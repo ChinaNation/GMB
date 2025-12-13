@@ -1,7 +1,7 @@
 {
-    "name": "wuminbi",
+    "name": "gongminbi",
     "id": "88711",
-    "protocolId": "wmb_0.0.0.0.1",
+    "protocolId": "gmb_0.0.0.0.1",
     "bootNodes": [
       "/dns4/nrcgch.wuminbi.com/tcp/30333/p2p/2DeusbNnisuEiDuDEiQ1JGAzZVruPDfTaW7wy26NwU7GTc",
       "/dns4/prczss.wuminbi.com/tcp/30333/p2p/2DhbTPiF4kyhHK462KFQVxKsh1fQqfEnC6LP7hpLwScAER",
