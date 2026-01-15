@@ -1,0 +1,32 @@
+[workspace]
+members = [
+    "runtime",
+    "bench",
+    "cli",
+    "inspect",
+    "primitives",
+    "rpc",
+    "testing",
+    "wenku",
+    "pallets/shengbank-issuance-control",
+]
+
+[workspace.package]
+authors = ["GMB"]
+edition = "2021"
+version = "0.1.0"
+license = "Apache-2.0"
+homepage = "https://www.wuminbi.com"
+repository = "https://github.com/ChinaNation/GMB"
+
+[workspace.dependencies]
+array-bytes = "6.2"
+codec = { package = "parity-scale-codec", version = "3.6", default-features = false }
+scale-info = { version = "2.11", default-features = false }
+sp-runtime = { version = "30.0", default-features = false }
+sp-std = { version = "30.0", default-features = false }
+sp-core = { version = "30.0", default-features = false }
+sp-io = { version = "30.0", default-features = false }
+frame-support = { version = "30.0", default-features = false }
+frame-system = { version = "30.0", default-features = false }
+log = "0.4"             # 你项目需要的版本
