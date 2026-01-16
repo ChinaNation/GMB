@@ -1,7 +1,9 @@
 {
   "name": "gongminbi",
   "id": "88711",
-  "protocolId": "gmb_0.0.0.0.1",
+  "protocolId": "gongminbi",
+  "chainType": "Live",
+  "properties": {"tokenSymbol": "GMB","tokenDecimals": 2},
   "bootNodes": [
     "/dns4/nrcgch.wuminbi.com/tcp/30333/p2p/2DeusbNnisuEiDuDEiQ1JGAzZVruPDfTaW7wy26NwU7GTc",
     "/dns4/prczss.wuminbi.com/tcp/30333/p2p/2DhbTPiF4kyhHK462KFQVxKsh1fQqfEnC6LP7hpLwScAER",
@@ -99,7 +101,7 @@
         ["0x80d01d6198a9121e98724cae237f4a9a8f425932db77ee94026408eab50a2548", 154895620000],
         ["0xa6f2daffe8d06fc5948a9ed606ebae529e348ae4f94c5f5e69867caffcee084a", 39910800000],
         ["0x16baa06b70cb409622766d05703c4fdd2dc1545eaf5b3a9bcf65c3fbe8413077", 87384580000]],
-    "staking_node": [
+    "shengbank_nodes": [
       {
       "node_name" :"中枢省公民储备银行权益节点",
       "multisig_address": "0x30f487dac5f5f9d76095c1bd85e8dcb2b46759fcba0aa5a1a82c644f542b1564",
@@ -400,7 +402,7 @@
         "stake_address": "0x16baa06b70cb409622766d05703c4fdd2dc1545eaf5b3a9bcf65c3fbe8413077",
         "p2p_address": "/dns4/prbhjs.wuminbi.com/tcp/30333/p2p/2DW8tZQqM1sn9q1eiogFBZrtHSautj85qGpmqjz5AszMNj",
         "mutable": false}]},
-    "authority_node": [
+    "reserve_nodes": [
       {
         "node_name" :"国家储备委员会权威节点",
         "multisig_address": "0x63e2690b28414c681977c19d0d612625c7901e6b04458da4176ba4874fd2113f",
