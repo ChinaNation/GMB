@@ -1,0 +1,7 @@
+[features]
+default = ["std"]
+
+std = [
+    "frame-support/std",
+    "frame-system/std",
+]

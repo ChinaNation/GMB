@@ -1,0 +1,7 @@
+/// - 全节点奖励发放模块，负责根据全节点的工作量证明（PoW）贡献，发放铸块奖励，仅铸币发放奖励。
+
+#[pallet::config]
+pub trait Config: frame_system::Config {
+    type RuntimeEvent: From<Event<Self>>
+        + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+}

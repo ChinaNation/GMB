@@ -28,6 +28,16 @@ serde_json = { features = ["alloc", "arbitrary_precision"], workspace = true }
 sp-debug-derive = { workspace = true }
 static_assertions = { workspace = true, default-features = true }
 
+# 以下是新增的自定义内容
+resolution-issuance-pro = { path = "../pallets/governance/resolution-issuance-pro",default-features = false }
+new-sheng-node = { path = "../pallets/governance/new-sheng-node",default-features = false }
+citizen-lightnode-issuance = { path = "../pallets/issuance/citizen-lightnode-issuance",default-features = false }
+fullnode-pow-reward = { path = "../pallets/issuance/fullnode-pow-reward",default-features = false }
+resolution-issuance-run = { path = "../pallets/issuance/resolution-issuance-run",default-features = false }
+shengbank-stake-interest = { path = "../pallets/issuance/shengbank-stake-interest",default-features = false }
+shengbank-stake-addresslock = { path = "../pallets/other/shengbank-stake-addresslock",default-features = false }
+# 以上是新增的自定义内容
+
 # pallet-asset-conversion: turn on "num-traits" feature
 primitive-types = { features = ["codec", "num-traits", "scale-info"], workspace = true }
 
@@ -59,6 +69,16 @@ std = [
 	"serde_json/std",
 	"sp-debug-derive/std",
 	"substrate-wasm-builder",
+
+    # 以下是新增的自定义内容
+    "resolution-issuance-pro/std",
+	"new-sheng-node/std",
+    "citizen-lightnode-issuance/std",
+    "fullnode-pow-reward/std",
+    "resolution-issuance-run/std",
+    "shengbank-stake-interest/std",
+    "shengbank-stake-addresslock/std",
+	# 以上是新增的自定义内容
 ]
 runtime-benchmarks = [
 	"pallet-example-mbm/runtime-benchmarks",

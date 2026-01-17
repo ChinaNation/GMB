@@ -1,10 +1,14 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-
-/// Shengbank interest distribution pallet
-/// 职责：
 /// - 省储行创立发行质押利息支付模块，铸币每年支付43个省储行的质押利息
 /// - 根据制度计算利息
 /// - 将利息发放到多签账户
+
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[pallet::config]
+pub trait Config: frame_system::Config {
+    type RuntimeEvent: From<Event<Self>>
+        + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+}
 pub use pallet::*;
 
 #[frame_support::pallet]

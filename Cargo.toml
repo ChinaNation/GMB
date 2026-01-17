@@ -30,3 +30,5 @@ sp-io = { version = "30.0", default-features = false }
 frame-support = { version = "30.0", default-features = false }
 frame-system = { version = "30.0", default-features = false }
 log = "0.4"             # 你项目需要的版本
+node-primitives = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409" }
+node-primitives = { path = "node/primitives", default-features = false }
