@@ -1,0 +1,9 @@
+# resolution-destro-gov=决议销毁模块；
+
+[features]
+default = ["std"]
+
+std = [
+    "frame-support/std",
+    "frame-system/std",
+]

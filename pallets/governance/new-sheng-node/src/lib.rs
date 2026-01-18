@@ -1,15 +1,3 @@
-/// - 投票新增省储行/省储会节点
-mod proposal;
-mod voting;
-mod issuance;
-mod utils;
-
-impl<T: Config> Pallet<T> {
-    // 对外暴露接口
-}
-
-#[pallet::config]
-pub trait Config: frame_system::Config {
-    type RuntimeEvent: From<Event<Self>>
-        + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-}
+//! - 投票新增省储行/省储会节点模块，由国储会发起提案，在现有省储行/省储会（含国储会19票）之间投票决定；
+//! - 省储行/省储会节点新增后，纳入权威节点+权益节点间投票；
+//! - 新增的省储行/省储会节点可以删改，43个初始的省储行/省储会节点不能被增删改

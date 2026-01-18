@@ -1,3 +1,5 @@
+# citizen-lightnode-issuance=公民轻节点发行模块，负责公民轻节点认证奖励发行逻辑；
+
 [features]
 default = ["std"]
 

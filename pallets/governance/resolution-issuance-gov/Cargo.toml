@@ -1,0 +1,9 @@
+# resolution-issuance-gov=决议发行治理模块，负责决议发行的提案与投票逻辑；
+
+[features]
+default = ["std"]
+
+std = [
+    "frame-support/std",
+    "frame-system/std",
+]

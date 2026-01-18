@@ -1,0 +1,3 @@
+[submodule "tools/subkey"]
+	path = tools/subkey
+	url = https://github.com/paritytech/polkadot-sdk

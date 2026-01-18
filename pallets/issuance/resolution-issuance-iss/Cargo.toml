@@ -1,0 +1,9 @@
+# resolution-issuance-iss=决议发行发行模块，负责决议发行投票通过后的发行执行逻辑；
+
+[features]
+default = ["std"]
+
+std = [
+    "frame-support/std",
+    "frame-system/std",
+]

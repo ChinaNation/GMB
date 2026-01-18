@@ -1,3 +1,5 @@
+# new-sheng-node=增删改“新省储行/省储会”节点，负责提案与投票逻辑；
+
 [features]
 default = ["std"]
 

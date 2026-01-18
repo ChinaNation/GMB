@@ -1,18 +1,2 @@
-[package]
-name = "shengbank-interest-distribution"
-version = "0.1.0"
-edition = "2021"
-description = "Shengbank interest calculation and distribution pallet"
+# shengbank-stake-interest=省储行创立发行质押利息支付模块，负责支付质押利息逻辑；
 
-[dependencies]
-frame-support = { workspace = true }
-frame-system  = { workspace = true }
-sp-runtime    = { workspace = true }
-
-[features]
-default = ["std"]
-std = [
-    "frame-support/std",
-    "frame-system/std",
-    "sp-runtime/std",
-]
