@@ -1,0 +1,29 @@
+[workspace]
+members = [
+    "node",
+    "runtime",
+    "pallets/governance/new-sheng-node",
+    "pallets/governance/resolution-destro-gov",
+    "pallets/governance/resolution-issuance-gov",
+    "pallets/issuance/citizen-lightnode-issuance",
+    "pallets/issuance/fullnode-pow-reward",
+    "pallets/issuance/resolution-issuance-iss",
+    "pallets/issuance/shengbank-stake-interest",
+    "pallets/transaction/offchain-transaction-fee",
+    "pallets/transaction/onchain-transaction-fee",
+    "primitives",
+    "backend/gongminbi-backend",
+    "backend/manage-backend",
+    "backend/wuminapp-backend",
+    "backend/fullnode-backend",
+    "frontend/gongminbi-frontend",
+    "frontend/manage-frontend",
+    "frontend/wuminapp-frontend",
+    "frontend/fullnode-frontend",
+    "tools/subkey",
+    "tools/scripts",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"  # 设置 workspace 默认 Rust 版本
