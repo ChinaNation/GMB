@@ -1,0 +1,7 @@
+[package]
+name = "manage-backend"  # 改为对应模块名
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# 可能依赖 actix-web 或 tokio

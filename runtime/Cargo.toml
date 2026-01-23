@@ -1,0 +1,21 @@
+[package]
+name = "runtime"                # 链上执行逻辑（runtime）包名
+version = "0.1.0"              # 当前版本
+edition = "2021"               # Rust 版本
+
+[dependencies]
+# FRAME 系统库，用于构建 Substrate Runtime
+frame-support = { version = "4.0.0", default-features = false }   # 支持自定义 pallet 的宏与 trait
+frame-system = { version = "4.0.0", default-features = false }    # Substrate 系统 pallet
+
+# Substrate 核心类型库
+sp-runtime = { version = "4.0.0", default-features = false }      # Runtime 核心类型和 trait
+sp-std = { version = "4.0.0", default-features = false }          # no_std 支持的标准库
+
+# 编码解码库
+parity-scale-codec = { version = "3.0.0", default-features = false }
+
+[features]
+# 默认启用 no_std 支持
+default = ["std"]
+std = ["sp-std/std"]
