@@ -1,0 +1,15 @@
+[package]
+name = "node"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Substrate CLI 模块，用于启动节点
+# 指向官方 polkadot-sdk 仓库的 master 分支，固定 package 名称
+sc-cli = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "master", package = "sc-cli" }
+
+# 其他 Substrate 核心模块（根据实际需要可加）
+sc-service = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "master", package = "sc-service" }
+sc-consensus-pow = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "master", package = "sc-consensus-pow" }
+
+# TODO: 后续根据需要添加更多依赖

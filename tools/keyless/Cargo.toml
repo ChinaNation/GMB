@@ -1,0 +1,14 @@
+# 生成无私钥不可签名的永久质押地址工具；
+
+[package]
+name = "keyless"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+blake2 = "0.10"
+hex = "0.4"
+
+[workspace]
+
+# cargo run --manifest-path tools/keyless/Cargo.toml
