@@ -1,5 +1,5 @@
 [package]
-name = "gongminbi-backend"  # 改为对应模块名
+name = "fcrc-backend"  # 联储会后端模块
 version = "0.1.0"
 edition = "2021"
 
