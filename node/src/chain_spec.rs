@@ -1,3 +1,7 @@
+//! chain_spec.rs — 公民币 GMB 专用 Chain Spec
+//! 说明：
+//! 本文件仅负责链的创世状态配置，不涉及任何共识逻辑。
+
 use sc_service::ChainType;
 use solochain_template_runtime::WASM_BINARY;
 
