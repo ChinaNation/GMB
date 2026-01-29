@@ -1,11 +1,12 @@
 //! 本文件存放：43 个省储行全部节点的常量
 //! 包含字段：pallet_id、node_name、pallet_address、keyless_address、admins
+//! 其中 admins 为该节点的创世管理员公钥数组，用于多签权限控制，可通过内部投票更换。
 
 use sp_core::H256;
 
 /// 单个省储行节点的常量结构
 #[derive(Debug, Clone)]
-pub struct ReserveBankNodeConst {
+pub struct ShengBankNodeConst {
     pub pallet_id: &'static str,
     pub node_name: &'static str,
     pub pallet_address: &'static str,
@@ -14,9 +15,9 @@ pub struct ReserveBankNodeConst {
 }
 
 /// 所有省储行节点数组
-pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
+pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
 // ======================== 01 中枢省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbzss01",
         node_name: "中枢省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072627a737330310000000000000000000000000000000000000000",
@@ -35,7 +36,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 02 岭南省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prblns02",
         node_name: "岭南省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626c6e7330320000000000000000000000000000000000000000",
@@ -54,7 +55,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 03 广东省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbgds03",
         node_name: "广东省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726267647330330000000000000000000000000000000000000000",
@@ -73,7 +74,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 04 广西省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbgxs04",
         node_name: "广西省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726267787330340000000000000000000000000000000000000000",
@@ -92,7 +93,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 05 福建省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbfjs05",
         node_name: "福建省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262666a7330350000000000000000000000000000000000000000",
@@ -111,7 +112,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 06 海南省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbhns06",
         node_name: "海南省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262686e7330360000000000000000000000000000000000000000",
@@ -130,7 +131,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 07 云南省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbyns07",
         node_name: "云南省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262796e7330370000000000000000000000000000000000000000",
@@ -149,7 +150,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 08 贵州省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbgzs08",
         node_name: "贵州省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262677a7330380000000000000000000000000000000000000000",
@@ -168,7 +169,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 09 湖南省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbhns09",
         node_name: "湖南省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262686e7330390000000000000000000000000000000000000000",
@@ -187,7 +188,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 10 江西省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbjxs10",
         node_name: "江西省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626a787331300000000000000000000000000000000000000000",
@@ -206,7 +207,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 11 浙江省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbzjs11",
         node_name: "浙江省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072627a6a7331310000000000000000000000000000000000000000",
@@ -225,7 +226,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 12 江苏省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbjss12",
         node_name: "江苏省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626a737331320000000000000000000000000000000000000000",
@@ -244,7 +245,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 13 山东省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbsds13",
         node_name: "山东省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726273647331330000000000000000000000000000000000000000",
@@ -263,7 +264,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 14 山西省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbsxs14",
         node_name: "山西省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726273787331340000000000000000000000000000000000000000",
@@ -282,7 +283,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 15 河南省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbhns15",
         node_name: "河南省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262686e7331350000000000000000000000000000000000000000",
@@ -301,7 +302,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 16 河北省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbhbs16",
         node_name: "河北省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726268627331360000000000000000000000000000000000000000",
@@ -320,7 +321,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 17 湖北省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbhbs17",
         node_name: "湖北省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726268627331370000000000000000000000000000000000000000",
@@ -339,7 +340,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 18 陕西省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbsxs18",
         node_name: "陕西省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726273787331380000000000000000000000000000000000000000",
@@ -358,7 +359,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 19 重庆省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbcqs19",
         node_name: "重庆省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726263717331390000000000000000000000000000000000000000",
@@ -377,7 +378,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 20 四川省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbscs20",
         node_name: "四川省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726273637332300000000000000000000000000000000000000000",
@@ -396,7 +397,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 21 甘肃省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbgss21",
         node_name: "甘肃省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726267737332310000000000000000000000000000000000000000",
@@ -415,7 +416,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },    
 
     // ======================== 22 北平省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbbps22",
         node_name: "北平省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726262707332320000000000000000000000000000000000000000",
@@ -434,7 +435,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 23 滨海省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbbhs23",
         node_name: "滨海省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726262687332330000000000000000000000000000000000000000",
@@ -453,7 +454,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 24 松江省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbsjs24",
         node_name: "松江省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262736a7332340000000000000000000000000000000000000000",
@@ -472,7 +473,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 25 龙江省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbljs25",
         node_name: "龙江省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626c6a7332350000000000000000000000000000000000000000",
@@ -491,7 +492,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 26 吉林省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbjls26",
         node_name: "吉林省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626a6c7332360000000000000000000000000000000000000000",
@@ -510,7 +511,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 27 辽宁省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prblns27",
         node_name: "辽宁省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626c6e7332370000000000000000000000000000000000000000",
@@ -529,7 +530,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 28 宁夏省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbnxs28",
         node_name: "宁夏省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626e787332380000000000000000000000000000000000000000",
@@ -548,7 +549,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 29 青海省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbqhs29",
         node_name: "青海省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726271687332390000000000000000000000000000000000000000",
@@ -567,7 +568,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 30 安徽省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbahs30",
         node_name: "安徽省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726261687333300000000000000000000000000000000000000000",
@@ -586,7 +587,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 31 台湾省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbtws31",
         node_name: "台湾省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726274777333310000000000000000000000000000000000000000",
@@ -605,7 +606,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 32 西藏省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbxzs32",
         node_name: "西藏省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262787a7333320000000000000000000000000000000000000000",
@@ -624,7 +625,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 33 新疆省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbxjs33",
         node_name: "新疆省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262786a7333330000000000000000000000000000000000000000",
@@ -643,7 +644,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 34 西康省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbxks34",
         node_name: "西康省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262786b7333340000000000000000000000000000000000000000",
@@ -662,7 +663,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 35 阿里省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbals35",
         node_name: "阿里省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262616c7333350000000000000000000000000000000000000000",
@@ -681,7 +682,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 36 葱岭省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbcls36",
         node_name: "葱岭省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262636c7333360000000000000000000000000000000000000000",
@@ -700,7 +701,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 37 天山省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbtss37",
         node_name: "天山省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726274737333370000000000000000000000000000000000000000",
@@ -719,7 +720,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 38 河西省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbhxs38",
         node_name: "河西省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726268787333380000000000000000000000000000000000000000",
@@ -738,7 +739,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 39 昆仑省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbkls39",
         node_name: "昆仑省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626b6c7333390000000000000000000000000000000000000000",
@@ -757,7 +758,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 40 河套省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbhts40",
         node_name: "河套省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726268747334300000000000000000000000000000000000000000",
@@ -776,7 +777,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 41 热河省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbrhs41",
         node_name: "热河省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726272687334310000000000000000000000000000000000000000",
@@ -795,7 +796,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 42 兴安省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbxas42",
         node_name: "兴安省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726278617334320000000000000000000000000000000000000000",
@@ -814,7 +815,7 @@ pub const RESERVE_BANK_NODES: &[ReserveBankNodeConst] = &[
     },
 
     // ======================== 43 合江省储行 ========================
-    ReserveBankNodeConst {
+    ShengBankNodeConst {
         pallet_id: "prbhjs43",
         node_name: "合江省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262686a7334330000000000000000000000000000000000000000",

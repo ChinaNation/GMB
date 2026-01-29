@@ -1,5 +1,6 @@
 //! 本文件存放：国储会 + 43 个省储会全部节点的常量
 //! 每一个节点包括：pallet_id、node_name、pallet_address、admins
+//! 其中 admins 为该节点的创世管理员公钥数组，用于多签权限控制，可通过内部投票更换。
 
 use sp_core::H256;
 

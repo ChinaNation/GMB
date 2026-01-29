@@ -3,9 +3,6 @@
     ├── Cargo.toml
     └── src/
          ├── lib.rs
-         ├── governance.rs
-         ├── agencies.rs
-         ├── province.rs
-         ├── pallet_ids.rs
-         ├── pow.rs
-         └── balances.rs
+         ├── core_const.rs   // 核心常量
+         ├── reserve_const.rs   // 储委会常量
+         ├── shengbank_const.rs   //省储行常量
