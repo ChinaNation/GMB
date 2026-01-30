@@ -1,5 +1,5 @@
-//! 本文件存放：43 个省储行全部节点的常量
-//! 包含字段：pallet_id、node_name、pallet_address、keyless_address、admins
+//! 43 个省储行全部节点的常量
+//! 包含：省储行ID（pallet_id）、节点名称（node_name）、交易账户（pallet_address）、管理员列表（admins）；
 //! 其中 admins 为该节点的创世管理员公钥数组，用于多签权限控制，可通过内部投票更换。
 
 use sp_core::H256;
@@ -10,18 +10,16 @@ pub struct ShengBankNodeConst {
     pub pallet_id: &'static str,
     pub node_name: &'static str,
     pub pallet_address: &'static str,
-    pub keyless_address: &'static str, 
     pub admins: &'static [&'static str],
 }
 
 /// 所有省储行节点数组
 pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
-// ======================== 01 中枢省储行 ========================
+/// ======================== 01 中枢省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbzss01",
         node_name: "中枢省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072627a737330310000000000000000000000000000000000000000",
-        keyless_address: "0x21bc9e12d717e4d55666501fd21f8f3fdfbf98d513d6584424f34162397ac1be",
         admins: &[
             "0x7a24e290379c6e458f5372246629a739064b01de97ca85e4008a0c52124ffa2b",
             "0x84a26299f660c0baa0af46ca33169aefaa41b35be06f2b8a66b4a20b7038d60b",
@@ -35,12 +33,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 02 岭南省储行 ========================
+    /// ======================== 02 岭南省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prblns02",
         node_name: "岭南省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626c6e7330320000000000000000000000000000000000000000",
-        keyless_address: "0xfaf75f9cb6945e1f61cb42a26d8b6c35614794830ecfc06477e8ace8e1c844b8",
         admins: &[
             "0x026c25206f34749215e5dd6ca6ab806ff53c4a047b68a5779ae7c22ed4befc73",
             "0x8834a8025fd436da0b7901653b4c6dd7ed05b14553a3c471b0991e1c840b0338",
@@ -54,12 +51,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 03 广东省储行 ========================
+    /// ======================== 03 广东省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbgds03",
         node_name: "广东省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726267647330330000000000000000000000000000000000000000",
-        keyless_address: "0x86eaef716945c2080b9348b8bc9aaede939be2bd875ddb2d3043edbcf2c42ddc",
         admins: &[
             "0x0489dc54c1f161b86bef1c9c5e5ef04ebd0e80b79a165178739f76a8aec19f71",
             "0xae07a1c9f0f52a7316d5fd8e961ed0725aeb424d24db73a79b526d4174f76e61",
@@ -73,12 +69,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 04 广西省储行 ========================
+    /// ======================== 04 广西省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbgxs04",
         node_name: "广西省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726267787330340000000000000000000000000000000000000000",
-        keyless_address: "0x209c88e0f516c4bef0bd7295a28065cd05ac8c2d4ed40b157a67dc55dc8d3e53",
         admins: &[
             "0x9427e1d51223861d4af89d3327844ff454c67a6dd7cf1a061efe930ebc894201",
             "0xba79a4f7103ea953b143f9d78fcf31de39d234d034d619231104a0a8d680f408",
@@ -92,12 +87,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 05 福建省储行 ========================
+    /// ======================== 05 福建省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbfjs05",
         node_name: "福建省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262666a7330350000000000000000000000000000000000000000",
-        keyless_address: "0x7a5d47815b1ae50c39ad89b68f8f7827dffedabbe0a349484a873cc0a3e94ba2",
         admins: &[
             "0xaafafefde99d84cdaa347e3525cad15b83661b21e919acb81f07bef285241760",
             "0xd829889b40819c533dd7470c46591ae30391f5e976061cdeef39b5b2fed9591b",
@@ -111,12 +105,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 06 海南省储行 ========================
+    /// ======================== 06 海南省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhns06",
         node_name: "海南省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262686e7330360000000000000000000000000000000000000000",
-        keyless_address: "0xe242a55b40fbf6c0a29e5aa316965a93ec67d09aafc266f7e8895bdb3e06b5d5",
         admins: &[
             "0x28e54d11584f1ca20f574a25de76ab19b077cf9ae1708fe52a00385b854ff72d",
             "0x2ae625ae1cc657c8639d5ff70578bae607c3cbb77561709dcee75dcc1e16ae43",
@@ -130,12 +123,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 07 云南省储行 ========================
+    /// ======================== 07 云南省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbyns07",
         node_name: "云南省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262796e7330370000000000000000000000000000000000000000",
-        keyless_address: "0x49542724fe089ab265daeceee4a6c9f5028ac623b9602230664578d2c1ea8442",
         admins: &[
             "0xae54c9e6bd19eaa35d2d344255f64a4258fad0e342ccee088f3817b6a61b152a",
             "0x86189f4190f2070778837d9bad9bc68b6f6c3ae4c712c5555b25553fb3ad2160",
@@ -149,12 +141,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 08 贵州省储行 ========================
+    /// ======================== 08 贵州省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbgzs08",
         node_name: "贵州省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262677a7330380000000000000000000000000000000000000000",
-        keyless_address: "0x523248ae37ea8689ca9e5a6d505e1610c67aa7e4646505b8b8750b82aeba9b6c",
         admins: &[
             "0xe0dcf22a3dd7e1f14aa455c0e274d4b4dcb5c049f36433a7f7f4135f04211d2f",
             "0x12f8a76239200bd531cf343957ad851e5135f3b5144c395342f03c5ee65a7272",
@@ -168,12 +159,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 09 湖南省储行 ========================
+    /// ======================== 09 湖南省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhns09",
         node_name: "湖南省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262686e7330390000000000000000000000000000000000000000",
-        keyless_address: "0xbae6d80a94732903af02202d0ada61d7e74f25f0a8cdf32b6d73260dc418e39f",
         admins: &[
             "0x1a4bf08983c7ca48d46ac578334d808c7ae02fa1bcff39c7fad236fa5b89e246",
             "0x764c622263b771743c4493f6bf282138b05f83ce22ed2bdce1295abc45130f1a",
@@ -187,12 +177,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 10 江西省储行 ========================
+    /// ======================== 10 江西省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbjxs10",
         node_name: "江西省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626a787331300000000000000000000000000000000000000000",
-        keyless_address: "0xfead3049fa97c8fd8b07f319cfe42bef096831cec0235dda5b4ad8af93827180",
         admins: &[
             "0xd0eb85c18ae4ba3a56618122ee359b2c18b3af18de0a8d994d01502cd8779176",
             "0xc6095937cbd97ddea9713f6e566837203e1af3df322d4c36031631dc3a76c412",
@@ -206,12 +195,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 11 浙江省储行 ========================
+    /// ======================== 11 浙江省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbzjs11",
         node_name: "浙江省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072627a6a7331310000000000000000000000000000000000000000",
-        keyless_address: "0x0f327a7b55043d17b16596f0c04729667696a666c38b419a237d8961fb343a00",
         admins: &[
             "0xd45f674ef2a84f320674374cd71e40fe29f4532d4329588f59165011d6a6a673",
             "0xec98eca9117b694254f7ce8d1c96228cee5b2ac1229a8c3da16982a4637ff86d",
@@ -225,12 +213,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 12 江苏省储行 ========================
+    /// ======================== 12 江苏省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbjss12",
         node_name: "江苏省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626a737331320000000000000000000000000000000000000000",
-        keyless_address: "0x65c81d68fc9970b3ae2ec820ebb494f9c0e571a46154f2beec36de05f15ec71c",
         admins: &[
             "0x00b31ce3c5a0c72d11d14e44e9fc3f24143fd4e7b50d9d666ca0744030538a11",
             "0x6ef2d3a56d37d85f07bd12ad1e039d1ebc6016118baed9d6adf055d22556003d",
@@ -244,12 +231,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 13 山东省储行 ========================
+    /// ======================== 13 山东省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbsds13",
         node_name: "山东省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726273647331330000000000000000000000000000000000000000",
-        keyless_address: "0x5213d43ecb0c0f9ef7156173cb4bb3310ccece5ae59259837b2238fc7ad7640e",
         admins: &[
             "0x5a5c268c38e99e8f20b9e8e3d0a02697a92406e601b8aeb0420a39925211d64f",
             "0xf612de6628031f3f285de2c1a3d54583b285057ec28eef35c1e719fa8748eb7b",
@@ -263,12 +249,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 14 山西省储行 ========================
+    /// ======================== 14 山西省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbsxs14",
         node_name: "山西省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726273787331340000000000000000000000000000000000000000",
-        keyless_address: "0x76d4f36462eca50cdc3aa7f59650dd957200ba8fa88c3a9e27547cb79ec92266",
         admins: &[
             "0xcedaa06d70cd93f39ddb56be76f08d0fa7ee4f8bb74dcb1d65d0831ef1ba7367",
             "0x2cea02949c178fd8161759f40b3446f6a14f1f485098c822fb3556a410de1d6a",
@@ -282,12 +267,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 15 河南省储行 ========================
+    /// ======================== 15 河南省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhns15",
         node_name: "河南省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262686e7331350000000000000000000000000000000000000000",
-        keyless_address: "0x682792dc6945be8fe5bdcdbe72f19fa40c42c39411d56a206516d4a223884d91",
         admins: &[
             "0x16977016c793b7f8cb5375bfb343e06511e8b6bff0a3ded1763b03e65b49dc75",
             "0x2e01b472f46fb11f0adabe426e7a76305d2f1a040213a5b5ca966b89dcc58d7c",
@@ -301,12 +285,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 16 河北省储行 ========================
+    /// ======================== 16 河北省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhbs16",
         node_name: "河北省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726268627331360000000000000000000000000000000000000000",
-        keyless_address: "0xbe824a50fb2e456cc8ad0dac169c6f42818525b6de16647284c433d5a36c05a5",
         admins: &[
             "0xbc50baf7fbc79b72df63804d5d48275528142136d1914a2334347875016fa551",
             "0x26ccde1f7b15cb0c45ce3a798aee6c68945e524fded101546d1b2e289260ca76",
@@ -320,12 +303,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 17 湖北省储行 ========================
+    /// ======================== 17 湖北省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhbs17",
         node_name: "湖北省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726268627331370000000000000000000000000000000000000000",
-        keyless_address: "0xa8c7569f9fd0eea135a453b9b2f1e32f3222c4f5a4981ba59111f5220e67d7f1",
         admins: &[
             "0xd8234d16d61cba73ebbfa12d4e53ddf1a4f5d24f106c286799d0e14801d0953b",
             "0x625284c24b30db1417fa4f253751f7e53c0b7f82bfbfbebdfbf2fc8ebc246e54",
@@ -339,12 +321,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 18 陕西省储行 ========================
+    /// ======================== 18 陕西省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbsxs18",
         node_name: "陕西省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726273787331380000000000000000000000000000000000000000",
-        keyless_address: "0xa3dbf6e743d0712ff6be8d852ec2a892891dc35d5d2ef260c112afe291c49b64",
         admins: &[
             "0xd230315cd4220886014478c89fe74112f144ef42c167a51ec1cff7d1a394df41",
             "0xfc28e2bd3c0f096fb04888a25eded5aa405b3bc010a75d6db79484c8c4e08a57",
@@ -358,12 +339,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 19 重庆省储行 ========================
+    /// ======================== 19 重庆省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbcqs19",
         node_name: "重庆省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726263717331390000000000000000000000000000000000000000",
-        keyless_address: "0x95f0a21e4d83326867e8ce82287e91f9606075cc77c21f1b1799a6224dc058c6",
         admins: &[
             "0x9e06d0846eebfe509661911c909abd83ae39180b7c6f97099b548d8352ed6428",
             "0xfec0660b9e067379bbc9196804cc517fc1b0ef4fb2b38b3e05e7b95d97e6d96b",
@@ -377,12 +357,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 20 四川省储行 ========================
+    /// ======================== 20 四川省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbscs20",
         node_name: "四川省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726273637332300000000000000000000000000000000000000000",
-        keyless_address: "0x97c73ed34795384c351a59d81d876011805cf41a0b40da822d7d051137f9059d",
         admins: &[
             "0x66942d040ad78ebd3dd5823702e65165bfd07ca6b72f4d6b6487ebfe5f710834",
             "0xfec1a2a37c3709426ed5c6dda3ec021a491eb26b489d26e3cae2c7928e1ada08",
@@ -396,12 +375,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 21 甘肃省储行 ========================
+    /// ======================== 21 甘肃省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbgss21",
         node_name: "甘肃省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726267737332310000000000000000000000000000000000000000",
-        keyless_address: "0x37b05070ec70ad7444f208dc1b0f15432fe00bedb05f4fdb061ac83ee68800bc",
         admins: &[
             "0xf6a25ebd4796d80cff6b511baa479d0415a940747edd09b604f000969a40c073",
             "0x96ac1e9089440a286d9a5779464d50cbce7bd9acf3f13971c34e2bb500bf8a77",
@@ -415,12 +393,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },    
 
-    // ======================== 22 北平省储行 ========================
+    /// ======================== 22 北平省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbbps22",
         node_name: "北平省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726262707332320000000000000000000000000000000000000000",
-        keyless_address: "0x4b724514f0c03b8289de69592687de7bd54096e6801ee1b55604b29789055e8e",
         admins: &[
             "0x5c02963fb3bd05b5219120d83d37f1fa579a385fecb85eb4ec2e2673ebbb2717",
             "0x426a2d8b60bea0d1d449f07944bb12b12f1d6462df665d370db2af69b81c3d4e",
@@ -434,12 +411,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 23 滨海省储行 ========================
+    /// ======================== 23 滨海省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbbhs23",
         node_name: "滨海省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726262687332330000000000000000000000000000000000000000",
-        keyless_address: "0xaf2cd60d5e63d8d1dff54c391c1567c89998ce4114fddb80d84d84a8f9e4db04",
         admins: &[
             "0xc088c0c872442f38d757e784c813dcec8553865ead6dd893ac6c017af5d69f55",
             "0x42114435469d7725d16e905e2a88c19da99bbb6ae524b1bce5b8ab5723307b02",
@@ -453,12 +429,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 24 松江省储行 ========================
+    /// ======================== 24 松江省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbsjs24",
         node_name: "松江省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262736a7332340000000000000000000000000000000000000000",
-        keyless_address: "0xf897f0119dfb14035a841713a7cf889f903d262d26c187fd329bb4ba6a7b5be3",
         admins: &[
             "0x827e73de31b2709b35089493589aacee2ae5b21783b42e5485d8f9b0e68fda61",
             "0x607171f3f3ea76ffc060c5168343e0b7e37eaa6a895aa5f767c9d7bbeb36b67a",
@@ -472,12 +447,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 25 龙江省储行 ========================
+    /// ======================== 25 龙江省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbljs25",
         node_name: "龙江省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626c6a7332350000000000000000000000000000000000000000",
-        keyless_address: "0x41f918fd7f8ec10f6fa1e4d67094583742585aae5ec5a2ac97fd046b4d4dc48c",
         admins: &[
             "0xce923cfccca40f7f50dbcc73f3993a47564ce7a2430d9f60bac6b9212db8082e",
             "0xc2aca903b71942762be6d8892ab61ad44389193ec442ee8a31ea7ced8c2e1b19",
@@ -491,12 +465,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 26 吉林省储行 ========================
+    /// ======================== 26 吉林省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbjls26",
         node_name: "吉林省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626a6c7332360000000000000000000000000000000000000000",
-        keyless_address: "0x0635c25df1cf9dd1fbe6d8e4bea1de71a0e8c1aab0d2dbf5fe2dbda39b64d798",
         admins: &[
             "0xec059effa082803a1cb54f4be99123b435514be482b2a45de16f2663d7bec07e",
             "0xe2720a778010c978a0dabcc8fd376aa1c2986cea86353695d89e452fe68e331b",
@@ -510,12 +483,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 27 辽宁省储行 ========================
+    /// ======================== 27 辽宁省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prblns27",
         node_name: "辽宁省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626c6e7332370000000000000000000000000000000000000000",
-        keyless_address: "0xb1684c88713edd73414eb23fb99608ba71495e2bed457da6d5b9afc1921e2fa4",
         admins: &[
             "0x240519b39d7ac94ae048845ff707b81255bfb52383ba61c47d65c9adad1e783f",
             "0x0e95f2e4c8cf8e4f2b39d98149d2b8846edfb80d009f6e508e3b4dc457783a15",
@@ -529,12 +501,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 28 宁夏省储行 ========================
+    /// ======================== 28 宁夏省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbnxs28",
         node_name: "宁夏省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626e787332380000000000000000000000000000000000000000",
-        keyless_address: "0x2dbfa78e5e41e7593ae96be8623cbfe019d181e1c93d598239713ad5bd3f5472",
         admins: &[
             "0x9e6c016183e311d06f3af7f8c868d23a63ebb02aed985506ba9cbac71b88e636",
             "0x70d199e9871d49ca54f65ef84b22eddaeb46d65fa51acffee5bd8d4ec5f68c7d",
@@ -548,12 +519,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 29 青海省储行 ========================
+    /// ======================== 29 青海省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbqhs29",
         node_name: "青海省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726271687332390000000000000000000000000000000000000000",
-        keyless_address: "0x0d71aa43a60982e9baf30e2898644701680737814ceeb724845c1ed3874cd685",
         admins: &[
             "0xd0abf7d5bf48879b31cf8335bf4eaa35284185444c3c340902791c8860d4d703",
             "0x02186e9ca519afc3d461d7433bf47c932b4da73c262eb599b1aa507a6ce6f812",
@@ -567,12 +537,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 30 安徽省储行 ========================
+    /// ======================== 30 安徽省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbahs30",
         node_name: "安徽省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726261687333300000000000000000000000000000000000000000",
-        keyless_address: "0x8029f0568a5a803d635179e1b84b1e82140670b425ff058497577f4e898b9829",
         admins: &[
             "0x6a23c0f923ff3bcb7b787eff0e09cdc5ec3c30d5c9fbaa244b30ff14ec88d00c",
             "0x10936e219740f088667645ce8df23fd47b1cb246b3e2f66a7d1111cca2b1820d",
@@ -586,12 +555,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 31 台湾省储行 ========================
+    /// ======================== 31 台湾省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbtws31",
         node_name: "台湾省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726274777333310000000000000000000000000000000000000000",
-        keyless_address: "0x5d489483bb48d1d447cbdcbc8fbb4c71e37eda4cf31340fe6c4f5aa640f72fc5",
         admins: &[
             "0xc2406f8a720ce27969456d67468debc78e2933f1fb8ebe75799582e6eec73839",
             "0x04908273d2916625087590caf764aae7eca0f8fa52a2f9b80959e7f308550430",
@@ -605,12 +573,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 32 西藏省储行 ========================
+    /// ======================== 32 西藏省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbxzs32",
         node_name: "西藏省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262787a7333320000000000000000000000000000000000000000",
-        keyless_address: "0x8f41d40cd896fa0af97c3052b6486353ab6f75d479f77ddf224af89a1c2977b6",
         admins: &[
             "0x82df0fbf16857baffbed3ceb167c17ee87b999797bdd3cc725c55ddf7d3c040a",
             "0x70fe5e941a9171c1884a6094793b91276a1871737c1a182539c453daa743fa6b",
@@ -624,12 +591,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 33 新疆省储行 ========================
+    /// ======================== 33 新疆省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbxjs33",
         node_name: "新疆省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262786a7333330000000000000000000000000000000000000000",
-        keyless_address: "0x587bc76d45042bcd9ff52ceee72612e3b71a734059038c46e9234985f308c373",
         admins: &[
             "0x9af72d3d46fe219a8f48fb6f73fdaccc4057f32dffe110531e606487c5abf73e",
             "0x6c5c177a796e35fc3a18e74d196b21d41931027bae0b852db3d1844c672b4e62",
@@ -643,12 +609,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 34 西康省储行 ========================
+    /// ======================== 34 西康省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbxks34",
         node_name: "西康省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262786b7333340000000000000000000000000000000000000000",
-        keyless_address: "0xf66395985ccc73d95fb290504973b376f02d7d98da93b20d95c343da8d152de7",
         admins: &[
             "0xb0c59a13a468e7c5a5d4fd32a7ca4d34e4bd41517a0bcc8327e2e40c838c2c08",
             "0x2c35bd9c95e7ca5660ca44f7bfe6f1033e240860be666b84244ad0fbb2469945",
@@ -662,12 +627,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 35 阿里省储行 ========================
+    /// ======================== 35 阿里省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbals35",
         node_name: "阿里省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262616c7333350000000000000000000000000000000000000000",
-        keyless_address: "0xbc789a1c394a5e485d38432bcdb59fad3411cfd4699a7983f5853997867401c4",
         admins: &[
             "0x5ad6075c5d29eb2b8e91083c406fe6f7ccaa41053d30e2cb0961d85bb26eca48",
             "0xc0abc0e68d1086d3f4b9de703dd4484b4949ef81c7d6a33372fb0cc9b3be990b",
@@ -681,12 +645,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 36 葱岭省储行 ========================
+    /// ======================== 36 葱岭省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbcls36",
         node_name: "葱岭省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262636c7333360000000000000000000000000000000000000000",
-        keyless_address: "0xed3f67c63bc0f2140205473c17890e73688babdf7684f9287ce7cddfcd22ca09",
         admins: &[
             "0xe8167b6b1319e6b529958c802060970eb11cad3653fe21a3efbd8359fd4dfb5c",
             "0x4e33b4bbc3c37ae3a61b8e52d2e901ef15d104e1fc9e27b4c40acf11db39634d",
@@ -700,12 +663,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 37 天山省储行 ========================
+    /// ======================== 37 天山省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbtss37",
         node_name: "天山省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726274737333370000000000000000000000000000000000000000",
-        keyless_address: "0xdd464573534b2eb6e0d7a6fcac549a51c63e5847b23c299135e36b4ea3e24adb",
         admins: &[
             "0xd0a892173117fe6d54d93e474395063b29ed4b3d96c280c27c7669817b611948",
             "0x24a69bfd777beb23434a5dc979fe1fdce4de09f08fa4a88b263eeece26cb6b2c",
@@ -719,12 +681,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 38 河西省储行 ========================
+    /// ======================== 38 河西省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhxs38",
         node_name: "河西省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726268787333380000000000000000000000000000000000000000",
-        keyless_address: "0x8f8b9105949a108774ff845ba4df0f7a921f5beae6e814717fabf9b99a1ce8bd",
         admins: &[
             "0x0afc29913ab6807bd7f56c017f2d50b45131b2b77e0323ea63b6ae6002327812",
             "0x3e5616265ad161e34ad89cf30fc8069e17ce015604687497162344fd7bce0030",
@@ -738,12 +699,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 39 昆仑省储行 ========================
+    /// ======================== 39 昆仑省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbkls39",
         node_name: "昆仑省公民储备银行权益节点",
         pallet_address: "0x6d6f646c7072626b6c7333390000000000000000000000000000000000000000",
-        keyless_address: "0xe7c1fa0801ca5b74c6939de99a519de7023dc602ab55231b640e3b1b7f5895f0",
         admins: &[
             "0xa6050f81f2e028db2037070544210b7dd2097b42da9453950c540734bc321528",
             "0xfc700d1ecd4360d9fb5b47d93a721df4053ccaf5c1370d2a02f47cb8e9466b08",
@@ -757,12 +717,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 40 河套省储行 ========================
+    /// ======================== 40 河套省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhts40",
         node_name: "河套省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726268747334300000000000000000000000000000000000000000",
-        keyless_address: "0x2ffbe3ed5ee5134149adec09698affcea20f5cca51dbf95cdb0616430eee84aa",
         admins: &[
             "0x22e781c336d56df96887073aeb1bae59da5d827c8ad3b68ff1bed9e33767775b",
             "0xb65dd0354fb19ea5666c4c2caada227b708907a033452fad41e12eb2e2377210",
@@ -776,12 +735,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 41 热河省储行 ========================
+    /// ======================== 41 热河省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbrhs41",
         node_name: "热河省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726272687334310000000000000000000000000000000000000000",
-        keyless_address: "0x6974ef45d1495159dbbacfc2a114e284b4538775dfd2c3e7296ed681285406f8",
         admins: &[
             "0xa0260cf1c59232c08ccf080783363dd6f276183c58ad3e5bc29b494f823af449",
             "0x8aa0feb0fb2850e7fd26e6ba53ef828a9d2aa0e4077aecc08142d901862b5f31",
@@ -795,12 +753,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 42 兴安省储行 ========================
+    /// ======================== 42 兴安省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbxas42",
         node_name: "兴安省公民储备银行权益节点",
         pallet_address: "0x6d6f646c70726278617334320000000000000000000000000000000000000000",
-        keyless_address: "0x10ac83be1c5cdc8c5e762323d037eb792bd783d362d77b6e52e4547e42174a3e",
         admins: &[
             "0x785c4af6c7af289e9deaf018d0593f6d2393626f8b4a756e026e62209a57bf26",
             "0xf283c9b82d4661efbd32710abcf9406f017e3dee11825885bb7b92e1a319e52b",
@@ -814,12 +771,11 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 
-    // ======================== 43 合江省储行 ========================
+    /// ======================== 43 合江省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhjs43",
         node_name: "合江省公民储备银行权益节点",
         pallet_address: "0x6d6f646c707262686a7334330000000000000000000000000000000000000000",
-        keyless_address: "0xeb85e6981f71269f7dc22f4715119f943b675bb98a0ae5427ede0004f2bad626",
         admins: &[
             "0x5a6b9de943c7a5125eecc39a18e565c174583d8aabaec8e540171e25d0251578",
             "0x0c892cbc1e85b3ea66dc26006429b8b568a35b2d533347248f43570496830d79",

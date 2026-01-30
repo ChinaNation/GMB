@@ -1,5 +1,5 @@
 //! 本文件存放：国储会 + 43 个省储会全部节点的常量
-//! 每一个节点包括：pallet_id、node_name、pallet_address、admins
+//! 每一个节点包括：储会ID（pallet_id）、节点名称（node_name）、交易账户（pallet_address）、管理员列表（admins）；
 //! 其中 admins 为该节点的创世管理员公钥数组，用于多签权限控制，可通过内部投票更换。
 
 use sp_core::H256;
@@ -15,7 +15,7 @@ pub struct ReserveNodeConst {
 
 /// 所有国储会+省储会节点数组
 pub const RESERVE_NODES: &[ReserveNodeConst] = &[
-    // ======国储会=======
+    /// ======国储会=======
     ReserveNodeConst {
         pallet_id: "nrcgch01",
         node_name: "国家储备委员会权威节点",
@@ -43,7 +43,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======中枢省储委会======
+    /// ======中枢省储委会======
     ReserveNodeConst {
         pallet_id: "prczss01",
         node_name: "中枢省储备委员会权威节点",
@@ -61,7 +61,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======岭南省储委会======
+    /// ======岭南省储委会======
     ReserveNodeConst {
         pallet_id: "prclns02",
         node_name: "岭南省储备委员会权威节点",
@@ -79,7 +79,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======广东省储委会======
+    /// ======广东省储委会======
     ReserveNodeConst {
         pallet_id: "prcgds03",
         node_name: "广东省储备委员会权威节点",
@@ -97,7 +97,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======广西省储委会======
+    /// ======广西省储委会======
     ReserveNodeConst {
         pallet_id: "prcgxs04",
         node_name: "广西省储备委员会权威节点",
@@ -115,7 +115,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======福建省储委会======
+    /// ======福建省储委会======
     ReserveNodeConst {
         pallet_id: "prcfjs05",
         node_name: "福建省储备委员会权威节点",
@@ -133,7 +133,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======海南省储委会======
+    /// ======海南省储委会======
     ReserveNodeConst {
         pallet_id: "prchns06",
         node_name: "海南省储备委员会权威节点",
@@ -151,7 +151,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======云南省储委会======
+    /// ======云南省储委会======
     ReserveNodeConst {
         pallet_id: "prcyns07",
         node_name: "云南省储备委员会权威节点",
@@ -169,7 +169,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======贵州省储委会======
+    /// ======贵州省储委会======
     ReserveNodeConst {
         pallet_id: "prcgzs08",
         node_name: "贵州省储备委员会权威节点",
@@ -187,7 +187,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======湖南省储委会======
+    /// ======湖南省储委会======
     ReserveNodeConst {
         pallet_id: "prchns09",
         node_name: "湖南省储备委员会权威节点",
@@ -205,7 +205,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======江西省储委会======
+    /// ======江西省储委会======
     ReserveNodeConst {
         pallet_id: "prcjxs10",
         node_name: "江西省储备委员会权威节点",
@@ -223,7 +223,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======浙江省储委会======
+    /// ======浙江省储委会======
     ReserveNodeConst {
         pallet_id: "prczjs11",
         node_name: "浙江省储备委员会权威节点",
@@ -241,7 +241,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======江苏省储委会======
+    /// ======江苏省储委会======
     ReserveNodeConst {
         pallet_id: "prcjss12",
         node_name: "江苏省储备委员会权威节点",
@@ -259,7 +259,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======山东省储委会======
+    /// ======山东省储委会======
     ReserveNodeConst {
         pallet_id: "prcsds13",
         node_name: "山东省储备委员会权威节点",
@@ -277,7 +277,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======山西省储委会======
+    /// ======山西省储委会======
     ReserveNodeConst {
         pallet_id: "prcsxs14",
         node_name: "山西省储备委员会权威节点",
@@ -295,7 +295,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======河南省储委会======
+    /// ======河南省储委会======
     ReserveNodeConst {
         pallet_id: "prchns15",
         node_name: "河南省储备委员会权威节点",
@@ -313,7 +313,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======河北省储委会======
+    /// ======河北省储委会======
     ReserveNodeConst {
         pallet_id: "prchbs16",
         node_name: "河北省储备委员会权威节点",
@@ -331,7 +331,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======湖北省储委会======
+    /// ======湖北省储委会======
     ReserveNodeConst {
         pallet_id: "prchbs17",
         node_name: "湖北省储备委员会权威节点",
@@ -349,7 +349,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======陕西省储委会======
+    /// ======陕西省储委会======
     ReserveNodeConst {
         pallet_id: "prcsxs18",
         node_name: "陕西省储备委员会权威节点",
@@ -367,7 +367,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======重庆省储委会======
+    /// ======重庆省储委会======
     ReserveNodeConst {
         pallet_id: "prccqs19",
         node_name: "重庆省储备委员会权威节点",
@@ -385,7 +385,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======四川省储委会======
+    /// ======四川省储委会======
     ReserveNodeConst {
         pallet_id: "prcscs20",
         node_name: "四川省储备委员会权威节点",
@@ -403,7 +403,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======甘肃省储委会======
+    /// ======甘肃省储委会======
     ReserveNodeConst {
         pallet_id: "prcgss21",
         node_name: "甘肃省储备委员会权威节点",
@@ -421,7 +421,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======北平省储委会======
+    /// ======北平省储委会======
     ReserveNodeConst {
         pallet_id: "prcbps22",
         node_name: "北平省储备委员会权威节点",
@@ -439,7 +439,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======滨海省储委会======
+    /// ======滨海省储委会======
     ReserveNodeConst {
         pallet_id: "prcbhs23",
         node_name: "滨海省储备委员会权威节点",
@@ -457,7 +457,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======松江省储委会======
+    /// ======松江省储委会======
     ReserveNodeConst {
         pallet_id: "prcsjs24",
         node_name: "松江省储备委员会权威节点",
@@ -475,7 +475,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======龙江省储委会======
+    /// ======龙江省储委会======
     ReserveNodeConst {
         pallet_id: "prcljs25",
         node_name: "龙江省储备委员会权威节点",
@@ -493,7 +493,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======吉林省储委会======
+    /// ======吉林省储委会======
     ReserveNodeConst {
         pallet_id: "prcjls26",
         node_name: "吉林省储备委员会权威节点",
@@ -511,7 +511,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======辽宁省储委会======
+    /// ======辽宁省储委会======
     ReserveNodeConst {
         pallet_id: "prclns27",
         node_name: "辽宁省储备委员会权威节点",
@@ -529,7 +529,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======宁夏省储委会======
+    /// ======宁夏省储委会======
     ReserveNodeConst {
         pallet_id: "prcnxs28",
         node_name: "宁夏省储备委员会权威节点",
@@ -547,7 +547,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======青海省储委会======
+    /// ======青海省储委会======
     ReserveNodeConst {
         pallet_id: "prcqhs29",
         node_name: "青海省储备委员会权威节点",
@@ -565,7 +565,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======安徽省储委会======
+    /// ======安徽省储委会======
     ReserveNodeConst {
         pallet_id: "prcahs30",
         node_name: "安徽省储备委员会权威节点",
@@ -583,7 +583,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======台湾省储委会======
+    /// ======台湾省储委会======
     ReserveNodeConst {
         pallet_id: "prctws31",
         node_name: "台湾省储备委员会权威节点",
@@ -601,7 +601,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======西藏省储委会======
+    /// ======西藏省储委会======
     ReserveNodeConst {
         pallet_id: "prcxzs32",
         node_name: "西藏省储备委员会权威节点",
@@ -619,7 +619,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======新疆省储委会======
+    /// ======新疆省储委会======
     ReserveNodeConst {
         pallet_id: "prcxjs33",
         node_name: "新疆省储备委员会权威节点",
@@ -637,7 +637,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======西康省储委会======
+    /// ======西康省储委会======
     ReserveNodeConst {
         pallet_id: "prcxks34",
         node_name: "西康省储备委员会权威节点",
@@ -655,7 +655,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======阿里省储委会======
+    /// ======阿里省储委会======
     ReserveNodeConst {
         pallet_id: "prcals35",
         node_name: "阿里省储备委员会权威节点",
@@ -673,7 +673,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======葱岭省储委会======
+    /// ======葱岭省储委会======
     ReserveNodeConst {
         pallet_id: "prccls36",
         node_name: "葱岭省储备委员会权威节点",
@@ -691,7 +691,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======天山省储委会======
+    /// ======天山省储委会======
     ReserveNodeConst {
         pallet_id: "prctss37",
         node_name: "天山省储备委员会权威节点",
@@ -709,7 +709,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======河西省储委会======
+    /// ======河西省储委会======
     ReserveNodeConst {
         pallet_id: "prchxs38",
         node_name: "河西省储备委员会权威节点",
@@ -727,7 +727,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======昆仑省储委会======
+    /// ======昆仑省储委会======
     ReserveNodeConst {
         pallet_id: "prckls39",
         node_name: "昆仑省储备委员会权威节点",
@@ -745,7 +745,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======河套省储委会======
+    /// ======河套省储委会======
     ReserveNodeConst {
         pallet_id: "prchts40",
         node_name: "河套省储备委员会权威节点",
@@ -763,7 +763,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======热河省储委会======
+    /// ======热河省储委会======
     ReserveNodeConst {
         pallet_id: "prcrhs41",
         node_name: "热河省储备委员会权威节点",
@@ -781,7 +781,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======兴安省储委会======
+    /// ======兴安省储委会======
     ReserveNodeConst {
         pallet_id: "prcxas42",
         node_name: "兴安省储备委员会权威节点",
@@ -799,7 +799,7 @@ pub const RESERVE_NODES: &[ReserveNodeConst] = &[
         ],
     },
 
-    // ======合江省储委会======
+    /// ======合江省储委会======
     ReserveNodeConst {
         pallet_id: "prchjs43",
         node_name: "合江省储备委员会权威节点",
