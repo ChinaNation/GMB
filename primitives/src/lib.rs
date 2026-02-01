@@ -2,9 +2,10 @@
 //! 所有 Pallet、runtime、chain_spec、node 均可安全引用。
 //! 不允许依赖 runtime，以避免循环依赖。
 
-pub mod governance;
-pub mod agencies;
-pub mod province;
-pub mod pallet_ids;
-pub mod pow;
-pub mod balances;
+pub mod citizen_const;
+pub mod core_const;
+pub mod count_const;
+pub mod pow_const;
+pub mod reserve_nodes_const;
+pub mod shengbank_nodes_const;
+pub mod shengbank_stakes_const;

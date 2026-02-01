@@ -1,7 +1,0 @@
-[package]
-name = "manage-frontend"  # 对应模块名
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-# 可添加 yew、tauri 等依赖
