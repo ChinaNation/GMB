@@ -1,13 +1,13 @@
 [package]
-name = "solochain-template-runtime"
+name = "gmb-runtime"  # 运行时状态模块
 description = "A solochain runtime template built with Substrate, part of Polkadot Sdk."
-version = "0.0.0"
-license = "Unlicense"
-authors.workspace = true
 homepage.workspace = true
-repository.workspace = true
-edition.workspace = true
 publish = false
+edition.workspace = true   # 默认 Rust 版本
+version.workspace = true   # 版本号
+authors.workspace = true   # 作者
+repository.workspace = true  #项目仓库
+license = "MIT"        # 授权协议 MIT
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]

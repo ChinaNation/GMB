@@ -1,7 +1,10 @@
 [package]
-name = "genesisinfo"
-version = "0.1.0"
-edition = "2021"
+name = "genesisinfo"  #创世宣言
+edition.workspace = true   # 默认 Rust 版本
+version.workspace = true   # 版本号
+authors.workspace = true   # 作者
+repository.workspace = true  #项目仓库
+license = "MIT"        # 授权协议 MIT
 
 [dependencies]
 # substrate pallet 相关依赖

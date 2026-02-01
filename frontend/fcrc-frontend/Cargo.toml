@@ -1,5 +1,5 @@
 [package]
-name = "fcrc-backend"  # 联储会后端模块
+name = "fcrc-frontend"  # 联邦公民储备委员会前端模块
 edition.workspace = true   # 默认 Rust 版本
 version.workspace = true   # 版本号
 authors.workspace = true   # 作者
@@ -7,4 +7,4 @@ repository.workspace = true  #项目仓库
 license = "MIT"        # 授权协议 MIT
 
 [dependencies]
-# 可能依赖 actix-web 或 tokio
+# 可添加 yew、tauri 等依赖
