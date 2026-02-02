@@ -1,4 +1,4 @@
-//! GMB 区块链核心常量定义
+//! 核心常量
 
 use sp_runtime::Perbill;
 
