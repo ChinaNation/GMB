@@ -1,4 +1,4 @@
-//! 43 个省储行全部质押的常量
+//! 省储行质押的常量
 //! 43 个省储行，创立发行永久质押常量，含省内公民数量（citizens_number）、质押金额（stake_amount）、质押地址（keyless_address）。
 
 use sp_core::H256;
