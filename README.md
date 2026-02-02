@@ -682,7 +682,8 @@ GMB/
 ### 8.2.1.keyless
 * 无私钥地址生成工具；
 * 可根据输入“种子”通过blake2_256算法得出无私钥地址；
-* 完整 43 个行政区划的种子（已修正陕西拼写并为SHAANXI）：
+* 完整43个省储行质押地址的种子（已修正陕西拼写并为SHAANXI）：
+```
     let provinces = [
         "01_ZHONGSHU", "02_LINGNAN", "03_GUANGDONG", "04_GUANGXI", "05_FUJIAN",
         "06_HAINAN", "07_YUNNAN", "08_GUIZHOU", "09_HUNAN", "10_JIANGXI",
@@ -694,7 +695,7 @@ GMB/
         "36_CONGLING", "37_TIANSHAN", "38_HEXI", "39_KUNLUN", "40_HETAO",
         "41_REHE", "42_XINGAN", "43_HEJIANG",
     ];
-* 以上为43个省储行永久质押地址的“种子”；
+```
 
 ### 8.2.2.subkey
 * 可使用subkey工具生成公民币区块使用的助记词、私公钥；
