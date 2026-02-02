@@ -245,6 +245,7 @@
 * 主体使用Rust语言，采用Substrate框架开发，桌面前端使用Tauri框架，手机前端使用开源的Matrix框架（Element前端）+Nova Wallet钱包集成；
 * 采用模块化开发，开发初期就要做好为后期去框架的准备，并符合长期技术演进，为今后重构中国的政府、金融、通信等领域的应用预留扩展。
 * 架构图
+```
    GMB/
    ├── node/                    # 区块链节点程序
    │   ├── src/                 # 节点主要逻辑（chain_spec、service、cli）
@@ -275,6 +276,7 @@
    ├── tools/                   # 工具库（账户生成、Key管理等）
    │
    └── wenku/                   # 文库（设计文档、图片素材、参考资料）
+```
 
 ****
 ## 4.2.节点/node
@@ -406,6 +408,7 @@
 * 省储行持有的公民币，根据本省储会决议，将其持有的公民币借贷给辖区商业银行或全节点，以获得借贷利息收益，商业银行/全节点借贷给公民/企业等。
 * 借贷模块/lending；借贷利息计算/interest；资产负债表/assets
 * 初步架构
+```
 GMB/
  └─ fcrc_backend/                 # 联邦公民储备委员会后端
    ├─ Cargo.toml                  # Rust 项目配置文件
@@ -422,10 +425,13 @@ GMB/
       │   ├─ format.rs            # 金额、时间格式化
       │   └─ validator.rs         # 数据合法性校验
           └─ errors.rs               # 错误类型定义
+```
 
 ## 6.2.全节点后端/fullnode-backend
 * 根据前端需求定制后端服务；
 * 初步架构
+
+```
 GMB/
 └─ fullnode_backend/                 # 全节点后端（链外辅助功能）
       ├─ Cargo.toml                     # Rust 项目配置文件
@@ -451,10 +457,12 @@ GMB/
           │   ├─ validator.rs           # 数据合法性校验
           │   └─ parser.rs              # 节点日志解析等
           └─ errors.rs                  # 错误类型定义
+```
 
 ## 6.3.轻节点后端/wuminapp-backend
 * 根据前端需求定制后端服务。
 * 初步架构
+```
 GMB/
 └─ wuminapp_backend/                 # 轻节点后端
       ├─ Cargo.toml                     # Rust 项目配置文件
@@ -483,6 +491,7 @@ GMB/
           │   ├─ parser.rs              # CIIC码解析、交易解析等
           │   └─ formatter.rs           # 金额格式化、公民币单位转换等
           └─ errors.rs                  # 错误类型   
+```
 
 ****
 # 7.前端/frontend
@@ -508,6 +517,7 @@ GMB/
 
 ### 7.1.4.技术开发
 * 初步架构
+```
 GMB/
 └─ frontend/                     # 所有节点前端统一放在这个文件夹
     └─ manage-frontend/          # 联邦公民储备委员会前端（fcrc是前端管理软件，国储会、省储会、省储行共用的前端软件）
@@ -526,6 +536,7 @@ GMB/
         │   └─ assets/           # 静态资源（图片、图标、样式等）
         ├─ public/               # 公共资源文件（index.html、favicon、静态图标等）
         └─ node_modules/         # 前端依赖库（React、MUI 等）
+```
 
 * 技术栈与框架选择
 	•	Tauri：打包桌面端（macOS / Linux），调用系统 API，安全轻量。
@@ -553,6 +564,7 @@ GMB/
 
 ### 7.2.4.技术开发
 * 初步架构
+```
 gmb/
 └── frontend/                     # 所有节点前端统一放在这个文件夹
     └── fullnode-frontend/        # 全节点前端
@@ -564,6 +576,8 @@ gmb/
             ├── components/       # 可复用组件，例如区块列表、节点状态面板
             ├── pages/            # 页面模块，例如监控页、交易页、日志页
             └── utils/            # 工具函数，例如 RPC 调用、数据处理
+```
+
 * 前端框架推荐
 	•	Tauri：桌面端打包，轻量、开源、安全。
 	•	React：前端组件化，便于维护和扩展。
@@ -623,6 +637,7 @@ gmb/
 
 ### 7.3.4.技术开发
 * 初步架构
+```
 GMB/
 └─ frontend/
     └─ wuminapp-frontend/        # 轻节点前端（中文：公民币）
@@ -643,11 +658,13 @@ GMB/
         ├─ android/              # Android 平台原生配置和源码
         ├─ ios/                  # iOS 平台原生配置和源码
         └─ node_modules/         # 前端依赖库（React Native、Nova Wallet SDK、Matrix SDK 等）
+```
 
 ****
 # 8.其他
 ## 8.1.自定义库/primitives
 * 全链统一常量
+```
 /primitives
     ├── Cargo.toml
     └── src/
@@ -660,6 +677,7 @@ GMB/
          ├── rreserve_nodes_const.rs    //  储委会常量（国储会+省储会）
          ├── shengbank_nodes_const.rs   //  省储行节点常量
          ├── shengbank_stakes_const.rs  //  省储行质押常量
+```
 
 ## 8.2.工具库/tools
 ### 8.2.1.keyless
