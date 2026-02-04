@@ -1,26 +1,21 @@
-[workspace]
+[workspace]         # 声明整个仓库的工作空间
 members = [
-    "node",
-    "runtime",
-    "primitives",
-    "pallets/governance/new-sheng-node",
-    "pallets/governance/resolution-destro-gov",
-    "pallets/governance/resolution-issuance-gov",
-    "pallets/issuance/citizen-lightnode-issuance",
-    "pallets/issuance/fullnode-pow-reward",
-    "pallets/issuance/resolution-issuance-iss",
-    "pallets/issuance/shengbank-stake-interest",
-    "pallets/transaction/offchain-transaction-fee",
-    "pallets/transaction/onchain-transaction-fee",
+  "citizenchain",   # 公民币区块链主体（node / runtime / pallets 等）
+  "fcrcnode",       # 公民储备委员会桌面软件（国储会 / 省储会 / 省储行 共用节点软件，前后端，Linux）
+  "fullnode",       # 全节点桌面软件（挖矿 / 交易 / 运维，Linux）
+  "wuminapp",       # 轻节点手机App软件（iOS、Android）
+  "primitives",     # 全项目通用常量
+  "tools",          # 工具库（keygen / key等）
+  "wenku",          # 文库/资料
 ]
-resolver = "2"
+resolver = "2"      # 使用 Cargo 新版依赖解析器，减少 feature 冲突
 
-[workspace.package]
-edition = "2021"
-version = "0.0.1"
-authors = ["voyager_rhett <chinanation@icloud.com>"]
-repository = "https://github.com/ChinaNation/GMB"
-license = "MIT"
+[workspace.package]                                         # 元信息（作为整个仓库的默认元数据）
+edition = "2021"                                            # Rust 版本规范（2021 Edition）
+version = "0.0.1"                                           # 整个工作空间的统一版本号（子 crate 可继承或覆盖）
+authors = ["voyager_rhett <chinanation@icloud.com>"]        # 作者信息
+repository = "https://github.com/ChinaNation/GMB"           # 项目仓库地址
+license = "MIT"                                             # 开源协议
 
 [workspace.dependencies]
 # 本地

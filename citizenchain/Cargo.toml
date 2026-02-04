@@ -1,0 +1,23 @@
+[workspace]                                  # 公民币区块链主体的子工作空间
+members = [
+    "node",                                  # 链节点程序
+    "runtime",                               # 链上运行时
+
+    "governance/admins-origin-gov",          # 治理-管理员权限治理模块 pallet
+    "governance/new-sheng-node",             # 治理-增删改新省储会/新省储行模块 pallet
+    "governance/resolution-destro-gov",      # 治理-决议销毁模块 pallet
+    "governance/resolution-issuance-gov",    # 治理-决议发行提案投票模块 pallet
+    "governance/runtime-root-upgrade",       # 治理-运行时状态升级与超级管理员模块 pallet
+    "governance/voting-engine-system",       # 治理-投票引擎模块 pallet
+
+    "issuance/citizen-lightnode-issuance",   # 发行-公民轻节点发行模块 pallet
+    "issuance/fullnode-pow-reward",          # 发行-全节点发行模块 pallet
+    "issuance/resolution-issuance-iss",      # 发行-决议发行执行模块 pallet
+    "issuance/shengbank-stake-interest",     # 发行-省储行质押利息模块 pallet
+
+    "transaction/offchain-transaction-pos",  # 交易-链下交易手续费模块 pallet
+    "transaction/onchain-transaction-pow",   # 交易-链上交易手续费模块 pallet
+
+    "template",                              # 框架自带模板 pallet
+]
+resolver = "2"
