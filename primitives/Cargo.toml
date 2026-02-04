@@ -1,10 +1,10 @@
 [package]
-name = "primitives"   # 全局常量模块
+name = "primitives"        # 全局常量模块
 edition.workspace = true   # 默认 Rust 版本
 version.workspace = true   # 版本号
 authors.workspace = true   # 作者
 repository.workspace = true  #项目仓库
-license = "MIT"        # 授权协议 MIT
+license = "MIT"              # 授权协议 MIT
 
 [dependencies]
 # SCALE 编解码

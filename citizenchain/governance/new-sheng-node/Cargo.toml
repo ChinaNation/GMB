@@ -1,5 +1,5 @@
 [package]
-name = "new-sheng-node"  # 新增省储会/省储会模块
+name = "new-sheng-node"    # 增删改新省储会/新省储行模块
 edition.workspace = true   # 默认 Rust 版本
 version.workspace = true   # 版本号
 authors.workspace = true   # 作者
