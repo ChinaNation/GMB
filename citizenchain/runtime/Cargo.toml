@@ -19,6 +19,7 @@ workspace = true
 codec = { features = ["derive"], workspace = true }
 scale-info = { features = ["derive", "serde"], workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
+primitives = { path = "../../../primitives", default-features = false } # 引用pow常量
 
 # frame
 frame-executive = { workspace = true }
