@@ -7,4 +7,19 @@ repository.workspace = true  #项目仓库
 license = "MIT"        # 授权协议 MIT
 
 [dependencies]
-# substrate pallet 相关依赖
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+sp-runtime = { workspace = true }
+sp-std = { workspace = true }
+
+primitives = { path = "../../../primitives", default-features = false }
+
+[features]
+default = ["std"]
+std = [
+    "frame-support/std",
+    "frame-system/std",
+    "sp-runtime/std",
+    "sp-std/std",
+    "primitives/std",
+]
