@@ -1,4 +1,4 @@
-//!  创世常量
+//!  创世常量=genesis.rs
 #![cfg_attr(not(feature = "std"), no_std)]
 
 /// 一、创世宣言
