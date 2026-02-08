@@ -1,4 +1,4 @@
-//! 公民轻节点发行常量
+//! 公民轻节点发行常量=citizen_const.rs
 
 /// 一、发行总量与阶段
 pub const CITIZEN_LIGHTNODE_MAX_COUNT: u64 = 1_443_497_378;  // 可获得奖励的公民轻节点最大数量

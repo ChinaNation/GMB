@@ -1,5 +1,5 @@
-//! 省储行节点的常量
-//! 包含：省储行ID（pallet_id）、节点名称（node_name）、交易账户（pallet_address）、管理员列表（admins）；
+//! 43个初始省储行节点的常量=shengbank_nodes_const.rs
+//! 包含：省储行ID（pallet_id）、节点名称（node_name）、省人口数（citizens_number）、质押金额（stake_amount）、质押地址（keyless_address）交易账户（pallet_address）、管理员列表（admins）；
 //! 其中 admins 为该节点的创世管理员公钥数组，用于多签权限控制，可通过内部投票更换。
 
 use sp_core::H256;
@@ -10,8 +10,8 @@ pub struct ShengBankNodeConst {
     pub node_name: &'static str,
     pub citizens_number: u64,
     pub stake_amount: u128,
-    pub pallet_address: [u8; 32],
     pub keyless_address: [u8; 32],
+    pub pallet_address: [u8; 32],
     pub admins: &'static [[u8; 32]],
 }
 
@@ -23,8 +23,8 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         node_name: "中枢省公民储备银行权益节点",
         citizens_number:10_913_902,
         stake_amount:10_913_902_0000,
-        pallet_address: hex!("6d6f646c7072627a737330310000000000000000000000000000000000000000"),
         keyless_address:hex!("21bc9e12d717e4d55666501fd21f8f3fdfbf98d513d6584424f34162397ac1be"),
+        pallet_address: hex!("6d6f646c7072627a737330310000000000000000000000000000000000000000"),
         admins: &[
             hex!("7a24e290379c6e458f5372246629a739064b01de97ca85e4008a0c52124ffa2b"),hex!("84a26299f660c0baa0af46ca33169aefaa41b35be06f2b8a66b4a20b7038d60b"),hex!("ece6ca93610b323a5a20c96d52078da1d90d2c4057784157194365ba51c61f6f"),
             hex!("f47c3849f4eb25e8306e7d525ef8f15d699ebe2f420abc53927ca7c1b63ae90b"),hex!("8002ed809a2fa9767d0def1cd0dede8dd8fa424c8468211ff07a684dd3695555"),hex!("40dd8262f62d8411be3795d187d226047271b4080033d22da9511dfacd106935"),
@@ -36,6 +36,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prblns02",
         node_name: "岭南省公民储备银行权益节点",
+        citizens_number:28_157_064,
+        stake_amount:28_157_064_0000,
+        keyless_address:hex!("faf75f9cb6945e1f61cb42a26d8b6c35614794830ecfc06477e8ace8e1c844b8"),
         pallet_address: hex!("6d6f646c7072626c6e7330320000000000000000000000000000000000000000"),
         admins: &[
             hex!("026c25206f34749215e5dd6ca6ab806ff53c4a047b68a5779ae7c22ed4befc73"),hex!("8834a8025fd436da0b7901653b4c6dd7ed05b14553a3c471b0991e1c840b0338"),hex!("5ec76404392102f3ac8f02efae9282160a478643b830d6c76c6edefaf6724227"),
@@ -48,6 +51,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbgds03",
         node_name: "广东省公民储备银行权益节点",
+        citizens_number:106_012_864,
+        stake_amount:106_012_864_0000,
+        keyless_address:hex!("86eaef716945c2080b9348b8bc9aaede939be2bd875ddb2d3043edbcf2c42ddc"),
         pallet_address: hex!("6d6f646c70726267647330330000000000000000000000000000000000000000"),
         admins: &[
             hex!("0489dc54c1f161b86bef1c9c5e5ef04ebd0e80b79a165178739f76a8aec19f71"),hex!("ae07a1c9f0f52a7316d5fd8e961ed0725aeb424d24db73a79b526d4174f76e61"),hex!("70d474f19e6dd32e28d009dfe481062e918b03b7b7f4e6ae40b95a1e8b361b5e"),
@@ -60,6 +66,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbgxs04",
         node_name: "广西省公民储备银行权益节点",
+        citizens_number:50_126_804,
+        stake_amount:50_126_804_0000,
+        keyless_address:hex!("209c88e0f516c4bef0bd7295a28065cd05ac8c2d4ed40b157a67dc55dc8d3e53"),
         pallet_address: hex!("6d6f646c70726267787330340000000000000000000000000000000000000000"),
         admins: &[
             hex!("9427e1d51223861d4af89d3327844ff454c67a6dd7cf1a061efe930ebc894201"),hex!("ba79a4f7103ea953b143f9d78fcf31de39d234d034d619231104a0a8d680f408"),hex!("4477a14b6e3057e5347474c959b706afd7950b82e2797332badc181cd9593f3c"),
@@ -72,6 +81,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbfjs05",
         node_name: "福建省公民储备银行权益节点",
+        citizens_number:41_540_086,
+        stake_amount:41_540_086_0000,
+        keyless_address:hex!("7a5d47815b1ae50c39ad89b68f8f7827dffedabbe0a349484a873cc0a3e94ba2"),
         pallet_address: hex!("6d6f646c707262666a7330350000000000000000000000000000000000000000"),
         admins: &[
             hex!("aafafefde99d84cdaa347e3525cad15b83661b21e919acb81f07bef285241760"),hex!("d829889b40819c533dd7470c46591ae30391f5e976061cdeef39b5b2fed9591b"),hex!("d0616e6da5b3e5d99ff7ebe4dae095a6b31182d4c5d93e60b0803b4a8d5eab37"),
@@ -84,6 +96,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbhns06",
         node_name: "海南省公民储备银行权益节点",
+        citizens_number:10_081_232,
+        stake_amount:10_081_232_0000,
+        keyless_address:hex!("e242a55b40fbf6c0a29e5aa316965a93ec67d09aafc266f7e8895bdb3e06b5d5"),
         pallet_address: hex!("6d6f646c707262686e7330360000000000000000000000000000000000000000"),
         admins: &[
             hex!("28e54d11584f1ca20f574a25de76ab19b077cf9ae1708fe52a00385b854ff72d"),hex!("2ae625ae1cc657c8639d5ff70578bae607c3cbb77561709dcee75dcc1e16ae43"),hex!("bc34797c613cdca8271ea8d179e8f7baf021f1f167ba1092c3c20f9126916a2f"),
@@ -96,6 +111,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbyns07",
         node_name: "云南省公民储备银行权益节点",
+        citizens_number:46_821_766,
+        stake_amount:46_821_766_0000,
+        keyless_address:hex!("49542724fe089ab265daeceee4a6c9f5028ac623b9602230664578d2c1ea8442"),
         pallet_address: hex!("6d6f646c707262796e7330370000000000000000000000000000000000000000"),
         admins: &[
             hex!("ae54c9e6bd19eaa35d2d344255f64a4258fad0e342ccee088f3817b6a61b152a"),hex!("86189f4190f2070778837d9bad9bc68b6f6c3ae4c712c5555b25553fb3ad2160"),hex!("16b7f4e63a9cf16385e086ecb693d0498166b6df914098450f4f5458a47f543f"),
@@ -108,6 +126,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbgzs08",
         node_name: "贵州省公民储备银行权益节点",
+        citizens_number:38_562_148,
+        stake_amount:38_562_148_0000,
+        keyless_address:hex!("523248ae37ea8689ca9e5a6d505e1610c67aa7e4646505b8b8750b82aeba9b6c"),
         pallet_address: hex!("6d6f646c707262677a7330380000000000000000000000000000000000000000"),
         admins: &[
             hex!("e0dcf22a3dd7e1f14aa455c0e274d4b4dcb5c049f36433a7f7f4135f04211d2f"),hex!("12f8a76239200bd531cf343957ad851e5135f3b5144c395342f03c5ee65a7272"),hex!("76f4fa8168efa5eb0cb752a62b2d348c3d8c8aa459c7a014078be89054c1fc62"),
@@ -120,6 +141,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbhns09",
         node_name: "湖南省公民储备银行权益节点",
+        citizens_number:66_444_864,
+        stake_amount:66_444_864_0000,
+        keyless_address:hex!("bae6d80a94732903af02202d0ada61d7e74f25f0a8cdf32b6d73260dc418e39f"),
         pallet_address: hex!("6d6f646c707262686e7330390000000000000000000000000000000000000000"),
         admins: &[
             hex!("1a4bf08983c7ca48d46ac578334d808c7ae02fa1bcff39c7fad236fa5b89e246"),hex!("764c622263b771743c4493f6bf282138b05f83ce22ed2bdce1295abc45130f1a"),hex!("9e1382c1b4e598b3c11af101087b48490107fdee8a60982e203cb45197507c64"),
@@ -132,6 +156,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbjxs10",
         node_name: "江西省公民储备银行权益节点",
+        citizens_number:45_188_635,
+        stake_amount:45_188_635_0000,
+        keyless_address:hex!("fead3049fa97c8fd8b07f319cfe42bef096831cec0235dda5b4ad8af93827180"),
         pallet_address: hex!("6d6f646c7072626a787331300000000000000000000000000000000000000000"),
         admins: &[
             hex!("d0eb85c18ae4ba3a56618122ee359b2c18b3af18de0a8d994d01502cd8779176"),hex!("c6095937cbd97ddea9713f6e566837203e1af3df322d4c36031631dc3a76c412"),hex!("feb24a49cc19e93afc71c8f571f41ed4f50a7a4bf67aeb40e7b9aff6f7b42b0e"),
@@ -144,6 +171,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbzjs11",
         node_name: "浙江省公民储备银行权益节点",
+        citizens_number:64_567_588,
+        stake_amount:64_567_588_0000,
+        keyless_address:hex!("0f327a7b55043d17b16596f0c04729667696a666c38b419a237d8961fb343a00"),
         pallet_address: hex!("6d6f646c7072627a6a7331310000000000000000000000000000000000000000"),
         admins: &[
             hex!("d45f674ef2a84f320674374cd71e40fe29f4532d4329588f59165011d6a6a673"),hex!("ec98eca9117b694254f7ce8d1c96228cee5b2ac1229a8c3da16982a4637ff86d"),hex!("dec896043b2cf543245066ab46433f95594b97ae42a35efbb07e2061115a4b20"),
@@ -156,6 +186,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbjss12",
         node_name: "江苏省公民储备银行权益节点",
+        citizens_number:84_748_016,
+        stake_amount:84_748_016_0000,
+        keyless_address:hex!("65c81d68fc9970b3ae2ec820ebb494f9c0e571a46154f2beec36de05f15ec71c"),
         pallet_address: hex!("6d6f646c7072626a737331320000000000000000000000000000000000000000"),
         admins: &[
             hex!("00b31ce3c5a0c72d11d14e44e9fc3f24143fd4e7b50d9d666ca0744030538a11"),hex!("6ef2d3a56d37d85f07bd12ad1e039d1ebc6016118baed9d6adf055d22556003d"),hex!("a0c2f02007638ba832a18d3dad102c6fb47be43316491f8c87683a13bf96db18"),
@@ -168,6 +201,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbsds13",
         node_name: "山东省公民储备银行权益节点",
+        citizens_number:101_527_453,
+        stake_amount:101_527_453_0000,
+        keyless_address:hex!("5213d43ecb0c0f9ef7156173cb4bb3310ccece5ae59259837b2238fc7ad7640e"),
         pallet_address: hex!("6d6f646c70726273647331330000000000000000000000000000000000000000"),
         admins: &[
             hex!("5a5c268c38e99e8f20b9e8e3d0a02697a92406e601b8aeb0420a39925211d64f"),hex!("f612de6628031f3f285de2c1a3d54583b285057ec28eef35c1e719fa8748eb7b"),hex!("5ef1de0f6e4e18a6219c21ddbf65f73504a7ce40e15e0bbf3929480539d0fb12"),
@@ -180,6 +216,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbsxs14",
         node_name: "山西省公民储备银行权益节点",
+        citizens_number:34_915_616,
+        stake_amount:34_915_616_0000,
+        keyless_address:hex!("76d4f36462eca50cdc3aa7f59650dd957200ba8fa88c3a9e27547cb79ec92266"),
         pallet_address: hex!("6d6f646c70726273787331340000000000000000000000000000000000000000"),
         admins: &[
             hex!("cedaa06d70cd93f39ddb56be76f08d0fa7ee4f8bb74dcb1d65d0831ef1ba7367"),hex!("2cea02949c178fd8161759f40b3446f6a14f1f485098c822fb3556a410de1d6a"),hex!("fc3ab1d451fa03ba214d736cc6dc1544605899f84607dae17f1fc3a424e03c62"),
@@ -192,6 +231,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbhns15",
         node_name: "河南省公民储备银行权益节点",
+        citizens_number:99_365_519,
+        stake_amount:99_365_519_0000,
+        keyless_address:hex!("682792dc6945be8fe5bdcdbe72f19fa40c42c39411d56a206516d4a223884d91"),
         pallet_address: hex!("6d6f646c707262686e7331350000000000000000000000000000000000000000"),
         admins: &[
             hex!("16977016c793b7f8cb5375bfb343e06511e8b6bff0a3ded1763b03e65b49dc75"),hex!("2e01b472f46fb11f0adabe426e7a76305d2f1a040213a5b5ca966b89dcc58d7c"),hex!("48d4eaf64c72a1c0a79f309df3dc0827f24a29ec203d257048e047062807a844"),
@@ -204,6 +246,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbhbs16",
         node_name: "河北省公民储备银行权益节点",
+        citizens_number:56_282_021,
+        stake_amount:56_282_021_0000,
+        keyless_address:hex!("be824a50fb2e456cc8ad0dac169c6f42818525b6de16647284c433d5a36c05a5"),
         pallet_address: hex!("6d6f646c70726268627331360000000000000000000000000000000000000000"),
         admins: &[
             hex!("bc50baf7fbc79b72df63804d5d48275528142136d1914a2334347875016fa551"),hex!("26ccde1f7b15cb0c45ce3a798aee6c68945e524fded101546d1b2e289260ca76"),hex!("c2cd07f51c525ac6ed14b6414d178cb8eab731f4b951f8499ecb480ffedd6e31"),
@@ -216,6 +261,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbhbs17",
         node_name: "湖北省公民储备银行权益节点",
+        citizens_number:54_543_553,
+        stake_amount:54_543_553_0000,
+        keyless_address:hex!("a8c7569f9fd0eea135a453b9b2f1e32f3222c4f5a4981ba59111f5220e67d7f1"),
         pallet_address: hex!("6d6f646c70726268627331370000000000000000000000000000000000000000"),
         admins: &[
             hex!("d8234d16d61cba73ebbfa12d4e53ddf1a4f5d24f106c286799d0e14801d0953b"),hex!("625284c24b30db1417fa4f253751f7e53c0b7f82bfbfbebdfbf2fc8ebc246e54"),hex!("f89647d183ef9fa59b51e5389b1037187d10d49d337569a27e31196f4fb43e78"),
@@ -228,6 +276,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbsxs18",
         node_name: "陕西省公民储备银行权益节点",
+        citizens_number:33_824_101,
+        stake_amount:33_824_101_0000,
+        keyless_address:hex!("a3dbf6e743d0712ff6be8d852ec2a892891dc35d5d2ef260c112afe291c49b64"),
         pallet_address: hex!("6d6f646c70726273787331380000000000000000000000000000000000000000"),
         admins: &[
             hex!("d230315cd4220886014478c89fe74112f144ef42c167a51ec1cff7d1a394df41"),hex!("fc28e2bd3c0f096fb04888a25eded5aa405b3bc010a75d6db79484c8c4e08a57"),hex!("188d874eb7953a2c2592b3847a63df8c04806430dd8d33f4ea83170d9bc6c876"),
@@ -240,6 +291,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbcqs19",
         node_name: "重庆省公民储备银行权益节点",
+        citizens_number:32_054_159,
+        stake_amount:32_054_159_0000,
+        keyless_address:hex!("95f0a21e4d83326867e8ce82287e91f9606075cc77c21f1b1799a6224dc058c6"),
         pallet_address: hex!("6d6f646c70726263717331390000000000000000000000000000000000000000"),
         admins: &[
             hex!("9e06d0846eebfe509661911c909abd83ae39180b7c6f97099b548d8352ed6428"),hex!("fec0660b9e067379bbc9196804cc517fc1b0ef4fb2b38b3e05e7b95d97e6d96b"),hex!("90c012f3b1be1015ad2dce39e86da83cff4270a0ded957be3e49394137a79818"),
@@ -252,6 +306,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbscs20",
         node_name: "四川省公民储备银行权益节点",
+        citizens_number:80_310_245,
+        stake_amount:80_310_245_0000,
+        keyless_address:hex!("97c73ed34795384c351a59d81d876011805cf41a0b40da822d7d051137f9059d"),
         pallet_address: hex!("6d6f646c70726273637332300000000000000000000000000000000000000000"),
         admins: &[
             hex!("66942d040ad78ebd3dd5823702e65165bfd07ca6b72f4d6b6487ebfe5f710834"),hex!("fec1a2a37c3709426ed5c6dda3ec021a491eb26b489d26e3cae2c7928e1ada08"),hex!("ec141e5d7509eac37b6a65fdce970e3bc555f6c3ed20661783d92f361986ed4c"),
@@ -264,6 +321,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbgss21",
         node_name: "甘肃省公民储备银行权益节点",
+        citizens_number:20_617_465,
+        stake_amount:20_617_465_0000,
+        keyless_address:hex!("37b05070ec70ad7444f208dc1b0f15432fe00bedb05f4fdb061ac83ee68800bc"),
         pallet_address: hex!("6d6f646c70726267737332310000000000000000000000000000000000000000"),
         admins: &[
             hex!("f6a25ebd4796d80cff6b511baa479d0415a940747edd09b604f000969a40c073"),hex!("96ac1e9089440a286d9a5779464d50cbce7bd9acf3f13971c34e2bb500bf8a77"),hex!("14745b4b10aeb10aa4a1d5d49d9940f3c73736179c1700b6320574fdaad3094f"),
@@ -276,6 +336,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbbps22",
         node_name: "北平省公民储备银行权益节点",
+        citizens_number:21_893_095,
+        stake_amount:21_893_095_0000,
+        keyless_address:hex!("4b724514f0c03b8289de69592687de7bd54096e6801ee1b55604b29789055e8e"),
         pallet_address: hex!("6d6f646c70726262707332320000000000000000000000000000000000000000"),
         admins: &[
             hex!("5c02963fb3bd05b5219120d83d37f1fa579a385fecb85eb4ec2e2673ebbb2717"),hex!("426a2d8b60bea0d1d449f07944bb12b12f1d6462df665d370db2af69b81c3d4e"),hex!("d60f7c8aadb750f545334c524d38966f35d721636b4031c1788410c92b2d0904"),
@@ -288,6 +351,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbbhs23",
         node_name: "滨海省公民储备银行权益节点",
+        citizens_number:24_720_871,
+        stake_amount:24_720_871_0000,
+        keyless_address:hex!("af2cd60d5e63d8d1dff54c391c1567c89998ce4114fddb80d84d84a8f9e4db04"),
         pallet_address: hex!("6d6f646c70726262687332330000000000000000000000000000000000000000"),
         admins: &[
             hex!("c088c0c872442f38d757e784c813dcec8553865ead6dd893ac6c017af5d69f55"),hex!("42114435469d7725d16e905e2a88c19da99bbb6ae524b1bce5b8ab5723307b02"),hex!("9e75e35544fb971fca7ee78a080cccdbd669f173a8f91bcc31d4303ad896dc0c"),
@@ -300,6 +366,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbsjs24",
         node_name: "松江省公民储备银行权益节点",
+        citizens_number:24_870_895,
+        stake_amount:24_870_895_0000,
+        keyless_address:hex!("f897f0119dfb14035a841713a7cf889f903d262d26c187fd329bb4ba6a7b5be3"),
         pallet_address: hex!("6d6f646c707262736a7332340000000000000000000000000000000000000000"),
         admins: &[
             hex!("827e73de31b2709b35089493589aacee2ae5b21783b42e5485d8f9b0e68fda61"),hex!("607171f3f3ea76ffc060c5168343e0b7e37eaa6a895aa5f767c9d7bbeb36b67a"),hex!("7cf58cab2eb3d22b06752610e229b6f7f295324e2f344bfec5b637a4e4749c4e"),
@@ -312,6 +381,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbljs25",
         node_name: "龙江省公民储备银行权益节点",
+        citizens_number:22_780_354,
+        stake_amount:22_780_354_0000,
+        keyless_address:hex!("41f918fd7f8ec10f6fa1e4d67094583742585aae5ec5a2ac97fd046b4d4dc48c"),
         pallet_address: hex!("6d6f646c7072626c6a7332350000000000000000000000000000000000000000"),
         admins: &[
             hex!("ce923cfccca40f7f50dbcc73f3993a47564ce7a2430d9f60bac6b9212db8082e"),hex!("c2aca903b71942762be6d8892ab61ad44389193ec442ee8a31ea7ced8c2e1b19"),hex!("c4405135f3207e48f73df3626170dbdd8a7c26bea487d954bc59d38e1bfe2411"),
@@ -324,6 +396,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbjls26",
         node_name: "吉林省公民储备银行权益节点",
+        citizens_number:24_073_453,
+        stake_amount:24_073_453_0000,
+        keyless_address:hex!("0635c25df1cf9dd1fbe6d8e4bea1de71a0e8c1aab0d2dbf5fe2dbda39b64d798"),
         pallet_address: hex!("6d6f646c7072626a6c7332360000000000000000000000000000000000000000"),
         admins: &[
             hex!("ec059effa082803a1cb54f4be99123b435514be482b2a45de16f2663d7bec07e"),hex!("e2720a778010c978a0dabcc8fd376aa1c2986cea86353695d89e452fe68e331b"),hex!("e07a5ae091692aee99991b9008c1c56381c251afa0efc37eb17d7b9275d00b15"),
@@ -336,6 +411,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prblns27",
         node_name: "辽宁省公民储备银行权益节点",
+        citizens_number:42_591_407,
+        stake_amount:42_591_407_0000,
+        keyless_address:hex!("b1684c88713edd73414eb23fb99608ba71495e2bed457da6d5b9afc1921e2fa4"),
         pallet_address: hex!("6d6f646c7072626c6e7332370000000000000000000000000000000000000000"),
         admins: &[
             hex!("240519b39d7ac94ae048845ff707b81255bfb52383ba61c47d65c9adad1e783f"),hex!("0e95f2e4c8cf8e4f2b39d98149d2b8846edfb80d009f6e508e3b4dc457783a15"),hex!("7e0df17eafbb1fadafe0449f709f084a28fac02e306279512298fc13b918f924"),
@@ -348,6 +426,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbnxs28",
         node_name: "宁夏省公民储备银行权益节点",
+        citizens_number:7_202_654,
+        stake_amount:7_202_654_0000,
+        keyless_address:hex!("2dbfa78e5e41e7593ae96be8623cbfe019d181e1c93d598239713ad5bd3f5472"),
         pallet_address: hex!("6d6f646c7072626e787332380000000000000000000000000000000000000000"),
         admins: &[
             hex!("9e6c016183e311d06f3af7f8c868d23a63ebb02aed985506ba9cbac71b88e636"),hex!("70d199e9871d49ca54f65ef84b22eddaeb46d65fa51acffee5bd8d4ec5f68c7d"),hex!("d8a96a54d932bc5e09f7bf38a88b71c95769dbf7af5ff33dd34d41b46d89e203"),
@@ -360,6 +441,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbqhs29",
         node_name: "青海省公民储备银行权益节点",
+        citizens_number:5_030_542,
+        stake_amount:5_030_542_0000,
+        keyless_address:hex!("0d71aa43a60982e9baf30e2898644701680737814ceeb724845c1ed3874cd685"),
         pallet_address: hex!("6d6f646c70726271687332390000000000000000000000000000000000000000"),
         admins: &[
             hex!("d0abf7d5bf48879b31cf8335bf4eaa35284185444c3c340902791c8860d4d703"),hex!("02186e9ca519afc3d461d7433bf47c932b4da73c262eb599b1aa507a6ce6f812"),hex!("825f083b9d940748da8bb79c00ebd971bed1a63fc5241f3d72a02726ba236529"),
@@ -372,6 +456,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbahs30",
         node_name: "安徽省公民储备银行权益节点",
+        citizens_number:61_027_171,
+        stake_amount:61_027_171_0000,
+        keyless_address:hex!("8029f0568a5a803d635179e1b84b1e82140670b425ff058497577f4e898b9829"),
         pallet_address: hex!("6d6f646c70726261687333300000000000000000000000000000000000000000"),
         admins: &[
             hex!("6a23c0f923ff3bcb7b787eff0e09cdc5ec3c30d5c9fbaa244b30ff14ec88d00c"),hex!("10936e219740f088667645ce8df23fd47b1cb246b3e2f66a7d1111cca2b1820d"),hex!("2a89d69c10104b963a3b41e4b553f694f33a7604149bca455b64edc31b5d8d48"),
@@ -384,6 +471,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbtws31",
         node_name: "台湾省公民储备银行权益节点",
+        citizens_number:23_561_236,
+        stake_amount:23_561_236_0000,
+        keyless_address:hex!("5d489483bb48d1d447cbdcbc8fbb4c71e37eda4cf31340fe6c4f5aa640f72fc5"),
         pallet_address: hex!("6d6f646c70726274777333310000000000000000000000000000000000000000"),
         admins: &[
             hex!("c2406f8a720ce27969456d67468debc78e2933f1fb8ebe75799582e6eec73839"),hex!("04908273d2916625087590caf764aae7eca0f8fa52a2f9b80959e7f308550430"),hex!("fe4fd3d43864c7c8b24249c85736bf42942ef3529e40c995dc47366af3c6352d"),
@@ -396,6 +486,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbxzs32",
         node_name: "西藏省公民储备银行权益节点",
+        citizens_number:2_763_853,
+        stake_amount:2_763_853_0000,
+        keyless_address:hex!("8f41d40cd896fa0af97c3052b6486353ab6f75d479f77ddf224af89a1c2977b6"),
         pallet_address: hex!("6d6f646c707262787a7333320000000000000000000000000000000000000000"),
         admins: &[
             hex!("82df0fbf16857baffbed3ceb167c17ee87b999797bdd3cc725c55ddf7d3c040a"),hex!("70fe5e941a9171c1884a6094793b91276a1871737c1a182539c453daa743fa6b"),hex!("5ed91f2dffb02e1d8555552221895a0f2bc62e465c3c4e7fe2c39bad15515651"),
@@ -408,6 +501,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbxjs33",
         node_name: "新疆省公民储备银行权益节点",
+        citizens_number:9_880_442,
+        stake_amount:9_880_442_0000,
+        keyless_address:hex!("587bc76d45042bcd9ff52ceee72612e3b71a734059038c46e9234985f308c373"),
         pallet_address: hex!("6d6f646c707262786a7333330000000000000000000000000000000000000000"),
         admins: &[
             hex!("9af72d3d46fe219a8f48fb6f73fdaccc4057f32dffe110531e606487c5abf73e"),hex!("6c5c177a796e35fc3a18e74d196b21d41931027bae0b852db3d1844c672b4e62"),hex!("a20044c26eda427df6856636abcf530dd69dd52a2adf641ee121a64a3e6fd962"),
@@ -420,6 +516,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbxks34",
         node_name: "西康省公民储备银行权益节点",
+        citizens_number:4_513_098,
+        stake_amount:4_513_098_0000,
+        keyless_address:hex!("f66395985ccc73d95fb290504973b376f02d7d98da93b20d95c343da8d152de7"),
         pallet_address: hex!("6d6f646c707262786b7333340000000000000000000000000000000000000000"),
         admins: &[
             hex!("b0c59a13a468e7c5a5d4fd32a7ca4d34e4bd41517a0bcc8327e2e40c838c2c08"),hex!("2c35bd9c95e7ca5660ca44f7bfe6f1033e240860be666b84244ad0fbb2469945"),hex!("a82c184bd133150afdc1579c59c61d89d6300159caf65f1bce3a73f8cbc2dc3a"),
@@ -432,6 +531,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbals35",
         node_name: "阿里省公民储备银行权益节点",
+        citizens_number:2_627_999,
+        stake_amount:2_627_999_0000,
+        keyless_address:hex!("bc789a1c394a5e485d38432bcdb59fad3411cfd4699a7983f5853997867401c4"),
         pallet_address: hex!("6d6f646c707262616c7333350000000000000000000000000000000000000000"),
         admins: &[
             hex!("5ad6075c5d29eb2b8e91083c406fe6f7ccaa41053d30e2cb0961d85bb26eca48"),hex!("c0abc0e68d1086d3f4b9de703dd4484b4949ef81c7d6a33372fb0cc9b3be990b"),hex!("be251b50338eace5d5c5c40403e7902d505901468f893e659195fcc2c11f6b0b"),
@@ -444,6 +546,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbcls36",
         node_name: "葱岭省公民储备银行权益节点",
+        citizens_number:7_833_021,
+        stake_amount:7_833_021_0000,
+        keyless_address:hex!("ed3f67c63bc0f2140205473c17890e73688babdf7684f9287ce7cddfcd22ca09"),
         pallet_address: hex!("6d6f646c707262636c7333360000000000000000000000000000000000000000"),
         admins: &[
             hex!("e8167b6b1319e6b529958c802060970eb11cad3653fe21a3efbd8359fd4dfb5c"),hex!("4e33b4bbc3c37ae3a61b8e52d2e901ef15d104e1fc9e27b4c40acf11db39634d"),hex!("a0be6c58f47b96d89d005d42d2f2e3ab4b4f85eb1879ff22f847c5369816304f"),
@@ -456,6 +561,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbtss37",
         node_name: "天山省公民储备银行权益节点",
+        citizens_number:5_634_164,
+        stake_amount:5_634_164_0000,
+        keyless_address:hex!("dd464573534b2eb6e0d7a6fcac549a51c63e5847b23c299135e36b4ea3e24adb"),
         pallet_address: hex!("6d6f646c70726274737333370000000000000000000000000000000000000000"),
         admins: &[
             hex!("d0a892173117fe6d54d93e474395063b29ed4b3d96c280c27c7669817b611948"),hex!("24a69bfd777beb23434a5dc979fe1fdce4de09f08fa4a88b263eeece26cb6b2c"),hex!("2a30b5fa75be94882127923977133b5530a103cecbc1ee5d0807e40f1ea1aa35"),
@@ -468,6 +576,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbhxs38",
         node_name: "河西省公民储备银行权益节点",
+        citizens_number:4_664_727,
+        stake_amount:4_664_727_0000,
+        keyless_address:hex!("8f8b9105949a108774ff845ba4df0f7a921f5beae6e814717fabf9b99a1ce8bd"),
         pallet_address: hex!("6d6f646c70726268787333380000000000000000000000000000000000000000"),
         admins: &[
             hex!("0afc29913ab6807bd7f56c017f2d50b45131b2b77e0323ea63b6ae6002327812"),hex!("3e5616265ad161e34ad89cf30fc8069e17ce015604687497162344fd7bce0030"),hex!("d0f1b61336b82066e88897b8a7697acb13b6d3597a877eaa5be83a987a02b96c"),
@@ -480,6 +591,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbkls39",
         node_name: "昆仑省公民储备银行权益节点",
+        citizens_number:893_415,
+        stake_amount:893_415_0000,
+        keyless_address:hex!("e7c1fa0801ca5b74c6939de99a519de7023dc602ab55231b640e3b1b7f5895f0"),    
         pallet_address: hex!("6d6f646c7072626b6c7333390000000000000000000000000000000000000000"),
         admins: &[
             hex!("a6050f81f2e028db2037070544210b7dd2097b42da9453950c540734bc321528"),hex!("fc700d1ecd4360d9fb5b47d93a721df4053ccaf5c1370d2a02f47cb8e9466b08"),hex!("c85b5193653a90a7713d98dfe68453fc76b52cb00a419d0b7752e8c65e43c950"),
@@ -492,6 +606,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbhts40",
         node_name: "河套省公民储备银行权益节点",
+        citizens_number:12_110_780,
+        stake_amount:12_110_780_0000,
+        keyless_address:hex!("2ffbe3ed5ee5134149adec09698affcea20f5cca51dbf95cdb0616430eee84aa"),
         pallet_address: hex!("6d6f646c70726268747334300000000000000000000000000000000000000000"),
         admins: &[
             hex!("22e781c336d56df96887073aeb1bae59da5d827c8ad3b68ff1bed9e33767775b"),hex!("b65dd0354fb19ea5666c4c2caada227b708907a033452fad41e12eb2e2377210"),hex!("0c6b9a4a19a32a9d778a5d9aa77b16383e5dd1d52aace6eacf3815d7e066c051"),
@@ -504,6 +621,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbrhs41",
         node_name: "热河省公民储备银行权益节点",
+        citizens_number:15_489_562,
+        stake_amount:15_489_562_0000,
+        keyless_address:hex!("6974ef45d1495159dbbacfc2a114e284b4538775dfd2c3e7296ed681285406f8"),
         pallet_address: hex!("6d6f646c70726272687334310000000000000000000000000000000000000000"),
         admins: &[
             hex!("a0260cf1c59232c08ccf080783363dd6f276183c58ad3e5bc29b494f823af449"),hex!("8aa0feb0fb2850e7fd26e6ba53ef828a9d2aa0e4077aecc08142d901862b5f31"),hex!("dc7de36d15c5ba3638a9831cdbb9552445993e420d11a9f1a43a073fd1216f47"),
@@ -516,6 +636,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbxas42",
         node_name: "兴安省公民储备银行权益节点",
+        citizens_number:3_991_080,
+        stake_amount:3_991_080_0000,
+        keyless_address:hex!("10ac83be1c5cdc8c5e762323d037eb792bd783d362d77b6e52e4547e42174a3e"),
         pallet_address: hex!("6d6f646c70726278617334320000000000000000000000000000000000000000"),
         admins: &[
             hex!("785c4af6c7af289e9deaf018d0593f6d2393626f8b4a756e026e62209a57bf26"),hex!("f283c9b82d4661efbd32710abcf9406f017e3dee11825885bb7b92e1a319e52b"),hex!("9e161898b9367f6aad76f5fbb177a14f45c645f40d894ef585849222c335d650"),
@@ -528,6 +651,9 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     ShengBankNodeConst {
         pallet_id: "prbhjs43",
         node_name: "合江省公民储备银行权益节点",
+        citizens_number:8_738_458,
+        stake_amount:8_738_458_0000,
+        keyless_address:hex!("eb85e6981f71269f7dc22f4715119f943b675bb98a0ae5427ede0004f2bad626"),
         pallet_address: hex!("6d6f646c707262686a7334330000000000000000000000000000000000000000"),
         admins: &[
             hex!("5a6b9de943c7a5125eecc39a18e565c174583d8aabaec8e540171e25d0251578"),hex!("0c892cbc1e85b3ea66dc26006429b8b568a35b2d533347248f43570496830d79"),hex!("e8beab3accbdc7987a611da0afa5d486e19a6ff392cf2a0c38a436cc7f970040"),

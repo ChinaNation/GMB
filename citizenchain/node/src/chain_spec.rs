@@ -1,5 +1,5 @@
-//! Chain specification for CitizenChain
-//! ⚠️ 本文件定义【唯一主链】的创世状态。
+//! 公民币区块链的链规范（Chain specification for CitizenChain）；
+//! 本文件定义【公民币唯一主链】的创世状态；
 //! 本文件不能在主链上线后被修改。
 
 use sc_service::ChainType;
@@ -12,7 +12,7 @@ use sp_runtime::traits::SaturatedConversion;
 // -----------------------------------------------------------------------------
 use citizenchain_runtime::{AccountId, Balance, GenesisConfig, SystemConfig,BalancesConfig, WASM_BINARY,};
 
-// 制度常量（来自 primitives，唯一权威来源）
+// 制度常量（来自 primitives，常量唯一来源）
 // -----------------------------------------------------------------------------
 use primitives::core_const::{TOKEN_SYMBOL, TOKEN_DECIMALS};
 use primitives::genesis::{GENESIS_ISSUANCE,DECLARATION_OF_CITIZENS,COUNTRY_NAME_INFO,};
@@ -96,7 +96,7 @@ fn get_national_reserve_account() -> AccountId {
         .expect("national reserve address must be 32 bytes")
 }
 
-// Genesis 构造函数（最终版）
+// Genesis 构造函数
 // -----------------------------------------------------------------------------
 fn genesis_config(
     treasury_account: AccountId,
@@ -111,7 +111,7 @@ fn genesis_config(
         GENESIS_ISSUANCE.saturated_into::<Balance>(),
     ));
 
-    // 省储行创立发行 → 各省永久质押地址（无私钥）
+    // 省级省储行创立发行 → 各省永久质押地址（无私钥）
     // ---------------------------------------------------------------------
     for stake in SHENG_BANK_STAKES {
         let raw = hex::decode(

@@ -1,4 +1,4 @@
-//! 核心常量
+//! 核心常量=core_const.rs
 
 use sp_runtime::Perbill;
 
