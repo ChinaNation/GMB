@@ -9,7 +9,7 @@ pub mod pallet {
         traits::Currency,
     };
     use frame_system::pallet_prelude::*;
-    use sp_runtime::traits::{SaturatedConversion, Zero};
+    use sp_runtime::traits::{SaturatedConversion, Saturating};
     use codec::Decode;
     use sp_std::prelude::*;
 
@@ -81,11 +81,17 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+            // 按区块高度结算：每满一个年度区块数才触发一次（例如 87_600 块）
+            let block = n.saturated_into::<u64>();
+            let per_year = T::BlocksPerYear::get();
             let current_year = Self::current_year(n);
             let last_year = Self::last_settled_year();
 
-            // 🔐 强保护：只允许“刚好跨一年”
-            if current_year == last_year + 1
+            // 只在“年度边界区块”触发，且按年度顺序结算，最多结算到制度上限年限
+            if per_year > 0
+                && block > 0
+                && block % per_year == 0
+                && current_year == last_year + 1
                 && last_year < SHENGBANK_INTEREST_DURATION_YEARS
             {
                 log::info!(
@@ -143,7 +149,7 @@ pub mod pallet {
 
         /// 核心铸造逻辑（只针对 43 个固定省储行）
         fn mint_interest_for_year(year: u32) -> (u64, u64) {
-            let mut reads = 1u64;
+            let reads = 1u64;
             let mut writes = 0u64;
 
             let rate_bp = Self::interest_bp_for_year(year);
@@ -168,16 +174,6 @@ pub mod pallet {
                         }
                     };
 
-                // 🔐 严格禁止自动创建账户
-                if T::Currency::total_balance(&account).is_zero() {
-                    log::error!(
-                        target: "runtime::shengbank",
-                        "省储行账户不存在，拒绝发放利息: {}",
-                        bank.pallet_id
-                    );
-                    continue;
-                }
-
                 let principal: BalanceOf<T> =
                     bank.stake_amount.saturated_into();
 
@@ -189,7 +185,7 @@ pub mod pallet {
                     continue;
                 }
 
-                // 安全存入（不创建账户）
+                // 固定创世省储行地址直接发放：仅尝试存入已存在账户，不自动创建新账户
                 if T::Currency::deposit_into_existing(&account, interest)
                     .is_ok()
                 {

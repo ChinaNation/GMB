@@ -34,10 +34,9 @@ pub const JOINT_VOTE_TOTAL: u32 = 105;              // 联合投票总票数：1
 pub const JOINT_VOTE_PASS_THRESHOLD: u32 = 105;     // 联合投票通过条件：全票通过则立即执行，非全票通过则进入公民投票流程
 
 /// 四、公民投票（仅联合投票未通过的则进入公民投票流程）
-pub const Citizen_VOTE_PASS_PERCENT: u32 = 50;      // 公民投票通过比例（百分比），大于50%则通过，否则则否决
+pub const CITIZEN_VOTE_PASS_PERCENT: u32 = 50;      // 公民投票通过比例（百分比），大于50%则通过，否则则否决
 
 /// 五、投票时限（单位：区块数）
-use crate::pow_const::BLOCKS_PER_DAY;               // 计数 / 时间 / 区块换算常量
 
 pub const VOTING_DURATION_DAYS: u32 = 30;           // 投票默认期限30天，本期限用于审计与展示
 

@@ -1,0 +1,13 @@
+[workspace]                                  # 轻节点 App 工作空间
+members = [
+    "backend",                              # 后端服务
+    "mobile",                               # 移动端
+]
+resolver = "2"
+
+[workspace.package]                          # 工作空间统一元信息
+edition = "2021"
+version = "0.0.1"
+authors = ["voyager_rhett <chinanation@icloud.com>"]
+repository = "https://github.com/ChinaNation/GMB"
+license = "MIT"
