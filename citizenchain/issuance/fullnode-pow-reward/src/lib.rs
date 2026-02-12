@@ -94,7 +94,7 @@ pub mod pallet {
 
             // 发放固定的全节点 PoW 铸块奖励
             let reward: BalanceOf<T> = FULLNODE_BLOCK_REWARD.saturated_into();
-            T::Currency::deposit_creating(&author, reward);
+            let _imbalance = T::Currency::deposit_creating(&author, reward);
         }
     }
 }

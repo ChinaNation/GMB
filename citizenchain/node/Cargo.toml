@@ -23,6 +23,8 @@ hex-literal = "0.4"
 clap = { workspace = true }
 futures = { workspace = true }
 jsonrpsee = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+primitives = { path = "../../primitives" }
 
 # substrate client
 sc-basic-authorship = { workspace = true, default-features = true }
@@ -31,6 +33,7 @@ sc-client-api = { workspace = true, default-features = true }
 sc-consensus = { workspace = true, default-features = true }
 sc-consensus-aura = { workspace = true, default-features = true }
 sc-consensus-grandpa = { workspace = true, default-features = true }
+sc-chain-spec = { workspace = true, default-features = true }
 sc-executor = { workspace = true, default-features = true }
 sc-network = { workspace = true, default-features = true }
 sc-offchain = { workspace = true, default-features = true }
@@ -60,7 +63,7 @@ pallet-transaction-payment-rpc = { workspace = true, default-features = true }
 substrate-frame-rpc-system = { workspace = true, default-features = true }
 
 # These dependencies are used for runtime benchmarking
-frame-benchmarking-cli = { workspace = true, default-features = true, optional = true }
+frame-benchmarking-cli = { workspace = true, default-features = true }
 
 # Local Dependencies
 gmb-runtime = { workspace = true }
@@ -73,7 +76,6 @@ default = ["std"]
 std = ["gmb-runtime/std"]
 # Dependencies that are only required if runtime benchmarking should be build.
 runtime-benchmarks = [
-	"frame-benchmarking-cli",
     "frame-system/runtime-benchmarks",
 	"pallet-transaction-payment/runtime-benchmarks",
 	"sc-service/runtime-benchmarks",

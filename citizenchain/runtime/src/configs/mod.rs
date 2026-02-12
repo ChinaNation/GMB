@@ -169,3 +169,11 @@ impl pallet_template::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = pallet_template::weights::SubstrateWeight<Runtime>;
 }
+
+/// 省储行质押利息模块配置：
+/// - 使用 Balances 作为铸币/记账货币
+/// - 每年区块数统一采用 primitives 中的制度常量
+impl shengbank_stake_interest::Config for Runtime {
+	type Currency = Balances;
+	type BlocksPerYear = ConstU64<{ primitives::pow_const::BLOCKS_PER_YEAR }>;
+}
