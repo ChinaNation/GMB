@@ -2,7 +2,7 @@
 //! 每一个节点包括：储会ID（pallet_id）、节点名称（node_name）、交易账户（pallet_address）、节点地址（p2p_bootnodes）、管理员列表（admins）；
 //! 其中 admins 为该节点的创世管理员公钥数组，用于多签权限控制，可通过内部投票更换。
 
-use sp_core::H256;
+use hex_literal::hex;
 
 /// 单个储委会的常量结构
 #[derive(Debug, Clone)]

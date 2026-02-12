@@ -12,6 +12,5 @@ license = "MIT"        # 授权协议 MIT
 blake2 = "0.10"
 hex = "0.4"
 
-[workspace]
 
 # cargo run --manifest-path tools/keyless/Cargo.toml

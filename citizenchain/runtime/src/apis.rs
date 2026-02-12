@@ -38,7 +38,6 @@ use sp_runtime::{
 	transaction_validity::{TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult,
 };
-use sp_session::OpaqueGeneratedSessionKeys;
 use sp_version::RuntimeVersion;
 
 // Local module imports
@@ -130,8 +129,8 @@ impl_runtime_apis! {
 	}
 
 	impl sp_session::SessionKeys<Block> for Runtime {
-		fn generate_session_keys(owner: Vec<u8>, seed: Option<Vec<u8>>) -> OpaqueGeneratedSessionKeys {
-			SessionKeys::generate(&owner, seed).into()
+		fn generate_session_keys(seed: Option<Vec<u8>>) -> Vec<u8> {
+			SessionKeys::generate(seed)
 		}
 
 		fn decode_session_keys(

@@ -1,12 +1,8 @@
 [workspace]         # 声明整个仓库的工作空间
 members = [
-  "citizenchain",   # 公民币区块链主体（node / runtime / pallets 等）
-  "fcrcnode",       # 公民储备委员会桌面软件（国储会 / 省储会 / 省储行 共用节点软件，前后端，Linux）
-  "fullnode",       # 全节点桌面软件（挖矿 / 交易 / 运维，Linux）
-  "wuminapp",       # 轻节点手机App软件（iOS、Android）
   "primitives",     # 全项目通用常量
-  "tools",          # 工具库（keygen / key等）
-  "wenku",          # 文库/资料
+  "tools/keyless",  # 工具库：无私钥地址生成工具
+  "tools/scripts",  # 工具库：脚本工具
 ]
 resolver = "2"      # 使用 Cargo 新版依赖解析器，减少 feature 冲突
 
@@ -18,9 +14,9 @@ repository = "https://github.com/ChinaNation/GMB"           # 项目仓库地址
 license = "MIT"                                             # 开源协议
 
 [workspace.dependencies]
-# 本地
-gmb-runtime = { path = "runtime" }
-pallet-template = { path = "pallets/template" }
+# 本地（统一给需要的子项目复用）
+gmb-runtime = { path = "citizenchain/runtime" }
+pallet-template = { path = "citizenchain/template" }
 
 # 工具
 codec      = { package = "parity-scale-codec", version = "3.6.1", default-features = false, features = ["derive"] }

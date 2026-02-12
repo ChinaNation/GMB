@@ -2,7 +2,7 @@
 //! 包含：省储行ID（pallet_id）、节点名称（node_name）、省人口数（citizens_number）、质押金额（stake_amount）、质押地址（keyless_address）交易账户（pallet_address）、管理员列表（admins）；
 //! 其中 admins 为该节点的创世管理员公钥数组，用于多签权限控制，可通过内部投票更换。
 
-use sp_core::H256;
+use hex_literal::hex;
 
 /// 单个省储行节点的常量结构
 pub struct ShengBankNodeConst {

@@ -10,6 +10,7 @@ license = "MIT"              # 授权协议 MIT
 # SCALE 编解码
 codec = { workspace = true, default-features = false, features = ["derive"] }
 scale-info = { workspace = true, default-features = false, features = ["derive"] }
+hex-literal = "0.4"
 
 # Substrate primitives —— 你现在就用到了
  sp-core = { workspace = true }

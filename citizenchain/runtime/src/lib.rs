@@ -219,4 +219,8 @@ mod runtime {
 	// Include the custom logic from the pallet-template in the runtime.
 	#[runtime::pallet_index(7)]
 	pub type Template = pallet_template;
+
+	// 省储行质押利息模块：按年度给固定省储行账户发放质押利息
+	#[runtime::pallet_index(8)]
+	pub type ShengBankStakeInterest = shengbank_stake_interest;
 }
