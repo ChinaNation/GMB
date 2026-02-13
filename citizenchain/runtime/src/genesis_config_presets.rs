@@ -26,16 +26,11 @@ use frame_support::build_struct_json_patch;
 #[cfg(feature = "std")]
 use serde_json::Value;
 #[cfg(feature = "std")]
-use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-#[cfg(feature = "std")]
-use sp_consensus_grandpa::AuthorityId as GrandpaId;
-#[cfg(feature = "std")]
 use sp_genesis_builder::{self};
 
 // Returns the genesis config presets populated with given parameters.
 #[cfg(feature = "std")]
 fn testnet_genesis(
-	initial_authorities: Vec<(AuraId, GrandpaId)>,
 	endowed_accounts: Vec<AccountId>,
 	root: AccountId,
 ) -> Value {
@@ -47,12 +42,6 @@ fn testnet_genesis(
 				.map(|k| (k, 1u128 << 60))
 				.collect::<Vec<_>>(),
 		},
-		aura: pallet_aura::GenesisConfig {
-			authorities: initial_authorities.iter().map(|x| x.0.clone()).collect::<Vec<_>>(),
-		},
-		grandpa: pallet_grandpa::GenesisConfig {
-			authorities: initial_authorities.iter().map(|x| (x.1.clone(), 1)).collect::<Vec<_>>(),
-		},
 		sudo: SudoConfig { key: Some(root) },
 	})
 }
@@ -60,13 +49,13 @@ fn testnet_genesis(
 /// Return the development genesis config.
 #[cfg(feature = "std")]
 pub fn development_config_genesis() -> Value {
-	testnet_genesis(vec![], vec![], AccountId::new([0u8; 32]))
+	testnet_genesis(vec![], AccountId::new([0u8; 32]))
 }
 
 /// Return the local genesis config preset.
 #[cfg(feature = "std")]
 pub fn local_config_genesis() -> Value {
-	testnet_genesis(vec![], vec![], AccountId::new([0u8; 32]))
+	testnet_genesis(vec![], AccountId::new([0u8; 32]))
 }
 
 /// Provides the JSON representation of predefined genesis config for given `id`.

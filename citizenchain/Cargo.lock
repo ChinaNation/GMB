@@ -1317,6 +1317,17 @@ dependencies = [
 [[package]]
 name = "citizen-lightnode-issuance"
 version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
 
 [[package]]
 name = "clang-sys"
@@ -5986,14 +5997,14 @@ dependencies = [
  "jsonrpsee",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
+ "parity-scale-codec",
  "primitives",
  "sc-basic-authorship",
  "sc-chain-spec",
  "sc-cli",
  "sc-client-api",
  "sc-consensus",
- "sc-consensus-aura",
- "sc-consensus-grandpa",
+ "sc-consensus-pow",
  "sc-executor",
  "sc-network",
  "sc-offchain",
@@ -6005,12 +6016,14 @@ dependencies = [
  "sp-api",
  "sp-block-builder",
  "sp-blockchain",
- "sp-consensus-aura",
+ "sp-consensus",
+ "sp-consensus-pow",
  "sp-core",
  "sp-genesis-builder",
  "sp-inherents",
  "sp-io",
  "sp-keyring",
+ "sp-keystore",
  "sp-runtime",
  "sp-timestamp",
  "substrate-build-script-utils",
@@ -8607,37 +8620,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-consensus-aura"
-version = "0.55.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2512#1b9a876861ac022c5d00f0a4d18b5343b0039bb5"
-dependencies = [
- "async-trait",
- "fork-tree",
- "futures",
- "log",
- "parity-scale-codec",
- "parking_lot 0.12.5",
- "sc-block-builder",
- "sc-client-api",
- "sc-consensus",
- "sc-consensus-slots",
- "sc-telemetry",
- "sp-api",
- "sp-application-crypto",
- "sp-block-builder",
- "sp-blockchain",
- "sp-consensus",
- "sp-consensus-aura",
- "sp-consensus-slots",
- "sp-core",
- "sp-inherents",
- "sp-keystore",
- "sp-runtime",
- "substrate-prometheus-endpoint",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "sc-consensus-babe"
 version = "0.55.0"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2512#1b9a876861ac022c5d00f0a4d18b5343b0039bb5"
@@ -8688,44 +8670,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-consensus-grandpa"
-version = "0.40.0"
+name = "sc-consensus-pow"
+version = "0.54.0"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2512#1b9a876861ac022c5d00f0a4d18b5343b0039bb5"
 dependencies = [
- "ahash 0.8.12",
- "array-bytes 6.2.3",
  "async-trait",
- "dyn-clone",
- "finality-grandpa",
- "fork-tree",
  "futures",
  "futures-timer",
  "log",
  "parity-scale-codec",
  "parking_lot 0.12.5",
- "rand 0.8.5",
- "sc-block-builder",
- "sc-chain-spec",
  "sc-client-api",
  "sc-consensus",
- "sc-network",
- "sc-network-common",
- "sc-network-gossip",
- "sc-network-sync",
- "sc-network-types",
- "sc-telemetry",
- "sc-transaction-pool-api",
- "sc-utils",
- "serde_json",
  "sp-api",
- "sp-application-crypto",
- "sp-arithmetic",
+ "sp-block-builder",
  "sp-blockchain",
  "sp-consensus",
- "sp-consensus-grandpa",
+ "sp-consensus-pow",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2512)",
- "sp-keystore",
+ "sp-inherents",
  "sp-runtime",
  "substrate-prometheus-endpoint",
  "thiserror 1.0.69",
@@ -8932,25 +8895,6 @@ dependencies = [
  "bitflags 1.3.2",
  "parity-scale-codec",
  "sp-runtime",
-]
-
-[[package]]
-name = "sc-network-gossip"
-version = "0.55.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2512#1b9a876861ac022c5d00f0a4d18b5343b0039bb5"
-dependencies = [
- "ahash 0.8.12",
- "futures",
- "futures-timer",
- "log",
- "sc-network",
- "sc-network-common",
- "sc-network-sync",
- "sc-network-types",
- "schnellru",
- "sp-runtime",
- "substrate-prometheus-endpoint",
- "tracing",
 ]
 
 [[package]]
@@ -10353,6 +10297,17 @@ dependencies = [
  "sp-application-crypto",
  "sp-core",
  "sp-keystore",
+ "sp-runtime",
+]
+
+[[package]]
+name = "sp-consensus-pow"
+version = "0.46.0"
+source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2512#1b9a876861ac022c5d00f0a4d18b5343b0039bb5"
+dependencies = [
+ "parity-scale-codec",
+ "sp-api",
+ "sp-core",
  "sp-runtime",
 ]
 
