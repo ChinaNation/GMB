@@ -9,7 +9,7 @@ pub mod pallet {
         traits::Currency,
     };
     use frame_system::pallet_prelude::*;
-    use sp_runtime::traits::{SaturatedConversion, Saturating};
+    use sp_runtime::traits::{SaturatedConversion, Saturating, Zero};
     use codec::Decode;
     use sp_std::prelude::*;
 
@@ -21,7 +21,7 @@ pub mod pallet {
             SHENGBANK_INTEREST_DURATION_YEARS,
             ENABLE_SHENGBANK_INTEREST_DECAY,
         },
-        shengbank_nodes_const::SHENG_BANK_NODES, // 固定 43 个
+        shengbank_nodes_const::SHENG_BANK_NODES,  // 固定 43 个省储行多签地址
     };
 
     // ===== 配置 =====
@@ -66,6 +66,13 @@ pub mod pallet {
         ShengBankYearSettled {
             year: u32,
         },
+
+        /// 某一年度结算失败（未满足“43个省储行全部成功入账”）
+        ShengBankYearSettlementFailed {
+            year: u32,
+            success_count: u32,
+            total_count: u32,
+        },
     }
 
     // ===== 错误 =====
@@ -81,7 +88,7 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-            // 按区块高度结算：每满一个年度区块数才触发一次（例如 87_600 块）
+            // 按区块高度结算：每满一个年度区块数才触发一次（87_600块/年）
             let block = n.saturated_into::<u64>();
             let per_year = T::BlocksPerYear::get();
             let current_year = Self::current_year(n);
@@ -101,16 +108,31 @@ pub mod pallet {
                     n
                 );
 
-                let (reads, writes) =
+                // 中文注释：执行当年利息发放，并返回读写计数+成功数
+                let (reads, writes, success_count) =
                     Self::mint_interest_for_year(current_year);
 
-                LastSettledYear::<T>::put(current_year);
-                Self::deposit_event(Event::<T>::ShengBankYearSettled {
-                    year: current_year,
-                });
+                // 中文注释：制度要求“43个省储行必须全部成功”，否则本年度不推进结算进度
+                let total_count = SHENG_BANK_NODES.len() as u32;
+                if success_count == total_count {
+                    LastSettledYear::<T>::put(current_year);
+                    Self::deposit_event(Event::<T>::ShengBankYearSettled {
+                        year: current_year,
+                    });
 
-                return T::DbWeight::get()
-                    .reads_writes(reads + 1, writes + 1);
+                    return T::DbWeight::get()
+                        .reads_writes(reads + 1, writes + 1);
+                }
+
+                // 中文注释：只要有任一地址发放失败，就记录失败事件并保持 LastSettledYear 不变
+                Self::deposit_event(
+                    Event::<T>::ShengBankYearSettlementFailed {
+                        year: current_year,
+                        success_count,
+                        total_count,
+                    },
+                );
+                return T::DbWeight::get().reads_writes(reads, writes);
             }
 
             // 默认只读一次 LastSettledYear
@@ -147,14 +169,16 @@ pub mod pallet {
             SHENGBANK_INITIAL_INTEREST_BP.saturating_sub(decay)
         }
 
-        /// 核心铸造逻辑（只针对 43 个固定省储行）
-        fn mint_interest_for_year(year: u32) -> (u64, u64) {
-            let reads = 1u64;
+        /// 核心铸造逻辑（只针对 43 个固定省储行多签地址）
+        fn mint_interest_for_year(year: u32) -> (u64, u64, u32) {
+            // 中文注释：按固定43个省储行估算保守读开销，写开销按成功入账次数累计
+            let reads = 1u64 + SHENG_BANK_NODES.len() as u64;
             let mut writes = 0u64;
+            let mut success_count = 0u32;
 
             let rate_bp = Self::interest_bp_for_year(year);
             if rate_bp == 0 {
-                return (reads, writes);
+                return (reads, writes, success_count);
             }
 
             for bank in SHENG_BANK_NODES.iter() {
@@ -189,6 +213,7 @@ pub mod pallet {
                 if T::Currency::deposit_into_existing(&account, interest)
                     .is_ok()
                 {
+                    success_count = success_count.saturating_add(1);
                     writes += 1;
 
                     Self::deposit_event(
@@ -202,7 +227,7 @@ pub mod pallet {
                 }
             }
 
-            (reads, writes)
+            (reads, writes, success_count)
         }
     }
 }

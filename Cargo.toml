@@ -6,12 +6,12 @@ members = [
 ]
 resolver = "2"      # 使用 Cargo 新版依赖解析器，减少 feature 冲突
 
-[workspace.package]                                         # 元信息（作为整个仓库的默认元数据）
-edition = "2021"                                            # Rust 版本规范（2021 Edition）
-version = "0.0.1"                                           # 整个工作空间的统一版本号（子 crate 可继承或覆盖）
-authors = ["voyager_rhett <chinanation@icloud.com>"]        # 作者信息
-repository = "https://github.com/ChinaNation/GMB"           # 项目仓库地址
-license = "MIT"                                             # 开源协议
+[workspace.package]                                                 # 元信息（作为整个仓库的默认元数据）
+edition = "2021"                                                    # Rust 版本规范（2021 Edition）
+version = "0.0.1"                                                   # 整个工作空间的统一版本号（子 crate 可继承或覆盖）
+authors = ["chengwei_voyager_rhett <chinanation@icloud.com>"]       # 作者信息
+repository = "https://github.com/ChinaNation/GMB"                   # 项目仓库地址
+license = "MIT"                                                     # 开源协议
 
 [workspace.dependencies]
 # 本地（统一给需要的子项目复用）
