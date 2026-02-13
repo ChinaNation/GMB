@@ -38,12 +38,12 @@ pub const CITIZEN_VOTE_PASS_PERCENT: u32 = 50;      // 公民投票通过比例�
 
 /// 五、投票时限（单位：区块数）
 
-pub const VOTING_DURATION_DAYS: u32 = 30;           // 投票默认期限30天，本期限用于审计与展示
+pub const VOTING_DURATION_DAYS: u32 = 35;           // 投票默认期限35天，本期限用于审计与展示
 
 pub const BLOCKS_PER_DAY: u32 = 240;                // 共识参数，每铸造1个区块约 6 分钟，约 240 个区块每天
 
 pub const VOTING_DURATION_BLOCKS: u32 =
-    BLOCKS_PER_DAY as u32 * VOTING_DURATION_DAYS;   // 投票默认期限（区块）= 30 * BLOCKS_PER_DAY
+    BLOCKS_PER_DAY as u32 * VOTING_DURATION_DAYS;   // 投票默认期限（区块）= 35 * BLOCKS_PER_DAY
 
 pub const VOTING_TIMEOUT_IS_REJECTED: bool = true;  // 投票是否在超时后自动否决，是
 
