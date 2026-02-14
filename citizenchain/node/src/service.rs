@@ -30,7 +30,8 @@ pub type Service = sc_service::PartialComponents<
 	Option<Telemetry>,
 >;
 
-const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"aura");
+// PoW 作者密钥类型：纯 PoW 链使用独立 key type，避免与 Aura 语义混用。
+const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
 const POW_DIFFICULTY: u64 = 1_000_000;
 const POW_MINING_TIMEOUT_SECS: u64 = 10;
 const POW_PROPOSAL_BUILD_SECS: u64 = 2;
@@ -286,7 +287,7 @@ pub fn new_full<
 		let algorithm = SimplePow::default();
 		let pre_runtime = author_pre_digest(&keystore_container.keystore());
 		if pre_runtime.is_none() {
-			eprintln!("WARN [pow] No sr25519 key with key type 'aura' found; PoW rewards may not be issued.");
+			eprintln!("WARN [pow] No sr25519 key with key type 'powr' found; PoW rewards may not be issued.");
 		}
 
 		let pow_block_import = PowBlockImport::new(

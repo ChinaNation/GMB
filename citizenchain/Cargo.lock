@@ -39,6 +39,16 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 [[package]]
 name = "admins-origin-gov"
 version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-runtime",
+ "sp-std",
+ "voting-engine-system",
+]
 
 [[package]]
 name = "aead"
@@ -3611,23 +3621,22 @@ dependencies = [
  "frame-system-benchmarking",
  "frame-system-rpc-runtime-api",
  "frame-try-runtime",
- "pallet-aura",
+ "fullnode-pow-reward",
  "pallet-balances",
- "pallet-grandpa",
- "pallet-sudo",
  "pallet-template",
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
  "primitives",
+ "resolution-issuance-gov",
+ "resolution-issuance-iss",
  "scale-info",
  "serde_json",
  "shengbank-stake-interest",
  "sp-api",
  "sp-block-builder",
- "sp-consensus-aura",
- "sp-consensus-grandpa",
+ "sp-consensus-pow",
  "sp-core",
  "sp-genesis-builder",
  "sp-inherents",
@@ -3638,6 +3647,7 @@ dependencies = [
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
+ "voting-engine-system",
 ]
 
 [[package]]
@@ -6305,22 +6315,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-aura"
-version = "44.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2512#1b9a876861ac022c5d00f0a4d18b5343b0039bb5"
-dependencies = [
- "frame-support",
- "frame-system",
- "log",
- "pallet-timestamp",
- "parity-scale-codec",
- "scale-info",
- "sp-application-crypto",
- "sp-consensus-aura",
- "sp-runtime",
-]
-
-[[package]]
 name = "pallet-authority-discovery"
 version = "45.0.0"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2512#1b9a876861ac022c5d00f0a4d18b5343b0039bb5"
@@ -6406,28 +6400,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-grandpa"
-version = "45.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2512#1b9a876861ac022c5d00f0a4d18b5343b0039bb5"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "log",
- "pallet-authorship",
- "pallet-session",
- "parity-scale-codec",
- "scale-info",
- "sp-application-crypto",
- "sp-consensus-grandpa",
- "sp-core",
- "sp-io",
- "sp-runtime",
- "sp-session",
- "sp-staking",
-]
-
-[[package]]
 name = "pallet-message-queue"
 version = "48.0.0"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2512#1b9a876861ac022c5d00f0a4d18b5343b0039bb5"
@@ -6499,21 +6471,6 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-staking",
-]
-
-[[package]]
-name = "pallet-sudo"
-version = "45.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2512#1b9a876861ac022c5d00f0a4d18b5343b0039bb5"
-dependencies = [
- "docify",
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "sp-io",
- "sp-runtime",
 ]
 
 [[package]]
@@ -8075,10 +8032,28 @@ version = "0.0.1"
 [[package]]
 name = "resolution-issuance-gov"
 version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "resolution-issuance-iss",
+ "scale-info",
+ "sp-runtime",
+ "sp-std",
+ "voting-engine-system",
+]
 
 [[package]]
 name = "resolution-issuance-iss"
 version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-runtime",
+ "sp-std",
+]
 
 [[package]]
 name = "resolv-conf"
@@ -12213,6 +12188,15 @@ checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 [[package]]
 name = "voting-engine-system"
 version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-runtime",
+ "sp-std",
+]
 
 [[package]]
 name = "w3f-bls"

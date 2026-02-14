@@ -29,18 +29,14 @@ frame-system = { workspace = true }
 frame-try-runtime = { optional = true, workspace = true }
 
 # frame pallets
-pallet-aura = { workspace = true }
 pallet-balances = { workspace = true }
-pallet-grandpa = { workspace = true }
-pallet-sudo = { workspace = true }
 pallet-timestamp = { workspace = true }
 pallet-transaction-payment = { workspace = true }
 
 # primitives
 sp-api = { workspace = true }
 sp-block-builder = { workspace = true }
-sp-consensus-aura = { features = ["serde"], workspace = true }
-sp-consensus-grandpa = { features = ["serde"], workspace = true }
+sp-consensus-pow = { workspace = true }
 sp-core = { features = ["serde"], workspace = true }
 sp-genesis-builder = { workspace = true }
 sp-inherents = { workspace = true }
@@ -62,6 +58,10 @@ frame-system-benchmarking = { optional = true, workspace = true }
 # The pallet in this template.
 pallet-template = { workspace = true, default-features = false }
 shengbank-stake-interest = { path = "../issuance/shengbank-stake-interest", default-features = false }
+fullnode-pow-reward = { path = "../issuance/fullnode-pow-reward", default-features = false }
+resolution-issuance-iss = { path = "../issuance/resolution-issuance-iss", default-features = false }
+resolution-issuance-gov = { path = "../governance/resolution-issuance-gov", default-features = false }
+voting-engine-system = { path = "../governance/voting-engine-system", default-features = false }
 
 [build-dependencies]
 substrate-wasm-builder = { optional = true, workspace = true, default-features = true }
@@ -78,12 +78,13 @@ std = [
 	"frame-system-rpc-runtime-api/std",
 	"frame-system/std",
 	"frame-try-runtime?/std",
-	"pallet-aura/std",
 	"pallet-balances/std",
-	"pallet-grandpa/std",
-	"pallet-sudo/std",
 	"pallet-template/std",
 	"shengbank-stake-interest/std",
+	"fullnode-pow-reward/std",
+	"resolution-issuance-iss/std",
+	"resolution-issuance-gov/std",
+	"voting-engine-system/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
 	"pallet-transaction-payment/std",
@@ -91,8 +92,7 @@ std = [
 	"serde_json/std",
 	"sp-api/std",
 	"sp-block-builder/std",
-	"sp-consensus-aura/std",
-	"sp-consensus-grandpa/std",
+	"sp-consensus-pow/std",
 	"sp-core/std",
 	"sp-genesis-builder/std",
 	"sp-inherents/std",
@@ -110,8 +110,6 @@ runtime-benchmarks = [
 	"frame-system-benchmarking/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
 	"pallet-balances/runtime-benchmarks",
-	"pallet-grandpa/runtime-benchmarks",
-	"pallet-sudo/runtime-benchmarks",
 	"pallet-template/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-transaction-payment/runtime-benchmarks",
@@ -122,10 +120,7 @@ try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
 	"frame-try-runtime/try-runtime",
-	"pallet-aura/try-runtime",
 	"pallet-balances/try-runtime",
-	"pallet-grandpa/try-runtime",
-	"pallet-sudo/try-runtime",
 	"pallet-template/try-runtime",
 	"pallet-timestamp/try-runtime",
 	"pallet-transaction-payment/try-runtime",

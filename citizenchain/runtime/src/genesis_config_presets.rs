@@ -20,9 +20,17 @@ use alloc::vec;
 use sp_genesis_builder::PresetId;
 
 #[cfg(feature = "std")]
-use crate::{AccountId, BalancesConfig, RuntimeGenesisConfig, SudoConfig};
+use crate::{AccountId, BalancesConfig, RuntimeGenesisConfig};
+#[cfg(feature = "std")]
+use codec::Decode;
 #[cfg(feature = "std")]
 use frame_support::build_struct_json_patch;
+#[cfg(feature = "std")]
+use primitives::{
+	genesis::GENESIS_ISSUANCE,
+	reserve_nodes_const::RESERVE_NODES,
+	shengbank_nodes_const::SHENG_BANK_NODES,
+};
 #[cfg(feature = "std")]
 use serde_json::Value;
 #[cfg(feature = "std")]
@@ -32,17 +40,37 @@ use sp_genesis_builder::{self};
 #[cfg(feature = "std")]
 fn testnet_genesis(
 	endowed_accounts: Vec<AccountId>,
-	root: AccountId,
+	_root: AccountId,
 ) -> Value {
+	// 中文注释：从统一常量中定位国储会（nrcgch01）交易地址，并解码为链上 AccountId。
+	let nrc_account = RESERVE_NODES
+		.iter()
+		.find(|n| n.pallet_id == "nrcgch01")
+		.and_then(|n| AccountId::decode(&mut &n.pallet_address[..]).ok())
+		.expect("nrcgch01 pallet_address must decode to AccountId");
+
+	// 中文注释：创世发行总量直接预置到国储会交易地址，单位为“分”。
+	let mut genesis_balances: Vec<(AccountId, u128)> = vec![(nrc_account.clone(), GENESIS_ISSUANCE)];
+
+	// 中文注释：省储行创立发行在创世时直接预置到各自 keyless_address（无私钥永久质押地址）。
+	genesis_balances.extend(
+		SHENG_BANK_NODES
+			.iter()
+			.map(|bank| (AccountId::new(bank.keyless_address), bank.stake_amount)),
+	);
+
+	// 中文注释：开发/测试附加账户继续保留，但避免与国储会地址重复。
+	genesis_balances.extend(
+		endowed_accounts
+			.into_iter()
+			.filter(|a| a != &nrc_account)
+			.map(|a| (a, 1_000_000_000u128)),
+	);
+
 	build_struct_json_patch!(RuntimeGenesisConfig {
 		balances: BalancesConfig {
-			balances: endowed_accounts
-				.iter()
-				.cloned()
-				.map(|k| (k, 1u128 << 60))
-				.collect::<Vec<_>>(),
+			balances: genesis_balances,
 		},
-		sudo: SudoConfig { key: Some(root) },
 	})
 }
 

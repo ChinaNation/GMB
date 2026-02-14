@@ -26,23 +26,26 @@
 // Substrate and Polkadot dependencies
 use frame_support::{
 	derive_impl, parameter_types,
-	traits::{ConstBool, ConstU128, ConstU32, ConstU64, ConstU8, VariantCountOf},
+	traits::{ConstU128, ConstU32, ConstU64, ConstU8, EnsureOrigin, FindAuthor, VariantCountOf},
 	weights::{
 		constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
 		IdentityFee, Weight,
 	},
+	PalletId,
 };
 use frame_system::limits::{BlockLength, BlockWeights};
+use codec::Encode;
 use pallet_transaction_payment::{ConstFeeMultiplier, FungibleAdapter, Multiplier};
-use sp_consensus_aura::sr25519::AuthorityId as AuraId;
+use codec::Decode;
 use sp_runtime::{traits::One, Perbill};
 use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-	AccountId, Aura, Balance, Balances, Block, BlockNumber, Hash, Nonce, PalletInfo, Runtime,
-	RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
-	System, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+	AccountId, Balance, Balances, Block, BlockNumber, Hash, Nonce, PalletInfo, Runtime,
+	ResolutionIssuanceGov, ResolutionIssuanceIss, RuntimeCall, RuntimeEvent,
+	RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
+	VotingEngineSystem, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
@@ -57,7 +60,8 @@ parameter_types! {
 		NORMAL_DISPATCH_RATIO,
 	);
 	pub RuntimeBlockLength: BlockLength = BlockLength::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
-	pub const SS58Prefix: u8 = 42;
+	/// 公民币主链地址编号（SS58 前缀）：固定为 2027
+	pub const SS58Prefix: u16 = 2027;
 }
 
 /// All migrations of the runtime, aside from the ones declared in the pallets.
@@ -91,36 +95,17 @@ impl frame_system::Config for Runtime {
 	type Version = Version;
 	/// The data to be stored in an account.
 	type AccountData = pallet_balances::AccountData<Balance>;
-	/// This is used as an identifier of the chain. 42 is the generic substrate prefix.
+	/// 地址显示编号（SS58 前缀），本链固定使用 2027。
 	type SS58Prefix = SS58Prefix;
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 	type SingleBlockMigrations = SingleBlockMigrations;
 }
 
-impl pallet_aura::Config for Runtime {
-	type AuthorityId = AuraId;
-	type DisabledValidators = ();
-	type MaxAuthorities = ConstU32<32>;
-	type AllowMultipleBlocksPerSlot = ConstBool<false>;
-	type SlotDuration = pallet_aura::MinimumPeriodTimesTwo<Runtime>;
-}
-
-impl pallet_grandpa::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-
-	type WeightInfo = ();
-	type MaxAuthorities = ConstU32<32>;
-	type MaxNominators = ConstU32<0>;
-	type MaxSetIdSessionEntries = ConstU64<0>;
-
-	type KeyOwnerProof = sp_core::Void;
-	type EquivocationReportSystem = ();
-}
-
 impl pallet_timestamp::Config for Runtime {
 	/// A timestamp: milliseconds since the unix epoch.
 	type Moment = u64;
-	type OnTimestampSet = Aura;
+	// 纯 PoW 共识：时间戳不再依赖 Aura 插槽回调。
+	type OnTimestampSet = ();
 	type MinimumPeriod = ConstU64<{ SLOT_DURATION / 2 }>;
 	type WeightInfo = ();
 }
@@ -158,12 +143,6 @@ impl pallet_transaction_payment::Config for Runtime {
 	type WeightInfo = pallet_transaction_payment::weights::SubstrateWeight<Runtime>;
 }
 
-impl pallet_sudo::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type RuntimeCall = RuntimeCall;
-	type WeightInfo = pallet_sudo::weights::SubstrateWeight<Runtime>;
-}
-
 /// Configure the pallet-template in pallets/template.
 impl pallet_template::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
@@ -176,4 +155,109 @@ impl pallet_template::Config for Runtime {
 impl shengbank_stake_interest::Config for Runtime {
 	type Currency = Balances;
 	type BlocksPerYear = ConstU64<{ primitives::pow_const::BLOCKS_PER_YEAR }>;
+}
+
+/// PoW 作者解析器：
+/// 从区块 pre-runtime digest 中读取 POW_ENGINE_ID 的负载，并解码为 AccountId。
+pub struct PowDigestAuthor;
+
+impl FindAuthor<AccountId> for PowDigestAuthor {
+	fn find_author<'a, I>(digests: I) -> Option<AccountId>
+	where
+		I: 'a + IntoIterator<Item = (sp_runtime::ConsensusEngineId, &'a [u8])>,
+	{
+		digests.into_iter().find_map(|(engine_id, data)| {
+			if engine_id == sp_consensus_pow::POW_ENGINE_ID {
+				AccountId::decode(&mut &data[..]).ok()
+			} else {
+				None
+			}
+		})
+	}
+}
+
+/// 全节点 PoW 奖励模块配置：
+/// - 链上货币使用 Balances
+/// - 作者识别完全基于 PoW digest（不依赖 Aura/Grandpa）
+impl fullnode_pow_reward::Config for Runtime {
+	type Currency = Balances;
+	type FindAuthor = PowDigestAuthor;
+}
+
+parameter_types! {
+	/// 国储会模块ID（全链唯一）：nrcgch01
+	pub const NrcPalletId: PalletId = PalletId(*b"nrcgch01");
+	pub const ResolutionIssuanceMaxReasonLen: u32 = 1024;
+	pub const ResolutionIssuanceMaxAllocations: u32 = 64;
+}
+
+/// 禁用特权原点：始终拒绝任何 Origin，确保不存在可被调用的特权入口。
+pub struct EnsureNoPrivilegeOrigin;
+
+impl EnsureOrigin<RuntimeOrigin> for EnsureNoPrivilegeOrigin {
+	type Success = ();
+
+	fn try_origin(o: RuntimeOrigin) -> Result<Self::Success, RuntimeOrigin> {
+		Err(o)
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
+		Err(())
+	}
+}
+
+pub struct EnsureNrcAdmin;
+
+impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
+	type Success = AccountId;
+
+	fn try_origin(o: RuntimeOrigin) -> Result<Self::Success, RuntimeOrigin> {
+		let who = frame_system::EnsureSigned::<AccountId>::try_origin(o)?;
+		if is_nrc_admin(&who) {
+			Ok(who)
+		} else {
+			Err(RuntimeOrigin::from(frame_system::RawOrigin::Signed(who)))
+		}
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
+		Err(())
+	}
+}
+
+fn is_nrc_admin(who: &AccountId) -> bool {
+	let who_bytes = who.encode();
+	primitives::reserve_nodes_const::RESERVE_NODES
+		.iter()
+		.find(|n| n.pallet_id == "nrcgch01")
+		.map(|nrc| nrc.admins.iter().any(|admin| admin.as_slice() == who_bytes.as_slice()))
+		.unwrap_or(false)
+}
+
+impl resolution_issuance_iss::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Currency = Balances;
+	// 中文注释：协议层封死特权入口，执行发行不接受任何外部特权调用。
+	type ExecuteOrigin = EnsureNoPrivilegeOrigin;
+	type MaxReasonLen = ResolutionIssuanceMaxReasonLen;
+	type MaxAllocations = ResolutionIssuanceMaxAllocations;
+}
+
+impl resolution_issuance_gov::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type NrcProposeOrigin = EnsureNrcAdmin;
+	type NrcPalletId = NrcPalletId;
+	type IssuanceExecutor = ResolutionIssuanceIss;
+	type JointVoteEngine = VotingEngineSystem;
+	type MaxReasonLen = ResolutionIssuanceMaxReasonLen;
+	type MaxAllocations = ResolutionIssuanceMaxAllocations;
+}
+
+impl voting_engine_system::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type MaxCiicLength = ConstU32<64>;
+	type CiicEligibility = ();
+	type JointVoteResultCallback = ResolutionIssuanceGov;
 }
