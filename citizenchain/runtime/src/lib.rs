@@ -11,7 +11,7 @@ pub mod configs;
 extern crate alloc;
 use alloc::vec::Vec;
 use sp_runtime::{
-	generic, impl_opaque_keys,
+	generic,
 	traits::{BlakeTwo256, IdentifyAccount, Verify},
 	MultiAddress, MultiSignature,
 };
@@ -50,13 +50,6 @@ pub mod opaque {
 	pub type Hash = <BlakeTwo256 as HashT>::Output;
 }
 
-impl_opaque_keys! {
-	pub struct SessionKeys {
-		pub aura: Aura,
-		pub grandpa: Grandpa,
-	}
-}
-
 // To learn more about runtime versioning, see:
 // https://docs.substrate.io/main-docs/build/upgrade#runtime-versioning
 #[sp_version::runtime_version]
@@ -78,9 +71,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 
 mod block_times {
 	/// This determines the average expected block time that we are targeting. Blocks will be
-	/// produced at a minimum duration defined by `SLOT_DURATION`. `SLOT_DURATION` is picked up by
-	/// `pallet_timestamp` which is in turn picked up by `pallet_aura` to implement `fn
-	/// slot_duration()`.
+	/// produced at a minimum duration defined by `SLOT_DURATION`.
 	///
 	/// Change this to adjust the block time.
 	pub const MILLI_SECS_PER_BLOCK: u64 = 6000;
@@ -98,13 +89,15 @@ pub const DAYS: BlockNumber = HOURS * 24;
 
 pub const BLOCK_HASH_COUNT: BlockNumber = 2400;
 
-// Unit = the base number of indivisible units for balances
-pub const UNIT: Balance = 1_000_000_000_000;
-pub const MILLI_UNIT: Balance = 1_000_000_000;
-pub const MICRO_UNIT: Balance = 1_000_000;
+// 货币单位统一为“分”体系：1 表示 1 分，100 分 = 1 元。
+pub const FEN: Balance = 1;
+pub const YUAN: Balance = 100 * FEN;
 
-/// Existential deposit.
-pub const EXISTENTIAL_DEPOSIT: Balance = MILLI_UNIT;
+// 为兼容模板中可能使用的 UNIT 命名，保留 UNIT 并指向 1 元（100 分）。
+pub const UNIT: Balance = YUAN;
+
+/// 账户存在最小余额（单位：分），统一采用 primitives 制度常量。
+pub const EXISTENTIAL_DEPOSIT: Balance = primitives::core_const::ACCOUNT_EXISTENTIAL_DEPOSIT;
 
 /// The version information used to identify this runtime when compiled natively.
 #[cfg(feature = "std")]
@@ -201,26 +194,34 @@ mod runtime {
 	#[runtime::pallet_index(1)]
 	pub type Timestamp = pallet_timestamp;
 
+	// 纯 PoW 共识链：移除 Aura/Grandpa，保留基础系统与业务模块。
 	#[runtime::pallet_index(2)]
-	pub type Aura = pallet_aura;
-
-	#[runtime::pallet_index(3)]
-	pub type Grandpa = pallet_grandpa;
-
-	#[runtime::pallet_index(4)]
 	pub type Balances = pallet_balances;
 
-	#[runtime::pallet_index(5)]
+	#[runtime::pallet_index(3)]
 	pub type TransactionPayment = pallet_transaction_payment;
 
-	#[runtime::pallet_index(6)]
-	pub type Sudo = pallet_sudo;
-
 	// Include the custom logic from the pallet-template in the runtime.
-	#[runtime::pallet_index(7)]
+	#[runtime::pallet_index(4)]
 	pub type Template = pallet_template;
 
 	// 省储行质押利息模块：按年度给固定省储行账户发放质押利息
-	#[runtime::pallet_index(8)]
+	#[runtime::pallet_index(5)]
 	pub type ShengBankStakeInterest = shengbank_stake_interest;
+
+	// 全节点 PoW 发行模块：出块成功后发放固定铸块奖励
+	#[runtime::pallet_index(6)]
+	pub type FullnodePowReward = fullnode_pow_reward;
+
+	// 决议发行执行模块：仅执行，不负责提案/投票
+	#[runtime::pallet_index(7)]
+	pub type ResolutionIssuanceIss = resolution_issuance_iss;
+
+	// 决议发行治理模块：负责提案与联合投票流程
+	#[runtime::pallet_index(8)]
+	pub type ResolutionIssuanceGov = resolution_issuance_gov;
+
+	// 投票引擎模块：提供联合投票/内部投票/公民投票
+	#[runtime::pallet_index(9)]
+	pub type VotingEngineSystem = voting_engine_system;
 }
