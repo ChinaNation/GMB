@@ -1,7 +1,9 @@
 //! 公民轻节点发行常量=citizen_const.rs
 
+use crate::genesis::GENESIS_CITIZEN_MAX;
+
 /// 一、发行总量与阶段
-pub const CITIZEN_LIGHTNODE_MAX_COUNT: u64 = 1_443_497_378;         // 可获得奖励的公民轻节点最大数量
+pub const CITIZEN_LIGHTNODE_MAX_COUNT: u64 = GENESIS_CITIZEN_MAX;   // 可获得奖励的公民轻节点最大数量
 
 pub const CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT: u64 = 14_436_417;    // 高额奖励阶段节点数量
 

@@ -9,6 +9,7 @@ use sc_cli::SubstrateCli;
 use sc_service::PartialComponents;
 use gmb_runtime::{Block, EXISTENTIAL_DEPOSIT};
 use sp_keyring::Sr25519Keyring;
+use sp_core::crypto::{set_default_ss58_version, Ss58AddressFormat};
 
 impl SubstrateCli for Cli {
 	fn impl_name() -> String {
@@ -48,6 +49,9 @@ impl SubstrateCli for Cli {
 
 /// Parse and run command line arguments
 pub fn run() -> sc_cli::Result<()> {
+	// 中文注释：统一 CLI/chain-spec 序列化时的地址显示前缀，避免默认回落到 42。
+	set_default_ss58_version(Ss58AddressFormat::custom(2027));
+
 	let cli = Cli::from_args();
 
 	match &cli.subcommand {
