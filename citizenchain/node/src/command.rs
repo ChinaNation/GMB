@@ -8,6 +8,7 @@ use frame_benchmarking_cli::{BenchmarkCmd, ExtrinsicFactory, SUBSTRATE_REFERENCE
 use sc_cli::SubstrateCli;
 use sc_service::PartialComponents;
 use gmb_runtime::{Block, EXISTENTIAL_DEPOSIT};
+use primitives::core_const::{SS58_FORMAT, SUPPORT_URL};
 use sp_keyring::Sr25519Keyring;
 use sp_core::crypto::{set_default_ss58_version, Ss58AddressFormat};
 
@@ -29,7 +30,7 @@ impl SubstrateCli for Cli {
 	}
 
 	fn support_url() -> String {
-		"support.anonymous.an".into()
+		SUPPORT_URL.into()
 	}
 
 	fn copyright_start_year() -> i32 {
@@ -38,9 +39,10 @@ impl SubstrateCli for Cli {
 
 	fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
 		Ok(match id {
-			"dev" => Box::new(chain_spec::development_chain_spec()?),
-			"" | "local" => Box::new(chain_spec::local_chain_spec()?),
-			"mainnet" | "live" => Box::new(chain_spec::mainnet_config()?),
+			"" | "mainnet" | "live" => Box::new(chain_spec::mainnet_config()?),
+			"dev" | "local" => {
+				return Err("unsupported chain id: use `mainnet` (or omit `--chain`)".into());
+			},
 			path =>
 				Box::new(chain_spec::ChainSpec::from_json_file(std::path::PathBuf::from(path))?),
 		})
@@ -50,7 +52,7 @@ impl SubstrateCli for Cli {
 /// Parse and run command line arguments
 pub fn run() -> sc_cli::Result<()> {
 	// 中文注释：统一 CLI/chain-spec 序列化时的地址显示前缀，避免默认回落到 42。
-	set_default_ss58_version(Ss58AddressFormat::custom(2027));
+	set_default_ss58_version(Ss58AddressFormat::custom(SS58_FORMAT));
 
 	let cli = Cli::from_args();
 

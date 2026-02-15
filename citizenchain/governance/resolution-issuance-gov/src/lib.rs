@@ -6,9 +6,12 @@ use voting_engine_system::JointVoteResultCallback;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use codec::Encode;
     use frame_support::{pallet_prelude::*, PalletId};
     use frame_system::pallet_prelude::*;
+    use primitives::shengbank_nodes_const::SHENG_BANK_NODES;
     use resolution_issuance_iss::ResolutionIssuanceExecutor;
+    use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
     use voting_engine_system::JointVoteEngine;
 
     pub type ReasonOf<T> = BoundedVec<u8, <T as Config>::MaxReasonLen>;
@@ -96,7 +99,7 @@ pub mod pallet {
         /// 仅允许国储会管理员发起提案。
         type NrcProposeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
 
-        /// 国储会模块ID（固定为 `nrcgch01`）。
+        /// 国储会模块ID（由运行时从统一常量注入）。
         type NrcPalletId: Get<PalletId>;
 
         /// 投票通过后，调用发行执行模块执行铸币。
@@ -156,6 +159,9 @@ pub mod pallet {
     pub enum Error<T> {
         EmptyReason,
         EmptyAllocations,
+        InvalidAllocationCount,
+        DuplicateRecipient,
+        InvalidRecipientSet,
         ZeroAmount,
         AllocationOverflow,
         TotalMismatch,
@@ -275,14 +281,28 @@ pub mod pallet {
             allocations: &[RecipientAmount<T::AccountId>],
         ) -> DispatchResult {
             ensure!(!allocations.is_empty(), Error::<T>::EmptyAllocations);
+            ensure!(
+                allocations.len() == SHENG_BANK_NODES.len(),
+                Error::<T>::InvalidAllocationCount
+            );
+
+            let expected: BTreeSet<Vec<u8>> = SHENG_BANK_NODES
+                .iter()
+                .map(|node| node.pallet_address.to_vec())
+                .collect();
+            let mut seen: BTreeSet<Vec<u8>> = BTreeSet::new();
 
             let mut sum = 0u128;
             for item in allocations {
                 ensure!(item.amount > 0, Error::<T>::ZeroAmount);
+                let who = item.recipient.encode();
+                ensure!(seen.insert(who), Error::<T>::DuplicateRecipient);
                 sum = sum
                     .checked_add(item.amount)
                     .ok_or(Error::<T>::AllocationOverflow)?;
             }
+
+            ensure!(seen == expected, Error::<T>::InvalidRecipientSet);
             ensure!(sum == total_amount, Error::<T>::TotalMismatch);
             Ok(())
         }

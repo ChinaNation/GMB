@@ -8036,6 +8036,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "parity-scale-codec",
+ "primitives",
  "resolution-issuance-iss",
  "scale-info",
  "sp-runtime",

@@ -11,8 +11,14 @@ use primitives::count_const::{
     JOINT_VOTE_TOTAL,
     VOTING_DURATION_BLOCKS,
 };
-use primitives::reserve_nodes_const::RESERVE_NODES;
-use primitives::shengbank_nodes_const::SHENG_BANK_NODES;
+use primitives::reserve_nodes_const::{
+    pallet_id_to_bytes as reserve_pallet_id_to_bytes,
+    RESERVE_NODES,
+};
+use primitives::shengbank_nodes_const::{
+    pallet_id_to_bytes as shengbank_pallet_id_to_bytes,
+    SHENG_BANK_NODES,
+};
 
 use crate::{
     citizen_vote::CiicEligibility,
@@ -24,21 +30,21 @@ use crate::{
     STATUS_PASSED,
 };
 
-/// 国储会唯一 pallet_id。
-pub const NRC_PALLET_ID: InstitutionPalletId = *b"nrcgch01";
-
 fn str_to_pallet_id(s: &str) -> Option<InstitutionPalletId> {
-    let bytes = s.as_bytes();
-    if bytes.len() != 8 {
-        return None;
-    }
-    let mut out = [0u8; 8];
-    out.copy_from_slice(bytes);
-    Some(out)
+    reserve_pallet_id_to_bytes(s)
+}
+
+fn str_to_shengbank_pallet_id(s: &str) -> Option<InstitutionPalletId> {
+    shengbank_pallet_id_to_bytes(s)
+}
+
+fn nrc_pallet_id_bytes() -> InstitutionPalletId {
+    reserve_pallet_id_to_bytes(RESERVE_NODES[0].pallet_id)
+        .expect("NRC pallet_id must be 8 bytes")
 }
 
 pub fn is_valid_institution(id: InstitutionPalletId) -> bool {
-    if id == NRC_PALLET_ID {
+    if id == nrc_pallet_id_bytes() {
         return true;
     }
 
@@ -52,12 +58,12 @@ pub fn is_valid_institution(id: InstitutionPalletId) -> bool {
 
     SHENG_BANK_NODES
         .iter()
-        .filter_map(|n| str_to_pallet_id(n.pallet_id))
+        .filter_map(|n| str_to_shengbank_pallet_id(n.pallet_id))
         .any(|pid| pid == id)
 }
 
 pub fn institution_weight(id: InstitutionPalletId) -> Option<u32> {
-    if id == NRC_PALLET_ID {
+    if id == nrc_pallet_id_bytes() {
         return Some(NRC_JOINT_VOTE_WEIGHT);
     }
 
@@ -71,7 +77,7 @@ pub fn institution_weight(id: InstitutionPalletId) -> Option<u32> {
 
     let in_prb = SHENG_BANK_NODES
         .iter()
-        .filter_map(|n| str_to_pallet_id(n.pallet_id))
+        .filter_map(|n| str_to_shengbank_pallet_id(n.pallet_id))
         .any(|pid| pid == id);
     if in_prb {
         return Some(PRB_JOINT_VOTE_WEIGHT);
