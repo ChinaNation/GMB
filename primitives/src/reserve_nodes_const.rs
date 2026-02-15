@@ -14,6 +14,18 @@ pub struct ReserveNodeConst {
     pub admins: &'static [[u8; 32]],
 }
 
+/// 全链统一的 pallet_id -> [u8; 8] 转码入口（其他模块统一调用这里，避免重复转码）。
+#[inline]
+pub fn pallet_id_to_bytes(id: &str) -> Option<[u8; 8]> {
+    let bytes = id.as_bytes();
+    if bytes.len() != 8 {
+        return None;
+    }
+    let mut out = [0u8; 8];
+    out.copy_from_slice(bytes);
+    Some(out)
+}
+
 /// 所有国储会+省储会节点数组
 pub const RESERVE_NODES: &[ReserveNodeConst] = &[
     // ======国储会=======

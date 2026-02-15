@@ -45,23 +45,25 @@ use super::{
 	AccountId, Balance, Balances, Block, BlockNumber, Hash, Nonce, PalletInfo, Runtime,
 	ResolutionIssuanceGov, ResolutionIssuanceIss, RuntimeCall, RuntimeEvent,
 	RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
-	VotingEngineSystem, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+	VotingEngineSystem, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 
-const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
+const NORMAL_DISPATCH_RATIO: Perbill =
+	Perbill::from_percent(primitives::core_const::NORMAL_DISPATCH_PERCENT);
 
 parameter_types! {
-	pub const BlockHashCount: BlockNumber = 2400;
+	pub const BlockHashCount: BlockNumber = BLOCK_HASH_COUNT;
 	pub const Version: RuntimeVersion = VERSION;
 
-	/// We allow for 2 seconds of compute with a 6 second average block time.
+	/// We allow for 2 seconds of compute per block.
 	pub RuntimeBlockWeights: BlockWeights = BlockWeights::with_sensible_defaults(
 		Weight::from_parts(2u64 * WEIGHT_REF_TIME_PER_SECOND, u64::MAX),
 		NORMAL_DISPATCH_RATIO,
 	);
-	pub RuntimeBlockLength: BlockLength = BlockLength::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
-	/// 公民币主链地址编号（SS58 前缀）：固定为 2027
-	pub const SS58Prefix: u16 = 2027;
+	pub RuntimeBlockLength: BlockLength =
+		BlockLength::max_with_normal_ratio(primitives::core_const::MAX_BLOCK_BYTES, NORMAL_DISPATCH_RATIO);
+	/// 公民币主链地址编号（SS58 前缀）：统一来源于 primitives 常量。
+	pub const SS58Prefix: u16 = primitives::core_const::SS58_FORMAT;
 }
 
 /// All migrations of the runtime, aside from the ones declared in the pallets.
@@ -95,7 +97,7 @@ impl frame_system::Config for Runtime {
 	type Version = Version;
 	/// The data to be stored in an account.
 	type AccountData = pallet_balances::AccountData<Balance>;
-	/// 地址显示编号（SS58 前缀），本链固定使用 2027。
+	/// 地址显示编号（SS58 前缀），统一来自 primitives 制度常量。
 	type SS58Prefix = SS58Prefix;
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 	type SingleBlockMigrations = SingleBlockMigrations;
@@ -136,7 +138,7 @@ parameter_types! {
 impl pallet_transaction_payment::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type OnChargeTransaction = FungibleAdapter<Balances, ()>;
-	type OperationalFeeMultiplier = ConstU8<5>;
+	type OperationalFeeMultiplier = ConstU8<{ primitives::core_const::OPERATIONAL_FEE_MULTIPLIER }>;
 	type WeightToFee = IdentityFee<Balance>;
 	type LengthToFee = IdentityFee<Balance>;
 	type FeeMultiplierUpdate = ConstFeeMultiplier<FeeMultiplier>;
@@ -185,10 +187,20 @@ impl fullnode_pow_reward::Config for Runtime {
 }
 
 parameter_types! {
-	/// 国储会模块ID（全链唯一）：nrcgch01
-	pub const NrcPalletId: PalletId = PalletId(*b"nrcgch01");
-	pub const ResolutionIssuanceMaxReasonLen: u32 = 1024;
-	pub const ResolutionIssuanceMaxAllocations: u32 = 64;
+	/// 决议发行治理参数（统一来源于 primitives 常量）。
+	pub const ResolutionIssuanceMaxReasonLen: u32 = primitives::count_const::RESOLUTION_ISSUANCE_MAX_REASON_LEN;
+	pub const ResolutionIssuanceMaxAllocations: u32 = primitives::count_const::RESOLUTION_ISSUANCE_MAX_ALLOCATIONS;
+}
+
+pub struct NrcPalletIdProvider;
+impl frame_support::traits::Get<PalletId> for NrcPalletIdProvider {
+	fn get() -> PalletId {
+		let nrc_id = primitives::reserve_nodes_const::RESERVE_NODES[0].pallet_id;
+		let nrc_id_bytes =
+			primitives::reserve_nodes_const::pallet_id_to_bytes(nrc_id)
+				.expect("NRC pallet_id must be 8 bytes");
+		PalletId(nrc_id_bytes)
+	}
 }
 
 /// 禁用特权原点：始终拒绝任何 Origin，确保不存在可被调用的特权入口。
@@ -229,9 +241,10 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 
 fn is_nrc_admin(who: &AccountId) -> bool {
 	let who_bytes = who.encode();
+	let nrc_id = primitives::reserve_nodes_const::RESERVE_NODES[0].pallet_id;
 	primitives::reserve_nodes_const::RESERVE_NODES
 		.iter()
-		.find(|n| n.pallet_id == "nrcgch01")
+		.find(|n| n.pallet_id == nrc_id)
 		.map(|nrc| nrc.admins.iter().any(|admin| admin.as_slice() == who_bytes.as_slice()))
 		.unwrap_or(false)
 }
@@ -248,7 +261,7 @@ impl resolution_issuance_iss::Config for Runtime {
 impl resolution_issuance_gov::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type NrcProposeOrigin = EnsureNrcAdmin;
-	type NrcPalletId = NrcPalletId;
+	type NrcPalletId = NrcPalletIdProvider;
 	type IssuanceExecutor = ResolutionIssuanceIss;
 	type JointVoteEngine = VotingEngineSystem;
 	type MaxReasonLen = ResolutionIssuanceMaxReasonLen;

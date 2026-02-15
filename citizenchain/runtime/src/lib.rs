@@ -73,8 +73,8 @@ mod block_times {
 	/// This determines the average expected block time that we are targeting. Blocks will be
 	/// produced at a minimum duration defined by `SLOT_DURATION`.
 	///
-	/// Change this to adjust the block time.
-	pub const MILLI_SECS_PER_BLOCK: u64 = 6000;
+	/// Change this to adjust the block time. Unified source: primitives::pow_const.
+	pub const MILLI_SECS_PER_BLOCK: u64 = primitives::pow_const::MILLISECS_PER_BLOCK;
 
 	// NOTE: Currently it is not possible to change the slot duration after the chain has started.
 	// Attempting to do so will brick block production.
@@ -87,7 +87,7 @@ pub const MINUTES: BlockNumber = 60_000 / (MILLI_SECS_PER_BLOCK as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
 
-pub const BLOCK_HASH_COUNT: BlockNumber = 2400;
+pub const BLOCK_HASH_COUNT: BlockNumber = primitives::core_const::BLOCK_HASH_COUNT;
 
 // 货币单位统一为“分”体系：1 表示 1 分，100 分 = 1 元。
 pub const FEN: Balance = 1;
