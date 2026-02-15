@@ -42,12 +42,13 @@ fn testnet_genesis(
 	endowed_accounts: Vec<AccountId>,
 	_root: AccountId,
 ) -> Value {
-	// 中文注释：从统一常量中定位国储会（nrcgch01）交易地址，并解码为链上 AccountId。
+	// 中文注释：从统一常量中定位国储会交易地址，并解码为链上 AccountId。
+	let nrc_id = RESERVE_NODES[0].pallet_id;
 	let nrc_account = RESERVE_NODES
 		.iter()
-		.find(|n| n.pallet_id == "nrcgch01")
+		.find(|n| n.pallet_id == nrc_id)
 		.and_then(|n| AccountId::decode(&mut &n.pallet_address[..]).ok())
-		.expect("nrcgch01 pallet_address must decode to AccountId");
+		.expect("NRC pallet_address must decode to AccountId");
 
 	// 中文注释：创世发行总量直接预置到国储会交易地址，单位为“分”。
 	let mut genesis_balances: Vec<(AccountId, u128)> = vec![(nrc_account.clone(), GENESIS_ISSUANCE)];
@@ -76,13 +77,7 @@ fn testnet_genesis(
 
 /// Return the development genesis config.
 #[cfg(feature = "std")]
-pub fn development_config_genesis() -> Value {
-	testnet_genesis(vec![], AccountId::new([0u8; 32]))
-}
-
-/// Return the local genesis config preset.
-#[cfg(feature = "std")]
-pub fn local_config_genesis() -> Value {
+pub fn mainnet_config_genesis() -> Value {
 	testnet_genesis(vec![], AccountId::new([0u8; 32]))
 }
 
@@ -97,8 +92,8 @@ pub fn get_preset(id: &PresetId) -> Option<Vec<u8>> {
 	#[cfg(feature = "std")]
 	{
 	let patch = match id.as_ref() {
-		sp_genesis_builder::DEV_RUNTIME_PRESET => development_config_genesis(),
-		sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET => local_config_genesis(),
+		sp_genesis_builder::DEV_RUNTIME_PRESET => mainnet_config_genesis(),
+		sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET => mainnet_config_genesis(),
 		_ => return None,
 	};
 	Some(

@@ -11,8 +11,14 @@ use scale_info::TypeInfo;
 use sp_std::vec::Vec;
 
 use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
-use primitives::reserve_nodes_const::RESERVE_NODES;
-use primitives::shengbank_nodes_const::SHENG_BANK_NODES;
+use primitives::reserve_nodes_const::{
+    pallet_id_to_bytes as reserve_pallet_id_to_bytes,
+    RESERVE_NODES,
+};
+use primitives::shengbank_nodes_const::{
+    pallet_id_to_bytes as shengbank_pallet_id_to_bytes,
+    SHENG_BANK_NODES,
+};
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
     InstitutionPalletId,
@@ -32,18 +38,21 @@ pub struct AdminReplacementAction<AccountId> {
 }
 
 fn str_to_pallet_id(s: &str) -> Option<InstitutionPalletId> {
-    let bytes = s.as_bytes();
-    if bytes.len() != 8 {
-        return None;
-    }
-    let mut out = [0u8; 8];
-    out.copy_from_slice(bytes);
-    Some(out)
+    reserve_pallet_id_to_bytes(s)
+}
+
+fn str_to_shengbank_pallet_id(s: &str) -> Option<InstitutionPalletId> {
+    shengbank_pallet_id_to_bytes(s)
+}
+
+fn nrc_pallet_id_bytes() -> InstitutionPalletId {
+    reserve_pallet_id_to_bytes(RESERVE_NODES[0].pallet_id)
+        .expect("NRC pallet_id must be 8 bytes")
 }
 
 fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
     // 国储会固定 pallet_id
-    if institution == *b"nrcgch01" {
+    if institution == nrc_pallet_id_bytes() {
         return Some(ORG_NRC);
     }
 
@@ -58,7 +67,7 @@ fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
 
     if SHENG_BANK_NODES
         .iter()
-        .filter_map(|n| str_to_pallet_id(n.pallet_id))
+        .filter_map(|n| str_to_shengbank_pallet_id(n.pallet_id))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRB);
