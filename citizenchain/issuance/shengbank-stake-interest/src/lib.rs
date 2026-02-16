@@ -4,24 +4,19 @@ pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use frame_support::{
-        pallet_prelude::*,
-        traits::Currency,
-    };
+    use codec::Decode;
+    use frame_support::{pallet_prelude::*, traits::Currency};
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::{SaturatedConversion, Saturating, Zero};
-    use codec::Decode;
     use sp_std::prelude::*;
 
     // ===== 引入制度常量 =====
     use primitives::{
         core_const::{
-            SHENGBANK_INITIAL_INTEREST_BP,
-            SHENGBANK_INTEREST_DECREASE_BP,
-            SHENGBANK_INTEREST_DURATION_YEARS,
-            ENABLE_SHENGBANK_INTEREST_DECAY,
+            ENABLE_SHENGBANK_INTEREST_DECAY, SHENGBANK_INITIAL_INTEREST_BP,
+            SHENGBANK_INTEREST_DECREASE_BP, SHENGBANK_INTEREST_DURATION_YEARS,
         },
-        shengbank_nodes_const::SHENG_BANK_NODES,  // 固定 43 个省储行多签地址
+        shengbank_nodes_const::SHENG_BANK_NODES, // 固定 43 个省储行多签地址
     };
 
     // ===== 配置 =====
@@ -36,9 +31,7 @@ pub mod pallet {
     }
 
     pub type BalanceOf<T> =
-        <<T as Config>::Currency as Currency<
-            <T as frame_system::Config>::AccountId,
-        >>::Balance;
+        <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
     // ===== 存储 =====
     /// 已完成结算的最后年度（0 表示尚未结算任何一年）
@@ -63,9 +56,7 @@ pub mod pallet {
         },
 
         /// 某一年度结算完成
-        ShengBankYearSettled {
-            year: u32,
-        },
+        ShengBankYearSettled { year: u32 },
 
         /// 某一年度结算失败（未满足“43个省储行全部成功入账”）
         ShengBankYearSettlementFailed {
@@ -109,29 +100,23 @@ pub mod pallet {
                 );
 
                 // 中文注释：执行当年利息发放，并返回读写计数+成功数
-                let (reads, writes, success_count) =
-                    Self::mint_interest_for_year(current_year);
+                let (reads, writes, success_count) = Self::mint_interest_for_year(current_year);
 
                 // 中文注释：制度要求“43个省储行必须全部成功”，否则本年度不推进结算进度
                 let total_count = SHENG_BANK_NODES.len() as u32;
                 if success_count == total_count {
                     LastSettledYear::<T>::put(current_year);
-                    Self::deposit_event(Event::<T>::ShengBankYearSettled {
-                        year: current_year,
-                    });
+                    Self::deposit_event(Event::<T>::ShengBankYearSettled { year: current_year });
 
-                    return T::DbWeight::get()
-                        .reads_writes(reads + 1, writes + 1);
+                    return T::DbWeight::get().reads_writes(reads + 1, writes + 1);
                 }
 
                 // 中文注释：只要有任一地址发放失败，就记录失败事件并保持 LastSettledYear 不变
-                Self::deposit_event(
-                    Event::<T>::ShengBankYearSettlementFailed {
-                        year: current_year,
-                        success_count,
-                        total_count,
-                    },
-                );
+                Self::deposit_event(Event::<T>::ShengBankYearSettlementFailed {
+                    year: current_year,
+                    success_count,
+                    total_count,
+                });
                 return T::DbWeight::get().reads_writes(reads, writes);
             }
 
@@ -183,46 +168,37 @@ pub mod pallet {
 
             for bank in SHENG_BANK_NODES.iter() {
                 // 解码省储行交易账户
-                let account =
-                    match T::AccountId::decode(
-                        &mut &bank.pallet_address[..],
-                    ) {
-                        Ok(a) => a,
-                        Err(_) => {
-                            log::error!(
-                                target: "runtime::shengbank",
-                                "省储行账户解码失败: {}",
-                                bank.pallet_id
-                            );
-                            continue;
-                        }
-                    };
+                let account = match T::AccountId::decode(&mut &bank.pallet_address[..]) {
+                    Ok(a) => a,
+                    Err(_) => {
+                        log::error!(
+                            target: "runtime::shengbank",
+                            "省储行账户解码失败: {}",
+                            bank.pallet_id
+                        );
+                        continue;
+                    }
+                };
 
-                let principal: BalanceOf<T> =
-                    bank.stake_amount.saturated_into();
+                let principal: BalanceOf<T> = bank.stake_amount.saturated_into();
 
-                let interest = principal
-                    .saturating_mul(rate_bp.into())
-                    / 10_000u32.into();
+                let interest = principal.saturating_mul(rate_bp.into()) / 10_000u32.into();
 
                 if interest.is_zero() {
                     continue;
                 }
 
                 // 中文注释：若账户被清理或尚未建户，自动重建对应省储行 pallet_address 后再入账。
-                let _imbalance =
-                    T::Currency::deposit_creating(&account, interest);
+                let _imbalance = T::Currency::deposit_creating(&account, interest);
                 success_count = success_count.saturating_add(1);
                 writes += 1;
 
-                Self::deposit_event(
-                    Event::<T>::ShengBankInterestMinted {
-                        year,
-                        pallet_id: bank.pallet_id.as_bytes().to_vec(),
-                        account: account.clone(),
-                        amount: interest,
-                    },
-                );
+                Self::deposit_event(Event::<T>::ShengBankInterestMinted {
+                    year,
+                    pallet_id: bank.pallet_id.as_bytes().to_vec(),
+                    account: account.clone(),
+                    amount: interest,
+                });
             }
 
             (reads, writes, success_count)
