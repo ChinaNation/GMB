@@ -11,9 +11,9 @@ pub mod configs;
 extern crate alloc;
 use alloc::vec::Vec;
 use sp_runtime::{
-	generic,
-	traits::{BlakeTwo256, IdentifyAccount, Verify},
-	MultiAddress, MultiSignature,
+    generic,
+    traits::{BlakeTwo256, IdentifyAccount, Verify},
+    MultiAddress, MultiSignature,
 };
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
@@ -32,53 +32,53 @@ pub mod genesis_config_presets;
 /// of data like extrinsics, allowing for them to continue syncing the network through upgrades
 /// to even the core data structures.
 pub mod opaque {
-	use super::*;
-	use sp_runtime::{
-		generic,
-		traits::{BlakeTwo256, Hash as HashT},
-	};
+    use super::*;
+    use sp_runtime::{
+        generic,
+        traits::{BlakeTwo256, Hash as HashT},
+    };
 
-	pub use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
+    pub use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
 
-	/// Opaque block header type.
-	pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
-	/// Opaque block type.
-	pub type Block = generic::Block<Header, UncheckedExtrinsic>;
-	/// Opaque block identifier type.
-	pub type BlockId = generic::BlockId<Block>;
-	/// Opaque block hash type.
-	pub type Hash = <BlakeTwo256 as HashT>::Output;
+    /// Opaque block header type.
+    pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
+    /// Opaque block type.
+    pub type Block = generic::Block<Header, UncheckedExtrinsic>;
+    /// Opaque block identifier type.
+    pub type BlockId = generic::BlockId<Block>;
+    /// Opaque block hash type.
+    pub type Hash = <BlakeTwo256 as HashT>::Output;
 }
 
 // To learn more about runtime versioning, see:
 // https://docs.substrate.io/main-docs/build/upgrade#runtime-versioning
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: alloc::borrow::Cow::Borrowed("gmb-runtime"),
-	impl_name: alloc::borrow::Cow::Borrowed("gmb-runtime"),
-	authoring_version: 1,
-	// The version of the runtime specification. A full node will not attempt to use its native
-	//   runtime in substitute for the on-chain Wasm runtime unless all of `spec_name`,
-	//   `spec_version`, and `authoring_version` are the same between Wasm and native.
-	// This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
-	//   the compatible custom types.
-	spec_version: 1,
-	impl_version: 1,
-	apis: apis::RUNTIME_API_VERSIONS,
-	transaction_version: 1,
-	system_version: 1,
+    spec_name: alloc::borrow::Cow::Borrowed("gmb-runtime"),
+    impl_name: alloc::borrow::Cow::Borrowed("gmb-runtime"),
+    authoring_version: 1,
+    // The version of the runtime specification. A full node will not attempt to use its native
+    //   runtime in substitute for the on-chain Wasm runtime unless all of `spec_name`,
+    //   `spec_version`, and `authoring_version` are the same between Wasm and native.
+    // This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
+    //   the compatible custom types.
+    spec_version: 1,
+    impl_version: 1,
+    apis: apis::RUNTIME_API_VERSIONS,
+    transaction_version: 1,
+    system_version: 1,
 };
 
 mod block_times {
-	/// This determines the average expected block time that we are targeting. Blocks will be
-	/// produced at a minimum duration defined by `SLOT_DURATION`.
-	///
-	/// Change this to adjust the block time. Unified source: primitives::pow_const.
-	pub const MILLI_SECS_PER_BLOCK: u64 = primitives::pow_const::MILLISECS_PER_BLOCK;
+    /// This determines the average expected block time that we are targeting. Blocks will be
+    /// produced at a minimum duration defined by `SLOT_DURATION`.
+    ///
+    /// Change this to adjust the block time. Unified source: primitives::pow_const.
+    pub const MILLI_SECS_PER_BLOCK: u64 = primitives::pow_const::MILLISECS_PER_BLOCK;
 
-	// NOTE: Currently it is not possible to change the slot duration after the chain has started.
-	// Attempting to do so will brick block production.
-	pub const SLOT_DURATION: u64 = MILLI_SECS_PER_BLOCK;
+    // NOTE: Currently it is not possible to change the slot duration after the chain has started.
+    // Attempting to do so will brick block production.
+    pub const SLOT_DURATION: u64 = MILLI_SECS_PER_BLOCK;
 }
 pub use block_times::*;
 
@@ -102,7 +102,10 @@ pub const EXISTENTIAL_DEPOSIT: Balance = primitives::core_const::ACCOUNT_EXISTEN
 /// The version information used to identify this runtime when compiled natively.
 #[cfg(feature = "std")]
 pub fn native_version() -> NativeVersion {
-	NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
+    NativeVersion {
+        runtime_version: VERSION,
+        can_author_with: Default::default(),
+    }
 }
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
@@ -141,87 +144,91 @@ pub type BlockId = generic::BlockId<Block>;
 
 /// The `TransactionExtension` to the basic transaction logic.
 pub type TxExtension = (
-	frame_system::AuthorizeCall<Runtime>,
-	frame_system::CheckNonZeroSender<Runtime>,
-	frame_system::CheckSpecVersion<Runtime>,
-	frame_system::CheckTxVersion<Runtime>,
-	frame_system::CheckGenesis<Runtime>,
-	frame_system::CheckEra<Runtime>,
-	frame_system::CheckNonce<Runtime>,
-	frame_system::CheckWeight<Runtime>,
-	pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
-	frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
-	frame_system::WeightReclaim<Runtime>,
+    frame_system::AuthorizeCall<Runtime>,
+    frame_system::CheckNonZeroSender<Runtime>,
+    frame_system::CheckSpecVersion<Runtime>,
+    frame_system::CheckTxVersion<Runtime>,
+    frame_system::CheckGenesis<Runtime>,
+    frame_system::CheckEra<Runtime>,
+    frame_system::CheckNonce<Runtime>,
+    frame_system::CheckWeight<Runtime>,
+    pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
+    frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
+    frame_system::WeightReclaim<Runtime>,
 );
 
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic =
-	generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
+    generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
 /// The payload being signed in transactions.
 pub type SignedPayload = generic::SignedPayload<RuntimeCall, TxExtension>;
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
-	Runtime,
-	Block,
-	frame_system::ChainContext<Runtime>,
-	Runtime,
-	AllPalletsWithSystem,
+    Runtime,
+    Block,
+    frame_system::ChainContext<Runtime>,
+    Runtime,
+    AllPalletsWithSystem,
 >;
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
 #[frame_support::runtime]
 mod runtime {
-	#[runtime::runtime]
-	#[runtime::derive(
-		RuntimeCall,
-		RuntimeEvent,
-		RuntimeError,
-		RuntimeOrigin,
-		RuntimeFreezeReason,
-		RuntimeHoldReason,
-		RuntimeSlashReason,
-		RuntimeLockId,
-		RuntimeTask,
-		RuntimeViewFunction
-	)]
-	pub struct Runtime;
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask,
+        RuntimeViewFunction
+    )]
+    pub struct Runtime;
 
-	#[runtime::pallet_index(0)]
-	pub type System = frame_system;
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
 
-	#[runtime::pallet_index(1)]
-	pub type Timestamp = pallet_timestamp;
+    #[runtime::pallet_index(1)]
+    pub type Timestamp = pallet_timestamp;
 
-	// 纯 PoW 共识链：移除 Aura/Grandpa，保留基础系统与业务模块。
-	#[runtime::pallet_index(2)]
-	pub type Balances = pallet_balances;
+    // 纯 PoW 共识链：移除 Aura/Grandpa，保留基础系统与业务模块。
+    #[runtime::pallet_index(2)]
+    pub type Balances = pallet_balances;
 
-	#[runtime::pallet_index(3)]
-	pub type TransactionPayment = pallet_transaction_payment;
+    #[runtime::pallet_index(3)]
+    pub type TransactionPayment = pallet_transaction_payment;
 
-	// Include the custom logic from the pallet-template in the runtime.
-	#[runtime::pallet_index(4)]
-	pub type Template = pallet_template;
+    // 省储行质押利息模块：按年度给固定省储行账户发放质押利息
+    #[runtime::pallet_index(5)]
+    pub type ShengBankStakeInterest = shengbank_stake_interest;
 
-	// 省储行质押利息模块：按年度给固定省储行账户发放质押利息
-	#[runtime::pallet_index(5)]
-	pub type ShengBankStakeInterest = shengbank_stake_interest;
+    // 全节点 PoW 发行模块：出块成功后发放固定铸块奖励
+    #[runtime::pallet_index(6)]
+    pub type FullnodePowReward = fullnode_pow_reward;
 
-	// 全节点 PoW 发行模块：出块成功后发放固定铸块奖励
-	#[runtime::pallet_index(6)]
-	pub type FullnodePowReward = fullnode_pow_reward;
+    // 决议发行执行模块：仅执行，不负责提案/投票
+    #[runtime::pallet_index(7)]
+    pub type ResolutionIssuanceIss = resolution_issuance_iss;
 
-	// 决议发行执行模块：仅执行，不负责提案/投票
-	#[runtime::pallet_index(7)]
-	pub type ResolutionIssuanceIss = resolution_issuance_iss;
+    // 决议发行治理模块：负责提案与联合投票流程
+    #[runtime::pallet_index(8)]
+    pub type ResolutionIssuanceGov = resolution_issuance_gov;
 
-	// 决议发行治理模块：负责提案与联合投票流程
-	#[runtime::pallet_index(8)]
-	pub type ResolutionIssuanceGov = resolution_issuance_gov;
+    // 投票引擎模块：提供联合投票/内部投票/公民投票
+    #[runtime::pallet_index(9)]
+    pub type VotingEngineSystem = voting_engine_system;
 
-	// 投票引擎模块：提供联合投票/内部投票/公民投票
-	#[runtime::pallet_index(9)]
-	pub type VotingEngineSystem = voting_engine_system;
+    // CIIC 绑定与资格校验：统一处理绑定、验签、资格查询
+    #[runtime::pallet_index(10)]
+    pub type CiicCodeAuth = ciic_code_auth;
+
+    // 公民轻节点发行：仅负责认证奖励发放
+    #[runtime::pallet_index(11)]
+    pub type CitizenLightnodeIssuance = citizen_lightnode_issuance;
 }

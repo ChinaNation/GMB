@@ -1,33 +1,23 @@
 #![allow(dead_code)]
 
+use codec::Encode;
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 
 use primitives::count_const::{
-    JOINT_VOTE_PASS_THRESHOLD,
-    NRC_JOINT_VOTE_WEIGHT,
-    PRB_JOINT_VOTE_WEIGHT,
-    PRC_JOINT_VOTE_WEIGHT,
-    JOINT_VOTE_TOTAL,
-    VOTING_DURATION_BLOCKS,
+    JOINT_VOTE_PASS_THRESHOLD, JOINT_VOTE_TOTAL, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT,
+    PRC_JOINT_VOTE_WEIGHT, VOTING_DURATION_BLOCKS,
 };
 use primitives::reserve_nodes_const::{
-    pallet_id_to_bytes as reserve_pallet_id_to_bytes,
-    RESERVE_NODES,
+    pallet_id_to_bytes as reserve_pallet_id_to_bytes, RESERVE_NODES,
 };
 use primitives::shengbank_nodes_const::{
-    pallet_id_to_bytes as shengbank_pallet_id_to_bytes,
-    SHENG_BANK_NODES,
+    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, SHENG_BANK_NODES,
 };
 
 use crate::{
-    citizen_vote::CiicEligibility,
     pallet::{Config, Error, Event, JointTallies, JointVotesByInstitution, Pallet, Proposals},
-    InstitutionPalletId,
-    Proposal,
-    PROPOSAL_KIND_JOINT,
-    STAGE_JOINT,
-    STATUS_PASSED,
+    InstitutionPalletId, Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
 
 fn str_to_pallet_id(s: &str) -> Option<InstitutionPalletId> {
@@ -45,6 +35,22 @@ fn nrc_pallet_id_bytes() -> InstitutionPalletId {
         .find(|n| n.pallet_id == "nrcgch01")
         .and_then(|n| reserve_pallet_id_to_bytes(n.pallet_id))
         .expect("NRC pallet_id must be 8 bytes")
+}
+
+fn is_nrc_admin_account(who: &[u8; 32]) -> bool {
+    RESERVE_NODES
+        .iter()
+        .find(|n| n.pallet_id == "nrcgch01")
+        .map(|n| n.admins.iter().any(|admin| admin == who))
+        .unwrap_or(false)
+}
+
+fn is_nrc_multisig_account(who: &[u8; 32]) -> bool {
+    RESERVE_NODES
+        .iter()
+        .find(|n| n.pallet_id == "nrcgch01")
+        .map(|n| n.pallet_address == *who)
+        .unwrap_or(false)
 }
 
 pub fn is_valid_institution(id: InstitutionPalletId) -> bool {
@@ -106,7 +112,14 @@ impl<T: Config> Pallet<T> {
     }
 
     /// 创建联合投票提案：独立计算本阶段 30 天截止区块。
-    pub(crate) fn do_create_joint_proposal() -> DispatchResult {
+    pub(crate) fn do_create_joint_proposal(who: T::AccountId) -> DispatchResult {
+        let who_arr: [u8; 32] = who
+            .encode()
+            .as_slice()
+            .try_into()
+            .map_err(|_| Error::<T>::NoPermission)?;
+        ensure!(is_nrc_admin_account(&who_arr), Error::<T>::NoPermission);
+
         let id = Self::allocate_proposal_id();
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::joint_stage_duration());
@@ -116,6 +129,7 @@ impl<T: Config> Pallet<T> {
             stage: STAGE_JOINT,
             status: crate::STATUS_VOTING,
             internal_org: None,
+            internal_institution: None,
             start: now,
             end,
             citizen_eligible_total: 0,
@@ -132,15 +146,33 @@ impl<T: Config> Pallet<T> {
     }
 
     pub(crate) fn do_submit_joint_institution_vote(
+        who: T::AccountId,
         proposal_id: u64,
         institution: InstitutionPalletId,
         internal_passed: bool,
     ) -> DispatchResult {
+        // 中文注释：联合投票结果提交执行必须由国储会多签地址发起。
+        let who_arr: [u8; 32] = who
+            .encode()
+            .as_slice()
+            .try_into()
+            .map_err(|_| Error::<T>::NoPermission)?;
+        ensure!(is_nrc_multisig_account(&who_arr), Error::<T>::NoPermission);
+
         let proposal = Self::ensure_open_proposal(proposal_id)?;
 
-        ensure!(proposal.kind == PROPOSAL_KIND_JOINT, Error::<T>::InvalidProposalKind);
-        ensure!(proposal.stage == STAGE_JOINT, Error::<T>::InvalidProposalStage);
-        ensure!(is_valid_institution(institution), Error::<T>::InvalidInstitution);
+        ensure!(
+            proposal.kind == PROPOSAL_KIND_JOINT,
+            Error::<T>::InvalidProposalKind
+        );
+        ensure!(
+            proposal.stage == STAGE_JOINT,
+            Error::<T>::InvalidProposalStage
+        );
+        ensure!(
+            is_valid_institution(institution),
+            Error::<T>::InvalidInstitution
+        );
         ensure!(
             !JointVotesByInstitution::<T>::contains_key(proposal_id, institution),
             Error::<T>::AlreadyVoted
@@ -180,10 +212,15 @@ impl<T: Config> Pallet<T> {
     /// - 若已全票通过，直接通过；
     /// - 否则进入公民投票阶段，并重新计算公民投票的 30 天时限。
     pub(crate) fn do_finalize_joint_timeout(proposal_id: u64) -> DispatchResult {
-        let proposal = Proposals::<T>::get(proposal_id)
-            .ok_or(Error::<T>::ProposalNotFound)?;
-        ensure!(proposal.stage == STAGE_JOINT, Error::<T>::InvalidProposalStage);
-        ensure!(proposal.status == crate::STATUS_VOTING, Error::<T>::ProposalAlreadyFinalized);
+        let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
+        ensure!(
+            proposal.stage == STAGE_JOINT,
+            Error::<T>::InvalidProposalStage
+        );
+        ensure!(
+            proposal.status == crate::STATUS_VOTING,
+            Error::<T>::ProposalAlreadyFinalized
+        );
         ensure!(
             <frame_system::Pallet<T>>::block_number() > proposal.end,
             Error::<T>::VoteNotExpired
@@ -200,7 +237,8 @@ impl<T: Config> Pallet<T> {
     fn advance_joint_to_citizen(proposal_id: u64) -> DispatchResult {
         let now = <frame_system::Pallet<T>>::block_number();
         let citizen_end = now.saturating_add(Self::citizen_stage_duration());
-        let eligible_total = T::CiicEligibility::eligible_voter_count();
+        // 中文注释：公民投票分母由“该提案首票”实时从 CIIC 系统带入并锁定。
+        let eligible_total = 0u64;
 
         Proposals::<T>::try_mutate(proposal_id, |maybe| -> DispatchResult {
             let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;

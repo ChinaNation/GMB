@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub use pallet::*;
 use frame_support::pallet_prelude::DispatchResult;
+pub use pallet::*;
 use voting_engine_system::JointVoteResultCallback;
 
 #[frame_support::pallet]
@@ -93,8 +93,7 @@ pub mod pallet {
     #[pallet::config]
     pub trait Config: frame_system::Config {
         #[allow(deprecated)]
-        type RuntimeEvent: From<Event<Self>>
-            + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// 仅允许国储会管理员发起提案。
         type NrcProposeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
@@ -122,8 +121,7 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn proposals)]
-    pub type Proposals<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, Proposal<T>, OptionQuery>;
+    pub type Proposals<T: Config> = StorageMap<_, Blake2_128Concat, u64, Proposal<T>, OptionQuery>;
 
     /// 决议发行提案ID -> 联合投票提案ID
     #[pallet::storage]
@@ -229,10 +227,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        pub(crate) fn apply_joint_vote_result(
-            proposal_id: u64,
-            approved: bool,
-        ) -> DispatchResult {
+        pub(crate) fn apply_joint_vote_result(proposal_id: u64, approved: bool) -> DispatchResult {
             let mut proposal =
                 Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
             ensure!(

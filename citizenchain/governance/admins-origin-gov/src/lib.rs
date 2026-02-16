@@ -12,17 +12,14 @@ use sp_std::vec::Vec;
 
 use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
 use primitives::reserve_nodes_const::{
-    pallet_id_to_bytes as reserve_pallet_id_to_bytes,
-    RESERVE_NODES,
+    pallet_id_to_bytes as reserve_pallet_id_to_bytes, RESERVE_NODES,
 };
 use primitives::shengbank_nodes_const::{
-    pallet_id_to_bytes as shengbank_pallet_id_to_bytes,
-    SHENG_BANK_NODES,
+    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, SHENG_BANK_NODES,
 };
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId,
-    STATUS_PASSED,
+    InstitutionPalletId, STATUS_PASSED,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
@@ -96,8 +93,7 @@ pub mod pallet {
     #[pallet::config]
     pub trait Config: frame_system::Config + voting_engine_system::Config {
         #[allow(deprecated)]
-        type RuntimeEvent: From<Event<Self>>
-            + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         #[pallet::constant]
         /// 单个机构管理员最大数量上限（用于 BoundedVec）
@@ -109,13 +105,8 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn proposal_action)]
-    pub type ProposalActions<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        u64,
-        AdminReplacementAction<T::AccountId>,
-        OptionQuery,
-    >;
+    pub type ProposalActions<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, AdminReplacementAction<T::AccountId>, OptionQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn current_admins)]
@@ -197,7 +188,10 @@ pub mod pallet {
             let admins = Self::admins_for_institution(institution)?;
             ensure!(admins.contains(&who), Error::<T>::UnauthorizedAdmin);
             ensure!(admins.contains(&old_admin), Error::<T>::OldAdminNotFound);
-            ensure!(!admins.contains(&new_admin), Error::<T>::NewAdminAlreadyExists);
+            ensure!(
+                !admins.contains(&new_admin),
+                Error::<T>::NewAdminAlreadyExists
+            );
 
             // 3) 在投票引擎中创建内部投票提案，并记录业务动作
             let proposal_id = voting_engine_system::Pallet::<T>::next_proposal_id();
@@ -323,10 +317,12 @@ pub mod pallet {
             // 仅在内部投票提案状态为 PASSED 时执行替换
             let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
-            ensure!(proposal.status == STATUS_PASSED, Error::<T>::ProposalNotPassed);
+            ensure!(
+                proposal.status == STATUS_PASSED,
+                Error::<T>::ProposalNotPassed
+            );
 
-            let org =
-                institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
             let mut admins = Self::admins_for_institution(action.institution)?;
             Self::validate_admin_count(org, admins.len())?;
 
@@ -344,7 +340,9 @@ pub mod pallet {
             Self::validate_admin_count(org, admins.len())?;
 
             let bounded: BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> =
-                admins.try_into().map_err(|_| Error::<T>::InvalidAdminCount)?;
+                admins
+                    .try_into()
+                    .map_err(|_| Error::<T>::InvalidAdminCount)?;
             CurrentAdmins::<T>::insert(action.institution, bounded);
 
             ProposalActions::<T>::mutate(proposal_id, |maybe| {

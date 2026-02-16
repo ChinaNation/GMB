@@ -10,8 +10,8 @@ pub use pallet::*;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::dispatch::DispatchResult;
 use scale_info::TypeInfo;
-use sp_runtime::DispatchError;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
+use sp_runtime::DispatchError;
 
 pub type InstitutionPalletId = [u8; 8];
 
@@ -50,6 +50,8 @@ pub struct Proposal<BlockNumber> {
     pub status: u8,
     /// 仅内部投票使用：机构类型（国储会/省储会/省储行）
     pub internal_org: Option<u8>,
+    /// 仅内部投票使用：机构 pallet_id（全链唯一）
+    pub internal_institution: Option<InstitutionPalletId>,
     /// 本阶段起始区块
     pub start: BlockNumber,
     /// 本阶段截止区块（超过则超时）
@@ -58,18 +60,7 @@ pub struct Proposal<BlockNumber> {
     pub citizen_eligible_total: u64,
 }
 
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    PartialEq,
-    Eq,
-    Encode,
-    Decode,
-    TypeInfo,
-    MaxEncodedLen,
-)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct VoteCountU32 {
     /// 赞成票
     pub yes: u32,
@@ -77,18 +68,7 @@ pub struct VoteCountU32 {
     pub no: u32,
 }
 
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    PartialEq,
-    Eq,
-    Encode,
-    Decode,
-    TypeInfo,
-    MaxEncodedLen,
-)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct VoteCountU64 {
     /// 赞成票
     pub yes: u64,
@@ -105,11 +85,16 @@ pub mod pallet {
     #[pallet::config]
     pub trait Config: frame_system::Config {
         #[allow(deprecated)]
-        type RuntimeEvent: From<Event<Self>>
-            + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         #[pallet::constant]
         type MaxCiicLength: Get<u32>;
+
+        #[pallet::constant]
+        type MaxVoteNonceLength: Get<u32>;
+
+        #[pallet::constant]
+        type MaxVoteSignatureLength: Get<u32>;
 
         type CiicEligibility: CiicEligibility<Self::AccountId>;
 
@@ -117,6 +102,8 @@ pub mod pallet {
     }
 
     pub type CiicOf<T> = BoundedVec<u8, <T as Config>::MaxCiicLength>;
+    pub type VoteNonceOf<T> = BoundedVec<u8, <T as Config>::MaxVoteNonceLength>;
+    pub type VoteSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxVoteSignatureLength>;
 
     #[pallet::pallet]
     pub struct Pallet<T>(_);
@@ -143,8 +130,7 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn internal_tally)]
-    pub type InternalTallies<T> =
-        StorageMap<_, Blake2_128Concat, u64, VoteCountU32, ValueQuery>;
+    pub type InternalTallies<T> = StorageMap<_, Blake2_128Concat, u64, VoteCountU32, ValueQuery>;
 
     #[pallet::storage]
     pub type JointVotesByInstitution<T> = StorageDoubleMap<
@@ -159,24 +145,15 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn joint_tally)]
-    pub type JointTallies<T> =
-        StorageMap<_, Blake2_128Concat, u64, VoteCountU32, ValueQuery>;
+    pub type JointTallies<T> = StorageMap<_, Blake2_128Concat, u64, VoteCountU32, ValueQuery>;
 
     #[pallet::storage]
-    pub type CitizenVotesByCiic<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        u64,
-        Blake2_128Concat,
-        T::Hash,
-        bool,
-        OptionQuery,
-    >;
+    pub type CitizenVotesByCiic<T: Config> =
+        StorageDoubleMap<_, Blake2_128Concat, u64, Blake2_128Concat, T::Hash, bool, OptionQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn citizen_tally)]
-    pub type CitizenTallies<T> =
-        StorageMap<_, Blake2_128Concat, u64, VoteCountU64, ValueQuery>;
+    pub type CitizenTallies<T> = StorageMap<_, Blake2_128Concat, u64, VoteCountU64, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -222,10 +199,12 @@ pub mod pallet {
         InvalidProposalStatus,
         InvalidInternalOrg,
         InvalidInstitution,
+        NoPermission,
         VoteClosed,
         VoteNotExpired,
         AlreadyVoted,
         CiicNotEligible,
+        InvalidCiicVoteCredential,
         EmptyCiic,
         ProposalAlreadyFinalized,
     }
@@ -237,16 +216,17 @@ pub mod pallet {
         pub fn create_internal_proposal(
             origin: OriginFor<T>,
             org: u8,
+            institution: InstitutionPalletId,
         ) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-            Self::do_create_internal_proposal(org)
+            let who = ensure_signed(origin)?;
+            Self::do_create_internal_proposal(who, org, institution)
         }
 
         #[pallet::call_index(1)]
         #[pallet::weight(T::DbWeight::get().reads_writes(2, 2))]
         pub fn create_joint_proposal(origin: OriginFor<T>) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-            Self::do_create_joint_proposal()
+            let who = ensure_signed(origin)?;
+            Self::do_create_joint_proposal(who)
         }
 
         #[pallet::call_index(2)]
@@ -268,8 +248,8 @@ pub mod pallet {
             institution: InstitutionPalletId,
             internal_passed: bool,
         ) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-            Self::do_submit_joint_institution_vote(proposal_id, institution, internal_passed)
+            let who = ensure_signed(origin)?;
+            Self::do_submit_joint_institution_vote(who, proposal_id, institution, internal_passed)
         }
 
         #[pallet::call_index(4)]
@@ -278,21 +258,28 @@ pub mod pallet {
             origin: OriginFor<T>,
             proposal_id: u64,
             ciic: CiicOf<T>,
+            eligible_total: u64,
+            nonce: VoteNonceOf<T>,
+            signature: VoteSignatureOf<T>,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_citizen_vote(who, proposal_id, ciic, approve)
+            Self::do_citizen_vote(
+                who,
+                proposal_id,
+                ciic,
+                eligible_total,
+                nonce,
+                signature,
+                approve,
+            )
         }
 
         #[pallet::call_index(5)]
         #[pallet::weight(T::DbWeight::get().reads_writes(2, 2))]
-        pub fn finalize_proposal(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-        ) -> DispatchResult {
+        pub fn finalize_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let _who = ensure_signed(origin)?;
-            let proposal = Proposals::<T>::get(proposal_id)
-                .ok_or(Error::<T>::ProposalNotFound)?;
+            let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
 
             match proposal.stage {
                 STAGE_INTERNAL => {
@@ -321,18 +308,23 @@ pub mod pallet {
         pub(crate) fn ensure_open_proposal(
             proposal_id: u64,
         ) -> Result<Proposal<BlockNumberFor<T>>, DispatchError> {
-            let proposal = Proposals::<T>::get(proposal_id)
-                .ok_or(Error::<T>::ProposalNotFound)?;
+            let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
 
-            ensure!(proposal.status == STATUS_VOTING, Error::<T>::InvalidProposalStatus);
-            ensure!(<frame_system::Pallet<T>>::block_number() <= proposal.end, Error::<T>::VoteClosed);
+            ensure!(
+                proposal.status == STATUS_VOTING,
+                Error::<T>::InvalidProposalStatus
+            );
+            ensure!(
+                <frame_system::Pallet<T>>::block_number() <= proposal.end,
+                Error::<T>::VoteClosed
+            );
 
             Ok(proposal)
         }
 
         pub(crate) fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
-            let proposal_before = Proposals::<T>::get(proposal_id)
-                .ok_or(Error::<T>::ProposalNotFound)?;
+            let proposal_before =
+                Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
             Proposals::<T>::try_mutate(proposal_id, |maybe| -> DispatchResult {
                 let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
                 proposal.status = status;
@@ -368,6 +360,7 @@ impl<T: pallet::Config> JointVoteEngine for pallet::Pallet<T> {
             stage: STAGE_JOINT,
             status: STATUS_VOTING,
             internal_org: None,
+            internal_institution: None,
             start: now,
             end,
             citizen_eligible_total: 0,
@@ -381,5 +374,499 @@ impl<T: pallet::Config> JointVoteEngine for pallet::Pallet<T> {
             end,
         });
         Ok(id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::cell::RefCell;
+    use std::collections::BTreeSet;
+
+    use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
+    use frame_system as system;
+    use primitives::reserve_nodes_const::{
+        pallet_id_to_bytes as reserve_pallet_id_to_bytes, RESERVE_NODES,
+    };
+    use primitives::shengbank_nodes_const::{
+        pallet_id_to_bytes as shengbank_pallet_id_to_bytes, SHENG_BANK_NODES,
+    };
+    use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+
+    type Block = frame_system::mocking::MockBlock<Test>;
+
+    #[frame_support::runtime]
+    mod runtime {
+        #[runtime::runtime]
+        #[runtime::derive(
+            RuntimeCall,
+            RuntimeEvent,
+            RuntimeError,
+            RuntimeOrigin,
+            RuntimeFreezeReason,
+            RuntimeHoldReason,
+            RuntimeSlashReason,
+            RuntimeLockId,
+            RuntimeTask,
+            RuntimeViewFunction
+        )]
+        pub struct Test;
+
+        #[runtime::pallet_index(0)]
+        pub type System = frame_system;
+
+        #[runtime::pallet_index(1)]
+        pub type VotingEngineSystem = super;
+    }
+
+    #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
+    impl system::Config for Test {
+        type Block = Block;
+        type AccountId = AccountId32;
+        type Lookup = IdentityLookup<Self::AccountId>;
+    }
+
+    impl Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type MaxCiicLength = ConstU32<64>;
+        type MaxVoteNonceLength = ConstU32<64>;
+        type MaxVoteSignatureLength = ConstU32<64>;
+        type CiicEligibility = TestCiicEligibility;
+        type JointVoteResultCallback = ();
+    }
+
+    thread_local! {
+        static USED_VOTE_NONCES: RefCell<BTreeSet<Vec<u8>>> = RefCell::new(BTreeSet::new());
+    }
+
+    pub struct TestCiicEligibility;
+
+    impl CiicEligibility<AccountId32> for TestCiicEligibility {
+        fn is_eligible(ciic: &[u8], who: &AccountId32) -> bool {
+            ciic == b"ciic-ok" && who == &nrc_admin(0)
+        }
+
+        fn eligible_voter_count() -> u64 {
+            10
+        }
+
+        fn verify_and_consume_vote_credential(
+            ciic: &[u8],
+            who: &AccountId32,
+            _proposal_id: u64,
+            _eligible_total: u64,
+            nonce: &[u8],
+            signature: &[u8],
+        ) -> bool {
+            if !Self::is_eligible(ciic, who) || signature != b"vote-ok" || nonce.is_empty() {
+                return false;
+            }
+            let key = nonce.to_vec();
+            USED_VOTE_NONCES.with(|set| {
+                let mut set = set.borrow_mut();
+                if set.contains(&key) {
+                    false
+                } else {
+                    set.insert(key);
+                    true
+                }
+            })
+        }
+    }
+
+    fn new_test_ext() -> sp_io::TestExternalities {
+        let storage = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
+            .expect("frame system genesis storage should build");
+        let mut ext = sp_io::TestExternalities::new(storage);
+        ext.execute_with(|| {
+            USED_VOTE_NONCES.with(|set| set.borrow_mut().clear());
+            System::set_block_number(1);
+        });
+        ext
+    }
+
+    fn nrc_pid() -> InstitutionPalletId {
+        reserve_pallet_id_to_bytes(RESERVE_NODES[0].pallet_id).expect("nrc id should be 8 bytes")
+    }
+
+    fn prc_pid() -> InstitutionPalletId {
+        reserve_pallet_id_to_bytes(RESERVE_NODES[1].pallet_id).expect("prc id should be 8 bytes")
+    }
+
+    fn prb_pid() -> InstitutionPalletId {
+        shengbank_pallet_id_to_bytes(SHENG_BANK_NODES[0].pallet_id)
+            .expect("prb id should be 8 bytes")
+    }
+
+    fn nrc_admin(index: usize) -> AccountId32 {
+        AccountId32::new(RESERVE_NODES[0].admins[index])
+    }
+
+    fn nrc_multisig() -> AccountId32 {
+        AccountId32::new(RESERVE_NODES[0].pallet_address)
+    }
+
+    fn prc_admin(index: usize) -> AccountId32 {
+        AccountId32::new(RESERVE_NODES[1].admins[index])
+    }
+
+    fn prb_admin(index: usize) -> AccountId32 {
+        AccountId32::new(SHENG_BANK_NODES[0].admins[index])
+    }
+
+    fn ciic_ok() -> pallet::CiicOf<Test> {
+        b"ciic-ok".to_vec().try_into().expect("ciic should fit")
+    }
+
+    fn vote_nonce(input: &str) -> pallet::VoteNonceOf<Test> {
+        input
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("nonce should fit")
+    }
+
+    fn vote_sig_ok() -> pallet::VoteSignatureOf<Test> {
+        b"vote-ok"
+            .to_vec()
+            .try_into()
+            .expect("signature should fit")
+    }
+
+    fn vote_sig_bad() -> pallet::VoteSignatureOf<Test> {
+        b"bad".to_vec().try_into().expect("signature should fit")
+    }
+
+    fn insert_citizen_proposal(proposal_id: u64, eligible_total: u64, end: u64) {
+        Proposals::<Test>::insert(
+            proposal_id,
+            Proposal {
+                kind: PROPOSAL_KIND_JOINT,
+                stage: STAGE_CITIZEN,
+                status: STATUS_VOTING,
+                internal_org: None,
+                internal_institution: None,
+                start: System::block_number(),
+                end,
+                citizen_eligible_total: eligible_total,
+            },
+        );
+    }
+
+    #[test]
+    fn internal_proposal_must_be_created_by_same_institution_admin() {
+        new_test_ext().execute_with(|| {
+            let outsider = AccountId32::new([7u8; 32]);
+
+            assert_noop!(
+                VotingEngineSystem::create_internal_proposal(
+                    RuntimeOrigin::signed(outsider),
+                    internal_vote::ORG_NRC,
+                    nrc_pid(),
+                ),
+                pallet::Error::<Test>::InvalidInstitution
+            );
+
+            assert_noop!(
+                VotingEngineSystem::create_internal_proposal(
+                    RuntimeOrigin::signed(prc_admin(0)),
+                    internal_vote::ORG_NRC,
+                    nrc_pid(),
+                ),
+                pallet::Error::<Test>::InvalidInstitution
+            );
+
+            assert_ok!(VotingEngineSystem::create_internal_proposal(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            ));
+        });
+    }
+
+    #[test]
+    fn internal_vote_must_be_by_same_institution_admin() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(VotingEngineSystem::create_internal_proposal(
+                RuntimeOrigin::signed(prb_admin(0)),
+                internal_vote::ORG_PRB,
+                prb_pid(),
+            ));
+
+            assert_noop!(
+                VotingEngineSystem::internal_vote(RuntimeOrigin::signed(nrc_admin(0)), 0, true,),
+                pallet::Error::<Test>::InvalidInstitution
+            );
+
+            assert_ok!(VotingEngineSystem::internal_vote(
+                RuntimeOrigin::signed(prb_admin(1)),
+                0,
+                true,
+            ));
+        });
+    }
+
+    #[test]
+    fn nrc_internal_vote_passes_at_13_yes_votes() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(VotingEngineSystem::create_internal_proposal(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            ));
+
+            for i in 0..12 {
+                assert_ok!(VotingEngineSystem::internal_vote(
+                    RuntimeOrigin::signed(nrc_admin(i)),
+                    0,
+                    true,
+                ));
+            }
+            assert_eq!(
+                VotingEngineSystem::proposals(0)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_VOTING
+            );
+
+            assert_ok!(VotingEngineSystem::internal_vote(
+                RuntimeOrigin::signed(nrc_admin(12)),
+                0,
+                true,
+            ));
+            assert_eq!(
+                VotingEngineSystem::proposals(0)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_PASSED
+            );
+        });
+    }
+
+    #[test]
+    fn internal_vote_is_rejected_after_timeout() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(VotingEngineSystem::create_internal_proposal(
+                RuntimeOrigin::signed(prc_admin(0)),
+                internal_vote::ORG_PRC,
+                prc_pid(),
+            ));
+
+            let proposal = VotingEngineSystem::proposals(0).expect("proposal exists");
+            System::set_block_number(proposal.end + 1);
+
+            assert_ok!(VotingEngineSystem::finalize_proposal(
+                RuntimeOrigin::signed(prc_admin(0)),
+                0,
+            ));
+            assert_eq!(
+                VotingEngineSystem::proposals(0)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_REJECTED
+            );
+        });
+    }
+
+    #[test]
+    fn joint_proposal_must_be_created_by_nrc_admin() {
+        new_test_ext().execute_with(|| {
+            let outsider = AccountId32::new([9u8; 32]);
+            assert_noop!(
+                VotingEngineSystem::create_joint_proposal(RuntimeOrigin::signed(outsider)),
+                pallet::Error::<Test>::NoPermission
+            );
+
+            assert_noop!(
+                VotingEngineSystem::create_joint_proposal(RuntimeOrigin::signed(prc_admin(0))),
+                pallet::Error::<Test>::NoPermission
+            );
+
+            assert_ok!(VotingEngineSystem::create_joint_proposal(
+                RuntimeOrigin::signed(nrc_admin(0))
+            ));
+        });
+    }
+
+    #[test]
+    fn joint_vote_submission_must_be_by_nrc_multisig() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(VotingEngineSystem::create_joint_proposal(
+                RuntimeOrigin::signed(nrc_admin(0))
+            ));
+
+            assert_noop!(
+                VotingEngineSystem::submit_joint_institution_vote(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    0,
+                    nrc_pid(),
+                    true
+                ),
+                pallet::Error::<Test>::NoPermission
+            );
+
+            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
+                RuntimeOrigin::signed(nrc_multisig()),
+                0,
+                nrc_pid(),
+                true
+            ));
+        });
+    }
+
+    #[test]
+    fn citizen_vote_rejects_invalid_signature_and_allows_valid_vote() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+
+            assert_noop!(
+                VotingEngineSystem::citizen_vote(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    0,
+                    ciic_ok(),
+                    10,
+                    vote_nonce("n-1"),
+                    vote_sig_bad(),
+                    true
+                ),
+                pallet::Error::<Test>::InvalidCiicVoteCredential
+            );
+
+            assert_ok!(VotingEngineSystem::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                ciic_ok(),
+                10,
+                vote_nonce("n-2"),
+                vote_sig_ok(),
+                true
+            ));
+            assert_eq!(CitizenTallies::<Test>::get(0).yes, 1);
+        });
+    }
+
+    #[test]
+    fn citizen_vote_same_ciic_can_only_vote_once_per_proposal() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+
+            assert_ok!(VotingEngineSystem::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                ciic_ok(),
+                10,
+                vote_nonce("n-1"),
+                vote_sig_ok(),
+                true
+            ));
+
+            assert_noop!(
+                VotingEngineSystem::citizen_vote(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    0,
+                    ciic_ok(),
+                    10,
+                    vote_nonce("n-2"),
+                    vote_sig_ok(),
+                    false
+                ),
+                pallet::Error::<Test>::AlreadyVoted
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_vote_credential_nonce_is_replay_protected_per_proposal() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+            insert_citizen_proposal(1, 10, 100);
+
+            assert_ok!(VotingEngineSystem::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                ciic_ok(),
+                10,
+                vote_nonce("same"),
+                vote_sig_ok(),
+                true
+            ));
+
+            assert_noop!(
+                VotingEngineSystem::citizen_vote(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    1,
+                    ciic_ok(),
+                    10,
+                    vote_nonce("same"),
+                    vote_sig_ok(),
+                    true
+                ),
+                pallet::Error::<Test>::InvalidCiicVoteCredential
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_eligible_total_is_locked_by_first_vote_of_same_proposal() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 0, 100);
+
+            assert_ok!(VotingEngineSystem::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                ciic_ok(),
+                1234,
+                vote_nonce("x-1"),
+                vote_sig_ok(),
+                true
+            ));
+            assert_eq!(
+                Proposals::<Test>::get(0)
+                    .expect("proposal should exist")
+                    .citizen_eligible_total,
+                1234
+            );
+
+            // 同提案后续投票（即便传入不同 eligible_total）也不会再改
+            assert_noop!(
+                VotingEngineSystem::citizen_vote(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    0,
+                    ciic_ok(),
+                    9999,
+                    vote_nonce("x-2"),
+                    vote_sig_ok(),
+                    true
+                ),
+                pallet::Error::<Test>::AlreadyVoted
+            );
+            assert_eq!(
+                Proposals::<Test>::get(0)
+                    .expect("proposal should exist")
+                    .citizen_eligible_total,
+                1234
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_timeout_with_half_or_less_is_rejected() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 5);
+            CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
+            System::set_block_number(6);
+
+            assert_ok!(VotingEngineSystem::finalize_proposal(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0
+            ));
+            assert_eq!(
+                Proposals::<Test>::get(0)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_REJECTED
+            );
+        });
     }
 }

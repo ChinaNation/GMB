@@ -22,24 +22,21 @@ impl<AccountId> ResolutionIssuanceExecutor<AccountId> for () {
         _total_amount: u128,
         _allocations: Vec<(AccountId, u128)>,
     ) -> DispatchResult {
-        Err(DispatchError::Other("ResolutionIssuanceExecutorNotConfigured"))
+        Err(DispatchError::Other(
+            "ResolutionIssuanceExecutorNotConfigured",
+        ))
     }
 }
 
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    use frame_support::{
-        pallet_prelude::*,
-        traits::Currency,
-    };
+    use frame_support::{pallet_prelude::*, traits::Currency};
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::{Hash, SaturatedConversion};
 
     pub type BalanceOf<T> =
-        <<T as Config>::Currency as Currency<
-            <T as frame_system::Config>::AccountId,
-        >>::Balance;
+        <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
     pub type ReasonOf<T> = BoundedVec<u8, <T as Config>::MaxReasonLen>;
     pub type AllocationOf<T> = BoundedVec<
@@ -66,8 +63,7 @@ pub mod pallet {
     #[pallet::config]
     pub trait Config: frame_system::Config {
         #[allow(deprecated)]
-        type RuntimeEvent: From<Event<Self>>
-            + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         type Currency: Currency<Self::AccountId>;
 
@@ -129,7 +125,12 @@ pub mod pallet {
             allocations: AllocationOf<T>,
         ) -> DispatchResult {
             T::ExecuteOrigin::ensure_origin(origin)?;
-            Self::do_execute(proposal_id, reason.as_slice(), total_amount, allocations.as_slice())
+            Self::do_execute(
+                proposal_id,
+                reason.as_slice(),
+                total_amount,
+                allocations.as_slice(),
+            )
         }
     }
 
@@ -140,7 +141,10 @@ pub mod pallet {
             total_amount: u128,
             allocations: &[RecipientAmount<T::AccountId>],
         ) -> DispatchResult {
-            ensure!(!Executed::<T>::get(proposal_id), Error::<T>::AlreadyExecuted);
+            ensure!(
+                !Executed::<T>::get(proposal_id),
+                Error::<T>::AlreadyExecuted
+            );
             ensure!(!allocations.is_empty(), Error::<T>::EmptyAllocations);
 
             let mut sum = 0u128;
@@ -189,7 +193,12 @@ pub mod pallet {
                 .map(|(recipient, amount)| RecipientAmount { recipient, amount })
                 .collect();
 
-            Self::do_execute(proposal_id, reason.as_slice(), total_amount, mapped.as_slice())
+            Self::do_execute(
+                proposal_id,
+                reason.as_slice(),
+                total_amount,
+                mapped.as_slice(),
+            )
         }
     }
 }
