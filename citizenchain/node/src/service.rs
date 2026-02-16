@@ -2,14 +2,16 @@
 
 use codec::{Decode, Encode};
 use futures::FutureExt;
-use sc_client_api::Backend;
+use sc_client_api::{Backend, StorageProvider};
 use sc_consensus_pow::{MiningHandle, PowAlgorithm, PowBlockImport};
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use gmb_runtime::{self, apis::RuntimeApi, opaque::Block};
 use sp_consensus::NoNetwork;
-use sp_core::{crypto::KeyTypeId, hashing::blake2_256, U256};
+use sp_core::{crypto::KeyTypeId, hashing::{blake2_128, blake2_256, twox_128}, U256};
+use sp_keystore::Keystore;
+use sp_storage::StorageKey;
 use sp_runtime::traits::{Block as BlockT, IdentifyAccount};
 use std::{sync::Arc, thread, time::Duration};
 
@@ -39,11 +41,39 @@ const POW_PROPOSAL_BUILD_SECS: u64 = 2;
 #[derive(Clone)]
 struct SimplePow {
 	difficulty: U256,
+	client: Arc<FullClient>,
 }
 
-impl Default for SimplePow {
-	fn default() -> Self {
-		Self { difficulty: U256::from(POW_DIFFICULTY) }
+impl SimplePow {
+	fn new(client: Arc<FullClient>) -> Self {
+		Self { difficulty: U256::from(POW_DIFFICULTY), client }
+	}
+
+	fn reward_wallet_key(miner: &gmb_runtime::AccountId) -> StorageKey {
+		let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
+		key.extend_from_slice(&twox_128(b"FullnodePowReward"));
+		key.extend_from_slice(&twox_128(b"RewardWalletByMiner"));
+
+		let encoded = miner.encode();
+		key.extend_from_slice(&blake2_128(&encoded));
+		key.extend_from_slice(&encoded);
+		StorageKey(key)
+	}
+
+	fn has_bound_wallet(
+		&self,
+		parent: &sp_runtime::generic::BlockId<Block>,
+		miner: &gmb_runtime::AccountId,
+	) -> bool {
+		let parent_hash = match parent {
+			sp_runtime::generic::BlockId::Hash(h) => *h,
+			sp_runtime::generic::BlockId::Number(_) => return false,
+		};
+		self.client
+			.storage(parent_hash, &Self::reward_wallet_key(miner))
+			.ok()
+			.flatten()
+			.is_some()
 	}
 }
 
@@ -58,10 +88,22 @@ impl PowAlgorithm<Block> for SimplePow {
 		&self,
 		_parent: &sp_runtime::generic::BlockId<Block>,
 		pre_hash: &<Block as BlockT>::Hash,
-		_pre_digest: Option<&[u8]>,
+		pre_digest: Option<&[u8]>,
 		seal: &sp_consensus_pow::Seal,
 		difficulty: Self::Difficulty,
 	) -> Result<bool, sc_consensus_pow::Error<Block>> {
+		// 中文注释：协议层硬约束，未绑定奖励钱包的矿工身份其区块直接判定无效。
+		let Some(pre_digest) = pre_digest else {
+			return Ok(false);
+		};
+		let miner = match gmb_runtime::AccountId::decode(&mut &pre_digest[..]) {
+			Ok(account) => account,
+			Err(_) => return Ok(false),
+		};
+		if !self.has_bound_wallet(_parent, &miner) {
+			return Ok(false);
+		}
+
 		let nonce = u64::decode(&mut &seal[..]).map_err(sc_consensus_pow::Error::<Block>::Codec)?;
 		let hash = pow_hash(pre_hash.as_ref(), nonce);
 		Ok(hash_meets_difficulty(&hash, difficulty))
@@ -87,6 +129,18 @@ fn author_pre_digest(keystore: &sp_keystore::KeystorePtr) -> Option<Vec<u8>> {
 	let author_public = keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE).into_iter().next()?;
 	let account: gmb_runtime::AccountId = sp_runtime::MultiSigner::from(author_public).into_account();
 	Some(account.encode())
+}
+
+fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceError> {
+	if !keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE).is_empty() {
+		return Ok(());
+	}
+
+	// 中文注释：authority 首启自动生成唯一 powr 密钥，避免“无 key 仅告警继续跑”。
+	keystore
+		.sr25519_generate_new(POW_AUTHOR_KEY_TYPE, None)
+		.map_err(|e| ServiceError::Other(format!("failed to generate powr key: {e}")))?;
+	Ok(())
 }
 
 fn start_cpu_miner<Proof: Send + 'static>(worker: MiningHandle<Block, SimplePow, (), Proof>) {
@@ -154,7 +208,7 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
 		.build(),
 	);
 
-	let algorithm = SimplePow::default();
+	let algorithm = SimplePow::new(client.clone());
 	let pow_block_import = PowBlockImport::new(
 		client.clone(),
 		client.clone(),
@@ -276,6 +330,9 @@ pub fn new_full<
 	})?;
 
 	if role.is_authority() {
+		let keystore = keystore_container.keystore();
+		ensure_powr_key(&keystore)?;
+
 		let proposer_factory = sc_basic_authorship::ProposerFactory::new(
 			task_manager.spawn_handle(),
 			client.clone(),
@@ -284,11 +341,10 @@ pub fn new_full<
 			telemetry.as_ref().map(|x| x.handle()),
 		);
 
-		let algorithm = SimplePow::default();
-		let pre_runtime = author_pre_digest(&keystore_container.keystore());
-		if pre_runtime.is_none() {
-			eprintln!("WARN [pow] No sr25519 key with key type 'powr' found; PoW rewards may not be issued.");
-		}
+		let algorithm = SimplePow::new(client.clone());
+		let pre_runtime = author_pre_digest(&keystore).ok_or_else(|| {
+			ServiceError::Other("powr key missing after generation attempt".into())
+		})?;
 
 		let pow_block_import = PowBlockImport::new(
 			client.clone(),
@@ -310,7 +366,7 @@ pub fn new_full<
 			proposer_factory,
 			NoNetwork,
 			(),
-			pre_runtime,
+			Some(pre_runtime),
 			|_, ()| async {
 				let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 				Ok((timestamp,))

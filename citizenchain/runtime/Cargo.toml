@@ -59,6 +59,7 @@ frame-system-benchmarking = { optional = true, workspace = true }
 pallet-template = { workspace = true, default-features = false }
 shengbank-stake-interest = { path = "../issuance/shengbank-stake-interest", default-features = false }
 fullnode-pow-reward = { path = "../issuance/fullnode-pow-reward", default-features = false }
+onchain-transaction-fee = { path = "../transaction/onchain-transaction-pow", default-features = false }
 resolution-issuance-iss = { path = "../issuance/resolution-issuance-iss", default-features = false }
 resolution-issuance-gov = { path = "../governance/resolution-issuance-gov", default-features = false }
 voting-engine-system = { path = "../governance/voting-engine-system", default-features = false }
@@ -82,6 +83,7 @@ std = [
 	"pallet-template/std",
 	"shengbank-stake-interest/std",
 	"fullnode-pow-reward/std",
+	"onchain-transaction-fee/std",
 	"resolution-issuance-iss/std",
 	"resolution-issuance-gov/std",
 	"voting-engine-system/std",

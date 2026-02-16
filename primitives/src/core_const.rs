@@ -24,6 +24,7 @@ pub const OFFCHAIN_MIN_FEE: u128 = 1;                                           
 pub const OFFCHAIN_FEE_RATE_MIN: Perbill = Perbill::from_parts(100_000);        // 链下交易费率下限：0.01%
 pub const OFFCHAIN_FEE_RATE_MAX: Perbill = Perbill::from_parts(1_000_000);      // 链下交易费率上限：0.1%
 pub const OPERATIONAL_FEE_MULTIPLIER: u8 = 1;                                   // 运营类交易费乘数（1=不额外加价）
+pub const BLACKHOLE_ADDRESS: [u8; 32] = [0u8; 32];                              // 黑洞地址（32字节全0）
 
 /// 3. 省储行质押年利率模型 (Annual Interest Rate)
 pub const SHENGBANK_INITIAL_INTEREST_BP: u32 = 100;         // 省储行初始年利率（第一年）：1.00%
