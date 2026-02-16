@@ -55,9 +55,9 @@ parameter_types! {
 	pub const BlockHashCount: BlockNumber = BLOCK_HASH_COUNT;
 	pub const Version: RuntimeVersion = VERSION;
 
-	/// We allow for 2 seconds of compute per block.
+	/// 每个区块允许 60 秒计算预算（weight ref_time）。
 	pub RuntimeBlockWeights: BlockWeights = BlockWeights::with_sensible_defaults(
-		Weight::from_parts(2u64 * WEIGHT_REF_TIME_PER_SECOND, u64::MAX),
+		Weight::from_parts(60u64 * WEIGHT_REF_TIME_PER_SECOND, u64::MAX),
 		NORMAL_DISPATCH_RATIO,
 	);
 	pub RuntimeBlockLength: BlockLength =
@@ -195,10 +195,12 @@ parameter_types! {
 pub struct NrcPalletIdProvider;
 impl frame_support::traits::Get<PalletId> for NrcPalletIdProvider {
 	fn get() -> PalletId {
-		let nrc_id = primitives::reserve_nodes_const::RESERVE_NODES[0].pallet_id;
-		let nrc_id_bytes =
-			primitives::reserve_nodes_const::pallet_id_to_bytes(nrc_id)
-				.expect("NRC pallet_id must be 8 bytes");
+		// 中文注释：国储会ID统一从常量数组读取并转码。
+		let nrc_id_bytes = primitives::reserve_nodes_const::RESERVE_NODES
+			.iter()
+			.find(|n| n.pallet_id == "nrcgch01")
+			.and_then(|n| primitives::reserve_nodes_const::pallet_id_to_bytes(n.pallet_id))
+			.expect("NRC pallet_id must be 8 bytes");
 		PalletId(nrc_id_bytes)
 	}
 }
@@ -241,10 +243,9 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 
 fn is_nrc_admin(who: &AccountId) -> bool {
 	let who_bytes = who.encode();
-	let nrc_id = primitives::reserve_nodes_const::RESERVE_NODES[0].pallet_id;
 	primitives::reserve_nodes_const::RESERVE_NODES
 		.iter()
-		.find(|n| n.pallet_id == nrc_id)
+		.find(|n| n.pallet_id == "nrcgch01")
 		.map(|nrc| nrc.admins.iter().any(|admin| admin.as_slice() == who_bytes.as_slice()))
 		.unwrap_or(false)
 }
