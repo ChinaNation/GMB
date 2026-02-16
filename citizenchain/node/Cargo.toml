@@ -54,6 +54,7 @@ sp-inherents = { workspace = true, default-features = true }
 sp-io = { workspace = true, default-features = true }
 sp-keyring = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }
+sp-storage = { workspace = true, default-features = true }
 sp-timestamp = { workspace = true, default-features = true }
 
 # frame and pallets

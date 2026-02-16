@@ -7,4 +7,25 @@ repository.workspace = true  #项目仓库
 license = "MIT"        # 授权协议 MIT
 
 [dependencies]
-# substrate pallet 相关依赖
+codec = { workspace = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+pallet-transaction-payment = { workspace = true }
+sp-runtime = { workspace = true }
+sp-std = { workspace = true }
+primitives = { path = "../../../primitives", default-features = false }
+fullnode-pow-reward = { path = "../../issuance/fullnode-pow-reward", default-features = false }
+
+[features]
+default = ["std"]
+runtime-benchmarks = []
+std = [
+    "codec/std",
+    "frame-support/std",
+    "frame-system/std",
+    "pallet-transaction-payment/std",
+    "sp-runtime/std",
+    "sp-std/std",
+    "primitives/std",
+    "fullnode-pow-reward/std",
+]

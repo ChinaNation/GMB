@@ -26,7 +26,12 @@
 // Substrate and Polkadot dependencies
 use frame_support::{
 	derive_impl, parameter_types,
-	traits::{ConstU128, ConstU32, ConstU64, ConstU8, EnsureOrigin, FindAuthor, VariantCountOf},
+	traits::{
+		ConstU128, ConstU32, ConstU64, ConstU8, EnsureOrigin, FindAuthor,
+		fungible::Inspect,
+		tokens::{Fortitude, Preservation},
+		VariantCountOf,
+	},
 	weights::{
 		constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
 		IdentityFee, Weight,
@@ -35,7 +40,7 @@ use frame_support::{
 };
 use frame_system::limits::{BlockLength, BlockWeights};
 use codec::Encode;
-use pallet_transaction_payment::{ConstFeeMultiplier, FungibleAdapter, Multiplier};
+use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use codec::Decode;
 use sp_runtime::{traits::One, Perbill};
 use sp_version::RuntimeVersion;
@@ -137,12 +142,88 @@ parameter_types! {
 
 impl pallet_transaction_payment::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type OnChargeTransaction = FungibleAdapter<Balances, ()>;
+	type OnChargeTransaction = onchain_transaction_fee::PowOnchainChargeAdapter<
+		Balances,
+		onchain_transaction_fee::PowOnchainFeeRouter<
+			Runtime,
+			Balances,
+			PowDigestAuthor,
+		>,
+		PowTxAmountExtractor,
+	>;
 	type OperationalFeeMultiplier = ConstU8<{ primitives::core_const::OPERATIONAL_FEE_MULTIPLIER }>;
 	type WeightToFee = IdentityFee<Balance>;
 	type LengthToFee = IdentityFee<Balance>;
 	type FeeMultiplierUpdate = ConstFeeMultiplier<FeeMultiplier>;
 	type WeightInfo = pallet_transaction_payment::weights::SubstrateWeight<Runtime>;
+}
+
+pub struct PowTxAmountExtractor;
+
+impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance>
+	for PowTxAmountExtractor
+{
+	fn amount(
+		who: &AccountId,
+		call: &RuntimeCall,
+	) -> onchain_transaction_fee::AmountExtractResult<Balance> {
+		match call {
+			RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
+				value,
+				..
+			}) => onchain_transaction_fee::AmountExtractResult::Amount(*value),
+			RuntimeCall::Balances(pallet_balances::Call::transfer_keep_alive {
+				value,
+				..
+			}) => onchain_transaction_fee::AmountExtractResult::Amount(*value),
+			RuntimeCall::Balances(pallet_balances::Call::force_transfer {
+				value,
+				..
+			}) => onchain_transaction_fee::AmountExtractResult::Amount(*value),
+			RuntimeCall::Balances(pallet_balances::Call::force_unreserve {
+				amount,
+				..
+			}) => onchain_transaction_fee::AmountExtractResult::Amount(*amount),
+			RuntimeCall::Balances(pallet_balances::Call::force_set_balance {
+				new_free,
+				..
+			}) => onchain_transaction_fee::AmountExtractResult::Amount(*new_free),
+			RuntimeCall::Balances(pallet_balances::Call::force_adjust_total_issuance {
+				delta,
+				..
+			}) => onchain_transaction_fee::AmountExtractResult::Amount(*delta),
+			RuntimeCall::Balances(pallet_balances::Call::burn {
+				value,
+				..
+			}) => onchain_transaction_fee::AmountExtractResult::Amount(*value),
+			RuntimeCall::Balances(pallet_balances::Call::transfer_all {
+				keep_alive,
+				..
+			}) => {
+				let preservation = if *keep_alive {
+					Preservation::Preserve
+				} else {
+					Preservation::Expendable
+				};
+				let value = <Balances as Inspect<AccountId>>::reducible_balance(
+					who,
+					preservation,
+					Fortitude::Polite,
+				);
+				onchain_transaction_fee::AmountExtractResult::Amount(value)
+			}
+			// 中文注释：以下调用类型明确属于“无金额交易”，放行且不计算手续费。
+			RuntimeCall::System(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+			RuntimeCall::Timestamp(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+			RuntimeCall::Template(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+			RuntimeCall::FullnodePowReward(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+			RuntimeCall::ResolutionIssuanceIss(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+			RuntimeCall::ResolutionIssuanceGov(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+			RuntimeCall::VotingEngineSystem(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+			// 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免“有金额但漏提取”。
+			RuntimeCall::Balances(_) => onchain_transaction_fee::AmountExtractResult::Unknown,
+		}
+	}
 }
 
 /// Configure the pallet-template in pallets/template.
