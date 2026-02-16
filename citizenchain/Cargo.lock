@@ -1305,6 +1305,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ciic-code-auth"
+version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "cipher"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1328,6 +1341,7 @@ dependencies = [
 name = "citizen-lightnode-issuance"
 version = "0.0.1"
 dependencies = [
+ "ciic-code-auth",
  "frame-support",
  "frame-system",
  "pallet-balances",
@@ -3611,6 +3625,8 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 name = "gmb-runtime"
 version = "0.0.1"
 dependencies = [
+ "ciic-code-auth",
+ "citizen-lightnode-issuance",
  "frame-benchmarking",
  "frame-executive",
  "frame-metadata-hash-extension",
@@ -3622,7 +3638,6 @@ dependencies = [
  "fullnode-pow-reward",
  "onchain-transaction-fee",
  "pallet-balances",
- "pallet-template",
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
@@ -3639,6 +3654,7 @@ dependencies = [
  "sp-core",
  "sp-genesis-builder",
  "sp-inherents",
+ "sp-io",
  "sp-offchain",
  "sp-runtime",
  "sp-session",
@@ -6482,20 +6498,6 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-staking",
-]
-
-[[package]]
-name = "pallet-template"
-version = "0.0.1"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "sp-core",
- "sp-io",
- "sp-runtime",
 ]
 
 [[package]]
@@ -12214,6 +12216,7 @@ dependencies = [
  "parity-scale-codec",
  "primitives",
  "scale-info",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]

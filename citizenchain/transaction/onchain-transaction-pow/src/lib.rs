@@ -1,7 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::Decode;
-use frame_support::unsigned::TransactionValidityError;
 use frame_support::traits::{
     fungible::Inspect,
     tokens::{
@@ -10,6 +9,7 @@ use frame_support::traits::{
     },
     FindAuthor, OnUnbalanced,
 };
+use frame_support::unsigned::TransactionValidityError;
 use pallet_transaction_payment::{Config as TxPaymentConfig, OnChargeTransaction, TxCreditHold};
 use sp_runtime::{
     traits::{DispatchInfoOf, PostDispatchInfoOf, SaturatedConversion, Saturating, Zero},
@@ -21,9 +21,7 @@ use sp_std::{marker::PhantomData, prelude::*};
 /// - 全节点（绑定钱包）分成：`ONCHAIN_FEE_FULLNODE_PERCENT`
 /// - 国储会分成：`ONCHAIN_FEE_NRC_PERCENT`
 /// - 黑洞销毁：`ONCHAIN_FEE_BLACKHOLE_PERCENT`
-pub struct PowOnchainFeeRouter<T, Currency, AuthorFinder>(
-    PhantomData<(T, Currency, AuthorFinder)>,
-);
+pub struct PowOnchainFeeRouter<T, Currency, AuthorFinder>(PhantomData<(T, Currency, AuthorFinder)>);
 
 /// 金额提取分类结果：
 /// - Amount: 确认是“有金额交易”，并返回金额
@@ -54,14 +52,13 @@ where
     T: TxPaymentConfig + fullnode_pow_reward::Config,
     Currency: Balanced<T::AccountId> + 'static,
     Router: OnUnbalanced<Credit<T::AccountId, Currency>>,
-    AmountExtractor: CallAmount<
-        T::AccountId,
-        T::RuntimeCall,
-        <Currency as Inspect<T::AccountId>>::Balance,
-    >,
+    AmountExtractor:
+        CallAmount<T::AccountId, T::RuntimeCall, <Currency as Inspect<T::AccountId>>::Balance>,
 {
-    type LiquidityInfo =
-        Option<(Credit<T::AccountId, Currency>, Credit<T::AccountId, Currency>)>;
+    type LiquidityInfo = Option<(
+        Credit<T::AccountId, Currency>,
+        Credit<T::AccountId, Currency>,
+    )>;
     type Balance = <Currency as Inspect<T::AccountId>>::Balance;
 
     fn withdraw_fee(
@@ -71,12 +68,8 @@ where
         _fee_with_tip: Self::Balance,
         tip: Self::Balance,
     ) -> Result<Self::LiquidityInfo, TransactionValidityError> {
-        let fee_with_tip = custom_fee_with_tip::<T, Currency, AmountExtractor>(
-            who,
-            call,
-            dispatch_info,
-            tip,
-        )?;
+        let fee_with_tip =
+            custom_fee_with_tip::<T, Currency, AmountExtractor>(who, call, dispatch_info, tip)?;
         if fee_with_tip.is_zero() {
             return Ok(None);
         }
@@ -101,12 +94,8 @@ where
         _fee_with_tip: Self::Balance,
         tip: Self::Balance,
     ) -> Result<(), TransactionValidityError> {
-        let fee_with_tip = custom_fee_with_tip::<T, Currency, AmountExtractor>(
-            who,
-            call,
-            dispatch_info,
-            tip,
-        )?;
+        let fee_with_tip =
+            custom_fee_with_tip::<T, Currency, AmountExtractor>(who, call, dispatch_info, tip)?;
         if fee_with_tip.is_zero() {
             return Ok(());
         }
@@ -171,8 +160,10 @@ where
             return;
         }
 
-        let (fullnode_credit, remainder) =
-            amount.ration(fullnode_percent, total_percent.saturating_sub(fullnode_percent));
+        let (fullnode_credit, remainder) = amount.ration(
+            fullnode_percent,
+            total_percent.saturating_sub(fullnode_percent),
+        );
         let (nrc_credit, blackhole_credit) = remainder.ration(nrc_percent, blackhole_percent);
 
         // 中文注释：手续费全节点分成只发给“当前区块作者对应绑定钱包”；未绑定则不分配（自动销毁）。
@@ -205,11 +196,8 @@ fn custom_fee_with_tip<T, Currency, AmountExtractor>(
 where
     T: TxPaymentConfig,
     Currency: Balanced<T::AccountId>,
-    AmountExtractor: CallAmount<
-        T::AccountId,
-        T::RuntimeCall,
-        <Currency as Inspect<T::AccountId>>::Balance,
-    >,
+    AmountExtractor:
+        CallAmount<T::AccountId, T::RuntimeCall, <Currency as Inspect<T::AccountId>>::Balance>,
 {
     // 中文注释：有金额交易必须提取金额收费；无金额交易放行不收费；无法判断则拒绝，防止漏提取。
     let amount = match AmountExtractor::amount(who, call) {
@@ -218,8 +206,7 @@ where
         AmountExtractResult::Unknown => return Err(InvalidTransaction::Payment.into()),
     };
     let amount_u128: u128 = amount.saturated_into();
-    let by_rate: u128 =
-        primitives::core_const::ONCHAIN_FEE_RATE.mul_floor(amount_u128);
+    let by_rate: u128 = primitives::core_const::ONCHAIN_FEE_RATE.mul_floor(amount_u128);
     let min_fee: u128 = primitives::core_const::ONCHAIN_MIN_FEE;
     let base_fee: <Currency as Inspect<T::AccountId>>::Balance =
         by_rate.max(min_fee).saturated_into();

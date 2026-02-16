@@ -14,11 +14,11 @@ members = [
     "issuance/fullnode-pow-reward",          # 发行-全节点发行模块 pallet
     "issuance/resolution-issuance-iss",      # 发行-决议发行执行模块 pallet
     "issuance/shengbank-stake-interest",     # 发行-省储行质押利息模块 pallet
+    "otherpallet/ciic-code-auth",            # 其他-CIIC 绑定与资格校验模块 pallet
 
     "transaction/offchain-transaction-pos",  # 交易-链下交易手续费模块 pallet
     "transaction/onchain-transaction-pow",   # 交易-链上交易手续费模块 pallet
 
-    "template",                              # 框架自带模板 pallet
 ]
 resolver = "2"
 
@@ -39,7 +39,6 @@ all = "allow"
 [workspace.dependencies]
 # 本地
 gmb-runtime = { path = "runtime" }
-pallet-template = { path = "template", default-features = false }
 
 # 工具
 codec      = { package = "parity-scale-codec", version = "3.6.1", default-features = false, features = ["derive"] }

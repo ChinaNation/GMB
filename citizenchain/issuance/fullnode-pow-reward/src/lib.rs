@@ -46,9 +46,7 @@ pub mod pallet {
     // 全节点 PoW 发行制度常量（来自 primitives）
     // ------------------------------------------------------------------------
     use primitives::pow_const::{
-        FULLNODE_BLOCK_REWARD,
-        FULLNODE_REWARD_START_BLOCK,
-        FULLNODE_REWARD_END_BLOCK,
+        FULLNODE_BLOCK_REWARD, FULLNODE_REWARD_END_BLOCK, FULLNODE_REWARD_START_BLOCK,
     };
 
     #[pallet::config]
@@ -65,20 +63,13 @@ pub mod pallet {
 
     /// 余额类型别名
     pub type BalanceOf<T> =
-        <<T as Config>::Currency as Currency<
-            <T as frame_system::Config>::AccountId,
-        >>::Balance;
+        <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
     /// 矿工身份账户（powr）到奖励钱包账户的绑定表。
     #[pallet::storage]
     #[pallet::getter(fn reward_wallet_by_miner)]
-    pub type RewardWalletByMiner<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        T::AccountId,
-        T::AccountId,
-        OptionQuery,
-    >;
+    pub type RewardWalletByMiner<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, T::AccountId, OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -108,10 +99,7 @@ pub mod pallet {
         /// 由矿工身份账户（powr 对应账户）发起一次性绑定。
         #[pallet::call_index(0)]
         #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
-        pub fn bind_reward_wallet(
-            origin: OriginFor<T>,
-            wallet: T::AccountId,
-        ) -> DispatchResult {
+        pub fn bind_reward_wallet(origin: OriginFor<T>, wallet: T::AccountId) -> DispatchResult {
             let miner = ensure_signed(origin)?;
             ensure!(
                 !RewardWalletByMiner::<T>::contains_key(&miner),
@@ -139,8 +127,7 @@ pub mod pallet {
 
             // 从共识 PreRuntime Digest 中获取 PoW 出块作者
             let digest = <frame_system::Pallet<T>>::digest();
-            let pre_runtime_digests =
-                digest.logs().iter().filter_map(|d| d.as_pre_runtime());
+            let pre_runtime_digests = digest.logs().iter().filter_map(|d| d.as_pre_runtime());
 
             let author = match T::FindAuthor::find_author(pre_runtime_digests) {
                 Some(a) => a,
