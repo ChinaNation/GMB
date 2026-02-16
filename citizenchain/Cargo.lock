@@ -3620,6 +3620,7 @@ dependencies = [
  "frame-system-rpc-runtime-api",
  "frame-try-runtime",
  "fullnode-pow-reward",
+ "onchain-transaction-fee",
  "pallet-balances",
  "pallet-template",
  "pallet-timestamp",
@@ -6034,6 +6035,7 @@ dependencies = [
  "sp-keyring",
  "sp-keystore",
  "sp-runtime",
+ "sp-storage",
  "sp-timestamp",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
@@ -6237,6 +6239,16 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 [[package]]
 name = "onchain-transaction-fee"
 version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "fullnode-pow-reward",
+ "pallet-transaction-payment",
+ "parity-scale-codec",
+ "primitives",
+ "sp-runtime",
+ "sp-std",
+]
 
 [[package]]
 name = "opaque-debug"

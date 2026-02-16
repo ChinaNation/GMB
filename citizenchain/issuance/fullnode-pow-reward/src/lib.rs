@@ -69,6 +69,61 @@ pub mod pallet {
             <T as frame_system::Config>::AccountId,
         >>::Balance;
 
+    /// 矿工身份账户（powr）到奖励钱包账户的绑定表。
+    #[pallet::storage]
+    #[pallet::getter(fn reward_wallet_by_miner)]
+    pub type RewardWalletByMiner<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        T::AccountId,
+        T::AccountId,
+        OptionQuery,
+    >;
+
+    #[pallet::event]
+    #[pallet::generate_deposit(pub(super) fn deposit_event)]
+    pub enum Event<T: Config> {
+        /// powr 矿工身份完成一次性钱包绑定。
+        RewardWalletBound {
+            miner: T::AccountId,
+            wallet: T::AccountId,
+        },
+        /// 本区块 PoW 奖励已发放到绑定钱包。
+        PowRewardIssued {
+            block: u32,
+            miner: T::AccountId,
+            wallet: T::AccountId,
+            amount: BalanceOf<T>,
+        },
+    }
+
+    #[pallet::error]
+    pub enum Error<T> {
+        /// 同一个矿工身份只允许绑定一次奖励钱包。
+        RewardWalletAlreadyBound,
+    }
+
+    #[pallet::call]
+    impl<T: Config> Pallet<T> {
+        /// 由矿工身份账户（powr 对应账户）发起一次性绑定。
+        #[pallet::call_index(0)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
+        pub fn bind_reward_wallet(
+            origin: OriginFor<T>,
+            wallet: T::AccountId,
+        ) -> DispatchResult {
+            let miner = ensure_signed(origin)?;
+            ensure!(
+                !RewardWalletByMiner::<T>::contains_key(&miner),
+                Error::<T>::RewardWalletAlreadyBound
+            );
+
+            RewardWalletByMiner::<T>::insert(&miner, &wallet);
+            Self::deposit_event(Event::<T>::RewardWalletBound { miner, wallet });
+            Ok(())
+        }
+    }
+
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_finalize(n: BlockNumberFor<T>) {
@@ -92,9 +147,21 @@ pub mod pallet {
                 None => return, // 理论上不应发生，发生则不发奖励
             };
 
+            // 仅向已绑定钱包的矿工发放奖励；未绑定则不发放。
+            let wallet = match RewardWalletByMiner::<T>::get(&author) {
+                Some(w) => w,
+                None => return,
+            };
+
             // 发放固定的全节点 PoW 铸块奖励
             let reward: BalanceOf<T> = FULLNODE_BLOCK_REWARD.saturated_into();
-            let _imbalance = T::Currency::deposit_creating(&author, reward);
+            let _imbalance = T::Currency::deposit_creating(&wallet, reward);
+            Self::deposit_event(Event::<T>::PowRewardIssued {
+                block: block_number,
+                miner: author,
+                wallet,
+                amount: reward,
+            });
         }
     }
 }
