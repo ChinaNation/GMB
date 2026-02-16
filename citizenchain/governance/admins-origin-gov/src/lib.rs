@@ -46,7 +46,11 @@ fn str_to_shengbank_pallet_id(s: &str) -> Option<InstitutionPalletId> {
 }
 
 fn nrc_pallet_id_bytes() -> InstitutionPalletId {
-    reserve_pallet_id_to_bytes(RESERVE_NODES[0].pallet_id)
+    // 中文注释：国储会ID统一从常量数组读取并转码。
+    RESERVE_NODES
+        .iter()
+        .find(|n| n.pallet_id == "nrcgch01")
+        .and_then(|n| reserve_pallet_id_to_bytes(n.pallet_id))
         .expect("NRC pallet_id must be 8 bytes")
 }
 

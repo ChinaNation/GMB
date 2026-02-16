@@ -209,22 +209,20 @@ pub mod pallet {
                     continue;
                 }
 
-                // 固定创世省储行地址直接发放：仅尝试存入已存在账户，不自动创建新账户
-                if T::Currency::deposit_into_existing(&account, interest)
-                    .is_ok()
-                {
-                    success_count = success_count.saturating_add(1);
-                    writes += 1;
+                // 中文注释：若账户被清理或尚未建户，自动重建对应省储行 pallet_address 后再入账。
+                let _imbalance =
+                    T::Currency::deposit_creating(&account, interest);
+                success_count = success_count.saturating_add(1);
+                writes += 1;
 
-                    Self::deposit_event(
-                        Event::<T>::ShengBankInterestMinted {
-                            year,
-                            pallet_id: bank.pallet_id.as_bytes().to_vec(),
-                            account: account.clone(),
-                            amount: interest,
-                        },
-                    );
-                }
+                Self::deposit_event(
+                    Event::<T>::ShengBankInterestMinted {
+                        year,
+                        pallet_id: bank.pallet_id.as_bytes().to_vec(),
+                        account: account.clone(),
+                        amount: interest,
+                    },
+                );
             }
 
             (reads, writes, success_count)

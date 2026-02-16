@@ -20,21 +20,28 @@ use alloc::vec;
 use sp_genesis_builder::PresetId;
 
 #[cfg(feature = "std")]
-use crate::{AccountId, BalancesConfig, RuntimeGenesisConfig};
+use crate::AccountId;
 #[cfg(feature = "std")]
 use codec::Decode;
 #[cfg(feature = "std")]
-use frame_support::build_struct_json_patch;
+use sp_core::crypto::{Ss58AddressFormat, Ss58Codec};
 #[cfg(feature = "std")]
 use primitives::{
+	core_const::SS58_FORMAT,
 	genesis::GENESIS_ISSUANCE,
 	reserve_nodes_const::RESERVE_NODES,
 	shengbank_nodes_const::SHENG_BANK_NODES,
 };
 #[cfg(feature = "std")]
-use serde_json::Value;
+use serde_json::{json, Value};
 #[cfg(feature = "std")]
 use sp_genesis_builder::{self};
+
+#[cfg(feature = "std")]
+fn account_to_genesis_ss58(account: &AccountId) -> String {
+	// 创世配置地址使用链统一 SS58 前缀（2027）。
+	account.to_ss58check_with_version(Ss58AddressFormat::custom(SS58_FORMAT))
+}
 
 // Returns the genesis config presets populated with given parameters.
 #[cfg(feature = "std")]
@@ -42,11 +49,10 @@ fn testnet_genesis(
 	endowed_accounts: Vec<AccountId>,
 	_root: AccountId,
 ) -> Value {
-	// 中文注释：从统一常量中定位国储会交易地址，并解码为链上 AccountId。
-	let nrc_id = RESERVE_NODES[0].pallet_id;
+	// 中文注释：国储会信息统一从常量数组入口读取。
 	let nrc_account = RESERVE_NODES
 		.iter()
-		.find(|n| n.pallet_id == nrc_id)
+		.find(|n| n.pallet_id == "nrcgch01")
 		.and_then(|n| AccountId::decode(&mut &n.pallet_address[..]).ok())
 		.expect("NRC pallet_address must decode to AccountId");
 
@@ -68,10 +74,19 @@ fn testnet_genesis(
 			.map(|a| (a, 1_000_000_000u128)),
 	);
 
-	build_struct_json_patch!(RuntimeGenesisConfig {
-		balances: BalancesConfig {
-			balances: genesis_balances,
-		},
+	// 中文注释：创世账户统一输出为链 SS58 地址（前缀 2027）。
+	let balances_json: Vec<Value> = genesis_balances
+		.into_iter()
+		.map(|(account, amount)| {
+			let account_ss58 = account_to_genesis_ss58(&account);
+			json!([account_ss58, amount])
+		})
+		.collect();
+
+	json!({
+		"balances": {
+			"balances": balances_json,
+		}
 	})
 }
 
