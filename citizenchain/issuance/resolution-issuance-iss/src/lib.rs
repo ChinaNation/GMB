@@ -105,6 +105,7 @@ pub mod pallet {
     pub enum Error<T> {
         AlreadyExecuted,
         EmptyAllocations,
+        TooManyAllocations,
         ZeroAmount,
         AllocationOverflow,
         TotalMismatch,
@@ -146,6 +147,10 @@ pub mod pallet {
                 Error::<T>::AlreadyExecuted
             );
             ensure!(!allocations.is_empty(), Error::<T>::EmptyAllocations);
+            ensure!(
+                allocations.len() <= T::MaxAllocations::get() as usize,
+                Error::<T>::TooManyAllocations
+            );
 
             let mut sum = 0u128;
             for item in allocations {
@@ -157,16 +162,17 @@ pub mod pallet {
 
             ensure!(sum == total_amount, Error::<T>::TotalMismatch);
 
+            // 中文注释：先做累计量溢出校验，再执行发币，避免出现“先发币后报错”的不一致风险。
+            let new_total = TotalIssued::<T>::get()
+                .checked_add(total_amount)
+                .ok_or(Error::<T>::TotalIssuedOverflow)?;
+
             for item in allocations {
                 let amount: BalanceOf<T> = item.amount.saturated_into();
                 let _imbalance = T::Currency::deposit_creating(&item.recipient, amount);
             }
 
             Executed::<T>::insert(proposal_id, true);
-
-            let new_total = TotalIssued::<T>::get()
-                .checked_add(total_amount)
-                .ok_or(Error::<T>::TotalIssuedOverflow)?;
             TotalIssued::<T>::put(new_total);
 
             let reason_hash = T::Hashing::hash(reason);
@@ -200,5 +206,208 @@ pub mod pallet {
                 mapped.as_slice(),
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use frame_support::{assert_noop, assert_ok, derive_impl, traits::{ConstU128, ConstU32}};
+    use frame_system as system;
+    use sp_runtime::{traits::IdentityLookup, BuildStorage};
+
+    type AccountId = u64;
+    type Balance = u128;
+    type Block = frame_system::mocking::MockBlock<Test>;
+
+    #[frame_support::runtime]
+    mod runtime {
+        #[runtime::runtime]
+        #[runtime::derive(
+            RuntimeCall,
+            RuntimeEvent,
+            RuntimeError,
+            RuntimeOrigin,
+            RuntimeFreezeReason,
+            RuntimeHoldReason,
+            RuntimeSlashReason,
+            RuntimeLockId,
+            RuntimeTask,
+            RuntimeViewFunction
+        )]
+        pub struct Test;
+
+        #[runtime::pallet_index(0)]
+        pub type System = frame_system;
+
+        #[runtime::pallet_index(1)]
+        pub type Balances = pallet_balances;
+
+        #[runtime::pallet_index(2)]
+        pub type ResolutionIssuanceIss = super;
+    }
+
+    #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
+    impl system::Config for Test {
+        type Block = Block;
+        type AccountId = AccountId;
+        type Lookup = IdentityLookup<Self::AccountId>;
+        type AccountData = pallet_balances::AccountData<Balance>;
+    }
+
+    impl pallet_balances::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type Balance = Balance;
+        type DustRemoval = ();
+        type ExistentialDeposit = ConstU128<1>;
+        type AccountStore = System;
+        type MaxLocks = ConstU32<0>;
+        type MaxReserves = ();
+        type ReserveIdentifier = [u8; 8];
+        type FreezeIdentifier = RuntimeFreezeReason;
+        type MaxFreezes = ConstU32<0>;
+        type RuntimeHoldReason = RuntimeHoldReason;
+        type RuntimeFreezeReason = RuntimeFreezeReason;
+        type DoneSlashHandler = ();
+        type WeightInfo = ();
+    }
+
+    impl pallet::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type Currency = Balances;
+        type ExecuteOrigin = frame_system::EnsureRoot<AccountId>;
+        type MaxReasonLen = ConstU32<128>;
+        type MaxAllocations = ConstU32<4>;
+    }
+
+    fn new_test_ext() -> sp_io::TestExternalities {
+        let storage = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
+            .expect("test storage should build");
+        storage.into()
+    }
+
+    fn alloc(recipient: AccountId, amount: u128) -> pallet::RecipientAmount<AccountId> {
+        pallet::RecipientAmount { recipient, amount }
+    }
+
+    #[test]
+    fn execute_via_trait_updates_balances_and_markers() {
+        new_test_ext().execute_with(|| {
+            let allocations = vec![(10, 30), (20, 70)];
+            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<AccountId>>::execute_resolution_issuance(
+                1,
+                b"ok".to_vec(),
+                100,
+                allocations
+            ));
+
+            assert_eq!(pallet_balances::Pallet::<Test>::free_balance(10), 30);
+            assert_eq!(pallet_balances::Pallet::<Test>::free_balance(20), 70);
+            assert!(pallet::Executed::<Test>::get(1));
+            assert_eq!(pallet::TotalIssued::<Test>::get(), 100);
+        });
+    }
+
+    #[test]
+    fn replay_is_rejected() {
+        new_test_ext().execute_with(|| {
+            let allocations = vec![(10, 100)];
+            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<AccountId>>::execute_resolution_issuance(
+                2,
+                b"a".to_vec(),
+                100,
+                allocations.clone()
+            ));
+            assert_noop!(
+                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<AccountId>>::execute_resolution_issuance(
+                    2,
+                    b"b".to_vec(),
+                    100,
+                    allocations
+                ),
+                pallet::Error::<Test>::AlreadyExecuted
+            );
+        });
+    }
+
+    #[test]
+    fn total_mismatch_is_rejected() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<AccountId>>::execute_resolution_issuance(
+                    3,
+                    b"x".to_vec(),
+                    100,
+                    vec![(10, 40), (20, 50)]
+                ),
+                pallet::Error::<Test>::TotalMismatch
+            );
+        });
+    }
+
+    #[test]
+    fn too_many_allocations_is_rejected() {
+        new_test_ext().execute_with(|| {
+            let many = vec![(1, 1), (2, 1), (3, 1), (4, 1), (5, 1)];
+            assert_noop!(
+                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<AccountId>>::execute_resolution_issuance(
+                    4,
+                    b"x".to_vec(),
+                    5,
+                    many
+                ),
+                pallet::Error::<Test>::TooManyAllocations
+            );
+        });
+    }
+
+    #[test]
+    fn overflow_is_rejected_before_mint() {
+        new_test_ext().execute_with(|| {
+            pallet::TotalIssued::<Test>::put(u128::MAX - 5);
+            assert_noop!(
+                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<AccountId>>::execute_resolution_issuance(
+                    5,
+                    b"x".to_vec(),
+                    10,
+                    vec![(10, 10)]
+                ),
+                pallet::Error::<Test>::TotalIssuedOverflow
+            );
+
+            assert_eq!(pallet_balances::Pallet::<Test>::free_balance(10), 0);
+            assert!(!pallet::Executed::<Test>::get(5));
+            assert_eq!(pallet::TotalIssued::<Test>::get(), u128::MAX - 5);
+        });
+    }
+
+    #[test]
+    fn extrinsic_requires_root_origin() {
+        new_test_ext().execute_with(|| {
+            let reason: pallet::ReasonOf<Test> = b"rs".to_vec().try_into().expect("fit");
+            let allocations: pallet::AllocationOf<Test> = vec![alloc(10, 10)]
+                .try_into()
+                .expect("fit");
+
+            assert_noop!(
+                pallet::Pallet::<Test>::execute_resolution_issuance(
+                    RuntimeOrigin::signed(1),
+                    6,
+                    reason.clone(),
+                    10,
+                    allocations.clone()
+                ),
+                sp_runtime::DispatchError::BadOrigin
+            );
+
+            assert_ok!(pallet::Pallet::<Test>::execute_resolution_issuance(
+                RuntimeOrigin::root(),
+                6,
+                reason,
+                10,
+                allocations
+            ));
+        });
     }
 }

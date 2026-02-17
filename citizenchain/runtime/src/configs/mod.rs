@@ -27,17 +27,18 @@
 use codec::Decode;
 use codec::Encode;
 use frame_support::{
+    dispatch::DispatchResult,
     derive_impl, parameter_types,
     traits::{
         fungible::Inspect,
         tokens::{Fortitude, Preservation},
+        UnfilteredDispatchable,
         ConstU128, ConstU32, ConstU64, ConstU8, EnsureOrigin, FindAuthor, VariantCountOf,
     },
     weights::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
         IdentityFee, Weight,
     },
-    PalletId,
 };
 use frame_system::limits::{BlockLength, BlockWeights};
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
@@ -50,8 +51,8 @@ use sp_version::RuntimeVersion;
 use super::{
     AccountId, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance, Hash, Nonce,
     PalletInfo, ResolutionIssuanceGov, ResolutionIssuanceIss, Runtime, RuntimeCall, RuntimeEvent,
-    RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System, VotingEngineSystem,
-    BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeRootUpgrade, RuntimeTask, System,
+    VotingEngineSystem, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 
 const NORMAL_DISPATCH_RATIO: Perbill =
@@ -217,6 +218,10 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::CitizenLightnodeIssuance(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
+            RuntimeCall::AdminsOriginGov(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+            RuntimeCall::RuntimeRootUpgrade(_) => {
+                onchain_transaction_fee::AmountExtractResult::NoAmount
+            }
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免“有金额但漏提取”。
             RuntimeCall::Balances(_) => onchain_transaction_fee::AmountExtractResult::Unknown,
         }
@@ -313,7 +318,6 @@ impl
         account: &AccountId,
         ciic_hash: Hash,
         proposal_id: u64,
-        eligible_total: u64,
         nonce: &ciic_code_auth::pallet::NonceOf<Runtime>,
         signature: &ciic_code_auth::pallet::SignatureOf<Runtime>,
     ) -> bool {
@@ -333,18 +337,12 @@ impl
             account,
             ciic_hash,
             proposal_id,
-            eligible_total,
             nonce.as_slice(),
         );
         let msg = blake2_256(&payload.encode());
 
         sr25519_verify(&signature, &msg, &public)
     }
-}
-
-parameter_types! {
-    /// 中文注释：可参与公民投票总人数，后续可替换为治理参数或链上同步值。
-    pub const CiicEligibleVoterCount: u64 = 0;
 }
 
 impl ciic_code_auth::Config for Runtime {
@@ -356,7 +354,44 @@ impl ciic_code_auth::Config for Runtime {
     type CiicVerifier = RuntimeCiicVerifier;
     type CiicVoteVerifier = RuntimeCiicVoteVerifier;
     type OnCiicBound = CitizenLightnodeIssuance;
-    type EligibleVoterCount = CiicEligibleVoterCount;
+}
+
+pub struct RuntimePopulationSnapshotVerifier;
+
+impl
+    voting_engine_system::PopulationSnapshotVerifier<
+        AccountId,
+        voting_engine_system::pallet::VoteNonceOf<Runtime>,
+        voting_engine_system::pallet::VoteSignatureOf<Runtime>,
+    > for RuntimePopulationSnapshotVerifier
+{
+    fn verify_population_snapshot(
+        who: &AccountId,
+        eligible_total: u64,
+        nonce: &voting_engine_system::pallet::VoteNonceOf<Runtime>,
+        signature: &voting_engine_system::pallet::VoteSignatureOf<Runtime>,
+    ) -> bool {
+        let sig_bytes = signature.as_slice();
+        if sig_bytes.len() != 64 {
+            return false;
+        }
+
+        let mut sig_raw = [0u8; 64];
+        sig_raw.copy_from_slice(sig_bytes);
+        let signature = sr25519::Signature::from_raw(sig_raw);
+        let public = sr25519::Public::from_raw(CIIC_VERIFY_PUBKEY);
+
+        let payload = (
+            b"GMB_CIIC_POPULATION_V1",
+            frame_system::Pallet::<Runtime>::block_hash(0),
+            who,
+            eligible_total,
+            nonce.as_slice(),
+        );
+        let msg = blake2_256(&payload.encode());
+
+        sr25519_verify(&signature, &msg, &public)
+    }
 }
 
 impl citizen_lightnode_issuance::Config for Runtime {
@@ -368,19 +403,18 @@ parameter_types! {
     /// 决议发行治理参数（统一来源于 primitives 常量）。
     pub const ResolutionIssuanceMaxReasonLen: u32 = primitives::count_const::RESOLUTION_ISSUANCE_MAX_REASON_LEN;
     pub const ResolutionIssuanceMaxAllocations: u32 = primitives::count_const::RESOLUTION_ISSUANCE_MAX_ALLOCATIONS;
+    /// Runtime 升级治理提案备注最大长度。
+    pub const RuntimeUpgradeMaxReasonLen: u32 = 1024;
+    /// Runtime wasm 最大长度（字节）。
+    pub const RuntimeUpgradeMaxCodeSize: u32 = 5 * 1024 * 1024;
+    /// 管理员治理：单机构管理员列表上限（覆盖国储会 19 人规模）。
+    pub const MaxAdminsPerInstitution: u32 = 32;
 }
 
-pub struct NrcPalletIdProvider;
-impl frame_support::traits::Get<PalletId> for NrcPalletIdProvider {
-    fn get() -> PalletId {
-        // 中文注释：国储会ID统一从常量数组读取并转码。
-        let nrc_id_bytes = primitives::reserve_nodes_const::RESERVE_NODES
-            .iter()
-            .find(|n| n.pallet_id == "nrcgch01")
-            .and_then(|n| primitives::reserve_nodes_const::pallet_id_to_bytes(n.pallet_id))
-            .expect("NRC pallet_id must be 8 bytes");
-        PalletId(nrc_id_bytes)
-    }
+impl admins_origin_gov::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
+    type InternalVoteEngine = VotingEngineSystem;
 }
 
 /// 禁用特权原点：始终拒绝任何 Origin，确保不存在可被调用的特权入口。
@@ -420,6 +454,22 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 }
 
 fn is_nrc_admin(who: &AccountId) -> bool {
+    let nrc_institution = primitives::reserve_nodes_const::RESERVE_NODES
+        .iter()
+        .find(|n| n.pallet_id == "nrcgch01")
+        .and_then(|n| primitives::reserve_nodes_const::pallet_id_to_bytes(n.pallet_id))
+        .expect("NRC pallet_id must be 8 bytes");
+
+    // 中文注释：优先读取链上管理员治理模块中的“当前管理员名单”。
+    if let Some(current_admins) = admins_origin_gov::Pallet::<Runtime>::current_admins(nrc_institution)
+    {
+        return current_admins
+            .into_inner()
+            .iter()
+            .any(|admin| admin == who);
+    }
+
+    // 中文注释：兼容回退到创世静态管理员列表（尚未发生管理员替换时）。
     let who_bytes = who.encode();
     primitives::reserve_nodes_const::RESERVE_NODES
         .iter()
@@ -444,11 +494,62 @@ impl resolution_issuance_iss::Config for Runtime {
 impl resolution_issuance_gov::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type NrcProposeOrigin = EnsureNrcAdmin;
-    type NrcPalletId = NrcPalletIdProvider;
     type IssuanceExecutor = ResolutionIssuanceIss;
     type JointVoteEngine = VotingEngineSystem;
     type MaxReasonLen = ResolutionIssuanceMaxReasonLen;
     type MaxAllocations = ResolutionIssuanceMaxAllocations;
+    type MaxSnapshotNonceLength = ConstU32<64>;
+    type MaxSnapshotSignatureLength = ConstU32<64>;
+}
+
+impl runtime_root_upgrade::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type NrcProposeOrigin = EnsureNrcAdmin;
+    type JointVoteEngine = VotingEngineSystem;
+    type RuntimeCodeExecutor = RuntimeSetCodeExecutor;
+    type MaxReasonLen = RuntimeUpgradeMaxReasonLen;
+    type MaxRuntimeCodeSize = RuntimeUpgradeMaxCodeSize;
+    type MaxSnapshotNonceLength = ConstU32<64>;
+    type MaxSnapshotSignatureLength = ConstU32<64>;
+}
+
+pub struct RuntimeSetCodeExecutor;
+
+impl runtime_root_upgrade::RuntimeCodeExecutor for RuntimeSetCodeExecutor {
+    fn execute_runtime_code(code: &[u8]) -> DispatchResult {
+        let set_code_call = frame_system::Call::<Runtime>::set_code {
+            code: code.to_vec(),
+        };
+        set_code_call
+            .dispatch_bypass_filter(frame_system::RawOrigin::Root.into())
+            .map(|_| ())
+            .map_err(|e| e.error)
+    }
+}
+
+pub struct RuntimeJointVoteResultCallback;
+
+impl voting_engine_system::JointVoteResultCallback for RuntimeJointVoteResultCallback {
+    fn on_joint_vote_finalized(vote_proposal_id: u64, approved: bool) -> DispatchResult {
+        if resolution_issuance_gov::Pallet::<Runtime>::joint_vote_to_gov(vote_proposal_id).is_some()
+        {
+            return <ResolutionIssuanceGov as voting_engine_system::JointVoteResultCallback>::on_joint_vote_finalized(
+                vote_proposal_id,
+                approved,
+            );
+        }
+
+        if runtime_root_upgrade::Pallet::<Runtime>::joint_vote_to_gov(vote_proposal_id).is_some() {
+            return <RuntimeRootUpgrade as voting_engine_system::JointVoteResultCallback>::on_joint_vote_finalized(
+                vote_proposal_id,
+                approved,
+            );
+        }
+
+        Err(sp_runtime::DispatchError::Other(
+            "joint vote mapping not found",
+        ))
+    }
 }
 
 impl voting_engine_system::Config for Runtime {
@@ -457,7 +558,102 @@ impl voting_engine_system::Config for Runtime {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type CiicEligibility = RuntimeCiicEligibility;
-    type JointVoteResultCallback = ResolutionIssuanceGov;
+    type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
+    type JointVoteResultCallback = RuntimeJointVoteResultCallback;
+    type InternalAdminProvider = RuntimeInternalAdminProvider;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use frame_support::assert_ok;
+    use sp_runtime::BuildStorage;
+    use voting_engine_system::JointVoteResultCallback;
+
+    fn new_test_ext() -> sp_io::TestExternalities {
+        let storage = frame_system::GenesisConfig::<Runtime>::default()
+            .build_storage()
+            .expect("runtime test storage should build");
+        let mut ext = sp_io::TestExternalities::new(storage);
+        ext.execute_with(|| {
+            System::set_block_number(1);
+        });
+        ext
+    }
+
+    #[test]
+    fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = 1u64;
+            let joint_vote_id = 99u64;
+            let recipient = AccountId::new(primitives::reserve_nodes_const::RESERVE_NODES[1].pallet_address);
+            let total_amount = 123u128;
+
+            let reason: resolution_issuance_gov::pallet::ReasonOf<Runtime> =
+                b"runtime-integration".to_vec().try_into().expect("reason should fit");
+            let allocations: resolution_issuance_gov::pallet::AllocationOf<Runtime> =
+                vec![resolution_issuance_gov::pallet::RecipientAmount {
+                    recipient: recipient.clone(),
+                    amount: total_amount,
+                }]
+                .try_into()
+                .expect("allocations should fit");
+
+            let proposal = resolution_issuance_gov::pallet::Proposal::<Runtime> {
+                proposer: recipient.clone(),
+                reason: reason.clone(),
+                total_amount,
+                allocations: allocations.clone(),
+                vote_kind: resolution_issuance_gov::pallet::VoteKind::Joint,
+                status: resolution_issuance_gov::pallet::ProposalStatus::Voting,
+            };
+
+            resolution_issuance_gov::pallet::Proposals::<Runtime>::insert(proposal_id, proposal);
+            resolution_issuance_gov::pallet::GovToJointVote::<Runtime>::insert(proposal_id, joint_vote_id);
+            resolution_issuance_gov::pallet::JointVoteToGov::<Runtime>::insert(joint_vote_id, proposal_id);
+
+            assert_ok!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(
+                joint_vote_id,
+                true
+            ));
+
+            let updated = resolution_issuance_gov::pallet::Proposals::<Runtime>::get(proposal_id)
+                .expect("proposal should exist");
+            assert!(matches!(
+                updated.status,
+                resolution_issuance_gov::pallet::ProposalStatus::Passed
+            ));
+            assert!(
+                resolution_issuance_gov::pallet::GovToJointVote::<Runtime>::get(proposal_id)
+                    .is_none()
+            );
+            assert!(
+                resolution_issuance_gov::pallet::JointVoteToGov::<Runtime>::get(joint_vote_id)
+                    .is_none()
+            );
+
+            assert!(resolution_issuance_iss::pallet::Executed::<Runtime>::get(proposal_id));
+            assert_eq!(
+                resolution_issuance_iss::pallet::TotalIssued::<Runtime>::get(),
+                total_amount
+            );
+            assert_eq!(Balances::free_balance(&recipient), total_amount);
+        });
+    }
+}
+
+pub struct RuntimeInternalAdminProvider;
+
+impl voting_engine_system::InternalAdminProvider<AccountId> for RuntimeInternalAdminProvider {
+    fn is_internal_admin(
+        _org: u8,
+        institution: voting_engine_system::InstitutionPalletId,
+        who: &AccountId,
+    ) -> bool {
+        admins_origin_gov::Pallet::<Runtime>::current_admins(institution)
+            .map(|admins| admins.into_inner().iter().any(|admin| admin == who))
+            .unwrap_or(false)
+    }
 }
 
 pub struct RuntimeCiicEligibility;
@@ -467,15 +663,10 @@ impl voting_engine_system::CiicEligibility<AccountId> for RuntimeCiicEligibility
         <ciic_code_auth::Pallet<Runtime> as ciic_code_auth::CiicEligibilityProvider<AccountId>>::is_eligible(ciic, who)
     }
 
-    fn eligible_voter_count() -> u64 {
-        <ciic_code_auth::Pallet<Runtime> as ciic_code_auth::CiicEligibilityProvider<AccountId>>::eligible_voter_count()
-    }
-
     fn verify_and_consume_vote_credential(
         ciic: &[u8],
         who: &AccountId,
         proposal_id: u64,
-        eligible_total: u64,
         nonce: &[u8],
         signature: &[u8],
     ) -> bool {
@@ -483,7 +674,6 @@ impl voting_engine_system::CiicEligibility<AccountId> for RuntimeCiicEligibility
             ciic,
             who,
             proposal_id,
-            eligible_total,
             nonce,
             signature,
         )

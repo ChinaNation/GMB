@@ -29,3 +29,7 @@ std = [
     "log/std",
     "primitives/std",
 ]
+
+[dev-dependencies]
+pallet-balances = { workspace = true, default-features = true }
+sp-io = { workspace = true, default-features = true }

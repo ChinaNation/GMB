@@ -3,7 +3,7 @@
 use codec::{Decode, Encode};
 use futures::FutureExt;
 use gmb_runtime::{self, apis::RuntimeApi, opaque::Block};
-use sc_client_api::{Backend, StorageProvider};
+use sc_client_api::Backend;
 use sc_consensus_pow::{MiningHandle, PowAlgorithm, PowBlockImport};
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryWorker};
@@ -11,12 +11,11 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_consensus::NoNetwork;
 use sp_core::{
     crypto::KeyTypeId,
-    hashing::{blake2_128, blake2_256, twox_128},
+    hashing::blake2_256,
     U256,
 };
 use sp_keystore::Keystore;
 use sp_runtime::traits::{Block as BlockT, IdentifyAccount};
-use sp_storage::StorageKey;
 use std::{sync::Arc, thread, time::Duration};
 
 pub(crate) type FullClient = sc_service::TFullClient<
@@ -45,42 +44,13 @@ const POW_PROPOSAL_BUILD_SECS: u64 = 2;
 #[derive(Clone)]
 struct SimplePow {
     difficulty: U256,
-    client: Arc<FullClient>,
 }
 
 impl SimplePow {
-    fn new(client: Arc<FullClient>) -> Self {
+    fn new(_client: Arc<FullClient>) -> Self {
         Self {
             difficulty: U256::from(POW_DIFFICULTY),
-            client,
         }
-    }
-
-    fn reward_wallet_key(miner: &gmb_runtime::AccountId) -> StorageKey {
-        let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
-        key.extend_from_slice(&twox_128(b"FullnodePowReward"));
-        key.extend_from_slice(&twox_128(b"RewardWalletByMiner"));
-
-        let encoded = miner.encode();
-        key.extend_from_slice(&blake2_128(&encoded));
-        key.extend_from_slice(&encoded);
-        StorageKey(key)
-    }
-
-    fn has_bound_wallet(
-        &self,
-        parent: &sp_runtime::generic::BlockId<Block>,
-        miner: &gmb_runtime::AccountId,
-    ) -> bool {
-        let parent_hash = match parent {
-            sp_runtime::generic::BlockId::Hash(h) => *h,
-            sp_runtime::generic::BlockId::Number(_) => return false,
-        };
-        self.client
-            .storage(parent_hash, &Self::reward_wallet_key(miner))
-            .ok()
-            .flatten()
-            .is_some()
     }
 }
 
@@ -102,17 +72,14 @@ impl PowAlgorithm<Block> for SimplePow {
         seal: &sp_consensus_pow::Seal,
         difficulty: Self::Difficulty,
     ) -> Result<bool, sc_consensus_pow::Error<Block>> {
-        // 中文注释：协议层硬约束，未绑定奖励钱包的矿工身份其区块直接判定无效。
+        // 中文注释：协议层仅要求 pre_digest 可解码为矿工账户；是否绑定钱包只影响奖励/手续费分配，不影响出块有效性。
         let Some(pre_digest) = pre_digest else {
             return Ok(false);
         };
-        let miner = match gmb_runtime::AccountId::decode(&mut &pre_digest[..]) {
-            Ok(account) => account,
+        match gmb_runtime::AccountId::decode(&mut &pre_digest[..]) {
+            Ok(_) => (),
             Err(_) => return Ok(false),
         };
-        if !self.has_bound_wallet(_parent, &miner) {
-            return Ok(false);
-        }
 
         let nonce = u64::decode(&mut &seal[..]).map_err(sc_consensus_pow::Error::<Block>::Codec)?;
         let hash = pow_hash(pre_hash.as_ref(), nonce);
@@ -150,7 +117,7 @@ fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceErr
         return Ok(());
     }
 
-    // 中文注释：authority 首启自动生成唯一 powr 密钥，避免“无 key 仅告警继续跑”。
+    // 中文注释：节点首启自动生成唯一 powr 密钥，避免“无 key 仅告警继续跑”。
     keystore
         .sr25519_generate_new(POW_AUTHOR_KEY_TYPE, None)
         .map_err(|e| ServiceError::Other(format!("failed to generate powr key: {e}")))?;
@@ -318,7 +285,6 @@ pub fn new_full<
         );
     }
 
-    let role = config.role;
     let prometheus_registry = config.prometheus_registry().cloned();
 
     let rpc_extensions_builder = {
@@ -350,60 +316,58 @@ pub fn new_full<
         tracing_execute_block: None,
     })?;
 
-    if role.is_authority() {
-        let keystore = keystore_container.keystore();
-        ensure_powr_key(&keystore)?;
+    // 中文注释：本链制度要求“安装全节点软件即可参与挖矿”，不再依赖 authority 角色开关。
+    let keystore = keystore_container.keystore();
+    ensure_powr_key(&keystore)?;
 
-        let proposer_factory = sc_basic_authorship::ProposerFactory::new(
-            task_manager.spawn_handle(),
-            client.clone(),
-            transaction_pool.clone(),
-            prometheus_registry.as_ref(),
-            telemetry.as_ref().map(|x| x.handle()),
-        );
+    let proposer_factory = sc_basic_authorship::ProposerFactory::new(
+        task_manager.spawn_handle(),
+        client.clone(),
+        transaction_pool.clone(),
+        prometheus_registry.as_ref(),
+        telemetry.as_ref().map(|x| x.handle()),
+    );
 
-        let algorithm = SimplePow::new(client.clone());
-        let pre_runtime = author_pre_digest(&keystore).ok_or_else(|| {
-            ServiceError::Other("powr key missing after generation attempt".into())
-        })?;
+    let algorithm = SimplePow::new(client.clone());
+    let pre_runtime = author_pre_digest(&keystore)
+        .ok_or_else(|| ServiceError::Other("powr key missing after generation attempt".into()))?;
 
-        let pow_block_import = PowBlockImport::new(
-            client.clone(),
-            client.clone(),
-            algorithm.clone(),
-            0,
-            select_chain.clone(),
-            |_, ()| async {
-                let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-                Ok((timestamp,))
-            },
-        );
+    let pow_block_import = PowBlockImport::new(
+        client.clone(),
+        client.clone(),
+        algorithm.clone(),
+        0,
+        select_chain.clone(),
+        |_, ()| async {
+            let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+            Ok((timestamp,))
+        },
+    );
 
-        let (worker, worker_task) = sc_consensus_pow::start_mining_worker(
-            Box::new(pow_block_import),
-            client.clone(),
-            select_chain,
-            algorithm,
-            proposer_factory,
-            NoNetwork,
-            (),
-            Some(pre_runtime),
-            |_, ()| async {
-                let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-                Ok((timestamp,))
-            },
-            Duration::from_secs(POW_MINING_TIMEOUT_SECS),
-            Duration::from_secs(POW_PROPOSAL_BUILD_SECS),
-        );
+    let (worker, worker_task) = sc_consensus_pow::start_mining_worker(
+        Box::new(pow_block_import),
+        client.clone(),
+        select_chain,
+        algorithm,
+        proposer_factory,
+        NoNetwork,
+        (),
+        Some(pre_runtime),
+        |_, ()| async {
+            let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+            Ok((timestamp,))
+        },
+        Duration::from_secs(POW_MINING_TIMEOUT_SECS),
+        Duration::from_secs(POW_PROPOSAL_BUILD_SECS),
+    );
 
-        task_manager.spawn_essential_handle().spawn(
-            "pow-worker",
-            Some("block-authoring"),
-            worker_task.boxed(),
-        );
+    task_manager.spawn_essential_handle().spawn(
+        "pow-worker",
+        Some("block-authoring"),
+        worker_task.boxed(),
+    );
 
-        start_cpu_miner(worker);
-    }
+    start_cpu_miner(worker);
 
     Ok(task_manager)
 }

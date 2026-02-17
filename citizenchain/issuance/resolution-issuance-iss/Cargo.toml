@@ -11,7 +11,9 @@ codec = { workspace = true }
 scale-info = { workspace = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
+pallet-balances = { workspace = true }
 sp-runtime = { workspace = true }
+sp-io = { workspace = true }
 sp-std = { workspace = true }
 
 [features]
@@ -21,6 +23,8 @@ std = [
     "scale-info/std",
     "frame-support/std",
     "frame-system/std",
+    "pallet-balances/std",
     "sp-runtime/std",
+    "sp-io/std",
     "sp-std/std",
 ]

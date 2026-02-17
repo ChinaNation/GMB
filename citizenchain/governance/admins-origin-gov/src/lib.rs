@@ -22,6 +22,8 @@ use voting_engine_system::{
     InstitutionPalletId, STATUS_PASSED,
 };
 
+pub use pallet::*;
+
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct AdminReplacementAction<AccountId> {
     /// 目标机构（8字节 pallet_id）
@@ -89,6 +91,7 @@ fn expected_admin_count(org: u8) -> Option<u32> {
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use voting_engine_system::InternalVoteEngine;
 
     #[pallet::config]
     pub trait Config: frame_system::Config + voting_engine_system::Config {
@@ -98,6 +101,9 @@ pub mod pallet {
         #[pallet::constant]
         /// 单个机构管理员最大数量上限（用于 BoundedVec）
         type MaxAdminsPerInstitution: Get<u32>;
+
+        /// 中文注释：内部投票引擎（返回真实 proposal_id，避免外部猜测 next_proposal_id）。
+        type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
     }
 
     #[pallet::pallet]
@@ -194,10 +200,10 @@ pub mod pallet {
             );
 
             // 3) 在投票引擎中创建内部投票提案，并记录业务动作
-            let proposal_id = voting_engine_system::Pallet::<T>::next_proposal_id();
-            voting_engine_system::Pallet::<T>::create_internal_proposal(
-                frame_system::RawOrigin::Signed(who.clone()).into(),
+            let proposal_id = T::InternalVoteEngine::create_internal_proposal(
+                who.clone(),
                 org,
+                institution,
             )?;
 
             ProposalActions::<T>::insert(
@@ -252,8 +258,12 @@ pub mod pallet {
             });
 
             if approve {
-                // 投赞成票后尝试执行：只有提案状态已 PASS 才会真正替换
-                Self::try_execute_replacement(proposal_id)?;
+                // 中文注释：只在内部投票状态达到 PASSED 时执行替换，避免前置赞成票被回滚。
+                if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
+                    if proposal.status == STATUS_PASSED {
+                        Self::try_execute_replacement(proposal_id)?;
+                    }
+                }
             }
             Ok(())
         }
@@ -277,7 +287,7 @@ pub mod pallet {
 
             SHENG_BANK_NODES
                 .iter()
-                .find(|n| str_to_pallet_id(n.pallet_id) == Some(institution))
+                .find(|n| str_to_shengbank_pallet_id(n.pallet_id) == Some(institution))
                 .map(|node| {
                     node.admins
                         .iter()
@@ -360,5 +370,381 @@ pub mod pallet {
 
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
+    use frame_system as system;
+    use primitives::reserve_nodes_const::{
+        pallet_id_to_bytes as reserve_pallet_id_to_bytes, RESERVE_NODES,
+    };
+    use primitives::shengbank_nodes_const::{
+        pallet_id_to_bytes as shengbank_pallet_id_to_bytes, SHENG_BANK_NODES,
+    };
+    use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+    use voting_engine_system::internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC};
+
+    type Block = frame_system::mocking::MockBlock<Test>;
+
+    #[frame_support::runtime]
+    mod runtime {
+        #[runtime::runtime]
+        #[runtime::derive(
+            RuntimeCall,
+            RuntimeEvent,
+            RuntimeError,
+            RuntimeOrigin,
+            RuntimeFreezeReason,
+            RuntimeHoldReason,
+            RuntimeSlashReason,
+            RuntimeLockId,
+            RuntimeTask,
+            RuntimeViewFunction
+        )]
+        pub struct Test;
+
+        #[runtime::pallet_index(0)]
+        pub type System = frame_system;
+
+        #[runtime::pallet_index(1)]
+        pub type VotingEngineSystem = voting_engine_system;
+
+        #[runtime::pallet_index(2)]
+        pub type AdminsOriginGov = super;
+    }
+
+    #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
+    impl system::Config for Test {
+        type Block = Block;
+        type AccountId = AccountId32;
+        type Lookup = IdentityLookup<Self::AccountId>;
+    }
+
+    pub struct TestCiicEligibility;
+    impl voting_engine_system::CiicEligibility<AccountId32> for TestCiicEligibility {
+        fn is_eligible(_ciic: &[u8], _who: &AccountId32) -> bool {
+            true
+        }
+
+        fn verify_and_consume_vote_credential(
+            _ciic: &[u8],
+            _who: &AccountId32,
+            _proposal_id: u64,
+            _nonce: &[u8],
+            _signature: &[u8],
+        ) -> bool {
+            true
+        }
+    }
+
+    pub struct TestPopulationSnapshotVerifier;
+    impl
+        voting_engine_system::PopulationSnapshotVerifier<
+            AccountId32,
+            voting_engine_system::pallet::VoteNonceOf<Test>,
+            voting_engine_system::pallet::VoteSignatureOf<Test>,
+        > for TestPopulationSnapshotVerifier
+    {
+        fn verify_population_snapshot(
+            _who: &AccountId32,
+            _eligible_total: u64,
+            _nonce: &voting_engine_system::pallet::VoteNonceOf<Test>,
+            _signature: &voting_engine_system::pallet::VoteSignatureOf<Test>,
+        ) -> bool {
+            true
+        }
+    }
+
+    pub struct TestInternalAdminProvider;
+    impl voting_engine_system::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
+        fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
+            if org != ORG_NRC {
+                return false;
+            }
+            pallet::CurrentAdmins::<Test>::get(institution)
+                .map(|admins| admins.into_inner().iter().any(|admin| admin == who))
+                .unwrap_or(false)
+        }
+    }
+
+    impl voting_engine_system::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type MaxCiicLength = ConstU32<64>;
+        type MaxVoteNonceLength = ConstU32<64>;
+        type MaxVoteSignatureLength = ConstU32<64>;
+        type CiicEligibility = TestCiicEligibility;
+        type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
+        type JointVoteResultCallback = ();
+        type InternalAdminProvider = TestInternalAdminProvider;
+    }
+
+    impl Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type MaxAdminsPerInstitution = ConstU32<32>;
+        type InternalVoteEngine = voting_engine_system::Pallet<Test>;
+    }
+
+    fn new_test_ext() -> sp_io::TestExternalities {
+        let storage = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
+            .expect("test storage should build");
+        storage.into()
+    }
+
+    fn nrc_admin(index: usize) -> AccountId32 {
+        AccountId32::new(RESERVE_NODES[0].admins[index])
+    }
+
+    fn prc_admin(index: usize) -> AccountId32 {
+        AccountId32::new(RESERVE_NODES[1].admins[index])
+    }
+
+    fn nrc_pallet_id() -> InstitutionPalletId {
+        reserve_pallet_id_to_bytes("nrcgch01").expect("nrcgch01 should be valid 8-byte pallet id")
+    }
+
+    fn prc_pallet_id() -> InstitutionPalletId {
+        reserve_pallet_id_to_bytes(RESERVE_NODES[1].pallet_id)
+            .expect("prc pallet_id should be valid 8-byte pallet id")
+    }
+
+    fn prb_pallet_id() -> InstitutionPalletId {
+        shengbank_pallet_id_to_bytes(SHENG_BANK_NODES[0].pallet_id)
+            .expect("prb pallet_id should be valid 8-byte pallet id")
+    }
+
+    fn prb_admin(index: usize) -> AccountId32 {
+        AccountId32::new(SHENG_BANK_NODES[0].admins[index])
+    }
+
+    #[test]
+    fn nrc_replacement_executes_when_yes_votes_reach_threshold() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let old_admin = nrc_admin(1);
+            let new_admin = AccountId32::new([99u8; 32]);
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                old_admin.clone(),
+                new_admin.clone()
+            ));
+
+            for i in 0..13 {
+                assert_ok!(AdminsOriginGov::vote_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(i)),
+                    0,
+                    true
+                ));
+            }
+
+            let admins = AdminsOriginGov::current_admins(institution)
+                .expect("current admins should be stored after execution")
+                .into_inner();
+            assert!(admins.iter().any(|a| a == &new_admin));
+            assert!(!admins.iter().any(|a| a == &old_admin));
+
+            let action = AdminsOriginGov::proposal_action(0).expect("action should exist");
+            assert!(action.executed);
+        });
+    }
+
+    #[test]
+    fn non_nrc_admin_cannot_propose_nrc_replacement() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            assert_noop!(
+                AdminsOriginGov::propose_admin_replacement(
+                    RuntimeOrigin::signed(prc_admin(0)),
+                    ORG_NRC,
+                    institution,
+                    nrc_admin(1),
+                    AccountId32::new([77u8; 32])
+                ),
+                Error::<Test>::UnauthorizedAdmin
+            );
+        });
+    }
+
+    #[test]
+    fn non_nrc_admin_cannot_vote_nrc_replacement() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                nrc_admin(1),
+                AccountId32::new([88u8; 32])
+            ));
+
+            assert_noop!(
+                AdminsOriginGov::vote_admin_replacement(RuntimeOrigin::signed(prc_admin(0)), 0, true),
+                Error::<Test>::UnauthorizedAdmin
+            );
+        });
+    }
+
+    #[test]
+    fn replaced_new_admin_can_propose_next_replacement() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let old_admin = nrc_admin(1);
+            let new_admin = AccountId32::new([66u8; 32]);
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                old_admin,
+                new_admin.clone()
+            ));
+            for i in 0..13 {
+                assert_ok!(AdminsOriginGov::vote_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(i)),
+                    0,
+                    true
+                ));
+            }
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(new_admin),
+                ORG_NRC,
+                institution,
+                nrc_admin(2),
+                AccountId32::new([67u8; 32])
+            ));
+        });
+    }
+
+    #[test]
+    fn prc_replacement_executes_when_yes_votes_reach_threshold() {
+        new_test_ext().execute_with(|| {
+            let institution = prc_pallet_id();
+            let old_admin = prc_admin(1);
+            let new_admin = AccountId32::new([55u8; 32]);
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(prc_admin(0)),
+                ORG_PRC,
+                institution,
+                old_admin.clone(),
+                new_admin.clone()
+            ));
+
+            // 省储会内部投票阈值：>=6
+            for i in 0..6 {
+                assert_ok!(AdminsOriginGov::vote_admin_replacement(
+                    RuntimeOrigin::signed(prc_admin(i)),
+                    0,
+                    true
+                ));
+            }
+
+            let admins = AdminsOriginGov::current_admins(institution)
+                .expect("current admins should be stored after execution")
+                .into_inner();
+            assert!(admins.iter().any(|a| a == &new_admin));
+            assert!(!admins.iter().any(|a| a == &old_admin));
+        });
+    }
+
+    #[test]
+    fn prb_replacement_executes_when_yes_votes_reach_threshold() {
+        new_test_ext().execute_with(|| {
+            let institution = prb_pallet_id();
+            let old_admin = prb_admin(1);
+            let new_admin = AccountId32::new([56u8; 32]);
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(prb_admin(0)),
+                ORG_PRB,
+                institution,
+                old_admin.clone(),
+                new_admin.clone()
+            ));
+
+            // 省储行内部投票阈值：>=6
+            for i in 0..6 {
+                assert_ok!(AdminsOriginGov::vote_admin_replacement(
+                    RuntimeOrigin::signed(prb_admin(i)),
+                    0,
+                    true
+                ));
+            }
+
+            let admins = AdminsOriginGov::current_admins(institution)
+                .expect("current admins should be stored after execution")
+                .into_inner();
+            assert!(admins.iter().any(|a| a == &new_admin));
+            assert!(!admins.iter().any(|a| a == &old_admin));
+        });
+    }
+
+    #[test]
+    fn non_prc_admin_cannot_propose_or_vote_prc_replacement() {
+        new_test_ext().execute_with(|| {
+            let institution = prc_pallet_id();
+
+            assert_noop!(
+                AdminsOriginGov::propose_admin_replacement(
+                    RuntimeOrigin::signed(prb_admin(0)),
+                    ORG_PRC,
+                    institution,
+                    prc_admin(1),
+                    AccountId32::new([57u8; 32])
+                ),
+                Error::<Test>::UnauthorizedAdmin
+            );
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(prc_admin(0)),
+                ORG_PRC,
+                institution,
+                prc_admin(1),
+                AccountId32::new([58u8; 32])
+            ));
+
+            assert_noop!(
+                AdminsOriginGov::vote_admin_replacement(RuntimeOrigin::signed(prb_admin(0)), 0, true),
+                Error::<Test>::UnauthorizedAdmin
+            );
+        });
+    }
+
+    #[test]
+    fn non_prb_admin_cannot_propose_or_vote_prb_replacement() {
+        new_test_ext().execute_with(|| {
+            let institution = prb_pallet_id();
+
+            assert_noop!(
+                AdminsOriginGov::propose_admin_replacement(
+                    RuntimeOrigin::signed(prc_admin(0)),
+                    ORG_PRB,
+                    institution,
+                    prb_admin(1),
+                    AccountId32::new([59u8; 32])
+                ),
+                Error::<Test>::UnauthorizedAdmin
+            );
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(prb_admin(0)),
+                ORG_PRB,
+                institution,
+                prb_admin(1),
+                AccountId32::new([60u8; 32])
+            ));
+
+            assert_noop!(
+                AdminsOriginGov::vote_admin_replacement(RuntimeOrigin::signed(prc_admin(0)), 0, true),
+                Error::<Test>::UnauthorizedAdmin
+            );
+        });
     }
 }

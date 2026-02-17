@@ -231,4 +231,12 @@ mod runtime {
     // 公民轻节点发行：仅负责认证奖励发放
     #[runtime::pallet_index(11)]
     pub type CitizenLightnodeIssuance = citizen_lightnode_issuance;
+
+    // 管理员治理模块：本机构管理员更换事项（走内部投票）
+    #[runtime::pallet_index(12)]
+    pub type AdminsOriginGov = admins_origin_gov;
+
+    // 运行时升级治理模块：提案与联合投票通过后触发 set_code。
+    #[runtime::pallet_index(13)]
+    pub type RuntimeRootUpgrade = runtime_root_upgrade;
 }

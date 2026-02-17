@@ -122,3 +122,67 @@ pub fn preset_names() -> Vec<PresetId> {
         PresetId::from(sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET),
     ]
 }
+
+#[cfg(all(test, feature = "std"))]
+mod tests {
+    use super::*;
+    use primitives::reserve_nodes_const::RESERVE_NODES;
+
+    #[test]
+    fn mainnet_genesis_contains_nrc_and_all_shengbank_balances() {
+        let patch = mainnet_config_genesis();
+        let balances = patch["balances"]["balances"]
+            .as_array()
+            .expect("balances.balances should be an array");
+
+        // 中文注释：创世应包含 1 个国储会地址 + 43 个省储行 keyless 质押地址。
+        assert_eq!(balances.len(), 1 + SHENG_BANK_NODES.len());
+    }
+
+    #[test]
+    fn mainnet_genesis_issuance_split_is_correct() {
+        let patch = mainnet_config_genesis();
+        let balances = patch["balances"]["balances"]
+            .as_array()
+            .expect("balances.balances should be an array");
+
+        let nrc_account = RESERVE_NODES
+            .iter()
+            .find(|n| n.pallet_id == "nrcgch01")
+            .and_then(|n| AccountId::decode(&mut &n.pallet_address[..]).ok())
+            .expect("NRC pallet_address must decode to AccountId");
+        let nrc_ss58 = account_to_genesis_ss58(&nrc_account);
+
+        let nrc_amount = balances
+            .iter()
+            .find_map(|entry| {
+                let arr = entry.as_array()?;
+                let account = arr.first()?.as_str()?;
+                if account == nrc_ss58 {
+                    arr.get(1)?.as_u64().map(|v| v as u128)
+                } else {
+                    None
+                }
+            })
+            .expect("NRC balance entry should exist");
+
+        // 中文注释：国储会地址仅承载创世发行，不应与省储行创立发行混淆。
+        assert_eq!(nrc_amount, GENESIS_ISSUANCE);
+
+        let total_in_patch: u128 = balances
+            .iter()
+            .map(|entry| {
+                entry
+                    .as_array()
+                    .and_then(|arr| arr.get(1))
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u128)
+                    .expect("each balance amount must be u64-compatible JSON number")
+            })
+            .sum();
+        let total_shengbank_stake: u128 = SHENG_BANK_NODES.iter().map(|n| n.stake_amount).sum();
+
+        // 中文注释：创世总注入 = 国储会创世发行 + 省储行创立发行。
+        assert_eq!(total_in_patch, GENESIS_ISSUANCE + total_shengbank_stake);
+    }
+}

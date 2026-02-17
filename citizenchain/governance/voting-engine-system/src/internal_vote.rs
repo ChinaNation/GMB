@@ -16,7 +16,8 @@ use primitives::shengbank_nodes_const::{
 
 use crate::{
     pallet::{Config, Error, Event, InternalTallies, InternalVotesByAccount, Pallet, Proposals},
-    InstitutionPalletId, Proposal, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
+    InstitutionPalletId, InternalAdminProvider, Proposal, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
+    STATUS_PASSED,
 };
 
 pub const ORG_NRC: u8 = 0;
@@ -68,6 +69,11 @@ fn is_internal_admin<T: Config>(
     institution: InstitutionPalletId,
     who: &T::AccountId,
 ) -> bool {
+    // 中文注释：优先读取运行时注入的动态管理员来源（如管理员治理模块）。
+    if T::InternalAdminProvider::is_internal_admin(org, institution, who) {
+        return true;
+    }
+
     let who_bytes = who.encode();
     if who_bytes.len() != 32 {
         return false;
@@ -99,7 +105,7 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         org: u8,
         institution: InstitutionPalletId,
-    ) -> DispatchResult {
+    ) -> Result<u64, sp_runtime::DispatchError> {
         ensure!(is_valid_org(org), Error::<T>::InvalidInternalOrg);
         ensure!(
             is_valid_internal_institution(org, institution),
@@ -133,7 +139,7 @@ impl<T: Config> Pallet<T> {
             stage: STAGE_INTERNAL,
             end,
         });
-        Ok(())
+        Ok(id)
     }
 
     pub(crate) fn do_internal_vote(

@@ -674,3 +674,27 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
         ],
     },
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::SHENG_BANK_NODES;
+    use crate::genesis::GENESIS_CITIZEN_MAX;
+
+    #[test]
+    fn citizens_sum_matches_genesis_total() {
+        // 中文注释：43 省储行人口汇总必须与创世人口常量一致。
+        let citizens_sum: u64 = SHENG_BANK_NODES.iter().map(|n| n.citizens_number).sum();
+        assert_eq!(citizens_sum, GENESIS_CITIZEN_MAX);
+    }
+
+    #[test]
+    fn stake_sum_matches_population_basis() {
+        // 中文注释：省储行创立发行按“每人 10_000 分”汇总。
+        let citizens_sum: u128 = SHENG_BANK_NODES
+            .iter()
+            .map(|n| n.citizens_number as u128)
+            .sum();
+        let stake_sum: u128 = SHENG_BANK_NODES.iter().map(|n| n.stake_amount).sum();
+        assert_eq!(stake_sum, citizens_sum * 10_000u128);
+    }
+}
