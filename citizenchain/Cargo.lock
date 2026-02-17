@@ -45,6 +45,7 @@ dependencies = [
  "parity-scale-codec",
  "primitives",
  "scale-info",
+ "sp-io",
  "sp-runtime",
  "sp-std",
  "voting-engine-system",
@@ -3345,9 +3346,11 @@ version = "0.0.1"
 dependencies = [
  "frame-support",
  "frame-system",
+ "pallet-balances",
  "parity-scale-codec",
  "primitives",
  "scale-info",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]
@@ -3625,6 +3628,7 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 name = "gmb-runtime"
 version = "0.0.1"
 dependencies = [
+ "admins-origin-gov",
  "ciic-code-auth",
  "citizen-lightnode-issuance",
  "frame-benchmarking",
@@ -3645,6 +3649,7 @@ dependencies = [
  "primitives",
  "resolution-issuance-gov",
  "resolution-issuance-iss",
+ "runtime-root-upgrade",
  "scale-info",
  "serde_json",
  "shengbank-stake-interest",
@@ -8060,6 +8065,7 @@ dependencies = [
  "primitives",
  "resolution-issuance-iss",
  "scale-info",
+ "sp-io",
  "sp-runtime",
  "sp-std",
  "voting-engine-system",
@@ -8071,8 +8077,10 @@ version = "0.0.1"
 dependencies = [
  "frame-support",
  "frame-system",
+ "pallet-balances",
  "parity-scale-codec",
  "scale-info",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]
@@ -8189,6 +8197,15 @@ dependencies = [
 [[package]]
 name = "runtime-root-upgrade"
 version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "voting-engine-system",
+]
 
 [[package]]
 name = "rustc-demangle"
@@ -9869,9 +9886,11 @@ dependencies = [
  "frame-support",
  "frame-system",
  "log",
+ "pallet-balances",
  "parity-scale-codec",
  "primitives",
  "scale-info",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]

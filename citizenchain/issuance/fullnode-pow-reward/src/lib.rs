@@ -6,7 +6,8 @@
 //! ---------------------------------------------------------------------------
 //! 1. 本模块 `fullnode-pow-reward` 是【系统级、制度性】的货币发行模块；
 //! 2. 用于在 Substrate PoW 共识下，对成功铸造新区块的【全节点】发放铸块奖励//!
-//! 3. 本模块不属于治理参数范畴，不接受链上治理修改，不依赖任何 Runtime Storage 状态，其发行规则完全由常量与区块高度决定。
+//! 3. 本模块不属于治理参数范畴，不接受链上治理修改；
+//! 4. 本模块仅依赖最小必要 Runtime Storage（矿工身份到账户钱包绑定表）用于发奖资格判定，其发行金额与高度规则完全由常量决定。
 //!
 //! 二、发行规则（写死于 primitives::pow_const）
 //! ---------------------------------------------------------------------------
@@ -18,7 +19,7 @@
 //! 三、技术实现原则
 //! ---------------------------------------------------------------------------
 //! 1. 本模块不参与PoW共识过程，仅消费共识结果，PoW共识由Substrate框架原生实现，通过PreRuntime Digest + FindAuthor获取区块作者；
-//! 2. 本模块不使用任何 Storage，不记录已发行数量、不记录已奖励区块、不维护任何可变状态；
+//! 2. 本模块使用最小必要 Storage（矿工身份到账户钱包的一次性绑定表），不记录已发行数量与已奖励区块；
 //! 3. 奖励发放时机：奖励在区块执行完成后的 on_finalize 阶段发放，属于对“已完成铸块行为”的结算，而非预测性激励；
 //! 4. 区块高度作为唯一时间与次数约束，区块高度全网一致、不可篡改的事实状态，不依赖任何人为或治理输入。
 //!
@@ -150,5 +151,184 @@ pub mod pallet {
                 amount: reward,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pallet::*;
+    use frame_support::{
+        assert_noop, assert_ok, derive_impl,
+        traits::{Hooks, VariantCountOf},
+    };
+    use frame_system as system;
+    use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+    use std::{cell::RefCell, thread_local};
+
+    type Block = frame_system::mocking::MockBlock<Test>;
+    type Balance = u128;
+
+    thread_local! {
+        static MOCK_AUTHOR: RefCell<Option<AccountId32>> = const { RefCell::new(None) };
+    }
+
+    pub struct MockFindAuthor;
+
+    impl frame_support::traits::FindAuthor<AccountId32> for MockFindAuthor {
+        fn find_author<'a, I>(_digests: I) -> Option<AccountId32>
+        where
+            I: 'a + IntoIterator<Item = (sp_runtime::ConsensusEngineId, &'a [u8])>,
+        {
+            MOCK_AUTHOR.with(|v| v.borrow().clone())
+        }
+    }
+
+    #[frame_support::runtime]
+    mod runtime {
+        #[runtime::runtime]
+        #[runtime::derive(
+            RuntimeCall,
+            RuntimeEvent,
+            RuntimeError,
+            RuntimeOrigin,
+            RuntimeFreezeReason,
+            RuntimeHoldReason,
+            RuntimeSlashReason,
+            RuntimeLockId,
+            RuntimeTask,
+            RuntimeViewFunction
+        )]
+        pub struct Test;
+
+        #[runtime::pallet_index(0)]
+        pub type System = frame_system;
+        #[runtime::pallet_index(1)]
+        pub type Balances = pallet_balances;
+        #[runtime::pallet_index(2)]
+        pub type FullnodePowReward = super;
+    }
+
+    #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
+    impl system::Config for Test {
+        type Block = Block;
+        type AccountId = AccountId32;
+        type AccountData = pallet_balances::AccountData<Balance>;
+        type Lookup = IdentityLookup<Self::AccountId>;
+        type Nonce = u64;
+    }
+
+    impl pallet_balances::Config for Test {
+        type MaxLocks = frame_support::traits::ConstU32<0>;
+        type MaxReserves = frame_support::traits::ConstU32<0>;
+        type ReserveIdentifier = [u8; 8];
+        type Balance = Balance;
+        type RuntimeEvent = RuntimeEvent;
+        type DustRemoval = ();
+        type ExistentialDeposit = frame_support::traits::ConstU128<1>;
+        type AccountStore = System;
+        type WeightInfo = ();
+        type FreezeIdentifier = RuntimeFreezeReason;
+        type MaxFreezes = VariantCountOf<RuntimeFreezeReason>;
+        type RuntimeHoldReason = RuntimeHoldReason;
+        type RuntimeFreezeReason = RuntimeFreezeReason;
+        type DoneSlashHandler = ();
+    }
+
+    impl Config for Test {
+        type Currency = Balances;
+        type FindAuthor = MockFindAuthor;
+    }
+
+    fn new_test_ext() -> sp_io::TestExternalities {
+        let storage = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
+            .expect("frame system genesis storage should build");
+        let mut ext = sp_io::TestExternalities::new(storage);
+        ext.execute_with(|| System::set_block_number(1));
+        ext
+    }
+
+    fn account(n: u8) -> AccountId32 {
+        AccountId32::new([n; 32])
+    }
+
+    #[test]
+    fn bind_reward_wallet_only_once() {
+        new_test_ext().execute_with(|| {
+            let miner = account(1);
+            let wallet = account(2);
+            let wallet2 = account(3);
+
+            assert_ok!(FullnodePowReward::bind_reward_wallet(
+                RuntimeOrigin::signed(miner.clone()),
+                wallet.clone()
+            ));
+            assert_eq!(RewardWalletByMiner::<Test>::get(&miner), Some(wallet));
+
+            assert_noop!(
+                FullnodePowReward::bind_reward_wallet(RuntimeOrigin::signed(miner), wallet2),
+                Error::<Test>::RewardWalletAlreadyBound
+            );
+        });
+    }
+
+    #[test]
+    fn reward_issued_within_range_when_bound() {
+        new_test_ext().execute_with(|| {
+            let miner = account(11);
+            let wallet = account(22);
+            assert_ok!(FullnodePowReward::bind_reward_wallet(
+                RuntimeOrigin::signed(miner.clone()),
+                wallet.clone()
+            ));
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
+
+            // 起始边界块 1 应发放奖励
+            <FullnodePowReward as Hooks<u64>>::on_finalize(1);
+            assert_eq!(Balances::free_balance(wallet.clone()), primitives::pow_const::FULLNODE_BLOCK_REWARD);
+
+            let has_event = System::events().iter().any(|r| {
+                matches!(
+                    r.event,
+                    RuntimeEvent::FullnodePowReward(Event::PowRewardIssued { block: 1, .. })
+                )
+            });
+            assert!(has_event);
+        });
+    }
+
+    #[test]
+    fn no_reward_when_not_bound() {
+        new_test_ext().execute_with(|| {
+            let miner = account(33);
+            let wallet = account(44);
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
+
+            <FullnodePowReward as Hooks<u64>>::on_finalize(1);
+            assert_eq!(Balances::free_balance(wallet), 0);
+        });
+    }
+
+    #[test]
+    fn no_reward_outside_reward_range() {
+        new_test_ext().execute_with(|| {
+            let miner = account(55);
+            let wallet = account(66);
+            assert_ok!(FullnodePowReward::bind_reward_wallet(
+                RuntimeOrigin::signed(miner.clone()),
+                wallet.clone()
+            ));
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
+
+            // 区块 0 不发放
+            <FullnodePowReward as Hooks<u64>>::on_finalize(0);
+            assert_eq!(Balances::free_balance(wallet.clone()), 0);
+
+            // 超出结束高度不发放
+            <FullnodePowReward as Hooks<u64>>::on_finalize(
+                (primitives::pow_const::FULLNODE_REWARD_END_BLOCK + 1).into(),
+            );
+            assert_eq!(Balances::free_balance(wallet), 0);
+        });
     }
 }

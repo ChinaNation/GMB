@@ -66,15 +66,6 @@ pub mod pallet {
         },
     }
 
-    // ===== 错误 =====
-    #[pallet::error]
-    pub enum Error<T> {
-        /// AccountId 解码失败
-        AccountDecodeFailed,
-        /// 账户不存在（被 reaped），拒绝发放
-        AccountNotExist,
-    }
-
     // ===== Hooks =====
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
@@ -85,35 +76,37 @@ pub mod pallet {
             let current_year = Self::current_year(n);
             let last_year = Self::last_settled_year();
 
-            // 只在“年度边界区块”触发，且按年度顺序结算，最多结算到制度上限年限
+            // 只在“年度边界区块”触发，且按年度顺序补结算（每次仅推进 1 年），最多结算到制度上限年限
             if per_year > 0
                 && block > 0
                 && block % per_year == 0
-                && current_year == last_year + 1
+                && current_year > last_year
                 && last_year < SHENGBANK_INTEREST_DURATION_YEARS
             {
+                let settling_year = last_year + 1;
                 log::info!(
                     target: "runtime::shengbank",
-                    "省储行利息年度结算开始 | 年度={} | 区块={:?}",
+                    "省储行利息年度结算开始 | 结算年度={} | 当前年度={} | 区块={:?}",
+                    settling_year,
                     current_year,
                     n
                 );
 
                 // 中文注释：执行当年利息发放，并返回读写计数+成功数
-                let (reads, writes, success_count) = Self::mint_interest_for_year(current_year);
+                let (reads, writes, success_count) = Self::mint_interest_for_year(settling_year);
 
                 // 中文注释：制度要求“43个省储行必须全部成功”，否则本年度不推进结算进度
                 let total_count = SHENG_BANK_NODES.len() as u32;
                 if success_count == total_count {
-                    LastSettledYear::<T>::put(current_year);
-                    Self::deposit_event(Event::<T>::ShengBankYearSettled { year: current_year });
+                    LastSettledYear::<T>::put(settling_year);
+                    Self::deposit_event(Event::<T>::ShengBankYearSettled { year: settling_year });
 
                     return T::DbWeight::get().reads_writes(reads + 1, writes + 1);
                 }
 
                 // 中文注释：只要有任一地址发放失败，就记录失败事件并保持 LastSettledYear 不变
                 Self::deposit_event(Event::<T>::ShengBankYearSettlementFailed {
-                    year: current_year,
+                    year: settling_year,
                     success_count,
                     total_count,
                 });
@@ -203,5 +196,179 @@ pub mod pallet {
 
             (reads, writes, success_count)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pallet::*;
+    use codec::Decode;
+    use frame_support::{
+        derive_impl,
+        traits::{OnFinalize, OnInitialize, VariantCountOf},
+    };
+    use frame_system as system;
+    use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+
+    type Block = frame_system::mocking::MockBlock<Test>;
+    type Balance = u128;
+
+    #[frame_support::runtime]
+    mod runtime {
+        #[runtime::runtime]
+        #[runtime::derive(
+            RuntimeCall,
+            RuntimeEvent,
+            RuntimeError,
+            RuntimeOrigin,
+            RuntimeFreezeReason,
+            RuntimeHoldReason,
+            RuntimeSlashReason,
+            RuntimeLockId,
+            RuntimeTask,
+            RuntimeViewFunction
+        )]
+        pub struct Test;
+
+        #[runtime::pallet_index(0)]
+        pub type System = frame_system;
+        #[runtime::pallet_index(1)]
+        pub type Balances = pallet_balances;
+        #[runtime::pallet_index(2)]
+        pub type ShengBankStakeInterest = super;
+    }
+
+    #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
+    impl system::Config for Test {
+        type Block = Block;
+        type AccountId = AccountId32;
+        type AccountData = pallet_balances::AccountData<Balance>;
+        type Lookup = IdentityLookup<Self::AccountId>;
+        type Nonce = u64;
+    }
+
+    impl pallet_balances::Config for Test {
+        type MaxLocks = frame_support::traits::ConstU32<0>;
+        type MaxReserves = frame_support::traits::ConstU32<0>;
+        type ReserveIdentifier = [u8; 8];
+        type Balance = Balance;
+        type RuntimeEvent = RuntimeEvent;
+        type DustRemoval = ();
+        type ExistentialDeposit = frame_support::traits::ConstU128<1>;
+        type AccountStore = System;
+        type WeightInfo = ();
+        type FreezeIdentifier = RuntimeFreezeReason;
+        type MaxFreezes = VariantCountOf<RuntimeFreezeReason>;
+        type RuntimeHoldReason = RuntimeHoldReason;
+        type RuntimeFreezeReason = RuntimeFreezeReason;
+        type DoneSlashHandler = ();
+    }
+
+    frame_support::parameter_types! {
+        pub const BlocksPerYearForTest: u64 = 10;
+    }
+
+    impl Config for Test {
+        type Currency = Balances;
+        type BlocksPerYear = BlocksPerYearForTest;
+    }
+
+    fn new_test_ext() -> sp_io::TestExternalities {
+        let storage = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
+            .expect("frame system genesis storage should build");
+        let mut ext = sp_io::TestExternalities::new(storage);
+        ext.execute_with(|| System::set_block_number(1));
+        ext
+    }
+
+    fn run_to_block(n: u64) {
+        while System::block_number() < n {
+            let b = System::block_number();
+            ShengBankStakeInterest::on_finalize(b);
+            System::on_finalize(b);
+            System::set_block_number(b + 1);
+            System::on_initialize(b + 1);
+            ShengBankStakeInterest::on_initialize(b + 1);
+        }
+    }
+
+    fn shengbank_account(index: usize) -> AccountId32 {
+        AccountId32::decode(
+            &mut &primitives::shengbank_nodes_const::SHENG_BANK_NODES[index].pallet_address[..],
+        )
+            .expect("pallet_address must decode")
+    }
+
+    #[test]
+    fn first_year_should_mint_and_settle() {
+        new_test_ext().execute_with(|| {
+            run_to_block(10);
+            assert_eq!(LastSettledYear::<Test>::get(), 1);
+
+            let first_bank = &primitives::shengbank_nodes_const::SHENG_BANK_NODES[0];
+            let account = shengbank_account(0);
+            let expected = first_bank.stake_amount * 100u128 / 10_000u128;
+            assert_eq!(Balances::free_balance(account), expected);
+
+            let has_settled_event = System::events().iter().any(|r| {
+                matches!(
+                    r.event,
+                    RuntimeEvent::ShengBankStakeInterest(
+                        Event::ShengBankYearSettled { year: 1 }
+                    )
+                )
+            });
+            assert!(has_settled_event);
+        });
+    }
+
+    #[test]
+    fn should_backfill_next_unsettled_year_on_later_boundary() {
+        new_test_ext().execute_with(|| {
+            // 直接跳到第2年边界，验证不会因为 current_year != last+1 而卡死。
+            System::set_block_number(20);
+            ShengBankStakeInterest::on_initialize(20);
+
+            assert_eq!(LastSettledYear::<Test>::get(), 1);
+
+            let first_bank = &primitives::shengbank_nodes_const::SHENG_BANK_NODES[0];
+            let account = shengbank_account(0);
+            let year1 = first_bank.stake_amount * 100u128 / 10_000u128;
+            assert_eq!(Balances::free_balance(account), year1);
+        });
+    }
+
+    #[test]
+    fn second_year_should_use_decayed_rate() {
+        new_test_ext().execute_with(|| {
+            run_to_block(20);
+            assert_eq!(LastSettledYear::<Test>::get(), 2);
+
+            let first_bank = &primitives::shengbank_nodes_const::SHENG_BANK_NODES[0];
+            let account = shengbank_account(0);
+            let year1 = first_bank.stake_amount * 100u128 / 10_000u128;
+            let year2 = first_bank.stake_amount * 99u128 / 10_000u128;
+            assert_eq!(Balances::free_balance(account), year1 + year2);
+        });
+    }
+
+    #[test]
+    fn should_stop_settling_after_duration_years() {
+        new_test_ext().execute_with(|| {
+            LastSettledYear::<Test>::put(primitives::core_const::SHENGBANK_INTEREST_DURATION_YEARS);
+            let account = shengbank_account(0);
+            assert_eq!(Balances::free_balance(account.clone()), 0);
+
+            // current_year = 101（边界块），但因已到年限上限，不应继续发放。
+            System::set_block_number(1010);
+            ShengBankStakeInterest::on_initialize(1010);
+
+            assert_eq!(
+                LastSettledYear::<Test>::get(),
+                primitives::core_const::SHENGBANK_INTEREST_DURATION_YEARS
+            );
+            assert_eq!(Balances::free_balance(account), 0);
+        });
     }
 }
