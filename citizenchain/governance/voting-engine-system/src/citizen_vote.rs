@@ -10,12 +10,10 @@ use crate::{
 
 pub trait CiicEligibility<AccountId> {
     fn is_eligible(ciic: &[u8], who: &AccountId) -> bool;
-    fn eligible_voter_count() -> u64;
     fn verify_and_consume_vote_credential(
         ciic: &[u8],
         who: &AccountId,
         proposal_id: u64,
-        eligible_total: u64,
         nonce: &[u8],
         signature: &[u8],
     ) -> bool;
@@ -26,15 +24,10 @@ impl<AccountId> CiicEligibility<AccountId> for () {
         false
     }
 
-    fn eligible_voter_count() -> u64 {
-        0
-    }
-
     fn verify_and_consume_vote_credential(
         _ciic: &[u8],
         _who: &AccountId,
         _proposal_id: u64,
-        _eligible_total: u64,
         _nonce: &[u8],
         _signature: &[u8],
     ) -> bool {
@@ -55,7 +48,6 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         proposal_id: u64,
         ciic: CiicOf<T>,
-        eligible_total: u64,
         nonce: crate::pallet::VoteNonceOf<T>,
         signature: crate::pallet::VoteSignatureOf<T>,
         approve: bool,
@@ -69,6 +61,10 @@ impl<T: Config> Pallet<T> {
         ensure!(
             proposal.stage == STAGE_CITIZEN,
             Error::<T>::InvalidProposalStage
+        );
+        ensure!(
+            proposal.citizen_eligible_total > 0,
+            Error::<T>::CitizenEligibleTotalNotSet
         );
         ensure!(!ciic.is_empty(), Error::<T>::EmptyCiic);
         ensure!(
@@ -86,23 +82,11 @@ impl<T: Config> Pallet<T> {
                 ciic.as_slice(),
                 &who,
                 proposal_id,
-                eligible_total,
                 nonce.as_slice(),
                 signature.as_slice()
             ),
             Error::<T>::InvalidCiicVoteCredential
         );
-
-        // 中文注释：同一提案仅允许首票写入可投票总人数，后续投票不可再修改。
-        if proposal.citizen_eligible_total == 0 {
-            Proposals::<T>::try_mutate(proposal_id, |maybe| -> DispatchResult {
-                let p = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
-                if p.citizen_eligible_total == 0 {
-                    p.citizen_eligible_total = eligible_total;
-                }
-                Ok(())
-            })?;
-        }
 
         CitizenVotesByCiic::<T>::insert(proposal_id, ciic_hash, approve);
         CitizenTallies::<T>::mutate(proposal_id, |tally| {

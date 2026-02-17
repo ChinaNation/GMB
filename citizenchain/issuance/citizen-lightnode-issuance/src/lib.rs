@@ -6,7 +6,7 @@ pub use pallet::*;
 pub mod pallet {
     use ciic_code_auth::OnCiicBound;
     use frame_support::{pallet_prelude::*, traits::Currency, Blake2_128Concat};
-    use sp_runtime::traits::SaturatedConversion;
+    use sp_runtime::traits::{SaturatedConversion, Zero};
 
     use primitives::citizen_const::{
         CITIZEN_LIGHTNODE_HIGH_REWARD, CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT,
@@ -85,11 +85,14 @@ pub mod pallet {
     impl<T: Config> OnCiicBound<T::AccountId, T::Hash> for Pallet<T> {
         fn on_ciic_bound(who: &T::AccountId, ciic_hash: T::Hash) {
             let reward = Self::try_issue_certification_reward(who, ciic_hash);
-            Self::deposit_event(Event::<T>::CertificationRewardIssued {
-                who: who.clone(),
-                ciic_hash,
-                reward,
-            });
+            // 中文注释：仅在实际发放奖励时发事件，避免 reward=0 造成“已发奖”误解。
+            if !reward.is_zero() {
+                Self::deposit_event(Event::<T>::CertificationRewardIssued {
+                    who: who.clone(),
+                    ciic_hash,
+                    reward,
+                });
+            }
         }
     }
 }
@@ -102,7 +105,10 @@ mod tests {
         traits::{ConstU128, ConstU32, VariantCountOf},
     };
     use frame_system as system;
-    use primitives::citizen_const::{CITIZEN_LIGHTNODE_HIGH_REWARD, CITIZEN_LIGHTNODE_MAX_COUNT};
+    use primitives::citizen_const::{
+        CITIZEN_LIGHTNODE_HIGH_REWARD, CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT,
+        CITIZEN_LIGHTNODE_MAX_COUNT, CITIZEN_LIGHTNODE_NORMAL_REWARD,
+    };
     use sp_runtime::{
         traits::{Hash, IdentityLookup},
         BuildStorage,
@@ -223,6 +229,25 @@ mod tests {
 
             assert_eq!(Balances::free_balance(1), CITIZEN_LIGHTNODE_HIGH_REWARD);
             assert_eq!(RewardedCount::<Test>::get(), 1);
+        });
+    }
+
+    #[test]
+    fn boundary_switches_to_normal_reward_at_high_reward_count() {
+        new_test_ext().execute_with(|| {
+            RewardedCount::<Test>::put(CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT);
+            let ciic_hash = <Test as frame_system::Config>::Hashing::hash(b"ciic-boundary");
+
+            <CitizenLightnodeIssuance as ciic_code_auth::OnCiicBound<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::on_ciic_bound(&1, ciic_hash);
+
+            assert_eq!(Balances::free_balance(1), CITIZEN_LIGHTNODE_NORMAL_REWARD);
+            assert_eq!(
+                RewardedCount::<Test>::get(),
+                CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT.saturating_add(1)
+            );
         });
     }
 }

@@ -10,7 +10,6 @@ pub use pallet::*;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::dispatch::DispatchResult;
 use scale_info::TypeInfo;
-use sp_runtime::traits::{SaturatedConversion, Saturating};
 use sp_runtime::DispatchError;
 
 pub type InstitutionPalletId = [u8; 8];
@@ -26,8 +25,54 @@ pub const STATUS_VOTING: u8 = 0;
 pub const STATUS_PASSED: u8 = 1;
 pub const STATUS_REJECTED: u8 = 2;
 
-pub trait JointVoteEngine {
-    fn create_joint_proposal() -> Result<u64, DispatchError>;
+/// 中文注释：事项模块接入联合投票时，统一由投票引擎创建提案并写入人口快照。
+pub trait JointVoteEngine<AccountId> {
+    fn create_joint_proposal(
+        who: AccountId,
+        eligible_total: u64,
+        snapshot_nonce: &[u8],
+        snapshot_signature: &[u8],
+    ) -> Result<u64, DispatchError>;
+}
+
+/// 中文注释：事项模块接入内部投票时，统一由投票引擎创建提案并返回真实提案ID。
+pub trait InternalVoteEngine<AccountId> {
+    fn create_internal_proposal(
+        who: AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+    ) -> Result<u64, DispatchError>;
+}
+
+impl<AccountId> InternalVoteEngine<AccountId> for () {
+    fn create_internal_proposal(
+        _who: AccountId,
+        _org: u8,
+        _institution: InstitutionPalletId,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other("InternalVoteEngineNotConfigured"))
+    }
+}
+
+/// 中文注释：公民总人口快照验签接口（由 runtime 对接 CIIC 系统）。
+pub trait PopulationSnapshotVerifier<AccountId, Nonce, Signature> {
+    fn verify_population_snapshot(
+        who: &AccountId,
+        eligible_total: u64,
+        nonce: &Nonce,
+        signature: &Signature,
+    ) -> bool;
+}
+
+impl<AccountId, Nonce, Signature> PopulationSnapshotVerifier<AccountId, Nonce, Signature> for () {
+    fn verify_population_snapshot(
+        _who: &AccountId,
+        _eligible_total: u64,
+        _nonce: &Nonce,
+        _signature: &Signature,
+    ) -> bool {
+        false
+    }
 }
 
 pub trait JointVoteResultCallback {
@@ -37,6 +82,17 @@ pub trait JointVoteResultCallback {
 impl JointVoteResultCallback for () {
     fn on_joint_vote_finalized(_vote_proposal_id: u64, _approved: bool) -> DispatchResult {
         Ok(())
+    }
+}
+
+/// 中文注释：内部管理员动态提供器（可由其他治理模块提供最新管理员集合）。
+pub trait InternalAdminProvider<AccountId> {
+    fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId) -> bool;
+}
+
+impl<AccountId> InternalAdminProvider<AccountId> for () {
+    fn is_internal_admin(_org: u8, _institution: InstitutionPalletId, _who: &AccountId) -> bool {
+        false
     }
 }
 
@@ -97,8 +153,14 @@ pub mod pallet {
         type MaxVoteSignatureLength: Get<u32>;
 
         type CiicEligibility: CiicEligibility<Self::AccountId>;
+        type PopulationSnapshotVerifier: PopulationSnapshotVerifier<
+            Self::AccountId,
+            VoteNonceOf<Self>,
+            VoteSignatureOf<Self>,
+        >;
 
         type JointVoteResultCallback: JointVoteResultCallback;
+        type InternalAdminProvider: InternalAdminProvider<Self::AccountId>;
     }
 
     pub type CiicOf<T> = BoundedVec<u8, <T as Config>::MaxCiicLength>;
@@ -155,6 +217,12 @@ pub mod pallet {
     #[pallet::getter(fn citizen_tally)]
     pub type CitizenTallies<T> = StorageMap<_, Blake2_128Concat, u64, VoteCountU64, ValueQuery>;
 
+    /// 中文注释：总人口快照 nonce 防重放（全局维度，防止跨提案重放）。
+    #[pallet::storage]
+    #[pallet::getter(fn used_population_snapshot_nonce)]
+    pub type UsedPopulationSnapshotNonce<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -206,6 +274,8 @@ pub mod pallet {
         CiicNotEligible,
         InvalidCiicVoteCredential,
         EmptyCiic,
+        CitizenEligibleTotalNotSet,
+        InvalidPopulationSnapshot,
         ProposalAlreadyFinalized,
     }
 
@@ -219,14 +289,22 @@ pub mod pallet {
             institution: InstitutionPalletId,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_create_internal_proposal(who, org, institution)
+            Self::do_create_internal_proposal(who, org, institution)?;
+            Ok(())
         }
 
         #[pallet::call_index(1)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(2, 2))]
-        pub fn create_joint_proposal(origin: OriginFor<T>) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            Self::do_create_joint_proposal(who)
+        #[pallet::weight(T::DbWeight::get().reads_writes(0, 0))]
+        pub fn create_joint_proposal(
+            origin: OriginFor<T>,
+            _eligible_total: u64,
+            _snapshot_nonce: VoteNonceOf<T>,
+            _snapshot_signature: VoteSignatureOf<T>,
+        ) -> DispatchResult {
+            let _ = ensure_signed(origin)?;
+            // 中文注释：联合投票提案只能由事项模块通过 JointVoteEngine trait 创建；
+            // 禁止外部直接调用，避免产生“无事项映射”的悬空联合提案。
+            Err(Error::<T>::NoPermission.into())
         }
 
         #[pallet::call_index(2)]
@@ -258,21 +336,12 @@ pub mod pallet {
             origin: OriginFor<T>,
             proposal_id: u64,
             ciic: CiicOf<T>,
-            eligible_total: u64,
             nonce: VoteNonceOf<T>,
             signature: VoteSignatureOf<T>,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_citizen_vote(
-                who,
-                proposal_id,
-                ciic,
-                eligible_total,
-                nonce,
-                signature,
-                approve,
-            )
+            Self::do_citizen_vote(who, proposal_id, ciic, nonce, signature, approve)
         }
 
         #[pallet::call_index(5)]
@@ -347,33 +416,37 @@ pub mod pallet {
     }
 }
 
-impl<T: pallet::Config> JointVoteEngine for pallet::Pallet<T> {
-    fn create_joint_proposal() -> Result<u64, DispatchError> {
-        let id = pallet::Pallet::<T>::allocate_proposal_id();
-        let now = <frame_system::Pallet<T>>::block_number();
-        let duration: frame_system::pallet_prelude::BlockNumberFor<T> =
-            (primitives::count_const::VOTING_DURATION_BLOCKS as u64).saturated_into();
-        let end = now.saturating_add(duration);
+impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
+    fn create_joint_proposal(
+        who: T::AccountId,
+        eligible_total: u64,
+        snapshot_nonce: &[u8],
+        snapshot_signature: &[u8],
+    ) -> Result<u64, DispatchError> {
+        let snapshot_nonce: pallet::VoteNonceOf<T> = snapshot_nonce
+            .to_vec()
+            .try_into()
+            .map_err(|_| pallet::Error::<T>::InvalidPopulationSnapshot)?;
+        let snapshot_signature: pallet::VoteSignatureOf<T> = snapshot_signature
+            .to_vec()
+            .try_into()
+            .map_err(|_| pallet::Error::<T>::InvalidPopulationSnapshot)?;
+        pallet::Pallet::<T>::do_create_joint_proposal(
+            who,
+            eligible_total,
+            snapshot_nonce,
+            snapshot_signature,
+        )
+    }
+}
 
-        let proposal = Proposal {
-            kind: PROPOSAL_KIND_JOINT,
-            stage: STAGE_JOINT,
-            status: STATUS_VOTING,
-            internal_org: None,
-            internal_institution: None,
-            start: now,
-            end,
-            citizen_eligible_total: 0,
-        };
-
-        pallet::Proposals::<T>::insert(id, proposal);
-        pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::ProposalCreated {
-            proposal_id: id,
-            kind: PROPOSAL_KIND_JOINT,
-            stage: STAGE_JOINT,
-            end,
-        });
-        Ok(id)
+impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
+    fn create_internal_proposal(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+    ) -> Result<u64, DispatchError> {
+        pallet::Pallet::<T>::do_create_internal_proposal(who, org, institution)
     }
 }
 
@@ -432,36 +505,51 @@ mod tests {
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
         type CiicEligibility = TestCiicEligibility;
+        type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
+        type InternalAdminProvider = ();
     }
 
     thread_local! {
-        static USED_VOTE_NONCES: RefCell<BTreeSet<Vec<u8>>> = RefCell::new(BTreeSet::new());
+        static USED_VOTE_NONCES: RefCell<BTreeSet<(u64, Vec<u8>, Vec<u8>)>> = RefCell::new(BTreeSet::new());
     }
 
     pub struct TestCiicEligibility;
+    pub struct TestPopulationSnapshotVerifier;
+
+    impl
+        PopulationSnapshotVerifier<
+            AccountId32,
+            pallet::VoteNonceOf<Test>,
+            pallet::VoteSignatureOf<Test>,
+        > for TestPopulationSnapshotVerifier
+    {
+        fn verify_population_snapshot(
+            _who: &AccountId32,
+            eligible_total: u64,
+            nonce: &pallet::VoteNonceOf<Test>,
+            signature: &pallet::VoteSignatureOf<Test>,
+        ) -> bool {
+            eligible_total > 0 && !nonce.is_empty() && signature.as_slice() == b"snapshot-ok"
+        }
+    }
 
     impl CiicEligibility<AccountId32> for TestCiicEligibility {
         fn is_eligible(ciic: &[u8], who: &AccountId32) -> bool {
             ciic == b"ciic-ok" && who == &nrc_admin(0)
         }
 
-        fn eligible_voter_count() -> u64 {
-            10
-        }
-
         fn verify_and_consume_vote_credential(
             ciic: &[u8],
             who: &AccountId32,
-            _proposal_id: u64,
-            _eligible_total: u64,
+            proposal_id: u64,
             nonce: &[u8],
             signature: &[u8],
         ) -> bool {
             if !Self::is_eligible(ciic, who) || signature != b"vote-ok" || nonce.is_empty() {
                 return false;
             }
-            let key = nonce.to_vec();
+            let key = (proposal_id, ciic.to_vec(), nonce.to_vec());
             USED_VOTE_NONCES.with(|set| {
                 let mut set = set.borrow_mut();
                 if set.contains(&key) {
@@ -536,6 +624,20 @@ mod tests {
 
     fn vote_sig_bad() -> pallet::VoteSignatureOf<Test> {
         b"bad".to_vec().try_into().expect("signature should fit")
+    }
+
+    fn snapshot_nonce_ok() -> pallet::VoteNonceOf<Test> {
+        b"snap-nonce"
+            .to_vec()
+            .try_into()
+            .expect("snapshot nonce should fit")
+    }
+
+    fn snapshot_sig_ok() -> pallet::VoteSignatureOf<Test> {
+        b"snapshot-ok"
+            .to_vec()
+            .try_into()
+            .expect("snapshot signature should fit")
     }
 
     fn insert_citizen_proposal(proposal_id: u64, eligible_total: u64, end: u64) {
@@ -672,29 +774,68 @@ mod tests {
     #[test]
     fn joint_proposal_must_be_created_by_nrc_admin() {
         new_test_ext().execute_with(|| {
+            // 中文注释：外部 extrinsic 入口已禁用，统一要求事项模块通过 trait 创建联合投票提案。
+            assert_noop!(
+                VotingEngineSystem::create_joint_proposal(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    10,
+                    snapshot_nonce_ok(),
+                    snapshot_sig_ok()
+                ),
+                pallet::Error::<Test>::NoPermission
+            );
+
             let outsider = AccountId32::new([9u8; 32]);
-            assert_noop!(
-                VotingEngineSystem::create_joint_proposal(RuntimeOrigin::signed(outsider)),
-                pallet::Error::<Test>::NoPermission
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    outsider,
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+                .is_err()
             );
 
-            assert_noop!(
-                VotingEngineSystem::create_joint_proposal(RuntimeOrigin::signed(prc_admin(0))),
-                pallet::Error::<Test>::NoPermission
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    prc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+                .is_err()
             );
 
-            assert_ok!(VotingEngineSystem::create_joint_proposal(
-                RuntimeOrigin::signed(nrc_admin(0))
-            ));
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+            );
         });
     }
 
     #[test]
     fn joint_vote_submission_must_be_by_nrc_multisig() {
         new_test_ext().execute_with(|| {
-            assert_ok!(VotingEngineSystem::create_joint_proposal(
-                RuntimeOrigin::signed(nrc_admin(0))
-            ));
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+            );
 
             assert_noop!(
                 VotingEngineSystem::submit_joint_institution_vote(
@@ -716,6 +857,34 @@ mod tests {
     }
 
     #[test]
+    fn population_snapshot_nonce_cannot_be_reused_across_proposals() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+            );
+
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    11,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+                .is_err()
+            );
+        });
+    }
+
+    #[test]
     fn citizen_vote_rejects_invalid_signature_and_allows_valid_vote() {
         new_test_ext().execute_with(|| {
             insert_citizen_proposal(0, 10, 100);
@@ -725,7 +894,6 @@ mod tests {
                     RuntimeOrigin::signed(nrc_admin(0)),
                     0,
                     ciic_ok(),
-                    10,
                     vote_nonce("n-1"),
                     vote_sig_bad(),
                     true
@@ -737,7 +905,6 @@ mod tests {
                 RuntimeOrigin::signed(nrc_admin(0)),
                 0,
                 ciic_ok(),
-                10,
                 vote_nonce("n-2"),
                 vote_sig_ok(),
                 true
@@ -755,7 +922,6 @@ mod tests {
                 RuntimeOrigin::signed(nrc_admin(0)),
                 0,
                 ciic_ok(),
-                10,
                 vote_nonce("n-1"),
                 vote_sig_ok(),
                 true
@@ -766,7 +932,6 @@ mod tests {
                     RuntimeOrigin::signed(nrc_admin(0)),
                     0,
                     ciic_ok(),
-                    10,
                     vote_nonce("n-2"),
                     vote_sig_ok(),
                     false
@@ -777,7 +942,7 @@ mod tests {
     }
 
     #[test]
-    fn citizen_vote_credential_nonce_is_replay_protected_per_proposal() {
+    fn citizen_vote_credential_nonce_is_replay_protected_per_proposal_and_ciic() {
         new_test_ext().execute_with(|| {
             insert_citizen_proposal(0, 10, 100);
             insert_citizen_proposal(1, 10, 100);
@@ -786,66 +951,37 @@ mod tests {
                 RuntimeOrigin::signed(nrc_admin(0)),
                 0,
                 ciic_ok(),
-                10,
                 vote_nonce("same"),
                 vote_sig_ok(),
                 true
             ));
 
-            assert_noop!(
-                VotingEngineSystem::citizen_vote(
-                    RuntimeOrigin::signed(nrc_admin(0)),
-                    1,
-                    ciic_ok(),
-                    10,
-                    vote_nonce("same"),
-                    vote_sig_ok(),
-                    true
-                ),
-                pallet::Error::<Test>::InvalidCiicVoteCredential
-            );
+            assert_ok!(VotingEngineSystem::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                1,
+                ciic_ok(),
+                vote_nonce("same"),
+                vote_sig_ok(),
+                true
+            ));
         });
     }
 
     #[test]
-    fn citizen_eligible_total_is_locked_by_first_vote_of_same_proposal() {
+    fn citizen_vote_rejects_when_eligible_total_not_set_in_proposal() {
         new_test_ext().execute_with(|| {
             insert_citizen_proposal(0, 0, 100);
 
-            assert_ok!(VotingEngineSystem::citizen_vote(
-                RuntimeOrigin::signed(nrc_admin(0)),
-                0,
-                ciic_ok(),
-                1234,
-                vote_nonce("x-1"),
-                vote_sig_ok(),
-                true
-            ));
-            assert_eq!(
-                Proposals::<Test>::get(0)
-                    .expect("proposal should exist")
-                    .citizen_eligible_total,
-                1234
-            );
-
-            // 同提案后续投票（即便传入不同 eligible_total）也不会再改
             assert_noop!(
                 VotingEngineSystem::citizen_vote(
                     RuntimeOrigin::signed(nrc_admin(0)),
                     0,
                     ciic_ok(),
-                    9999,
-                    vote_nonce("x-2"),
+                    vote_nonce("x-1"),
                     vote_sig_ok(),
                     true
                 ),
-                pallet::Error::<Test>::AlreadyVoted
-            );
-            assert_eq!(
-                Proposals::<Test>::get(0)
-                    .expect("proposal should exist")
-                    .citizen_eligible_total,
-                1234
+                pallet::Error::<Test>::CitizenEligibleTotalNotSet
             );
         });
     }

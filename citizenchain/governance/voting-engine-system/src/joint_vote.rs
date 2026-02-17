@@ -2,6 +2,7 @@
 
 use codec::Encode;
 use frame_support::{ensure, pallet_prelude::DispatchResult};
+use sp_runtime::traits::Hash;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 
 use primitives::count_const::{
@@ -16,8 +17,12 @@ use primitives::shengbank_nodes_const::{
 };
 
 use crate::{
-    pallet::{Config, Error, Event, JointTallies, JointVotesByInstitution, Pallet, Proposals},
-    InstitutionPalletId, Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
+    pallet::{
+        Config, Error, Event, JointTallies, JointVotesByInstitution, Pallet, Proposals,
+        UsedPopulationSnapshotNonce,
+    },
+    InstitutionPalletId, InternalAdminProvider, PopulationSnapshotVerifier, Proposal,
+    PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
 
 fn str_to_pallet_id(s: &str) -> Option<InstitutionPalletId> {
@@ -43,6 +48,20 @@ fn is_nrc_admin_account(who: &[u8; 32]) -> bool {
         .find(|n| n.pallet_id == "nrcgch01")
         .map(|n| n.admins.iter().any(|admin| admin == who))
         .unwrap_or(false)
+}
+
+fn is_nrc_admin<T: Config>(who: &T::AccountId) -> bool {
+    // 中文注释：优先走动态管理员来源，支持管理员变更后立即生效。
+    if T::InternalAdminProvider::is_internal_admin(crate::internal_vote::ORG_NRC, nrc_pallet_id_bytes(), who) {
+        return true;
+    }
+    let who_bytes = who.encode();
+    if who_bytes.len() != 32 {
+        return false;
+    }
+    let mut who_arr = [0u8; 32];
+    who_arr.copy_from_slice(&who_bytes);
+    is_nrc_admin_account(&who_arr)
 }
 
 fn is_nrc_multisig_account(who: &[u8; 32]) -> bool {
@@ -111,16 +130,41 @@ impl<T: Config> Pallet<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
-    /// 创建联合投票提案：独立计算本阶段 30 天截止区块。
-    pub(crate) fn do_create_joint_proposal(who: T::AccountId) -> DispatchResult {
-        let who_arr: [u8; 32] = who
-            .encode()
-            .as_slice()
-            .try_into()
-            .map_err(|_| Error::<T>::NoPermission)?;
-        ensure!(is_nrc_admin_account(&who_arr), Error::<T>::NoPermission);
+    /// 创建联合投票提案：独立计算本阶段 30 天截止区块，并在创建时锁定公民总人口快照。
+    pub(crate) fn do_create_joint_proposal(
+        who: T::AccountId,
+        eligible_total: u64,
+        snapshot_nonce: crate::pallet::VoteNonceOf<T>,
+        snapshot_signature: crate::pallet::VoteSignatureOf<T>,
+    ) -> Result<u64, sp_runtime::DispatchError> {
+        ensure!(is_nrc_admin::<T>(&who), Error::<T>::NoPermission);
+        ensure!(eligible_total > 0, Error::<T>::CitizenEligibleTotalNotSet);
+        ensure!(
+            !snapshot_nonce.is_empty(),
+            Error::<T>::InvalidPopulationSnapshot
+        );
+        ensure!(
+            !snapshot_signature.is_empty(),
+            Error::<T>::InvalidPopulationSnapshot
+        );
 
         let id = Self::allocate_proposal_id();
+        let snapshot_nonce_hash = T::Hashing::hash(snapshot_nonce.as_slice());
+        ensure!(
+            !UsedPopulationSnapshotNonce::<T>::get(snapshot_nonce_hash),
+            Error::<T>::InvalidPopulationSnapshot
+        );
+        ensure!(
+            T::PopulationSnapshotVerifier::verify_population_snapshot(
+                &who,
+                eligible_total,
+                &snapshot_nonce,
+                &snapshot_signature
+            ),
+            Error::<T>::InvalidPopulationSnapshot
+        );
+        UsedPopulationSnapshotNonce::<T>::insert(snapshot_nonce_hash, true);
+
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::joint_stage_duration());
 
@@ -132,7 +176,7 @@ impl<T: Config> Pallet<T> {
             internal_institution: None,
             start: now,
             end,
-            citizen_eligible_total: 0,
+            citizen_eligible_total: eligible_total,
         };
 
         Proposals::<T>::insert(id, proposal);
@@ -142,7 +186,7 @@ impl<T: Config> Pallet<T> {
             stage: STAGE_JOINT,
             end,
         });
-        Ok(())
+        Ok(id)
     }
 
     pub(crate) fn do_submit_joint_institution_vote(
@@ -234,18 +278,18 @@ impl<T: Config> Pallet<T> {
     }
 
     /// 联合投票未全票通过时，进入公民投票并重新计算公民投票阶段的 30 天截止区块。
+    /// 中文注释：公民总人口分母必须由事项模块在提案创建时写入，这里只做阶段切换，绝不重置。
     fn advance_joint_to_citizen(proposal_id: u64) -> DispatchResult {
+        let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
         let now = <frame_system::Pallet<T>>::block_number();
         let citizen_end = now.saturating_add(Self::citizen_stage_duration());
-        // 中文注释：公民投票分母由“该提案首票”实时从 CIIC 系统带入并锁定。
-        let eligible_total = 0u64;
+        let eligible_total = proposal.citizen_eligible_total;
 
         Proposals::<T>::try_mutate(proposal_id, |maybe| -> DispatchResult {
             let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
             proposal.stage = crate::STAGE_CITIZEN;
             proposal.start = now;
             proposal.end = citizen_end;
-            proposal.citizen_eligible_total = eligible_total;
             Ok(())
         })?;
 

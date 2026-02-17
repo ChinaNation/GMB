@@ -39,7 +39,6 @@ pub trait CiicVoteVerifier<AccountId, Hash, Nonce, Signature> {
         account: &AccountId,
         ciic_hash: Hash,
         proposal_id: u64,
-        eligible_total: u64,
         nonce: &Nonce,
         signature: &Signature,
     ) -> bool;
@@ -50,7 +49,6 @@ impl<AccountId, Hash, Nonce, Signature> CiicVoteVerifier<AccountId, Hash, Nonce,
         _account: &AccountId,
         _ciic_hash: Hash,
         _proposal_id: u64,
-        _eligible_total: u64,
         _nonce: &Nonce,
         _signature: &Signature,
     ) -> bool {
@@ -68,12 +66,10 @@ impl<AccountId, Hash> OnCiicBound<AccountId, Hash> for () {}
 /// 中文注释：给投票模块使用的统一资格接口。
 pub trait CiicEligibilityProvider<AccountId> {
     fn is_eligible(ciic: &[u8], who: &AccountId) -> bool;
-    fn eligible_voter_count() -> u64;
     fn verify_and_consume_vote_credential(
         ciic: &[u8],
         who: &AccountId,
         proposal_id: u64,
-        eligible_total: u64,
         nonce: &[u8],
         signature: &[u8],
     ) -> bool;
@@ -84,7 +80,7 @@ pub mod pallet {
     use super::*;
     use frame_support::{pallet_prelude::*, Blake2_128Concat};
     use frame_system::pallet_prelude::*;
-    use sp_runtime::traits::{Hash, SaturatedConversion};
+    use sp_runtime::traits::Hash;
 
     pub type CiicOf<T> = BoundedVec<u8, <T as Config>::MaxCiicLength>;
     pub type NonceOf<T> = BoundedVec<u8, <T as Config>::MaxCredentialNonceLength>;
@@ -123,9 +119,6 @@ pub mod pallet {
 
         /// 中文注释：绑定后回调到发行模块发放认证奖励。
         type OnCiicBound: OnCiicBound<Self::AccountId, Self::Hash>;
-
-        /// 中文注释：可投票公民总人数（由外部系统或治理配置提供）。
-        type EligibleVoterCount: Get<u64>;
     }
 
     #[pallet::pallet]
@@ -152,10 +145,11 @@ pub mod pallet {
     pub type UsedCredentialNonce<T: Config> =
         StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
-    /// 中文注释：公民投票验签 nonce（哈希）防重放。
+    /// 中文注释：公民投票验签 nonce（哈希）防重放（提案+身份+nonce 三元维度）。
     #[pallet::storage]
     #[pallet::getter(fn used_vote_nonce)]
-    pub type UsedVoteNonce<T: Config> = StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
+    pub type UsedVoteNonce<T: Config> =
+        StorageMap<_, Blake2_128Concat, (u64, T::Hash, T::Hash), bool, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -278,20 +272,10 @@ pub mod pallet {
             Self::is_ciic_bound_to(ciic_hash, who)
         }
 
-        fn eligible_voter_count() -> u64 {
-            let configured = T::EligibleVoterCount::get().saturated_into();
-            if configured == 0 {
-                BoundCount::<T>::get()
-            } else {
-                configured
-            }
-        }
-
         fn verify_and_consume_vote_credential(
             ciic: &[u8],
             who: &T::AccountId,
             proposal_id: u64,
-            eligible_total: u64,
             nonce: &[u8],
             signature: &[u8],
         ) -> bool {
@@ -305,7 +289,8 @@ pub mod pallet {
             }
 
             let nonce_hash = T::Hashing::hash(nonce);
-            if UsedVoteNonce::<T>::get(nonce_hash) {
+            let vote_nonce_key = (proposal_id, ciic_hash, nonce_hash);
+            if UsedVoteNonce::<T>::get(vote_nonce_key) {
                 return false;
             }
 
@@ -322,14 +307,13 @@ pub mod pallet {
                 who,
                 ciic_hash,
                 proposal_id,
-                eligible_total,
                 &nonce_bounded,
                 &signature_bounded,
             ) {
                 return false;
             }
 
-            UsedVoteNonce::<T>::insert(nonce_hash, true);
+            UsedVoteNonce::<T>::insert(vote_nonce_key, true);
             true
         }
     }
@@ -397,7 +381,6 @@ mod tests {
             _account: &u64,
             _ciic_hash: <Test as frame_system::Config>::Hash,
             _proposal_id: u64,
-            _eligible_total: u64,
             _nonce: &NonceOf<Test>,
             signature: &SignatureOf<Test>,
         ) -> bool {
@@ -409,7 +392,6 @@ mod tests {
         pub const MaxCiicLength: u32 = 64;
         pub const MaxCredentialNonceLength: u32 = 64;
         pub const MaxCredentialSignatureLength: u32 = 64;
-        pub const EligibleVoterCount: u64 = 0;
     }
 
     impl Config for Test {
@@ -420,7 +402,6 @@ mod tests {
         type CiicVerifier = TestCiicVerifier;
         type CiicVoteVerifier = TestCiicVoteVerifier;
         type OnCiicBound = ();
-        type EligibleVoterCount = EligibleVoterCount;
     }
 
     fn new_test_ext() -> sp_io::TestExternalities {
@@ -516,7 +497,7 @@ mod tests {
     }
 
     #[test]
-    fn vote_credential_nonce_replay_is_rejected() {
+    fn vote_credential_nonce_replay_is_rejected_per_proposal() {
         new_test_ext().execute_with(|| {
             assert_ok!(CiicCodeAuth::bind_ciic(
                 RuntimeOrigin::signed(1),
@@ -529,7 +510,6 @@ mod tests {
                     b"ciic-vote",
                     &1,
                     100,
-                    123,
                     b"vote-nonce",
                     b"vote-ok"
                 )
@@ -538,8 +518,16 @@ mod tests {
                 !<Pallet<Test> as CiicEligibilityProvider<u64>>::verify_and_consume_vote_credential(
                     b"ciic-vote",
                     &1,
+                    100,
+                    b"vote-nonce",
+                    b"vote-ok"
+                )
+            );
+            assert!(
+                <Pallet<Test> as CiicEligibilityProvider<u64>>::verify_and_consume_vote_credential(
+                    b"ciic-vote",
+                    &1,
                     101,
-                    456,
                     b"vote-nonce",
                     b"vote-ok"
                 )

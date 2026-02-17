@@ -64,6 +64,8 @@ onchain-transaction-fee = { path = "../transaction/onchain-transaction-pow", def
 resolution-issuance-iss = { path = "../issuance/resolution-issuance-iss", default-features = false }
 resolution-issuance-gov = { path = "../governance/resolution-issuance-gov", default-features = false }
 voting-engine-system = { path = "../governance/voting-engine-system", default-features = false }
+admins-origin-gov = { path = "../governance/admins-origin-gov", default-features = false }
+runtime-root-upgrade = { path = "../governance/runtime-root-upgrade", default-features = false }
 
 [build-dependencies]
 substrate-wasm-builder = { optional = true, workspace = true, default-features = true }
@@ -89,6 +91,8 @@ std = [
 	"resolution-issuance-iss/std",
 	"resolution-issuance-gov/std",
 	"voting-engine-system/std",
+	"admins-origin-gov/std",
+	"runtime-root-upgrade/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
 	"pallet-transaction-payment/std",
