@@ -1,0 +1,22 @@
+[package]
+name = "fcrcnode-desktop-shell"
+version = "0.1.0"
+description = "FCRCNode desktop shell"
+authors = ["voyager_rhett <chinanation@icloud.com>"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png"] }
+qrcode = "0.14"
+hex = "0.4"
+schnorrkel = "0.11"
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

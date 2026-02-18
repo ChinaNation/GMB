@@ -3640,6 +3640,7 @@ dependencies = [
  "frame-system-rpc-runtime-api",
  "frame-try-runtime",
  "fullnode-pow-reward",
+ "offchain-transaction-fee",
  "onchain-transaction-fee",
  "pallet-balances",
  "pallet-timestamp",
@@ -3647,6 +3648,7 @@ dependencies = [
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
  "primitives",
+ "resolution-destro-gov",
  "resolution-issuance-gov",
  "resolution-issuance-iss",
  "runtime-root-upgrade",
@@ -5993,10 +5995,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "new-sheng-node"
-version = "0.0.1"
-
-[[package]]
 name = "nix"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6222,6 +6220,18 @@ dependencies = [
 [[package]]
 name = "offchain-transaction-fee"
 version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+ "voting-engine-system",
+]
 
 [[package]]
 name = "oid-registry"
@@ -8054,6 +8064,18 @@ checksum = "a96887878f22d7bad8a3b6dc5b7440e0ada9a245242924394987b21cf2210a4c"
 [[package]]
 name = "resolution-destro-gov"
 version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+ "voting-engine-system",
+]
 
 [[package]]
 name = "resolution-issuance-gov"

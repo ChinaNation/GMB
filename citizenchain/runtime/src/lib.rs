@@ -204,6 +204,10 @@ mod runtime {
     #[runtime::pallet_index(3)]
     pub type TransactionPayment = pallet_transaction_payment;
 
+    // 链下交易手续费与清算上链模块
+    #[runtime::pallet_index(4)]
+    pub type OffchainTransactionFee = offchain_transaction_fee;
+
     // 省储行质押利息模块：按年度给固定省储行账户发放质押利息
     #[runtime::pallet_index(5)]
     pub type ShengBankStakeInterest = shengbank_stake_interest;
@@ -239,4 +243,8 @@ mod runtime {
     // 运行时升级治理模块：提案与联合投票通过后触发 set_code。
     #[runtime::pallet_index(13)]
     pub type RuntimeRootUpgrade = runtime_root_upgrade;
+
+    // 决议销毁治理模块：本机构内部投票通过后销毁本机构交易地址余额
+    #[runtime::pallet_index(14)]
+    pub type ResolutionDestroGov = resolution_destro_gov;
 }

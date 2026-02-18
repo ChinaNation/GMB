@@ -7,4 +7,9 @@ repository.workspace = true  #项目仓库
 license = "MIT"        # 授权协议 MIT
 
 [dependencies]
-# 可能依赖 actix-web 或 tokio
+axum = "0.7"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

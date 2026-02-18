@@ -38,22 +38,37 @@ pub trait CallAmount<AccountId, Call, Balance> {
     fn amount(who: &AccountId, call: &Call) -> AmountExtractResult<Balance>;
 }
 
+/// 可选扣费来源：
+/// - None：沿用默认交易提交者扣费
+/// - Some(account)：从指定账户扣费
+pub trait CallFeePayer<AccountId, Call> {
+    fn fee_payer(who: &AccountId, call: &Call) -> Option<AccountId>;
+}
+
+impl<AccountId, Call> CallFeePayer<AccountId, Call> for () {
+    fn fee_payer(_who: &AccountId, _call: &Call) -> Option<AccountId> {
+        None
+    }
+}
+
 /// 链上 PoW 手续费收取适配器：
 /// - 手续费按交易金额 `ONCHAIN_FEE_RATE` 计算
 /// - 单笔最低 `ONCHAIN_MIN_FEE`
 /// - 具体分配交给 `PowOnchainFeeRouter`
-pub struct PowOnchainChargeAdapter<Currency, Router, AmountExtractor>(
-    PhantomData<(Currency, Router, AmountExtractor)>,
+pub struct PowOnchainChargeAdapter<Currency, Router, AmountExtractor, FeePayerExtractor>(
+    PhantomData<(Currency, Router, AmountExtractor, FeePayerExtractor)>,
 );
 
-impl<T, Currency, Router, AmountExtractor> OnChargeTransaction<T>
-    for PowOnchainChargeAdapter<Currency, Router, AmountExtractor>
+impl<T, Currency, Router, AmountExtractor, FeePayerExtractor> OnChargeTransaction<T>
+    for PowOnchainChargeAdapter<Currency, Router, AmountExtractor, FeePayerExtractor>
 where
     T: TxPaymentConfig + fullnode_pow_reward::Config,
     Currency: Balanced<T::AccountId> + 'static,
     Router: OnUnbalanced<Credit<T::AccountId, Currency>>,
     AmountExtractor:
         CallAmount<T::AccountId, T::RuntimeCall, <Currency as Inspect<T::AccountId>>::Balance>,
+    FeePayerExtractor: CallFeePayer<T::AccountId, T::RuntimeCall>,
+    T::AccountId: Clone,
 {
     type LiquidityInfo = Option<(
         Credit<T::AccountId, Currency>,
@@ -73,9 +88,10 @@ where
         if fee_with_tip.is_zero() {
             return Ok(None);
         }
+        let payer = FeePayerExtractor::fee_payer(who, call).unwrap_or_else(|| who.clone());
 
         let credit = Currency::withdraw(
-            who,
+            &payer,
             fee_with_tip,
             Precision::Exact,
             Preservation::Preserve,
@@ -99,7 +115,8 @@ where
         if fee_with_tip.is_zero() {
             return Ok(());
         }
-        match Currency::can_withdraw(who, fee_with_tip) {
+        let payer = FeePayerExtractor::fee_payer(who, call).unwrap_or_else(|| who.clone());
+        match Currency::can_withdraw(&payer, fee_with_tip) {
             frame_support::traits::tokens::WithdrawConsequence::Success => Ok(()),
             _ => Err(InvalidTransaction::Payment.into()),
         }
@@ -131,8 +148,8 @@ where
     }
 }
 
-impl<T, Currency, Router, AmountExtractor> TxCreditHold<T>
-    for PowOnchainChargeAdapter<Currency, Router, AmountExtractor>
+impl<T, Currency, Router, AmountExtractor, FeePayerExtractor> TxCreditHold<T>
+    for PowOnchainChargeAdapter<Currency, Router, AmountExtractor, FeePayerExtractor>
 where
     T: TxPaymentConfig,
     Currency: Balanced<T::AccountId> + 'static,
@@ -179,10 +196,9 @@ where
         if let Some(nrc_account) = nrc_account::<T>() {
             let _ = Currency::resolve(&nrc_account, nrc_credit);
         }
-        // 中文注释：黑洞分成统一转入常量黑洞地址；若地址解析失败则自动销毁。
-        if let Some(blackhole_account) = blackhole_account::<T>() {
-            let _ = Currency::resolve(&blackhole_account, blackhole_credit);
-        }
+        // 中文注释：黑洞分成改为“直接销毁”（不入任何地址），总发行量同步减少。
+        // 这里不再向 BLACKHOLE_ADDRESS 转账。
+        drop(blackhole_credit);
         // 未被 resolve 的余额离开作用域后自动销毁。
     }
 }
@@ -206,11 +222,21 @@ where
         AmountExtractResult::Unknown => return Err(InvalidTransaction::Payment.into()),
     };
     let amount_u128: u128 = amount.saturated_into();
-    let by_rate: u128 = primitives::core_const::ONCHAIN_FEE_RATE.mul_floor(amount_u128);
-    let min_fee: u128 = primitives::core_const::ONCHAIN_MIN_FEE;
+    let by_rate: u128 = mul_perbill_round(amount_u128, primitives::core_const::ONCHAIN_FEE_RATE);
+    let min_fee: u128 = primitives::core_const::ONCHAIN_MIN_FEE; // 0.1元=10分
     let base_fee: <Currency as Inspect<T::AccountId>>::Balance =
         by_rate.max(min_fee).saturated_into();
     Ok(base_fee.saturating_add(tip))
+}
+
+fn mul_perbill_round(amount: u128, rate: sp_runtime::Perbill) -> u128 {
+    // 中文注释：链上精度为“分”，这里做四舍五入到分。
+    const PERBILL_DENOMINATOR: u128 = 1_000_000_000;
+    let parts: u128 = rate.deconstruct() as u128;
+    amount
+        .saturating_mul(parts)
+        .saturating_add(PERBILL_DENOMINATOR / 2)
+        .saturating_div(PERBILL_DENOMINATOR)
 }
 
 fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
@@ -220,6 +246,26 @@ fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
         .and_then(|n| T::AccountId::decode(&mut &n.pallet_address[..]).ok())
 }
 
-fn blackhole_account<T: frame_system::Config>() -> Option<T::AccountId> {
-    T::AccountId::decode(&mut &primitives::core_const::BLACKHOLE_ADDRESS[..]).ok()
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sp_runtime::Perbill;
+
+    #[test]
+    fn onchain_fee_round_and_min_work() {
+        let rate = Perbill::from_parts(1_000_000); // 0.1%
+                                                   // 1分*0.1%=0.001分 => round=0分，应用最低10分
+        let fee_small = mul_perbill_round(1, rate).max(primitives::core_const::ONCHAIN_MIN_FEE);
+        assert_eq!(fee_small, 10);
+
+        // 10000分(100元)*0.1%=10分，刚好最低线
+        let fee_boundary =
+            mul_perbill_round(10_000, rate).max(primitives::core_const::ONCHAIN_MIN_FEE);
+        assert_eq!(fee_boundary, 10);
+
+        // 50000分(500元)*0.1%=50分，大于最低线按实际收取
+        let fee_large =
+            mul_perbill_round(50_000, rate).max(primitives::core_const::ONCHAIN_MIN_FEE);
+        assert_eq!(fee_large, 50);
+    }
 }
