@@ -1,0 +1,44 @@
+:root {
+  font-family: 'IBM Plex Sans', 'Noto Sans SC', sans-serif;
+  color: #e7ecef;
+  background:
+    radial-gradient(900px 520px at 12% -8%, rgba(245, 158, 11, 0.30) 0%, rgba(245, 158, 11, 0) 64%),
+    radial-gradient(900px 620px at 92% 6%, rgba(14, 165, 233, 0.28) 0%, rgba(14, 165, 233, 0) 62%),
+    radial-gradient(1200px 700px at 50% 120%, rgba(125, 211, 252, 0.18) 0%, rgba(125, 211, 252, 0) 65%),
+    linear-gradient(135deg, #07101a 0%, #0b1622 45%, #132233 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(720px 460px at 14% 6%, rgba(250, 204, 21, 0.18) 0%, rgba(250, 204, 21, 0) 70%),
+    radial-gradient(820px 500px at 86% 2%, rgba(56, 189, 248, 0.16) 0%, rgba(56, 189, 248, 0) 72%);
+  background-attachment: fixed;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.35;
+  background:
+    conic-gradient(from 210deg at 50% 50%, rgba(251, 191, 36, 0.22), rgba(14, 165, 233, 0.2), rgba(251, 191, 36, 0.22));
+  filter: blur(40px);
+  animation: bgDrift 22s ease-in-out infinite alternate;
+}
+
+@keyframes bgDrift {
+  from {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(2%, 1%, 0) scale(1.05);
+  }
+}

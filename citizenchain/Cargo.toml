@@ -4,7 +4,6 @@ members = [
     "runtime",                               # 链上运行时
 
     "governance/admins-origin-gov",          # 治理-管理员权限治理模块 pallet
-    "governance/new-sheng-node",             # 治理-增删改新省储会/新省储行模块 pallet
     "governance/resolution-destro-gov",      # 治理-决议销毁模块 pallet
     "governance/resolution-issuance-gov",    # 治理-决议发行提案投票模块 pallet
     "governance/runtime-root-upgrade",       # 治理-运行时状态升级与超级管理员模块 pallet

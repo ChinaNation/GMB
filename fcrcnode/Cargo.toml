@@ -2,6 +2,7 @@
 members = [
     "backend",                              # 后端服务
     "desktop",                              # 桌面端
+    "desktop/src-tauri",                    # Tauri 桌面壳
 ]
 resolver = "2"
 

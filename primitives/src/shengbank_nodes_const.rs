@@ -7,6 +7,7 @@ use hex_literal::hex;
 /// 单个省储行节点的常量结构
 pub struct ShengBankNodeConst {
     pub pallet_id: &'static str,
+    pub fee_pallet_id: &'static str,
     pub node_name: &'static str,
     pub citizens_number: u64,
     pub stake_amount: u128,
@@ -27,11 +28,18 @@ pub fn pallet_id_to_bytes(id: &str) -> Option<[u8; 8]> {
     Some(out)
 }
 
+/// 全链统一的省储行 fee_pallet_id -> [u8; 8] 转码入口。
+#[inline]
+pub fn fee_pallet_id_to_bytes(id: &str) -> Option<[u8; 8]> {
+    pallet_id_to_bytes(id)
+}
+
 /// 所有省储行节点数组
 pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 01 中枢省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbzss01",
+        fee_pallet_id: "prbzssaa",
         node_name: "中枢省公民储备银行权益节点",
         citizens_number:10_913_902,
         stake_amount:10_913_902_0000,
@@ -47,6 +55,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 02 岭南省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prblns02",
+        fee_pallet_id: "prblnsab",
         node_name: "岭南省公民储备银行权益节点",
         citizens_number:28_157_064,
         stake_amount:28_157_064_0000,
@@ -62,6 +71,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 03 广东省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbgds03",
+        fee_pallet_id: "prbgdsac",
         node_name: "广东省公民储备银行权益节点",
         citizens_number:106_012_864,
         stake_amount:106_012_864_0000,
@@ -77,6 +87,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 04 广西省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbgxs04",
+        fee_pallet_id: "prbgxsad",
         node_name: "广西省公民储备银行权益节点",
         citizens_number:50_126_804,
         stake_amount:50_126_804_0000,
@@ -92,6 +103,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 05 福建省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbfjs05",
+        fee_pallet_id: "prbfjsae",
         node_name: "福建省公民储备银行权益节点",
         citizens_number:41_540_086,
         stake_amount:41_540_086_0000,
@@ -107,6 +119,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 06 海南省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhns06",
+        fee_pallet_id: "prbhnsaf",
         node_name: "海南省公民储备银行权益节点",
         citizens_number:10_081_232,
         stake_amount:10_081_232_0000,
@@ -122,6 +135,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 07 云南省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbyns07",
+        fee_pallet_id: "prbynsag",
         node_name: "云南省公民储备银行权益节点",
         citizens_number:46_821_766,
         stake_amount:46_821_766_0000,
@@ -137,6 +151,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 08 贵州省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbgzs08",
+        fee_pallet_id: "prbgzsah",
         node_name: "贵州省公民储备银行权益节点",
         citizens_number:38_562_148,
         stake_amount:38_562_148_0000,
@@ -152,6 +167,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 09 湖南省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhns09",
+        fee_pallet_id: "prbhnsai",
         node_name: "湖南省公民储备银行权益节点",
         citizens_number:66_444_864,
         stake_amount:66_444_864_0000,
@@ -167,6 +183,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 10 江西省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbjxs10",
+        fee_pallet_id: "prbjxsaj",
         node_name: "江西省公民储备银行权益节点",
         citizens_number:45_188_635,
         stake_amount:45_188_635_0000,
@@ -182,6 +199,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 11 浙江省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbzjs11",
+        fee_pallet_id: "prbzjsak",
         node_name: "浙江省公民储备银行权益节点",
         citizens_number:64_567_588,
         stake_amount:64_567_588_0000,
@@ -197,6 +215,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 12 江苏省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbjss12",
+        fee_pallet_id: "prbjssal",
         node_name: "江苏省公民储备银行权益节点",
         citizens_number:84_748_016,
         stake_amount:84_748_016_0000,
@@ -212,6 +231,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 13 山东省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbsds13",
+        fee_pallet_id: "prbsdsam",
         node_name: "山东省公民储备银行权益节点",
         citizens_number:101_527_453,
         stake_amount:101_527_453_0000,
@@ -227,6 +247,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 14 山西省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbsxs14",
+        fee_pallet_id: "prbsxsan",
         node_name: "山西省公民储备银行权益节点",
         citizens_number:34_915_616,
         stake_amount:34_915_616_0000,
@@ -242,6 +263,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 15 河南省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhns15",
+        fee_pallet_id: "prbhnsao",
         node_name: "河南省公民储备银行权益节点",
         citizens_number:99_365_519,
         stake_amount:99_365_519_0000,
@@ -257,6 +279,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 16 河北省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhbs16",
+        fee_pallet_id: "prbhbsap",
         node_name: "河北省公民储备银行权益节点",
         citizens_number:56_282_021,
         stake_amount:56_282_021_0000,
@@ -272,6 +295,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 17 湖北省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhbs17",
+        fee_pallet_id: "prbhbsaq",
         node_name: "湖北省公民储备银行权益节点",
         citizens_number:54_543_553,
         stake_amount:54_543_553_0000,
@@ -287,6 +311,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 18 陕西省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbsxs18",
+        fee_pallet_id: "prbsxsar",
         node_name: "陕西省公民储备银行权益节点",
         citizens_number:33_824_101,
         stake_amount:33_824_101_0000,
@@ -302,6 +327,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 19 重庆省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbcqs19",
+        fee_pallet_id: "prbcqsas",
         node_name: "重庆省公民储备银行权益节点",
         citizens_number:32_054_159,
         stake_amount:32_054_159_0000,
@@ -317,6 +343,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 20 四川省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbscs20",
+        fee_pallet_id: "prbscsat",
         node_name: "四川省公民储备银行权益节点",
         citizens_number:80_310_245,
         stake_amount:80_310_245_0000,
@@ -332,6 +359,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 21 甘肃省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbgss21",
+        fee_pallet_id: "prbgssau",
         node_name: "甘肃省公民储备银行权益节点",
         citizens_number:20_617_465,
         stake_amount:20_617_465_0000,
@@ -347,6 +375,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 22 北平省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbbps22",
+        fee_pallet_id: "prbbpsav",
         node_name: "北平省公民储备银行权益节点",
         citizens_number:21_893_095,
         stake_amount:21_893_095_0000,
@@ -362,6 +391,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 23 滨海省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbbhs23",
+        fee_pallet_id: "prbbhsaw",
         node_name: "滨海省公民储备银行权益节点",
         citizens_number:24_720_871,
         stake_amount:24_720_871_0000,
@@ -377,6 +407,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 24 松江省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbsjs24",
+        fee_pallet_id: "prbsjsax",
         node_name: "松江省公民储备银行权益节点",
         citizens_number:24_870_895,
         stake_amount:24_870_895_0000,
@@ -392,6 +423,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 25 龙江省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbljs25",
+        fee_pallet_id: "prbljsay",
         node_name: "龙江省公民储备银行权益节点",
         citizens_number:22_780_354,
         stake_amount:22_780_354_0000,
@@ -407,6 +439,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 26 吉林省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbjls26",
+        fee_pallet_id: "prbjlsaz",
         node_name: "吉林省公民储备银行权益节点",
         citizens_number:24_073_453,
         stake_amount:24_073_453_0000,
@@ -422,6 +455,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 27 辽宁省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prblns27",
+        fee_pallet_id: "prblnsba",
         node_name: "辽宁省公民储备银行权益节点",
         citizens_number:42_591_407,
         stake_amount:42_591_407_0000,
@@ -437,6 +471,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 28 宁夏省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbnxs28",
+        fee_pallet_id: "prbnxsbb",
         node_name: "宁夏省公民储备银行权益节点",
         citizens_number:7_202_654,
         stake_amount:7_202_654_0000,
@@ -452,6 +487,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 29 青海省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbqhs29",
+        fee_pallet_id: "prbqhsbc",
         node_name: "青海省公民储备银行权益节点",
         citizens_number:5_030_542,
         stake_amount:5_030_542_0000,
@@ -467,6 +503,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 30 安徽省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbahs30",
+        fee_pallet_id: "prbahsbd",
         node_name: "安徽省公民储备银行权益节点",
         citizens_number:61_027_171,
         stake_amount:61_027_171_0000,
@@ -482,6 +519,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 31 台湾省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbtws31",
+        fee_pallet_id: "prbtwsbe",
         node_name: "台湾省公民储备银行权益节点",
         citizens_number:23_561_236,
         stake_amount:23_561_236_0000,
@@ -497,6 +535,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 32 西藏省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbxzs32",
+        fee_pallet_id: "prbxzsbf",
         node_name: "西藏省公民储备银行权益节点",
         citizens_number:2_763_853,
         stake_amount:2_763_853_0000,
@@ -512,6 +551,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 33 新疆省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbxjs33",
+        fee_pallet_id: "prbxjsbg",
         node_name: "新疆省公民储备银行权益节点",
         citizens_number:9_880_442,
         stake_amount:9_880_442_0000,
@@ -527,6 +567,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 34 西康省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbxks34",
+        fee_pallet_id: "prbxksbh",
         node_name: "西康省公民储备银行权益节点",
         citizens_number:4_513_098,
         stake_amount:4_513_098_0000,
@@ -542,6 +583,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 35 阿里省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbals35",
+        fee_pallet_id: "prbalsbi",
         node_name: "阿里省公民储备银行权益节点",
         citizens_number:2_627_999,
         stake_amount:2_627_999_0000,
@@ -557,6 +599,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 36 葱岭省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbcls36",
+        fee_pallet_id: "prbclsbj",
         node_name: "葱岭省公民储备银行权益节点",
         citizens_number:7_833_021,
         stake_amount:7_833_021_0000,
@@ -572,6 +615,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 37 天山省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbtss37",
+        fee_pallet_id: "prbtssbk",
         node_name: "天山省公民储备银行权益节点",
         citizens_number:5_634_164,
         stake_amount:5_634_164_0000,
@@ -587,6 +631,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 38 河西省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhxs38",
+        fee_pallet_id: "prbhxsbl",
         node_name: "河西省公民储备银行权益节点",
         citizens_number:4_664_727,
         stake_amount:4_664_727_0000,
@@ -602,6 +647,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 39 昆仑省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbkls39",
+        fee_pallet_id: "prbklsbm",
         node_name: "昆仑省公民储备银行权益节点",
         citizens_number:893_415,
         stake_amount:893_415_0000,
@@ -617,6 +663,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 40 河套省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhts40",
+        fee_pallet_id: "prbhtsbn",
         node_name: "河套省公民储备银行权益节点",
         citizens_number:12_110_780,
         stake_amount:12_110_780_0000,
@@ -632,6 +679,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 41 热河省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbrhs41",
+        fee_pallet_id: "prbrhsbo",
         node_name: "热河省公民储备银行权益节点",
         citizens_number:15_489_562,
         stake_amount:15_489_562_0000,
@@ -647,6 +695,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 42 兴安省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbxas42",
+        fee_pallet_id: "prbxasbp",
         node_name: "兴安省公民储备银行权益节点",
         citizens_number:3_991_080,
         stake_amount:3_991_080_0000,
@@ -662,6 +711,7 @@ pub const SHENG_BANK_NODES: &[ShengBankNodeConst] = &[
     // ======================== 43 合江省储行 ========================
     ShengBankNodeConst {
         pallet_id: "prbhjs43",
+        fee_pallet_id: "prbhjsbq",
         node_name: "合江省公民储备银行权益节点",
         citizens_number:8_738_458,
         stake_amount:8_738_458_0000,

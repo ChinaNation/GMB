@@ -1,7 +1,6 @@
 [workspace]                                  # 轻节点 App 工作空间
 members = [
     "backend",                              # 后端服务
-    "mobile",                               # 移动端
 ]
 resolver = "2"
 
