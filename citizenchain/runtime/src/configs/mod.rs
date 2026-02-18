@@ -27,13 +27,14 @@
 use codec::Decode;
 use codec::Encode;
 use frame_support::{
+    derive_impl,
     dispatch::DispatchResult,
-    derive_impl, parameter_types,
+    parameter_types,
     traits::{
         fungible::Inspect,
         tokens::{Fortitude, Preservation},
-        UnfilteredDispatchable,
-        ConstU128, ConstU32, ConstU64, ConstU8, EnsureOrigin, FindAuthor, VariantCountOf,
+        ConstU128, ConstU32, ConstU64, ConstU8, EnsureOrigin, FindAuthor, UnfilteredDispatchable,
+        VariantCountOf,
     },
     weights::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
@@ -50,9 +51,10 @@ use sp_version::RuntimeVersion;
 // Local module imports
 use super::{
     AccountId, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance, Hash, Nonce,
-    PalletInfo, ResolutionIssuanceGov, ResolutionIssuanceIss, Runtime, RuntimeCall, RuntimeEvent,
-    RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeRootUpgrade, RuntimeTask, System,
-    VotingEngineSystem, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    OffchainTransactionFee, PalletInfo, ResolutionIssuanceGov, ResolutionIssuanceIss, Runtime,
+    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin,
+    RuntimeRootUpgrade, RuntimeTask, System, VotingEngineSystem, BLOCK_HASH_COUNT,
+    EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 
 const NORMAL_DISPATCH_RATIO: Perbill =
@@ -148,6 +150,7 @@ impl pallet_transaction_payment::Config for Runtime {
         Balances,
         onchain_transaction_fee::PowOnchainFeeRouter<Runtime, Balances, PowDigestAuthor>,
         PowTxAmountExtractor,
+        RuntimeFeePayerExtractor,
     >;
     type OperationalFeeMultiplier = ConstU8<{ primitives::core_const::OPERATIONAL_FEE_MULTIPLIER }>;
     type WeightToFee = IdentityFee<Balance>;
@@ -199,9 +202,40 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
                 );
                 onchain_transaction_fee::AmountExtractResult::Amount(value)
             }
+            RuntimeCall::OffchainTransactionFee(
+                offchain_transaction_fee::pallet::Call::submit_offchain_batch {
+                    institution,
+                    batch_seq,
+                    batch,
+                    batch_signature,
+                },
+            ) => {
+                // 中文注释：链下批次只有通过完整预检才可进入链上扣费流程；
+                // 预检失败直接按 Unknown 拒绝，避免提交账户/手续费账户被异常扣费。
+                if OffchainTransactionFee::precheck_submit_offchain_batch(
+                    who,
+                    *institution,
+                    *batch_seq,
+                    batch,
+                    batch_signature,
+                )
+                .is_ok()
+                    && OffchainTransactionFee::fee_account_of(*institution).is_ok()
+                {
+                    let sum = batch.iter().fold(0u128, |acc, item| {
+                        acc.saturating_add(item.offchain_fee_amount)
+                    });
+                    onchain_transaction_fee::AmountExtractResult::Amount(sum)
+                } else {
+                    onchain_transaction_fee::AmountExtractResult::Unknown
+                }
+            }
             // 中文注释：以下调用类型明确属于“无金额交易”，放行且不计算手续费。
             RuntimeCall::System(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
             RuntimeCall::Timestamp(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+            RuntimeCall::OffchainTransactionFee(_) => {
+                onchain_transaction_fee::AmountExtractResult::NoAmount
+            }
             RuntimeCall::FullnodePowReward(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
@@ -218,12 +252,37 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::CitizenLightnodeIssuance(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
-            RuntimeCall::AdminsOriginGov(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+            RuntimeCall::AdminsOriginGov(_) => {
+                onchain_transaction_fee::AmountExtractResult::NoAmount
+            }
             RuntimeCall::RuntimeRootUpgrade(_) => {
+                onchain_transaction_fee::AmountExtractResult::NoAmount
+            }
+            RuntimeCall::ResolutionDestroGov(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免“有金额但漏提取”。
             RuntimeCall::Balances(_) => onchain_transaction_fee::AmountExtractResult::Unknown,
+        }
+    }
+}
+
+pub struct RuntimeFeePayerExtractor;
+
+impl onchain_transaction_fee::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
+    fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
+        match call {
+            RuntimeCall::OffchainTransactionFee(
+                offchain_transaction_fee::pallet::Call::submit_offchain_batch {
+                    institution,
+                    ..
+                },
+            ) => {
+                // 中文注释：链下批次上链手续费永远由本机构 fee_pallet_address 承担。
+                // 提交账户只负责提交，不承担手续费。
+                OffchainTransactionFee::fee_account_of(*institution).ok()
+            }
+            _ => None,
         }
     }
 }
@@ -261,6 +320,37 @@ impl FindAuthor<AccountId> for PowDigestAuthor {
 impl fullnode_pow_reward::Config for Runtime {
     type Currency = Balances;
     type FindAuthor = PowDigestAuthor;
+}
+
+impl offchain_transaction_fee::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type MaxVerifyKeyLen = ConstU32<256>;
+    type MaxBatchSize = ConstU32<200000>;
+    type MaxBatchSignatureLength = ConstU32<64>;
+    type MaxRelaySubmitters = ConstU32<8>;
+    type InternalVoteEngine = VotingEngineSystem;
+    type OffchainBatchVerifier = RuntimeOffchainBatchVerifier;
+}
+
+pub struct RuntimeOffchainBatchVerifier;
+
+impl offchain_transaction_fee::OffchainBatchVerifier for RuntimeOffchainBatchVerifier {
+    fn verify(verify_key: &[u8], message: &[u8], signature: &[u8]) -> bool {
+        if verify_key.len() != 32 || signature.len() != 64 {
+            return false;
+        }
+
+        let mut pk_raw = [0u8; 32];
+        pk_raw.copy_from_slice(verify_key);
+        let public = sr25519::Public::from_raw(pk_raw);
+
+        let mut sig_raw = [0u8; 64];
+        sig_raw.copy_from_slice(signature);
+        let sig = sr25519::Signature::from_raw(sig_raw);
+
+        sr25519_verify(&sig, message, &public)
+    }
 }
 
 /// CIIC 系统发布的一次性绑定凭证验签公钥（sr25519）。
@@ -417,6 +507,12 @@ impl admins_origin_gov::Config for Runtime {
     type InternalVoteEngine = VotingEngineSystem;
 }
 
+impl resolution_destro_gov::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type InternalVoteEngine = VotingEngineSystem;
+}
+
 /// 禁用特权原点：始终拒绝任何 Origin，确保不存在可被调用的特权入口。
 pub struct EnsureNoPrivilegeOrigin;
 
@@ -461,12 +557,10 @@ fn is_nrc_admin(who: &AccountId) -> bool {
         .expect("NRC pallet_id must be 8 bytes");
 
     // 中文注释：优先读取链上管理员治理模块中的“当前管理员名单”。
-    if let Some(current_admins) = admins_origin_gov::Pallet::<Runtime>::current_admins(nrc_institution)
+    if let Some(current_admins) =
+        admins_origin_gov::Pallet::<Runtime>::current_admins(nrc_institution)
     {
-        return current_admins
-            .into_inner()
-            .iter()
-            .any(|admin| admin == who);
+        return current_admins.into_inner().iter().any(|admin| admin == who);
     }
 
     // 中文注释：兼容回退到创世静态管理员列表（尚未发生管理员替换时）。
@@ -566,8 +660,15 @@ impl voting_engine_system::Config for Runtime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::OffchainTransactionFee;
+    use crate::ResolutionDestroGov;
     use frame_support::assert_ok;
-    use sp_runtime::BuildStorage;
+    use frame_support::traits::Currency;
+    use primitives::reserve_nodes_const::{
+        pallet_id_to_bytes as reserve_pallet_id_to_bytes, RESERVE_NODES,
+    };
+    use sp_core::Pair;
+    use sp_runtime::{traits::Hash as HashT, BuildStorage};
     use voting_engine_system::JointVoteResultCallback;
 
     fn new_test_ext() -> sp_io::TestExternalities {
@@ -586,11 +687,14 @@ mod tests {
         new_test_ext().execute_with(|| {
             let proposal_id = 1u64;
             let joint_vote_id = 99u64;
-            let recipient = AccountId::new(primitives::reserve_nodes_const::RESERVE_NODES[1].pallet_address);
+            let recipient =
+                AccountId::new(primitives::reserve_nodes_const::RESERVE_NODES[1].pallet_address);
             let total_amount = 123u128;
 
-            let reason: resolution_issuance_gov::pallet::ReasonOf<Runtime> =
-                b"runtime-integration".to_vec().try_into().expect("reason should fit");
+            let reason: resolution_issuance_gov::pallet::ReasonOf<Runtime> = b"runtime-integration"
+                .to_vec()
+                .try_into()
+                .expect("reason should fit");
             let allocations: resolution_issuance_gov::pallet::AllocationOf<Runtime> =
                 vec![resolution_issuance_gov::pallet::RecipientAmount {
                     recipient: recipient.clone(),
@@ -609,8 +713,14 @@ mod tests {
             };
 
             resolution_issuance_gov::pallet::Proposals::<Runtime>::insert(proposal_id, proposal);
-            resolution_issuance_gov::pallet::GovToJointVote::<Runtime>::insert(proposal_id, joint_vote_id);
-            resolution_issuance_gov::pallet::JointVoteToGov::<Runtime>::insert(joint_vote_id, proposal_id);
+            resolution_issuance_gov::pallet::GovToJointVote::<Runtime>::insert(
+                proposal_id,
+                joint_vote_id,
+            );
+            resolution_issuance_gov::pallet::JointVoteToGov::<Runtime>::insert(
+                joint_vote_id,
+                proposal_id,
+            );
 
             assert_ok!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(
                 joint_vote_id,
@@ -632,12 +742,150 @@ mod tests {
                     .is_none()
             );
 
-            assert!(resolution_issuance_iss::pallet::Executed::<Runtime>::get(proposal_id));
+            assert!(resolution_issuance_iss::pallet::Executed::<Runtime>::get(
+                proposal_id
+            ));
             assert_eq!(
                 resolution_issuance_iss::pallet::TotalIssued::<Runtime>::get(),
                 total_amount
             );
             assert_eq!(Balances::free_balance(&recipient), total_amount);
+        });
+    }
+
+    #[test]
+    fn resolution_destro_gov_internal_vote_flow_executes_destroy_and_reduces_issuance() {
+        new_test_ext().execute_with(|| {
+            let nrc_institution =
+                reserve_pallet_id_to_bytes("nrcgch01").expect("nrc institution id must be valid");
+            let nrc_account = AccountId::new(RESERVE_NODES[0].pallet_address);
+            let initial_balance: Balance = 1_000;
+            let destroy_amount: Balance = 100;
+
+            let _ = Balances::deposit_creating(&nrc_account, initial_balance);
+            let issuance_before = Balances::total_issuance();
+
+            assert_ok!(ResolutionDestroGov::propose_destroy(
+                RuntimeOrigin::signed(AccountId::new(RESERVE_NODES[0].admins[0])),
+                voting_engine_system::internal_vote::ORG_NRC,
+                nrc_institution,
+                destroy_amount,
+            ));
+
+            for i in 0..13 {
+                assert_ok!(ResolutionDestroGov::vote_destroy(
+                    RuntimeOrigin::signed(AccountId::new(RESERVE_NODES[0].admins[i])),
+                    0,
+                    true,
+                ));
+            }
+
+            let action = resolution_destro_gov::Pallet::<Runtime>::proposal_action(0)
+                .expect("destroy action should exist");
+            assert!(action.executed);
+
+            assert_eq!(
+                Balances::free_balance(&nrc_account),
+                initial_balance - destroy_amount
+            );
+            assert_eq!(Balances::total_issuance(), issuance_before - destroy_amount);
+        });
+    }
+
+    #[test]
+    fn offchain_batch_submitter_is_institution_and_fee_base_is_batch_offchain_fee_sum() {
+        new_test_ext().execute_with(|| {
+            let institution = primitives::shengbank_nodes_const::pallet_id_to_bytes(
+                primitives::shengbank_nodes_const::SHENG_BANK_NODES[0].pallet_id,
+            )
+            .expect("institution id should be valid");
+            let institution_account = AccountId::new(
+                primitives::shengbank_nodes_const::SHENG_BANK_NODES[0].pallet_address,
+            );
+            let payer = AccountId::new([7u8; 32]);
+            let recipient = AccountId::new([8u8; 32]);
+
+            let _ = Balances::deposit_creating(&institution_account, 1_000);
+            let _ = Balances::deposit_creating(&payer, 10_000);
+            let _ = Balances::deposit_creating(&recipient, 1);
+
+            let tx_id = <Runtime as frame_system::Config>::Hashing::hash(b"rt-offchain-batch-1");
+            let item =
+                offchain_transaction_fee::pallet::OffchainBatchItem::<AccountId, Balance, Hash> {
+                    tx_id,
+                    payer: payer.clone(),
+                    recipient: recipient.clone(),
+                    transfer_amount: 1_000,
+                    offchain_fee_amount: 1,
+                };
+            let batch: offchain_transaction_fee::pallet::BatchOf<Runtime> =
+                vec![item].try_into().expect("batch should fit");
+            let fee_account = OffchainTransactionFee::fee_account_of(institution).expect("fee");
+            let relay = AccountId::new([42u8; 32]);
+            let _ = Balances::deposit_creating(&relay, 1_000);
+            let (pair, _) = sr25519::Pair::generate();
+            let verify_key: offchain_transaction_fee::pallet::VerifyKeyOf<Runtime> =
+                pair.public().0.to_vec().try_into().expect("verify key should fit");
+            assert_ok!(OffchainTransactionFee::init_verify_key(
+                RuntimeOrigin::signed(institution_account.clone()),
+                institution,
+                verify_key,
+            ));
+            let submitters: offchain_transaction_fee::pallet::RelaySubmittersOf<Runtime> =
+                vec![relay.clone(), institution_account.clone(), payer.clone()]
+                    .try_into()
+                    .expect("submitters should fit");
+            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+                RuntimeOrigin::signed(institution_account.clone()),
+                institution,
+                submitters,
+            ));
+            let batch_sig_raw = pair
+                .sign(&blake2_256(&(b"GMB_OFFCHAIN_BATCH_V1", institution, 1u64, &batch).encode()))
+                .0
+                .to_vec();
+            let batch_signature: offchain_transaction_fee::pallet::BatchSignatureOf<Runtime> =
+                batch_sig_raw.try_into().expect("signature should fit");
+
+            let call = RuntimeCall::OffchainTransactionFee(
+                offchain_transaction_fee::pallet::Call::submit_offchain_batch {
+                    institution,
+                    batch_seq: 1,
+                    batch: batch.clone(),
+                    batch_signature: batch_signature.clone(),
+                },
+            );
+            let extracted = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
+                AccountId,
+                RuntimeCall,
+                Balance,
+            >>::amount(&institution_account, &call);
+            match extracted {
+                onchain_transaction_fee::AmountExtractResult::Amount(v) => assert_eq!(v, 1),
+                _ => panic!("expected amount extract result"),
+            }
+
+            let before_payer = Balances::free_balance(&payer);
+            let before_recipient = Balances::free_balance(&recipient);
+            let before_institution = Balances::free_balance(&institution_account);
+            let _ = Balances::deposit_creating(&fee_account, 1_000);
+            let before_fee = Balances::free_balance(&fee_account);
+
+            assert_ok!(OffchainTransactionFee::submit_offchain_batch(
+                RuntimeOrigin::signed(relay.clone()),
+                institution,
+                1,
+                batch,
+                batch_signature,
+            ));
+
+            assert_eq!(Balances::free_balance(&payer), before_payer - 1_001);
+            assert_eq!(Balances::free_balance(&recipient), before_recipient + 1_000);
+            assert_eq!(
+                Balances::free_balance(&institution_account),
+                before_institution
+            );
+            assert_eq!(Balances::free_balance(&fee_account), before_fee + 1);
         });
     }
 }

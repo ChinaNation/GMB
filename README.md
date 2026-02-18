@@ -351,7 +351,7 @@ GMB/
 * 省储行可提案销毁所持有交易地址内的公民币，由任意省储行懂事/管理员提案，本提案为内部投票提案。
 
 ### 5.1.6.新增省节点治理/new-sheng-node
-* 仅国储会节点可提案增删改新省储会/新省储行，且必须两者同时增删改，即同一个提案增删改一对省储会/省储行，本提案为联合投票提案；
+* 仅国储会节点可提案增删改新省储会/新省储行，且必须两者同时增删改，即同一个提案增删改一对省储会/省储行，本提案为联合投票提案，v2.0以后再增加本功能；
 
 ## 5.2.发行模块/issuance
 ### 5.2.1.省储行质押利息/shengbank-stake-interest
@@ -379,7 +379,7 @@ GMB/
 ## 5.3.交易模块/transaction
 ### 5.3.1.链上交易/onchain-transaction-pow
 * 链上交易手续费为0.1%，精度为四舍五入后的小数点后两位，且单笔支付手续费最少为0.1元，不足0.1元的以0.1元计算，由付款方必须支付，交易费按8:1:1的比例分账；  
-* 链上交易费的80%用于奖励铸块的全节点，10%支付给国储会地址（0x6d6f646c6e726367636830310000000000000000000000000000000000000000）用于社区建设和国储会节点运营，10%支付到黑洞地址（0x0000000000000000000000000000000000000000000000000000000000000000），用于代币通缩燃烧；  
+* 链上交易费的80%用于奖励铸块的全节点，10%支付给国储会地址（0x6d6f646c6e726367636830310000000000000000000000000000000000000000）用于社区建设和国储会节点运营，10%直接销毁，用于代币通缩燃烧；  
 * 链下交易上链的，除省储行权益节点获得的手续费外，其链下交易的金额不再支付链上交易费，例：小李支付1000元公民币给小习，由广东省储行节点验证，其费率为0.1%，那么小李需要支付1001元，小习收到1000元，广东省储行节点收到1元，打包该交易上链时，那1000元不用支付链上交易费，而广东省储行获得的1元需要支付链上交易手续费。 
 
 ### 5.3.2.链下交易/offchain-transaction-pos
@@ -388,29 +388,11 @@ GMB/
 * 链下交易手续费完全由负责清算的省储行节点所有，收入到各省储行多签名地址（primitives/src/shengbank_nodes_const.rs/pallet_address）；
 * 各省储行打包上链采用：条件A：交易笔数 ≥ N or 条件B：距离上次打包 ≥ T 双阈值触发打包，N = 100,000 笔，T = 60 分钟，阈值以优先触发为准；
 * 各省储行执行链下交易验证时使用专用的链下交易验证密钥，该密钥仅保存于省储行终端本地，由省储行管理员使用“内部投票”流程生成/更换。
-* 链下交易模块结构图：
-```
-offchain-transaction-pos/
-└── src/
-    ├── main.rs              ← 进程入口（启动/配置/生命周期）
-    ├── config.rs            ← 配置加载（阈值、节点地址等）
-    ├── intake.rs            ← 接收交易（API / MQ / gRPC）
-    ├── precheck.rs          ← 交易预校验（签名/格式/权限）
-    ├── ledger.rs            ← 链下账本（确定性状态机）
-    ├── fee.rs               ← 手续费计算（确定性）
-    ├── dedup.rs             ← 去重 / 防重放
-    ├── batch.rs             ← 聚合与打包（N/T 双阈值）
-    ├── root.rs              ← 批次/状态摘要（Merkle/Hash）
-    ├── signer.rs            ← 执行密钥签名（本地/HSM）
-    ├── submit.rs            ← 提交链上（RPC）
-    ├── audit.rs             ← 审计日志 / 重放支持
-    ├── health.rs            ← 健康检查 / 指标
-    ├── errors.rs            ← 统一错误定义
-    └── types.rs             ← 公共类型
-```
 
-## 5.4.框架自带/template
-* 框架自带模块，预留。
+## 5.4.其他模块/otherpallet
+### 5.4.1.公民身份识别码校验/ciic-code-auth
+* 绑定/解绑
+* 投票校验
 
 ****
 # 6.公民储备委员会/fcrcnode
@@ -420,25 +402,7 @@ offchain-transaction-pos/
 * 省储行持有的公民币，根据本省储会决议，将其持有的公民币借贷给辖区商业银行或全节点，以获得借贷利息收益，商业银行/全节点借贷给公民/企业等。
 * 借贷模块/lending；借贷利息计算/interest；资产负债表/assets
 * 初步架构
-```
-GMB/
- └─ fcrcnode/                      # 公民储备委员会
-    └─ backend/                    # 公民储备委员会服务端
-      ├─ Cargo.toml                # Rust 项目配置文件
-      └─ src/
-        ├─ main.rs                 # 后端启动入口
-        ├─ config.rs               # 配置文件，例如数据库连接
-        ├─ db/                     # 数据库相关（链外辅助数据）
-        │   ├─ models/             # 数据模型（仅链外信息）
-        │   │   └─ logs.rs         # 操作日志、报表记录
-        │   └─ repository.rs       # 数据库接口（链外日志、报表）
-        ├─ routes/                 # API 路由（仅链外查询接口）
-        │   └─ reports.rs          # 报表、日志接口
-        ├─ utils/                  # 工具函数（格式化、校验等）
-        │   ├─ format.rs           # 金额、时间格式化
-        │   └─ validator.rs        # 数据合法性校验
-            └─ errors.rs           # 错误类型定义
-```
+
 ## 6.2.公民储备委员会桌面端/desktop
 ### 6.2.1.高优级功能
 * 登录：国储会、省储会、省储行分别使用管理员公钥登录；
@@ -464,27 +428,6 @@ GMB/
 * 通知与消息：国储会、省储会、省储行提案签名提醒、奖励到账提醒等。
 
 ### 6.2.4.技术开发
-* 初步架构
-```
-GMB/
-└─ fcrcnode/                     # 公民储备委员会
-    └─ desktop/                  # 公民储备委员会桌面端（fcrcnode是国储会、省储会、省储行共用的软件）
-        ├─ tauri.conf.json       # Tauri 框架配置文件
-        ├─ package.json          # Node / React 项目依赖和配置
-        ├─ src/                  # React 源代码文件夹
-        │   ├─ main.tsx          # 应用入口文件
-        │   ├─ App.tsx           # 根组件
-        │   ├─ components/       # 可复用 UI 组件（按钮、表格、弹窗等）
-        │   ├─ pages/            # 页面模块
-        │   │   ├─ Nrc/          # 国储会页面
-        │   │   ├─ Prc/          # 省储会页面
-        │   │   ├─ Prb/          # 省储行页面
-        │   ├─ hooks/            # 自定义 Hooks（状态管理、API 请求）
-        │   ├─ utils/            # 工具函数（金额格式化、校验、公民币单位转换等）
-        │   └─ assets/           # 静态资源（图片、图标、样式等）
-        ├─ public/               # 公共资源文件（index.html、favicon、静态图标等）
-        └─ node_modules/         # 前端依赖库（React、MUI 等）
-```
 * 技术栈与框架选择
   * Tauri：打包桌面端（macOS / Linux / Windows），调用系统 API，安全轻量。
   *	React：实现动态界面和组件化开发。
@@ -496,36 +439,6 @@ GMB/
 # 7.全节点/fullnode
 ## 7.1.全节点服务端/backend
 * 根据前端需求定制后端服务；
-* 初步架构
-
-```
-GMB/
-└─ fullnode/                            # 全节点
-   └─ backend                           # 全节点服务端（链外辅助功能）
-      ├─ Cargo.toml                     # Rust 项目配置文件
-      └─ src/
-          ├─ main.rs                    # 后端启动入口
-          ├─ config.rs                  # 配置文件，例如日志路径、数据库连接
-          ├─ db/                        # 链外数据库（辅助数据存储）
-          │   ├─ models/                # 数据模型（链外信息）
-          │   │   ├─ performance.rs     # 性能监控数据结构
-          │   │   ├─ logs.rs            # 节点操作日志数据结构
-          │   │   └─ metrics.rs         # 统计指标数据结构
-          │   └─ repository.rs          # 链外数据库接口
-          ├─ routes/                    # API 路由
-          │   ├─ performance.rs         # 性能监控接口
-          │   ├─ logs.rs                # 日志查询接口
-          │   └─ metrics.rs             # 节点指标查询接口
-          ├─ services/                  # 业务逻辑（链外功能）
-          │   ├─ log_service.rs         # 日志收集、存储、分析
-          │   ├─ metrics_service.rs     # 性能数据采集与处理
-          │   └─ alert_service.rs       # 异常告警、通知
-          ├─ utils/                     # 工具函数
-          │   ├─ format.rs              # 时间、数值格式化
-          │   ├─ validator.rs           # 数据合法性校验
-          │   └─ parser.rs              # 节点日志解析等
-          └─ errors.rs                  # 错误类型定义
-```
 ## 7.2.全节点桌面端/desktop
 ### 7.2.1.高优级功能
 * 账户：首启“导入/新建钱包 + 自动生成 powr + 自动绑定”，未绑定不能挖矿，未绑定不给手续费；
@@ -546,19 +459,6 @@ GMB/
 
 ### 7.2.4.技术开发
 * 全节点初步架构
-```
-GMB/
-└── fullnode/                     # 全节点
-    └── desktop/                  # 全节点桌面端
-        ├── package.json          # 前端依赖管理文件
-        ├── public/               # 公共资源文件（图片、图标、静态文件等）
-        ├── node_modules/         # 前端依赖库（npm/yarn 安装的包）
-        └── src/                  # 源代码文件夹
-            ├── App.tsx           # 主入口文件
-            ├── components/       # 可复用组件，例如区块列表、节点状态面板
-            ├── pages/            # 页面模块，例如监控页、交易页、日志页
-            └── utils/            # 工具函数，例如 RPC 调用、数据处理
-```
 * 前端框架推荐
   *	Tauri：桌面端打包（macOS、Linux、Windows），轻量、开源、安全。
   *	React：前端组件化，便于维护和扩展。
@@ -567,38 +467,7 @@ GMB/
 # 8.轻节点/wuminapp
 ## 8.1.轻节点服务端/backend
 * 根据前端需求定制后端服务。
-* 初步架构
-```
-GMB/
-└─ wuminapp/                            # 轻节点
-   └─backend                            # 轻节点服务端
-      ├─ Cargo.toml                     # Rust 项目配置文件
-      └─ src/
-          ├─ main.rs                    # 后端启动入口
-          ├─ config.rs                  # 配置文件（数据库连接、消息队列、文件存储路径等）
-          ├─ db/                        # 链外数据库
-          │   ├─ models/                # 数据模型
-          │   │   ├─ user.rs            # 用户信息（WuminApp ID、PeerID、头像、昵称、CIIC码等）
-          │   │   ├─ transaction.rs     # 用户链下交易记录
-          │   │   └─ session.rs         # 会话信息、登录状态
-          │   └─ repository.rs          # 数据库接口（CRUD操作）
-          ├─ routes/                    # API路由
-          │   ├─ user_routes.rs         # 用户注册、登录、查询接口
-          │   ├─ transaction_routes.rs  # 交易发起、查询接口
-          │   ├─ peer_routes.rs         # 节点认证、PeerID绑定接口
-          │   └─ message_routes.rs      # 消息、通知接口
-          ├─ services/                  # 业务逻辑
-          │   ├─ auth_service.rs        # 用户身份认证逻辑（CIIC码绑定、登录校验等）
-          │   ├─ wallet_service.rs      # 钱包管理（助记词、账户生成、签名辅助）
-          │   ├─ transaction_service.rs # 交易处理、校验
-          │   ├─ peer_service.rs        # 节点管理、节点状态检测
-          │   └─ notification_service.rs # 消息推送、提醒
-          ├─ utils/                     # 工具函数
-          │   ├─ crypto.rs              # 加密、签名、验证工具
-          │   ├─ parser.rs              # CIIC码解析、交易解析等
-          │   └─ formatter.rs           # 金额格式化、公民币单位转换等
-          └─ errors.rs                  # 错误类型   
-```
+
 ## 8.2.轻节点客户端/mobile
 ### 8.2.1.高优级功能
 * 账户管理
@@ -652,29 +521,6 @@ GMB/
   • 离线交易签名：支持生成离线交易，在安全环境下签名再广播。
 
 ### 8.2.4.技术开发
-* 初步架构
-```
-GMB/
-└─ wuminapp/                     # 轻节点
-    └─ mobile/                   # 轻节点客户端（中文：公民币）
-        ├─ package.json          # Node / React Native 项目依赖管理
-        ├─ app.json              # React Native 配置文件
-        ├─ src/                  # 源代码文件夹
-        │   ├─ App.tsx           # 应用入口文件
-        │   ├─ components/       # 可复用 UI 组件（按钮、表格、弹窗、投票列表等）
-        │   ├─ pages/            # 页面模块
-        │   │   ├─ Auth/         # 认证页面（CIIC、公民身份绑定）
-        │   │   ├─ Wallet/       # 钱包页面（助记词、种子、公私钥管理）
-        │   │   ├─ Voting/       # 投票页面（轻节点投票）
-        │   │   ├─ Transactions/ # 支付、转账、交易历史
-        │   │   ├─ Chat/         # 私密通信页面（Matrix/端到端加密）
-        │   ├─ hooks/            # 自定义 Hooks（状态管理、API 请求）
-        │   ├─ utils/            # 工具函数（金额格式化、公民币单位转换、签名校验）
-        │   └─ assets/           # 图片、图标、样式文件
-        ├─ android/              # Android 平台原生配置和源码
-        ├─ ios/                  # iOS 平台原生配置和源码
-        └─ node_modules/         # 前端依赖库（React Native、Nova Wallet SDK、Matrix SDK 等）
-```
 
 ****
 # 9.其他
