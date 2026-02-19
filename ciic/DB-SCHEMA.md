@@ -78,11 +78,19 @@
 - `username` `varchar(64)` UNIQUE NOT NULL
 - `password_hash` `varchar(255)` NOT NULL
 - `role` `varchar(32)` NOT NULL
+- `org_level` `varchar(16)` NOT NULL
+- `province_code` `varchar(16)` NULL
+- `city_code` `varchar(16)` NULL
 - `two_fa_secret` `varchar(255)` NULL
 - `status` `varchar(16)` NOT NULL
 - `last_login_at` `timestamptz` NULL
 - `created_at` `timestamptz` NOT NULL
 - `updated_at` `timestamptz` NOT NULL
+
+约束建议：
+- 国家超级管理员：`org_level='NATIONAL'`，`province_code/city_code` 为空
+- 省级管理员：`org_level='PROVINCE'`，必须有 `province_code`
+- 市护照局管理员：`org_level='CITY_BUREAU'`，必须有 `province_code + city_code`
 
 ### 2.5 `audit_logs`
 用途：记录人工和关键自动动作。
@@ -108,6 +116,7 @@
 - `archive_bindings.status`：`ACTIVE | UNBOUND | SUSPENDED`
 - `admin_users.status`：`ACTIVE | DISABLED`
 - `audit_logs.result`：`SUCCESS | FAILED`
+- `admin_users.org_level`：`NATIONAL | PROVINCE | CITY_BUREAU`
 
 ## 4. 一致性规则
 1. 管理员确认绑定时事务内执行：
@@ -127,3 +136,7 @@
 - `credential_issues`：保留 365 天后冷归档。
 - `audit_logs`：建议长期保留，不少于 3 年。
 
+## 6. 部署拓扑建议
+- 全国部署一个 PostgreSQL 主库集群（HA）。
+- 每省部署一个只读副本，承接本省查询与审计报表。
+- 所有写操作只写主库，副本仅查询，避免多主冲突。

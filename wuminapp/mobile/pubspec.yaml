@@ -10,6 +10,12 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+  polkadart_keyring: ^0.7.0
+  bip39: ^1.0.6
+  mobile_scanner: ^5.2.3
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:
