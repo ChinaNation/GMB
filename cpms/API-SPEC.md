@@ -112,7 +112,7 @@
 请求体：
 ```json
 {
-  "province_code": "GD",
+  "province_code": "ZS",
   "full_name": "张三",
   "birth_date": "1990-01-15",
   "gender_code": "M",
@@ -205,6 +205,7 @@
 ## 10. 索引号生成与校验约束
 - 主机端程序自动生成 `archive_index_no`，客户端不可直接指定。
 - 规则：`省代码 + 性别码 + 生日码 + 档案编号`
+- 省代码取值来源于 `primitives/src/sheng_code.rs` 的简称码字段（例如 `("中枢省", "ZS", "01_ZHONGSHU")` 中的 `ZS`）。
 - 正则：`^[A-Z]{2}(M|W)[0-9]{8}[0-9]{6}$`
 
 ## 11. 幂等与审计
