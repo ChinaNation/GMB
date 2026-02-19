@@ -77,6 +77,8 @@
   [9.1. 自定义库/primitives](#91自定义库primitives)
   [9.2. 工具库/tools](#92工具库tools)
   [9.3. 文库/wenku](#93文库wenku)
+  [9.4. 公民身份码系统/ciic](#94公民身份码系统ciic)
+  [9.5. 公民护照管理系统/cpms](#95公民护照管理系统cpms)
   </details>
 
 ****
@@ -573,4 +575,10 @@ let provinces = [
 
 ## 9.3.文库/wenku
 * 常用图片、文档库。
+
+## 9.4.公民身份码系统/ciic
+* 详见GMB/ciic
+
+## 9.5.公民护照管理系统/cpms
+* 详见GMB/cpms
 ****

@@ -730,7 +730,7 @@ components:
         province_code:
           type: string
           pattern: "^[A-Z]{2}$"
-          example: GD
+          example: ZS
         full_name:
           type: string
           maxLength: 128
@@ -768,4 +768,3 @@ components:
           maxLength: 32
         remark:
           type: string
-

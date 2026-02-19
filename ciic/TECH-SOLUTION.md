@@ -4,6 +4,9 @@
 - 桌面端技术路线固定为：`Tauri + React + TypeScript + Vite`。
 - CIIC 为独立联网系统，只通过标准接口与轻节点/区块链接入。
 - 绑定环节人工执行，投票凭证环节自动执行。
+- 密钥体系分阶段：
+  - `v1.0`：单国家级签名私钥（`NATIONAL`）
+  - `v2.0`：国家 Root + 省级签名私钥（分层证书链）
 
 ## 2. 建设目标
 - 支撑管理员人工录入文明档案索引号并绑定公钥。
@@ -12,7 +15,7 @@
 - 不改区块链实现，仅对接既有链上验签能力。
 
 ## 3. 系统边界
-1. 外部系统：公民档案管理系统（离线）
+1. 外部系统：公民护照管理系统（离线）/cpms
 - 不属于 CIIC 研发范围。
 - CIIC 仅依赖管理员可从该系统获取文明档案索引号。
 
@@ -29,21 +32,24 @@
 1. 桌面端
 - `Tauri`（桌面壳）
 - `React + TypeScript + Vite`（管理界面）
+- `Ant Design`（组件库）+ 自定义主题（品牌色、语义色、状态色、间距、圆角、字体）
 
 2. 后端服务
 - `Rust + Axum`
-- `PostgreSQL`（主存储）
+- `PostgreSQL`（全国主库 + 省级只读副本）
 - `Redis`（可选：限流、短期缓存、任务状态）
 
 3. 安全与密钥
 - 独立 `Signer` 服务（Rust）
 - 签名私钥不落业务 API 进程
 - 支持 `key_id` 轮换
+- 预留 `signer_scope` 字段（`NATIONAL | PROVINCE`），v1.0 先固定为 `NATIONAL`
 
 ## 5. 模块设计
 1. `ciic-desktop-admin`
 - 工单列表、绑定确认、异常处理、操作审计查询。
 - 录入校验：索引号格式、重复提示、公钥校验。
+- UI 统一采用 `Ant Design` 组件，禁止默认主题直出；必须使用 CIIC 主题 token。
 
 2. `ciic-api`
 - 绑定申请、绑定确认、凭证签发、状态查询。
@@ -56,6 +62,10 @@
 4. `ciic-audit`
 - 记录人工操作与关键自动动作。
 - 支持按人、按时间、按公钥追溯。
+
+5. `ciic-replica-read`
+- 省级查询与审计默认走本省只读副本。
+- 写入统一进入全国主库，避免跨省写冲突。
 
 ## 6. 核心流程
 ### 6.1 人工绑定
@@ -93,7 +103,7 @@
 - 约束：`archive_index` 唯一、`account_pubkey` 唯一
 
 3. `credential_issues`
-- `issue_id`, `credential_type(BIND|VOTE)`, `account_pubkey`, `proposal_id`, `nonce_hash`, `key_id`, `issued_at`, `expired_at`
+- `issue_id`, `credential_type(BIND|VOTE)`, `account_pubkey`, `proposal_id`, `nonce_hash`, `key_id`, `signer_scope`, `issued_at`, `expired_at`
 
 4. `audit_logs`
 - `log_id`, `operator_id`, `action`, `target_type`, `target_id`, `result`, `detail`, `created_at`
@@ -110,11 +120,11 @@
 
 3. `GET /api/v1/bind/credential`
 - 入参：`request_id`, `account_pubkey`
-- 出参：`identity_hash`, `nonce`, `signature`, `key_id`, `expired_at`
+- 出参：`identity_hash`, `nonce`, `signature`, `key_id`, `signer_scope`, `expired_at`
 
 4. `POST /api/v1/vote/credential`
 - 入参：`account_pubkey`, `proposal_id`
-- 出参：`identity_hash`, `nonce`, `signature`, `key_id`, `expired_at`
+- 出参：`identity_hash`, `nonce`, `signature`, `key_id`, `signer_scope`, `expired_at`
 
 5. 响应统一
 - 成功：`{ code: 0, message: "ok", data: ... }`
@@ -122,7 +132,9 @@
 
 ## 10. 安全方案
 1. 权限控制
+- 组织层级：国家超级管理员、省级管理员、市护照局管理员。
 - RBAC：录入员、复核员、审计员、系统管理员。
+- 作用域字段：`province_code + city_code`（一个市对应一个护照管理局，无需单独 bureau 实体）。
 - 高风险动作可配置双人复核。
 
 2. 输入与风控
@@ -133,6 +145,8 @@
 - API 与 signer 进程隔离。
 - 私钥最小暴露，支持轮换和吊销。
 - 凭证短时效 + `nonce` 一次性。
+- `v1.0`：单国家级私钥在线签名，省市管理员无私钥权限。
+- `v2.0`：国家 Root 仅签发省级公钥证书，省级私钥负责日常签发。
 
 4. 审计
 - 人工绑定全流程日志不可删改。
@@ -143,6 +157,7 @@
 - 时延：凭证签发 P95 `< 300ms`（不含客户端网络）
 - 可观测：日志、指标、追踪三件套
 - 备份：数据库日备份 + 审计日志归档
+- 容灾：主库 HA（自动故障切换）+ 省级只读副本（查询容灾）
 
 ## 12. 实施计划
 1. M1（2-3 周）
@@ -155,6 +170,11 @@
 
 3. M3（2 周）
 - 密钥轮换、2FA、双人复核、审计报表
+
+4. M4（v2.0 预研与升级）
+- Root/Province 分层密钥证书模型
+- 区块链侧证书链验签改造对接（双轨兼容窗口）
+- 省级密钥吊销与应急切换演练
 
 ## 13. 验收标准
 - 管理员可手工绑定“索引号-公钥”。

@@ -179,7 +179,7 @@
             "url": "{{baseUrl}}/archives",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"province_code\": \"GD\",\n  \"full_name\": \"张三\",\n  \"birth_date\": \"1990-01-15\",\n  \"gender_code\": \"M\",\n  \"height_cm\": 175.5,\n  \"passport_no\": \"P123456789\"\n}"
+              "raw": "{\n  \"province_code\": \"ZS\",\n  \"full_name\": \"张三\",\n  \"birth_date\": \"1990-01-15\",\n  \"gender_code\": \"M\",\n  \"height_cm\": 175.5,\n  \"passport_no\": \"P123456789\"\n}"
             }
           },
           "event": [
