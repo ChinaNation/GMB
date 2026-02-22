@@ -1,349 +1,293 @@
-//!  联邦政府机构常量=china_zf.rs
+//!  联邦监察院机构常量=china_jc.rs
 
-pub const CHINA_ZF: &[ChinaZf] = &[
-    ChinaZf {
-        shenfen_id: "GFR-ZS001-ZF0Z-741133595-20260221",
-        shenfen_name: "总统府",
-        duoqian_address: hex!("57391c8626e1d181ce5750cfb018d6f741c9988db062302feaf2bdf19d090e82"),
+pub const CHINA_JC: &[ChinaJc] = &[
+    ChinaJc {
+        shenfen_id: "GFR-LN001-CB0T-178132059-20260221",
+        shenfen_name: "国家监察院",
+        duoqian_address: hex!("191ef776e0575afa0b3a7bb33b3b3b5cf8c591c0b4deb7d091f17d16dc0f7cc9"),
         duoqian_admins: &[
             hex!(""), hex!(""), hex!(""), hex!(""), hex!(""),
         ],
     },
-    ChinaZf {
-        shenfen_id: "GFR-ZS001-ZF03-464086638-20260221",
-        shenfen_name: "外交部",
-        duoqian_address: hex!("f56f0a6e959dd01b394403f07910e57309361a37f7ce378044982627fb89f4df"),
+    ChinaJc {
+        shenfen_id: "GFR-LN001-CB0T-178132059-20260221",
+        shenfen_name: "联邦廉政署",
+        duoqian_address: hex!("191ef776e0575afa0b3a7bb33b3b3b5cf8c591c0b4deb7d091f17d16dc0f7cc9"),
         duoqian_admins: &[
             hex!(""), hex!(""), hex!(""), hex!(""), hex!(""),
         ],
     },
-    ChinaZf {
-        shenfen_id: "GFR-ZS001-ZF0X-187039681-20260221",
-        shenfen_name: "国防部",
-        duoqian_address: hex!("b88882dc1a35b2616b56b396126306a1c1f60f84f9be11fff65826695e766db0"),
+    ChinaJc {
+        shenfen_id: "GFR-LN001-CB0T-178132059-20260221",
+        shenfen_name: "联邦审计署",
+        duoqian_address: hex!("191ef776e0575afa0b3a7bb33b3b3b5cf8c591c0b4deb7d091f17d16dc0f7cc9"),
         duoqian_admins: &[
             hex!(""), hex!(""), hex!(""), hex!(""), hex!(""),
         ],
     },
-    ChinaZf {
-        shenfen_id: "GFR-ZS001-ZF0L-909992724-20260221",
-        shenfen_name: "国安部",
-        duoqian_address: hex!("2f68e12fca57892ae264f38ea24deae82f1ee809c2bd730196d9cd330be16bfd"),
+    ChinaJc {
+        shenfen_id: "GFR-LN001-CB0T-178132059-20260221",
+        shenfen_name: "联邦调查署",
+        duoqian_address: hex!("191ef776e0575afa0b3a7bb33b3b3b5cf8c591c0b4deb7d091f17d16dc0f7cc9"),
         duoqian_admins: &[
             hex!(""), hex!(""), hex!(""), hex!(""), hex!(""),
         ],
     },
-    ChinaZf {
-        shenfen_id: "GFR-ZS001-ZF0X-632945767-20260221",
-        shenfen_name: "民生部",
-        duoqian_address: hex!("0xaa3d9a13890d0b97ffa15cea873d38639e04de6555c6461b780c9ac07e0d6574"),
-        duoqian_admins: &[
-            hex!(""), hex!(""), hex!(""), hex!(""), hex!(""),
-        ],
-    },
-    ChinaZf {
-        shenfen_id: "GFR-ZS001-ZF00-355898810-20260221",
-        shenfen_name: "住建部",
-        duoqian_address: hex!("9e1a5946f2735dc2a8a261d110f41eb89a1ab0b05fd30ddd5980c0593a3dafff"),
-        duoqian_admins: &[
-            hex!(""), hex!(""), hex!(""), hex!(""), hex!(""),
-        ],
-    },
-    ChinaZf {
-        shenfen_id: "GFR-ZS001-ZF0L-078851853-20260221",
-        shenfen_name: "农业部",
-        duoqian_address: hex!("58236d400acfb5873b2ff7b664c1932e288e58c0bc4e4fcca213a8c26321c2a1"),
-        duoqian_admins: &[
-            hex!(""), hex!(""), hex!(""), hex!(""), hex!(""),
-        ],
-    },
-    ChinaZf {
-        shenfen_id: "GFR-ZS001-ZF0Z-801804896-20260221",
-        shenfen_name: "商贸部",
-        duoqian_address: hex!("371ff61846446eca44fefe0019c296f8414f0d24b7c6bc70cc50d4b370dc5374"),
-        duoqian_admins: &[
-            hex!(""), hex!(""), hex!(""), hex!(""), hex!(""),
-        ],
-    },
-    ChinaZf {
-        shenfen_id: "GFR-ZS001-ZF03-524757939-20260221",
-        shenfen_name: "财税部",
-        duoqian_address: hex!("f00cc243f927cde425cb6973de764b175dbb95c3a3aa5622e31d7ae37ba003e6"),
-        duoqian_admins: &[
-            hex!(""), hex!(""), hex!(""), hex!(""), hex!(""),
-        ],
-    },
-    ChinaZf {
-        shenfen_id: "GFR-ZS001-ZF0N-247710982-20260221",
-        shenfen_name: "能源部",
-        duoqian_address: hex!("c3b43b83d5adf6cb5f5da85480a26cc3b570d0b5556243beb75ce10cddd279ce"),
-        duoqian_admins: &[
-            hex!(""), hex!(""), hex!(""), hex!(""), hex!(""),
-        ],
-    },
-    ChinaZf {
-        shenfen_id: "GFR-ZS001-ZF01-970664025-20260221",
-        shenfen_name: "交通部",
-        duoqian_address: hex!("6988734cfb443db86c415036a49fc53d1f316f4f40b93ab136baacbe6876fc4f"),
-        duoqian_admins: &[
-            hex!(""), hex!(""), hex!(""), hex!(""), hex!(""),
-        ],
-    },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "GFR-ZS001-CB08-866047042-20260221",
-        shenfen_name: "中枢省政府",
+        shenfen_name: "中枢省监察院",
         duoqian_address: hex!("f43544661993692f9080194731dab65ef366d5398615cc2a897edadfbbe0828a"),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SLNSF000",
-        shenfen_name: "岭南省政府",
+        shenfen_name: "岭南省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SGDSF000",
-        shenfen_name: "广东省政府",
+        shenfen_name: "广东省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SGXSF000",
-        shenfen_name: "广西省政府",
+        shenfen_name: "广西省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SFJSF000",
-        shenfen_name: "福建省政府",
+        shenfen_name: "福建省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SHNSF000",
-        shenfen_name: "海南省政府",
+        shenfen_name: "海南省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SYNSF000",
-        shenfen_name: "云南省政府",
+        shenfen_name: "云南省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SGZSF000",
-        shenfen_name: "贵州省政府",
+        shenfen_name: "贵州省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SHUSF000",
-        shenfen_name: "湖南省政府",
+        shenfen_name: "湖南省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SJXSF000",
-        shenfen_name: "江西省政府",
+        shenfen_name: "江西省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SZJSF000",
-        shenfen_name: "浙江省政府",
+        shenfen_name: "浙江省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SJSSF000",
-        shenfen_name: "江苏省政府",
+        shenfen_name: "江苏省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SSDSF000",
-        shenfen_name: "山东省政府",
+        shenfen_name: "山东省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SSXSF000",
-        shenfen_name: "山西省政府",
+        shenfen_name: "山西省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SHESF000",
-        shenfen_name: "河南省政府",
+        shenfen_name: "河南省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SHBSF000",
-        shenfen_name: "河北省政府",
+        shenfen_name: "河北省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SHISF000",
-        shenfen_name: "湖北省政府",
+        shenfen_name: "湖北省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SSISF000",
-        shenfen_name: "陕西省政府",
+        shenfen_name: "陕西省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SCQSF000",
-        shenfen_name: "重庆省政府",
+        shenfen_name: "重庆省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SSCSF000",
-        shenfen_name: "四川省政府",
+        shenfen_name: "四川省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SGSSF000",
-        shenfen_name: "甘肃省政府",
+        shenfen_name: "甘肃省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SBPSF000",
-        shenfen_name: "北平省政府",
+        shenfen_name: "北平省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SHASF000",
-        shenfen_name: "海滨省政府",
+        shenfen_name: "海滨省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SSJSF000",
-        shenfen_name: "松江省政府",
+        shenfen_name: "松江省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SLJSF000",
-        shenfen_name: "龙江省政府",
+        shenfen_name: "龙江省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SJLSF000",
-        shenfen_name: "吉林省政府",
+        shenfen_name: "吉林省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SLISF000",
-        shenfen_name: "辽宁省政府",
+        shenfen_name: "辽宁省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SNXSF000",
-        shenfen_name: "宁夏省政府",
+        shenfen_name: "宁夏省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SQHSF000",
-        shenfen_name: "青海省政府",
+        shenfen_name: "青海省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SAHSF000",
-        shenfen_name: "安徽省政府",
+        shenfen_name: "安徽省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "STWSF000",
-        shenfen_name: "台湾省政府",
+        shenfen_name: "台湾省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SXZSF000",
-        shenfen_name: "西藏省政府",
+        shenfen_name: "西藏省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SXJSF000",
-        shenfen_name: "新疆省政府",
+        shenfen_name: "新疆省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SXKSF000",
-        shenfen_name: "西康省政府",
+        shenfen_name: "西康省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SALSF000",
-        shenfen_name: "阿里省政府",
+        shenfen_name: "阿里省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SCLSF000",
-        shenfen_name: "葱岭省政府",
+        shenfen_name: "葱岭省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "STSSF000",
-        shenfen_name: "天山省政府",
+        shenfen_name: "天山省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SHXSF000",
-        shenfen_name: "河西省政府",
+        shenfen_name: "河西省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SKLSF000",
-        shenfen_name: "昆仑省政府",
+        shenfen_name: "昆仑省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SHTSF000",
-        shenfen_name: "河套省政府",
+        shenfen_name: "河套省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SRHSF000",
-        shenfen_name: "热河省政府",
+        shenfen_name: "热河省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SXASF000",
-        shenfen_name: "兴安省政府",
+        shenfen_name: "兴安省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
-    ChinaZf {
+    ChinaJc {
         shenfen_id: "SHJSF000",
-        shenfen_name: "合江省政府",
+        shenfen_name: "合江省监察院",
         duoqian_address: hex!(""),
         duoqian_admins: &[hex!(""), hex!(""), hex!(""), hex!(""), hex!("")],
     },
