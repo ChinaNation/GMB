@@ -14,7 +14,7 @@ frame-system = { workspace = true }
 pallet-balances = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
-ciic-code-auth = { path = "../../otherpallet/ciic-code-auth", default-features = false }
+sfid-code-auth = { path = "../../otherpallet/sfid-code-auth", default-features = false }
 
 primitives = { path = "../../../primitives", default-features = false }
 
@@ -28,7 +28,7 @@ std = [
     "pallet-balances/std",
     "sp-runtime/std",
     "sp-std/std",
-    "ciic-code-auth/std",
+    "sfid-code-auth/std",
     "primitives/std",
 ]
 

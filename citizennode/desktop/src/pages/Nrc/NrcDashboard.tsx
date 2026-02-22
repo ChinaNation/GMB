@@ -6,7 +6,7 @@ export function NrcDashboard() {
       <Card>
         <Space direction="vertical" size={6}>
           <Typography.Title level={5} style={{ margin: 0 }}>
-            CPMS 档案录入工作台
+            SFID 档案录入工作台
           </Typography.Title>
           <Typography.Text type="secondary">
             新建公民档案，录入姓名、出生日期、性别、身高、护照号与档案索引号。

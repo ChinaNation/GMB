@@ -11,4 +11,4 @@ pub const CITIZEN_LIGHTNODE_HIGH_REWARD: u128 = 999_900;            // 前期高
 pub const CITIZEN_LIGHTNODE_NORMAL_REWARD: u128 = 99_900;           // 后期常规认证奖励：999.00 元/节点
 
 /// 三、认证发行规则
-pub const CITIZEN_LIGHTNODE_ONE_TIME_ONLY: bool = true;             // 每个 CIIC 身份只能领取一次奖励
+pub const CITIZEN_LIGHTNODE_ONE_TIME_ONLY: bool = true;             // 每个 SFID 身份只能领取一次奖励

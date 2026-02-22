@@ -6,7 +6,7 @@ export function PrbDashboard() {
       <Card>
         <Space direction="vertical" size={6}>
           <Typography.Title level={5} style={{ margin: 0 }}>
-            CPMS 档案检索工作台
+            SFID 档案检索工作台
           </Typography.Title>
           <Typography.Text type="secondary">
             按档案索引号、护照号、姓名等条件快速检索并查看档案详情。

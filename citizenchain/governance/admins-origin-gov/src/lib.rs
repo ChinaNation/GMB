@@ -124,6 +124,60 @@ pub mod pallet {
         OptionQuery,
     >;
 
+    #[pallet::genesis_config]
+    pub struct GenesisConfig<T: Config> {
+        pub _phantom: sp_std::marker::PhantomData<T>,
+    }
+
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            Self {
+                _phantom: Default::default(),
+            }
+        }
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            for node in RESERVE_NODES.iter() {
+                let Some(institution) = reserve_pallet_id_to_bytes(node.pallet_id) else {
+                    continue;
+                };
+                let admins: Vec<T::AccountId> = node
+                    .admins
+                    .iter()
+                    .map(|raw| {
+                        T::AccountId::decode(&mut &raw[..])
+                            .expect("reserve admin account must decode")
+                    })
+                    .collect();
+                let bounded: BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> = admins
+                    .try_into()
+                    .expect("reserve admins must fit MaxAdminsPerInstitution");
+                CurrentAdmins::<T>::insert(institution, bounded);
+            }
+
+            for node in SHENG_BANK_NODES.iter() {
+                let Some(institution) = shengbank_pallet_id_to_bytes(node.pallet_id) else {
+                    continue;
+                };
+                let admins: Vec<T::AccountId> = node
+                    .admins
+                    .iter()
+                    .map(|raw| {
+                        T::AccountId::decode(&mut &raw[..])
+                            .expect("shengbank admin account must decode")
+                    })
+                    .collect();
+                let bounded: BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> = admins
+                    .try_into()
+                    .expect("shengbank admins must fit MaxAdminsPerInstitution");
+                CurrentAdmins::<T>::insert(institution, bounded);
+            }
+        }
+    }
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -270,43 +324,12 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn initial_admins_for_institution(
-            institution: InstitutionPalletId,
-        ) -> Option<Vec<T::AccountId>> {
-            if let Some(node) = RESERVE_NODES
-                .iter()
-                .find(|n| str_to_pallet_id(n.pallet_id) == Some(institution))
-            {
-                let admins = node
-                    .admins
-                    .iter()
-                    .filter_map(|raw| T::AccountId::decode(&mut &raw[..]).ok())
-                    .collect::<Vec<_>>();
-                return Some(admins);
-            }
-
-            SHENG_BANK_NODES
-                .iter()
-                .find(|n| str_to_shengbank_pallet_id(n.pallet_id) == Some(institution))
-                .map(|node| {
-                    node.admins
-                        .iter()
-                        .filter_map(|raw| T::AccountId::decode(&mut &raw[..]).ok())
-                        .collect::<Vec<_>>()
-                })
-        }
-
         fn admins_for_institution(
             institution: InstitutionPalletId,
         ) -> Result<Vec<T::AccountId>, DispatchError> {
-            // 优先读取链上当前管理员列表；若无则回退到创世管理员列表
-            if let Some(stored) = CurrentAdmins::<T>::get(institution) {
-                return Ok(stored.into_inner());
-            }
-
-            let defaults = Self::initial_admins_for_institution(institution)
-                .ok_or(Error::<T>::InvalidInstitution)?;
-            Ok(defaults)
+            // 中文注释：创世后只信任链上管理员状态，不再回退常量管理员。
+            let stored = CurrentAdmins::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            Ok(stored.into_inner())
         }
 
         fn validate_admin_count(org: u8, admins_len: usize) -> DispatchResult {
@@ -376,6 +399,7 @@ pub mod pallet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codec::Encode;
     use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
     use frame_system as system;
     use primitives::reserve_nodes_const::{
@@ -423,14 +447,14 @@ mod tests {
         type Lookup = IdentityLookup<Self::AccountId>;
     }
 
-    pub struct TestCiicEligibility;
-    impl voting_engine_system::CiicEligibility<AccountId32> for TestCiicEligibility {
-        fn is_eligible(_ciic: &[u8], _who: &AccountId32) -> bool {
+    pub struct TestSfidEligibility;
+    impl voting_engine_system::SfidEligibility<AccountId32> for TestSfidEligibility {
+        fn is_eligible(_sfid: &[u8], _who: &AccountId32) -> bool {
             true
         }
 
         fn verify_and_consume_vote_credential(
-            _ciic: &[u8],
+            _sfid: &[u8],
             _who: &AccountId32,
             _proposal_id: u64,
             _nonce: &[u8],
@@ -461,21 +485,40 @@ mod tests {
     pub struct TestInternalAdminProvider;
     impl voting_engine_system::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
-            if org != ORG_NRC {
+            if !matches!(org, ORG_NRC | ORG_PRC | ORG_PRB) {
                 return false;
             }
-            pallet::CurrentAdmins::<Test>::get(institution)
-                .map(|admins| admins.into_inner().iter().any(|admin| admin == who))
-                .unwrap_or(false)
+            if let Some(admins) = pallet::CurrentAdmins::<Test>::get(institution) {
+                return admins.into_inner().iter().any(|admin| admin == who);
+            }
+            let who_arr = who.encode();
+            if who_arr.len() != 32 {
+                return false;
+            }
+            let mut who_raw = [0u8; 32];
+            who_raw.copy_from_slice(&who_arr);
+            match org {
+                ORG_NRC | ORG_PRC => RESERVE_NODES
+                    .iter()
+                    .find(|n| reserve_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                    .map(|n| n.admins.iter().any(|admin| *admin == who_raw))
+                    .unwrap_or(false),
+                ORG_PRB => SHENG_BANK_NODES
+                    .iter()
+                    .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                    .map(|n| n.admins.iter().any(|admin| *admin == who_raw))
+                    .unwrap_or(false),
+                _ => false,
+            }
         }
     }
 
     impl voting_engine_system::Config for Test {
         type RuntimeEvent = RuntimeEvent;
-        type MaxCiicLength = ConstU32<64>;
+        type MaxSfidLength = ConstU32<64>;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
-        type CiicEligibility = TestCiicEligibility;
+        type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
@@ -488,9 +531,12 @@ mod tests {
     }
 
     fn new_test_ext() -> sp_io::TestExternalities {
-        let storage = frame_system::GenesisConfig::<Test>::default()
+        let mut storage = frame_system::GenesisConfig::<Test>::default()
             .build_storage()
             .expect("test storage should build");
+        GenesisConfig::<Test>::default()
+            .assimilate_storage(&mut storage)
+            .expect("admins-origin-gov genesis should assimilate");
         storage.into()
     }
 

@@ -93,7 +93,7 @@ export function LoginCard() {
     const loginSession = organization ?? {
       role: 'full' as const,
       publicKey: fallbackPublicKey,
-      organizationName: 'CPMS 本地管理员'
+      organizationName: 'SFID 本地管理员'
     };
 
     let signerHex = '';
@@ -173,7 +173,7 @@ export function LoginCard() {
             已识别机构：{formatNodeDisplayName(organization)}
           </Typography.Text>
         ) : inputAddress && !invalidAddress ? (
-          <Typography.Text>CPMS 本地管理员</Typography.Text>
+          <Typography.Text>SFID 本地管理员</Typography.Text>
         ) : null}
 
         <Space wrap>

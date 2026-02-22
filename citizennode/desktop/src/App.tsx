@@ -30,7 +30,7 @@ export default function App() {
               <Typography.Title level={3} style={{ margin: 0 }}>
                 公民护照管理系统
               </Typography.Title>
-              <Typography.Text type="secondary">CPMS 本地管理端（离线/局域网）</Typography.Text>
+              <Typography.Text type="secondary">SFID 本地管理端（离线/局域网）</Typography.Text>
               <Space>
                 <Tag color="gold">{getOrganizationName(session)}</Tag>
                 <Button
