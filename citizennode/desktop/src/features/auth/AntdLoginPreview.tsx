@@ -19,7 +19,7 @@ export function AntdLoginPreview() {
 
   const DEV_SUPER_ADMIN = {
     username: 'superadmin',
-    password: 'CPMS@123456'
+    password: 'SFID@123456'
   };
 
   const onFinish = (values: LoginValues) => {
@@ -31,20 +31,20 @@ export function AntdLoginPreview() {
     setLoginError(null);
     login({
       role: 'full',
-      publicKey: '0xCPMS_LOCAL_SUPER_ADMIN',
-      organizationName: 'CPMS 本地超级管理员'
+      publicKey: '0xSFID_LOCAL_SUPER_ADMIN',
+      organizationName: 'SFID 本地超级管理员'
     });
     navigate('/');
   };
 
   return (
-    <div className="cpms-cartoon-page">
-      <div className="cpms-cartoon-frame">
-        <Card bordered={false} className="cpms-cartoon-card">
+    <div className="sfid-cartoon-page">
+      <div className="sfid-cartoon-frame">
+        <Card bordered={false} className="sfid-cartoon-card">
           <Space direction="vertical" size={20} style={{ width: '100%' }}>
             <div>
               <Typography.Title level={3} style={{ margin: 0 }}>
-                CPMS 管理端登录
+                SFID 管理端登录
               </Typography.Title>
               <Typography.Text type="secondary">公民护照管理系统（局域网离线版）</Typography.Text>
             </div>
@@ -52,9 +52,9 @@ export function AntdLoginPreview() {
             <Alert
               type="info"
               showIcon
-              className="cpms-cartoon-alert"
+              className="sfid-cartoon-alert"
               message="请使用系统管理员账号登录"
-              description="开发账号：superadmin / CPMS@123456"
+              description="开发账号：superadmin / SFID@123456"
             />
 
             {loginError ? <Alert type="error" showIcon message={loginError} /> : null}

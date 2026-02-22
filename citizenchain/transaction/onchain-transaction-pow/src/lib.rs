@@ -197,7 +197,6 @@ where
             let _ = Currency::resolve(&nrc_account, nrc_credit);
         }
         // 中文注释：黑洞分成改为“直接销毁”（不入任何地址），总发行量同步减少。
-        // 这里不再向 BLACKHOLE_ADDRESS 转账。
         drop(blackhole_credit);
         // 未被 resolve 的余额离开作用域后自动销毁。
     }
@@ -249,7 +248,161 @@ fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sp_runtime::Perbill;
+    use frame_support::{
+        assert_ok,
+        derive_impl,
+        dispatch::GetDispatchInfo,
+        traits::VariantCountOf,
+        weights::ConstantMultiplier,
+    };
+    use frame_system as system;
+    use pallet_transaction_payment::OnChargeTransaction;
+    use sp_runtime::{
+        traits::IdentityLookup,
+        AccountId32, BuildStorage, Perbill,
+    };
+    use std::{cell::RefCell, thread_local};
+
+    type Block = frame_system::mocking::MockBlock<Test>;
+    type Balance = u128;
+
+    thread_local! {
+        static MOCK_AUTHOR: RefCell<Option<AccountId32>> = const { RefCell::new(None) };
+    }
+
+    #[frame_support::runtime]
+    mod runtime {
+        #[runtime::runtime]
+        #[runtime::derive(
+            RuntimeCall,
+            RuntimeEvent,
+            RuntimeError,
+            RuntimeOrigin,
+            RuntimeFreezeReason,
+            RuntimeHoldReason,
+            RuntimeSlashReason,
+            RuntimeLockId,
+            RuntimeTask,
+            RuntimeViewFunction
+        )]
+        pub struct Test;
+
+        #[runtime::pallet_index(0)]
+        pub type System = frame_system;
+        #[runtime::pallet_index(1)]
+        pub type Balances = pallet_balances;
+        #[runtime::pallet_index(2)]
+        pub type TransactionPayment = pallet_transaction_payment;
+        #[runtime::pallet_index(3)]
+        pub type FullnodePowReward = fullnode_pow_reward;
+    }
+
+    #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
+    impl system::Config for Test {
+        type Block = Block;
+        type AccountId = AccountId32;
+        type AccountData = pallet_balances::AccountData<Balance>;
+        type Lookup = IdentityLookup<Self::AccountId>;
+        type Nonce = u64;
+    }
+
+    impl pallet_balances::Config for Test {
+        type MaxLocks = frame_support::traits::ConstU32<0>;
+        type MaxReserves = frame_support::traits::ConstU32<0>;
+        type ReserveIdentifier = [u8; 8];
+        type Balance = Balance;
+        type RuntimeEvent = RuntimeEvent;
+        type DustRemoval = ();
+        type ExistentialDeposit = frame_support::traits::ConstU128<1>;
+        type AccountStore = System;
+        type WeightInfo = ();
+        type FreezeIdentifier = RuntimeFreezeReason;
+        type MaxFreezes = VariantCountOf<RuntimeFreezeReason>;
+        type RuntimeHoldReason = RuntimeHoldReason;
+        type RuntimeFreezeReason = RuntimeFreezeReason;
+        type DoneSlashHandler = ();
+    }
+
+    impl pallet_transaction_payment::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type OnChargeTransaction = pallet_transaction_payment::FungibleAdapter<Balances, ()>;
+        type WeightToFee = ConstantMultiplier<Balance, frame_support::traits::ConstU128<1>>;
+        type LengthToFee = ConstantMultiplier<Balance, frame_support::traits::ConstU128<1>>;
+        type FeeMultiplierUpdate = ();
+        type OperationalFeeMultiplier = frame_support::traits::ConstU8<1>;
+        type WeightInfo = ();
+    }
+
+    pub struct MockFindAuthor;
+    impl FindAuthor<AccountId32> for MockFindAuthor {
+        fn find_author<'a, I>(_digests: I) -> Option<AccountId32>
+        where
+            I: 'a + IntoIterator<Item = (sp_runtime::ConsensusEngineId, &'a [u8])>,
+        {
+            MOCK_AUTHOR.with(|v| v.borrow().clone())
+        }
+    }
+
+    impl fullnode_pow_reward::Config for Test {
+        type Currency = Balances;
+        type FindAuthor = MockFindAuthor;
+    }
+
+    fn account(n: u8) -> AccountId32 {
+        AccountId32::new([n; 32])
+    }
+
+    fn new_test_ext() -> sp_io::TestExternalities {
+        let mut storage = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
+            .expect("system genesis build should succeed");
+        pallet_balances::GenesisConfig::<Test> {
+            balances: vec![(account(1), 1_000), (account(2), 1_000), (account(3), 3)],
+            dev_accounts: None,
+        }
+        .assimilate_storage(&mut storage)
+        .expect("balances genesis build should succeed");
+        sp_io::TestExternalities::new(storage)
+    }
+
+    struct AmountExtractorAmount;
+    impl CallAmount<AccountId32, RuntimeCall, Balance> for AmountExtractorAmount {
+        fn amount(_who: &AccountId32, _call: &RuntimeCall) -> AmountExtractResult<Balance> {
+            AmountExtractResult::Amount(50_000)
+        }
+    }
+
+    struct AmountExtractorNoAmount;
+    impl CallAmount<AccountId32, RuntimeCall, Balance> for AmountExtractorNoAmount {
+        fn amount(_who: &AccountId32, _call: &RuntimeCall) -> AmountExtractResult<Balance> {
+            AmountExtractResult::NoAmount
+        }
+    }
+
+    struct AmountExtractorUnknown;
+    impl CallAmount<AccountId32, RuntimeCall, Balance> for AmountExtractorUnknown {
+        fn amount(_who: &AccountId32, _call: &RuntimeCall) -> AmountExtractResult<Balance> {
+            AmountExtractResult::Unknown
+        }
+    }
+
+    struct AmountExtractorTiny;
+    impl CallAmount<AccountId32, RuntimeCall, Balance> for AmountExtractorTiny {
+        fn amount(_who: &AccountId32, _call: &RuntimeCall) -> AmountExtractResult<Balance> {
+            AmountExtractResult::Amount(1)
+        }
+    }
+
+    struct FeePayerAsAccount2;
+    impl CallFeePayer<AccountId32, RuntimeCall> for FeePayerAsAccount2 {
+        fn fee_payer(_who: &AccountId32, _call: &RuntimeCall) -> Option<AccountId32> {
+            Some(account(2))
+        }
+    }
+
+    fn sample_call() -> RuntimeCall {
+        RuntimeCall::System(frame_system::Call::remark { remark: vec![1, 2, 3] })
+    }
 
     #[test]
     fn onchain_fee_round_and_min_work() {
@@ -267,5 +420,183 @@ mod tests {
         let fee_large =
             mul_perbill_round(50_000, rate).max(primitives::core_const::ONCHAIN_MIN_FEE);
         assert_eq!(fee_large, 50);
+    }
+
+    #[test]
+    fn mul_perbill_round_half_up_works() {
+        // 500 * 0.1% = 0.5 分，按四舍五入应为 1 分
+        assert_eq!(mul_perbill_round(500, Perbill::from_parts(1_000_000)), 1);
+        // 499 * 0.1% = 0.499 分，按四舍五入应为 0 分
+        assert_eq!(mul_perbill_round(499, Perbill::from_parts(1_000_000)), 0);
+    }
+
+    #[test]
+    fn custom_fee_with_tip_handles_all_extract_results() {
+        new_test_ext().execute_with(|| {
+            let who = account(1);
+            let call = sample_call();
+            let info = call.get_dispatch_info();
+
+            // Amount：50_000 * 0.1% = 50 分，+ tip(3) => 53 分
+            let fee_amount = custom_fee_with_tip::<Test, Balances, AmountExtractorAmount>(
+                &who, &call, &info, 3,
+            )
+            .expect("amount fee must be computable");
+            assert_eq!(fee_amount, 53);
+
+            // NoAmount：不收基础费，仅返回 tip
+            let fee_no_amount = custom_fee_with_tip::<Test, Balances, AmountExtractorNoAmount>(
+                &who, &call, &info, 7,
+            )
+            .expect("no-amount call must only charge tip");
+            assert_eq!(fee_no_amount, 7);
+
+            // Unknown：拒绝交易，避免漏提取手续费
+            assert!(
+                custom_fee_with_tip::<Test, Balances, AmountExtractorUnknown>(&who, &call, &info, 0)
+                    .is_err()
+            );
+        });
+    }
+
+    #[test]
+    fn withdraw_and_can_withdraw_use_default_payer_and_min_fee() {
+        type Adapter = PowOnchainChargeAdapter<Balances, (), AmountExtractorTiny, ()>;
+
+        new_test_ext().execute_with(|| {
+            let who = account(1);
+            let call = sample_call();
+            let info = call.get_dispatch_info();
+
+            assert_ok!(<Adapter as OnChargeTransaction<Test>>::can_withdraw_fee(
+                &who, &call, &info, 0, 2
+            ));
+
+            let liq = <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 2)
+                .expect("withdraw should succeed")
+                .expect("non-zero fee must return liquidity info");
+
+            assert_eq!(Balances::free_balance(who), 988);
+            assert_eq!(liq.0.peek(), 10);
+            assert_eq!(liq.1.peek(), 2);
+        });
+    }
+
+    #[test]
+    fn withdraw_uses_custom_fee_payer() {
+        type Adapter =
+            PowOnchainChargeAdapter<Balances, (), AmountExtractorTiny, FeePayerAsAccount2>;
+
+        new_test_ext().execute_with(|| {
+            let who = account(1);
+            let payer = account(2);
+            let call = sample_call();
+            let info = call.get_dispatch_info();
+
+            let _ = <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 0)
+                .expect("withdraw should succeed")
+                .expect("non-zero fee must return liquidity info");
+
+            assert_eq!(Balances::free_balance(who), 1_000);
+            assert_eq!(Balances::free_balance(payer), 990);
+        });
+    }
+
+    #[test]
+    fn can_withdraw_and_withdraw_fail_when_insufficient_balance() {
+        type Adapter = PowOnchainChargeAdapter<Balances, (), AmountExtractorTiny, ()>;
+
+        new_test_ext().execute_with(|| {
+            let poor = account(3);
+            let call = sample_call();
+            let info = call.get_dispatch_info();
+
+            assert!(<Adapter as OnChargeTransaction<Test>>::can_withdraw_fee(
+                &poor, &call, &info, 0, 0
+            )
+            .is_err());
+
+            assert!(<Adapter as OnChargeTransaction<Test>>::withdraw_fee(
+                &poor, &call, &info, 0, 0
+            )
+            .is_err());
+        });
+    }
+
+    #[test]
+    fn fee_router_distributes_to_bound_author_wallet_and_nrc_then_burns_remainder() {
+        new_test_ext().execute_with(|| {
+            let payer = account(1);
+            let miner = account(9);
+            let reward_wallet = account(8);
+            let nrc = nrc_account::<Test>().expect("nrc account must decode");
+            let issuance_before = Balances::total_issuance();
+
+            fullnode_pow_reward::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
+
+            let credit = <Balances as Balanced<AccountId32>>::withdraw(
+                &payer,
+                100,
+                Precision::Exact,
+                Preservation::Preserve,
+                Fortitude::Polite,
+            )
+            .expect("payer should have enough balance");
+
+            PowOnchainFeeRouter::<Test, Balances, MockFindAuthor>::on_nonzero_unbalanced(credit);
+
+            assert_eq!(Balances::free_balance(payer), 900);
+            assert_eq!(
+                Balances::free_balance(reward_wallet),
+                primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128
+            );
+            assert_eq!(
+                Balances::free_balance(nrc),
+                primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128
+            );
+            assert_eq!(
+                Balances::total_issuance(),
+                issuance_before
+                    - (primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT as u128)
+            );
+        });
+    }
+
+    #[test]
+    fn fee_router_burns_fullnode_share_when_author_not_bound() {
+        new_test_ext().execute_with(|| {
+            let payer = account(1);
+            let miner = account(7);
+            let missing_wallet = account(6);
+            let nrc = nrc_account::<Test>().expect("nrc account must decode");
+            let issuance_before = Balances::total_issuance();
+
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
+            assert_eq!(fullnode_pow_reward::RewardWalletByMiner::<Test>::get(&miner), None);
+
+            let credit = <Balances as Balanced<AccountId32>>::withdraw(
+                &payer,
+                100,
+                Precision::Exact,
+                Preservation::Preserve,
+                Fortitude::Polite,
+            )
+            .expect("payer should have enough balance");
+
+            PowOnchainFeeRouter::<Test, Balances, MockFindAuthor>::on_nonzero_unbalanced(credit);
+
+            assert_eq!(Balances::free_balance(payer), 900);
+            assert_eq!(Balances::free_balance(missing_wallet), 0);
+            assert_eq!(
+                Balances::free_balance(nrc),
+                primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128
+            );
+            // 无作者钱包时：全节点分成+黑洞分成均销毁。
+            let burned = (primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT
+                + primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT)
+                as u128;
+            assert_eq!(Balances::total_issuance(), issuance_before - burned);
+        });
     }
 }

@@ -51,24 +51,43 @@ fn is_nrc_admin_account(who: &[u8; 32]) -> bool {
 }
 
 fn is_nrc_admin<T: Config>(who: &T::AccountId) -> bool {
-    // 中文注释：优先走动态管理员来源，支持管理员变更后立即生效。
-    if T::InternalAdminProvider::is_internal_admin(crate::internal_vote::ORG_NRC, nrc_pallet_id_bytes(), who) {
-        return true;
+    // 中文注释：生产环境仅信任动态管理员来源（链上治理替换后的最终状态）。
+    #[cfg(not(test))]
+    {
+        T::InternalAdminProvider::is_internal_admin(crate::internal_vote::ORG_NRC, nrc_pallet_id_bytes(), who)
     }
-    let who_bytes = who.encode();
-    if who_bytes.len() != 32 {
-        return false;
+    // 中文注释：单测环境允许回退到常量管理员，便于独立测试本 pallet。
+    #[cfg(test)]
+    {
+        if T::InternalAdminProvider::is_internal_admin(crate::internal_vote::ORG_NRC, nrc_pallet_id_bytes(), who) {
+            return true;
+        }
+        let who_bytes = who.encode();
+        if who_bytes.len() != 32 {
+            return false;
+        }
+        let mut who_arr = [0u8; 32];
+        who_arr.copy_from_slice(&who_bytes);
+        is_nrc_admin_account(&who_arr)
     }
-    let mut who_arr = [0u8; 32];
-    who_arr.copy_from_slice(&who_bytes);
-    is_nrc_admin_account(&who_arr)
 }
 
-fn is_nrc_multisig_account(who: &[u8; 32]) -> bool {
+fn institution_multisig_account(institution: InstitutionPalletId) -> Option<[u8; 32]> {
     RESERVE_NODES
         .iter()
-        .find(|n| n.pallet_id == "nrcgch01")
-        .map(|n| n.pallet_address == *who)
+        .find(|n| reserve_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+        .map(|n| n.pallet_address)
+        .or_else(|| {
+            SHENG_BANK_NODES
+                .iter()
+                .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                .map(|n| n.pallet_address)
+        })
+}
+
+fn is_institution_multisig_account(institution: InstitutionPalletId, who: &[u8; 32]) -> bool {
+    institution_multisig_account(institution)
+        .map(|addr| addr == *who)
         .unwrap_or(false)
 }
 
@@ -195,13 +214,17 @@ impl<T: Config> Pallet<T> {
         institution: InstitutionPalletId,
         internal_passed: bool,
     ) -> DispatchResult {
-        // 中文注释：联合投票结果提交执行必须由国储会多签地址发起。
+        // 中文注释：联合投票结果必须由“对应机构自己的多签地址”提交；
+        // 国储会不能代替其他机构提交。
         let who_arr: [u8; 32] = who
             .encode()
             .as_slice()
             .try_into()
             .map_err(|_| Error::<T>::NoPermission)?;
-        ensure!(is_nrc_multisig_account(&who_arr), Error::<T>::NoPermission);
+        ensure!(
+            is_institution_multisig_account(institution, &who_arr),
+            Error::<T>::NoPermission
+        );
 
         let proposal = Self::ensure_open_proposal(proposal_id)?;
 

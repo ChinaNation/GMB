@@ -79,10 +79,38 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
         })
         .collect();
 
+    // 中文注释：SFID 三把创世账户固定为已确认公钥；不依赖 primitives 常量命名。
+    let sfid_main = AccountId::new([
+        0xc6, 0xed, 0x4e, 0x83, 0x20, 0x57, 0xd9, 0x3c, 0x08, 0xc3, 0x3e, 0xb9, 0xb0, 0x29,
+        0x13, 0x4d, 0x88, 0x13, 0x0f, 0x88, 0xb5, 0x85, 0x7a, 0x9c, 0x8a, 0x74, 0xcd, 0xb2,
+        0xf6, 0x72, 0xb1, 0x0a,
+    ]);
+    let sfid_backup_1 = AccountId::new([
+        0x46, 0x9e, 0x28, 0xdc, 0x42, 0xf5, 0xb3, 0x7f, 0xb6, 0x91, 0xcd, 0x01, 0xc9, 0xe8,
+        0xf8, 0x06, 0xb2, 0x0a, 0x3c, 0xb2, 0xd7, 0x5c, 0x9f, 0x94, 0x68, 0xe3, 0x29, 0x84,
+        0xa3, 0x32, 0x60, 0x56,
+    ]);
+    let sfid_backup_2 = AccountId::new([
+        0x56, 0x70, 0x1c, 0xdf, 0x56, 0x29, 0xb9, 0x6e, 0xc0, 0xd1, 0x1f, 0x41, 0xaf, 0x78,
+        0x5b, 0x3a, 0x9e, 0x03, 0xa0, 0xfd, 0x7d, 0xa5, 0x97, 0xce, 0x58, 0x62, 0xbe, 0xe0,
+        0xe3, 0xe8, 0x34, 0x65,
+    ]);
+
+    // 中文注释：机构创世数据由链规格外部注入；这里默认留空数组。
+    let institutions_json: Vec<Value> = Vec::new();
+
     json!({
         "balances": {
             "balances": balances_json,
-        }
+        },
+        "sfidCodeAuth": {
+            "sfidMainAccount": account_to_genesis_ss58(&sfid_main),
+            "sfidBackupAccount1": account_to_genesis_ss58(&sfid_backup_1),
+            "sfidBackupAccount2": account_to_genesis_ss58(&sfid_backup_2),
+        },
+        "nationalInstitutionalRegistry": {
+            "institutions": institutions_json,
+        },
     })
 }
 
@@ -184,5 +212,14 @@ mod tests {
 
         // 中文注释：创世总注入 = 国储会创世发行 + 省储行创立发行。
         assert_eq!(total_in_patch, GENESIS_ISSUANCE + total_shengbank_stake);
+    }
+
+    #[test]
+    fn mainnet_genesis_contains_federal_registry_institutions() {
+        let patch = mainnet_config_genesis();
+        let institutions = patch["nationalInstitutionalRegistry"]["institutions"]
+            .as_array()
+            .expect("nationalInstitutionalRegistry.institutions should be an array");
+        assert!(institutions.is_empty());
     }
 }

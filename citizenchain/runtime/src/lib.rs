@@ -228,9 +228,9 @@ mod runtime {
     #[runtime::pallet_index(9)]
     pub type VotingEngineSystem = voting_engine_system;
 
-    // CIIC 绑定与资格校验：统一处理绑定、验签、资格查询
+    // SFID 绑定与资格校验：统一处理绑定、验签、资格查询
     #[runtime::pallet_index(10)]
-    pub type CiicCodeAuth = ciic_code_auth;
+    pub type SfidCodeAuth = sfid_code_auth;
 
     // 公民轻节点发行：仅负责认证奖励发放
     #[runtime::pallet_index(11)]
@@ -247,4 +247,36 @@ mod runtime {
     // 决议销毁治理模块：本机构内部投票通过后销毁本机构交易地址余额
     #[runtime::pallet_index(14)]
     pub type ResolutionDestroGov = resolution_destro_gov;
+
+    // 国家机构注册管理：机构ID/机构账户/管理员5人制注册与停用
+    #[runtime::pallet_index(15)]
+    pub type NationalInstitutionalRegistry = national_institutional_registry;
+
+    // 公共资金支付：机构内 5 管理员中 >=3 通过后执行机构账户转账
+    #[runtime::pallet_index(16)]
+    pub type PublicFundsPayment = public_funds_payment;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn time_and_currency_constants_are_consistent() {
+        assert_eq!(YUAN, 100 * FEN);
+        assert_eq!(UNIT, YUAN);
+        assert_eq!(HOURS, MINUTES * 60);
+        assert_eq!(DAYS, HOURS * 24);
+        assert_eq!(SLOT_DURATION, MILLI_SECS_PER_BLOCK);
+    }
+
+    #[test]
+    fn runtime_version_and_block_types_are_sane() {
+        assert_eq!(VERSION.spec_name.as_ref(), "gmb-runtime");
+        assert_eq!(VERSION.impl_name.as_ref(), "gmb-runtime");
+        assert!(VERSION.spec_version >= 1);
+
+        let _opaque_block_id: opaque::BlockId = generic::BlockId::Number(0);
+        let _runtime_block_id: BlockId = generic::BlockId::Number(0);
+    }
 }

@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+#[cfg(test)]
 use codec::Encode;
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 use sp_runtime::traits::{SaturatedConversion, Saturating};
@@ -69,30 +70,38 @@ fn is_internal_admin<T: Config>(
     institution: InstitutionPalletId,
     who: &T::AccountId,
 ) -> bool {
-    // 中文注释：优先读取运行时注入的动态管理员来源（如管理员治理模块）。
-    if T::InternalAdminProvider::is_internal_admin(org, institution, who) {
-        return true;
+    // 中文注释：生产环境仅信任动态管理员来源（链上治理替换后的最终状态）。
+    #[cfg(not(test))]
+    {
+        T::InternalAdminProvider::is_internal_admin(org, institution, who)
     }
+    // 中文注释：单测环境允许回退到常量管理员，便于独立测试本 pallet。
+    #[cfg(test)]
+    {
+        if T::InternalAdminProvider::is_internal_admin(org, institution, who) {
+            return true;
+        }
 
-    let who_bytes = who.encode();
-    if who_bytes.len() != 32 {
-        return false;
-    }
-    let mut who_arr = [0u8; 32];
-    who_arr.copy_from_slice(&who_bytes);
+        let who_bytes = who.encode();
+        if who_bytes.len() != 32 {
+            return false;
+        }
+        let mut who_arr = [0u8; 32];
+        who_arr.copy_from_slice(&who_bytes);
 
-    match org {
-        ORG_NRC | ORG_PRC => RESERVE_NODES
-            .iter()
-            .find(|n| reserve_pallet_id_to_bytes(n.pallet_id) == Some(institution))
-            .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
-            .unwrap_or(false),
-        ORG_PRB => SHENG_BANK_NODES
-            .iter()
-            .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
-            .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
-            .unwrap_or(false),
-        _ => false,
+        match org {
+            ORG_NRC | ORG_PRC => RESERVE_NODES
+                .iter()
+                .find(|n| reserve_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                .unwrap_or(false),
+            ORG_PRB => SHENG_BANK_NODES
+                .iter()
+                .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                .unwrap_or(false),
+            _ => false,
+        }
     }
 }
 
