@@ -248,13 +248,9 @@ mod runtime {
     #[runtime::pallet_index(14)]
     pub type ResolutionDestroGov = resolution_destro_gov;
 
-    // 国家机构注册管理：机构ID/机构账户/管理员5人制注册与停用
-    #[runtime::pallet_index(15)]
-    pub type NationalInstitutionalRegistry = national_institutional_registry;
-
-    // 公共资金支付：机构内 5 管理员中 >=3 通过后执行机构账户转账
-    #[runtime::pallet_index(16)]
-    pub type PublicFundsPayment = public_funds_payment;
+    // 多签交易模块：duoqian_address 创建/注销与半数签名校验
+    #[runtime::pallet_index(17)]
+    pub type DuoqianTransactionPow = duoqian_transaction_pow;
 }
 
 #[cfg(test)]
