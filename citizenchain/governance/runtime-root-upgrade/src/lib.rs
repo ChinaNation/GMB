@@ -209,7 +209,9 @@ pub mod pallet {
             );
 
             if approved {
+                let code_to_execute = proposal.code.clone();
                 proposal.status = ProposalStatus::Passed;
+                proposal.code = Default::default();
                 Proposals::<T>::insert(proposal_id, &proposal);
                 if let Some(joint_vote_id) = GovToJointVote::<T>::take(proposal_id) {
                     JointVoteToGov::<T>::remove(joint_vote_id);
@@ -221,7 +223,8 @@ pub mod pallet {
                 });
 
                 // 中文注释：联合投票通过即治理流程结束；执行结果单独记录，不回滚治理状态。
-                if T::RuntimeCodeExecutor::execute_runtime_code(proposal.code.as_slice()).is_ok() {
+                if T::RuntimeCodeExecutor::execute_runtime_code(code_to_execute.as_slice()).is_ok()
+                {
                     Self::deposit_event(Event::<T>::RuntimeUpgradeExecuted {
                         proposal_id,
                         code_hash: proposal.code_hash,
@@ -235,6 +238,7 @@ pub mod pallet {
                 return Ok(());
             } else {
                 proposal.status = ProposalStatus::Rejected;
+                proposal.code = Default::default();
                 Proposals::<T>::insert(proposal_id, &proposal);
                 if let Some(joint_vote_id) = GovToJointVote::<T>::take(proposal_id) {
                     JointVoteToGov::<T>::remove(joint_vote_id);
@@ -462,7 +466,10 @@ mod tests {
 
             let joint_vote_id =
                 RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
-            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(joint_vote_id, false));
+            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
+                joint_vote_id,
+                false
+            ));
             let p = RuntimeRootUpgrade::proposals(0).expect("proposal should exist");
             assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
             assert!(RuntimeRootUpgrade::gov_to_joint_vote(0).is_none());
@@ -484,10 +491,17 @@ mod tests {
 
             let joint_vote_id =
                 RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
-            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(joint_vote_id, true));
+            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
+                joint_vote_id,
+                true
+            ));
 
             let p = RuntimeRootUpgrade::proposals(0).expect("proposal should exist");
             assert!(matches!(p.status, pallet::ProposalStatus::Passed));
+            assert!(
+                p.code.is_empty(),
+                "proposal code should be cleared after finalize"
+            );
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
             assert!(code_executed, "runtime code executor should be called");
             assert!(RuntimeRootUpgrade::gov_to_joint_vote(0).is_none());
@@ -510,14 +524,51 @@ mod tests {
 
             let joint_vote_id =
                 RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
-            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(joint_vote_id, true));
+            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
+                joint_vote_id,
+                true
+            ));
 
             let p = RuntimeRootUpgrade::proposals(0).expect("proposal should exist");
             assert!(matches!(p.status, pallet::ProposalStatus::Passed));
+            assert!(
+                p.code.is_empty(),
+                "proposal code should be cleared after finalize"
+            );
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
-            assert!(!code_executed, "runtime code executor should fail in this test");
+            assert!(
+                !code_executed,
+                "runtime code executor should fail in this test"
+            );
             assert!(RuntimeRootUpgrade::gov_to_joint_vote(0).is_none());
             assert!(RuntimeRootUpgrade::joint_vote_to_gov(joint_vote_id).is_none());
+        });
+    }
+
+    #[test]
+    fn rejected_joint_vote_clears_runtime_code() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(RuntimeRootUpgrade::propose_runtime_upgrade(
+                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                reason_ok(),
+                code_ok(),
+                10,
+                nonce_ok(),
+                sig_ok()
+            ));
+
+            let joint_vote_id =
+                RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
+            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
+                joint_vote_id,
+                false
+            ));
+            let p = RuntimeRootUpgrade::proposals(0).expect("proposal should exist");
+            assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
+            assert!(
+                p.code.is_empty(),
+                "proposal code should be cleared after finalize"
+            );
         });
     }
 }

@@ -62,14 +62,13 @@ citizen-lightnode-issuance = { path = "../issuance/citizen-lightnode-issuance", 
 sfid-code-auth = { path = "../otherpallet/sfid-code-auth", default-features = false }
 onchain-transaction-fee = { path = "../transaction/onchain-transaction-pow", default-features = false }
 offchain-transaction-fee = { path = "../transaction/offchain-transaction-pos", default-features = false }
+duoqian-transaction-pow = { path = "../transaction/duoqian-transaction-pow", default-features = false }
 resolution-issuance-iss = { path = "../issuance/resolution-issuance-iss", default-features = false }
 resolution-issuance-gov = { path = "../governance/resolution-issuance-gov", default-features = false }
 voting-engine-system = { path = "../governance/voting-engine-system", default-features = false }
 admins-origin-gov = { path = "../governance/admins-origin-gov", default-features = false }
 runtime-root-upgrade = { path = "../governance/runtime-root-upgrade", default-features = false }
 resolution-destro-gov = { path = "../governance/resolution-destro-gov", default-features = false }
-national-institutional-registry = { path = "../governance/national-institutional-registry", default-features = false }
-public-funds-payment = { path = "../transaction/public-funds-payment", default-features = false }
 
 [build-dependencies]
 substrate-wasm-builder = { optional = true, workspace = true, default-features = true }
@@ -93,14 +92,13 @@ std = [
 	"sfid-code-auth/std",
 	"onchain-transaction-fee/std",
 	"offchain-transaction-fee/std",
+	"duoqian-transaction-pow/std",
 	"resolution-issuance-iss/std",
 	"resolution-issuance-gov/std",
 	"voting-engine-system/std",
 	"admins-origin-gov/std",
 	"runtime-root-upgrade/std",
 	"resolution-destro-gov/std",
-	"national-institutional-registry/std",
-	"public-funds-payment/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
 	"pallet-transaction-payment/std",

@@ -45,16 +45,19 @@ use frame_system::limits::{BlockLength, BlockWeights};
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use sp_core::sr25519;
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
-use sp_runtime::{traits::One, Perbill};
+use sp_runtime::{
+    traits::{IdentifyAccount, One},
+    MultiSigner, Perbill,
+};
 use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
     AccountId, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance, Hash, Nonce,
-    NationalInstitutionalRegistry, OffchainTransactionFee, PalletInfo, PublicFundsPayment,
-    ResolutionIssuanceGov, ResolutionIssuanceIss, Runtime, RuntimeCall, RuntimeEvent,
-    RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeRootUpgrade, RuntimeTask,
-    System, VotingEngineSystem, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    OffchainTransactionFee, PalletInfo, ResolutionIssuanceGov, ResolutionIssuanceIss, Runtime,
+    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin,
+    RuntimeRootUpgrade, RuntimeTask, System, VotingEngineSystem, BLOCK_HASH_COUNT,
+    EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 
 const NORMAL_DISPATCH_RATIO: Perbill =
@@ -230,19 +233,16 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
                     onchain_transaction_fee::AmountExtractResult::Unknown
                 }
             }
-            RuntimeCall::PublicFundsPayment(
-                public_funds_payment::pallet::Call::approve_payment {
-                    institution,
-                    payment_id,
+            RuntimeCall::DuoqianTransactionPow(
+                duoqian_transaction_pow::pallet::Call::create_duoqian { amount, .. },
+            ) => onchain_transaction_fee::AmountExtractResult::Amount(*amount),
+            RuntimeCall::DuoqianTransactionPow(
+                duoqian_transaction_pow::pallet::Call::close_duoqian {
+                    duoqian_address, ..
                 },
-            ) => {
-                // 中文注释：仅当本次签名会触发“第3票执行转账”时，才按转账金额抽取链上手续费。
-                // 非执行签名（第1/2票）视为无金额交易。
-                match PublicFundsPayment::preview_execute_amount(who, *institution, *payment_id) {
-                    Ok(v) => onchain_transaction_fee::AmountExtractResult::Amount(v),
-                    Err(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
-                }
-            }
+            ) => onchain_transaction_fee::AmountExtractResult::Amount(Balances::free_balance(
+                duoqian_address,
+            )),
             // 中文注释：以下调用类型明确属于“无金额交易”，放行且不计算手续费。
             RuntimeCall::System(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
             RuntimeCall::Timestamp(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
@@ -274,10 +274,7 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::ResolutionDestroGov(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
-            RuntimeCall::NationalInstitutionalRegistry(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
-            }
-            RuntimeCall::PublicFundsPayment(_) => {
+            RuntimeCall::DuoqianTransactionPow(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免“有金额但漏提取”。
@@ -289,30 +286,16 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
 pub struct RuntimeFeePayerExtractor;
 
 impl onchain_transaction_fee::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
-    fn fee_payer(who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
+    fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
         match call {
             RuntimeCall::OffchainTransactionFee(
                 offchain_transaction_fee::pallet::Call::submit_offchain_batch {
-                    institution,
-                    ..
+                    institution, ..
                 },
             ) => {
                 // 中文注释：链下批次上链手续费永远由本机构 fee_pallet_address 承担。
                 // 提交账户只负责提交，不承担手续费。
                 OffchainTransactionFee::fee_account_of(*institution).ok()
-            }
-            RuntimeCall::PublicFundsPayment(
-                public_funds_payment::pallet::Call::approve_payment {
-                    institution,
-                    payment_id,
-                },
-            ) => {
-                // 中文注释：机构支付提案达到第3签时，由机构账户承担链上手续费。
-                if PublicFundsPayment::preview_execute_amount(who, *institution, *payment_id).is_ok() {
-                    PublicFundsPayment::institution_account_of(*institution)
-                } else {
-                    None
-                }
             }
             _ => None,
         }
@@ -363,6 +346,53 @@ impl offchain_transaction_fee::Config for Runtime {
     type MaxRelaySubmitters = ConstU32<8>;
     type InternalVoteEngine = VotingEngineSystem;
     type OffchainBatchVerifier = RuntimeOffchainBatchVerifier;
+}
+
+pub struct RuntimeDuoqianAdminAuth;
+
+impl duoqian_transaction_pow::DuoqianAdminAuth<AccountId> for RuntimeDuoqianAdminAuth {
+    type PublicKey = [u8; 32];
+    type Signature = [u8; 64];
+
+    fn is_valid_public_key(public_key: &Self::PublicKey) -> bool {
+        public_key.iter().any(|b| *b != 0)
+    }
+
+    fn public_key_to_account(public_key: &Self::PublicKey) -> Option<AccountId> {
+        let signer = MultiSigner::from(sr25519::Public::from_raw(*public_key));
+        Some(<MultiSigner as IdentifyAccount>::into_account(signer))
+    }
+
+    fn verify_signature(
+        public_key: &Self::PublicKey,
+        payload: &[u8],
+        signature: &Self::Signature,
+    ) -> bool {
+        let public = sr25519::Public::from_raw(*public_key);
+        let sig = sr25519::Signature::from_raw(*signature);
+        sr25519_verify(&sig, payload, &public)
+    }
+}
+
+pub struct RuntimeDuoqianAddressValidator;
+
+impl duoqian_transaction_pow::DuoqianAddressValidator<AccountId>
+    for RuntimeDuoqianAddressValidator
+{
+    fn is_valid(address: &AccountId) -> bool {
+        // 中文注释：Runtime AccountId 已是本链统一哈希地址格式，这里至少禁止全0黑洞地址。
+        address != &AccountId::new([0u8; 32])
+    }
+}
+
+impl duoqian_transaction_pow::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type AdminAuth = RuntimeDuoqianAdminAuth;
+    type AddressValidator = RuntimeDuoqianAddressValidator;
+    type MaxAdmins = ConstU32<64>;
+    type MinCreateAmount = ConstU128<111>;
+    type MinCloseBalance = ConstU128<111>;
 }
 
 pub struct RuntimeOffchainBatchVerifier;
@@ -531,18 +561,6 @@ impl citizen_lightnode_issuance::Config for Runtime {
     type Currency = Balances;
 }
 
-impl national_institutional_registry::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type MaxInstitutionNameLen = ConstU32<128>;
-}
-
-impl public_funds_payment::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type Currency = Balances;
-    type InstitutionRegistry = NationalInstitutionalRegistry;
-    type MaxMemoLen = ConstU32<256>;
-}
-
 parameter_types! {
     /// 决议发行治理参数（统一来源于 primitives 常量）。
     pub const ResolutionIssuanceMaxReasonLen: u32 = primitives::count_const::RESOLUTION_ISSUANCE_MAX_REASON_LEN;
@@ -702,18 +720,17 @@ mod tests {
     use super::*;
     use crate::OffchainTransactionFee;
     use crate::ResolutionDestroGov;
-    use sfid_code_auth::{SfidVerifier, SfidVoteVerifier};
     use frame_support::assert_ok;
     use frame_support::traits::Currency;
     use offchain_transaction_fee::OffchainBatchVerifier;
     use primitives::reserve_nodes_const::{
         pallet_id_to_bytes as reserve_pallet_id_to_bytes, RESERVE_NODES,
     };
+    use sfid_code_auth::{SfidVerifier, SfidVoteVerifier};
     use sp_core::Pair;
     use sp_runtime::{traits::Hash as HashT, traits::IdentifyAccount, BuildStorage, MultiSigner};
     use voting_engine_system::{
-        SfidEligibility, InternalAdminProvider, JointVoteResultCallback,
-        PopulationSnapshotVerifier,
+        InternalAdminProvider, JointVoteResultCallback, PopulationSnapshotVerifier, SfidEligibility,
     };
 
     fn new_test_ext() -> sp_io::TestExternalities {
@@ -869,8 +886,12 @@ mod tests {
             let relay = AccountId::new([42u8; 32]);
             let _ = Balances::deposit_creating(&relay, 1_000);
             let (pair, _) = sr25519::Pair::generate();
-            let verify_key: offchain_transaction_fee::pallet::VerifyKeyOf<Runtime> =
-                pair.public().0.to_vec().try_into().expect("verify key should fit");
+            let verify_key: offchain_transaction_fee::pallet::VerifyKeyOf<Runtime> = pair
+                .public()
+                .0
+                .to_vec()
+                .try_into()
+                .expect("verify key should fit");
             assert_ok!(OffchainTransactionFee::init_verify_key(
                 RuntimeOrigin::signed(institution_account.clone()),
                 institution,
@@ -886,7 +907,9 @@ mod tests {
                 submitters,
             ));
             let batch_sig_raw = pair
-                .sign(&blake2_256(&(b"GMB_OFFCHAIN_BATCH_V1", institution, 1u64, &batch).encode()))
+                .sign(&blake2_256(
+                    &(b"GMB_OFFCHAIN_BATCH_V1", institution, 1u64, &batch).encode(),
+                ))
                 .0
                 .to_vec();
             let batch_signature: offchain_transaction_fee::pallet::BatchSignatureOf<Runtime> =
@@ -940,7 +963,9 @@ mod tests {
             let who = AccountId::new([1u8; 32]);
             let recipient = AccountId::new([2u8; 32]);
 
-            let system_call = RuntimeCall::System(frame_system::Call::remark { remark: b"x".to_vec() });
+            let system_call = RuntimeCall::System(frame_system::Call::remark {
+                remark: b"x".to_vec(),
+            });
             let no_amount = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
                 AccountId,
                 RuntimeCall,
@@ -966,13 +991,14 @@ mod tests {
                 _ => panic!("expected amount path"),
             }
 
-            let item = offchain_transaction_fee::pallet::OffchainBatchItem::<AccountId, Balance, Hash> {
-                tx_id: <Runtime as frame_system::Config>::Hashing::hash(b"rt-unknown-1"),
-                payer: who.clone(),
-                recipient: AccountId::new([3u8; 32]),
-                transfer_amount: 10,
-                offchain_fee_amount: 1,
-            };
+            let item =
+                offchain_transaction_fee::pallet::OffchainBatchItem::<AccountId, Balance, Hash> {
+                    tx_id: <Runtime as frame_system::Config>::Hashing::hash(b"rt-unknown-1"),
+                    payer: who.clone(),
+                    recipient: AccountId::new([3u8; 32]),
+                    transfer_amount: 10,
+                    offchain_fee_amount: 1,
+                };
             let batch: offchain_transaction_fee::pallet::BatchOf<Runtime> =
                 vec![item].try_into().expect("batch should fit");
             let bad_sig: offchain_transaction_fee::pallet::BatchSignatureOf<Runtime> =
@@ -998,6 +1024,96 @@ mod tests {
     }
 
     #[test]
+    fn pow_tx_amount_extractor_covers_duoqian_create_and_close() {
+        new_test_ext().execute_with(|| {
+            let (p1, _) = sr25519::Pair::generate();
+            let (p2, _) = sr25519::Pair::generate();
+            let admin1 = p1.public().0;
+            let admin2 = p2.public().0;
+            let signer1 = MultiSigner::from(p1.public());
+            let who: AccountId = signer1.into_account();
+
+            let duoqian_address = AccountId::new([77u8; 32]);
+            let beneficiary = AccountId::new([78u8; 32]);
+            let admins: duoqian_transaction_pow::pallet::DuoqianAdminsOf<Runtime> =
+                vec![admin1, admin2].try_into().expect("admins should fit");
+
+            let create_payload = (
+                b"DUOQIAN_CREATE_V1".to_vec(),
+                &duoqian_address,
+                2u32,
+                &admins,
+                1u32,
+                1_000u128,
+            )
+                .encode();
+            let create_sig = p1.sign(&create_payload).0;
+            let approvals: duoqian_transaction_pow::pallet::AdminApprovalsOf<Runtime> =
+                vec![duoqian_transaction_pow::AdminApproval {
+                    public_key: admin1,
+                    signature: create_sig,
+                }]
+                .try_into()
+                .expect("approvals should fit");
+
+            let create_call = RuntimeCall::DuoqianTransactionPow(
+                duoqian_transaction_pow::pallet::Call::create_duoqian {
+                    duoqian_address: duoqian_address.clone(),
+                    admin_count: 2,
+                    duoqian_admins: admins.clone(),
+                    threshold: 1,
+                    amount: 1_000,
+                    approvals,
+                },
+            );
+            let create_amount = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
+                AccountId,
+                RuntimeCall,
+                Balance,
+            >>::amount(&who, &create_call);
+            match create_amount {
+                onchain_transaction_fee::AmountExtractResult::Amount(v) => assert_eq!(v, 1_000),
+                _ => panic!("expected create amount"),
+            }
+
+            let _ = Balances::deposit_creating(&duoqian_address, 777);
+            let close_payload = (
+                b"DUOQIAN_CLOSE_V1".to_vec(),
+                &duoqian_address,
+                &beneficiary,
+                2u32,
+                1u32,
+                777u128,
+            )
+                .encode();
+            let close_sig = p1.sign(&close_payload).0;
+            let close_approvals: duoqian_transaction_pow::pallet::AdminApprovalsOf<Runtime> =
+                vec![duoqian_transaction_pow::AdminApproval {
+                    public_key: admin1,
+                    signature: close_sig,
+                }]
+                .try_into()
+                .expect("approvals should fit");
+            let close_call = RuntimeCall::DuoqianTransactionPow(
+                duoqian_transaction_pow::pallet::Call::close_duoqian {
+                    duoqian_address,
+                    beneficiary,
+                    approvals: close_approvals,
+                },
+            );
+            let close_amount = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
+                AccountId,
+                RuntimeCall,
+                Balance,
+            >>::amount(&who, &close_call);
+            match close_amount {
+                onchain_transaction_fee::AmountExtractResult::Amount(v) => assert_eq!(v, 777),
+                _ => panic!("expected close amount"),
+            }
+        });
+    }
+
+    #[test]
     fn runtime_fee_payer_extractor_routes_offchain_fee_to_fee_account() {
         new_test_ext().execute_with(|| {
             let who = AccountId::new([9u8; 32]);
@@ -1005,7 +1121,8 @@ mod tests {
                 primitives::shengbank_nodes_const::SHENG_BANK_NODES[0].pallet_id,
             )
             .expect("institution id should be valid");
-            let fee_account = OffchainTransactionFee::fee_account_of(institution).expect("fee account");
+            let fee_account =
+                OffchainTransactionFee::fee_account_of(institution).expect("fee account");
 
             let dummy_item =
                 offchain_transaction_fee::pallet::OffchainBatchItem::<AccountId, Balance, Hash> {
@@ -1080,7 +1197,9 @@ mod tests {
     #[test]
     fn joint_vote_callback_missing_mapping_and_runtime_upgrade_route() {
         new_test_ext().execute_with(|| {
-            assert!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(999_999, true).is_err());
+            assert!(
+                RuntimeJointVoteResultCallback::on_joint_vote_finalized(999_999, true).is_err()
+            );
 
             let proposal_id = 7u64;
             let joint_vote_id = 70u64;
@@ -1101,8 +1220,14 @@ mod tests {
                     status: runtime_root_upgrade::pallet::ProposalStatus::Voting,
                 },
             );
-            runtime_root_upgrade::pallet::GovToJointVote::<Runtime>::insert(proposal_id, joint_vote_id);
-            runtime_root_upgrade::pallet::JointVoteToGov::<Runtime>::insert(joint_vote_id, proposal_id);
+            runtime_root_upgrade::pallet::GovToJointVote::<Runtime>::insert(
+                proposal_id,
+                joint_vote_id,
+            );
+            runtime_root_upgrade::pallet::JointVoteToGov::<Runtime>::insert(
+                joint_vote_id,
+                proposal_id,
+            );
 
             assert_ok!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(
                 joint_vote_id,
@@ -1114,8 +1239,13 @@ mod tests {
                 updated.status,
                 runtime_root_upgrade::pallet::ProposalStatus::Rejected
             ));
-            assert!(runtime_root_upgrade::pallet::GovToJointVote::<Runtime>::get(proposal_id).is_none());
-            assert!(runtime_root_upgrade::pallet::JointVoteToGov::<Runtime>::get(joint_vote_id).is_none());
+            assert!(
+                runtime_root_upgrade::pallet::GovToJointVote::<Runtime>::get(proposal_id).is_none()
+            );
+            assert!(
+                runtime_root_upgrade::pallet::JointVoteToGov::<Runtime>::get(joint_vote_id)
+                    .is_none()
+            );
         });
     }
 
@@ -1147,8 +1277,11 @@ mod tests {
             );
             let bind_msg = blake2_256(&bind_payload.encode());
             let bind_sig = pair.sign(&bind_msg);
-            let bind_signature: sfid_code_auth::pallet::SignatureOf<Runtime> =
-                bind_sig.0.to_vec().try_into().expect("signature should fit");
+            let bind_signature: sfid_code_auth::pallet::SignatureOf<Runtime> = bind_sig
+                .0
+                .to_vec()
+                .try_into()
+                .expect("signature should fit");
             let bind_credential = sfid_code_auth::BindCredential {
                 sfid_code_hash: sfid_hash,
                 nonce: bind_nonce.clone(),
@@ -1208,12 +1341,14 @@ mod tests {
                 .to_vec()
                 .try_into()
                 .expect("signature should fit");
-            assert!(RuntimePopulationSnapshotVerifier::verify_population_snapshot(
-                &account,
-                123,
-                &pop_nonce,
-                &pop_signature
-            ));
+            assert!(
+                RuntimePopulationSnapshotVerifier::verify_population_snapshot(
+                    &account,
+                    123,
+                    &pop_nonce,
+                    &pop_signature
+                )
+            );
         });
     }
 
@@ -1231,7 +1366,10 @@ mod tests {
             sfid_code_auth::pallet::AccountToSfid::<Runtime>::insert(who.clone(), sfid_hash);
 
             assert!(RuntimeSfidEligibility::is_eligible(sfid, &who));
-            assert!(!RuntimeSfidEligibility::is_eligible(sfid, &AccountId::new([42u8; 32])));
+            assert!(!RuntimeSfidEligibility::is_eligible(
+                sfid,
+                &AccountId::new([42u8; 32])
+            ));
 
             let nonce = b"wrap-nonce";
             let vote_msg = blake2_256(
@@ -1248,10 +1386,8 @@ mod tests {
             let signature = pair.sign(&vote_msg).0.to_vec();
             let nonce_bounded: sfid_code_auth::pallet::NonceOf<Runtime> =
                 nonce.to_vec().try_into().expect("nonce should fit");
-            let signature_bounded: sfid_code_auth::pallet::SignatureOf<Runtime> = signature
-                .clone()
-                .try_into()
-                .expect("signature should fit");
+            let signature_bounded: sfid_code_auth::pallet::SignatureOf<Runtime> =
+                signature.clone().try_into().expect("signature should fit");
             assert!(RuntimeSfidVoteVerifier::verify_vote(
                 &who,
                 sfid_hash,
@@ -1276,9 +1412,7 @@ mod tests {
             let outsider = AccountId::new([99u8; 32]);
 
             let ok_origin = RuntimeOrigin::signed(nrc_admin.clone());
-            assert!(
-                <EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(ok_origin).is_ok()
-            );
+            assert!(<EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(ok_origin).is_ok());
             let bad_origin = RuntimeOrigin::signed(outsider.clone());
             assert!(
                 <EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(bad_origin).is_err()
