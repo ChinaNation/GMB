@@ -931,26 +931,39 @@ pub mod pallet {
         }
 
         fn is_prb_admin(institution: InstitutionPalletId, who: &T::AccountId) -> bool {
-            if <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
-                ORG_PRB,
-                institution,
-                who,
-            ) {
-                return true;
+            // 中文注释：生产环境仅信任动态管理员来源（链上治理替换后的最终状态）。
+            #[cfg(not(test))]
+            {
+                <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
+                    ORG_PRB,
+                    institution,
+                    who,
+                )
             }
+            // 中文注释：单测环境允许回退到常量管理员，便于独立测试本 pallet。
+            #[cfg(test)]
+            {
+                if <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
+                    ORG_PRB,
+                    institution,
+                    who,
+                ) {
+                    return true;
+                }
 
-            let who_bytes = who.encode();
-            if who_bytes.len() != 32 {
-                return false;
+                let who_bytes = who.encode();
+                if who_bytes.len() != 32 {
+                    return false;
+                }
+                let mut who_arr = [0u8; 32];
+                who_arr.copy_from_slice(&who_bytes);
+
+                SHENG_BANK_NODES
+                    .iter()
+                    .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                    .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                    .unwrap_or(false)
             }
-            let mut who_arr = [0u8; 32];
-            who_arr.copy_from_slice(&who_bytes);
-
-            SHENG_BANK_NODES
-                .iter()
-                .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
-                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
-                .unwrap_or(false)
         }
 
         fn try_execute_rate(proposal_id: u64) -> DispatchResult {
@@ -1169,6 +1182,7 @@ pub mod pallet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codec::Encode;
     use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
     use frame_system as system;
     use sp_runtime::{traits::Hash as HashT, traits::IdentityLookup, AccountId32, BuildStorage, TokenError};
@@ -1231,14 +1245,14 @@ mod tests {
         type WeightInfo = ();
     }
 
-    pub struct TestCiicEligibility;
-    impl voting_engine_system::CiicEligibility<AccountId32> for TestCiicEligibility {
-        fn is_eligible(_ciic: &[u8], _who: &AccountId32) -> bool {
+    pub struct TestSfidEligibility;
+    impl voting_engine_system::SfidEligibility<AccountId32> for TestSfidEligibility {
+        fn is_eligible(_sfid: &[u8], _who: &AccountId32) -> bool {
             true
         }
 
         fn verify_and_consume_vote_credential(
-            _ciic: &[u8],
+            _sfid: &[u8],
             _who: &AccountId32,
             _proposal_id: u64,
             _nonce: &[u8],
@@ -1266,15 +1280,39 @@ mod tests {
         }
     }
 
+    pub struct TestInternalAdminProvider;
+    impl voting_engine_system::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
+        fn is_internal_admin(
+            org: u8,
+            institution: InstitutionPalletId,
+            who: &AccountId32,
+        ) -> bool {
+            let who_bytes = who.encode();
+            if who_bytes.len() != 32 {
+                return false;
+            }
+            let mut who_arr = [0u8; 32];
+            who_arr.copy_from_slice(&who_bytes);
+            match org {
+                voting_engine_system::internal_vote::ORG_PRB => SHENG_BANK_NODES
+                    .iter()
+                    .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                    .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                    .unwrap_or(false),
+                _ => false,
+            }
+        }
+    }
+
     impl voting_engine_system::Config for Test {
         type RuntimeEvent = RuntimeEvent;
-        type MaxCiicLength = ConstU32<64>;
+        type MaxSfidLength = ConstU32<64>;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
-        type CiicEligibility = TestCiicEligibility;
+        type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
-        type InternalAdminProvider = ();
+        type InternalAdminProvider = TestInternalAdminProvider;
     }
 
     pub struct TestOffchainBatchVerifier;

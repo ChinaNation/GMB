@@ -6,7 +6,7 @@ export function FullDashboard() {
       <Card>
         <Space direction="vertical" size={6}>
           <Typography.Title level={5} style={{ margin: 0 }}>
-            CPMS 超级管理员工作台
+            SFID 超级管理员工作台
           </Typography.Title>
           <Typography.Text type="secondary">
             管理管理员账户、系统参数、数据备份恢复与局域网共享配置。

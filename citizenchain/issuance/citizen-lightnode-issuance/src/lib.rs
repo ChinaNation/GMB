@@ -4,7 +4,7 @@ pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use ciic_code_auth::OnCiicBound;
+    use sfid_code_auth::OnSfidBound;
     use frame_support::{pallet_prelude::*, traits::Currency, Blake2_128Concat};
     use sp_runtime::traits::{SaturatedConversion, Zero};
 
@@ -39,10 +39,10 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 中文注释：CIIC 绑定成功后，认证发行模块执行一次奖励发放。
+        /// 中文注释：SFID 绑定成功后，认证发行模块执行一次奖励发放。
         CertificationRewardIssued {
             who: T::AccountId,
-            ciic_hash: T::Hash,
+            sfid_hash: T::Hash,
             reward: BalanceOf<T>,
         },
     }
@@ -54,8 +54,8 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {}
 
     impl<T: Config> Pallet<T> {
-        fn try_issue_certification_reward(who: &T::AccountId, ciic_hash: T::Hash) -> BalanceOf<T> {
-            if CITIZEN_LIGHTNODE_ONE_TIME_ONLY && RewardClaimed::<T>::get(ciic_hash) {
+        fn try_issue_certification_reward(who: &T::AccountId, sfid_hash: T::Hash) -> BalanceOf<T> {
+            if CITIZEN_LIGHTNODE_ONE_TIME_ONLY && RewardClaimed::<T>::get(sfid_hash) {
                 return 0u128.saturated_into();
             }
 
@@ -75,21 +75,21 @@ pub mod pallet {
 
             RewardedCount::<T>::put(rewarded_count.saturating_add(1));
             if CITIZEN_LIGHTNODE_ONE_TIME_ONLY {
-                RewardClaimed::<T>::insert(ciic_hash, true);
+                RewardClaimed::<T>::insert(sfid_hash, true);
             }
 
             reward
         }
     }
 
-    impl<T: Config> OnCiicBound<T::AccountId, T::Hash> for Pallet<T> {
-        fn on_ciic_bound(who: &T::AccountId, ciic_hash: T::Hash) {
-            let reward = Self::try_issue_certification_reward(who, ciic_hash);
+    impl<T: Config> OnSfidBound<T::AccountId, T::Hash> for Pallet<T> {
+        fn on_sfid_bound(who: &T::AccountId, sfid_hash: T::Hash) {
+            let reward = Self::try_issue_certification_reward(who, sfid_hash);
             // 中文注释：仅在实际发放奖励时发事件，避免 reward=0 造成“已发奖”误解。
             if !reward.is_zero() {
                 Self::deposit_event(Event::<T>::CertificationRewardIssued {
                     who: who.clone(),
-                    ciic_hash,
+                    sfid_hash,
                     reward,
                 });
             }
@@ -183,17 +183,17 @@ mod tests {
     }
 
     #[test]
-    fn on_ciic_bound_issues_reward() {
+    fn on_sfid_bound_issues_reward() {
         new_test_ext().execute_with(|| {
-            let ciic_hash = <Test as frame_system::Config>::Hashing::hash(b"ciic-a");
-            <CitizenLightnodeIssuance as ciic_code_auth::OnCiicBound<
+            let sfid_hash = <Test as frame_system::Config>::Hashing::hash(b"sfid-a");
+            <CitizenLightnodeIssuance as sfid_code_auth::OnSfidBound<
                 u64,
                 <Test as frame_system::Config>::Hash,
-            >>::on_ciic_bound(&1, ciic_hash);
+            >>::on_sfid_bound(&1, sfid_hash);
 
             assert_eq!(Balances::free_balance(1), CITIZEN_LIGHTNODE_HIGH_REWARD);
             assert_eq!(RewardedCount::<Test>::get(), 1);
-            assert!(RewardClaimed::<Test>::get(ciic_hash));
+            assert!(RewardClaimed::<Test>::get(sfid_hash));
         });
     }
 
@@ -201,12 +201,12 @@ mod tests {
     fn max_cap_stops_reward() {
         new_test_ext().execute_with(|| {
             RewardedCount::<Test>::put(CITIZEN_LIGHTNODE_MAX_COUNT);
-            let ciic_hash = <Test as frame_system::Config>::Hashing::hash(b"ciic-cap");
+            let sfid_hash = <Test as frame_system::Config>::Hashing::hash(b"sfid-cap");
 
-            <CitizenLightnodeIssuance as ciic_code_auth::OnCiicBound<
+            <CitizenLightnodeIssuance as sfid_code_auth::OnSfidBound<
                 u64,
                 <Test as frame_system::Config>::Hash,
-            >>::on_ciic_bound(&1, ciic_hash);
+            >>::on_sfid_bound(&1, sfid_hash);
 
             assert_eq!(Balances::free_balance(1), 0);
             assert_eq!(RewardedCount::<Test>::get(), CITIZEN_LIGHTNODE_MAX_COUNT);
@@ -214,18 +214,18 @@ mod tests {
     }
 
     #[test]
-    fn same_ciic_only_rewards_once() {
+    fn same_sfid_only_rewards_once() {
         new_test_ext().execute_with(|| {
-            let ciic_hash = <Test as frame_system::Config>::Hashing::hash(b"ciic-repeat");
+            let sfid_hash = <Test as frame_system::Config>::Hashing::hash(b"sfid-repeat");
 
-            <CitizenLightnodeIssuance as ciic_code_auth::OnCiicBound<
+            <CitizenLightnodeIssuance as sfid_code_auth::OnSfidBound<
                 u64,
                 <Test as frame_system::Config>::Hash,
-            >>::on_ciic_bound(&1, ciic_hash);
-            <CitizenLightnodeIssuance as ciic_code_auth::OnCiicBound<
+            >>::on_sfid_bound(&1, sfid_hash);
+            <CitizenLightnodeIssuance as sfid_code_auth::OnSfidBound<
                 u64,
                 <Test as frame_system::Config>::Hash,
-            >>::on_ciic_bound(&1, ciic_hash);
+            >>::on_sfid_bound(&1, sfid_hash);
 
             assert_eq!(Balances::free_balance(1), CITIZEN_LIGHTNODE_HIGH_REWARD);
             assert_eq!(RewardedCount::<Test>::get(), 1);
@@ -236,12 +236,12 @@ mod tests {
     fn boundary_switches_to_normal_reward_at_high_reward_count() {
         new_test_ext().execute_with(|| {
             RewardedCount::<Test>::put(CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT);
-            let ciic_hash = <Test as frame_system::Config>::Hashing::hash(b"ciic-boundary");
+            let sfid_hash = <Test as frame_system::Config>::Hashing::hash(b"sfid-boundary");
 
-            <CitizenLightnodeIssuance as ciic_code_auth::OnCiicBound<
+            <CitizenLightnodeIssuance as sfid_code_auth::OnSfidBound<
                 u64,
                 <Test as frame_system::Config>::Hash,
-            >>::on_ciic_bound(&1, ciic_hash);
+            >>::on_sfid_bound(&1, sfid_hash);
 
             assert_eq!(Balances::free_balance(1), CITIZEN_LIGHTNODE_NORMAL_REWARD);
             assert_eq!(

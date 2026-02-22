@@ -81,18 +81,18 @@ class AttestationService {
     await prefs.remove(_kLastPayload);
   }
 
-  Future<CiicBindDraft> buildCiicBindDraft({
+  Future<SfidBindDraft> buildSfidBindDraft({
     required WalletProfile wallet,
-    required String ciicCode,
+    required String sfidCode,
   }) async {
     final state = await getState();
     if (!state.isValid || state.token == null) {
-      throw Exception('未拿到官方证明，不能绑定 CIIC');
+      throw Exception('未拿到官方证明，不能绑定 SFID');
     }
     final challenge = _issueChallenge();
     final signature = _signChallengeLocally(challenge, wallet);
-    return CiicBindDraft(
-      ciicCode: ciicCode,
+    return SfidBindDraft(
+      sfidCode: sfidCode,
       attestationToken: state.token!,
       challenge: challenge,
       challengeSignature: signature,
@@ -133,15 +133,15 @@ class AttestationService {
   }
 }
 
-class CiicBindDraft {
-  const CiicBindDraft({
-    required this.ciicCode,
+class SfidBindDraft {
+  const SfidBindDraft({
+    required this.sfidCode,
     required this.attestationToken,
     required this.challenge,
     required this.challengeSignature,
   });
 
-  final String ciicCode;
+  final String sfidCode;
   final String attestationToken;
   final String challenge;
   final String challengeSignature;

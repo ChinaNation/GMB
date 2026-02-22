@@ -1,4 +1,4 @@
-.cpms-cartoon-page {
+.sfid-cartoon-page {
   min-height: 100vh;
   display: grid;
   place-items: center;
@@ -9,7 +9,7 @@
     #d8caba;
 }
 
-.cpms-cartoon-frame {
+.sfid-cartoon-frame {
   width: 100%;
   max-width: 860px;
   padding: 34px;
@@ -19,7 +19,7 @@
   box-shadow: 0 10px 0 rgba(29, 110, 107, 0.12);
 }
 
-.cpms-cartoon-card.ant-card {
+.sfid-cartoon-card.ant-card {
   width: 100%;
   max-width: 520px;
   margin: 0 auto;
@@ -29,25 +29,25 @@
   box-shadow: none;
 }
 
-.cpms-cartoon-alert.ant-alert {
+.sfid-cartoon-alert.ant-alert {
   border: 3px solid #1d6e6b;
   border-radius: 16px;
   background: #d7e8e6;
 }
 
-.cpms-cartoon-card .ant-form-item-label > label {
+.sfid-cartoon-card .ant-form-item-label > label {
   color: #3f413e;
   font-weight: 600;
 }
 
-.cpms-cartoon-card .ant-input-affix-wrapper,
-.cpms-cartoon-card .ant-input {
+.sfid-cartoon-card .ant-input-affix-wrapper,
+.sfid-cartoon-card .ant-input {
   border: 3px solid #1d6e6b;
   border-radius: 16px;
   background: #fffef9;
 }
 
-.cpms-cartoon-card .ant-btn-primary {
+.sfid-cartoon-card .ant-btn-primary {
   height: 48px;
   border: 3px solid #1d6e6b;
   border-radius: 24px;
@@ -56,18 +56,18 @@
   font-weight: 700;
 }
 
-.cpms-cartoon-card .ant-btn-primary:hover {
+.sfid-cartoon-card .ant-btn-primary:hover {
   background: #247d79;
 }
 
 @media (max-width: 768px) {
-  .cpms-cartoon-frame {
+  .sfid-cartoon-frame {
     padding: 18px;
     border-width: 3px;
     border-radius: 24px;
   }
 
-  .cpms-cartoon-card.ant-card {
+  .sfid-cartoon-card.ant-card {
     border-width: 3px;
     border-radius: 22px;
   }

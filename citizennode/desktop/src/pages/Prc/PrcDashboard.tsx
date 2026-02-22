@@ -6,7 +6,7 @@ export function PrcDashboard() {
       <Card>
         <Space direction="vertical" size={6}>
           <Typography.Title level={5} style={{ margin: 0 }}>
-            CPMS 档案审核工作台
+            SFID 档案审核工作台
           </Typography.Title>
           <Typography.Text type="secondary">
             审核档案完整性与索引号规范，处理退回、补录、通过等流程。

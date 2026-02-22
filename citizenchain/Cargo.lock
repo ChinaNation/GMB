@@ -1306,19 +1306,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ciic-code-auth"
-version = "0.0.1"
-dependencies = [
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "sp-io",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
 name = "cipher"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1342,13 +1329,13 @@ dependencies = [
 name = "citizen-lightnode-issuance"
 version = "0.0.1"
 dependencies = [
- "ciic-code-auth",
  "frame-support",
  "frame-system",
  "pallet-balances",
  "parity-scale-codec",
  "primitives",
  "scale-info",
+ "sfid-code-auth",
  "sp-io",
  "sp-runtime",
  "sp-std",
@@ -3629,7 +3616,6 @@ name = "gmb-runtime"
 version = "0.0.1"
 dependencies = [
  "admins-origin-gov",
- "ciic-code-auth",
  "citizen-lightnode-issuance",
  "frame-benchmarking",
  "frame-executive",
@@ -3640,6 +3626,7 @@ dependencies = [
  "frame-system-rpc-runtime-api",
  "frame-try-runtime",
  "fullnode-pow-reward",
+ "national-institutional-registry",
  "offchain-transaction-fee",
  "onchain-transaction-fee",
  "pallet-balances",
@@ -3648,12 +3635,14 @@ dependencies = [
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
  "primitives",
+ "public-funds-payment",
  "resolution-destro-gov",
  "resolution-issuance-gov",
  "resolution-issuance-iss",
  "runtime-root-upgrade",
  "scale-info",
  "serde_json",
+ "sfid-code-auth",
  "shengbank-stake-interest",
  "sp-api",
  "sp-block-builder",
@@ -5919,6 +5908,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a51313c5820b0b02bd422f4b44776fbf47961755c74ce64afc73bfad10226c3"
 
 [[package]]
+name = "national-institutional-registry"
+version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "netlink-packet-core"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6274,9 +6277,12 @@ dependencies = [
  "frame-support",
  "frame-system",
  "fullnode-pow-reward",
+ "pallet-balances",
  "pallet-transaction-payment",
  "parity-scale-codec",
  "primitives",
+ "scale-info",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]
@@ -7674,6 +7680,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8991c4cbdb8bc5b11f0b074ffe286c30e523de90fee5ba8132f1399f23cb3dd7"
 dependencies = [
  "prost 0.14.3",
+]
+
+[[package]]
+name = "public-funds-payment"
+version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "national-institutional-registry",
+ "pallet-balances",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]
@@ -9845,6 +9867,20 @@ checksum = "a84f14a19e9a014bb9f4512488d9829a68e04ecabffb0f9904cd1ace94598177"
 dependencies = [
  "base16ct",
  "serde",
+]
+
+[[package]]
+name = "sfid-code-auth"
+version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]

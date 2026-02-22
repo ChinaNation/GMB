@@ -4,7 +4,7 @@ pub mod citizen_vote;
 pub mod internal_vote;
 pub mod joint_vote;
 
-pub use citizen_vote::CiicEligibility;
+pub use citizen_vote::SfidEligibility;
 pub use pallet::*;
 
 use codec::{Decode, Encode, MaxEncodedLen};
@@ -54,7 +54,7 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
     }
 }
 
-/// 中文注释：公民总人口快照验签接口（由 runtime 对接 CIIC 系统）。
+/// 中文注释：公民总人口快照验签接口（由 runtime 对接 SFID 系统）。
 pub trait PopulationSnapshotVerifier<AccountId, Nonce, Signature> {
     fn verify_population_snapshot(
         who: &AccountId,
@@ -144,7 +144,7 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         #[pallet::constant]
-        type MaxCiicLength: Get<u32>;
+        type MaxSfidLength: Get<u32>;
 
         #[pallet::constant]
         type MaxVoteNonceLength: Get<u32>;
@@ -152,7 +152,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxVoteSignatureLength: Get<u32>;
 
-        type CiicEligibility: CiicEligibility<Self::AccountId>;
+        type SfidEligibility: SfidEligibility<Self::AccountId>;
         type PopulationSnapshotVerifier: PopulationSnapshotVerifier<
             Self::AccountId,
             VoteNonceOf<Self>,
@@ -163,7 +163,7 @@ pub mod pallet {
         type InternalAdminProvider: InternalAdminProvider<Self::AccountId>;
     }
 
-    pub type CiicOf<T> = BoundedVec<u8, <T as Config>::MaxCiicLength>;
+    pub type SfidOf<T> = BoundedVec<u8, <T as Config>::MaxSfidLength>;
     pub type VoteNonceOf<T> = BoundedVec<u8, <T as Config>::MaxVoteNonceLength>;
     pub type VoteSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxVoteSignatureLength>;
 
@@ -210,7 +210,7 @@ pub mod pallet {
     pub type JointTallies<T> = StorageMap<_, Blake2_128Concat, u64, VoteCountU32, ValueQuery>;
 
     #[pallet::storage]
-    pub type CitizenVotesByCiic<T: Config> =
+    pub type CitizenVotesBySfid<T: Config> =
         StorageDoubleMap<_, Blake2_128Concat, u64, Blake2_128Concat, T::Hash, bool, OptionQuery>;
 
     #[pallet::storage]
@@ -254,7 +254,7 @@ pub mod pallet {
         CitizenVoteCast {
             proposal_id: u64,
             who: T::AccountId,
-            ciic_hash: T::Hash,
+            sfid_hash: T::Hash,
             approve: bool,
         },
     }
@@ -271,9 +271,9 @@ pub mod pallet {
         VoteClosed,
         VoteNotExpired,
         AlreadyVoted,
-        CiicNotEligible,
-        InvalidCiicVoteCredential,
-        EmptyCiic,
+        SfidNotEligible,
+        InvalidSfidVoteCredential,
+        EmptySfid,
         CitizenEligibleTotalNotSet,
         InvalidPopulationSnapshot,
         ProposalAlreadyFinalized,
@@ -335,13 +335,13 @@ pub mod pallet {
         pub fn citizen_vote(
             origin: OriginFor<T>,
             proposal_id: u64,
-            ciic: CiicOf<T>,
+            sfid: SfidOf<T>,
             nonce: VoteNonceOf<T>,
             signature: VoteSignatureOf<T>,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_citizen_vote(who, proposal_id, ciic, nonce, signature, approve)
+            Self::do_citizen_vote(who, proposal_id, sfid, nonce, signature, approve)
         }
 
         #[pallet::call_index(5)]
@@ -501,10 +501,10 @@ mod tests {
 
     impl Config for Test {
         type RuntimeEvent = RuntimeEvent;
-        type MaxCiicLength = ConstU32<64>;
+        type MaxSfidLength = ConstU32<64>;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
-        type CiicEligibility = TestCiicEligibility;
+        type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = ();
@@ -514,7 +514,7 @@ mod tests {
         static USED_VOTE_NONCES: RefCell<BTreeSet<(u64, Vec<u8>, Vec<u8>)>> = RefCell::new(BTreeSet::new());
     }
 
-    pub struct TestCiicEligibility;
+    pub struct TestSfidEligibility;
     pub struct TestPopulationSnapshotVerifier;
 
     impl
@@ -534,22 +534,22 @@ mod tests {
         }
     }
 
-    impl CiicEligibility<AccountId32> for TestCiicEligibility {
-        fn is_eligible(ciic: &[u8], who: &AccountId32) -> bool {
-            ciic == b"ciic-ok" && who == &nrc_admin(0)
+    impl SfidEligibility<AccountId32> for TestSfidEligibility {
+        fn is_eligible(sfid: &[u8], who: &AccountId32) -> bool {
+            sfid == b"sfid-ok" && who == &nrc_admin(0)
         }
 
         fn verify_and_consume_vote_credential(
-            ciic: &[u8],
+            sfid: &[u8],
             who: &AccountId32,
             proposal_id: u64,
             nonce: &[u8],
             signature: &[u8],
         ) -> bool {
-            if !Self::is_eligible(ciic, who) || signature != b"vote-ok" || nonce.is_empty() {
+            if !Self::is_eligible(sfid, who) || signature != b"vote-ok" || nonce.is_empty() {
                 return false;
             }
-            let key = (proposal_id, ciic.to_vec(), nonce.to_vec());
+            let key = (proposal_id, sfid.to_vec(), nonce.to_vec());
             USED_VOTE_NONCES.with(|set| {
                 let mut set = set.borrow_mut();
                 if set.contains(&key) {
@@ -595,6 +595,35 @@ mod tests {
         AccountId32::new(RESERVE_NODES[0].pallet_address)
     }
 
+    fn prc_multisig() -> AccountId32 {
+        AccountId32::new(RESERVE_NODES[1].pallet_address)
+    }
+
+    fn all_prc_institutions() -> Vec<(InstitutionPalletId, AccountId32)> {
+        RESERVE_NODES
+            .iter()
+            .filter(|n| n.pallet_id != "nrcgch01")
+            .map(|n| {
+                (
+                    reserve_pallet_id_to_bytes(n.pallet_id).expect("prc id should be 8 bytes"),
+                    AccountId32::new(n.pallet_address),
+                )
+            })
+            .collect()
+    }
+
+    fn all_prb_institutions() -> Vec<(InstitutionPalletId, AccountId32)> {
+        SHENG_BANK_NODES
+            .iter()
+            .map(|n| {
+                (
+                    shengbank_pallet_id_to_bytes(n.pallet_id).expect("prb id should be 8 bytes"),
+                    AccountId32::new(n.pallet_address),
+                )
+            })
+            .collect()
+    }
+
     fn prc_admin(index: usize) -> AccountId32 {
         AccountId32::new(RESERVE_NODES[1].admins[index])
     }
@@ -603,8 +632,8 @@ mod tests {
         AccountId32::new(SHENG_BANK_NODES[0].admins[index])
     }
 
-    fn ciic_ok() -> pallet::CiicOf<Test> {
-        b"ciic-ok".to_vec().try_into().expect("ciic should fit")
+    fn sfid_ok() -> pallet::SfidOf<Test> {
+        b"sfid-ok".to_vec().try_into().expect("sfid should fit")
     }
 
     fn vote_nonce(input: &str) -> pallet::VoteNonceOf<Test> {
@@ -824,7 +853,7 @@ mod tests {
     }
 
     #[test]
-    fn joint_vote_submission_must_be_by_nrc_multisig() {
+    fn joint_vote_submission_must_be_by_institution_multisig() {
         new_test_ext().execute_with(|| {
             let nonce = snapshot_nonce_ok();
             let sig = snapshot_sig_ok();
@@ -851,6 +880,24 @@ mod tests {
                 RuntimeOrigin::signed(nrc_multisig()),
                 0,
                 nrc_pid(),
+                true
+            ));
+
+            // 中文注释：国储会多签不能代省储会提交省储会内部投票结果。
+            assert_noop!(
+                VotingEngineSystem::submit_joint_institution_vote(
+                    RuntimeOrigin::signed(nrc_multisig()),
+                    0,
+                    prc_pid(),
+                    true
+                ),
+                pallet::Error::<Test>::NoPermission
+            );
+
+            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
+                RuntimeOrigin::signed(prc_multisig()),
+                0,
+                prc_pid(),
                 true
             ));
         });
@@ -893,18 +940,18 @@ mod tests {
                 VotingEngineSystem::citizen_vote(
                     RuntimeOrigin::signed(nrc_admin(0)),
                     0,
-                    ciic_ok(),
+                    sfid_ok(),
                     vote_nonce("n-1"),
                     vote_sig_bad(),
                     true
                 ),
-                pallet::Error::<Test>::InvalidCiicVoteCredential
+                pallet::Error::<Test>::InvalidSfidVoteCredential
             );
 
             assert_ok!(VotingEngineSystem::citizen_vote(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 0,
-                ciic_ok(),
+                sfid_ok(),
                 vote_nonce("n-2"),
                 vote_sig_ok(),
                 true
@@ -914,14 +961,14 @@ mod tests {
     }
 
     #[test]
-    fn citizen_vote_same_ciic_can_only_vote_once_per_proposal() {
+    fn citizen_vote_same_sfid_can_only_vote_once_per_proposal() {
         new_test_ext().execute_with(|| {
             insert_citizen_proposal(0, 10, 100);
 
             assert_ok!(VotingEngineSystem::citizen_vote(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 0,
-                ciic_ok(),
+                sfid_ok(),
                 vote_nonce("n-1"),
                 vote_sig_ok(),
                 true
@@ -931,7 +978,7 @@ mod tests {
                 VotingEngineSystem::citizen_vote(
                     RuntimeOrigin::signed(nrc_admin(0)),
                     0,
-                    ciic_ok(),
+                    sfid_ok(),
                     vote_nonce("n-2"),
                     vote_sig_ok(),
                     false
@@ -942,7 +989,7 @@ mod tests {
     }
 
     #[test]
-    fn citizen_vote_credential_nonce_is_replay_protected_per_proposal_and_ciic() {
+    fn citizen_vote_credential_nonce_is_replay_protected_per_proposal_and_sfid() {
         new_test_ext().execute_with(|| {
             insert_citizen_proposal(0, 10, 100);
             insert_citizen_proposal(1, 10, 100);
@@ -950,7 +997,7 @@ mod tests {
             assert_ok!(VotingEngineSystem::citizen_vote(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 0,
-                ciic_ok(),
+                sfid_ok(),
                 vote_nonce("same"),
                 vote_sig_ok(),
                 true
@@ -959,7 +1006,7 @@ mod tests {
             assert_ok!(VotingEngineSystem::citizen_vote(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 1,
-                ciic_ok(),
+                sfid_ok(),
                 vote_nonce("same"),
                 vote_sig_ok(),
                 true
@@ -976,7 +1023,7 @@ mod tests {
                 VotingEngineSystem::citizen_vote(
                     RuntimeOrigin::signed(nrc_admin(0)),
                     0,
-                    ciic_ok(),
+                    sfid_ok(),
                     vote_nonce("x-1"),
                     vote_sig_ok(),
                     true
@@ -1003,6 +1050,298 @@ mod tests {
                     .status,
                 STATUS_REJECTED
             );
+        });
+    }
+
+    #[test]
+    fn citizen_vote_rejects_empty_sfid_and_ineligible_account() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+
+            let empty_sfid: pallet::SfidOf<Test> = Vec::<u8>::new()
+                .try_into()
+                .expect("empty sfid should fit bounds");
+            assert_noop!(
+                VotingEngineSystem::citizen_vote(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    0,
+                    empty_sfid,
+                    vote_nonce("n-empty"),
+                    vote_sig_ok(),
+                    true
+                ),
+                pallet::Error::<Test>::EmptySfid
+            );
+
+            let outsider = AccountId32::new([7u8; 32]);
+            assert_noop!(
+                VotingEngineSystem::citizen_vote(
+                    RuntimeOrigin::signed(outsider),
+                    0,
+                    sfid_ok(),
+                    vote_nonce("n-ineligible"),
+                    vote_sig_ok(),
+                    true
+                ),
+                pallet::Error::<Test>::SfidNotEligible
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_vote_rejects_when_not_in_citizen_stage() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+            );
+
+            assert_noop!(
+                VotingEngineSystem::citizen_vote(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    0,
+                    sfid_ok(),
+                    vote_nonce("joint-stage"),
+                    vote_sig_ok(),
+                    true
+                ),
+                pallet::Error::<Test>::InvalidProposalStage
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_vote_passes_immediately_when_yes_exceeds_half() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+            CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
+
+            assert_ok!(VotingEngineSystem::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                sfid_ok(),
+                vote_nonce("immediate-pass"),
+                vote_sig_ok(),
+                true
+            ));
+
+            let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
+            assert_eq!(proposal.status, STATUS_PASSED);
+        });
+    }
+
+    #[test]
+    fn citizen_finalize_before_timeout_is_rejected() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+            System::set_block_number(100);
+
+            assert_noop!(
+                VotingEngineSystem::finalize_proposal(RuntimeOrigin::signed(nrc_admin(0)), 0),
+                pallet::Error::<Test>::VoteNotExpired
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_pass_threshold_function_boundaries_are_correct() {
+        assert!(!citizen_vote::is_citizen_vote_passed(0, 0));
+        assert!(!citizen_vote::is_citizen_vote_passed(5, 10));
+        assert!(citizen_vote::is_citizen_vote_passed(6, 10));
+    }
+
+    #[test]
+    fn joint_vote_all_yes_passes_immediately() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    100,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+            );
+
+            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
+                RuntimeOrigin::signed(nrc_multisig()),
+                0,
+                nrc_pid(),
+                true
+            ));
+
+            for (institution, multisig) in all_prc_institutions() {
+                assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
+                    RuntimeOrigin::signed(multisig),
+                    0,
+                    institution,
+                    true
+                ));
+            }
+            for (institution, multisig) in all_prb_institutions() {
+                assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
+                    RuntimeOrigin::signed(multisig),
+                    0,
+                    institution,
+                    true
+                ));
+            }
+
+            let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
+            assert_eq!(proposal.status, STATUS_PASSED);
+            assert_eq!(proposal.stage, STAGE_JOINT);
+            assert_eq!(JointTallies::<Test>::get(0).yes, primitives::count_const::JOINT_VOTE_TOTAL);
+        });
+    }
+
+    #[test]
+    fn joint_vote_non_unanimous_moves_to_citizen_after_all_institutions_submit() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    77,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+            );
+            let joint_end = Proposals::<Test>::get(0).expect("proposal should exist").end;
+
+            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
+                RuntimeOrigin::signed(nrc_multisig()),
+                0,
+                nrc_pid(),
+                true
+            ));
+
+            let mut all_others = all_prc_institutions();
+            all_others.extend(all_prb_institutions());
+            let (last_institution, last_multisig) = all_others
+                .pop()
+                .expect("there should be at least one non-nrc institution");
+
+            let first_prc = all_prc_institutions()
+                .first()
+                .cloned()
+                .expect("there should be at least one prc institution");
+            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
+                RuntimeOrigin::signed(first_prc.1),
+                0,
+                first_prc.0,
+                false
+            ));
+
+            for (institution, multisig) in all_others {
+                if institution == first_prc.0 {
+                    continue;
+                }
+                assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
+                    RuntimeOrigin::signed(multisig),
+                    0,
+                    institution,
+                    true
+                ));
+            }
+
+            System::set_block_number(50);
+            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
+                RuntimeOrigin::signed(last_multisig),
+                0,
+                last_institution,
+                true
+            ));
+
+            let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
+            assert_eq!(proposal.stage, STAGE_CITIZEN);
+            assert_eq!(proposal.status, STATUS_VOTING);
+            assert_eq!(
+                proposal.end,
+                50 + primitives::count_const::VOTING_DURATION_BLOCKS as u64
+            );
+            assert_eq!(proposal.citizen_eligible_total, 77);
+            assert!(proposal.end > joint_end);
+            assert_eq!(JointTallies::<Test>::get(0).no, 1);
+        });
+    }
+
+    #[test]
+    fn joint_vote_timeout_moves_to_citizen_when_not_unanimous() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    88,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+            );
+
+            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
+                RuntimeOrigin::signed(nrc_multisig()),
+                0,
+                nrc_pid(),
+                true
+            ));
+
+            let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
+            System::set_block_number(proposal.end + 1);
+            assert_ok!(VotingEngineSystem::finalize_proposal(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0
+            ));
+
+            let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
+            assert_eq!(proposal.stage, STAGE_CITIZEN);
+            assert_eq!(proposal.status, STATUS_VOTING);
+            assert_eq!(
+                proposal.end,
+                (proposal.start + primitives::count_const::VOTING_DURATION_BLOCKS as u64)
+            );
+        });
+    }
+
+    #[test]
+    fn joint_vote_timeout_with_unanimous_tally_passes() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    66,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+            );
+            JointTallies::<Test>::insert(
+                0,
+                VoteCountU32 {
+                    yes: primitives::count_const::JOINT_VOTE_TOTAL,
+                    no: 0,
+                },
+            );
+
+            let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
+            System::set_block_number(proposal.end + 1);
+            assert_ok!(VotingEngineSystem::finalize_proposal(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0
+            ));
+
+            let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
+            assert_eq!(proposal.status, STATUS_PASSED);
+            assert_eq!(proposal.stage, STAGE_JOINT);
         });
     }
 }

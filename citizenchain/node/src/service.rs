@@ -16,7 +16,11 @@ use sp_core::{
 };
 use sp_keystore::Keystore;
 use sp_runtime::traits::{Block as BlockT, IdentifyAccount};
-use std::{sync::Arc, thread, time::Duration};
+use std::{
+    sync::{Arc, Mutex},
+    thread,
+    time::{Duration, Instant},
+};
 
 pub(crate) type FullClient = sc_service::TFullClient<
     Block,
@@ -37,7 +41,7 @@ pub type Service = sc_service::PartialComponents<
 
 // PoW 作者密钥类型：纯 PoW 链使用独立 key type，避免与 Aura 语义混用。
 const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
-const POW_DIFFICULTY: u64 = 1_000_000;
+const POW_DIFFICULTY: u64 = primitives::pow_const::POW_INITIAL_DIFFICULTY;
 const POW_MINING_TIMEOUT_SECS: u64 = 10;
 const POW_PROPOSAL_BUILD_SECS: u64 = 2;
 
@@ -125,6 +129,8 @@ fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceErr
 }
 
 fn start_cpu_miner<Proof: Send + 'static>(worker: MiningHandle<Block, SimplePow, (), Proof>) {
+    // 中文注释：提交门控，防止“早产块”触发 timestamp inherent 的 future 校验失败。
+    let min_submit_interval = Duration::from_millis(primitives::pow_const::MILLISECS_PER_BLOCK);
     thread::spawn(move || loop {
         let Some(metadata) = worker.metadata() else {
             thread::sleep(Duration::from_millis(200));
@@ -141,7 +147,18 @@ fn start_cpu_miner<Proof: Send + 'static>(worker: MiningHandle<Block, SimplePow,
 
             let hash = pow_hash(metadata.pre_hash.as_ref(), nonce);
             if hash_meets_difficulty(&hash, metadata.difficulty) {
+                // 中文注释：仅限制“提交频率”，挖矿过程仍持续进行。
+                // 这样可以保证区块时间戳不会持续跑在本地时间之前导致 future 错误。
+                static MINER_GATE: std::sync::OnceLock<std::sync::Mutex<Instant>> =
+                    std::sync::OnceLock::new();
+                let gate = MINER_GATE.get_or_init(|| Mutex::new(Instant::now() - min_submit_interval));
+                let mut last_submit = gate.lock().expect("miner submit gate mutex poisoned");
+                let elapsed = last_submit.elapsed();
+                if elapsed < min_submit_interval {
+                    thread::sleep(min_submit_interval - elapsed);
+                }
                 let _ = futures::executor::block_on(worker.submit(nonce.encode()));
+                *last_submit = Instant::now();
                 break;
             }
 

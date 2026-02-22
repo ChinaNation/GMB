@@ -51,10 +51,10 @@ use sp_version::RuntimeVersion;
 // Local module imports
 use super::{
     AccountId, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance, Hash, Nonce,
-    OffchainTransactionFee, PalletInfo, ResolutionIssuanceGov, ResolutionIssuanceIss, Runtime,
-    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin,
-    RuntimeRootUpgrade, RuntimeTask, System, VotingEngineSystem, BLOCK_HASH_COUNT,
-    EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    NationalInstitutionalRegistry, OffchainTransactionFee, PalletInfo, PublicFundsPayment,
+    ResolutionIssuanceGov, ResolutionIssuanceIss, Runtime, RuntimeCall, RuntimeEvent,
+    RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeRootUpgrade, RuntimeTask,
+    System, VotingEngineSystem, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 
 const NORMAL_DISPATCH_RATIO: Perbill =
@@ -230,6 +230,19 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
                     onchain_transaction_fee::AmountExtractResult::Unknown
                 }
             }
+            RuntimeCall::PublicFundsPayment(
+                public_funds_payment::pallet::Call::approve_payment {
+                    institution,
+                    payment_id,
+                },
+            ) => {
+                // 中文注释：仅当本次签名会触发“第3票执行转账”时，才按转账金额抽取链上手续费。
+                // 非执行签名（第1/2票）视为无金额交易。
+                match PublicFundsPayment::preview_execute_amount(who, *institution, *payment_id) {
+                    Ok(v) => onchain_transaction_fee::AmountExtractResult::Amount(v),
+                    Err(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+                }
+            }
             // 中文注释：以下调用类型明确属于“无金额交易”，放行且不计算手续费。
             RuntimeCall::System(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
             RuntimeCall::Timestamp(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
@@ -248,7 +261,7 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::VotingEngineSystem(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
-            RuntimeCall::CiicCodeAuth(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+            RuntimeCall::SfidCodeAuth(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
             RuntimeCall::CitizenLightnodeIssuance(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
@@ -261,6 +274,12 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::ResolutionDestroGov(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
+            RuntimeCall::NationalInstitutionalRegistry(_) => {
+                onchain_transaction_fee::AmountExtractResult::NoAmount
+            }
+            RuntimeCall::PublicFundsPayment(_) => {
+                onchain_transaction_fee::AmountExtractResult::NoAmount
+            }
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免“有金额但漏提取”。
             RuntimeCall::Balances(_) => onchain_transaction_fee::AmountExtractResult::Unknown,
         }
@@ -270,7 +289,7 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
 pub struct RuntimeFeePayerExtractor;
 
 impl onchain_transaction_fee::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
-    fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
+    fn fee_payer(who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
         match call {
             RuntimeCall::OffchainTransactionFee(
                 offchain_transaction_fee::pallet::Call::submit_offchain_batch {
@@ -281,6 +300,19 @@ impl onchain_transaction_fee::CallFeePayer<AccountId, RuntimeCall> for RuntimeFe
                 // 中文注释：链下批次上链手续费永远由本机构 fee_pallet_address 承担。
                 // 提交账户只负责提交，不承担手续费。
                 OffchainTransactionFee::fee_account_of(*institution).ok()
+            }
+            RuntimeCall::PublicFundsPayment(
+                public_funds_payment::pallet::Call::approve_payment {
+                    institution,
+                    payment_id,
+                },
+            ) => {
+                // 中文注释：机构支付提案达到第3签时，由机构账户承担链上手续费。
+                if PublicFundsPayment::preview_execute_amount(who, *institution, *payment_id).is_ok() {
+                    PublicFundsPayment::institution_account_of(*institution)
+                } else {
+                    None
+                }
             }
             _ => None,
         }
@@ -353,24 +385,29 @@ impl offchain_transaction_fee::OffchainBatchVerifier for RuntimeOffchainBatchVer
     }
 }
 
-/// CIIC 系统发布的一次性绑定凭证验签公钥（sr25519）。
-/// TODO: 上线前替换为真实 CIIC 系统公钥（32 字节）。
-const CIIC_VERIFY_PUBKEY: [u8; 32] = [0u8; 32];
+fn current_sfid_verify_public() -> Option<sr25519::Public> {
+    let key = sfid_code_auth::Pallet::<Runtime>::current_sfid_verify_pubkey()?;
+    Some(sr25519::Public::from_raw(key))
+}
 
-pub struct RuntimeCiicVerifier;
+pub struct RuntimeSfidVerifier;
 
 impl
-    ciic_code_auth::CiicVerifier<
+    sfid_code_auth::SfidVerifier<
         AccountId,
         Hash,
-        ciic_code_auth::pallet::NonceOf<Runtime>,
-        ciic_code_auth::pallet::SignatureOf<Runtime>,
-    > for RuntimeCiicVerifier
+        sfid_code_auth::pallet::NonceOf<Runtime>,
+        sfid_code_auth::pallet::SignatureOf<Runtime>,
+    > for RuntimeSfidVerifier
 {
     fn verify(
         account: &AccountId,
-        credential: &ciic_code_auth::pallet::CredentialOf<Runtime>,
+        credential: &sfid_code_auth::pallet::CredentialOf<Runtime>,
     ) -> bool {
+        let public = match current_sfid_verify_public() {
+            Some(v) => v,
+            None => return false,
+        };
         let sig_bytes = credential.signature.as_slice();
         if sig_bytes.len() != 64 {
             return false;
@@ -379,13 +416,12 @@ impl
         let mut sig_raw = [0u8; 64];
         sig_raw.copy_from_slice(sig_bytes);
         let signature = sr25519::Signature::from_raw(sig_raw);
-        let public = sr25519::Public::from_raw(CIIC_VERIFY_PUBKEY);
 
         let payload = (
-            b"GMB_CIIC_BIND_V1",
+            b"GMB_SFID_BIND_V1",
             frame_system::Pallet::<Runtime>::block_hash(0),
             account,
-            credential.ciic_code_hash,
+            credential.sfid_code_hash,
             credential.nonce.as_slice(),
         );
         let msg = blake2_256(&payload.encode());
@@ -394,23 +430,27 @@ impl
     }
 }
 
-pub struct RuntimeCiicVoteVerifier;
+pub struct RuntimeSfidVoteVerifier;
 
 impl
-    ciic_code_auth::CiicVoteVerifier<
+    sfid_code_auth::SfidVoteVerifier<
         AccountId,
         Hash,
-        ciic_code_auth::pallet::NonceOf<Runtime>,
-        ciic_code_auth::pallet::SignatureOf<Runtime>,
-    > for RuntimeCiicVoteVerifier
+        sfid_code_auth::pallet::NonceOf<Runtime>,
+        sfid_code_auth::pallet::SignatureOf<Runtime>,
+    > for RuntimeSfidVoteVerifier
 {
     fn verify_vote(
         account: &AccountId,
-        ciic_hash: Hash,
+        sfid_hash: Hash,
         proposal_id: u64,
-        nonce: &ciic_code_auth::pallet::NonceOf<Runtime>,
-        signature: &ciic_code_auth::pallet::SignatureOf<Runtime>,
+        nonce: &sfid_code_auth::pallet::NonceOf<Runtime>,
+        signature: &sfid_code_auth::pallet::SignatureOf<Runtime>,
     ) -> bool {
+        let public = match current_sfid_verify_public() {
+            Some(v) => v,
+            None => return false,
+        };
         let sig_bytes = signature.as_slice();
         if sig_bytes.len() != 64 {
             return false;
@@ -419,13 +459,12 @@ impl
         let mut sig_raw = [0u8; 64];
         sig_raw.copy_from_slice(sig_bytes);
         let signature = sr25519::Signature::from_raw(sig_raw);
-        let public = sr25519::Public::from_raw(CIIC_VERIFY_PUBKEY);
 
         let payload = (
-            b"GMB_CIIC_VOTE_V1",
+            b"GMB_SFID_VOTE_V1",
             frame_system::Pallet::<Runtime>::block_hash(0),
             account,
-            ciic_hash,
+            sfid_hash,
             proposal_id,
             nonce.as_slice(),
         );
@@ -435,15 +474,15 @@ impl
     }
 }
 
-impl ciic_code_auth::Config for Runtime {
+impl sfid_code_auth::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type MaxCiicLength = ConstU32<64>;
+    type MaxSfidLength = ConstU32<64>;
     type MaxCredentialNonceLength = ConstU32<64>;
-    // 中文注释：CIIC 绑定与投票验签统一使用 64 字节原始 sr25519 签名。
+    // 中文注释：SFID 绑定与投票验签统一使用 64 字节原始 sr25519 签名。
     type MaxCredentialSignatureLength = ConstU32<64>;
-    type CiicVerifier = RuntimeCiicVerifier;
-    type CiicVoteVerifier = RuntimeCiicVoteVerifier;
-    type OnCiicBound = CitizenLightnodeIssuance;
+    type SfidVerifier = RuntimeSfidVerifier;
+    type SfidVoteVerifier = RuntimeSfidVoteVerifier;
+    type OnSfidBound = CitizenLightnodeIssuance;
 }
 
 pub struct RuntimePopulationSnapshotVerifier;
@@ -461,6 +500,10 @@ impl
         nonce: &voting_engine_system::pallet::VoteNonceOf<Runtime>,
         signature: &voting_engine_system::pallet::VoteSignatureOf<Runtime>,
     ) -> bool {
+        let public = match current_sfid_verify_public() {
+            Some(v) => v,
+            None => return false,
+        };
         let sig_bytes = signature.as_slice();
         if sig_bytes.len() != 64 {
             return false;
@@ -469,10 +512,9 @@ impl
         let mut sig_raw = [0u8; 64];
         sig_raw.copy_from_slice(sig_bytes);
         let signature = sr25519::Signature::from_raw(sig_raw);
-        let public = sr25519::Public::from_raw(CIIC_VERIFY_PUBKEY);
 
         let payload = (
-            b"GMB_CIIC_POPULATION_V1",
+            b"GMB_SFID_POPULATION_V1",
             frame_system::Pallet::<Runtime>::block_hash(0),
             who,
             eligible_total,
@@ -487,6 +529,18 @@ impl
 impl citizen_lightnode_issuance::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
+}
+
+impl national_institutional_registry::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type MaxInstitutionNameLen = ConstU32<128>;
+}
+
+impl public_funds_payment::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type InstitutionRegistry = NationalInstitutionalRegistry;
+    type MaxMemoLen = ConstU32<256>;
 }
 
 parameter_types! {
@@ -556,23 +610,9 @@ fn is_nrc_admin(who: &AccountId) -> bool {
         .and_then(|n| primitives::reserve_nodes_const::pallet_id_to_bytes(n.pallet_id))
         .expect("NRC pallet_id must be 8 bytes");
 
-    // 中文注释：优先读取链上管理员治理模块中的“当前管理员名单”。
-    if let Some(current_admins) =
-        admins_origin_gov::Pallet::<Runtime>::current_admins(nrc_institution)
-    {
-        return current_admins.into_inner().iter().any(|admin| admin == who);
-    }
-
-    // 中文注释：兼容回退到创世静态管理员列表（尚未发生管理员替换时）。
-    let who_bytes = who.encode();
-    primitives::reserve_nodes_const::RESERVE_NODES
-        .iter()
-        .find(|n| n.pallet_id == "nrcgch01")
-        .map(|nrc| {
-            nrc.admins
-                .iter()
-                .any(|admin| admin.as_slice() == who_bytes.as_slice())
-        })
+    // 中文注释：创世后只信任链上管理员治理模块中的当前管理员名单。
+    admins_origin_gov::Pallet::<Runtime>::current_admins(nrc_institution)
+        .map(|admins| admins.into_inner().iter().any(|admin| admin == who))
         .unwrap_or(false)
 }
 
@@ -648,10 +688,10 @@ impl voting_engine_system::JointVoteResultCallback for RuntimeJointVoteResultCal
 
 impl voting_engine_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type MaxCiicLength = ConstU32<64>;
+    type MaxSfidLength = ConstU32<64>;
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
-    type CiicEligibility = RuntimeCiicEligibility;
+    type SfidEligibility = RuntimeSfidEligibility;
     type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
     type InternalAdminProvider = RuntimeInternalAdminProvider;
@@ -662,17 +702,22 @@ mod tests {
     use super::*;
     use crate::OffchainTransactionFee;
     use crate::ResolutionDestroGov;
+    use sfid_code_auth::{SfidVerifier, SfidVoteVerifier};
     use frame_support::assert_ok;
     use frame_support::traits::Currency;
+    use offchain_transaction_fee::OffchainBatchVerifier;
     use primitives::reserve_nodes_const::{
         pallet_id_to_bytes as reserve_pallet_id_to_bytes, RESERVE_NODES,
     };
     use sp_core::Pair;
-    use sp_runtime::{traits::Hash as HashT, BuildStorage};
-    use voting_engine_system::JointVoteResultCallback;
+    use sp_runtime::{traits::Hash as HashT, traits::IdentifyAccount, BuildStorage, MultiSigner};
+    use voting_engine_system::{
+        SfidEligibility, InternalAdminProvider, JointVoteResultCallback,
+        PopulationSnapshotVerifier,
+    };
 
     fn new_test_ext() -> sp_io::TestExternalities {
-        let storage = frame_system::GenesisConfig::<Runtime>::default()
+        let storage = crate::RuntimeGenesisConfig::default()
             .build_storage()
             .expect("runtime test storage should build");
         let mut ext = sp_io::TestExternalities::new(storage);
@@ -888,6 +933,367 @@ mod tests {
             assert_eq!(Balances::free_balance(&fee_account), before_fee + 1);
         });
     }
+
+    #[test]
+    fn pow_tx_amount_extractor_covers_noamount_amount_and_unknown_paths() {
+        new_test_ext().execute_with(|| {
+            let who = AccountId::new([1u8; 32]);
+            let recipient = AccountId::new([2u8; 32]);
+
+            let system_call = RuntimeCall::System(frame_system::Call::remark { remark: b"x".to_vec() });
+            let no_amount = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
+                AccountId,
+                RuntimeCall,
+                Balance,
+            >>::amount(&who, &system_call);
+            assert!(matches!(
+                no_amount,
+                onchain_transaction_fee::AmountExtractResult::NoAmount
+            ));
+
+            let transfer_call =
+                RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
+                    dest: sp_runtime::MultiAddress::Id(recipient),
+                    value: 123,
+                });
+            let amount = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
+                AccountId,
+                RuntimeCall,
+                Balance,
+            >>::amount(&who, &transfer_call);
+            match amount {
+                onchain_transaction_fee::AmountExtractResult::Amount(v) => assert_eq!(v, 123),
+                _ => panic!("expected amount path"),
+            }
+
+            let item = offchain_transaction_fee::pallet::OffchainBatchItem::<AccountId, Balance, Hash> {
+                tx_id: <Runtime as frame_system::Config>::Hashing::hash(b"rt-unknown-1"),
+                payer: who.clone(),
+                recipient: AccountId::new([3u8; 32]),
+                transfer_amount: 10,
+                offchain_fee_amount: 1,
+            };
+            let batch: offchain_transaction_fee::pallet::BatchOf<Runtime> =
+                vec![item].try_into().expect("batch should fit");
+            let bad_sig: offchain_transaction_fee::pallet::BatchSignatureOf<Runtime> =
+                vec![1u8; 64].try_into().expect("signature should fit");
+            let offchain_call = RuntimeCall::OffchainTransactionFee(
+                offchain_transaction_fee::pallet::Call::submit_offchain_batch {
+                    institution: *b"badid000",
+                    batch_seq: 1,
+                    batch,
+                    batch_signature: bad_sig,
+                },
+            );
+            let unknown = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
+                AccountId,
+                RuntimeCall,
+                Balance,
+            >>::amount(&who, &offchain_call);
+            assert!(matches!(
+                unknown,
+                onchain_transaction_fee::AmountExtractResult::Unknown
+            ));
+        });
+    }
+
+    #[test]
+    fn runtime_fee_payer_extractor_routes_offchain_fee_to_fee_account() {
+        new_test_ext().execute_with(|| {
+            let who = AccountId::new([9u8; 32]);
+            let institution = primitives::shengbank_nodes_const::pallet_id_to_bytes(
+                primitives::shengbank_nodes_const::SHENG_BANK_NODES[0].pallet_id,
+            )
+            .expect("institution id should be valid");
+            let fee_account = OffchainTransactionFee::fee_account_of(institution).expect("fee account");
+
+            let dummy_item =
+                offchain_transaction_fee::pallet::OffchainBatchItem::<AccountId, Balance, Hash> {
+                    tx_id: <Runtime as frame_system::Config>::Hashing::hash(b"rt-fee-payer-1"),
+                    payer: who.clone(),
+                    recipient: AccountId::new([10u8; 32]),
+                    transfer_amount: 1,
+                    offchain_fee_amount: 1,
+                };
+            let batch: offchain_transaction_fee::pallet::BatchOf<Runtime> =
+                vec![dummy_item].try_into().expect("batch should fit");
+            let sig: offchain_transaction_fee::pallet::BatchSignatureOf<Runtime> =
+                vec![0u8; 64].try_into().expect("sig should fit");
+            let offchain_call = RuntimeCall::OffchainTransactionFee(
+                offchain_transaction_fee::pallet::Call::submit_offchain_batch {
+                    institution,
+                    batch_seq: 1,
+                    batch,
+                    batch_signature: sig,
+                },
+            );
+            assert_eq!(
+                <RuntimeFeePayerExtractor as onchain_transaction_fee::CallFeePayer<
+                    AccountId,
+                    RuntimeCall,
+                >>::fee_payer(&who, &offchain_call),
+                Some(fee_account)
+            );
+
+            let system_call = RuntimeCall::System(frame_system::Call::remark { remark: vec![] });
+            assert_eq!(
+                <RuntimeFeePayerExtractor as onchain_transaction_fee::CallFeePayer<
+                    AccountId,
+                    RuntimeCall,
+                >>::fee_payer(&who, &system_call),
+                None
+            );
+        });
+    }
+
+    #[test]
+    fn pow_digest_author_and_offchain_batch_verifier_work() {
+        let author = AccountId::new([21u8; 32]);
+        let encoded = author.encode();
+        let digests: Vec<(sp_runtime::ConsensusEngineId, &[u8])> = vec![
+            (*b"TEST", b"ignored".as_ref()),
+            (sp_consensus_pow::POW_ENGINE_ID, encoded.as_slice()),
+        ];
+        let found = PowDigestAuthor::find_author(digests);
+        assert_eq!(found, Some(author));
+
+        let (pair, _) = sr25519::Pair::generate();
+        let msg = b"batch-message";
+        let sig = pair.sign(msg);
+        assert!(RuntimeOffchainBatchVerifier::verify(
+            &pair.public().0,
+            msg,
+            &sig.0
+        ));
+        assert!(!RuntimeOffchainBatchVerifier::verify(
+            &pair.public().0[..31],
+            msg,
+            &sig.0
+        ));
+        assert!(!RuntimeOffchainBatchVerifier::verify(
+            &pair.public().0,
+            msg,
+            &sig.0[..63]
+        ));
+    }
+
+    #[test]
+    fn joint_vote_callback_missing_mapping_and_runtime_upgrade_route() {
+        new_test_ext().execute_with(|| {
+            assert!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(999_999, true).is_err());
+
+            let proposal_id = 7u64;
+            let joint_vote_id = 70u64;
+            let proposer = AccountId::new(RESERVE_NODES[0].admins[0]);
+            let reason: runtime_root_upgrade::pallet::ReasonOf<Runtime> =
+                b"upgrade".to_vec().try_into().expect("reason");
+            let code: runtime_root_upgrade::pallet::CodeOf<Runtime> =
+                vec![1u8, 2, 3].try_into().expect("code");
+            let code_hash = <Runtime as frame_system::Config>::Hashing::hash(code.as_slice());
+
+            runtime_root_upgrade::pallet::Proposals::<Runtime>::insert(
+                proposal_id,
+                runtime_root_upgrade::pallet::Proposal::<Runtime> {
+                    proposer,
+                    reason,
+                    code_hash,
+                    code,
+                    status: runtime_root_upgrade::pallet::ProposalStatus::Voting,
+                },
+            );
+            runtime_root_upgrade::pallet::GovToJointVote::<Runtime>::insert(proposal_id, joint_vote_id);
+            runtime_root_upgrade::pallet::JointVoteToGov::<Runtime>::insert(joint_vote_id, proposal_id);
+
+            assert_ok!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(
+                joint_vote_id,
+                false
+            ));
+            let updated = runtime_root_upgrade::pallet::Proposals::<Runtime>::get(proposal_id)
+                .expect("proposal should exist");
+            assert!(matches!(
+                updated.status,
+                runtime_root_upgrade::pallet::ProposalStatus::Rejected
+            ));
+            assert!(runtime_root_upgrade::pallet::GovToJointVote::<Runtime>::get(proposal_id).is_none());
+            assert!(runtime_root_upgrade::pallet::JointVoteToGov::<Runtime>::get(joint_vote_id).is_none());
+        });
+    }
+
+    #[test]
+    fn runtime_sfid_verifiers_and_population_snapshot_verify_with_runtime_main_key() {
+        new_test_ext().execute_with(|| {
+            let (pair, _) = sr25519::Pair::generate();
+            let sfid_main: AccountId = MultiSigner::from(pair.public()).into_account();
+            sfid_code_auth::pallet::SfidMainAccount::<Runtime>::put(sfid_main);
+            assert_eq!(
+                sfid_code_auth::Pallet::<Runtime>::current_sfid_verify_pubkey(),
+                Some(pair.public().0)
+            );
+            assert_eq!(
+                sfid_code_auth::Pallet::<Runtime>::current_sfid_verify_pubkey(),
+                Some(pair.public().0)
+            );
+
+            let account = AccountId::new([31u8; 32]);
+            let sfid_hash = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-verify");
+            let bind_nonce: sfid_code_auth::pallet::NonceOf<Runtime> =
+                b"bind-nonce".to_vec().try_into().expect("nonce should fit");
+            let bind_payload = (
+                b"GMB_SFID_BIND_V1",
+                frame_system::Pallet::<Runtime>::block_hash(0),
+                &account,
+                sfid_hash,
+                bind_nonce.as_slice(),
+            );
+            let bind_msg = blake2_256(&bind_payload.encode());
+            let bind_sig = pair.sign(&bind_msg);
+            let bind_signature: sfid_code_auth::pallet::SignatureOf<Runtime> =
+                bind_sig.0.to_vec().try_into().expect("signature should fit");
+            let bind_credential = sfid_code_auth::BindCredential {
+                sfid_code_hash: sfid_hash,
+                nonce: bind_nonce.clone(),
+                signature: bind_signature,
+            };
+            assert!(RuntimeSfidVerifier::verify(&account, &bind_credential));
+
+            let bad_bind_signature: sfid_code_auth::pallet::SignatureOf<Runtime> =
+                vec![7u8; 63].try_into().expect("signature should fit");
+            let bad_bind_credential = sfid_code_auth::BindCredential {
+                sfid_code_hash: sfid_hash,
+                nonce: bind_nonce,
+                signature: bad_bind_signature,
+            };
+            assert!(!RuntimeSfidVerifier::verify(&account, &bad_bind_credential));
+
+            let vote_nonce: sfid_code_auth::pallet::NonceOf<Runtime> =
+                b"vote-nonce".to_vec().try_into().expect("nonce should fit");
+            let vote_signature: sfid_code_auth::pallet::SignatureOf<Runtime> = pair
+                .sign(&blake2_256(
+                    &(
+                        b"GMB_SFID_VOTE_V1",
+                        frame_system::Pallet::<Runtime>::block_hash(0),
+                        &account,
+                        sfid_hash,
+                        9u64,
+                        vote_nonce.as_slice(),
+                    )
+                        .encode(),
+                ))
+                .0
+                .to_vec()
+                .try_into()
+                .expect("signature should fit");
+            assert!(RuntimeSfidVoteVerifier::verify_vote(
+                &account,
+                sfid_hash,
+                9,
+                &vote_nonce,
+                &vote_signature
+            ));
+
+            let pop_nonce: voting_engine_system::pallet::VoteNonceOf<Runtime> =
+                b"pop-nonce".to_vec().try_into().expect("nonce should fit");
+            let pop_signature: voting_engine_system::pallet::VoteSignatureOf<Runtime> = pair
+                .sign(&blake2_256(
+                    &(
+                        b"GMB_SFID_POPULATION_V1",
+                        frame_system::Pallet::<Runtime>::block_hash(0),
+                        &account,
+                        123u64,
+                        pop_nonce.as_slice(),
+                    )
+                        .encode(),
+                ))
+                .0
+                .to_vec()
+                .try_into()
+                .expect("signature should fit");
+            assert!(RuntimePopulationSnapshotVerifier::verify_population_snapshot(
+                &account,
+                123,
+                &pop_nonce,
+                &pop_signature
+            ));
+        });
+    }
+
+    #[test]
+    fn runtime_sfid_eligibility_wrapper_works_with_nonce_consumption() {
+        new_test_ext().execute_with(|| {
+            let (pair, _) = sr25519::Pair::generate();
+            let sfid_main: AccountId = MultiSigner::from(pair.public()).into_account();
+            sfid_code_auth::pallet::SfidMainAccount::<Runtime>::put(sfid_main);
+
+            let who = AccountId::new([41u8; 32]);
+            let sfid = b"sfid-wrap";
+            let sfid_hash = <Runtime as frame_system::Config>::Hashing::hash(sfid);
+            sfid_code_auth::pallet::SfidToAccount::<Runtime>::insert(sfid_hash, who.clone());
+            sfid_code_auth::pallet::AccountToSfid::<Runtime>::insert(who.clone(), sfid_hash);
+
+            assert!(RuntimeSfidEligibility::is_eligible(sfid, &who));
+            assert!(!RuntimeSfidEligibility::is_eligible(sfid, &AccountId::new([42u8; 32])));
+
+            let nonce = b"wrap-nonce";
+            let vote_msg = blake2_256(
+                &(
+                    b"GMB_SFID_VOTE_V1",
+                    frame_system::Pallet::<Runtime>::block_hash(0),
+                    &who,
+                    sfid_hash,
+                    88u64,
+                    nonce.as_slice(),
+                )
+                    .encode(),
+            );
+            let signature = pair.sign(&vote_msg).0.to_vec();
+            let nonce_bounded: sfid_code_auth::pallet::NonceOf<Runtime> =
+                nonce.to_vec().try_into().expect("nonce should fit");
+            let signature_bounded: sfid_code_auth::pallet::SignatureOf<Runtime> = signature
+                .clone()
+                .try_into()
+                .expect("signature should fit");
+            assert!(RuntimeSfidVoteVerifier::verify_vote(
+                &who,
+                sfid_hash,
+                88,
+                &nonce_bounded,
+                &signature_bounded
+            ));
+            assert!(RuntimeSfidEligibility::verify_and_consume_vote_credential(
+                sfid, &who, 88, nonce, &signature
+            ));
+            assert!(!RuntimeSfidEligibility::verify_and_consume_vote_credential(
+                sfid, &who, 88, nonce, &signature
+            ));
+        });
+    }
+
+    #[test]
+    fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
+        new_test_ext().execute_with(|| {
+            let nrc_id = reserve_pallet_id_to_bytes("nrcgch01").expect("nrc id");
+            let nrc_admin = AccountId::new(RESERVE_NODES[0].admins[0]);
+            let outsider = AccountId::new([99u8; 32]);
+
+            let ok_origin = RuntimeOrigin::signed(nrc_admin.clone());
+            assert!(
+                <EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(ok_origin).is_ok()
+            );
+            let bad_origin = RuntimeOrigin::signed(outsider.clone());
+            assert!(
+                <EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(bad_origin).is_err()
+            );
+
+            admins_origin_gov::pallet::CurrentAdmins::<Runtime>::remove(nrc_id);
+            assert!(!is_nrc_admin(&nrc_admin));
+            assert!(!is_nrc_admin(&outsider));
+            assert!(!RuntimeInternalAdminProvider::is_internal_admin(
+                voting_engine_system::internal_vote::ORG_NRC,
+                nrc_id,
+                &nrc_admin
+            ));
+        });
+    }
 }
 
 pub struct RuntimeInternalAdminProvider;
@@ -898,28 +1304,29 @@ impl voting_engine_system::InternalAdminProvider<AccountId> for RuntimeInternalA
         institution: voting_engine_system::InstitutionPalletId,
         who: &AccountId,
     ) -> bool {
+        // 中文注释：生产逻辑只信任链上当前管理员状态；无状态则拒绝（不再回退常量）。
         admins_origin_gov::Pallet::<Runtime>::current_admins(institution)
             .map(|admins| admins.into_inner().iter().any(|admin| admin == who))
             .unwrap_or(false)
     }
 }
 
-pub struct RuntimeCiicEligibility;
+pub struct RuntimeSfidEligibility;
 
-impl voting_engine_system::CiicEligibility<AccountId> for RuntimeCiicEligibility {
-    fn is_eligible(ciic: &[u8], who: &AccountId) -> bool {
-        <ciic_code_auth::Pallet<Runtime> as ciic_code_auth::CiicEligibilityProvider<AccountId>>::is_eligible(ciic, who)
+impl voting_engine_system::SfidEligibility<AccountId> for RuntimeSfidEligibility {
+    fn is_eligible(sfid: &[u8], who: &AccountId) -> bool {
+        <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<AccountId>>::is_eligible(sfid, who)
     }
 
     fn verify_and_consume_vote_credential(
-        ciic: &[u8],
+        sfid: &[u8],
         who: &AccountId,
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
     ) -> bool {
-        <ciic_code_auth::Pallet<Runtime> as ciic_code_auth::CiicEligibilityProvider<AccountId>>::verify_and_consume_vote_credential(
-            ciic,
+        <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<AccountId>>::verify_and_consume_vote_credential(
+            sfid,
             who,
             proposal_id,
             nonce,

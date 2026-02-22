@@ -4,14 +4,14 @@ use frame_support::{ensure, pallet_prelude::DispatchResult};
 use sp_runtime::traits::Hash;
 
 use crate::{
-    pallet::{CiicOf, CitizenTallies, CitizenVotesByCiic, Config, Error, Event, Pallet, Proposals},
+    pallet::{SfidOf, CitizenTallies, CitizenVotesBySfid, Config, Error, Event, Pallet, Proposals},
     PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STATUS_PASSED,
 };
 
-pub trait CiicEligibility<AccountId> {
-    fn is_eligible(ciic: &[u8], who: &AccountId) -> bool;
+pub trait SfidEligibility<AccountId> {
+    fn is_eligible(sfid: &[u8], who: &AccountId) -> bool;
     fn verify_and_consume_vote_credential(
-        ciic: &[u8],
+        sfid: &[u8],
         who: &AccountId,
         proposal_id: u64,
         nonce: &[u8],
@@ -19,13 +19,13 @@ pub trait CiicEligibility<AccountId> {
     ) -> bool;
 }
 
-impl<AccountId> CiicEligibility<AccountId> for () {
-    fn is_eligible(_ciic: &[u8], _who: &AccountId) -> bool {
+impl<AccountId> SfidEligibility<AccountId> for () {
+    fn is_eligible(_sfid: &[u8], _who: &AccountId) -> bool {
         false
     }
 
     fn verify_and_consume_vote_credential(
-        _ciic: &[u8],
+        _sfid: &[u8],
         _who: &AccountId,
         _proposal_id: u64,
         _nonce: &[u8],
@@ -43,11 +43,11 @@ pub fn is_citizen_vote_passed(yes_votes: u64, eligible_total: u64) -> bool {
 }
 
 impl<T: Config> Pallet<T> {
-    /// 公民投票执行：由外部 CIIC 系统判定资格，链上负责去重计票。
+    /// 公民投票执行：由外部 SFID 系统判定资格，链上负责去重计票。
     pub(crate) fn do_citizen_vote(
         who: T::AccountId,
         proposal_id: u64,
-        ciic: CiicOf<T>,
+        sfid: SfidOf<T>,
         nonce: crate::pallet::VoteNonceOf<T>,
         signature: crate::pallet::VoteSignatureOf<T>,
         approve: bool,
@@ -66,29 +66,29 @@ impl<T: Config> Pallet<T> {
             proposal.citizen_eligible_total > 0,
             Error::<T>::CitizenEligibleTotalNotSet
         );
-        ensure!(!ciic.is_empty(), Error::<T>::EmptyCiic);
+        ensure!(!sfid.is_empty(), Error::<T>::EmptySfid);
         ensure!(
-            T::CiicEligibility::is_eligible(ciic.as_slice(), &who),
-            Error::<T>::CiicNotEligible
+            T::SfidEligibility::is_eligible(sfid.as_slice(), &who),
+            Error::<T>::SfidNotEligible
         );
 
-        let ciic_hash = T::Hashing::hash(ciic.as_slice());
+        let sfid_hash = T::Hashing::hash(sfid.as_slice());
         ensure!(
-            !CitizenVotesByCiic::<T>::contains_key(proposal_id, ciic_hash),
+            !CitizenVotesBySfid::<T>::contains_key(proposal_id, sfid_hash),
             Error::<T>::AlreadyVoted
         );
         ensure!(
-            T::CiicEligibility::verify_and_consume_vote_credential(
-                ciic.as_slice(),
+            T::SfidEligibility::verify_and_consume_vote_credential(
+                sfid.as_slice(),
                 &who,
                 proposal_id,
                 nonce.as_slice(),
                 signature.as_slice()
             ),
-            Error::<T>::InvalidCiicVoteCredential
+            Error::<T>::InvalidSfidVoteCredential
         );
 
-        CitizenVotesByCiic::<T>::insert(proposal_id, ciic_hash, approve);
+        CitizenVotesBySfid::<T>::insert(proposal_id, sfid_hash, approve);
         CitizenTallies::<T>::mutate(proposal_id, |tally| {
             if approve {
                 tally.yes = tally.yes.saturating_add(1);
@@ -100,7 +100,7 @@ impl<T: Config> Pallet<T> {
         Self::deposit_event(Event::<T>::CitizenVoteCast {
             proposal_id,
             who,
-            ciic_hash,
+            sfid_hash,
             approve,
         });
 

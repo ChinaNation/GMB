@@ -59,7 +59,7 @@ frame-system-benchmarking = { optional = true, workspace = true }
 shengbank-stake-interest = { path = "../issuance/shengbank-stake-interest", default-features = false }
 fullnode-pow-reward = { path = "../issuance/fullnode-pow-reward", default-features = false }
 citizen-lightnode-issuance = { path = "../issuance/citizen-lightnode-issuance", default-features = false }
-ciic-code-auth = { path = "../otherpallet/ciic-code-auth", default-features = false }
+sfid-code-auth = { path = "../otherpallet/sfid-code-auth", default-features = false }
 onchain-transaction-fee = { path = "../transaction/onchain-transaction-pow", default-features = false }
 offchain-transaction-fee = { path = "../transaction/offchain-transaction-pos", default-features = false }
 resolution-issuance-iss = { path = "../issuance/resolution-issuance-iss", default-features = false }
@@ -68,6 +68,8 @@ voting-engine-system = { path = "../governance/voting-engine-system", default-fe
 admins-origin-gov = { path = "../governance/admins-origin-gov", default-features = false }
 runtime-root-upgrade = { path = "../governance/runtime-root-upgrade", default-features = false }
 resolution-destro-gov = { path = "../governance/resolution-destro-gov", default-features = false }
+national-institutional-registry = { path = "../governance/national-institutional-registry", default-features = false }
+public-funds-payment = { path = "../transaction/public-funds-payment", default-features = false }
 
 [build-dependencies]
 substrate-wasm-builder = { optional = true, workspace = true, default-features = true }
@@ -88,7 +90,7 @@ std = [
 	"shengbank-stake-interest/std",
 	"fullnode-pow-reward/std",
 	"citizen-lightnode-issuance/std",
-	"ciic-code-auth/std",
+	"sfid-code-auth/std",
 	"onchain-transaction-fee/std",
 	"offchain-transaction-fee/std",
 	"resolution-issuance-iss/std",
@@ -97,6 +99,8 @@ std = [
 	"admins-origin-gov/std",
 	"runtime-root-upgrade/std",
 	"resolution-destro-gov/std",
+	"national-institutional-registry/std",
+	"public-funds-payment/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
 	"pallet-transaction-payment/std",

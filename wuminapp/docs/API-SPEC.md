@@ -23,14 +23,14 @@
 }
 ```
 
-## 2) CIIC Bind (placeholder)
-- `POST /api/v1/auth/ciic/bind`
-- Purpose: bind account with CIIC credential
+## 2) SFID Bind (placeholder)
+- `POST /api/v1/auth/sfid/bind`
+- Purpose: bind account with SFID credential
 - Body (draft):
 ```json
 {
   "account": "5F...",
-  "ciic_code": "CN-...",
+  "sfid_code": "CN-...",
   "credential_nonce": "...",
   "signature": "0x..."
 }
