@@ -91,8 +91,6 @@
 ## 1.2.名称与结构  
 * 名称：公民币区块链（英文：CitizenChain），原生数字货币：公民币，符号：GMB；
 * 单位：常用单位：元（YUAN），小数单位：分（FEN），元最小为1元，分最小为1分，100分等于1元，统一使用分为系统计算单位，使用元为前端展示单位。
-* 公民币区块链结构图
-![alt text](https://raw.githubusercontent.com/ChinaNation/GMB/main/wenku/公民币区块链结构图.png)
 
 ## 1.3.发行量总览
 ```
