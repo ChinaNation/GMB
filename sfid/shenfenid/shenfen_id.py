@@ -8,12 +8,16 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import hashlib
 import os
 import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
+
+try:
+    from blake3 import blake3
+except ModuleNotFoundError as e:
+    raise ModuleNotFoundError("missing dependency 'blake3', please install with: pip install blake3") from e
 
 try:
     from tools.shenfenid.city_codes import CITY_OPTIONS_BY_PROVINCE, PROVINCE_OPTIONS
@@ -97,8 +101,10 @@ def validate_fields(a3: str, r5: str, t2: str, p1: str, d: str) -> None:
         raise ValueError("invalid P1")
     validate_date(d)
 
-    if a3 in {"GMR", "ZRR", "ZNR", "SFR"} and t2 != "ZG":
+    if a3 in {"GMR", "ZRR", "ZNR"} and t2 != "ZG":
         raise ValueError(f"{a3} requires T2=ZG")
+    if a3 in {"SFR", "FFR"} and t2 not in {"ZG", "CH", "TG"}:
+        raise ValueError(f"{a3} requires T2 in (ZG, CH, TG)")
     if a3 == "GFR":
         if t2 == "ZG":
             raise ValueError("GFR cannot use T2=ZG")
@@ -128,7 +134,7 @@ def fmt(p: ParsedCode) -> str:
 
 def account(p: ParsedCode) -> str:
     raw = f"{p.a3}{p.r5}{p.t2}{p.p1}{p.c1}{p.n9}{p.d}".encode()
-    return "0x" + hashlib.blake2b(raw, digest_size=32).hexdigest()
+    return "0x" + blake3(raw).hexdigest()
 
 
 def ensure_db(conn: sqlite3.Connection) -> None:
@@ -152,7 +158,7 @@ def next_seq(conn: sqlite3.Connection, bucket: str) -> int:
 
 
 def perturb_n9(seq: int, bucket: str, secret: str) -> str:
-    d = hashlib.blake2b(f"{bucket}|{secret}".encode(), digest_size=16).digest()
+    d = blake3(f"{bucket}|{secret}".encode()).digest(length=16)
     a = int.from_bytes(d[:8], "big") % 1_000_000_000
     while a % 2 == 0 or a % 5 == 0:
         a = (a + 1) % 1_000_000_000
@@ -171,6 +177,17 @@ def pick(title: str, opts: list[tuple[str, str]]) -> str:
         if s.isdigit() and 1 <= int(s) <= len(opts):
             return opts[int(s)-1][1]
         print("输入无效，请重试")
+
+
+def pick_p1() -> str:
+    print("\n请选择 P1（盈利属性）")
+    print("输入 0 = 非盈利")
+    print("输入 1 = 盈利")
+    while True:
+        s = input("请输入 P1（0/1）: ").strip()
+        if s in P1_SET:
+            return s
+        print("输入无效，请输入 0 或 1")
 
 
 def today() -> str:
@@ -204,9 +221,11 @@ def cmd_generate(args: argparse.Namespace) -> int:
         city = pick("请选择市代码（R5后三位）", city_opts)
         r5 = f"{prov}{city}"
 
-        if a3 in {"GMR", "ZRR", "ZNR", "SFR"}:
+        if a3 in {"GMR", "ZRR", "ZNR"}:
             t2 = "ZG"
             print("T2 自动设为 ZG")
+        elif a3 in {"SFR", "FFR"}:
+            t2 = pick("请选择 T2（仅限 ZG/CH/TG）", [x for x in T2_OPTIONS if x[1] in {"ZG", "CH", "TG"}])
         elif a3 == "GFR":
             t2 = pick("请选择 T2（公法人不可选 ZG）", [x for x in T2_OPTIONS if x[1] != "ZG"])
         else:
@@ -219,7 +238,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
             p1 = "0"
             print("P1 自动设为 0")
         else:
-            p1 = pick("请选择 P1", P1_OPTIONS)
+            p1 = pick_p1()
 
         d = input_date() if a3 in {"GMR", "ZRR"} else today()
         if a3 not in {"GMR", "ZRR"}:

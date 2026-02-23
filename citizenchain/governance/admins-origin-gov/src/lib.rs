@@ -11,11 +11,11 @@ use scale_info::TypeInfo;
 use sp_std::vec::Vec;
 
 use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
-use primitives::reserve_nodes_const::{
-    pallet_id_to_bytes as reserve_pallet_id_to_bytes, CHINACB,
+use primitives::china::china_cb::{
+    shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
 };
-use primitives::shengbank_nodes_const::{
-    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, CHINACH,
+use primitives::china::china_ch::{
+    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
@@ -26,7 +26,7 @@ pub use pallet::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct AdminReplacementAction<AccountId> {
-    /// 目标机构（8字节 pallet_id）
+    /// 目标机构（机构标识 pallet_id）
     pub institution: InstitutionPalletId,
     /// 被替换的管理员
     pub old_admin: AccountId,
@@ -46,31 +46,30 @@ fn str_to_shengbank_pallet_id(s: &str) -> Option<InstitutionPalletId> {
 
 fn nrc_pallet_id_bytes() -> InstitutionPalletId {
     // 中文注释：国储会ID统一从常量数组读取并转码。
-    CHINACB
-        .iter()
-        .find(|n| n.pallet_id == "nrcgch01")
-        .and_then(|n| reserve_pallet_id_to_bytes(n.pallet_id))
-        .expect("NRC pallet_id must be 8 bytes")
+    CHINA_CB
+        .first()
+        .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .expect("NRC shenfen_id must be valid")
 }
 
 fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
-    // 国储会固定 pallet_id
+    // 国储会固定 shenfen_id
     if institution == nrc_pallet_id_bytes() {
         return Some(ORG_NRC);
     }
 
-    if CHINACB
+    if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| str_to_pallet_id(n.pallet_id))
+        .filter_map(|n| str_to_pallet_id(n.shenfen_id))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRC);
     }
 
-    if CHINACH
+    if CHINA_CH
         .iter()
-        .filter_map(|n| str_to_shengbank_pallet_id(n.pallet_id))
+        .filter_map(|n| str_to_shengbank_pallet_id(n.shenfen_id))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRB);
@@ -140,8 +139,8 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            for node in CHINACB.iter() {
-                let Some(institution) = reserve_pallet_id_to_bytes(node.pallet_id) else {
+            for node in CHINA_CB.iter() {
+                let Some(institution) = reserve_pallet_id_to_bytes(node.shenfen_id) else {
                     continue;
                 };
                 let admins: Vec<T::AccountId> = node
@@ -158,8 +157,8 @@ pub mod pallet {
                 CurrentAdmins::<T>::insert(institution, bounded);
             }
 
-            for node in CHINACH.iter() {
-                let Some(institution) = shengbank_pallet_id_to_bytes(node.pallet_id) else {
+            for node in CHINA_CH.iter() {
+                let Some(institution) = shengbank_pallet_id_to_bytes(node.shenfen_id) else {
                     continue;
                 };
                 let admins: Vec<T::AccountId> = node
@@ -402,11 +401,11 @@ mod tests {
     use codec::Encode;
     use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
     use frame_system as system;
-    use primitives::reserve_nodes_const::{
-        pallet_id_to_bytes as reserve_pallet_id_to_bytes, CHINACB,
+    use primitives::china::china_cb::{
+        shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
     };
-    use primitives::shengbank_nodes_const::{
-        pallet_id_to_bytes as shengbank_pallet_id_to_bytes, CHINACH,
+    use primitives::china::china_ch::{
+        shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
     };
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
     use voting_engine_system::internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC};
@@ -498,14 +497,14 @@ mod tests {
             let mut who_raw = [0u8; 32];
             who_raw.copy_from_slice(&who_arr);
             match org {
-                ORG_NRC | ORG_PRC => CHINACB
+                ORG_NRC | ORG_PRC => CHINA_CB
                     .iter()
-                    .find(|n| reserve_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                     .map(|n| n.admins.iter().any(|admin| *admin == who_raw))
                     .unwrap_or(false),
-                ORG_PRB => CHINACH
+                ORG_PRB => CHINA_CH
                     .iter()
-                    .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                     .map(|n| n.admins.iter().any(|admin| *admin == who_raw))
                     .unwrap_or(false),
                 _ => false,
@@ -541,29 +540,30 @@ mod tests {
     }
 
     fn nrc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINACB[0].admins[index])
+        AccountId32::new(CHINA_CB[0].admins[index])
     }
 
     fn prc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINACB[1].admins[index])
+        AccountId32::new(CHINA_CB[1].admins[index])
     }
 
     fn nrc_pallet_id() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes("nrcgch01").expect("nrcgch01 should be valid 8-byte pallet id")
+        reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
+            .expect("NRC shenfen_id should map to valid shenfen_id institution id")
     }
 
     fn prc_pallet_id() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINACB[1].pallet_id)
-            .expect("prc pallet_id should be valid 8-byte pallet id")
+        reserve_pallet_id_to_bytes(CHINA_CB[1].shenfen_id)
+            .expect("prc pallet_id should be valid shenfen_id institution id")
     }
 
     fn prb_pallet_id() -> InstitutionPalletId {
-        shengbank_pallet_id_to_bytes(CHINACH[0].pallet_id)
-            .expect("prb pallet_id should be valid 8-byte pallet id")
+        shengbank_pallet_id_to_bytes(CHINA_CH[0].shenfen_id)
+            .expect("prb pallet_id should be valid shenfen_id institution id")
     }
 
     fn prb_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINACH[0].admins[index])
+        AccountId32::new(CHINA_CH[0].admins[index])
     }
 
     #[test]

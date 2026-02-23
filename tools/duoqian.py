@@ -1,5 +1,9 @@
 import json
-import hashlib
+
+try:
+    from blake3 import blake3
+except ModuleNotFoundError as e:
+    raise ModuleNotFoundError("missing dependency 'blake3', please install with: pip install blake3") from e
 
 def calc_multisig_hex(public_keys, threshold):
     """
@@ -21,8 +25,8 @@ def calc_multisig_hex(public_keys, threshold):
     for pk in pk_bytes_list:
         payload += pk
         
-    # 3. 计算 Blake2b 哈希 (256位/32字节)
-    final_hash = hashlib.blake2b(payload, digest_size=32).digest()
+    # 3. 计算 BLAKE3 哈希 (256位/32字节)
+    final_hash = blake3(payload).digest(length=32)
     
     # 4. 返回 0x 开头的十六进制字符串
     return "0x" + final_hash.hex()

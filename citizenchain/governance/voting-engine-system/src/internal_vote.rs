@@ -8,11 +8,11 @@ use sp_runtime::traits::{SaturatedConversion, Saturating};
 use primitives::count_const::{
     NRC_INTERNAL_THRESHOLD, PRB_INTERNAL_THRESHOLD, PRC_INTERNAL_THRESHOLD, VOTING_DURATION_BLOCKS,
 };
-use primitives::reserve_nodes_const::{
-    pallet_id_to_bytes as reserve_pallet_id_to_bytes, CHINACB,
+use primitives::china::china_cb::{
+    shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
 };
-use primitives::shengbank_nodes_const::{
-    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, CHINACH,
+use primitives::china::china_ch::{
+    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
 
 use crate::{
@@ -39,27 +39,26 @@ pub fn org_pass_threshold(org: u8) -> Option<u32> {
 }
 
 fn nrc_pallet_id_bytes() -> InstitutionPalletId {
-    CHINACB
-        .iter()
-        .find(|n| n.pallet_id == "nrcgch01")
-        .and_then(|n| reserve_pallet_id_to_bytes(n.pallet_id))
-        .expect("NRC pallet_id must be 8 bytes")
+    CHINA_CB
+        .first()
+        .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .expect("NRC shenfen_id must be valid")
 }
 
 fn is_valid_internal_institution(org: u8, institution: InstitutionPalletId) -> bool {
     match org {
         // 国储会只有一个机构
         ORG_NRC => institution == nrc_pallet_id_bytes(),
-        // 省储会从 CHINACB 中排除国储会
-        ORG_PRC => CHINACB
+        // 省储会从 CHINA_CB 中排除国储会
+        ORG_PRC => CHINA_CB
             .iter()
-            .filter(|n| n.pallet_id != "nrcgch01")
-            .filter_map(|n| reserve_pallet_id_to_bytes(n.pallet_id))
+            .skip(1)
+            .filter_map(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
             .any(|pid| pid == institution),
-        // 省储行从 CHINACH 获取
-        ORG_PRB => CHINACH
+        // 省储行从 CHINA_CH 获取
+        ORG_PRB => CHINA_CH
             .iter()
-            .filter_map(|n| shengbank_pallet_id_to_bytes(n.pallet_id))
+            .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
             .any(|pid| pid == institution),
         _ => false,
     }
@@ -90,14 +89,14 @@ fn is_internal_admin<T: Config>(
         who_arr.copy_from_slice(&who_bytes);
 
         match org {
-            ORG_NRC | ORG_PRC => CHINACB
+            ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|n| reserve_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
-            ORG_PRB => CHINACH
+            ORG_PRB => CHINA_CH
                 .iter()
-                .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             _ => false,
