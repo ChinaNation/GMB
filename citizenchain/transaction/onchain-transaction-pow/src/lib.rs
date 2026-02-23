@@ -239,7 +239,7 @@ fn mul_perbill_round(amount: u128, rate: sp_runtime::Perbill) -> u128 {
 }
 
 fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
-    primitives::reserve_nodes_const::RESERVE_NODES
+    primitives::reserve_nodes_const::CHINACB
         .iter()
         .find(|n| n.pallet_id == "nrcgch01")
         .and_then(|n| T::AccountId::decode(&mut &n.pallet_address[..]).ok())
