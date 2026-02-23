@@ -9,7 +9,7 @@ pub mod pallet {
     use codec::Encode;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
-    use primitives::reserve_nodes_const::CHINACB;
+    use primitives::china::china_cb::CHINA_CB;
     use resolution_issuance_iss::ResolutionIssuanceExecutor;
     use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
     use voting_engine_system::JointVoteEngine;
@@ -304,10 +304,10 @@ pub mod pallet {
             allocations: &[RecipientAmount<T::AccountId>],
         ) -> DispatchResult {
             ensure!(!allocations.is_empty(), Error::<T>::EmptyAllocations);
-            let expected: BTreeSet<Vec<u8>> = CHINACB
+            let expected: BTreeSet<Vec<u8>> = CHINA_CB
                 .iter()
-                .filter(|node| node.pallet_id != "nrcgch01")
-                .map(|node| node.pallet_address.to_vec())
+                .skip(1)
+                .map(|node| node.duoqian_address.to_vec())
                 .collect();
             ensure!(
                 allocations.len() == expected.len(),
@@ -492,10 +492,10 @@ mod tests {
     }
 
     fn reserve_council_accounts() -> Vec<AccountId32> {
-        primitives::reserve_nodes_const::CHINACB
+        primitives::china::china_cb::CHINA_CB
             .iter()
-            .filter(|n| n.pallet_id != "nrcgch01")
-            .map(|n| AccountId32::new(n.pallet_address))
+            .skip(1)
+            .map(|n| AccountId32::new(n.duoqian_address))
             .collect()
     }
 

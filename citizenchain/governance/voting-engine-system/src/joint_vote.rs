@@ -9,11 +9,11 @@ use primitives::count_const::{
     JOINT_VOTE_PASS_THRESHOLD, JOINT_VOTE_TOTAL, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT,
     PRC_JOINT_VOTE_WEIGHT, VOTING_DURATION_BLOCKS,
 };
-use primitives::reserve_nodes_const::{
-    pallet_id_to_bytes as reserve_pallet_id_to_bytes, CHINACB,
+use primitives::china::china_cb::{
+    shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
 };
-use primitives::shengbank_nodes_const::{
-    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, CHINACH,
+use primitives::china::china_ch::{
+    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
 
 use crate::{
@@ -35,17 +35,15 @@ fn str_to_shengbank_pallet_id(s: &str) -> Option<InstitutionPalletId> {
 
 fn nrc_pallet_id_bytes() -> InstitutionPalletId {
     // 中文注释：国储会ID统一从常量数组读取并转码。
-    CHINACB
-        .iter()
-        .find(|n| n.pallet_id == "nrcgch01")
-        .and_then(|n| reserve_pallet_id_to_bytes(n.pallet_id))
-        .expect("NRC pallet_id must be 8 bytes")
+    CHINA_CB
+        .first()
+        .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .expect("NRC shenfen_id must be valid")
 }
 
 fn is_nrc_admin_account(who: &[u8; 32]) -> bool {
-    CHINACB
-        .iter()
-        .find(|n| n.pallet_id == "nrcgch01")
+    CHINA_CB
+        .first()
         .map(|n| n.admins.iter().any(|admin| admin == who))
         .unwrap_or(false)
 }
@@ -73,15 +71,15 @@ fn is_nrc_admin<T: Config>(who: &T::AccountId) -> bool {
 }
 
 fn institution_multisig_account(institution: InstitutionPalletId) -> Option<[u8; 32]> {
-    CHINACB
+    CHINA_CB
         .iter()
-        .find(|n| reserve_pallet_id_to_bytes(n.pallet_id) == Some(institution))
-        .map(|n| n.pallet_address)
+        .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+        .map(|n| n.duoqian_address)
         .or_else(|| {
-            CHINACH
+            CHINA_CH
                 .iter()
-                .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
-                .map(|n| n.pallet_address)
+                .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                .map(|n| n.duoqian_address)
         })
 }
 
@@ -96,17 +94,17 @@ pub fn is_valid_institution(id: InstitutionPalletId) -> bool {
         return true;
     }
 
-    let in_prc = CHINACB
+    let in_prc = CHINA_CB
         .iter()
-        .filter_map(|n| str_to_pallet_id(n.pallet_id))
+        .filter_map(|n| str_to_pallet_id(n.shenfen_id))
         .any(|pid| pid == id);
     if in_prc {
         return true;
     }
 
-    CHINACH
+    CHINA_CH
         .iter()
-        .filter_map(|n| str_to_shengbank_pallet_id(n.pallet_id))
+        .filter_map(|n| str_to_shengbank_pallet_id(n.shenfen_id))
         .any(|pid| pid == id)
 }
 
@@ -115,17 +113,17 @@ pub fn institution_weight(id: InstitutionPalletId) -> Option<u32> {
         return Some(NRC_JOINT_VOTE_WEIGHT);
     }
 
-    let in_prc = CHINACB
+    let in_prc = CHINA_CB
         .iter()
-        .filter_map(|n| str_to_pallet_id(n.pallet_id))
+        .filter_map(|n| str_to_pallet_id(n.shenfen_id))
         .any(|pid| pid == id);
     if in_prc {
         return Some(PRC_JOINT_VOTE_WEIGHT);
     }
 
-    let in_prb = CHINACH
+    let in_prb = CHINA_CH
         .iter()
-        .filter_map(|n| str_to_shengbank_pallet_id(n.pallet_id))
+        .filter_map(|n| str_to_shengbank_pallet_id(n.shenfen_id))
         .any(|pid| pid == id);
     if in_prb {
         return Some(PRB_JOINT_VOTE_WEIGHT);

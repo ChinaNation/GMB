@@ -6,11 +6,11 @@ use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_runtime::traits::Zero;
 
-use primitives::reserve_nodes_const::{
-    pallet_id_to_bytes as reserve_pallet_id_to_bytes, CHINACB,
+use primitives::china::china_cb::{
+    shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
 };
-use primitives::shengbank_nodes_const::{
-    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, CHINACH,
+use primitives::china::china_ch::{
+    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
@@ -24,7 +24,7 @@ type BalanceOf<T> =
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct DestroyAction<Balance> {
-    /// 目标机构（8字节 pallet_id）
+    /// 目标机构（机构标识 pallet_id）
     pub institution: InstitutionPalletId,
     /// 销毁数量
     pub amount: Balance,
@@ -41,11 +41,10 @@ fn str_to_shengbank_pallet_id(s: &str) -> Option<InstitutionPalletId> {
 }
 
 fn nrc_pallet_id_bytes() -> InstitutionPalletId {
-    CHINACB
-        .iter()
-        .find(|n| n.pallet_id == "nrcgch01")
-        .and_then(|n| reserve_pallet_id_to_bytes(n.pallet_id))
-        .expect("NRC pallet_id must be 8 bytes")
+    CHINA_CB
+        .first()
+        .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .expect("NRC shenfen_id must be valid")
 }
 
 fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
@@ -53,18 +52,18 @@ fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
         return Some(ORG_NRC);
     }
 
-    if CHINACB
+    if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| str_to_pallet_id(n.pallet_id))
+        .filter_map(|n| str_to_pallet_id(n.shenfen_id))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRC);
     }
 
-    if CHINACH
+    if CHINA_CH
         .iter()
-        .filter_map(|n| str_to_shengbank_pallet_id(n.pallet_id))
+        .filter_map(|n| str_to_shengbank_pallet_id(n.shenfen_id))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRB);
@@ -74,17 +73,17 @@ fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
 }
 
 fn institution_pallet_address(institution: InstitutionPalletId) -> Option<[u8; 32]> {
-    if let Some(node) = CHINACB
+    if let Some(node) = CHINA_CB
         .iter()
-        .find(|n| str_to_pallet_id(n.pallet_id) == Some(institution))
+        .find(|n| str_to_pallet_id(n.shenfen_id) == Some(institution))
     {
-        return Some(node.pallet_address);
+        return Some(node.duoqian_address);
     }
 
-    CHINACH
+    CHINA_CH
         .iter()
-        .find(|n| str_to_shengbank_pallet_id(n.pallet_id) == Some(institution))
-        .map(|n| n.pallet_address)
+        .find(|n| str_to_shengbank_pallet_id(n.shenfen_id) == Some(institution))
+        .map(|n| n.duoqian_address)
 }
 
 #[frame_support::pallet]
@@ -269,14 +268,14 @@ pub mod pallet {
                 who_arr.copy_from_slice(&who_bytes);
 
                 match org {
-                    ORG_NRC | ORG_PRC => CHINACB
+                    ORG_NRC | ORG_PRC => CHINA_CB
                         .iter()
-                        .find(|n| str_to_pallet_id(n.pallet_id) == Some(institution))
+                        .find(|n| str_to_pallet_id(n.shenfen_id) == Some(institution))
                         .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                         .unwrap_or(false),
-                    ORG_PRB => CHINACH
+                    ORG_PRB => CHINA_CH
                         .iter()
-                        .find(|n| str_to_shengbank_pallet_id(n.pallet_id) == Some(institution))
+                        .find(|n| str_to_shengbank_pallet_id(n.shenfen_id) == Some(institution))
                         .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                         .unwrap_or(false),
                     _ => false,
@@ -442,14 +441,14 @@ mod tests {
             let mut who_arr = [0u8; 32];
             who_arr.copy_from_slice(&who_bytes);
             match org {
-                ORG_NRC | ORG_PRC => CHINACB
+                ORG_NRC | ORG_PRC => CHINA_CB
                     .iter()
-                    .find(|n| str_to_pallet_id(n.pallet_id) == Some(institution))
+                    .find(|n| str_to_pallet_id(n.shenfen_id) == Some(institution))
                     .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
-                ORG_PRB => CHINACH
+                ORG_PRB => CHINA_CH
                     .iter()
-                    .find(|n| str_to_shengbank_pallet_id(n.pallet_id) == Some(institution))
+                    .find(|n| str_to_shengbank_pallet_id(n.shenfen_id) == Some(institution))
                     .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
                 _ => false,
@@ -475,27 +474,27 @@ mod tests {
     }
 
     fn nrc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINACB[0].admins[index])
+        AccountId32::new(CHINA_CB[0].admins[index])
     }
 
     fn prc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINACB[1].admins[index])
+        AccountId32::new(CHINA_CB[1].admins[index])
     }
 
     fn prb_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINACH[0].admins[index])
+        AccountId32::new(CHINA_CH[0].admins[index])
     }
 
     fn nrc_pallet_id() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes("nrcgch01").expect("nrc id should be valid")
+        reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("nrc id should be valid")
     }
 
     fn prc_pallet_id() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINACB[1].pallet_id).expect("prc id should be valid")
+        reserve_pallet_id_to_bytes(CHINA_CB[1].shenfen_id).expect("prc id should be valid")
     }
 
     fn prb_pallet_id() -> InstitutionPalletId {
-        shengbank_pallet_id_to_bytes(CHINACH[0].pallet_id).expect("prb id should be valid")
+        shengbank_pallet_id_to_bytes(CHINA_CH[0].shenfen_id).expect("prb id should be valid")
     }
 
     fn institution_account(institution: InstitutionPalletId) -> AccountId32 {

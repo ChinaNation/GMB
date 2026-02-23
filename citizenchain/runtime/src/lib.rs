@@ -10,11 +10,20 @@ pub mod configs;
 
 extern crate alloc;
 use alloc::vec::Vec;
+use codec::{Decode, DecodeWithMemTracking, Encode};
+use frame_support::{dispatch::DispatchInfo, pallet_prelude::TransactionSource};
+use scale_info::TypeInfo;
 use sp_runtime::{
     generic,
-    traits::{BlakeTwo256, IdentifyAccount, Verify},
+    traits::{
+        AsSystemOriginSigner, BlakeTwo256, DispatchInfoOf, Dispatchable, IdentifyAccount,
+        PostDispatchInfoOf, TransactionExtension, ValidateResult, Verify,
+    },
+    transaction_validity::{InvalidTransaction, TransactionValidityError},
+    DispatchResult,
     MultiAddress, MultiSignature,
 };
+use frame_support::weights::Weight;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
@@ -146,6 +155,7 @@ pub type BlockId = generic::BlockId<Block>;
 pub type TxExtension = (
     frame_system::AuthorizeCall<Runtime>,
     frame_system::CheckNonZeroSender<Runtime>,
+    CheckNonKeylessSender,
     frame_system::CheckSpecVersion<Runtime>,
     frame_system::CheckTxVersion<Runtime>,
     frame_system::CheckGenesis<Runtime>,
@@ -156,6 +166,63 @@ pub type TxExtension = (
     frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
     frame_system::WeightReclaim<Runtime>,
 );
+
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, Eq, PartialEq, TypeInfo, Debug)]
+pub struct CheckNonKeylessSender;
+
+impl TransactionExtension<RuntimeCall> for CheckNonKeylessSender
+where
+    RuntimeCall: Dispatchable<Info = DispatchInfo>,
+    <RuntimeCall as Dispatchable>::RuntimeOrigin: AsSystemOriginSigner<AccountId> + Clone,
+{
+    const IDENTIFIER: &'static str = "CheckNonKeylessSender";
+    type Implicit = ();
+    type Val = ();
+    type Pre = ();
+
+    fn weight(&self, _call: &RuntimeCall) -> Weight {
+        Weight::zero()
+    }
+
+    fn validate(
+        &self,
+        origin: RuntimeOrigin,
+        _call: &RuntimeCall,
+        _info: &DispatchInfoOf<RuntimeCall>,
+        _len: usize,
+        _self_implicit: Self::Implicit,
+        _inherited_implication: &impl Encode,
+        _source: TransactionSource,
+    ) -> ValidateResult<Self::Val, RuntimeCall> {
+        if let Some(who) = origin.as_system_origin_signer() {
+            if configs::is_keyless_account(&who) {
+                return Err(InvalidTransaction::Call.into());
+            }
+        }
+        Ok((Default::default(), (), origin))
+    }
+
+    fn prepare(
+        self,
+        _val: Self::Val,
+        _origin: &RuntimeOrigin,
+        _call: &RuntimeCall,
+        _info: &DispatchInfoOf<RuntimeCall>,
+        _len: usize,
+    ) -> Result<Self::Pre, TransactionValidityError> {
+        Ok(())
+    }
+
+    fn post_dispatch_details(
+        _pre: Self::Pre,
+        _info: &DispatchInfo,
+        _post_info: &PostDispatchInfoOf<RuntimeCall>,
+        _len: usize,
+        _result: &DispatchResult,
+    ) -> Result<Weight, TransactionValidityError> {
+        Ok(Weight::zero())
+    }
+}
 
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic =

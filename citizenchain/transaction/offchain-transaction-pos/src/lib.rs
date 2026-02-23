@@ -10,9 +10,9 @@ use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_runtime::traits::{AccountIdConversion, SaturatedConversion, Saturating, Zero};
 
-use primitives::shengbank_nodes_const::{
-    fee_pallet_id_to_bytes as shengbank_fee_pallet_id_to_bytes,
-    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, CHINACH,
+use primitives::china::china_ch::{
+    shenfen_fee_id_to_bytes as shengbank_shenfen_fee_id_to_bytes,
+    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
 use voting_engine_system::{
     internal_vote::ORG_PRB, InstitutionPalletId, InternalVoteEngine, PROPOSAL_KIND_INTERNAL,
@@ -34,17 +34,17 @@ const VERIFY_KEY_ROTATION_DELAY_BLOCKS: u32 = primitives::pow_const::BLOCKS_PER_
 const BP_DENOMINATOR: u128 = 10_000;
 
 fn institution_pallet_address(institution: InstitutionPalletId) -> Option<[u8; 32]> {
-    CHINACH
+    CHINA_CH
         .iter()
-        .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
-        .map(|n| n.pallet_address)
+        .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+        .map(|n| n.duoqian_address)
 }
 
-fn institution_fee_pallet_id(institution: InstitutionPalletId) -> Option<[u8; 8]> {
-    CHINACH
+fn institution_shenfen_fee_id(institution: InstitutionPalletId) -> Option<[u8; 8]> {
+    CHINA_CH
         .iter()
-        .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
-        .and_then(|n| shengbank_fee_pallet_id_to_bytes(n.fee_pallet_id))
+        .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+        .and_then(|n| shengbank_shenfen_fee_id_to_bytes(n.shenfen_fee_id))
 }
 
 fn round_div(numerator: u128, denominator: u128) -> u128 {
@@ -65,6 +65,17 @@ pub trait OffchainBatchVerifier {
 
 impl OffchainBatchVerifier for () {
     fn verify(_verify_key: &[u8], _message: &[u8], _signature: &[u8]) -> bool {
+        false
+    }
+}
+
+/// 付款源地址保护：用于禁止制度保留地址作为转出源。
+pub trait ProtectedSourceChecker<AccountId> {
+    fn is_protected(account: &AccountId) -> bool;
+}
+
+impl<AccountId> ProtectedSourceChecker<AccountId> for () {
+    fn is_protected(_account: &AccountId) -> bool {
         false
     }
 }
@@ -136,6 +147,7 @@ pub mod pallet {
         type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
 
         type OffchainBatchVerifier: OffchainBatchVerifier;
+        type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
     }
 
     pub type VerifyKeyOf<T> = BoundedVec<u8, <T as Config>::MaxVerifyKeyLen>;
@@ -402,6 +414,7 @@ pub mod pallet {
         VerifyKeyAlreadyInitialized,
         VerifyKeyMissing,
         InvalidBatchSignature,
+        ProtectedSource,
         InsufficientFeeReserve,
         SweepAmountExceedsCap,
         RelaySubmittersNotInitialized,
@@ -450,6 +463,10 @@ pub mod pallet {
             let mut total_fee_u128: u128 = 0;
 
             for item in batch.iter() {
+                ensure!(
+                    !T::ProtectedSourceChecker::is_protected(&item.payer),
+                    Error::<T>::ProtectedSource
+                );
                 let transfer_u128: u128 = item.transfer_amount.saturated_into();
                 let fee_u128: u128 = item.offchain_fee_amount.saturated_into();
 
@@ -854,6 +871,10 @@ pub mod pallet {
                     !ProcessedOffchainTx::<T>::get(item.tx_id),
                     Error::<T>::TxAlreadyProcessed
                 );
+                ensure!(
+                    !T::ProtectedSourceChecker::is_protected(&item.payer),
+                    Error::<T>::ProtectedSource
+                );
                 let transfer_u128: u128 = item.transfer_amount.saturated_into();
                 let fee_u128: u128 = item.offchain_fee_amount.saturated_into();
                 let expected_fee = calc_offchain_fee_fen(transfer_u128, rate_bp);
@@ -895,8 +916,8 @@ pub mod pallet {
         }
 
         fn institution_fee_account(institution: InstitutionPalletId) -> T::AccountId {
-            let fee_pid = institution_fee_pallet_id(institution).expect("valid institution checked");
-            // 中文注释：fee_pallet_address 直接由 fee_pallet_id 派生，是独立手续费账户。
+            let fee_pid = institution_shenfen_fee_id(institution).expect("valid institution checked");
+            // 中文注释：fee_pallet_address 直接由 shenfen_fee_id 派生，是独立手续费账户。
             PalletId(fee_pid).into_account_truncating()
         }
 
@@ -958,9 +979,9 @@ pub mod pallet {
                 let mut who_arr = [0u8; 32];
                 who_arr.copy_from_slice(&who_bytes);
 
-                CHINACH
+                CHINA_CH
                     .iter()
-                    .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                     .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false)
             }
@@ -1099,6 +1120,10 @@ pub mod pallet {
 
             let fee_account = Self::institution_fee_account(action.institution);
             let main_account = Self::institution_account(action.institution)?;
+            ensure!(
+                !T::ProtectedSourceChecker::is_protected(&fee_account),
+                Error::<T>::ProtectedSource
+            );
 
             let amount_u128: u128 = action.amount.saturated_into();
             let fee_balance_u128: u128 = T::Currency::free_balance(&fee_account).saturated_into();
@@ -1148,8 +1173,8 @@ pub mod pallet {
         fn on_initialize(now: BlockNumberFor<T>) -> Weight {
             let mut reads: u64 = 0;
             let mut writes: u64 = 0;
-            for node in CHINACH.iter() {
-                let Some(institution) = shengbank_pallet_id_to_bytes(node.pallet_id) else {
+            for node in CHINA_CH.iter() {
+                let Some(institution) = shengbank_pallet_id_to_bytes(node.shenfen_id) else {
                     continue;
                 };
                 reads = reads.saturating_add(1);
@@ -1294,9 +1319,9 @@ mod tests {
             let mut who_arr = [0u8; 32];
             who_arr.copy_from_slice(&who_bytes);
             match org {
-                voting_engine_system::internal_vote::ORG_PRB => CHINACH
+                voting_engine_system::internal_vote::ORG_PRB => CHINA_CH
                     .iter()
-                    .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
+                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                     .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
                 _ => false,
@@ -1331,14 +1356,15 @@ mod tests {
         type MaxRelaySubmitters = ConstU32<8>;
         type InternalVoteEngine = voting_engine_system::Pallet<Test>;
         type OffchainBatchVerifier = TestOffchainBatchVerifier;
+        type ProtectedSourceChecker = ();
     }
 
     fn prb_institution() -> InstitutionPalletId {
-        shengbank_pallet_id_to_bytes(CHINACH[0].pallet_id).expect("valid institution")
+        shengbank_pallet_id_to_bytes(CHINA_CH[0].shenfen_id).expect("valid institution")
     }
 
     fn prb_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINACH[0].admins[index])
+        AccountId32::new(CHINA_CH[0].admins[index])
     }
 
     fn prb_account() -> AccountId32 {

@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use primitives::{
-    genesis::GENESIS_ISSUANCE, reserve_nodes_const::CHINACB,
-    shengbank_nodes_const::CHINACH,
+    genesis::GENESIS_ISSUANCE, china::china_cb::CHINA_CB,
+    china::china_ch::CHINA_CH,
 };
 use serde_json::{json, Value};
 use sp_core::{blake2_128, twox_128};
@@ -99,11 +99,8 @@ fn spawn_node(rpc_port: u16) -> Result<Child, Box<dyn Error>> {
 fn do_audit(rpc_url: &str, timeout_secs: u64) -> Result<(), Box<dyn Error>> {
     wait_rpc_ready(rpc_url, timeout_secs)?;
 
-    let nrc = CHINACB
-        .iter()
-        .find(|n| n.pallet_id == "nrcgch01")
-        .ok_or("未找到 nrcgch01")?;
-    let nrc_balance = read_free_balance(rpc_url, &nrc.pallet_address)?;
+    let nrc = CHINA_CB.first().ok_or("未找到国储会节点")?;
+    let nrc_balance = read_free_balance(rpc_url, &nrc.duoqian_address)?;
     if nrc_balance != GENESIS_ISSUANCE {
         return Err(format!(
             "国储会创世发行不匹配: on-chain={}, expected={}",
@@ -113,12 +110,12 @@ fn do_audit(rpc_url: &str, timeout_secs: u64) -> Result<(), Box<dyn Error>> {
     }
 
     let mut shengbank_sum: u128 = 0;
-    for bank in CHINACH {
+    for bank in CHINA_CH {
         let onchain = read_free_balance(rpc_url, &bank.keyless_address)?;
         if onchain != bank.stake_amount {
             return Err(format!(
                 "省储行 {} 创立发行不匹配: on-chain={}, expected={}",
-                bank.pallet_id, onchain, bank.stake_amount
+                bank.shenfen_id, onchain, bank.stake_amount
             )
             .into());
         }
@@ -126,7 +123,7 @@ fn do_audit(rpc_url: &str, timeout_secs: u64) -> Result<(), Box<dyn Error>> {
     }
 
     let expected_total = GENESIS_ISSUANCE.saturating_add(
-        CHINACH
+        CHINA_CH
             .iter()
             .map(|b| b.stake_amount)
             .fold(0u128, |acc, v| acc.saturating_add(v)),

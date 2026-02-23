@@ -187,7 +187,16 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            // 中文注释：SFID 三把创世账户必须在链规格中显式给出，不允许回退常量。
+            // 中文注释：默认创世允许不配置 SFID 三把账户（no-op），
+            // 但如果配置了任意一个，则必须三把都配置且互不相同。
+            if self.sfid_main_account.is_none()
+                && self.sfid_backup_account_1.is_none()
+                && self.sfid_backup_account_2.is_none()
+            {
+                return;
+            }
+
+            // 中文注释：只要启用 SFID 创世配置，就必须三把完整提供。
             let main = self
                 .sfid_main_account
                 .clone()
