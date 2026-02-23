@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use primitives::{
-    genesis::GENESIS_ISSUANCE, reserve_nodes_const::RESERVE_NODES,
-    shengbank_nodes_const::SHENG_BANK_NODES,
+    genesis::GENESIS_ISSUANCE, reserve_nodes_const::CHINACB,
+    shengbank_nodes_const::CHINACH,
 };
 use serde_json::{json, Value};
 use sp_core::{blake2_128, twox_128};
@@ -99,7 +99,7 @@ fn spawn_node(rpc_port: u16) -> Result<Child, Box<dyn Error>> {
 fn do_audit(rpc_url: &str, timeout_secs: u64) -> Result<(), Box<dyn Error>> {
     wait_rpc_ready(rpc_url, timeout_secs)?;
 
-    let nrc = RESERVE_NODES
+    let nrc = CHINACB
         .iter()
         .find(|n| n.pallet_id == "nrcgch01")
         .ok_or("未找到 nrcgch01")?;
@@ -113,7 +113,7 @@ fn do_audit(rpc_url: &str, timeout_secs: u64) -> Result<(), Box<dyn Error>> {
     }
 
     let mut shengbank_sum: u128 = 0;
-    for bank in SHENG_BANK_NODES {
+    for bank in CHINACH {
         let onchain = read_free_balance(rpc_url, &bank.keyless_address)?;
         if onchain != bank.stake_amount {
             return Err(format!(
@@ -126,7 +126,7 @@ fn do_audit(rpc_url: &str, timeout_secs: u64) -> Result<(), Box<dyn Error>> {
     }
 
     let expected_total = GENESIS_ISSUANCE.saturating_add(
-        SHENG_BANK_NODES
+        CHINACH
             .iter()
             .map(|b| b.stake_amount)
             .fold(0u128, |acc, v| acc.saturating_add(v)),

@@ -40,13 +40,14 @@ use frame_support::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
         IdentityFee, Weight,
     },
+    PalletId,
 };
 use frame_system::limits::{BlockLength, BlockWeights};
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use sp_core::sr25519;
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
 use sp_runtime::{
-    traits::{IdentifyAccount, One},
+    traits::{AccountIdConversion, IdentifyAccount, One},
     MultiSigner, Perbill,
 };
 use sp_version::RuntimeVersion;
@@ -380,8 +381,43 @@ impl duoqian_transaction_pow::DuoqianAddressValidator<AccountId>
     for RuntimeDuoqianAddressValidator
 {
     fn is_valid(address: &AccountId) -> bool {
-        // 中文注释：Runtime AccountId 已是本链统一哈希地址格式，这里至少禁止全0黑洞地址。
-        address != &AccountId::new([0u8; 32])
+        // 中文注释：禁止黑洞地址。
+        if address == &AccountId::new([0u8; 32]) {
+            return false;
+        }
+
+        // 中文注释：禁止占用“国储会/省储会”的制度保留交易地址。
+        if primitives::china::china_cb::CHINACB
+            .iter()
+            .any(|n| address == &AccountId::new(n.pallet_address))
+        {
+            return false;
+        }
+
+        // 中文注释：禁止占用“省储行”的制度保留交易地址。
+        if primitives::china::china_ch::CHINACH
+            .iter()
+            .any(|n| address == &AccountId::new(n.pallet_address))
+        {
+            return false;
+        }
+
+        // 中文注释：禁止占用“省储行手续费账户”地址（由 fee_pallet_id 派生）。
+        if primitives::china::china_ch::CHINACH
+            .iter()
+            .any(|n| {
+                primitives::china::china_ch::fee_pallet_id_to_bytes(n.fee_pallet_id)
+                    .map(|pid| {
+                        let fee_account: AccountId = PalletId(pid).into_account_truncating();
+                        address == &fee_account
+                    })
+                    .unwrap_or(false)
+            })
+        {
+            return false;
+        }
+
+        true
     }
 }
 
@@ -622,7 +658,7 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 }
 
 fn is_nrc_admin(who: &AccountId) -> bool {
-    let nrc_institution = primitives::reserve_nodes_const::RESERVE_NODES
+    let nrc_institution = primitives::reserve_nodes_const::CHINACB
         .iter()
         .find(|n| n.pallet_id == "nrcgch01")
         .and_then(|n| primitives::reserve_nodes_const::pallet_id_to_bytes(n.pallet_id))
@@ -724,7 +760,7 @@ mod tests {
     use frame_support::traits::Currency;
     use offchain_transaction_fee::OffchainBatchVerifier;
     use primitives::reserve_nodes_const::{
-        pallet_id_to_bytes as reserve_pallet_id_to_bytes, RESERVE_NODES,
+        pallet_id_to_bytes as reserve_pallet_id_to_bytes, CHINACB,
     };
     use sfid_code_auth::{SfidVerifier, SfidVoteVerifier};
     use sp_core::Pair;
@@ -750,7 +786,7 @@ mod tests {
             let proposal_id = 1u64;
             let joint_vote_id = 99u64;
             let recipient =
-                AccountId::new(primitives::reserve_nodes_const::RESERVE_NODES[1].pallet_address);
+                AccountId::new(primitives::reserve_nodes_const::CHINACB[1].pallet_address);
             let total_amount = 123u128;
 
             let reason: resolution_issuance_gov::pallet::ReasonOf<Runtime> = b"runtime-integration"
@@ -820,7 +856,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let nrc_institution =
                 reserve_pallet_id_to_bytes("nrcgch01").expect("nrc institution id must be valid");
-            let nrc_account = AccountId::new(RESERVE_NODES[0].pallet_address);
+            let nrc_account = AccountId::new(CHINACB[0].pallet_address);
             let initial_balance: Balance = 1_000;
             let destroy_amount: Balance = 100;
 
@@ -828,7 +864,7 @@ mod tests {
             let issuance_before = Balances::total_issuance();
 
             assert_ok!(ResolutionDestroGov::propose_destroy(
-                RuntimeOrigin::signed(AccountId::new(RESERVE_NODES[0].admins[0])),
+                RuntimeOrigin::signed(AccountId::new(CHINACB[0].admins[0])),
                 voting_engine_system::internal_vote::ORG_NRC,
                 nrc_institution,
                 destroy_amount,
@@ -836,7 +872,7 @@ mod tests {
 
             for i in 0..13 {
                 assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(AccountId::new(RESERVE_NODES[0].admins[i])),
+                    RuntimeOrigin::signed(AccountId::new(CHINACB[0].admins[i])),
                     0,
                     true,
                 ));
@@ -858,11 +894,11 @@ mod tests {
     fn offchain_batch_submitter_is_institution_and_fee_base_is_batch_offchain_fee_sum() {
         new_test_ext().execute_with(|| {
             let institution = primitives::shengbank_nodes_const::pallet_id_to_bytes(
-                primitives::shengbank_nodes_const::SHENG_BANK_NODES[0].pallet_id,
+                primitives::shengbank_nodes_const::CHINACH[0].pallet_id,
             )
             .expect("institution id should be valid");
             let institution_account = AccountId::new(
-                primitives::shengbank_nodes_const::SHENG_BANK_NODES[0].pallet_address,
+                primitives::shengbank_nodes_const::CHINACH[0].pallet_address,
             );
             let payer = AccountId::new([7u8; 32]);
             let recipient = AccountId::new([8u8; 32]);
@@ -1118,7 +1154,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let who = AccountId::new([9u8; 32]);
             let institution = primitives::shengbank_nodes_const::pallet_id_to_bytes(
-                primitives::shengbank_nodes_const::SHENG_BANK_NODES[0].pallet_id,
+                primitives::shengbank_nodes_const::CHINACH[0].pallet_id,
             )
             .expect("institution id should be valid");
             let fee_account =
@@ -1203,7 +1239,7 @@ mod tests {
 
             let proposal_id = 7u64;
             let joint_vote_id = 70u64;
-            let proposer = AccountId::new(RESERVE_NODES[0].admins[0]);
+            let proposer = AccountId::new(CHINACB[0].admins[0]);
             let reason: runtime_root_upgrade::pallet::ReasonOf<Runtime> =
                 b"upgrade".to_vec().try_into().expect("reason");
             let code: runtime_root_upgrade::pallet::CodeOf<Runtime> =
@@ -1408,7 +1444,7 @@ mod tests {
     fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
         new_test_ext().execute_with(|| {
             let nrc_id = reserve_pallet_id_to_bytes("nrcgch01").expect("nrc id");
-            let nrc_admin = AccountId::new(RESERVE_NODES[0].admins[0]);
+            let nrc_admin = AccountId::new(CHINACB[0].admins[0]);
             let outsider = AccountId::new([99u8; 32]);
 
             let ok_origin = RuntimeOrigin::signed(nrc_admin.clone());
