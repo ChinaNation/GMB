@@ -10,10 +10,10 @@ use primitives::count_const::{
     PRC_JOINT_VOTE_WEIGHT, VOTING_DURATION_BLOCKS,
 };
 use primitives::reserve_nodes_const::{
-    pallet_id_to_bytes as reserve_pallet_id_to_bytes, RESERVE_NODES,
+    pallet_id_to_bytes as reserve_pallet_id_to_bytes, CHINACB,
 };
 use primitives::shengbank_nodes_const::{
-    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, SHENG_BANK_NODES,
+    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, CHINACH,
 };
 
 use crate::{
@@ -35,7 +35,7 @@ fn str_to_shengbank_pallet_id(s: &str) -> Option<InstitutionPalletId> {
 
 fn nrc_pallet_id_bytes() -> InstitutionPalletId {
     // 中文注释：国储会ID统一从常量数组读取并转码。
-    RESERVE_NODES
+    CHINACB
         .iter()
         .find(|n| n.pallet_id == "nrcgch01")
         .and_then(|n| reserve_pallet_id_to_bytes(n.pallet_id))
@@ -43,7 +43,7 @@ fn nrc_pallet_id_bytes() -> InstitutionPalletId {
 }
 
 fn is_nrc_admin_account(who: &[u8; 32]) -> bool {
-    RESERVE_NODES
+    CHINACB
         .iter()
         .find(|n| n.pallet_id == "nrcgch01")
         .map(|n| n.admins.iter().any(|admin| admin == who))
@@ -73,12 +73,12 @@ fn is_nrc_admin<T: Config>(who: &T::AccountId) -> bool {
 }
 
 fn institution_multisig_account(institution: InstitutionPalletId) -> Option<[u8; 32]> {
-    RESERVE_NODES
+    CHINACB
         .iter()
         .find(|n| reserve_pallet_id_to_bytes(n.pallet_id) == Some(institution))
         .map(|n| n.pallet_address)
         .or_else(|| {
-            SHENG_BANK_NODES
+            CHINACH
                 .iter()
                 .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
                 .map(|n| n.pallet_address)
@@ -96,7 +96,7 @@ pub fn is_valid_institution(id: InstitutionPalletId) -> bool {
         return true;
     }
 
-    let in_prc = RESERVE_NODES
+    let in_prc = CHINACB
         .iter()
         .filter_map(|n| str_to_pallet_id(n.pallet_id))
         .any(|pid| pid == id);
@@ -104,7 +104,7 @@ pub fn is_valid_institution(id: InstitutionPalletId) -> bool {
         return true;
     }
 
-    SHENG_BANK_NODES
+    CHINACH
         .iter()
         .filter_map(|n| str_to_shengbank_pallet_id(n.pallet_id))
         .any(|pid| pid == id)
@@ -115,7 +115,7 @@ pub fn institution_weight(id: InstitutionPalletId) -> Option<u32> {
         return Some(NRC_JOINT_VOTE_WEIGHT);
     }
 
-    let in_prc = RESERVE_NODES
+    let in_prc = CHINACB
         .iter()
         .filter_map(|n| str_to_pallet_id(n.pallet_id))
         .any(|pid| pid == id);
@@ -123,7 +123,7 @@ pub fn institution_weight(id: InstitutionPalletId) -> Option<u32> {
         return Some(PRC_JOINT_VOTE_WEIGHT);
     }
 
-    let in_prb = SHENG_BANK_NODES
+    let in_prb = CHINACH
         .iter()
         .filter_map(|n| str_to_shengbank_pallet_id(n.pallet_id))
         .any(|pid| pid == id);

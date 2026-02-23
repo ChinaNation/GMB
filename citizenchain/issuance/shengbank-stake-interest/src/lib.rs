@@ -16,7 +16,7 @@ pub mod pallet {
             ENABLE_SHENGBANK_INTEREST_DECAY, SHENGBANK_INITIAL_INTEREST_BP,
             SHENGBANK_INTEREST_DECREASE_BP, SHENGBANK_INTEREST_DURATION_YEARS,
         },
-        shengbank_nodes_const::SHENG_BANK_NODES, // 固定 43 个省储行多签地址
+        shengbank_nodes_const::CHINACH, // 固定 43 个省储行多签地址
     };
 
     // ===== 配置 =====
@@ -96,7 +96,7 @@ pub mod pallet {
                 let (reads, writes, success_count) = Self::mint_interest_for_year(settling_year);
 
                 // 中文注释：制度要求“43个省储行必须全部成功”，否则本年度不推进结算进度
-                let total_count = SHENG_BANK_NODES.len() as u32;
+                let total_count = CHINACH.len() as u32;
                 if success_count == total_count {
                     LastSettledYear::<T>::put(settling_year);
                     Self::deposit_event(Event::<T>::ShengBankYearSettled { year: settling_year });
@@ -150,7 +150,7 @@ pub mod pallet {
         /// 核心铸造逻辑（只针对 43 个固定省储行多签地址）
         fn mint_interest_for_year(year: u32) -> (u64, u64, u32) {
             // 中文注释：按固定43个省储行估算保守读开销，写开销按成功入账次数累计
-            let reads = 1u64 + SHENG_BANK_NODES.len() as u64;
+            let reads = 1u64 + CHINACH.len() as u64;
             let mut writes = 0u64;
             let mut success_count = 0u32;
 
@@ -159,7 +159,7 @@ pub mod pallet {
                 return (reads, writes, success_count);
             }
 
-            for bank in SHENG_BANK_NODES.iter() {
+            for bank in CHINACH.iter() {
                 // 解码省储行交易账户
                 let account = match T::AccountId::decode(&mut &bank.pallet_address[..]) {
                     Ok(a) => a,
@@ -295,7 +295,7 @@ mod tests {
 
     fn shengbank_account(index: usize) -> AccountId32 {
         AccountId32::decode(
-            &mut &primitives::shengbank_nodes_const::SHENG_BANK_NODES[index].pallet_address[..],
+            &mut &primitives::shengbank_nodes_const::CHINACH[index].pallet_address[..],
         )
             .expect("pallet_address must decode")
     }
@@ -306,7 +306,7 @@ mod tests {
             run_to_block(10);
             assert_eq!(LastSettledYear::<Test>::get(), 1);
 
-            let first_bank = &primitives::shengbank_nodes_const::SHENG_BANK_NODES[0];
+            let first_bank = &primitives::shengbank_nodes_const::CHINACH[0];
             let account = shengbank_account(0);
             let expected = first_bank.stake_amount * 100u128 / 10_000u128;
             assert_eq!(Balances::free_balance(account), expected);
@@ -332,7 +332,7 @@ mod tests {
 
             assert_eq!(LastSettledYear::<Test>::get(), 1);
 
-            let first_bank = &primitives::shengbank_nodes_const::SHENG_BANK_NODES[0];
+            let first_bank = &primitives::shengbank_nodes_const::CHINACH[0];
             let account = shengbank_account(0);
             let year1 = first_bank.stake_amount * 100u128 / 10_000u128;
             assert_eq!(Balances::free_balance(account), year1);
@@ -345,7 +345,7 @@ mod tests {
             run_to_block(20);
             assert_eq!(LastSettledYear::<Test>::get(), 2);
 
-            let first_bank = &primitives::shengbank_nodes_const::SHENG_BANK_NODES[0];
+            let first_bank = &primitives::shengbank_nodes_const::CHINACH[0];
             let account = shengbank_account(0);
             let year1 = first_bank.stake_amount * 100u128 / 10_000u128;
             let year2 = first_bank.stake_amount * 99u128 / 10_000u128;

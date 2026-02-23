@@ -9,10 +9,10 @@ use primitives::count_const::{
     NRC_INTERNAL_THRESHOLD, PRB_INTERNAL_THRESHOLD, PRC_INTERNAL_THRESHOLD, VOTING_DURATION_BLOCKS,
 };
 use primitives::reserve_nodes_const::{
-    pallet_id_to_bytes as reserve_pallet_id_to_bytes, RESERVE_NODES,
+    pallet_id_to_bytes as reserve_pallet_id_to_bytes, CHINACB,
 };
 use primitives::shengbank_nodes_const::{
-    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, SHENG_BANK_NODES,
+    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, CHINACH,
 };
 
 use crate::{
@@ -39,7 +39,7 @@ pub fn org_pass_threshold(org: u8) -> Option<u32> {
 }
 
 fn nrc_pallet_id_bytes() -> InstitutionPalletId {
-    RESERVE_NODES
+    CHINACB
         .iter()
         .find(|n| n.pallet_id == "nrcgch01")
         .and_then(|n| reserve_pallet_id_to_bytes(n.pallet_id))
@@ -50,14 +50,14 @@ fn is_valid_internal_institution(org: u8, institution: InstitutionPalletId) -> b
     match org {
         // 国储会只有一个机构
         ORG_NRC => institution == nrc_pallet_id_bytes(),
-        // 省储会从 RESERVE_NODES 中排除国储会
-        ORG_PRC => RESERVE_NODES
+        // 省储会从 CHINACB 中排除国储会
+        ORG_PRC => CHINACB
             .iter()
             .filter(|n| n.pallet_id != "nrcgch01")
             .filter_map(|n| reserve_pallet_id_to_bytes(n.pallet_id))
             .any(|pid| pid == institution),
-        // 省储行从 SHENG_BANK_NODES 获取
-        ORG_PRB => SHENG_BANK_NODES
+        // 省储行从 CHINACH 获取
+        ORG_PRB => CHINACH
             .iter()
             .filter_map(|n| shengbank_pallet_id_to_bytes(n.pallet_id))
             .any(|pid| pid == institution),
@@ -90,12 +90,12 @@ fn is_internal_admin<T: Config>(
         who_arr.copy_from_slice(&who_bytes);
 
         match org {
-            ORG_NRC | ORG_PRC => RESERVE_NODES
+            ORG_NRC | ORG_PRC => CHINACB
                 .iter()
                 .find(|n| reserve_pallet_id_to_bytes(n.pallet_id) == Some(institution))
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
-            ORG_PRB => SHENG_BANK_NODES
+            ORG_PRB => CHINACH
                 .iter()
                 .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))

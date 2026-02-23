@@ -12,7 +12,7 @@ use sp_runtime::traits::{AccountIdConversion, SaturatedConversion, Saturating, Z
 
 use primitives::shengbank_nodes_const::{
     fee_pallet_id_to_bytes as shengbank_fee_pallet_id_to_bytes,
-    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, SHENG_BANK_NODES,
+    pallet_id_to_bytes as shengbank_pallet_id_to_bytes, CHINACH,
 };
 use voting_engine_system::{
     internal_vote::ORG_PRB, InstitutionPalletId, InternalVoteEngine, PROPOSAL_KIND_INTERNAL,
@@ -34,14 +34,14 @@ const VERIFY_KEY_ROTATION_DELAY_BLOCKS: u32 = primitives::pow_const::BLOCKS_PER_
 const BP_DENOMINATOR: u128 = 10_000;
 
 fn institution_pallet_address(institution: InstitutionPalletId) -> Option<[u8; 32]> {
-    SHENG_BANK_NODES
+    CHINACH
         .iter()
         .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
         .map(|n| n.pallet_address)
 }
 
 fn institution_fee_pallet_id(institution: InstitutionPalletId) -> Option<[u8; 8]> {
-    SHENG_BANK_NODES
+    CHINACH
         .iter()
         .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
         .and_then(|n| shengbank_fee_pallet_id_to_bytes(n.fee_pallet_id))
@@ -958,7 +958,7 @@ pub mod pallet {
                 let mut who_arr = [0u8; 32];
                 who_arr.copy_from_slice(&who_bytes);
 
-                SHENG_BANK_NODES
+                CHINACH
                     .iter()
                     .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
                     .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
@@ -1148,7 +1148,7 @@ pub mod pallet {
         fn on_initialize(now: BlockNumberFor<T>) -> Weight {
             let mut reads: u64 = 0;
             let mut writes: u64 = 0;
-            for node in SHENG_BANK_NODES.iter() {
+            for node in CHINACH.iter() {
                 let Some(institution) = shengbank_pallet_id_to_bytes(node.pallet_id) else {
                     continue;
                 };
@@ -1294,7 +1294,7 @@ mod tests {
             let mut who_arr = [0u8; 32];
             who_arr.copy_from_slice(&who_bytes);
             match org {
-                voting_engine_system::internal_vote::ORG_PRB => SHENG_BANK_NODES
+                voting_engine_system::internal_vote::ORG_PRB => CHINACH
                     .iter()
                     .find(|n| shengbank_pallet_id_to_bytes(n.pallet_id) == Some(institution))
                     .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
@@ -1334,11 +1334,11 @@ mod tests {
     }
 
     fn prb_institution() -> InstitutionPalletId {
-        shengbank_pallet_id_to_bytes(SHENG_BANK_NODES[0].pallet_id).expect("valid institution")
+        shengbank_pallet_id_to_bytes(CHINACH[0].pallet_id).expect("valid institution")
     }
 
     fn prb_admin(index: usize) -> AccountId32 {
-        AccountId32::new(SHENG_BANK_NODES[0].admins[index])
+        AccountId32::new(CHINACH[0].admins[index])
     }
 
     fn prb_account() -> AccountId32 {

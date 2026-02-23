@@ -459,10 +459,10 @@ mod tests {
     use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
     use frame_system as system;
     use primitives::reserve_nodes_const::{
-        pallet_id_to_bytes as reserve_pallet_id_to_bytes, RESERVE_NODES,
+        pallet_id_to_bytes as reserve_pallet_id_to_bytes, CHINACB,
     };
     use primitives::shengbank_nodes_const::{
-        pallet_id_to_bytes as shengbank_pallet_id_to_bytes, SHENG_BANK_NODES,
+        pallet_id_to_bytes as shengbank_pallet_id_to_bytes, CHINACH,
     };
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 
@@ -575,32 +575,32 @@ mod tests {
     }
 
     fn nrc_pid() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(RESERVE_NODES[0].pallet_id).expect("nrc id should be 8 bytes")
+        reserve_pallet_id_to_bytes(CHINACB[0].pallet_id).expect("nrc id should be 8 bytes")
     }
 
     fn prc_pid() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(RESERVE_NODES[1].pallet_id).expect("prc id should be 8 bytes")
+        reserve_pallet_id_to_bytes(CHINACB[1].pallet_id).expect("prc id should be 8 bytes")
     }
 
     fn prb_pid() -> InstitutionPalletId {
-        shengbank_pallet_id_to_bytes(SHENG_BANK_NODES[0].pallet_id)
+        shengbank_pallet_id_to_bytes(CHINACH[0].pallet_id)
             .expect("prb id should be 8 bytes")
     }
 
     fn nrc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(RESERVE_NODES[0].admins[index])
+        AccountId32::new(CHINACB[0].admins[index])
     }
 
     fn nrc_multisig() -> AccountId32 {
-        AccountId32::new(RESERVE_NODES[0].pallet_address)
+        AccountId32::new(CHINACB[0].pallet_address)
     }
 
     fn prc_multisig() -> AccountId32 {
-        AccountId32::new(RESERVE_NODES[1].pallet_address)
+        AccountId32::new(CHINACB[1].pallet_address)
     }
 
     fn all_prc_institutions() -> Vec<(InstitutionPalletId, AccountId32)> {
-        RESERVE_NODES
+        CHINACB
             .iter()
             .filter(|n| n.pallet_id != "nrcgch01")
             .map(|n| {
@@ -613,7 +613,7 @@ mod tests {
     }
 
     fn all_prb_institutions() -> Vec<(InstitutionPalletId, AccountId32)> {
-        SHENG_BANK_NODES
+        CHINACH
             .iter()
             .map(|n| {
                 (
@@ -625,11 +625,11 @@ mod tests {
     }
 
     fn prc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(RESERVE_NODES[1].admins[index])
+        AccountId32::new(CHINACB[1].admins[index])
     }
 
     fn prb_admin(index: usize) -> AccountId32 {
-        AccountId32::new(SHENG_BANK_NODES[0].admins[index])
+        AccountId32::new(CHINACH[0].admins[index])
     }
 
     fn sfid_ok() -> pallet::SfidOf<Test> {

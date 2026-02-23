@@ -9,7 +9,7 @@ pub mod pallet {
     use codec::Encode;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
-    use primitives::reserve_nodes_const::RESERVE_NODES;
+    use primitives::reserve_nodes_const::CHINACB;
     use resolution_issuance_iss::ResolutionIssuanceExecutor;
     use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
     use voting_engine_system::JointVoteEngine;
@@ -304,7 +304,7 @@ pub mod pallet {
             allocations: &[RecipientAmount<T::AccountId>],
         ) -> DispatchResult {
             ensure!(!allocations.is_empty(), Error::<T>::EmptyAllocations);
-            let expected: BTreeSet<Vec<u8>> = RESERVE_NODES
+            let expected: BTreeSet<Vec<u8>> = CHINACB
                 .iter()
                 .filter(|node| node.pallet_id != "nrcgch01")
                 .map(|node| node.pallet_address.to_vec())
@@ -492,7 +492,7 @@ mod tests {
     }
 
     fn reserve_council_accounts() -> Vec<AccountId32> {
-        primitives::reserve_nodes_const::RESERVE_NODES
+        primitives::reserve_nodes_const::CHINACB
             .iter()
             .filter(|n| n.pallet_id != "nrcgch01")
             .map(|n| AccountId32::new(n.pallet_address))

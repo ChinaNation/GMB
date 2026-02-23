@@ -1,5 +1,5 @@
 [package]
-name = "duoqian-transaction-pow"  # 多签名账户链上交易模块
+name = "duoqian-transaction-pow"  # 多签名链上交易模块
 edition.workspace = true
 version.workspace = true
 authors.workspace = true
