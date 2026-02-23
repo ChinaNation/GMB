@@ -33,7 +33,8 @@ use frame_support::{
     traits::{
         fungible::Inspect,
         tokens::{Fortitude, Preservation},
-        ConstU128, ConstU32, ConstU64, ConstU8, EnsureOrigin, FindAuthor, UnfilteredDispatchable,
+        ConstU128, ConstU32, ConstU64, ConstU8, Contains, EnsureOrigin, FindAuthor,
+        UnfilteredDispatchable,
         VariantCountOf,
     },
     weights::{
@@ -54,7 +55,7 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-    AccountId, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance, Hash, Nonce,
+    AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance, Hash, Nonce,
     OffchainTransactionFee, PalletInfo, ResolutionIssuanceGov, ResolutionIssuanceIss, Runtime,
     RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin,
     RuntimeRootUpgrade, RuntimeTask, System, VotingEngineSystem, BLOCK_HASH_COUNT,
@@ -85,6 +86,38 @@ parameter_types! {
 #[allow(unused_parens)]
 type SingleBlockMigrations = ();
 
+pub fn is_keyless_account(address: &AccountId) -> bool {
+    primitives::china::china_ch::CHINA_CH
+        .iter()
+        .any(|n| address == &AccountId::new(n.keyless_address))
+}
+
+fn is_keyless_multi_address(address: &Address) -> bool {
+    match address {
+        sp_runtime::MultiAddress::Id(account) => is_keyless_account(account),
+        sp_runtime::MultiAddress::Address32(raw) => is_keyless_account(&AccountId::new(*raw)),
+        sp_runtime::MultiAddress::Raw(raw) if raw.len() == 32 => {
+            let mut out = [0u8; 32];
+            out.copy_from_slice(raw.as_slice());
+            is_keyless_account(&AccountId::new(out))
+        }
+        _ => false,
+    }
+}
+
+pub struct RuntimeCallFilter;
+
+impl Contains<RuntimeCall> for RuntimeCallFilter {
+    fn contains(call: &RuntimeCall) -> bool {
+        match call {
+            RuntimeCall::Balances(pallet_balances::Call::force_transfer { source, .. }) => {
+                !is_keyless_multi_address(source)
+            }
+            _ => true,
+        }
+    }
+}
+
 /// The default types are being injected by [`derive_impl`](`frame_support::derive_impl`) from
 /// [`SoloChainDefaultConfig`](`struct@frame_system::config_preludes::SolochainDefaultConfig`),
 /// but overridden as needed.
@@ -112,6 +145,8 @@ impl frame_system::Config for Runtime {
     type AccountData = pallet_balances::AccountData<Balance>;
     /// 地址显示编号（SS58 前缀），统一来自 primitives 制度常量。
     type SS58Prefix = SS58Prefix;
+    /// 中文注释：全局调用过滤器，禁止从 keyless_address 发起 force_transfer。
+    type BaseCallFilter = RuntimeCallFilter;
     type MaxConsumers = frame_support::traits::ConstU32<16>;
     type SingleBlockMigrations = SingleBlockMigrations;
 }
@@ -226,7 +261,7 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
                 .is_ok()
                     && OffchainTransactionFee::fee_account_of(*institution).is_ok()
                 {
-                    let sum = batch.iter().fold(0u128, |acc, item| {
+                    let sum = batch.iter().fold(0u128, |acc: u128, item| {
                         acc.saturating_add(item.offchain_fee_amount)
                     });
                     onchain_transaction_fee::AmountExtractResult::Amount(sum)
@@ -347,6 +382,7 @@ impl offchain_transaction_fee::Config for Runtime {
     type MaxRelaySubmitters = ConstU32<8>;
     type InternalVoteEngine = VotingEngineSystem;
     type OffchainBatchVerifier = RuntimeOffchainBatchVerifier;
+    type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
 }
 
 pub struct RuntimeDuoqianAdminAuth;
@@ -387,26 +423,26 @@ impl duoqian_transaction_pow::DuoqianAddressValidator<AccountId>
         }
 
         // 中文注释：禁止占用“国储会/省储会”的制度保留交易地址。
-        if primitives::china::china_cb::CHINACB
+        if primitives::china::china_cb::CHINA_CB
             .iter()
-            .any(|n| address == &AccountId::new(n.pallet_address))
+            .any(|n| address == &AccountId::new(n.duoqian_address))
         {
             return false;
         }
 
         // 中文注释：禁止占用“省储行”的制度保留交易地址。
-        if primitives::china::china_ch::CHINACH
+        if primitives::china::china_ch::CHINA_CH
             .iter()
-            .any(|n| address == &AccountId::new(n.pallet_address))
+            .any(|n| address == &AccountId::new(n.duoqian_address))
         {
             return false;
         }
 
-        // 中文注释：禁止占用“省储行手续费账户”地址（由 fee_pallet_id 派生）。
-        if primitives::china::china_ch::CHINACH
+        // 中文注释：禁止占用“省储行手续费账户”地址（由 shenfen_fee_id 派生）。
+        if primitives::china::china_ch::CHINA_CH
             .iter()
             .any(|n| {
-                primitives::china::china_ch::fee_pallet_id_to_bytes(n.fee_pallet_id)
+                primitives::china::china_ch::shenfen_fee_id_to_bytes(n.shenfen_fee_id)
                     .map(|pid| {
                         let fee_account: AccountId = PalletId(pid).into_account_truncating();
                         address == &fee_account
@@ -421,11 +457,66 @@ impl duoqian_transaction_pow::DuoqianAddressValidator<AccountId>
     }
 }
 
+pub struct RuntimeDuoqianReservedAddressChecker;
+
+pub struct RuntimeProtectedSourceChecker;
+
+impl offchain_transaction_fee::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
+    fn is_protected(address: &AccountId) -> bool {
+        is_keyless_account(address)
+    }
+}
+
+impl duoqian_transaction_pow::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
+    fn is_protected(address: &AccountId) -> bool {
+        is_keyless_account(address)
+    }
+}
+
+impl duoqian_transaction_pow::DuoqianReservedAddressChecker<AccountId>
+    for RuntimeDuoqianReservedAddressChecker
+{
+    fn is_reserved(address: &AccountId) -> bool {
+        // 中文注释：禁止占用省储行 keyless_address（制度保留地址）。
+        if primitives::china::china_ch::CHINA_CH
+            .iter()
+            .any(|n| address == &AccountId::new(n.keyless_address))
+        {
+            return true;
+        }
+
+        // 中文注释：禁止占用省储行手续费地址（由 shenfen_fee_id 派生）。
+        if primitives::china::china_ch::CHINA_CH
+            .iter()
+            .any(|n| {
+                primitives::china::china_ch::shenfen_fee_id_to_bytes(n.shenfen_fee_id)
+                    .map(|pid| {
+                        let fee_account: AccountId = PalletId(pid).into_account_truncating();
+                        address == &fee_account
+                    })
+                    .unwrap_or(false)
+            })
+        {
+            return true;
+        }
+
+        let raw: &[u8] = address.as_ref();
+        if raw.len() != 32 {
+            return false;
+        }
+        let mut addr = [0u8; 32];
+        addr.copy_from_slice(raw);
+        primitives::china::china_zb::is_reserved_duoqian_address(&addr)
+    }
+}
+
 impl duoqian_transaction_pow::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type AdminAuth = RuntimeDuoqianAdminAuth;
     type AddressValidator = RuntimeDuoqianAddressValidator;
+    type ReservedAddressChecker = RuntimeDuoqianReservedAddressChecker;
+    type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type MaxAdmins = ConstU32<64>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<111>;
@@ -658,16 +749,17 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 }
 
 fn is_nrc_admin(who: &AccountId) -> bool {
-    let nrc_institution = primitives::reserve_nodes_const::CHINACB
-        .iter()
-        .find(|n| n.pallet_id == "nrcgch01")
-        .and_then(|n| primitives::reserve_nodes_const::pallet_id_to_bytes(n.pallet_id))
-        .expect("NRC pallet_id must be 8 bytes");
+    let nrc_institution = primitives::china::china_cb::CHINA_CB
+        .first()
+        .and_then(|n| primitives::china::china_cb::shenfen_id_to_fixed48(n.shenfen_id))
+        .expect("NRC shenfen_id must be valid");
 
     // 中文注释：创世后只信任链上管理员治理模块中的当前管理员名单。
-    admins_origin_gov::Pallet::<Runtime>::current_admins(nrc_institution)
-        .map(|admins| admins.into_inner().iter().any(|admin| admin == who))
-        .unwrap_or(false)
+    if let Some(admins) = admins_origin_gov::Pallet::<Runtime>::current_admins(nrc_institution) {
+        admins.into_inner().iter().any(|admin| admin == who)
+    } else {
+        false
+    }
 }
 
 impl resolution_issuance_iss::Config for Runtime {
@@ -756,11 +848,12 @@ mod tests {
     use super::*;
     use crate::OffchainTransactionFee;
     use crate::ResolutionDestroGov;
+    use duoqian_transaction_pow::DuoqianReservedAddressChecker;
     use frame_support::assert_ok;
     use frame_support::traits::Currency;
     use offchain_transaction_fee::OffchainBatchVerifier;
-    use primitives::reserve_nodes_const::{
-        pallet_id_to_bytes as reserve_pallet_id_to_bytes, CHINACB,
+    use primitives::china::china_cb::{
+        shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
     };
     use sfid_code_auth::{SfidVerifier, SfidVoteVerifier};
     use sp_core::Pair;
@@ -786,7 +879,7 @@ mod tests {
             let proposal_id = 1u64;
             let joint_vote_id = 99u64;
             let recipient =
-                AccountId::new(primitives::reserve_nodes_const::CHINACB[1].pallet_address);
+                AccountId::new(primitives::china::china_cb::CHINA_CB[1].duoqian_address);
             let total_amount = 123u128;
 
             let reason: resolution_issuance_gov::pallet::ReasonOf<Runtime> = b"runtime-integration"
@@ -855,8 +948,8 @@ mod tests {
     fn resolution_destro_gov_internal_vote_flow_executes_destroy_and_reduces_issuance() {
         new_test_ext().execute_with(|| {
             let nrc_institution =
-                reserve_pallet_id_to_bytes("nrcgch01").expect("nrc institution id must be valid");
-            let nrc_account = AccountId::new(CHINACB[0].pallet_address);
+                reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("nrc institution id must be valid");
+            let nrc_account = AccountId::new(CHINA_CB[0].duoqian_address);
             let initial_balance: Balance = 1_000;
             let destroy_amount: Balance = 100;
 
@@ -864,7 +957,7 @@ mod tests {
             let issuance_before = Balances::total_issuance();
 
             assert_ok!(ResolutionDestroGov::propose_destroy(
-                RuntimeOrigin::signed(AccountId::new(CHINACB[0].admins[0])),
+                RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].admins[0])),
                 voting_engine_system::internal_vote::ORG_NRC,
                 nrc_institution,
                 destroy_amount,
@@ -872,7 +965,7 @@ mod tests {
 
             for i in 0..13 {
                 assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(AccountId::new(CHINACB[0].admins[i])),
+                    RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].admins[i])),
                     0,
                     true,
                 ));
@@ -893,12 +986,12 @@ mod tests {
     #[test]
     fn offchain_batch_submitter_is_institution_and_fee_base_is_batch_offchain_fee_sum() {
         new_test_ext().execute_with(|| {
-            let institution = primitives::shengbank_nodes_const::pallet_id_to_bytes(
-                primitives::shengbank_nodes_const::CHINACH[0].pallet_id,
+            let institution = primitives::china::china_ch::shenfen_id_to_fixed48(
+                primitives::china::china_ch::CHINA_CH[0].shenfen_id,
             )
             .expect("institution id should be valid");
             let institution_account = AccountId::new(
-                primitives::shengbank_nodes_const::CHINACH[0].pallet_address,
+                primitives::china::china_ch::CHINA_CH[0].duoqian_address,
             );
             let payer = AccountId::new([7u8; 32]);
             let recipient = AccountId::new([8u8; 32]);
@@ -1041,7 +1134,8 @@ mod tests {
                 vec![1u8; 64].try_into().expect("signature should fit");
             let offchain_call = RuntimeCall::OffchainTransactionFee(
                 offchain_transaction_fee::pallet::Call::submit_offchain_batch {
-                    institution: *b"badid000",
+                    institution: primitives::china::china_ch::shenfen_id_to_fixed48("badid000")
+                        .expect("test shenfen_id should map"),
                     batch_seq: 1,
                     batch,
                     batch_signature: bad_sig,
@@ -1153,8 +1247,8 @@ mod tests {
     fn runtime_fee_payer_extractor_routes_offchain_fee_to_fee_account() {
         new_test_ext().execute_with(|| {
             let who = AccountId::new([9u8; 32]);
-            let institution = primitives::shengbank_nodes_const::pallet_id_to_bytes(
-                primitives::shengbank_nodes_const::CHINACH[0].pallet_id,
+            let institution = primitives::china::china_ch::shenfen_id_to_fixed48(
+                primitives::china::china_ch::CHINA_CH[0].shenfen_id,
             )
             .expect("institution id should be valid");
             let fee_account =
@@ -1200,6 +1294,56 @@ mod tests {
     }
 
     #[test]
+    fn duoqian_reserved_checker_rejects_keyless_and_shenfen_fee_addresses() {
+        let keyless = AccountId::new(primitives::china::china_ch::CHINA_CH[0].keyless_address);
+        assert!(RuntimeDuoqianReservedAddressChecker::is_reserved(&keyless));
+
+        let pid = primitives::china::china_ch::shenfen_fee_id_to_bytes(
+            primitives::china::china_ch::CHINA_CH[0].shenfen_fee_id,
+        )
+        .expect("shenfen_fee_id must be 8 bytes");
+        let fee_account: AccountId = PalletId(pid).into_account_truncating();
+        assert!(RuntimeDuoqianReservedAddressChecker::is_reserved(
+            &fee_account
+        ));
+    }
+
+    #[test]
+    fn runtime_call_filter_blocks_force_transfer_from_keyless() {
+        let keyless = AccountId::new(primitives::china::china_ch::CHINA_CH[0].keyless_address);
+        let dst = AccountId::new([9u8; 32]);
+
+        let blocked_by_id = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
+            source: sp_runtime::MultiAddress::Id(keyless),
+            dest: sp_runtime::MultiAddress::Id(dst.clone()),
+            value: 1,
+        });
+        assert!(!RuntimeCallFilter::contains(&blocked_by_id));
+
+        let keyless_raw = primitives::china::china_ch::CHINA_CH[0].keyless_address;
+        let blocked_by_32 = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
+            source: sp_runtime::MultiAddress::Address32(keyless_raw),
+            dest: sp_runtime::MultiAddress::Id(dst.clone()),
+            value: 1,
+        });
+        assert!(!RuntimeCallFilter::contains(&blocked_by_32));
+
+        let blocked_by_raw = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
+            source: sp_runtime::MultiAddress::Raw(keyless_raw.to_vec()),
+            dest: sp_runtime::MultiAddress::Id(dst.clone()),
+            value: 1,
+        });
+        assert!(!RuntimeCallFilter::contains(&blocked_by_raw));
+
+        let allowed = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
+            source: sp_runtime::MultiAddress::Id(AccountId::new([8u8; 32])),
+            dest: sp_runtime::MultiAddress::Id(dst),
+            value: 1,
+        });
+        assert!(RuntimeCallFilter::contains(&allowed));
+    }
+
+    #[test]
     fn pow_digest_author_and_offchain_batch_verifier_work() {
         let author = AccountId::new([21u8; 32]);
         let encoded = author.encode();
@@ -1239,7 +1383,7 @@ mod tests {
 
             let proposal_id = 7u64;
             let joint_vote_id = 70u64;
-            let proposer = AccountId::new(CHINACB[0].admins[0]);
+            let proposer = AccountId::new(CHINA_CB[0].admins[0]);
             let reason: runtime_root_upgrade::pallet::ReasonOf<Runtime> =
                 b"upgrade".to_vec().try_into().expect("reason");
             let code: runtime_root_upgrade::pallet::CodeOf<Runtime> =
@@ -1443,8 +1587,8 @@ mod tests {
     #[test]
     fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
         new_test_ext().execute_with(|| {
-            let nrc_id = reserve_pallet_id_to_bytes("nrcgch01").expect("nrc id");
-            let nrc_admin = AccountId::new(CHINACB[0].admins[0]);
+            let nrc_id = reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("nrc id");
+            let nrc_admin = AccountId::new(CHINA_CB[0].admins[0]);
             let outsider = AccountId::new([99u8; 32]);
 
             let ok_origin = RuntimeOrigin::signed(nrc_admin.clone());
@@ -1475,9 +1619,11 @@ impl voting_engine_system::InternalAdminProvider<AccountId> for RuntimeInternalA
         who: &AccountId,
     ) -> bool {
         // 中文注释：生产逻辑只信任链上当前管理员状态；无状态则拒绝（不再回退常量）。
-        admins_origin_gov::Pallet::<Runtime>::current_admins(institution)
-            .map(|admins| admins.into_inner().iter().any(|admin| admin == who))
-            .unwrap_or(false)
+        if let Some(admins) = admins_origin_gov::Pallet::<Runtime>::current_admins(institution) {
+            admins.into_inner().iter().any(|admin| admin == who)
+        } else {
+            false
+        }
     }
 }
 

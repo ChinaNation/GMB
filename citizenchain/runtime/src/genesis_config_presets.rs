@@ -25,8 +25,8 @@ use crate::AccountId;
 use codec::Decode;
 #[cfg(feature = "std")]
 use primitives::{
-    core_const::SS58_FORMAT, genesis::GENESIS_ISSUANCE, reserve_nodes_const::CHINACB,
-    shengbank_nodes_const::CHINACH,
+    core_const::SS58_FORMAT, genesis::GENESIS_ISSUANCE, china::china_cb::CHINA_CB,
+    china::china_ch::CHINA_CH,
 };
 #[cfg(feature = "std")]
 use serde_json::{json, Value};
@@ -45,10 +45,9 @@ fn account_to_genesis_ss58(account: &AccountId) -> String {
 #[cfg(feature = "std")]
 fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value {
     // 中文注释：国储会信息统一从常量数组入口读取。
-    let nrc_account = CHINACB
-        .iter()
-        .find(|n| n.pallet_id == "nrcgch01")
-        .and_then(|n| AccountId::decode(&mut &n.pallet_address[..]).ok())
+    let nrc_account = CHINA_CB
+        .first()
+        .and_then(|n| AccountId::decode(&mut &n.duoqian_address[..]).ok())
         .expect("NRC pallet_address must decode to AccountId");
 
     // 中文注释：创世发行总量直接预置到国储会交易地址，单位为“分”。
@@ -57,7 +56,7 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
 
     // 中文注释：省储行创立发行在创世时直接预置到各自 keyless_address（无私钥永久质押地址）。
     genesis_balances.extend(
-        CHINACH
+        CHINA_CH
             .iter()
             .map(|bank| (AccountId::new(bank.keyless_address), bank.stake_amount)),
     );
@@ -154,7 +153,7 @@ pub fn preset_names() -> Vec<PresetId> {
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use super::*;
-    use primitives::reserve_nodes_const::CHINACB;
+    use primitives::china::china_cb::CHINA_CB;
 
     #[test]
     fn mainnet_genesis_contains_nrc_and_all_shengbank_balances() {
@@ -164,7 +163,7 @@ mod tests {
             .expect("balances.balances should be an array");
 
         // 中文注释：创世应包含 1 个国储会地址 + 43 个省储行 keyless 质押地址。
-        assert_eq!(balances.len(), 1 + CHINACH.len());
+        assert_eq!(balances.len(), 1 + CHINA_CH.len());
     }
 
     #[test]
@@ -174,10 +173,9 @@ mod tests {
             .as_array()
             .expect("balances.balances should be an array");
 
-        let nrc_account = CHINACB
-            .iter()
-            .find(|n| n.pallet_id == "nrcgch01")
-            .and_then(|n| AccountId::decode(&mut &n.pallet_address[..]).ok())
+        let nrc_account = CHINA_CB
+            .first()
+            .and_then(|n| AccountId::decode(&mut &n.duoqian_address[..]).ok())
             .expect("NRC pallet_address must decode to AccountId");
         let nrc_ss58 = account_to_genesis_ss58(&nrc_account);
 
@@ -208,7 +206,7 @@ mod tests {
                     .expect("each balance amount must be u64-compatible JSON number")
             })
             .sum();
-        let total_shengbank_stake: u128 = CHINACH.iter().map(|n| n.stake_amount).sum();
+        let total_shengbank_stake: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
 
         // 中文注释：创世总注入 = 国储会创世发行 + 省储行创立发行。
         assert_eq!(total_in_patch, GENESIS_ISSUANCE + total_shengbank_stake);

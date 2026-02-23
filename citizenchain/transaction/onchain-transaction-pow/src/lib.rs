@@ -192,7 +192,7 @@ where
             }
         }
 
-        // 中文注释：国储会分成发到常量数组中的 nrcgch01 交易地址；解析失败则自动销毁。
+        // 中文注释：国储会分成发到 CHINA_CB[0] 对应交易地址；解析失败则自动销毁。
         if let Some(nrc_account) = nrc_account::<T>() {
             let _ = Currency::resolve(&nrc_account, nrc_credit);
         }
@@ -239,10 +239,9 @@ fn mul_perbill_round(amount: u128, rate: sp_runtime::Perbill) -> u128 {
 }
 
 fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
-    primitives::reserve_nodes_const::CHINACB
-        .iter()
-        .find(|n| n.pallet_id == "nrcgch01")
-        .and_then(|n| T::AccountId::decode(&mut &n.pallet_address[..]).ok())
+    primitives::china::china_cb::CHINA_CB
+        .first()
+        .and_then(|n| T::AccountId::decode(&mut &n.duoqian_address[..]).ok())
 }
 
 #[cfg(test)]

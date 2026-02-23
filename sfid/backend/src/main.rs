@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer, SigningKey};
 use hex::FromHex;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use blake3;
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -762,17 +762,18 @@ fn seed_demo_record(state: &AppState) {
 }
 
 fn deterministic_sfid_code(state: &AppState, archive_index: &str, account_pubkey: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(b"sfid-code-v1|");
-    hasher.update(state.signing_key.to_bytes());
-    hasher.update(b"|");
-    hasher.update(archive_index.as_bytes());
-    hasher.update(b"|");
-    hasher.update(account_pubkey.as_bytes());
-    let digest = hasher.finalize();
+    let mut payload = Vec::new();
+    payload.extend_from_slice(b"sfid-code-v1|");
+    payload.extend_from_slice(&state.signing_key.to_bytes());
+    payload.extend_from_slice(b"|");
+    payload.extend_from_slice(archive_index.as_bytes());
+    payload.extend_from_slice(b"|");
+    payload.extend_from_slice(account_pubkey.as_bytes());
+    let digest = blake3::hash(&payload);
+    let digest_bytes = digest.as_bytes();
 
-    let core = hex::encode_upper(&digest[..12]);
-    let checksum = digest
+    let core = hex::encode_upper(&digest_bytes[..12]);
+    let checksum = digest_bytes
         .iter()
         .fold(0_u32, |acc, b| (acc + u32::from(*b)) % 10_u32);
     format!("SFID-{core}{checksum}")
@@ -809,10 +810,8 @@ fn decode_seed_to_32(raw: String) -> [u8; 32] {
         }
     }
 
-    let mut hasher = Sha256::new();
-    hasher.update(trimmed.as_bytes());
-    let digest = hasher.finalize();
+    let digest = blake3::hash(trimmed.as_bytes());
     let mut out = [0_u8; 32];
-    out.copy_from_slice(&digest[..32]);
+    out.copy_from_slice(digest.as_bytes());
     out
 }

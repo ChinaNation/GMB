@@ -2,7 +2,7 @@
 
 use gmb_runtime::{genesis_config_presets, WASM_BINARY};
 use primitives::core_const::{CHAIN_ID, CHAIN_NAME, SS58_FORMAT, TOKEN_DECIMALS, TOKEN_SYMBOL};
-use primitives::reserve_nodes_const::CHINACB;
+use primitives::china::china_cb::CHINA_CB;
 use sc_chain_spec::NoExtension;
 use sc_service::ChainType;
 
@@ -18,7 +18,7 @@ fn chain_properties() -> sc_service::Properties {
 }
 
 fn reserve_boot_nodes() -> Result<Vec<sc_network::config::MultiaddrWithPeerId>, String> {
-    CHINACB
+    CHINA_CB
         .iter()
         .flat_map(|node| node.p2p_bootnodes.iter().copied())
         .map(|addr| {

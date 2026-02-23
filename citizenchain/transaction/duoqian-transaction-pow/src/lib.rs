@@ -41,6 +41,28 @@ impl<AccountId> DuoqianAddressValidator<AccountId> for () {
     }
 }
 
+/// 保留地址校验抽象：用于拦截制度保留地址被 duoqian 抢注册。
+pub trait DuoqianReservedAddressChecker<AccountId> {
+    fn is_reserved(address: &AccountId) -> bool;
+}
+
+impl<AccountId> DuoqianReservedAddressChecker<AccountId> for () {
+    fn is_reserved(_address: &AccountId) -> bool {
+        false
+    }
+}
+
+/// 转出源地址保护：用于禁止制度保留地址作为资金转出源。
+pub trait ProtectedSourceChecker<AccountId> {
+    fn is_protected(address: &AccountId) -> bool;
+}
+
+impl<AccountId> ProtectedSourceChecker<AccountId> for () {
+    fn is_protected(_address: &AccountId) -> bool {
+        false
+    }
+}
+
 #[derive(
     Encode,
     Decode,
@@ -80,6 +102,8 @@ pub mod pallet {
         type AdminAuth: DuoqianAdminAuth<Self::AccountId>;
 
         type AddressValidator: DuoqianAddressValidator<Self::AccountId>;
+        type ReservedAddressChecker: DuoqianReservedAddressChecker<Self::AccountId>;
+        type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
 
         #[pallet::constant]
         type MaxAdmins: Get<u32>;
@@ -158,6 +182,8 @@ pub mod pallet {
         IncompleteParameters,
         /// 地址非法
         InvalidAddress,
+        /// 地址为制度保留地址，不允许注册
+        AddressReserved,
         /// 地址已存在（已初始化）
         AddressAlreadyExists,
         /// 链上已存在同地址账户
@@ -186,6 +212,8 @@ pub mod pallet {
         DuoqianNotFound,
         /// 注销收款地址非法（不允许等于 duoqian_address）
         InvalidBeneficiary,
+        /// 资金转出源地址受保护，不允许转出
+        ProtectedSource,
     }
 
     #[pallet::call]
@@ -210,6 +238,10 @@ pub mod pallet {
             approvals: AdminApprovalsOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+            ensure!(
+                !T::ProtectedSourceChecker::is_protected(&who),
+                Error::<T>::ProtectedSource
+            );
 
             ensure!(!duoqian_admins.is_empty(), Error::<T>::IncompleteParameters);
             ensure!(admin_count > 0, Error::<T>::IncompleteParameters);
@@ -225,6 +257,10 @@ pub mod pallet {
                 Error::<T>::AdminCountMismatch
             );
 
+            ensure!(
+                !T::ReservedAddressChecker::is_reserved(&duoqian_address),
+                Error::<T>::AddressReserved
+            );
             ensure!(
                 T::AddressValidator::is_valid(&duoqian_address),
                 Error::<T>::InvalidAddress
@@ -310,6 +346,10 @@ pub mod pallet {
             approvals: AdminApprovalsOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+            ensure!(
+                !T::ProtectedSourceChecker::is_protected(&duoqian_address),
+                Error::<T>::ProtectedSource
+            );
             ensure!(
                 beneficiary != duoqian_address,
                 Error::<T>::InvalidBeneficiary
@@ -494,6 +534,13 @@ mod tests {
         }
     }
 
+    pub struct TestReservedAddressChecker;
+    impl DuoqianReservedAddressChecker<AccountId32> for TestReservedAddressChecker {
+        fn is_reserved(address: &AccountId32) -> bool {
+            *address == AccountId32::new([0xAA; 32])
+        }
+    }
+
     pub struct TestAdminAuth;
     impl DuoqianAdminAuth<AccountId32> for TestAdminAuth {
         type PublicKey = [u8; 32];
@@ -524,6 +571,8 @@ mod tests {
         type Currency = Balances;
         type AdminAuth = TestAdminAuth;
         type AddressValidator = TestAddressValidator;
+        type ReservedAddressChecker = TestReservedAddressChecker;
+        type ProtectedSourceChecker = ();
         type MaxAdmins = ConstU32<10>;
         type MinCreateAmount = ConstU128<111>;
         type MinCloseBalance = ConstU128<111>;
@@ -1016,6 +1065,43 @@ mod tests {
                     approvals
                 ),
                 Error::<Test>::AddressAlreadyOnChain
+            );
+        });
+    }
+
+    #[test]
+    fn create_duoqian_rejects_reserved_address() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let duoqian = AccountId32::new([0xAA; 32]);
+
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
+            let payload = (
+                b"DUOQIAN_CREATE_V1".to_vec(),
+                &duoqian,
+                2u32,
+                &admins,
+                1u32,
+                111u128,
+            )
+                .encode();
+            let approvals = approvals_vec(vec![AdminApproval {
+                public_key: public_of(&p1),
+                signature: sign(&p1, &payload),
+            }]);
+
+            assert_noop!(
+                Duoqian::create_duoqian(
+                    RuntimeOrigin::signed(account_of(&p1)),
+                    duoqian,
+                    2,
+                    admins,
+                    1,
+                    111,
+                    approvals
+                ),
+                Error::<Test>::AddressReserved
             );
         });
     }
