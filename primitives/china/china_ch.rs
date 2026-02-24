@@ -45,7 +45,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "中枢省公民储备银行",
         citizens_number: 10_913_902,
         stake_amount: 10_913_902_0000,
-        keyless_address: hex!("21bc9e12d717e4d55666501fd21f8f3fdfbf98d513d6584424f34162397ac1be"),
+        keyless_address: hex!("1fba0c01f5fd9089ad83e94de12505bde3961acee6411aaca5d03e34ffa34924"),
         duoqian_address: hex!("9263b56ffe0c3ee796af11e133bbad53f13dd467563caacd462cf2c257754bee"),
         admins: &[
             hex!("7a24e290379c6e458f5372246629a739064b01de97ca85e4008a0c52124ffa2b"),
@@ -65,7 +65,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "岭南省公民储备银行",
         citizens_number: 28_157_064,
         stake_amount: 28_157_064_0000,
-        keyless_address: hex!("faf75f9cb6945e1f61cb42a26d8b6c35614794830ecfc06477e8ace8e1c844b8"),
+        keyless_address: hex!("5a4ffe7b0c17853b38d423c7c7ab562196d48edb6426cadfc5032ed449498473"),
         duoqian_address: hex!("779400993088554ea45f2643cd969fa442172eec54dce70309423fcb5f0b6363"),
         admins: &[
             hex!("026c25206f34749215e5dd6ca6ab806ff53c4a047b68a5779ae7c22ed4befc73"),
@@ -85,7 +85,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "广东省公民储备银行",
         citizens_number: 106_012_864,
         stake_amount: 106_012_864_0000,
-        keyless_address: hex!("86eaef716945c2080b9348b8bc9aaede939be2bd875ddb2d3043edbcf2c42ddc"),
+        keyless_address: hex!("5af9a4fb48374a0069c2d5f52137a5ca47810ce9d8067b87dca3379fdbcdfece"),
         duoqian_address: hex!("b4809460d951e2ca1c1b0f7a33c720a7148a40989e4a614c9f8d07ec088ec3fb"),
         admins: &[
             hex!("0489dc54c1f161b86bef1c9c5e5ef04ebd0e80b79a165178739f76a8aec19f71"),
@@ -105,7 +105,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "广西省公民储备银行",
         citizens_number: 50_126_804,
         stake_amount: 50_126_804_0000,
-        keyless_address: hex!("209c88e0f516c4bef0bd7295a28065cd05ac8c2d4ed40b157a67dc55dc8d3e53"),
+        keyless_address: hex!("04f15c50f9df2be39962d4b1947107190d686363230e1276fa652ac60065873c"),
         duoqian_address: hex!("1681ccc0061ca61d29fd241b36ddd2cee1c841c460c4989f740d1ffbc9036a2f"),
         admins: &[
             hex!("9427e1d51223861d4af89d3327844ff454c67a6dd7cf1a061efe930ebc894201"),
@@ -125,7 +125,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "福建省公民储备银行",
         citizens_number: 41_540_086,
         stake_amount: 41_540_086_0000,
-        keyless_address: hex!("7a5d47815b1ae50c39ad89b68f8f7827dffedabbe0a349484a873cc0a3e94ba2"),
+        keyless_address: hex!("4564da48ef85d37378dbf5b297dec56d450d732c6635d1b28024b087ccdfc66d"),
         duoqian_address: hex!("52f19926e3edb7e71194173c235c37b33b715cce754b387f38588faf2f7022b1"),
         admins: &[
             hex!("aafafefde99d84cdaa347e3525cad15b83661b21e919acb81f07bef285241760"),
@@ -145,7 +145,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "海南省公民储备银行",
         citizens_number: 10_081_232,
         stake_amount: 10_081_232_0000,
-        keyless_address: hex!("e242a55b40fbf6c0a29e5aa316965a93ec67d09aafc266f7e8895bdb3e06b5d5"),
+        keyless_address: hex!("972df9c96a38acbd6bcea17ba6572604b6c9307aa935dacb2895adaf9d934ddf"),
         duoqian_address: hex!("d32aacac99f5244f795e52880b3f97e4644c17846186787061eebf14c714af92"),
         admins: &[
             hex!("28e54d11584f1ca20f574a25de76ab19b077cf9ae1708fe52a00385b854ff72d"),
@@ -165,7 +165,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "云南省公民储备银行",
         citizens_number: 46_821_766,
         stake_amount: 46_821_766_0000,
-        keyless_address: hex!("49542724fe089ab265daeceee4a6c9f5028ac623b9602230664578d2c1ea8442"),
+        keyless_address: hex!("535a4d01d368c78791464f423d62a92e05e533217a9b6ef0a21843205d5745e0"),
         duoqian_address: hex!("4ddfbfdee08467451e3760b0e3dba0900555d022f3c1baeee7aa7deae2d17db1"),
         admins: &[
             hex!("ae54c9e6bd19eaa35d2d344255f64a4258fad0e342ccee088f3817b6a61b152a"),
@@ -185,7 +185,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "贵州省公民储备银行",
         citizens_number: 38_562_148,
         stake_amount: 38_562_148_0000,
-        keyless_address: hex!("523248ae37ea8689ca9e5a6d505e1610c67aa7e4646505b8b8750b82aeba9b6c"),
+        keyless_address: hex!("40847fa4145ad3c59691138f405d2abd4239b55289c54f7c0742373093cd2da9"),
         duoqian_address: hex!("78aa8d39d2bb662ec2bc3b70c1ccaa8c742dca17d3a5619e1f4865ae9e71ee6a"),
         admins: &[
             hex!("e0dcf22a3dd7e1f14aa455c0e274d4b4dcb5c049f36433a7f7f4135f04211d2f"),
@@ -205,7 +205,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "湖南省公民储备银行",
         citizens_number: 66_444_864,
         stake_amount: 66_444_864_0000,
-        keyless_address: hex!("bae6d80a94732903af02202d0ada61d7e74f25f0a8cdf32b6d73260dc418e39f"),
+        keyless_address: hex!("d9c86f52435bf48d5ac183caacf1ecced3639f87be3104cb15e6a9dfcd19a8cb"),
         duoqian_address: hex!("0f7cd0ad573f02f3a472227d6b9e586960adf5d57828257def40256b59a02aa2"),
         admins: &[
             hex!("1a4bf08983c7ca48d46ac578334d808c7ae02fa1bcff39c7fad236fa5b89e246"),
@@ -225,7 +225,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "江西省公民储备银行",
         citizens_number: 45_188_635,
         stake_amount: 45_188_635_0000,
-        keyless_address: hex!("fead3049fa97c8fd8b07f319cfe42bef096831cec0235dda5b4ad8af93827180"),
+        keyless_address: hex!("25245835eee11c1bae20986f877b671b055adf707667b05d1d0c73380fd5fdb7"),
         duoqian_address: hex!("abc4441ae26e2e3e94633b917e2fd14b5c8e9358944d23e6fcfe15b32371309e"),
         admins: &[
             hex!("d0eb85c18ae4ba3a56618122ee359b2c18b3af18de0a8d994d01502cd8779176"),
@@ -245,7 +245,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "浙江省公民储备银行",
         citizens_number: 64_567_588,
         stake_amount: 64_567_588_0000,
-        keyless_address: hex!("0f327a7b55043d17b16596f0c04729667696a666c38b419a237d8961fb343a00"),
+        keyless_address: hex!("968e85804d00df2e4e9d43c9477e6d7df85ae4bde57ed8aedc4056d3b7218a73"),
         duoqian_address: hex!("388aaf092f1ae38c97f617565c1f652e9f65e165a3777d0c7a13d69a3f81d756"),
         admins: &[
             hex!("d45f674ef2a84f320674374cd71e40fe29f4532d4329588f59165011d6a6a673"),
@@ -265,7 +265,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "江苏省公民储备银行",
         citizens_number: 84_748_016,
         stake_amount: 84_748_016_0000,
-        keyless_address: hex!("65c81d68fc9970b3ae2ec820ebb494f9c0e571a46154f2beec36de05f15ec71c"),
+        keyless_address: hex!("e9bce880be38c97f6adfe236c3021a9939b429bb58dc4abfbc6cdf4590f3982c"),
         duoqian_address: hex!("6fa7001eb35cdcda93a426e8e970cab031fa7c1b40807c2d0421f192586db384"),
         admins: &[
             hex!("00b31ce3c5a0c72d11d14e44e9fc3f24143fd4e7b50d9d666ca0744030538a11"),
@@ -285,7 +285,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "山东省公民储备银行",
         citizens_number: 101_527_453,
         stake_amount: 101_527_453_0000,
-        keyless_address: hex!("5213d43ecb0c0f9ef7156173cb4bb3310ccece5ae59259837b2238fc7ad7640e"),
+        keyless_address: hex!("3ce2ca44b06646e3b97a8b052bdaefd26a98c09c5580f68814855c01eccf16df"),
         duoqian_address: hex!("c2a6047fcf489b99aabee44d825da2641c7bf3e6e5f739322ee6231865aeac6f"),
         admins: &[
             hex!("5a5c268c38e99e8f20b9e8e3d0a02697a92406e601b8aeb0420a39925211d64f"),
@@ -305,7 +305,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "山西省公民储备银行",
         citizens_number: 34_915_616,
         stake_amount: 34_915_616_0000,
-        keyless_address: hex!("76d4f36462eca50cdc3aa7f59650dd957200ba8fa88c3a9e27547cb79ec92266"),
+        keyless_address: hex!("921e7d249846467072a9804f61619443d5b4a86efff0df3841a8509cba27a64f"),
         duoqian_address: hex!("fb26419ff4383bccf01ad03d728a8debeb77f563c8ee55ce41384312e99ea5ed"),
         admins: &[
             hex!("cedaa06d70cd93f39ddb56be76f08d0fa7ee4f8bb74dcb1d65d0831ef1ba7367"),
@@ -325,7 +325,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "河南省公民储备银行",
         citizens_number: 99_365_519,
         stake_amount: 99_365_519_0000,
-        keyless_address: hex!("682792dc6945be8fe5bdcdbe72f19fa40c42c39411d56a206516d4a223884d91"),
+        keyless_address: hex!("778c697d1aa90356aac69d16177bad17e45c7a476e91b64f718f51c36a03892a"),
         duoqian_address: hex!("fb95468be4c6e2eadb5f94cf26ee503afaf41513ae8a9cb94e58d6859b443f67"),
         admins: &[
             hex!("16977016c793b7f8cb5375bfb343e06511e8b6bff0a3ded1763b03e65b49dc75"),
@@ -345,7 +345,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "河北省公民储备银行",
         citizens_number: 56_282_021,
         stake_amount: 56_282_021_0000,
-        keyless_address: hex!("be824a50fb2e456cc8ad0dac169c6f42818525b6de16647284c433d5a36c05a5"),
+        keyless_address: hex!("a9e433c68a0a3f1c3eae28b95b376e4361ff6eec1d94d41619c6c105aa5d3e82"),
         duoqian_address: hex!("2fe5b50c3600218de1832c302b5b0a8277240d747a7d4fc116a3c2530905e62f"),
         admins: &[
             hex!("bc50baf7fbc79b72df63804d5d48275528142136d1914a2334347875016fa551"),
@@ -365,7 +365,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "湖北省公民储备银行",
         citizens_number: 54_543_553,
         stake_amount: 54_543_553_0000,
-        keyless_address: hex!("a8c7569f9fd0eea135a453b9b2f1e32f3222c4f5a4981ba59111f5220e67d7f1"),
+        keyless_address: hex!("3c7971baa702819d3daff92463c062ffb5fbf3d52272a9915b80ead7dc3610c5"),
         duoqian_address: hex!("ec3ed3b5ab3a5f8e590bd6e49402e7ecae4dd57eec2700f346558f99a50ec218"),
         admins: &[
             hex!("d8234d16d61cba73ebbfa12d4e53ddf1a4f5d24f106c286799d0e14801d0953b"),
@@ -385,7 +385,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "陕西省公民储备银行",
         citizens_number: 33_824_101,
         stake_amount: 33_824_101_0000,
-        keyless_address: hex!("a3dbf6e743d0712ff6be8d852ec2a892891dc35d5d2ef260c112afe291c49b64"),
+        keyless_address: hex!("fad86f285a53dbc6ab76dc84ed5cfa5bcc91ef9ddb944c0e665325ee8b4e291c"),
         duoqian_address: hex!("684c0b8048dcb3beaa6489faf6c31d0a8e23aee5e30ace1ebc898f97555d56a6"),
         admins: &[
             hex!("d230315cd4220886014478c89fe74112f144ef42c167a51ec1cff7d1a394df41"),
@@ -405,7 +405,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "重庆省公民储备银行",
         citizens_number: 32_054_159,
         stake_amount: 32_054_159_0000,
-        keyless_address: hex!("95f0a21e4d83326867e8ce82287e91f9606075cc77c21f1b1799a6224dc058c6"),
+        keyless_address: hex!("2f2f73a5ad3fea2e18212344bdab823c91f158a12c77fc2889d744cb9130510f"),
         duoqian_address: hex!("cf8124e104dd2cab9ed173bec6ed2c10ff1d2ed2e6594154f3ad3d8dcb0857ed"),
         admins: &[
             hex!("9e06d0846eebfe509661911c909abd83ae39180b7c6f97099b548d8352ed6428"),
@@ -425,7 +425,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "四川省公民储备银行",
         citizens_number: 80_310_245,
         stake_amount: 80_310_245_0000,
-        keyless_address: hex!("97c73ed34795384c351a59d81d876011805cf41a0b40da822d7d051137f9059d"),
+        keyless_address: hex!("c3d72526370fe518c98b20f7c29b8536f9ad48f771a2d7882815571f38814697"),
         duoqian_address: hex!("5dd6f52c82f5ab7229b650ffe688a031b898928acbbda939c8f347c84c194e4f"),
         admins: &[
             hex!("66942d040ad78ebd3dd5823702e65165bfd07ca6b72f4d6b6487ebfe5f710834"),
@@ -445,7 +445,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "甘肃省公民储备银行",
         citizens_number: 20_617_465,
         stake_amount: 20_617_465_0000,
-        keyless_address: hex!("37b05070ec70ad7444f208dc1b0f15432fe00bedb05f4fdb061ac83ee68800bc"),
+        keyless_address: hex!("43eef7fa53411f5a384d2273823cf5990c5300f4384980ca4c38f9fb92b3b3c0"),
         duoqian_address: hex!("c50f87ad9f29b19a5b669ab2efe433f1057dd67bceca2352a80646789e4b602e"),
         admins: &[
             hex!("f6a25ebd4796d80cff6b511baa479d0415a940747edd09b604f000969a40c073"),
@@ -465,7 +465,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "北平省公民储备银行",
         citizens_number: 21_893_095,
         stake_amount: 21_893_095_0000,
-        keyless_address: hex!("4b724514f0c03b8289de69592687de7bd54096e6801ee1b55604b29789055e8e"),
+        keyless_address: hex!("3cdc238746d3826c6ac77e5ac8a0531a6ac38ce463067504ec126bbf34b75084"),
         duoqian_address: hex!("3fd2fc5601ddf533ae25ade7ebeb181d2157f831dc1d2cd7eff1eedc1b4653ec"),
         admins: &[
             hex!("5c02963fb3bd05b5219120d83d37f1fa579a385fecb85eb4ec2e2673ebbb2717"),
@@ -485,7 +485,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "滨海省公民储备银行",
         citizens_number: 24_720_871,
         stake_amount: 24_720_871_0000,
-        keyless_address: hex!("af2cd60d5e63d8d1dff54c391c1567c89998ce4114fddb80d84d84a8f9e4db04"),
+        keyless_address: hex!("6b529403733123d4672dc168da3fd6a5a32606f06320b7d0fbe3e165540829e1"),
         duoqian_address: hex!("514728d9d0b7a8f11dd1d96c79516d440f91171f13a71457e3d0de1b8a46c57a"),
         admins: &[
             hex!("c088c0c872442f38d757e784c813dcec8553865ead6dd893ac6c017af5d69f55"),
@@ -505,7 +505,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "松江省公民储备银行",
         citizens_number: 24_870_895,
         stake_amount: 24_870_895_0000,
-        keyless_address: hex!("f897f0119dfb14035a841713a7cf889f903d262d26c187fd329bb4ba6a7b5be3"),
+        keyless_address: hex!("0d78b454f3ad9759010ab632e5ff3529a38a74d0e10c90cd3b71ef828c45515a"),
         duoqian_address: hex!("9777efc8d971e0a8eedcc0566a5fe371a0aad7ef1baf3f3a607fc5a9288eb88e"),
         admins: &[
             hex!("827e73de31b2709b35089493589aacee2ae5b21783b42e5485d8f9b0e68fda61"),
@@ -525,7 +525,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "龙江省公民储备银行",
         citizens_number: 22_780_354,
         stake_amount: 22_780_354_0000,
-        keyless_address: hex!("41f918fd7f8ec10f6fa1e4d67094583742585aae5ec5a2ac97fd046b4d4dc48c"),
+        keyless_address: hex!("d9535c5a1d2e096bf9b2eb944901e0676fbcf9bcd30be97c4da3604e03de9815"),
         duoqian_address: hex!("d2b37e8a9331162169ff144ff81618644f951d9614deae33da35fe198a21607f"),
         admins: &[
             hex!("ce923cfccca40f7f50dbcc73f3993a47564ce7a2430d9f60bac6b9212db8082e"),
@@ -545,7 +545,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "吉林省公民储备银行",
         citizens_number: 24_073_453,
         stake_amount: 24_073_453_0000,
-        keyless_address: hex!("0635c25df1cf9dd1fbe6d8e4bea1de71a0e8c1aab0d2dbf5fe2dbda39b64d798"),
+        keyless_address: hex!("ff9d863e562f0a478a80b3e49c070a4fcc7de1711c0a4554f8660d85f60568e0"),
         duoqian_address: hex!("1fefb91f1817233bfce6b55857c6cd53db696f233cf5991bc8feb931bae56670"),
         admins: &[
             hex!("ec059effa082803a1cb54f4be99123b435514be482b2a45de16f2663d7bec07e"),
@@ -565,7 +565,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "辽宁省公民储备银行",
         citizens_number: 42_591_407,
         stake_amount: 42_591_407_0000,
-        keyless_address: hex!("b1684c88713edd73414eb23fb99608ba71495e2bed457da6d5b9afc1921e2fa4"),
+        keyless_address: hex!("93277e43d1e83ce68698507751a10b858cb536edd3a921a43a3a76b1c2704553"),
         duoqian_address: hex!("815096e61f8de0d41e5f21d081ded9670a0ad2cb08b3ee9face9b61a3c0cc155"),
         admins: &[
             hex!("240519b39d7ac94ae048845ff707b81255bfb52383ba61c47d65c9adad1e783f"),
@@ -585,7 +585,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "宁夏省公民储备银行",
         citizens_number: 7_202_654,
         stake_amount: 7_202_654_0000,
-        keyless_address: hex!("2dbfa78e5e41e7593ae96be8623cbfe019d181e1c93d598239713ad5bd3f5472"),
+        keyless_address: hex!("3aef029dbf31fdc9d4579cde9b800669d45a946cfc14b53cfe88c5241ee0a8ef"),
         duoqian_address: hex!("9f4832bdfae0c3697e8c4307a73fe0733eabc0bb2bc880c31c7bd14437f2f98d"),
         admins: &[
             hex!("9e6c016183e311d06f3af7f8c868d23a63ebb02aed985506ba9cbac71b88e636"),
@@ -605,7 +605,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "青海省公民储备银行",
         citizens_number: 5_030_542,
         stake_amount: 5_030_542_0000,
-        keyless_address: hex!("0d71aa43a60982e9baf30e2898644701680737814ceeb724845c1ed3874cd685"),
+        keyless_address: hex!("03543e9a7ced28278db004f3ec1d0a6adb4f85a4c41ccc2eec1dd5a09b035ae8"),
         duoqian_address: hex!("ff6c2f43770f8770fc035a2e780da6c38968b68c9257ea2d7bf667445bf2ce6d"),
         admins: &[
             hex!("d0abf7d5bf48879b31cf8335bf4eaa35284185444c3c340902791c8860d4d703"),
@@ -625,7 +625,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "安徽省公民储备银行",
         citizens_number: 61_027_171,
         stake_amount: 61_027_171_0000,
-        keyless_address: hex!("8029f0568a5a803d635179e1b84b1e82140670b425ff058497577f4e898b9829"),
+        keyless_address: hex!("67ec7fc9a47cf903ab1ff94410cba627a260d262990d696c6af0030e98aec97a"),
         duoqian_address: hex!("f15567895adebbd81e4624c3133b8a7538e025c7aa00a681be1a2ef15362aac8"),
         admins: &[
             hex!("6a23c0f923ff3bcb7b787eff0e09cdc5ec3c30d5c9fbaa244b30ff14ec88d00c"),
@@ -645,7 +645,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "台湾省公民储备银行",
         citizens_number: 23_561_236,
         stake_amount: 23_561_236_0000,
-        keyless_address: hex!("5d489483bb48d1d447cbdcbc8fbb4c71e37eda4cf31340fe6c4f5aa640f72fc5"),
+        keyless_address: hex!("58fefd565137d1288f908512f49daaa35d9bdcd8f6ec96b939004557627ccc5a"),
         duoqian_address: hex!("d0d25196fa9cb154d38279b4f82e1cef88ccd05d7e1acad318437e05cbe49c27"),
         admins: &[
             hex!("c2406f8a720ce27969456d67468debc78e2933f1fb8ebe75799582e6eec73839"),
@@ -665,7 +665,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "西藏省公民储备银行",
         citizens_number: 2_763_853,
         stake_amount: 2_763_853_0000,
-        keyless_address: hex!("8f41d40cd896fa0af97c3052b6486353ab6f75d479f77ddf224af89a1c2977b6"),
+        keyless_address: hex!("aaf6876406ed68576afb9bec25d34804e4a402dd3d743f57ef54c9ccaa8e7039"),
         duoqian_address: hex!("f79b64e3b5ab05046f9d043530dff2faba01d7b6bed691cc5e25b169c9762dea"),
         admins: &[
             hex!("82df0fbf16857baffbed3ceb167c17ee87b999797bdd3cc725c55ddf7d3c040a"),
@@ -685,7 +685,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "新疆省公民储备银行",
         citizens_number: 9_880_442,
         stake_amount: 9_880_442_0000,
-        keyless_address: hex!("587bc76d45042bcd9ff52ceee72612e3b71a734059038c46e9234985f308c373"),
+        keyless_address: hex!("eb8c322c33d6b609769ae0224da07f8301e7ba7cb7db5b3a2b1255d521a3a6c4"),
         duoqian_address: hex!("0d7f4e22dba29a7bdf63ffd340b9d2ebaf42129937a2b9e56b0d3a48553280d2"),
         admins: &[
             hex!("9af72d3d46fe219a8f48fb6f73fdaccc4057f32dffe110531e606487c5abf73e"),
@@ -705,7 +705,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "西康省公民储备银行",
         citizens_number: 4_513_098,
         stake_amount: 4_513_098_0000,
-        keyless_address: hex!("f66395985ccc73d95fb290504973b376f02d7d98da93b20d95c343da8d152de7"),
+        keyless_address: hex!("414f033b520d868e01823cc644122d13af3b55e5ee001ae55837727d640db2df"),
         duoqian_address: hex!("d1fabd61e95f163e97118a49424339ee7263536bf30ffbc3d7bc829b191f5747"),
         admins: &[
             hex!("b0c59a13a468e7c5a5d4fd32a7ca4d34e4bd41517a0bcc8327e2e40c838c2c08"),
@@ -725,7 +725,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "阿里省公民储备银行",
         citizens_number: 2_627_999,
         stake_amount: 2_627_999_0000,
-        keyless_address: hex!("bc789a1c394a5e485d38432bcdb59fad3411cfd4699a7983f5853997867401c4"),
+        keyless_address: hex!("6897d9faf6cd6cd82ebae796208f055d29b9e67651a675a5e5da44e0fef7e50b"),
         duoqian_address: hex!("87ecd34623fb8db263894724118c1152edbef5bf720f469831398ed806368169"),
         admins: &[
             hex!("5ad6075c5d29eb2b8e91083c406fe6f7ccaa41053d30e2cb0961d85bb26eca48"),
@@ -745,7 +745,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "葱岭省公民储备银行",
         citizens_number: 7_833_021,
         stake_amount: 7_833_021_0000,
-        keyless_address: hex!("ed3f67c63bc0f2140205473c17890e73688babdf7684f9287ce7cddfcd22ca09"),
+        keyless_address: hex!("00bee7cb2f8c0607fff7db2e4d2bc508789f27483f26d091c0b91999f2fa16ea"),
         duoqian_address: hex!("cdf7b00d9e2bc0b33741f26bd8ae96c2f7cc940e250befbcf83e4bd1970146f8"),
         admins: &[
             hex!("e8167b6b1319e6b529958c802060970eb11cad3653fe21a3efbd8359fd4dfb5c"),
@@ -765,7 +765,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "天山省公民储备银行",
         citizens_number: 5_634_164,
         stake_amount: 5_634_164_0000,
-        keyless_address: hex!("dd464573534b2eb6e0d7a6fcac549a51c63e5847b23c299135e36b4ea3e24adb"),
+        keyless_address: hex!("ee713538069dfc5baf45619d94c3ce47b50e961adc444bfe24ff1d2340936306"),
         duoqian_address: hex!("0601297524f8cb9f4305976a5c085f7b4f6bb60f7e78aa2ce94ff07c1a572a86"),
         admins: &[
             hex!("d0a892173117fe6d54d93e474395063b29ed4b3d96c280c27c7669817b611948"),
@@ -785,7 +785,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "河西省公民储备银行",
         citizens_number: 4_664_727,
         stake_amount: 4_664_727_0000,
-        keyless_address: hex!("8f8b9105949a108774ff845ba4df0f7a921f5beae6e814717fabf9b99a1ce8bd"),
+        keyless_address: hex!("16b7b874152a37a11ded2614e63ddfd4d30c0767fb8b4aae4722f60df01baba0"),
         duoqian_address: hex!("0e1690346978553bb9b16a5c2bea32347a42407f22aa1b8c24eb5fc3ef247e77"),
         admins: &[
             hex!("0afc29913ab6807bd7f56c017f2d50b45131b2b77e0323ea63b6ae6002327812"),
@@ -805,7 +805,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "昆仑省公民储备银行",
         citizens_number: 893_415,
         stake_amount: 893_415_0000,
-        keyless_address: hex!("e7c1fa0801ca5b74c6939de99a519de7023dc602ab55231b640e3b1b7f5895f0"),
+        keyless_address: hex!("34f8281f2340e14f4e8e618726fcbb940dd980c6e849ce200417360233f37348"),
         duoqian_address: hex!("1e13d1c46e78df8860531891f655dfeff10a512558a4d424d621b01e2ea65c7f"),
         admins: &[
             hex!("a6050f81f2e028db2037070544210b7dd2097b42da9453950c540734bc321528"),
@@ -825,7 +825,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "河套省公民储备银行",
         citizens_number: 12_110_780,
         stake_amount: 12_110_780_0000,
-        keyless_address: hex!("2ffbe3ed5ee5134149adec09698affcea20f5cca51dbf95cdb0616430eee84aa"),
+        keyless_address: hex!("19833b391020fa341e6ce2772bb2369db16d552acac1c8689e28a156286d06a1"),
         duoqian_address: hex!("35122f7684cf3ebd6a8b9829bd1d6e30cc47a3698d073b237faa6afef252f57a"),
         admins: &[
             hex!("22e781c336d56df96887073aeb1bae59da5d827c8ad3b68ff1bed9e33767775b"),
@@ -845,7 +845,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "热河省公民储备银行",
         citizens_number: 15_489_562,
         stake_amount: 15_489_562_0000,
-        keyless_address: hex!("6974ef45d1495159dbbacfc2a114e284b4538775dfd2c3e7296ed681285406f8"),
+        keyless_address: hex!("f6c160d4ed8e164e6629abcd0f4d68fa880d867bf19833346317ad9a1f397578"),
         duoqian_address: hex!("35f7707ea3c6272e85fabc67fca5713e82d13b0ed1eb511d4f033e193bddae6a"),
         admins: &[
             hex!("a0260cf1c59232c08ccf080783363dd6f276183c58ad3e5bc29b494f823af449"),
@@ -865,7 +865,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "兴安省公民储备银行",
         citizens_number: 3_991_080,
         stake_amount: 3_991_080_0000,
-        keyless_address: hex!("10ac83be1c5cdc8c5e762323d037eb792bd783d362d77b6e52e4547e42174a3e"),
+        keyless_address: hex!("3ebdd2792e85db27b1cc05e6037d75d8e82bed708c8945f34408ff4bc85bd1fe"),
         duoqian_address: hex!("330b6fec1be2bbec7e85d582285f0e80361fb382ceaf6c1c29d2db16d567f94d"),
         admins: &[
             hex!("785c4af6c7af289e9deaf018d0593f6d2393626f8b4a756e026e62209a57bf26"),
@@ -885,7 +885,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
         shenfen_name: "合江省公民储备银行",
         citizens_number: 8_738_458,
         stake_amount: 8_738_458_0000,
-        keyless_address: hex!("eb85e6981f71269f7dc22f4715119f943b675bb98a0ae5427ede0004f2bad626"),
+        keyless_address: hex!("cbc477b84fd503a161b84f5e133266b73bb0be7d3eb330793ba1b5d3318e72ee"),
         duoqian_address: hex!("0e900d55a3fce5dd46698a65fa6d634a3e89f75e9d637431adcaa99d8b4c5efa"),
         admins: &[
             hex!("5a6b9de943c7a5125eecc39a18e565c174583d8aabaec8e540171e25d0251578"),

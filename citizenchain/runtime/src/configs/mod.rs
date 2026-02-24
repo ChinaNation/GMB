@@ -269,6 +269,16 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
                     onchain_transaction_fee::AmountExtractResult::Unknown
                 }
             }
+            RuntimeCall::OffchainTransactionFee(
+                offchain_transaction_fee::pallet::Call::process_queued_batch { queue_id },
+            ) => {
+                if let Ok(sum) = OffchainTransactionFee::precheck_process_queued_batch(who, *queue_id)
+                {
+                    onchain_transaction_fee::AmountExtractResult::Amount(sum)
+                } else {
+                    onchain_transaction_fee::AmountExtractResult::Unknown
+                }
+            }
             RuntimeCall::DuoqianTransactionPow(
                 duoqian_transaction_pow::pallet::Call::create_duoqian { amount, .. },
             ) => onchain_transaction_fee::AmountExtractResult::Amount(*amount),
@@ -333,6 +343,9 @@ impl onchain_transaction_fee::CallFeePayer<AccountId, RuntimeCall> for RuntimeFe
                 // 提交账户只负责提交，不承担手续费。
                 OffchainTransactionFee::fee_account_of(*institution).ok()
             }
+            RuntimeCall::OffchainTransactionFee(
+                offchain_transaction_fee::pallet::Call::process_queued_batch { queue_id },
+            ) => OffchainTransactionFee::fee_payer_for_queued_batch(*queue_id).ok(),
             _ => None,
         }
     }
@@ -458,6 +471,7 @@ impl duoqian_transaction_pow::DuoqianAddressValidator<AccountId>
 }
 
 pub struct RuntimeDuoqianReservedAddressChecker;
+pub struct RuntimeSfidRegistryOperator;
 
 pub struct RuntimeProtectedSourceChecker;
 
@@ -510,6 +524,29 @@ impl duoqian_transaction_pow::DuoqianReservedAddressChecker<AccountId>
     }
 }
 
+impl duoqian_transaction_pow::SfidRegistryOperator<AccountId> for RuntimeSfidRegistryOperator {
+    fn can_register(operator: &AccountId) -> bool {
+        if sfid_code_auth::Pallet::<Runtime>::sfid_main_account()
+            .as_ref()
+            .map(|acc| acc == operator)
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        if sfid_code_auth::Pallet::<Runtime>::sfid_backup_account_1()
+            .as_ref()
+            .map(|acc| acc == operator)
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        sfid_code_auth::Pallet::<Runtime>::sfid_backup_account_2()
+            .as_ref()
+            .map(|acc| acc == operator)
+            .unwrap_or(false)
+    }
+}
+
 impl duoqian_transaction_pow::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
@@ -517,7 +554,9 @@ impl duoqian_transaction_pow::Config for Runtime {
     type AddressValidator = RuntimeDuoqianAddressValidator;
     type ReservedAddressChecker = RuntimeDuoqianReservedAddressChecker;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
+    type SfidRegistryOperator = RuntimeSfidRegistryOperator;
     type MaxAdmins = ConstU32<64>;
+    type MaxSfidIdLength = ConstU32<96>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<111>;
 }
@@ -999,6 +1038,10 @@ mod tests {
             let _ = Balances::deposit_creating(&institution_account, 1_000);
             let _ = Balances::deposit_creating(&payer, 10_000);
             let _ = Balances::deposit_creating(&recipient, 1);
+            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+                RuntimeOrigin::signed(recipient.clone()),
+                institution,
+            ));
 
             let tx_id = <Runtime as frame_system::Config>::Hashing::hash(b"rt-offchain-batch-1");
             let item =

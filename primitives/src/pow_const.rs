@@ -1,5 +1,8 @@
 //! 全节点铸块与发行常量=pow_const.rs
 
+/// PoW 初始难度（固定难度算法）。
+pub const POW_INITIAL_DIFFICULTY: u64 = 1_000_000;
+
 /// 一、全节点铸块，每个区块奖励金额（单位：分）
 pub const FULLNODE_BLOCK_REWARD: u128 = 999_900; // 每个区块奖励：9999.00 元 = 999_900 分
 

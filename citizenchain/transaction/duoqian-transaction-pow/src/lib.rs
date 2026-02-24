@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
+mod blake3_reference;
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
@@ -63,6 +64,17 @@ impl<AccountId> ProtectedSourceChecker<AccountId> for () {
     }
 }
 
+/// SFID 机构登记操作员权限校验：仅 SFID 系统授权账户可登记机构ID。
+pub trait SfidRegistryOperator<AccountId> {
+    fn can_register(operator: &AccountId) -> bool;
+}
+
+impl<AccountId> SfidRegistryOperator<AccountId> for () {
+    fn can_register(_operator: &AccountId) -> bool {
+        false
+    }
+}
+
 #[derive(
     Encode,
     Decode,
@@ -104,9 +116,13 @@ pub mod pallet {
         type AddressValidator: DuoqianAddressValidator<Self::AccountId>;
         type ReservedAddressChecker: DuoqianReservedAddressChecker<Self::AccountId>;
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
+        type SfidRegistryOperator: SfidRegistryOperator<Self::AccountId>;
 
         #[pallet::constant]
         type MaxAdmins: Get<u32>;
+
+        #[pallet::constant]
+        type MaxSfidIdLength: Get<u32>;
 
         /// 创建时最低入金（默认应设置为 111 分 = 1.11 元）。
         #[pallet::constant]
@@ -146,6 +162,8 @@ pub mod pallet {
             BlockNumberFor<T>,
         >;
 
+    pub type SfidIdOf<T> = BoundedVec<u8, <T as Config>::MaxSfidIdLength>;
+
     #[pallet::pallet]
     #[pallet::without_storage_info]
     pub struct Pallet<T>(_);
@@ -155,6 +173,18 @@ pub mod pallet {
     #[pallet::getter(fn duoqian_account_of)]
     pub type DuoqianAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, DuoqianAccountOf<T>, OptionQuery>;
+
+    /// SFID 机构登记：sfid_id -> duoqian_address（由 blake3 派生）
+    #[pallet::storage]
+    #[pallet::getter(fn sfid_registered_address)]
+    pub type SfidRegisteredAddress<T: Config> =
+        StorageMap<_, Blake2_128Concat, SfidIdOf<T>, T::AccountId, OptionQuery>;
+
+    /// SFID 机构登记反向索引：duoqian_address -> sfid_id
+    #[pallet::storage]
+    #[pallet::getter(fn address_registered_sfid)]
+    pub type AddressRegisteredSfid<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, SfidIdOf<T>, OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -173,6 +203,11 @@ pub mod pallet {
             submitter: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
+        },
+        SfidInstitutionRegistered {
+            sfid_id: SfidIdOf<T>,
+            duoqian_address: T::AccountId,
+            operator: T::AccountId,
         },
     }
 
@@ -214,10 +249,69 @@ pub mod pallet {
         InvalidBeneficiary,
         /// 资金转出源地址受保护，不允许转出
         ProtectedSource,
+        /// SFID机构未登记，不允许创建
+        InstitutionNotRegistered,
+        /// SFID机构登记操作无权限
+        UnauthorizedSfidRegistrar,
+        /// SFID ID 重复登记
+        SfidAlreadyRegistered,
+        /// SFID ID 为空
+        EmptySfidId,
+        /// 无法将派生地址转换为账户ID
+        DerivedAddressDecodeFailed,
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
+        /// SFID 系统登记机构：
+        /// - 仅 SFID 系统授权账户可调用；
+        /// - 地址按 blake3("DUOQIAN_SFID_V1" || sfid_id) 固定派生；
+        /// - 同一 sfid_id 只能登记一次。
+        #[pallet::call_index(2)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(2, 2))]
+        pub fn register_sfid_institution(
+            origin: OriginFor<T>,
+            sfid_id: SfidIdOf<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
+            ensure!(
+                T::SfidRegistryOperator::can_register(&who),
+                Error::<T>::UnauthorizedSfidRegistrar
+            );
+            ensure!(
+                !SfidRegisteredAddress::<T>::contains_key(&sfid_id),
+                Error::<T>::SfidAlreadyRegistered
+            );
+
+            let duoqian_address = Self::derive_duoqian_address_from_sfid_id(sfid_id.as_slice())?;
+            ensure!(
+                !AddressRegisteredSfid::<T>::contains_key(&duoqian_address),
+                Error::<T>::AddressAlreadyExists
+            );
+            ensure!(
+                !frame_system::Account::<T>::contains_key(&duoqian_address),
+                Error::<T>::AddressAlreadyOnChain
+            );
+            ensure!(
+                !T::ReservedAddressChecker::is_reserved(&duoqian_address),
+                Error::<T>::AddressReserved
+            );
+            ensure!(
+                T::AddressValidator::is_valid(&duoqian_address),
+                Error::<T>::InvalidAddress
+            );
+
+            SfidRegisteredAddress::<T>::insert(&sfid_id, &duoqian_address);
+            AddressRegisteredSfid::<T>::insert(&duoqian_address, &sfid_id);
+            Self::deposit_event(Event::<T>::SfidInstitutionRegistered {
+                sfid_id,
+                duoqian_address,
+                operator: who,
+            });
+            Ok(())
+        }
+
         /// 创建多签账户：
         /// - 参数必须完整；
         /// - N>=2，M>=ceil(N/2) 且 M<=N；
@@ -268,6 +362,10 @@ pub mod pallet {
             ensure!(
                 !DuoqianAccounts::<T>::contains_key(&duoqian_address),
                 Error::<T>::AddressAlreadyExists
+            );
+            ensure!(
+                AddressRegisteredSfid::<T>::contains_key(&duoqian_address),
+                Error::<T>::InstitutionNotRegistered
             );
             ensure!(
                 !frame_system::Account::<T>::contains_key(&duoqian_address),
@@ -412,6 +510,19 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        pub fn derive_duoqian_address_from_sfid_id(
+            sfid_id: &[u8],
+        ) -> Result<T::AccountId, DispatchError> {
+            let mut input = b"DUOQIAN_SFID_V1".to_vec();
+            input.extend_from_slice(sfid_id);
+            let mut digest = [0u8; 32];
+            let mut hasher = crate::blake3_reference::Hasher::new();
+            hasher.update(input.as_slice());
+            hasher.finalize(&mut digest);
+            T::AccountId::decode(&mut &digest[..])
+                .map_err(|_| Error::<T>::DerivedAddressDecodeFailed.into())
+        }
+
         fn ensure_unique_and_valid_admins(
             admins: &DuoqianAdminsOf<T>,
         ) -> Result<(), DispatchError> {
@@ -541,6 +652,13 @@ mod tests {
         }
     }
 
+    pub struct TestSfidRegistryOperator;
+    impl SfidRegistryOperator<AccountId32> for TestSfidRegistryOperator {
+        fn can_register(operator: &AccountId32) -> bool {
+            *operator == AccountId32::new([0x55; 32])
+        }
+    }
+
     pub struct TestAdminAuth;
     impl DuoqianAdminAuth<AccountId32> for TestAdminAuth {
         type PublicKey = [u8; 32];
@@ -573,7 +691,9 @@ mod tests {
         type AddressValidator = TestAddressValidator;
         type ReservedAddressChecker = TestReservedAddressChecker;
         type ProtectedSourceChecker = ();
+        type SfidRegistryOperator = TestSfidRegistryOperator;
         type MaxAdmins = ConstU32<10>;
+        type MaxSfidIdLength = ConstU32<96>;
         type MinCreateAmount = ConstU128<111>;
         type MinCloseBalance = ConstU128<111>;
     }
@@ -626,12 +746,25 @@ mod tests {
         approvals.try_into().expect("approvals length within bound")
     }
 
+    fn register_sfid_and_get_address(tag: &str) -> AccountId32 {
+        let sfid: SfidIdOf<Test> = format!("GFR-LN001-CB0C-{}-20260222", tag)
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("sfid id should fit");
+        assert_ok!(Duoqian::register_sfid_institution(
+            RuntimeOrigin::signed(AccountId32::new([0x55; 32])),
+            sfid.clone()
+        ));
+        Duoqian::sfid_registered_address(sfid).expect("sfid should be registered")
+    }
+
     #[test]
     fn create_duoqian_works_and_locks_config() {
         new_test_ext().execute_with(|| {
             let p1 = pair(1);
             let p2 = pair(2);
-            let duoqian = account_of(&pair(9));
+            let duoqian = register_sfid_and_get_address("create-ok");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
             let payload = (
@@ -669,7 +802,7 @@ mod tests {
     fn create_duoqian_rejects_duplicate_admins() {
         new_test_ext().execute_with(|| {
             let p1 = pair(1);
-            let duoqian = account_of(&pair(9));
+            let duoqian = register_sfid_and_get_address("dup-admin");
             let duplicated = public_of(&p1);
 
             let admins = admins_vec(vec![duplicated, duplicated]);
@@ -707,7 +840,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let p1 = pair(1);
             let p2 = pair(2);
-            let duoqian = account_of(&pair(9));
+            let duoqian = register_sfid_and_get_address("threshold");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
             let payload = (
@@ -745,7 +878,7 @@ mod tests {
             let p1 = pair(1);
             let p2 = pair(2);
             let p3 = pair(3);
-            let duoqian = account_of(&pair(9));
+            let duoqian = register_sfid_and_get_address("half-sign");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2), public_of(&p3)]);
             let payload = (
@@ -784,7 +917,7 @@ mod tests {
             let p2 = pair(2);
             let p3 = pair(3);
             let p4 = pair(4);
-            let duoqian = account_of(&pair(9));
+            let duoqian = register_sfid_and_get_address("close-recreate");
             let beneficiary = account_of(&pair(8));
 
             // first create: admins p1,p2 threshold 1
@@ -879,7 +1012,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let p1 = pair(1);
             let p2 = pair(2);
-            let duoqian = account_of(&pair(9));
+            let duoqian = register_sfid_and_get_address("count-mismatch");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
             let payload = (
@@ -923,7 +1056,7 @@ mod tests {
             let p1 = pair(1);
             let p2 = pair(2);
             let outsider = pair(7);
-            let duoqian = account_of(&pair(9));
+            let duoqian = register_sfid_and_get_address("non-admin-submit");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
             let payload = (
@@ -961,7 +1094,7 @@ mod tests {
             let p1 = pair(1);
             let p2 = pair(2);
             let outsider = pair(7);
-            let duoqian = account_of(&pair(9));
+            let duoqian = register_sfid_and_get_address("non-admin-approval");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
             let payload = (
@@ -998,7 +1131,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let p1 = pair(1);
             let p2 = pair(2);
-            let duoqian = account_of(&pair(9));
+            let duoqian = register_sfid_and_get_address("invalid-sig");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
             let payload = (
@@ -1036,7 +1169,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let p1 = pair(1);
             let p2 = pair(2);
-            let duoqian = account_of(&p3_for_existing_account());
+            let duoqian = register_sfid_and_get_address("exists-onchain");
             let _ = Balances::deposit_creating(&duoqian, 50);
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
@@ -1111,7 +1244,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let p1 = pair(1);
             let p2 = pair(2);
-            let duoqian = account_of(&pair(9));
+            let duoqian = register_sfid_and_get_address("close-self");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
             let create_payload = (
@@ -1169,7 +1302,7 @@ mod tests {
             let p1 = pair(1);
             let p2 = pair(2);
             let outsider = pair(7);
-            let duoqian = account_of(&pair(9));
+            let duoqian = register_sfid_and_get_address("close-nonadmin");
             let beneficiary = account_of(&pair(8));
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
@@ -1227,7 +1360,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let p1 = pair(1);
             let p2 = pair(2);
-            let duoqian_a = account_of(&pair(9));
+            let duoqian_a = register_sfid_and_get_address("close-to-other");
             let duoqian_b = account_of(&pair(10));
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
@@ -1279,7 +1412,64 @@ mod tests {
         });
     }
 
-    fn p3_for_existing_account() -> sr25519::Pair {
-        pair(33)
+    #[test]
+    fn create_duoqian_requires_registered_sfid_address() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let duoqian = account_of(&pair(9));
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
+            let payload = (
+                b"DUOQIAN_CREATE_V1".to_vec(),
+                &duoqian,
+                2u32,
+                &admins,
+                1u32,
+                111u128,
+            )
+                .encode();
+            let approvals = approvals_vec(vec![AdminApproval {
+                public_key: public_of(&p1),
+                signature: sign(&p1, &payload),
+            }]);
+
+            assert_noop!(
+                Duoqian::create_duoqian(
+                    RuntimeOrigin::signed(account_of(&p1)),
+                    duoqian,
+                    2,
+                    admins,
+                    1,
+                    111,
+                    approvals
+                ),
+                Error::<Test>::InstitutionNotRegistered
+            );
+        });
+    }
+
+    #[test]
+    fn register_sfid_institution_derives_blake3_address_and_blocks_duplicate_sfid() {
+        new_test_ext().execute_with(|| {
+            let sfid: SfidIdOf<Test> = b"GFR-LN001-CB0C-617776487-20260222"
+                .to_vec()
+                .try_into()
+                .expect("fit");
+            assert_ok!(Duoqian::register_sfid_institution(
+                RuntimeOrigin::signed(AccountId32::new([0x55; 32])),
+                sfid.clone()
+            ));
+            let expected = Duoqian::derive_duoqian_address_from_sfid_id(sfid.as_slice())
+                .expect("must derive");
+            assert_eq!(Duoqian::sfid_registered_address(sfid.clone()), Some(expected));
+
+            assert_noop!(
+                Duoqian::register_sfid_institution(
+                    RuntimeOrigin::signed(AccountId32::new([0x55; 32])),
+                    sfid
+                ),
+                Error::<Test>::SfidAlreadyRegistered
+            );
+        });
     }
 }
