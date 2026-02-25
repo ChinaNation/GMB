@@ -13,6 +13,7 @@ frame-support = { workspace = true }
 frame-system = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
+blake3 = { version = "1.8.3", default-features = false }
 
 [features]
 default = ["std"]
@@ -24,6 +25,7 @@ std = [
     "frame-system/std",
     "sp-runtime/std",
     "sp-std/std",
+    "blake3/std",
 ]
 
 [dev-dependencies]

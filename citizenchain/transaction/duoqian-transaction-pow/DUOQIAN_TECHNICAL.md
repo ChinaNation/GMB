@@ -1,4 +1,7 @@
-# duoqian-transaction-pow：SFID 先登记后创建统一技术文档
+# DUOQIAN_TECHNICAL
+
+模块：`duoqian-transaction-pow`  
+范围：SFID 先登记后创建的多签账户流程
 
 ## 1. 目标
 
@@ -14,7 +17,7 @@
    - `duoqian_address = BLAKE3("DUOQIAN_SFID_V1" || sfid_id_bytes)`
 4. 同一 `sfid_id` 只能登记一次。
 5. 只有 SFID 系统授权账户（主账户或备用账户）可登记。
-6. `create_duoqian` 必须校验 `duoqian_address` 已在登记表中，否则拒绝。
+6. `create_duoqian` 只接收 `sfid_id`，并据此解析已登记的 `duoqian_address`，未登记则拒绝。
 
 ## 3. 链上数据结构
 
@@ -45,10 +48,10 @@
 
 ### 4.2 创建多签
 
-调用：`create_duoqian(...)`
+调用：`create_duoqian(sfid_id, admin_count, duoqian_admins, threshold, amount, approvals)`
 
 新增强约束：
-- `duoqian_address` 必须存在于 `AddressRegisteredSfid`。
+- `sfid_id` 必须存在于 `SfidRegisteredAddress`。
 
 其余既有约束保持不变：
 - `N >= 2`
@@ -80,8 +83,8 @@
 
 用户输入 `sfid_id` 后：
 1. 自动查询链上是否已登记。
-2. 自动填充 `duoqian_address`。
-3. `duoqian_address` 输入框只读，不允许手动改。
+2. 自动展示链上解析出的 `duoqian_address`（只用于展示）。
+3. 提交时只传 `sfid_id`，不再上传 `duoqian_address` 参数。
 
 ### 7.2 查询流程
 
@@ -90,9 +93,9 @@
    - `api.query.duoqianTransactionPow.sfidRegisteredAddress(sfidIdBytes)`
 3. 若返回 `None`：提示“机构未登记，不能创建多签”。
 4. 若返回 `Some(address)`：
-   - 自动填充 `duoqian_address = address`
+   - 自动展示 `duoqian_address = address`
    - 控件设为只读（`readonly`）。
-5. 提交 `create_duoqian` 前再次查询比对，若不一致直接阻断提交。
+5. 提交 `create_duoqian` 时仅提交 `sfid_id`，并在提交前再次查询确认仍已登记。
 
 ### 7.3 前端示例（polkadot.js）
 
