@@ -34,8 +34,7 @@ use frame_support::{
         fungible::Inspect,
         tokens::{Fortitude, Preservation},
         ConstU128, ConstU32, ConstU64, ConstU8, Contains, EnsureOrigin, FindAuthor,
-        UnfilteredDispatchable,
-        VariantCountOf,
+        UnfilteredDispatchable, VariantCountOf,
     },
     weights::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
@@ -55,9 +54,9 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-    AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance, Hash, Nonce,
-    OffchainTransactionFee, PalletInfo, ResolutionIssuanceGov, ResolutionIssuanceIss, Runtime,
-    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin,
+    AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance, Hash,
+    Nonce, OffchainTransactionFee, PalletInfo, ResolutionIssuanceGov, ResolutionIssuanceIss,
+    Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin,
     RuntimeRootUpgrade, RuntimeTask, System, VotingEngineSystem, BLOCK_HASH_COUNT,
     EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
@@ -287,7 +286,8 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::OffchainTransactionFee(
                 offchain_transaction_fee::pallet::Call::process_queued_batch { queue_id },
             ) => {
-                if let Ok(sum) = OffchainTransactionFee::precheck_process_queued_batch(who, *queue_id)
+                if let Ok(sum) =
+                    OffchainTransactionFee::precheck_process_queued_batch(who, *queue_id)
                 {
                     onchain_transaction_fee::AmountExtractResult::Amount(sum)
                 } else {
@@ -411,6 +411,7 @@ impl offchain_transaction_fee::Config for Runtime {
     type InternalVoteEngine = VotingEngineSystem;
     type OffchainBatchVerifier = RuntimeOffchainBatchVerifier;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
+    type WeightInfo = ();
 }
 
 pub struct RuntimeDuoqianAdminAuth;
@@ -467,17 +468,14 @@ impl duoqian_transaction_pow::DuoqianAddressValidator<AccountId>
         }
 
         // 中文注释：禁止占用“省储行手续费账户”地址（由 shenfen_fee_id 派生）。
-        if primitives::china::china_ch::CHINA_CH
-            .iter()
-            .any(|n| {
-                primitives::china::china_ch::shenfen_fee_id_to_bytes(n.shenfen_fee_id)
-                    .map(|pid| {
-                        let fee_account: AccountId = PalletId(pid).into_account_truncating();
-                        address == &fee_account
-                    })
-                    .unwrap_or(false)
-            })
-        {
+        if primitives::china::china_ch::CHINA_CH.iter().any(|n| {
+            primitives::china::china_ch::shenfen_fee_id_to_bytes(n.shenfen_fee_id)
+                .map(|pid| {
+                    let fee_account: AccountId = PalletId(pid).into_account_truncating();
+                    address == &fee_account
+                })
+                .unwrap_or(false)
+        }) {
             return false;
         }
 
@@ -515,17 +513,14 @@ impl duoqian_transaction_pow::DuoqianReservedAddressChecker<AccountId>
         }
 
         // 中文注释：禁止占用省储行手续费地址（由 shenfen_fee_id 派生）。
-        if primitives::china::china_ch::CHINA_CH
-            .iter()
-            .any(|n| {
-                primitives::china::china_ch::shenfen_fee_id_to_bytes(n.shenfen_fee_id)
-                    .map(|pid| {
-                        let fee_account: AccountId = PalletId(pid).into_account_truncating();
-                        address == &fee_account
-                    })
-                    .unwrap_or(false)
-            })
-        {
+        if primitives::china::china_ch::CHINA_CH.iter().any(|n| {
+            primitives::china::china_ch::shenfen_fee_id_to_bytes(n.shenfen_fee_id)
+                .map(|pid| {
+                    let fee_account: AccountId = PalletId(pid).into_account_truncating();
+                    address == &fee_account
+                })
+                .unwrap_or(false)
+        }) {
             return true;
         }
 
@@ -574,6 +569,7 @@ impl duoqian_transaction_pow::Config for Runtime {
     type MaxSfidIdLength = ConstU32<96>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<111>;
+    type WeightInfo = ();
 }
 
 pub struct RuntimeOffchainBatchVerifier;
@@ -1001,8 +997,8 @@ mod tests {
     #[test]
     fn resolution_destro_gov_internal_vote_flow_executes_destroy_and_reduces_issuance() {
         new_test_ext().execute_with(|| {
-            let nrc_institution =
-                reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("nrc institution id must be valid");
+            let nrc_institution = reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
+                .expect("nrc institution id must be valid");
             let nrc_account = AccountId::new(CHINA_CB[0].duoqian_address);
             let initial_balance: Balance = 1_000;
             let destroy_amount: Balance = 100;
@@ -1044,9 +1040,8 @@ mod tests {
                 primitives::china::china_ch::CHINA_CH[0].shenfen_id,
             )
             .expect("institution id should be valid");
-            let institution_account = AccountId::new(
-                primitives::china::china_ch::CHINA_CH[0].duoqian_address,
-            );
+            let institution_account =
+                AccountId::new(primitives::china::china_ch::CHINA_CH[0].duoqian_address);
             let payer = AccountId::new([7u8; 32]);
             let recipient = AccountId::new([8u8; 32]);
 
@@ -1223,6 +1218,11 @@ mod tests {
 
             let duoqian_address = AccountId::new([77u8; 32]);
             let beneficiary = AccountId::new([78u8; 32]);
+            let sfid_id: duoqian_transaction_pow::pallet::SfidIdOf<Runtime> =
+                b"GFR-LN001-CB0C-runtime-20260222"
+                    .to_vec()
+                    .try_into()
+                    .expect("sfid id should fit");
             let admins: duoqian_transaction_pow::pallet::DuoqianAdminsOf<Runtime> =
                 vec![admin1, admin2].try_into().expect("admins should fit");
 
@@ -1246,11 +1246,12 @@ mod tests {
 
             let create_call = RuntimeCall::DuoqianTransactionPow(
                 duoqian_transaction_pow::pallet::Call::create_duoqian {
-                    duoqian_address: duoqian_address.clone(),
+                    sfid_id,
                     admin_count: 2,
                     duoqian_admins: admins.clone(),
                     threshold: 1,
                     amount: 1_000,
+                    expires_at: 9_999,
                     approvals,
                 },
             );
@@ -1286,6 +1287,8 @@ mod tests {
                 duoqian_transaction_pow::pallet::Call::close_duoqian {
                     duoqian_address,
                     beneficiary,
+                    min_balance: 1,
+                    expires_at: 9_999,
                     approvals: close_approvals,
                 },
             );

@@ -2530,6 +2530,7 @@ checksum = "4c3cf4824e2d5f025c7b531afcb2325364084a16806f6d47fbc1f5fbd9960590"
 name = "duoqian-transaction-pow"
 version = "0.0.1"
 dependencies = [
+ "blake3",
  "frame-support",
  "frame-system",
  "pallet-balances",
