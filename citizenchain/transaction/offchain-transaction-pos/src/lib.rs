@@ -267,6 +267,7 @@ pub enum QueuedBatchStatus {
 pub enum QueuedBatchLastError {
     PrecheckFailed,
     ExecutionFailed,
+    WaitingForPriorBatch,
 }
 
 #[derive(
@@ -559,6 +560,7 @@ pub struct QueuedBatchRecord<AccountId, Balance, Hash, BlockNumber, Batch, Batch
         ProtectedSource,
         InsufficientFeeReserve,
         SweepAmountExceedsCap,
+        InvalidSweepAmount,
         RelaySubmittersNotInitialized,
         RelaySubmitterNotAllowed,
         RelaySubmittersAlreadyInitialized,
@@ -710,6 +712,7 @@ pub struct QueuedBatchRecord<AccountId, Balance, Hash, BlockNumber, Batch, Batch
                     true
                 }
             } else {
+                // 中文注释：首次绑定虽然 switched=false，但会启动“下次切换”的冷却计时。
                 RecipientClearingInstitutionLastSwitchAt::<T>::insert(
                     &who,
                     frame_system::Pallet::<T>::block_number(),
@@ -785,6 +788,7 @@ pub struct QueuedBatchRecord<AccountId, Balance, Hash, BlockNumber, Batch, Batch
             NextEnqueueBatchSeq::<T>::insert(institution, expected_seq.saturating_add(1));
             let now = frame_system::Pallet::<T>::block_number();
             let item_count = batch.len() as u32;
+            // 中文注释：队列在入队时锁定费率快照；后续费率治理不影响已入队批次。
             let fee_sum_snapshot: BalanceOf<T> = fee_sum_u128.saturated_into();
             let marker_tx_id = batch
                 .first()
@@ -835,14 +839,45 @@ pub struct QueuedBatchRecord<AccountId, Balance, Hash, BlockNumber, Batch, Batch
             );
 
             let now = frame_system::Pallet::<T>::block_number();
-            Self::precheck_submit_offchain_batch_with_rate(
+            let precheck_result = Self::precheck_submit_offchain_batch_with_rate(
                 &submitter,
                 queued.institution,
                 queued.batch_seq,
                 &queued.batch,
                 &queued.batch_signature,
                 queued.rate_bp_snapshot,
-            )?;
+            );
+            if let Err(e) = precheck_result {
+                if Self::should_bubble_precheck_error(&e) {
+                    return Err(e);
+                }
+                if Self::should_wait_precheck_error(&e) {
+                    queued.last_error = Some(QueuedBatchLastError::WaitingForPriorBatch);
+                    queued.last_attempt_at = Some(now);
+                    QueuedBatches::<T>::insert(queue_id, queued.clone());
+                    Self::deposit_event(Event::<T>::OffchainQueuedBatchRetryFailed {
+                        queue_id,
+                        institution: queued.institution,
+                        retry_count: queued.retry_count,
+                        last_error: QueuedBatchLastError::WaitingForPriorBatch,
+                    });
+                    return Ok(());
+                }
+                if Self::should_ignore_precheck_error(&e) {
+                    return Ok(());
+                }
+                queued.retry_count = queued.retry_count.saturating_add(1);
+                queued.last_error = Some(QueuedBatchLastError::PrecheckFailed);
+                queued.last_attempt_at = Some(now);
+                QueuedBatches::<T>::insert(queue_id, queued.clone());
+                Self::deposit_event(Event::<T>::OffchainQueuedBatchRetryFailed {
+                    queue_id,
+                    institution: queued.institution,
+                    retry_count: queued.retry_count,
+                    last_error: QueuedBatchLastError::PrecheckFailed,
+                });
+                return Ok(());
+            }
 
             let execute_result = with_transaction(|| {
                 let inner = Self::execute_batch(
@@ -1052,6 +1087,8 @@ pub struct QueuedBatchRecord<AccountId, Balance, Hash, BlockNumber, Batch, Batch
             amount: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+            let amount_u128: u128 = amount.saturated_into();
+            ensure!(amount_u128 > 0, Error::<T>::InvalidSweepAmount);
             ensure!(
                 Self::is_prb_admin(institution, &who),
                 Error::<T>::UnauthorizedAdmin
@@ -1162,7 +1199,7 @@ pub struct QueuedBatchRecord<AccountId, Balance, Hash, BlockNumber, Batch, Batch
         /// 队列批次对应的手续费支付账户（用于 runtime 扣费路由）。
         pub fn fee_payer_for_queued_batch(queue_id: u64) -> Result<T::AccountId, DispatchError> {
             let queued = QueuedBatches::<T>::get(queue_id).ok_or(Error::<T>::QueuedBatchNotFound)?;
-            Ok(Self::institution_fee_account(queued.institution))
+            Self::institution_fee_account(queued.institution)
         }
 
         fn precheck_submit_offchain_batch_with_rate(
@@ -1195,11 +1232,7 @@ pub struct QueuedBatchRecord<AccountId, Balance, Hash, BlockNumber, Batch, Batch
 
             let now = frame_system::Pallet::<T>::block_number();
             let last = LastPackBlock::<T>::get(institution);
-            let elapsed: u32 =
-                <BlockNumberFor<T> as sp_runtime::traits::Saturating>::saturating_sub(now, last)
-                    .saturated_into();
-            let by_count = (batch.len() as u64) >= PACK_TX_THRESHOLD;
-            let by_time = last.is_zero() || elapsed >= PACK_BLOCK_THRESHOLD;
+            let (by_count, by_time) = Self::pack_trigger_reason(last, now, batch.len() as u64);
             ensure!(by_count || by_time, Error::<T>::PackThresholdNotReached);
             let t2 = institution_t2_code(institution).ok_or(Error::<T>::InvalidInstitution)?;
 
@@ -1232,15 +1265,11 @@ pub struct QueuedBatchRecord<AccountId, Balance, Hash, BlockNumber, Batch, Batch
             batch_seq: u64,
             batch: &BatchOf<T>,
         ) -> Result<u64, DispatchError> {
-            let fee_account = Self::institution_fee_account(institution);
+            let fee_account = Self::institution_fee_account(institution)?;
             let verify_key = Self::verify_key_for(institution).ok_or(Error::<T>::VerifyKeyMissing)?;
             let now = frame_system::Pallet::<T>::block_number();
             let last = LastPackBlock::<T>::get(institution);
-            let elapsed: u32 =
-                <BlockNumberFor<T> as sp_runtime::traits::Saturating>::saturating_sub(now, last)
-                    .saturated_into();
-            let by_count = (batch.len() as u64) >= PACK_TX_THRESHOLD;
-            let by_time = last.is_zero() || elapsed >= PACK_BLOCK_THRESHOLD;
+            let (by_count, by_time) = Self::pack_trigger_reason(last, now, batch.len() as u64);
             let t2 = institution_t2_code(institution).ok_or(Error::<T>::InvalidInstitution)?;
 
             let mut total_transfer_u128: u128 = 0;
@@ -1312,7 +1341,7 @@ pub struct QueuedBatchRecord<AccountId, Balance, Hash, BlockNumber, Batch, Batch
                 Error::<T>::InvalidInstitution
             );
             // 中文注释：fee_account_of 仅暴露地址查询，不做任何资产转移。
-            Ok(Self::institution_fee_account(institution))
+            Self::institution_fee_account(institution)
         }
 
         /// 返回当前有效验证密钥（仅读取已激活的 current key）。
@@ -1331,10 +1360,11 @@ pub struct QueuedBatchRecord<AccountId, Balance, Hash, BlockNumber, Batch, Batch
             )
         }
 
-        fn institution_fee_account(institution: InstitutionPalletId) -> T::AccountId {
-            let fee_pid = institution_shenfen_fee_id(institution).expect("valid institution checked");
+        fn institution_fee_account(institution: InstitutionPalletId) -> Result<T::AccountId, DispatchError> {
+            let fee_pid =
+                institution_shenfen_fee_id(institution).ok_or(Error::<T>::InvalidInstitution)?;
             // 中文注释：fee_pallet_address 直接由 shenfen_fee_id 派生，是独立手续费账户。
-            PalletId(fee_pid).into_account_truncating()
+            Ok(PalletId(fee_pid).into_account_truncating())
         }
 
         fn institution_account(
@@ -1344,6 +1374,33 @@ pub struct QueuedBatchRecord<AccountId, Balance, Hash, BlockNumber, Batch, Batch
                 institution_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
             T::AccountId::decode(&mut &raw[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into())
+        }
+
+        fn pack_trigger_reason(
+            last: BlockNumberFor<T>,
+            now: BlockNumberFor<T>,
+            batch_len: u64,
+        ) -> (bool, bool) {
+            let elapsed: u32 =
+                <BlockNumberFor<T> as sp_runtime::traits::Saturating>::saturating_sub(now, last)
+                    .saturated_into();
+            let by_count = batch_len >= PACK_TX_THRESHOLD;
+            let by_time = last.is_zero() || elapsed >= PACK_BLOCK_THRESHOLD;
+            (by_count, by_time)
+        }
+
+        fn should_bubble_precheck_error(e: &DispatchError) -> bool {
+            *e == Error::<T>::RelaySubmitterNotAllowed.into()
+                || *e == Error::<T>::RelaySubmittersNotInitialized.into()
+                || *e == Error::<T>::VerifyKeyMissing.into()
+        }
+
+        fn should_ignore_precheck_error(e: &DispatchError) -> bool {
+            *e == Error::<T>::PackThresholdNotReached.into()
+        }
+
+        fn should_wait_precheck_error(e: &DispatchError) -> bool {
+            *e == Error::<T>::InvalidBatchSeq.into()
         }
 
         fn ensure_rate_and_institution(
@@ -1534,7 +1591,7 @@ pub struct QueuedBatchRecord<AccountId, Balance, Hash, BlockNumber, Batch, Batch
                 Error::<T>::ProposalInstitutionMismatch
             );
 
-            let fee_account = Self::institution_fee_account(action.institution);
+            let fee_account = Self::institution_fee_account(action.institution)?;
             let main_account = Self::institution_account(action.institution)?;
             ensure!(
                 !T::ProtectedSourceChecker::is_protected(&fee_account),
@@ -2145,6 +2202,21 @@ mod tests {
                 Error::<Test>::InsufficientFeeReserve
             );
             assert_eq!(Balances::free_balance(&fee_account), fee_before + 200_000);
+        });
+    }
+
+    #[test]
+    fn propose_sweep_to_main_rejects_zero_amount() {
+        new_test_ext().execute_with(|| {
+            let institution = prb_institution();
+            assert_noop!(
+                OffchainTransactionFee::propose_sweep_to_main(
+                    RuntimeOrigin::signed(prb_admin(0)),
+                    institution,
+                    0,
+                ),
+                Error::<Test>::InvalidSweepAmount
+            );
         });
     }
 
@@ -2779,6 +2851,346 @@ mod tests {
             assert_eq!(queued.retry_count, 0);
             assert!(queued.last_error.is_none());
             assert!(matches!(queued.status, QueuedBatchStatus::Pending));
+        });
+    }
+
+    #[test]
+    fn process_queued_batch_records_precheck_failed_and_keeps_pending() {
+        new_test_ext().execute_with(|| {
+            let institution = prb_institution();
+            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+                RuntimeOrigin::signed(prb_admin(0)),
+                institution,
+                1
+            ));
+            for i in 0..6 {
+                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                    RuntimeOrigin::signed(prb_admin(i)),
+                    0,
+                    true
+                ));
+            }
+            assert_ok!(OffchainTransactionFee::init_verify_key(
+                RuntimeOrigin::signed(prb_account()),
+                institution,
+                b"default-key".to_vec().try_into().expect("fit")
+            ));
+            let relays: RelaySubmittersOf<Test> =
+                vec![relay_account(), prb_admin(0), prb_admin(1)].try_into().expect("fit");
+            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+                RuntimeOrigin::signed(prb_account()),
+                institution,
+                relays
+            ));
+
+            let payer = AccountId32::new([1u8; 32]);
+            let recipient = AccountId32::new([3u8; 32]);
+            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+                RuntimeOrigin::signed(recipient.clone()),
+                institution
+            ));
+            let _ = Balances::deposit_creating(&payer, 100_000);
+
+            let tx1 = <Test as frame_system::Config>::Hashing::hash(b"precheck-fail-1");
+            let batch1: BatchOf<Test> = vec![BatchItemOf::<Test> {
+                tx_id: tx1,
+                payer: payer.clone(),
+                recipient: recipient.clone(),
+                transfer_amount: 100,
+                offchain_fee_amount: 1,
+            }]
+            .try_into()
+            .expect("fit");
+            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+                RuntimeOrigin::signed(relay_account()),
+                institution,
+                1,
+                batch1,
+                b"ok".to_vec().try_into().expect("fit"),
+            ));
+            assert_ok!(OffchainTransactionFee::process_queued_batch(
+                RuntimeOrigin::signed(relay_account()),
+                0
+            ));
+
+            let tx2 = <Test as frame_system::Config>::Hashing::hash(b"precheck-fail-2");
+            let batch2: BatchOf<Test> = vec![BatchItemOf::<Test> {
+                tx_id: tx2,
+                payer,
+                recipient,
+                transfer_amount: 100,
+                offchain_fee_amount: 1,
+            }]
+            .try_into()
+            .expect("fit");
+            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+                RuntimeOrigin::signed(relay_account()),
+                institution,
+                2,
+                batch2,
+                b"ok".to_vec().try_into().expect("fit"),
+            ));
+
+            // 故障注入测试：人为篡改已入队签名，验证 InvalidBatchSignature 归类为 PrecheckFailed。
+            QueuedBatches::<Test>::mutate(1, |maybe| {
+                if let Some(inner) = maybe {
+                    inner.batch_signature = b"bad".to_vec().try_into().expect("fit");
+                }
+            });
+            assert_ok!(OffchainTransactionFee::process_queued_batch(
+                RuntimeOrigin::signed(relay_account()),
+                1
+            ));
+            let queued = OffchainTransactionFee::queued_batch_by_id(1).expect("queued");
+            assert!(matches!(queued.status, QueuedBatchStatus::Pending));
+            assert_eq!(queued.retry_count, 1);
+            assert_eq!(
+                queued.last_error,
+                Some(QueuedBatchLastError::PrecheckFailed)
+            );
+        });
+    }
+
+    #[test]
+    fn process_queued_batch_pack_threshold_not_reached_does_not_consume_retry() {
+        new_test_ext().execute_with(|| {
+            let institution = prb_institution();
+            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+                RuntimeOrigin::signed(prb_admin(0)),
+                institution,
+                1
+            ));
+            for i in 0..6 {
+                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                    RuntimeOrigin::signed(prb_admin(i)),
+                    0,
+                    true
+                ));
+            }
+            assert_ok!(OffchainTransactionFee::init_verify_key(
+                RuntimeOrigin::signed(prb_account()),
+                institution,
+                b"default-key".to_vec().try_into().expect("fit")
+            ));
+            let relays: RelaySubmittersOf<Test> =
+                vec![relay_account(), prb_admin(0), prb_admin(1)].try_into().expect("fit");
+            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+                RuntimeOrigin::signed(prb_account()),
+                institution,
+                relays
+            ));
+            let payer = AccountId32::new([1u8; 32]);
+            let recipient = AccountId32::new([3u8; 32]);
+            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+                RuntimeOrigin::signed(recipient.clone()),
+                institution
+            ));
+            let _ = Balances::deposit_creating(&payer, 100_000);
+
+            let tx1 = <Test as frame_system::Config>::Hashing::hash(b"pack-threshold-1");
+            let batch1: BatchOf<Test> = vec![BatchItemOf::<Test> {
+                tx_id: tx1,
+                payer: payer.clone(),
+                recipient: recipient.clone(),
+                transfer_amount: 100,
+                offchain_fee_amount: 1,
+            }]
+            .try_into()
+            .expect("fit");
+            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+                RuntimeOrigin::signed(relay_account()),
+                institution,
+                1,
+                batch1,
+                b"ok".to_vec().try_into().expect("fit"),
+            ));
+            assert_ok!(OffchainTransactionFee::process_queued_batch(
+                RuntimeOrigin::signed(relay_account()),
+                0
+            ));
+
+            let tx2 = <Test as frame_system::Config>::Hashing::hash(b"pack-threshold-2");
+            let batch2: BatchOf<Test> = vec![BatchItemOf::<Test> {
+                tx_id: tx2,
+                payer,
+                recipient,
+                transfer_amount: 100,
+                offchain_fee_amount: 1,
+            }]
+            .try_into()
+            .expect("fit");
+            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+                RuntimeOrigin::signed(relay_account()),
+                institution,
+                2,
+                batch2,
+                b"ok".to_vec().try_into().expect("fit"),
+            ));
+
+            assert_ok!(OffchainTransactionFee::process_queued_batch(
+                RuntimeOrigin::signed(relay_account()),
+                1
+            ));
+            let queued = OffchainTransactionFee::queued_batch_by_id(1).expect("queued");
+            assert!(matches!(queued.status, QueuedBatchStatus::Pending));
+            assert_eq!(queued.retry_count, 0);
+            assert!(queued.last_error.is_none());
+        });
+    }
+
+    #[test]
+    fn process_queued_batch_rejects_missing_config_without_mutating_retry() {
+        new_test_ext().execute_with(|| {
+            let institution = prb_institution();
+            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+                RuntimeOrigin::signed(prb_admin(0)),
+                institution,
+                1
+            ));
+            for i in 0..6 {
+                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                    RuntimeOrigin::signed(prb_admin(i)),
+                    0,
+                    true
+                ));
+            }
+            assert_ok!(OffchainTransactionFee::init_verify_key(
+                RuntimeOrigin::signed(prb_account()),
+                institution,
+                b"default-key".to_vec().try_into().expect("fit")
+            ));
+            let relays: RelaySubmittersOf<Test> =
+                vec![relay_account(), prb_admin(0), prb_admin(1)].try_into().expect("fit");
+            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+                RuntimeOrigin::signed(prb_account()),
+                institution,
+                relays
+            ));
+            let payer = AccountId32::new([1u8; 32]);
+            let recipient = AccountId32::new([3u8; 32]);
+            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+                RuntimeOrigin::signed(recipient.clone()),
+                institution
+            ));
+            let _ = Balances::deposit_creating(&payer, 100_000);
+
+            let tx = <Test as frame_system::Config>::Hashing::hash(b"missing-config");
+            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
+                tx_id: tx,
+                payer,
+                recipient,
+                transfer_amount: 100,
+                offchain_fee_amount: 1,
+            }]
+            .try_into()
+            .expect("fit");
+            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+                RuntimeOrigin::signed(relay_account()),
+                institution,
+                1,
+                batch,
+                b"ok".to_vec().try_into().expect("fit"),
+            ));
+
+            VerifyKeys::<Test>::remove(institution);
+            assert_noop!(
+                OffchainTransactionFee::process_queued_batch(
+                    RuntimeOrigin::signed(relay_account()),
+                    0
+                ),
+                Error::<Test>::VerifyKeyMissing
+            );
+            let queued = OffchainTransactionFee::queued_batch_by_id(0).expect("queued");
+            assert_eq!(queued.retry_count, 0);
+            assert!(queued.last_error.is_none());
+            assert!(matches!(queued.status, QueuedBatchStatus::Pending));
+        });
+    }
+
+    #[test]
+    fn process_queued_batch_waiting_for_prior_batch_is_observable_without_retry() {
+        new_test_ext().execute_with(|| {
+            let institution = prb_institution();
+            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+                RuntimeOrigin::signed(prb_admin(0)),
+                institution,
+                1
+            ));
+            for i in 0..6 {
+                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                    RuntimeOrigin::signed(prb_admin(i)),
+                    0,
+                    true
+                ));
+            }
+            assert_ok!(OffchainTransactionFee::init_verify_key(
+                RuntimeOrigin::signed(prb_account()),
+                institution,
+                b"default-key".to_vec().try_into().expect("fit")
+            ));
+            let relays: RelaySubmittersOf<Test> =
+                vec![relay_account(), prb_admin(0), prb_admin(1)].try_into().expect("fit");
+            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+                RuntimeOrigin::signed(prb_account()),
+                institution,
+                relays
+            ));
+            let payer = AccountId32::new([1u8; 32]);
+            let recipient = AccountId32::new([3u8; 32]);
+            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+                RuntimeOrigin::signed(recipient.clone()),
+                institution
+            ));
+            let _ = Balances::deposit_creating(&payer, 100_000);
+
+            let tx1 = <Test as frame_system::Config>::Hashing::hash(b"wait-seq-1");
+            let batch1: BatchOf<Test> = vec![BatchItemOf::<Test> {
+                tx_id: tx1,
+                payer: payer.clone(),
+                recipient: recipient.clone(),
+                transfer_amount: 100,
+                offchain_fee_amount: 1,
+            }]
+            .try_into()
+            .expect("fit");
+            let tx2 = <Test as frame_system::Config>::Hashing::hash(b"wait-seq-2");
+            let batch2: BatchOf<Test> = vec![BatchItemOf::<Test> {
+                tx_id: tx2,
+                payer,
+                recipient,
+                transfer_amount: 100,
+                offchain_fee_amount: 1,
+            }]
+            .try_into()
+            .expect("fit");
+
+            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+                RuntimeOrigin::signed(relay_account()),
+                institution,
+                1,
+                batch1,
+                b"ok".to_vec().try_into().expect("fit"),
+            ));
+            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+                RuntimeOrigin::signed(relay_account()),
+                institution,
+                2,
+                batch2,
+                b"ok".to_vec().try_into().expect("fit"),
+            ));
+
+            // 先处理 seq=2，触发 InvalidBatchSeq，应记录 WaitingForPriorBatch 且不增加 retry。
+            assert_ok!(OffchainTransactionFee::process_queued_batch(
+                RuntimeOrigin::signed(relay_account()),
+                1
+            ));
+            let queued = OffchainTransactionFee::queued_batch_by_id(1).expect("queued");
+            assert!(matches!(queued.status, QueuedBatchStatus::Pending));
+            assert_eq!(queued.retry_count, 0);
+            assert_eq!(
+                queued.last_error,
+                Some(QueuedBatchLastError::WaitingForPriorBatch)
+            );
         });
     }
 }
