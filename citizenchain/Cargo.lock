@@ -6277,6 +6277,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "fullnode-pow-reward",
+ "log",
  "pallet-balances",
  "pallet-transaction-payment",
  "parity-scale-codec",

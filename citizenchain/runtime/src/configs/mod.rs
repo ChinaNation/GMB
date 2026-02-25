@@ -187,7 +187,12 @@ impl pallet_transaction_payment::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type OnChargeTransaction = onchain_transaction_fee::PowOnchainChargeAdapter<
         Balances,
-        onchain_transaction_fee::PowOnchainFeeRouter<Runtime, Balances, PowDigestAuthor>,
+        onchain_transaction_fee::PowOnchainFeeRouter<
+            Runtime,
+            Balances,
+            PowDigestAuthor,
+            RuntimeNrcAccountProvider,
+        >,
         PowTxAmountExtractor,
         RuntimeFeePayerExtractor,
     >;
@@ -196,6 +201,16 @@ impl pallet_transaction_payment::Config for Runtime {
     type LengthToFee = IdentityFee<Balance>;
     type FeeMultiplierUpdate = ConstFeeMultiplier<FeeMultiplier>;
     type WeightInfo = pallet_transaction_payment::weights::SubstrateWeight<Runtime>;
+}
+
+pub struct RuntimeNrcAccountProvider;
+
+impl onchain_transaction_fee::NrcAccountProvider<AccountId> for RuntimeNrcAccountProvider {
+    fn nrc_account() -> Option<AccountId> {
+        Some(AccountId::new(
+            primitives::china::china_cb::CHINA_CB[0].duoqian_address,
+        ))
+    }
 }
 
 pub struct PowTxAmountExtractor;
