@@ -65,19 +65,18 @@
   </details>
 
 - <details>
-  <summary>8. 链外系统/sfidcpms</summary>
+  <summary>8. 其他</summary>
 
-  [8.1. 身份识别码系统/sfid](#81身份识别码系统sfid)
-  [8.2. 公民护照管理系统/cpms](#82公民护照管理系统cpms)
+  [8.1. 常量库/primitives](#81常量库primitives)
+  [8.2. 工具库/tools](#82工具库tools)
+  [8.3. 文库/wenku](#83文库wenku)
   </details>
 
 - <details>
-  <summary>9. 其他</summary>
+  <summary>9. 身份识别码系统/sfid</summary>
 
-  [9.1. 常量库/primitives](#91常量库primitives)
-  [9.2. 工具库/tools](#92工具库tools)
-  [9.3. 文库/wenku](#93文库wenku)
   </details>
+
 
 ****
 # 1.总则
@@ -499,33 +498,22 @@ GMB/
 ### 7.2.4.技术开发
 
 ****
-# 8.链外系统/sfidcpms
-## 8.1.身份识别码系统/sfid
-### 8.1.1.编码工具/shenfenid
-* 身份识别码统一编码规则工具
-### 8.1.2.服务端/backend
-### 8.1.3.Web端/desktop
-
-## 8.2.公民护照管理系统/cpms
-* 详见GMB/cpms
-
-****
-# 9.其他
-## 9.1.常量库/primitives
+# 8.其他
+## 8.1.常量库/primitives
 * src/核心常量
 * china/公权机构常量
 
-## 9.2.工具库/tools
-
-### 9.2.1.助记词/zhujichi
+## 8.2.工具库/tools
+### 8.2.1.助记词/zhujichi
 * 可使用该脚本生成普通的助记词、公私钥对；
 * 务必断网本地生成。
-
-### 9.2.2.助记词+盐值/zhujichi_yan
+### 8.2.2.助记词+盐值/zhujichi_yan
 * 可使用该脚本生成带盐值的助记词、公私钥对；
 * 务必断网本地生成。
 
-## 9.3.文库/wenku
+## 8.3.文库/wenku
 * 常用图片、文档库。
 
 ****
+# 9.身份识别码系统/sfid
+* 身份识别码统一编码规则工具
