@@ -25,8 +25,8 @@ use crate::AccountId;
 use codec::Decode;
 #[cfg(feature = "std")]
 use primitives::{
-    core_const::SS58_FORMAT, genesis::GENESIS_ISSUANCE, china::china_cb::CHINA_CB,
-    china::china_ch::CHINA_CH,
+    china::china_cb::CHINA_CB, china::china_ch::CHINA_CH, core_const::SS58_FORMAT,
+    genesis::GENESIS_ISSUANCE,
 };
 #[cfg(feature = "std")]
 use serde_json::{json, Value};

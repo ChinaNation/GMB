@@ -11,6 +11,7 @@ pub mod configs;
 extern crate alloc;
 use alloc::vec::Vec;
 use codec::{Decode, DecodeWithMemTracking, Encode};
+use frame_support::weights::Weight;
 use frame_support::{dispatch::DispatchInfo, pallet_prelude::TransactionSource};
 use scale_info::TypeInfo;
 use sp_runtime::{
@@ -20,10 +21,8 @@ use sp_runtime::{
         PostDispatchInfoOf, TransactionExtension, ValidateResult, Verify,
     },
     transaction_validity::{InvalidTransaction, TransactionValidityError},
-    DispatchResult,
-    MultiAddress, MultiSignature,
+    DispatchResult, MultiAddress, MultiSignature,
 };
-use frame_support::weights::Weight;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;

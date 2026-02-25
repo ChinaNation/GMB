@@ -1,4 +1,7 @@
-# Offchain Transaction POS 技术方案（定稿）
+# OFFCHAIN_TECHNICAL
+
+模块：`offchain-transaction-pos`  
+范围：链下确认、批次上链与重试治理
 
 ## 1. 目标与边界
 - 本模块目标：支持省储行清算的链下交易批量上链。
