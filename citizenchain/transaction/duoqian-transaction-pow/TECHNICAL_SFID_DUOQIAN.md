@@ -2,7 +2,7 @@
 
 ## 1. 目标
 
-在创建多签账户前，必须先由 SFID 系统在链上登记机构 ID（`sfid_id`），并由链上按固定算法派生 `duoqian_address`。
+在创建多签账户前，必须先由 SFID 系统在链上登记机构 ID（`sfid_id`），并由链上按固定Blake3算法派生 `duoqian_address`。
 
 只有已登记地址，才允许 `create_duoqian` 创建。
 
