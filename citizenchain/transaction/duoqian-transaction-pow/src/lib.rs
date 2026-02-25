@@ -78,8 +78,8 @@ impl<AccountId> SfidRegistryOperator<AccountId> for () {
 
 pub trait WeightInfo {
     fn register_sfid_institution() -> Weight;
-    fn create_duoqian(approval_count: u32) -> Weight;
-    fn close_duoqian(approval_count: u32) -> Weight;
+    fn create_duoqian(admin_count: u32, approval_count: u32) -> Weight;
+    fn close_duoqian(admin_count: u32, approval_count: u32) -> Weight;
 }
 
 impl WeightInfo for () {
@@ -87,14 +87,18 @@ impl WeightInfo for () {
         Weight::from_parts(40_000_000, 1_024)
     }
 
-    fn create_duoqian(approval_count: u32) -> Weight {
+    fn create_duoqian(admin_count: u32, approval_count: u32) -> Weight {
         Weight::from_parts(120_000_000, 4_096).saturating_add(
+            Weight::from_parts(8_000_000, 128).saturating_mul(admin_count as u64),
+        ).saturating_add(
             Weight::from_parts(25_000_000, 256).saturating_mul(approval_count as u64),
         )
     }
 
-    fn close_duoqian(approval_count: u32) -> Weight {
+    fn close_duoqian(admin_count: u32, approval_count: u32) -> Weight {
         Weight::from_parts(95_000_000, 3_072).saturating_add(
+            Weight::from_parts(8_000_000, 128).saturating_mul(admin_count as u64),
+        ).saturating_add(
             Weight::from_parts(25_000_000, 256).saturating_mul(approval_count as u64),
         )
     }
@@ -154,6 +158,7 @@ pub struct RegisteredInstitution<SfidId> {
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -215,6 +220,7 @@ pub mod pallet {
     pub type SfidIdOf<T> = BoundedVec<u8, <T as Config>::MaxSfidIdLength>;
 
     #[pallet::pallet]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
     /// 多签账户配置。key 为 duoqian_address。
@@ -224,6 +230,7 @@ pub mod pallet {
         StorageMap<_, Blake2_128Concat, T::AccountId, DuoqianAccountOf<T>, OptionQuery>;
 
     /// SFID 机构登记：sfid_id -> duoqian_address（由 blake3 派生）
+    /// 注：本映射按制度设计不在链上解绑，解绑/迁移由 SFID 系统侧完成并重新登记。
     #[pallet::storage]
     #[pallet::getter(fn sfid_registered_address)]
     pub type SfidRegisteredAddress<T: Config> =
@@ -275,16 +282,18 @@ pub mod pallet {
         AddressReserved,
         /// 地址已存在（已初始化）
         AddressAlreadyExists,
-        /// 链上已存在同地址账户
-        AddressAlreadyOnChain,
         /// 公钥重复
         DuplicatePublicKey,
         /// 阈值不合法
         InvalidThreshold,
         /// 金额不足
         InsufficientAmount,
-        /// 手续费不足（由交易支付系统返回）
-        InsufficientFee,
+        /// 创建金额低于最小门槛
+        CreateAmountBelowMinimum,
+        /// 注销时账户余额低于最小门槛
+        CloseBalanceBelowMinimum,
+        /// 注销时账户余额低于调用方声明的最小可接受金额
+        CloseBalanceBelowRequested,
         /// 签名不足
         InsufficientSignatures,
         /// 权限不足
@@ -321,6 +330,8 @@ pub mod pallet {
         ReservedBalanceRemaining,
         /// nonce 已耗尽
         NonceOverflow,
+        /// runtime 配置不合法
+        InvalidRuntimeConfig,
     }
 
     #[pallet::call]
@@ -329,7 +340,7 @@ pub mod pallet {
         // Function declaration order is kept compatible with existing deployments.
         /// SFID 系统登记机构：
         /// - 仅 SFID 系统授权账户可调用；
-        /// - 地址按 blake3("DUOQIAN_SFID_V1" || sfid_id) 固定派生；
+        /// - 地址按 blake3("DUOQIAN_SFID_V1" || chain_domain_hash || sfid_id) 固定派生；
         /// - 同一 sfid_id 只能登记一次。
         #[pallet::call_index(2)]
         #[pallet::weight(T::WeightInfo::register_sfid_institution())]
@@ -388,10 +399,11 @@ pub mod pallet {
         /// - 管理员有效签名数必须 >= M；
         /// - 创建时转入金额必须 >= MinCreateAmount（建议 111 分）。
         #[pallet::call_index(0)]
-        #[pallet::weight(T::WeightInfo::create_duoqian(approvals.len() as u32))]
+        #[pallet::weight(T::WeightInfo::create_duoqian(duoqian_admins.len() as u32, approvals.len() as u32))]
         pub fn create_duoqian(
             origin: OriginFor<T>,
             sfid_id: SfidIdOf<T>,
+            // 显式传入 admin_count，用于签名 payload 与链上参数双向绑定，避免链下签名歧义。
             admin_count: u32,
             duoqian_admins: DuoqianAdminsOf<T>,
             threshold: u32,
@@ -407,10 +419,13 @@ pub mod pallet {
             let now = frame_system::Pallet::<T>::block_number();
             ensure!(now <= expires_at, Error::<T>::SignatureExpired);
 
-            ensure!(!duoqian_admins.is_empty(), Error::<T>::IncompleteParameters);
+            ensure!(
+                T::MaxAdmins::get() >= 2,
+                Error::<T>::InvalidRuntimeConfig
+            );
             ensure!(
                 amount >= T::MinCreateAmount::get(),
-                Error::<T>::InsufficientAmount
+                Error::<T>::CreateAmountBelowMinimum
             );
 
             ensure!(admin_count >= 2, Error::<T>::InvalidAdminCount);
@@ -455,14 +470,16 @@ pub mod pallet {
 
             Self::ensure_chain_domain_hash_initialized()?;
             let nonce = registered.nonce;
+            // 提前检查，避免签名验证后才发现溢出浪费计算量。
             ensure!(nonce < u64::MAX, Error::<T>::NonceOverflow);
             let payload = (
-                b"DUOQIAN_CREATE_V2".to_vec(),
+                b"DUOQIAN_CREATE_V3".to_vec(),
                 Self::signature_domain_hash_value()?,
                 nonce,
                 expires_at,
                 &sfid_id,
                 &duoqian_address,
+                &who,
                 admin_count,
                 &duoqian_admins,
                 threshold,
@@ -486,10 +503,10 @@ pub mod pallet {
                     threshold,
                     duoqian_admins: duoqian_admins.clone(),
                     creator: who.clone(),
-                    created_at: frame_system::Pallet::<T>::block_number(),
+                    created_at: now,
                 },
             );
-            registered.nonce = nonce.saturating_add(1);
+            registered.nonce = nonce.checked_add(1).ok_or(Error::<T>::NonceOverflow)?;
             AddressRegisteredSfid::<T>::insert(&duoqian_address, registered);
 
             Self::deposit_event(Event::<T>::DuoqianCreated {
@@ -510,7 +527,7 @@ pub mod pallet {
         /// - 余额清零后删除配置；
         /// - 删除后可按新管理员配置重新创建。
         #[pallet::call_index(1)]
-        #[pallet::weight(T::WeightInfo::close_duoqian(approvals.len() as u32))]
+        #[pallet::weight(T::WeightInfo::close_duoqian(T::MaxAdmins::get(), approvals.len() as u32))]
         pub fn close_duoqian(
             origin: OriginFor<T>,
             duoqian_address: T::AccountId,
@@ -518,7 +535,7 @@ pub mod pallet {
             min_balance: BalanceOf<T>,
             expires_at: BlockNumberFor<T>,
             approvals: AdminApprovalsOf<T>,
-        ) -> DispatchResult {
+        ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             let now = frame_system::Pallet::<T>::block_number();
             ensure!(now <= expires_at, Error::<T>::SignatureExpired);
@@ -532,6 +549,14 @@ pub mod pallet {
             );
             ensure!(
                 !T::ReservedAddressChecker::is_reserved(&beneficiary),
+                Error::<T>::InvalidBeneficiary
+            );
+            ensure!(
+                T::AddressValidator::is_valid(&beneficiary),
+                Error::<T>::InvalidAddress
+            );
+            ensure!(
+                !T::ProtectedSourceChecker::is_protected(&beneficiary),
                 Error::<T>::InvalidBeneficiary
             );
 
@@ -551,9 +576,12 @@ pub mod pallet {
             let all_balance = T::Currency::free_balance(&duoqian_address);
             ensure!(
                 all_balance >= T::MinCloseBalance::get(),
-                Error::<T>::InsufficientAmount
+                Error::<T>::CloseBalanceBelowMinimum
             );
-            ensure!(all_balance >= min_balance, Error::<T>::InsufficientAmount);
+            ensure!(
+                all_balance >= min_balance,
+                Error::<T>::CloseBalanceBelowRequested
+            );
             ensure!(
                 T::Currency::reserved_balance(&duoqian_address).is_zero(),
                 Error::<T>::ReservedBalanceRemaining
@@ -563,14 +591,17 @@ pub mod pallet {
             let mut registered = AddressRegisteredSfid::<T>::get(&duoqian_address)
                 .ok_or(Error::<T>::InstitutionNotRegistered)?;
             let nonce = registered.nonce;
+            // 提前检查，避免签名验证后才发现溢出浪费计算量。
             ensure!(nonce < u64::MAX, Error::<T>::NonceOverflow);
             let payload = (
-                b"DUOQIAN_CLOSE_V2".to_vec(),
+                b"DUOQIAN_CLOSE_V3".to_vec(),
                 Self::signature_domain_hash_value()?,
                 nonce,
                 expires_at,
                 &duoqian_address,
                 &beneficiary,
+                &who,
+                &admins,
                 admin_count,
                 threshold,
                 min_balance,
@@ -587,7 +618,7 @@ pub mod pallet {
             )?;
 
             DuoqianAccounts::<T>::remove(&duoqian_address);
-            registered.nonce = nonce.saturating_add(1);
+            registered.nonce = nonce.checked_add(1).ok_or(Error::<T>::NonceOverflow)?;
             AddressRegisteredSfid::<T>::insert(&duoqian_address, registered);
 
             Self::deposit_event(Event::<T>::DuoqianClosed {
@@ -597,7 +628,8 @@ pub mod pallet {
                 amount: all_balance,
             });
 
-            Ok(())
+            let actual_weight = T::WeightInfo::close_duoqian(admin_count, approvals.len() as u32);
+            Ok(Some(actual_weight).into())
         }
     }
 
@@ -620,10 +652,17 @@ pub mod pallet {
                 .ok_or(Error::<T>::ChainDomainHashUnavailable.into())
         }
 
+        /// 从 sfid_id 派生 duoqian 地址。
+        ///
+        /// # 前置条件
+        /// 必须先确保 `ChainDomainHash` 已初始化（例如先调用
+        /// `ensure_chain_domain_hash_initialized()`），否则会返回
+        /// `ChainDomainHashUnavailable`。
         pub fn derive_duoqian_address_from_sfid_id(
             sfid_id: &[u8],
         ) -> Result<T::AccountId, DispatchError> {
             let mut input = b"DUOQIAN_SFID_V1".to_vec();
+            input.extend_from_slice(Self::signature_domain_hash_value()?.encode().as_slice());
             input.extend_from_slice(sfid_id);
             let digest = blake3::hash(input.as_slice());
             T::AccountId::decode(&mut &digest.as_bytes()[..])
@@ -667,7 +706,10 @@ pub mod pallet {
                     ),
                     Error::<T>::InvalidAdminSignature
                 );
-                approved_signers.insert(approval.public_key.clone());
+                ensure!(
+                    approved_signers.insert(approval.public_key.clone()),
+                    Error::<T>::DuplicatePublicKey
+                );
             }
 
             Ok(approved_signers.len() as u32)
@@ -686,7 +728,7 @@ mod tests {
     use sp_core::{sr25519, Pair};
     use sp_runtime::{
         traits::{IdentifyAccount, IdentityLookup, Verify},
-        AccountId32, BuildStorage, MultiSignature, MultiSigner,
+        AccountId32, BuildStorage, DispatchError, MultiSignature, MultiSigner, TokenError,
     };
 
     type Block = frame_system::mocking::MockBlock<Test>;
@@ -730,7 +772,7 @@ mod tests {
 
     impl pallet_balances::Config for Test {
         type MaxLocks = ConstU32<0>;
-        type MaxReserves = ConstU32<0>;
+        type MaxReserves = ConstU32<1>;
         type ReserveIdentifier = [u8; 8];
         type Balance = Balance;
         type RuntimeEvent = RuntimeEvent;
@@ -755,7 +797,8 @@ mod tests {
     pub struct TestReservedAddressChecker;
     impl DuoqianReservedAddressChecker<AccountId32> for TestReservedAddressChecker {
         fn is_reserved(address: &AccountId32) -> bool {
-            *address == AccountId32::new([0xAA; 32])
+            let bytes: &[u8] = address.as_ref();
+            *address == AccountId32::new([0xAA; 32]) || (bytes[0] == 0xFE && bytes[1] == 0xED)
         }
     }
 
@@ -763,6 +806,13 @@ mod tests {
     impl SfidRegistryOperator<AccountId32> for TestSfidRegistryOperator {
         fn can_register(operator: &AccountId32) -> bool {
             *operator == AccountId32::new([0x55; 32])
+        }
+    }
+
+    pub struct TestProtectedSourceChecker;
+    impl ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
+        fn is_protected(address: &AccountId32) -> bool {
+            *address == AccountId32::new([0xCC; 32])
         }
     }
 
@@ -797,7 +847,7 @@ mod tests {
         type AdminAuth = TestAdminAuth;
         type AddressValidator = TestAddressValidator;
         type ReservedAddressChecker = TestReservedAddressChecker;
-        type ProtectedSourceChecker = ();
+        type ProtectedSourceChecker = TestProtectedSourceChecker;
         type SfidRegistryOperator = TestSfidRegistryOperator;
         type MaxAdmins = ConstU32<10>;
         type MaxSfidIdLength = ConstU32<96>;
@@ -871,9 +921,10 @@ mod tests {
     const DEFAULT_EXPIRES_AT: u64 = 1_000;
     const DEFAULT_MIN_CLOSE_BALANCE: u128 = 111;
 
-    fn create_payload(
+    fn create_payload_with_submitter(
         sfid: &SfidIdOf<Test>,
         duoqian: &AccountId32,
+        submitter: &AccountId32,
         admin_count: u32,
         admins: &DuoqianAdminsOf<Test>,
         threshold: u32,
@@ -885,12 +936,13 @@ mod tests {
             .unwrap_or(0);
         let domain = Duoqian::chain_domain_hash().unwrap_or_else(|| System::block_hash(0));
         (
-            b"DUOQIAN_CREATE_V2".to_vec(),
+            b"DUOQIAN_CREATE_V3".to_vec(),
             domain,
             nonce,
             expires_at,
             sfid,
             duoqian,
+            submitter,
             admin_count,
             admins,
             threshold,
@@ -899,9 +951,36 @@ mod tests {
             .encode()
     }
 
-    fn close_payload(
+    fn create_payload(
+        sfid: &SfidIdOf<Test>,
+        duoqian: &AccountId32,
+        admin_count: u32,
+        admins: &DuoqianAdminsOf<Test>,
+        threshold: u32,
+        amount: u128,
+        expires_at: u64,
+    ) -> Vec<u8> {
+        let submitter = admins
+            .first()
+            .and_then(TestAdminAuth::public_key_to_account)
+            .expect("at least one admin required for payload");
+        create_payload_with_submitter(
+            sfid,
+            duoqian,
+            &submitter,
+            admin_count,
+            admins,
+            threshold,
+            amount,
+            expires_at,
+        )
+    }
+
+    fn close_payload_with_submitter(
         duoqian: &AccountId32,
         beneficiary: &AccountId32,
+        submitter: &AccountId32,
+        admins: &DuoqianAdminsOf<Test>,
         admin_count: u32,
         threshold: u32,
         min_balance: u128,
@@ -912,17 +991,44 @@ mod tests {
             .unwrap_or(0);
         let domain = Duoqian::chain_domain_hash().unwrap_or_else(|| System::block_hash(0));
         (
-            b"DUOQIAN_CLOSE_V2".to_vec(),
+            b"DUOQIAN_CLOSE_V3".to_vec(),
             domain,
             nonce,
             expires_at,
             duoqian,
             beneficiary,
+            submitter,
+            admins,
             admin_count,
             threshold,
             min_balance,
         )
             .encode()
+    }
+
+    fn close_payload(
+        duoqian: &AccountId32,
+        beneficiary: &AccountId32,
+        admins: &DuoqianAdminsOf<Test>,
+        admin_count: u32,
+        threshold: u32,
+        min_balance: u128,
+        expires_at: u64,
+    ) -> Vec<u8> {
+        let submitter = admins
+            .first()
+            .and_then(TestAdminAuth::public_key_to_account)
+            .expect("at least one admin required for payload");
+        close_payload_with_submitter(
+            duoqian,
+            beneficiary,
+            &submitter,
+            admins,
+            admin_count,
+            threshold,
+            min_balance,
+            expires_at,
+        )
     }
 
     fn call_create(
@@ -960,6 +1066,8 @@ mod tests {
             DEFAULT_EXPIRES_AT,
             approvals,
         )
+        .map(|_| ())
+        .map_err(|e| e.error)
     }
 
     #[test]
@@ -1114,15 +1222,23 @@ mod tests {
                 RuntimeOrigin::signed(account_of(&p1)),
                 sfid.clone(),
                 2,
-                admins1,
+                admins1.clone(),
                 2,
                 200,
                 approvals_1
             ));
+            assert_eq!(
+                Duoqian::address_registered_sfid(duoqian.clone())
+                    .expect("registered")
+                    .nonce,
+                1
+            );
 
-            let close_payload = close_payload(
+            let close_payload = close_payload_with_submitter(
                 &duoqian,
                 &beneficiary,
+                &account_of(&p2),
+                &admins1,
                 2u32,
                 2u32,
                 DEFAULT_MIN_CLOSE_BALANCE,
@@ -1144,6 +1260,12 @@ mod tests {
                 beneficiary.clone(),
                 close_approvals
             ));
+            assert_eq!(
+                Duoqian::address_registered_sfid(duoqian.clone())
+                    .expect("registered")
+                    .nonce,
+                2
+            );
 
             assert!(!DuoqianAccounts::<Test>::contains_key(&duoqian));
             assert_eq!(Balances::free_balance(&duoqian), 0);
@@ -1171,6 +1293,12 @@ mod tests {
                 111,
                 approvals_2
             ));
+            assert_eq!(
+                Duoqian::address_registered_sfid(duoqian.clone())
+                    .expect("registered")
+                    .nonce,
+                3
+            );
 
             let config = DuoqianAccounts::<Test>::get(&duoqian).expect("recreate must succeed");
             assert_eq!(config.admin_count, 2);
@@ -1251,6 +1379,30 @@ mod tests {
     }
 
     #[test]
+    fn create_duoqian_rejects_protected_source_caller() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let protected = AccountId32::new([0xCC; 32]);
+            let (sfid, _duoqian) = register_sfid_and_get_address("protected-create-source");
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
+
+            assert_noop!(
+                call_create(
+                    RuntimeOrigin::signed(protected),
+                    sfid,
+                    2,
+                    admins,
+                    2,
+                    111,
+                    approvals_vec(vec![])
+                ),
+                Error::<Test>::ProtectedSource
+            );
+        });
+    }
+
+    #[test]
     fn create_duoqian_rejects_non_admin_approval() {
         new_test_ext().execute_with(|| {
             let p1 = pair(1);
@@ -1307,6 +1459,236 @@ mod tests {
             ),
                 Error::<Test>::InvalidAdminSignature
             );
+        });
+    }
+
+    #[test]
+    fn create_duoqian_rejects_duplicate_signatures() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let (sfid, duoqian) = register_sfid_and_get_address("dup-signatures");
+
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
+            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &payload),
+                },
+            ]);
+
+            assert_noop!(
+                call_create(
+                    RuntimeOrigin::signed(account_of(&p1)),
+                    sfid,
+                    2,
+                    admins,
+                    2,
+                    111,
+                    approvals
+                ),
+                Error::<Test>::DuplicatePublicKey
+            );
+        });
+    }
+
+    #[test]
+    fn create_duoqian_rejects_empty_approvals() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let (sfid, _duoqian) = register_sfid_and_get_address("empty-approvals");
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
+
+            assert_noop!(
+                call_create(
+                    RuntimeOrigin::signed(account_of(&p1)),
+                    sfid,
+                    2,
+                    admins,
+                    2,
+                    111,
+                    approvals_vec(vec![])
+                ),
+                Error::<Test>::IncompleteParameters
+            );
+        });
+    }
+
+    #[test]
+    fn create_duoqian_rejects_insufficient_transfer_balance() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let (sfid, duoqian) = register_sfid_and_get_address("insufficient-create-balance");
+            let amount = 20_000u128;
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                amount,
+                DEFAULT_EXPIRES_AT,
+            );
+            let approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p2),
+                    signature: sign(&p2, &payload),
+                },
+            ]);
+
+            assert_noop!(
+                call_create(
+                    RuntimeOrigin::signed(account_of(&p1)),
+                    sfid,
+                    2,
+                    admins,
+                    2,
+                    amount,
+                    approvals
+                ),
+                DispatchError::Token(TokenError::FundsUnavailable)
+            );
+        });
+    }
+
+    #[test]
+    fn create_duoqian_accepts_threshold_equal_admin_count() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let p3 = pair(3);
+            let (sfid, duoqian) = register_sfid_and_get_address("threshold-all");
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2), public_of(&p3)]);
+            let payload = create_payload(&sfid, &duoqian, 3u32, &admins, 3u32, 111u128, DEFAULT_EXPIRES_AT);
+            let approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p2),
+                    signature: sign(&p2, &payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p3),
+                    signature: sign(&p3, &payload),
+                },
+            ]);
+            assert_ok!(call_create(
+                RuntimeOrigin::signed(account_of(&p1)),
+                sfid,
+                3,
+                admins,
+                3,
+                111,
+                approvals
+            ));
+        });
+    }
+
+    #[test]
+    fn create_duoqian_accepts_min_threshold_boundary() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let p3 = pair(3);
+            let p4 = pair(4);
+            let (sfid, duoqian) = register_sfid_and_get_address("threshold-min");
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2), public_of(&p3), public_of(&p4)]);
+            let payload = create_payload(&sfid, &duoqian, 4u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p2),
+                    signature: sign(&p2, &payload),
+                },
+            ]);
+            assert_ok!(call_create(
+                RuntimeOrigin::signed(account_of(&p1)),
+                sfid,
+                4,
+                admins,
+                2,
+                111,
+                approvals
+            ));
+        });
+    }
+
+    #[test]
+    fn create_and_close_with_three_admins_threshold_two_works() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let p3 = pair(3);
+            let (sfid, duoqian) = register_sfid_and_get_address("3of2-flow");
+            let beneficiary = account_of(&pair(9));
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2), public_of(&p3)]);
+            let create_payload =
+                create_payload(&sfid, &duoqian, 3u32, &admins, 2u32, 300u128, DEFAULT_EXPIRES_AT);
+            let create_approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &create_payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p2),
+                    signature: sign(&p2, &create_payload),
+                },
+            ]);
+            assert_ok!(call_create(
+                RuntimeOrigin::signed(account_of(&p1)),
+                sfid,
+                3,
+                admins.clone(),
+                2,
+                300,
+                create_approvals
+            ));
+
+            let close_payload = close_payload_with_submitter(
+                &duoqian,
+                &beneficiary,
+                &account_of(&p3),
+                &admins,
+                3u32,
+                2u32,
+                DEFAULT_MIN_CLOSE_BALANCE,
+                DEFAULT_EXPIRES_AT,
+            );
+            let close_approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &close_payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p3),
+                    signature: sign(&p3, &close_payload),
+                },
+            ]);
+            assert_ok!(call_close(
+                RuntimeOrigin::signed(account_of(&p3)),
+                duoqian.clone(),
+                beneficiary.clone(),
+                close_approvals
+            ));
+            assert_eq!(Balances::free_balance(beneficiary), 300);
+            assert_eq!(Balances::free_balance(duoqian), 0);
         });
     }
 
@@ -1414,7 +1796,15 @@ mod tests {
                 create_approvals
             ));
 
-            let close_payload = close_payload(&duoqian, &duoqian, 2u32, 2u32, 200u128, DEFAULT_EXPIRES_AT);
+            let close_payload = close_payload(
+                &duoqian,
+                &duoqian,
+                &admins,
+                2u32,
+                2u32,
+                200u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let close_approvals = approvals_vec(vec![AdminApproval {
                 public_key: public_of(&p2),
                 signature: sign(&p2, &close_payload),
@@ -1428,6 +1818,56 @@ mod tests {
                     close_approvals
                 ),
                 Error::<Test>::InvalidBeneficiary
+            );
+        });
+    }
+
+    #[test]
+    fn close_duoqian_rejects_invalid_beneficiary_address() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let (sfid, duoqian) = register_sfid_and_get_address("close-invalid-beneficiary");
+            let beneficiary = AccountId32::new([0u8; 32]);
+
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
+            let create_payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                200u128,
+                DEFAULT_EXPIRES_AT,
+            );
+            let create_approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &create_payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p2),
+                    signature: sign(&p2, &create_payload),
+                },
+            ]);
+            assert_ok!(call_create(
+                RuntimeOrigin::signed(account_of(&p1)),
+                sfid,
+                2,
+                admins,
+                2,
+                200,
+                create_approvals
+            ));
+
+            assert_noop!(
+                call_close(
+                    RuntimeOrigin::signed(account_of(&p1)),
+                    duoqian,
+                    beneficiary,
+                    approvals_vec(vec![])
+                ),
+                Error::<Test>::InvalidAddress
             );
         });
     }
@@ -1473,6 +1913,7 @@ mod tests {
             let close_payload = close_payload(
                 &duoqian,
                 &beneficiary,
+                &admins,
                 2u32,
                 2u32,
                 DEFAULT_MIN_CLOSE_BALANCE,
@@ -1497,6 +1938,106 @@ mod tests {
                     close_approvals
                 ),
                 Error::<Test>::InvalidBeneficiary
+            );
+        });
+    }
+
+    #[test]
+    fn close_duoqian_rejects_protected_beneficiary() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let (sfid, duoqian) = register_sfid_and_get_address("close-protected-beneficiary");
+            let beneficiary = AccountId32::new([0xCC; 32]);
+
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
+            let create_payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                200u128,
+                DEFAULT_EXPIRES_AT,
+            );
+            let create_approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &create_payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p2),
+                    signature: sign(&p2, &create_payload),
+                },
+            ]);
+            assert_ok!(call_create(
+                RuntimeOrigin::signed(account_of(&p1)),
+                sfid,
+                2,
+                admins,
+                2,
+                200,
+                create_approvals
+            ));
+
+            assert_noop!(
+                call_close(
+                    RuntimeOrigin::signed(account_of(&p1)),
+                    duoqian,
+                    beneficiary,
+                    approvals_vec(vec![])
+                ),
+                Error::<Test>::InvalidBeneficiary
+            );
+        });
+    }
+
+    #[test]
+    fn close_duoqian_rejects_when_reserved_balance_exists() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let (sfid, duoqian) = register_sfid_and_get_address("close-reserved-balance");
+            let beneficiary = account_of(&pair(8));
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
+            let create_payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                200u128,
+                DEFAULT_EXPIRES_AT,
+            );
+            let create_approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &create_payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p2),
+                    signature: sign(&p2, &create_payload),
+                },
+            ]);
+            assert_ok!(call_create(
+                RuntimeOrigin::signed(account_of(&p1)),
+                sfid,
+                2,
+                admins,
+                2,
+                200,
+                create_approvals
+            ));
+            assert_ok!(Balances::reserve(&duoqian, 1));
+
+            assert_noop!(
+                call_close(
+                    RuntimeOrigin::signed(account_of(&p1)),
+                    duoqian,
+                    beneficiary,
+                    approvals_vec(vec![])
+                ),
+                Error::<Test>::ReservedBalanceRemaining
             );
         });
     }
@@ -1535,6 +2076,7 @@ mod tests {
             let close_payload = close_payload(
                 &duoqian,
                 &beneficiary,
+                &admins,
                 2u32,
                 2u32,
                 DEFAULT_MIN_CLOSE_BALANCE,
@@ -1587,9 +2129,11 @@ mod tests {
                 create_approvals
             ));
 
-            let close_payload = close_payload(
+            let close_payload = close_payload_with_submitter(
                 &duoqian_a,
                 &duoqian_b,
+                &account_of(&p2),
+                &admins,
                 2u32,
                 2u32,
                 DEFAULT_MIN_CLOSE_BALANCE,
@@ -1651,6 +2195,7 @@ mod tests {
             let close_payload_1 = close_payload(
                 &duoqian,
                 &beneficiary,
+                &admins,
                 2u32,
                 2u32,
                 DEFAULT_MIN_CLOSE_BALANCE,
@@ -1735,6 +2280,7 @@ mod tests {
             let close_payload_1 = close_payload(
                 &duoqian,
                 &beneficiary,
+                &admins1,
                 2u32,
                 2u32,
                 DEFAULT_MIN_CLOSE_BALANCE,
@@ -1912,6 +2458,135 @@ mod tests {
     }
 
     #[test]
+    fn close_rejects_nonce_overflow() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let (sfid, duoqian) = register_sfid_and_get_address("close-nonce-overflow");
+            let beneficiary = account_of(&pair(8));
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
+            let create_payload =
+                create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 200u128, DEFAULT_EXPIRES_AT);
+            let create_approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &create_payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p2),
+                    signature: sign(&p2, &create_payload),
+                },
+            ]);
+            assert_ok!(call_create(
+                RuntimeOrigin::signed(account_of(&p1)),
+                sfid,
+                2,
+                admins.clone(),
+                2,
+                200,
+                create_approvals
+            ));
+            AddressRegisteredSfid::<Test>::mutate(&duoqian, |entry| {
+                if let Some(e) = entry {
+                    e.nonce = u64::MAX;
+                }
+            });
+
+            let close_payload = close_payload(
+                &duoqian,
+                &beneficiary,
+                &admins,
+                2u32,
+                2u32,
+                DEFAULT_MIN_CLOSE_BALANCE,
+                DEFAULT_EXPIRES_AT,
+            );
+            let close_approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &close_payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p2),
+                    signature: sign(&p2, &close_payload),
+                },
+            ]);
+            assert_noop!(
+                call_close(
+                    RuntimeOrigin::signed(account_of(&p1)),
+                    duoqian,
+                    beneficiary,
+                    close_approvals
+                ),
+                Error::<Test>::NonceOverflow
+            );
+        });
+    }
+
+    #[test]
+    fn close_rejects_expired_signatures() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let (sfid, duoqian) = register_sfid_and_get_address("close-expired");
+            let beneficiary = account_of(&pair(8));
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
+            let create_payload =
+                create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 200u128, DEFAULT_EXPIRES_AT);
+            let create_approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &create_payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p2),
+                    signature: sign(&p2, &create_payload),
+                },
+            ]);
+            assert_ok!(call_create(
+                RuntimeOrigin::signed(account_of(&p1)),
+                sfid,
+                2,
+                admins.clone(),
+                2,
+                200,
+                create_approvals
+            ));
+
+            let close_payload = close_payload(
+                &duoqian,
+                &beneficiary,
+                &admins,
+                2u32,
+                2u32,
+                DEFAULT_MIN_CLOSE_BALANCE,
+                DEFAULT_EXPIRES_AT,
+            );
+            let close_approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &close_payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p2),
+                    signature: sign(&p2, &close_payload),
+                },
+            ]);
+
+            System::set_block_number(DEFAULT_EXPIRES_AT + 1);
+            assert_noop!(
+                call_close(
+                    RuntimeOrigin::signed(account_of(&p1)),
+                    duoqian,
+                    beneficiary,
+                    close_approvals
+                ),
+                Error::<Test>::SignatureExpired
+            );
+        });
+    }
+
+    #[test]
     fn register_sfid_institution_derives_blake3_address_and_blocks_duplicate_sfid() {
         new_test_ext().execute_with(|| {
             let sfid: SfidIdOf<Test> = b"GFR-LN001-CB0C-617776487-20260222"
@@ -1932,6 +2607,68 @@ mod tests {
                     sfid
                 ),
                 Error::<Test>::SfidAlreadyRegistered
+            );
+        });
+    }
+
+    #[test]
+    fn register_sfid_institution_rejects_unauthorized_operator() {
+        new_test_ext().execute_with(|| {
+            let sfid: SfidIdOf<Test> = b"GFR-LN001-CB0C-unauth-20260222"
+                .to_vec()
+                .try_into()
+                .expect("fit");
+            assert_noop!(
+                Duoqian::register_sfid_institution(
+                    RuntimeOrigin::signed(AccountId32::new([0x99; 32])),
+                    sfid
+                ),
+                Error::<Test>::UnauthorizedSfidRegistrar
+            );
+        });
+    }
+
+    #[test]
+    fn register_sfid_institution_rejects_empty_sfid() {
+        new_test_ext().execute_with(|| {
+            let sfid: SfidIdOf<Test> = Vec::new().try_into().expect("empty bounded vec allowed");
+            assert_noop!(
+                Duoqian::register_sfid_institution(
+                    RuntimeOrigin::signed(AccountId32::new([0x55; 32])),
+                    sfid
+                ),
+                Error::<Test>::EmptySfidId
+            );
+        });
+    }
+
+    #[test]
+    fn register_sfid_institution_rejects_derived_reserved_address() {
+        new_test_ext().execute_with(|| {
+            ChainDomainHash::<Test>::put(System::block_hash(0));
+            let mut found: Option<SfidIdOf<Test>> = None;
+            for i in 0..500_000u32 {
+                let candidate = format!("GFR-LN001-CB0C-rsvd-{}-20260222", i);
+                let sfid: SfidIdOf<Test> = candidate
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("fit");
+                let derived =
+                    Duoqian::derive_duoqian_address_from_sfid_id(sfid.as_slice()).expect("derive");
+                let bytes: &[u8] = derived.as_ref();
+                if bytes[0] == 0xFE && bytes[1] == 0xED {
+                    found = Some(sfid);
+                    break;
+                }
+            }
+            let sfid = found.expect("must find a reserved-pattern sfid");
+            assert_noop!(
+                Duoqian::register_sfid_institution(
+                    RuntimeOrigin::signed(AccountId32::new([0x55; 32])),
+                    sfid
+                ),
+                Error::<Test>::AddressReserved
             );
         });
     }
