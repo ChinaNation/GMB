@@ -241,21 +241,17 @@ GMB/
 │   ├── src/                 # 主要常量
 │   └── china/               # 公权账户常量
 │
-├── citizennode/             # 节点软件（国储会、省储会、省储行、全节点）
+├── citizennode/             # 桌面节点软件（国储会、省储会、省储行、全节点）
 │   ├── backend/             # 服务端（Linux）
 │   └── desktop/             # 桌面端（Linux、macOS、Windows）
 │     
-├── wuminapp/                # 轻节点软件
+├── wuminapp/                # 移动节点软件（轻节点：公民/访客）
 │   ├── backend/             # 服务端（Linux）
-│   └── mobile/              # 客户端（钱包、公民投票、隐私通信、资产管理，iOS、Android）
+│   └── mobile/              # 移动端（钱包、公民投票、隐私通信、资产管理，iOS、Android）
 │
 ├── sfid/                    # 身份识别码系统（链外系统）
-│   ├── backend/             # 服务端（Linux）
-│   └── desktop/             # Web端
 │
 ├── cpms/                    # 公民护照管理系统（链外系统）
-│   ├── backend/             # 服务端（Linux）
-│   └── desktop/             # Web端
 │
 ├── tools/                   # 工具库（账户生成、Key工具等）
 │
@@ -376,12 +372,13 @@ GMB/
 ### 5.4.1.身份识别码校验/sfid-code-auth
 * 绑定/解绑
 * 投票校验
+* 获取人口数快照
 
 ****
 # 6.其他
 ## 6.1.常量库/primitives
-* src/核心常量
-* china/公权机构常量
+* src/核心常量，区块链的统一核心常量合集；
+* china/公权机构常量，国家、省部层面公权机构的常量。
 
 ## 6.2.工具库/tools
 ### 6.2.1.助记词/zhujichi
