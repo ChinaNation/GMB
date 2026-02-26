@@ -176,15 +176,21 @@ pub trait WeightInfo {
 
 impl WeightInfo for () {
     fn submit_offchain_batch(items: u32) -> Weight {
-        frame_support::weights::constants::RocksDbWeight::get().reads_writes(9, 8 + items as u64)
+        let items = items as u64;
+        frame_support::weights::constants::RocksDbWeight::get()
+            .reads_writes(9 + items.saturating_mul(7), 8 + items.saturating_mul(7))
     }
 
     fn enqueue_offchain_batch(items: u32) -> Weight {
-        frame_support::weights::constants::RocksDbWeight::get().reads_writes(9, 4 + items as u64)
+        let items = items as u64;
+        frame_support::weights::constants::RocksDbWeight::get()
+            .reads_writes(9 + items.saturating_mul(6), 4 + items.saturating_mul(2))
     }
 
     fn process_queued_batch(items: u32) -> Weight {
-        frame_support::weights::constants::RocksDbWeight::get().reads_writes(8, 4 + items as u64)
+        let items = items as u64;
+        frame_support::weights::constants::RocksDbWeight::get()
+            .reads_writes(8 + items.saturating_mul(7), 4 + items.saturating_mul(7))
     }
 }
 
@@ -972,7 +978,7 @@ pub mod pallet {
         /// 该初始化由机构主账户（pallet_address）执行；
         /// 后续更换必须走内部投票流程（propose_verify_key/vote_verify_key）。
         #[pallet::call_index(5)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(2, 3))]
+        #[pallet::weight(T::DbWeight::get().reads_writes(1, 3))]
         pub fn init_verify_key(
             origin: OriginFor<T>,
             institution: InstitutionPalletId,
@@ -1133,46 +1139,9 @@ pub mod pallet {
                 Error::<T>::InvalidBatchSignature
             );
 
-            let mut fee_sum_u128: u128 = 0;
             let t2 = institution_t2_code(institution).ok_or(Error::<T>::InvalidInstitution)?;
-            Self::ensure_no_duplicate_tx_ids(&batch)?;
-            for item in batch.iter() {
-                ensure!(
-                    !Self::is_processed_offchain_tx_active(t2, item.tx_id),
-                    Error::<T>::TxAlreadyProcessed
-                );
-                ensure!(
-                    !QueuedTxIndex::<T>::contains_key(t2, item.tx_id),
-                    Error::<T>::TxAlreadyProcessed
-                );
-                ensure!(
-                    !item.transfer_amount.is_zero(),
-                    Error::<T>::InvalidTransferAmount
-                );
-                ensure!(
-                    item.payer != item.recipient,
-                    Error::<T>::SelfTransferNotAllowed
-                );
-                ensure!(
-                    !T::ProtectedSourceChecker::is_protected(&item.payer),
-                    Error::<T>::ProtectedSource
-                );
-                let bound = RecipientClearingInstitution::<T>::get(&item.recipient)
-                    .ok_or(Error::<T>::RecipientClearingInstitutionNotBound)?;
-                ensure!(
-                    bound == institution,
-                    Error::<T>::RecipientClearingInstitutionMismatch
-                );
-                let transfer_u128: u128 = item.transfer_amount.saturated_into();
-                let fee_u128: u128 = item.offchain_fee_amount.saturated_into();
-                ensure!(
-                    transfer_u128 <= u128::MAX / rate_bp as u128,
-                    Error::<T>::TransferAmountTooLarge
-                );
-                let expected_fee = calc_offchain_fee_fen(transfer_u128, rate_bp);
-                ensure!(fee_u128 == expected_fee, Error::<T>::InvalidFeeAmount);
-                fee_sum_u128 = fee_sum_u128.saturating_add(fee_u128);
-            }
+            let fee_sum_u128 =
+                Self::validate_batch_items(&batch, institution, t2, rate_bp, true, true)?;
 
             let queue_id = NextQueuedBatchId::<T>::get();
             let next_queue_id = queue_id.checked_add(1).ok_or(Error::<T>::CounterOverflow)?;
@@ -1249,7 +1218,7 @@ pub mod pallet {
                 for item in queued.batch.iter() {
                     QueuedTxIndex::<T>::remove(t2, item.tx_id);
                 }
-                QueuedBatches::<T>::insert(queue_id, queued.clone());
+                QueuedBatches::<T>::insert(queue_id, &queued);
                 Self::deposit_event(Event::<T>::OffchainQueuedBatchInvalidatedByKeyRotation {
                     queue_id,
                     institution: queued.institution,
@@ -1277,7 +1246,7 @@ pub mod pallet {
                     if Self::should_wait_precheck_error(&e) {
                         queued.last_error = Some(QueuedBatchLastError::WaitingForPriorBatch);
                         queued.last_attempt_at = Some(now);
-                        QueuedBatches::<T>::insert(queue_id, queued.clone());
+                        QueuedBatches::<T>::insert(queue_id, &queued);
                         Self::deposit_event(Event::<T>::OffchainQueuedBatchRetryFailed {
                             queue_id,
                             institution: queued.institution,
@@ -1289,7 +1258,7 @@ pub mod pallet {
                     if Self::should_ignore_precheck_error(&e) {
                         queued.last_error = Some(QueuedBatchLastError::PackThresholdNotReached);
                         queued.last_attempt_at = Some(now);
-                        QueuedBatches::<T>::insert(queue_id, queued.clone());
+                        QueuedBatches::<T>::insert(queue_id, &queued);
                         Self::deposit_event(Event::<T>::OffchainQueuedBatchDeferred {
                             queue_id,
                             institution: queued.institution,
@@ -1302,7 +1271,7 @@ pub mod pallet {
                     queued.last_attempt_at = Some(now);
                     if queued.retry_count >= MAX_QUEUE_RETRY_COUNT {
                         queued.status = QueuedBatchStatus::Failed;
-                        QueuedBatches::<T>::insert(queue_id, queued.clone());
+                        QueuedBatches::<T>::insert(queue_id, &queued);
                         if let Some(t2) = institution_t2_code(queued.institution) {
                             for item in queued.batch.iter() {
                                 QueuedTxIndex::<T>::remove(t2, item.tx_id);
@@ -1316,7 +1285,7 @@ pub mod pallet {
                         });
                         return Ok(());
                     }
-                    QueuedBatches::<T>::insert(queue_id, queued.clone());
+                    QueuedBatches::<T>::insert(queue_id, &queued);
                     Self::deposit_event(Event::<T>::OffchainQueuedBatchRetryFailed {
                         queue_id,
                         institution: queued.institution,
@@ -1350,7 +1319,7 @@ pub mod pallet {
                     queued.last_attempt_at = Some(now);
                     queued.processed_at = Some(now);
                     queued.last_error = None;
-                    QueuedBatches::<T>::insert(queue_id, queued.clone());
+                    QueuedBatches::<T>::insert(queue_id, &queued);
                     for item in queued.batch.iter() {
                         QueuedTxIndex::<T>::remove(t2, item.tx_id);
                     }
@@ -1367,7 +1336,7 @@ pub mod pallet {
                     queued.last_attempt_at = Some(now);
                     if queued.retry_count >= MAX_QUEUE_RETRY_COUNT {
                         queued.status = QueuedBatchStatus::Failed;
-                        QueuedBatches::<T>::insert(queue_id, queued.clone());
+                        QueuedBatches::<T>::insert(queue_id, &queued);
                         for item in queued.batch.iter() {
                             QueuedTxIndex::<T>::remove(t2, item.tx_id);
                         }
@@ -1379,7 +1348,7 @@ pub mod pallet {
                         });
                         return Ok(());
                     }
-                    QueuedBatches::<T>::insert(queue_id, queued.clone());
+                    QueuedBatches::<T>::insert(queue_id, &queued);
                     Self::deposit_event(Event::<T>::OffchainQueuedBatchRetryFailed {
                         queue_id,
                         institution: queued.institution,
@@ -2243,42 +2212,7 @@ pub mod pallet {
             let (by_count, by_time) = Self::pack_trigger_reason(last, now, batch.len() as u64);
             ensure!(by_count || by_time, Error::<T>::PackThresholdNotReached);
             let t2 = institution_t2_code(institution).ok_or(Error::<T>::InvalidInstitution)?;
-            Self::ensure_no_duplicate_tx_ids(batch)?;
-
-            for item in batch.iter() {
-                ensure!(
-                    !Self::is_processed_offchain_tx_active(t2, item.tx_id),
-                    Error::<T>::TxAlreadyProcessed
-                );
-                ensure!(
-                    !item.transfer_amount.is_zero(),
-                    Error::<T>::InvalidTransferAmount
-                );
-                ensure!(
-                    item.payer != item.recipient,
-                    Error::<T>::SelfTransferNotAllowed
-                );
-                ensure!(
-                    !T::ProtectedSourceChecker::is_protected(&item.payer),
-                    Error::<T>::ProtectedSource
-                );
-                let bound = RecipientClearingInstitution::<T>::get(&item.recipient)
-                    .ok_or(Error::<T>::RecipientClearingInstitutionNotBound)?;
-                ensure!(
-                    bound == institution,
-                    Error::<T>::RecipientClearingInstitutionMismatch
-                );
-                if verify_fee {
-                    let transfer_u128: u128 = item.transfer_amount.saturated_into();
-                    let fee_u128: u128 = item.offchain_fee_amount.saturated_into();
-                    ensure!(
-                        transfer_u128 <= u128::MAX / rate_bp as u128,
-                        Error::<T>::TransferAmountTooLarge
-                    );
-                    let expected_fee = calc_offchain_fee_fen(transfer_u128, rate_bp);
-                    ensure!(fee_u128 == expected_fee, Error::<T>::InvalidFeeAmount);
-                }
-            }
+            let _ = Self::validate_batch_items(batch, institution, t2, rate_bp, verify_fee, false)?;
             Ok((t2, verify_key, by_count, by_time))
         }
 
@@ -2458,6 +2392,60 @@ pub mod pallet {
                 }
             }
             Ok(())
+        }
+
+        fn validate_batch_items(
+            batch: &BatchOf<T>,
+            institution: InstitutionPalletId,
+            t2: [u8; 2],
+            rate_bp: u32,
+            verify_fee: bool,
+            check_queued_index: bool,
+        ) -> Result<u128, DispatchError> {
+            Self::ensure_no_duplicate_tx_ids(batch)?;
+            let mut fee_sum_u128: u128 = 0;
+            for item in batch.iter() {
+                ensure!(
+                    !Self::is_processed_offchain_tx_active(t2, item.tx_id),
+                    Error::<T>::TxAlreadyProcessed
+                );
+                if check_queued_index {
+                    ensure!(
+                        !QueuedTxIndex::<T>::contains_key(t2, item.tx_id),
+                        Error::<T>::TxAlreadyProcessed
+                    );
+                }
+                ensure!(
+                    !item.transfer_amount.is_zero(),
+                    Error::<T>::InvalidTransferAmount
+                );
+                ensure!(
+                    item.payer != item.recipient,
+                    Error::<T>::SelfTransferNotAllowed
+                );
+                ensure!(
+                    !T::ProtectedSourceChecker::is_protected(&item.payer),
+                    Error::<T>::ProtectedSource
+                );
+                let bound = RecipientClearingInstitution::<T>::get(&item.recipient)
+                    .ok_or(Error::<T>::RecipientClearingInstitutionNotBound)?;
+                ensure!(
+                    bound == institution,
+                    Error::<T>::RecipientClearingInstitutionMismatch
+                );
+                if verify_fee {
+                    let transfer_u128: u128 = item.transfer_amount.saturated_into();
+                    let fee_u128: u128 = item.offchain_fee_amount.saturated_into();
+                    ensure!(
+                        transfer_u128 <= u128::MAX / rate_bp as u128,
+                        Error::<T>::TransferAmountTooLarge
+                    );
+                    let expected_fee = calc_offchain_fee_fen(transfer_u128, rate_bp);
+                    ensure!(fee_u128 == expected_fee, Error::<T>::InvalidFeeAmount);
+                    fee_sum_u128 = fee_sum_u128.saturating_add(fee_u128);
+                }
+            }
+            Ok(fee_sum_u128)
         }
 
         fn is_processed_offchain_tx_active(t2: [u8; 2], tx_id: T::Hash) -> bool {
