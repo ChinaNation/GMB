@@ -11,48 +11,27 @@ import { asHexAddress, resolveOrganizationByAddress } from '../../services/auth/
 import { generateOfflineQrDataUrl } from '../../services/auth/qr';
 import { verifyLoginSignature } from '../../services/auth/verify';
 import { useAuthStore } from '../../stores/auth';
-import { isValidAddress } from '../../utils/address';
-import { formatNodeDisplayName, getOrganizationName } from '../../utils/organization';
+import { getOrganizationName } from '../../utils/organization';
 import { CameraQrScanner } from './CameraQrScanner';
 
 export function LoginCard() {
   const navigate = useNavigate();
   const { session, login, logout } = useAuthStore();
 
-  const [publicKey, setPublicKey] = useState('');
   const [challenge, setChallenge] = useState<LoginChallenge | null>(null);
   const [scannedPayload, setScannedPayload] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  const inputAddress = publicKey.trim();
-  const invalidAddress = inputAddress.length > 0 && !isValidAddress(inputAddress);
-  const organization = inputAddress && !invalidAddress ? resolveOrganizationByAddress(inputAddress) : null;
-
-  const canGenerateChallenge = !!inputAddress && !invalidAddress;
+  const canGenerateChallenge = true;
   const parsedSignature = parseSignedLoginPayload(scannedPayload);
   const canLogin = useMemo(
-    () => canGenerateChallenge && challenge !== null && parsedSignature !== null,
-    [canGenerateChallenge, challenge, parsedSignature]
+    () => challenge !== null && parsedSignature !== null,
+    [challenge, parsedSignature]
   );
 
   const generateChallenge = async () => {
-    if (!inputAddress || invalidAddress) return;
-    let loginAddress = organization?.publicKey;
-    if (!loginAddress) {
-      try {
-        loginAddress = asHexAddress(inputAddress);
-      } catch {
-        setLoginError('输入地址无法解码，请确认 SS58 或 0x 地址正确。');
-        return;
-      }
-    }
-    const loginRole = organization?.role ?? 'full';
-    const next = issueLoginChallenge({
-      role: loginRole,
-      address: loginAddress,
-      province: organization?.province
-    });
+    const next = issueLoginChallenge();
 
     setChallenge(next);
     setScannedPayload('');
@@ -64,10 +43,6 @@ export function LoginCard() {
   };
 
   const doLogin = async () => {
-    if (!inputAddress || invalidAddress) {
-      setLoginError('请输入合法的公钥/SS58 地址。');
-      return;
-    }
     if (!challenge) {
       setLoginError('请先生成挑战二维码。');
       return;
@@ -81,21 +56,6 @@ export function LoginCard() {
       return;
     }
 
-    let fallbackPublicKey = '';
-    if (!organization) {
-      try {
-        fallbackPublicKey = asHexAddress(inputAddress);
-      } catch {
-        setLoginError('输入地址无法解码，请确认 SS58 或 0x 地址正确。');
-        return;
-      }
-    }
-    const loginSession = organization ?? {
-      role: 'full' as const,
-      publicKey: fallbackPublicKey,
-      organizationName: 'SFID 本地管理员'
-    };
-
     let signerHex = '';
     try {
       signerHex = asHexAddress(parsedSignature.publicKey);
@@ -103,8 +63,9 @@ export function LoginCard() {
       setLoginError('签名中的 publicKey 地址格式不合法。');
       return;
     }
-    if (signerHex !== loginSession.publicKey.toLowerCase()) {
-      setLoginError('签名中的 publicKey 与当前管理员公钥不一致。');
+    const loginSession = resolveOrganizationByAddress(signerHex);
+    if (!loginSession) {
+      setLoginError('系统中没有该管理员公钥，拒绝登录。');
       return;
     }
     if (parsedSignature.nonce !== challenge.nonce) {
@@ -118,7 +79,7 @@ export function LoginCard() {
       verified = await verifyLoginSignature({
         payload,
         signature: parsedSignature.signature,
-        publicKey: loginSession.publicKey,
+        publicKey: signerHex,
         crypto: parsedSignature.crypto
       });
     } catch {
@@ -145,40 +106,11 @@ export function LoginCard() {
           管理员扫码登录
         </Typography.Title>
 
-        <div>
-          <Typography.Text>管理员公钥地址</Typography.Text>
-          <Input
-            value={publicKey}
-            onChange={(event) => {
-              setPublicKey(event.target.value);
-              setChallenge(null);
-              setScannedPayload('');
-              setQrDataUrl(null);
-              setLoginError(null);
-            }}
-            placeholder="输入公钥或 SS58 地址"
-            status={invalidAddress ? 'error' : ''}
-          />
-          <div style={{ marginTop: 6 }}>
-            {invalidAddress ? (
-              <Typography.Text type="danger">地址格式不合法（SS58）</Typography.Text>
-            ) : (
-              <Typography.Text type="secondary">输入后自动识别机构名称</Typography.Text>
-            )}
-          </div>
-        </div>
-
-        {organization ? (
-          <Typography.Text style={{ color: '#1d7a46' }}>
-            已识别机构：{formatNodeDisplayName(organization)}
-          </Typography.Text>
-        ) : inputAddress && !invalidAddress ? (
-          <Typography.Text>SFID 本地管理员</Typography.Text>
-        ) : null}
+        <Typography.Text type="secondary">点击生成登录二维码，手机扫码签名后回扫即登录。</Typography.Text>
 
         <Space wrap>
           <Button onClick={generateChallenge} disabled={!canGenerateChallenge}>
-            生成签名二维码
+            生成登录二维码
           </Button>
           <Button type="primary" onClick={() => void doLogin()} disabled={!canLogin}>
             验签并登录
@@ -229,7 +161,7 @@ export function LoginCard() {
             </Button>
           </Space>
         ) : (
-          <Typography.Text type="secondary">请输入管理员公钥后开始扫码登录。</Typography.Text>
+          <Typography.Text type="secondary">系统不会手工录入公钥，公钥来自扫码签名内容。</Typography.Text>
         )}
       </Space>
     </Card>
