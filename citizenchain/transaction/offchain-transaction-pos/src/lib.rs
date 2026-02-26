@@ -525,6 +525,11 @@ pub mod pallet {
     #[pallet::storage]
     pub type QueuedBatchPruneCursor<T> = StorageValue<_, u64, ValueQuery>;
 
+    /// 按机构维度记录 stale cancel 扫描游标，避免重复扫描。
+    #[pallet::storage]
+    pub type StaleCancelCursorByInstitution<T> =
+        StorageMap<_, Blake2_128Concat, InstitutionPalletId, u64, ValueQuery>;
+
     #[pallet::storage]
     pub type BatchSummaryPruneCursor<T> = StorageValue<_, u64, ValueQuery>;
 
@@ -1215,6 +1220,10 @@ pub mod pallet {
                 queued.status = QueuedBatchStatus::Cancelled;
                 queued.last_attempt_at = Some(now);
                 queued.last_error = Some(QueuedBatchLastError::Cancelled);
+                let current_seq = LastBatchSeq::<T>::get(queued.institution);
+                if queued.batch_seq > current_seq {
+                    LastBatchSeq::<T>::insert(queued.institution, queued.batch_seq);
+                }
                 for item in queued.batch.iter() {
                     QueuedTxIndex::<T>::remove(t2, item.tx_id);
                 }
@@ -1690,11 +1699,12 @@ pub mod pallet {
 
         /// 清理已处理且超过保留窗口的队列批次记录。
         #[pallet::call_index(14)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(2, 2 + T::MaxBatchSize::get() as u64))]
+        #[pallet::weight(T::DbWeight::get().reads_writes(3, 3 + T::MaxBatchSize::get() as u64))]
         pub fn prune_queued_batch(origin: OriginFor<T>, queue_id: u64) -> DispatchResult {
             let _ = ensure_signed(origin)?;
             let queued =
                 QueuedBatches::<T>::get(queue_id).ok_or(Error::<T>::QueuedBatchNotFound)?;
+            let is_pending = matches!(queued.status, QueuedBatchStatus::Pending);
             let finalized_at = match queued.status {
                 QueuedBatchStatus::Processed => queued.processed_at,
                 QueuedBatchStatus::Failed => queued.last_attempt_at,
@@ -1710,6 +1720,13 @@ pub mod pallet {
                 elapsed >= QUEUED_BATCH_RETENTION_BLOCKS,
                 Error::<T>::QueueRetentionNotReached
             );
+            if is_pending {
+                let current_seq = LastBatchSeq::<T>::get(queued.institution);
+                let expected_seq = current_seq.saturating_add(1);
+                if queued.batch_seq == expected_seq {
+                    LastBatchSeq::<T>::insert(queued.institution, queued.batch_seq);
+                }
+            }
             if let Some(t2) = institution_t2_code(queued.institution) {
                 for item in queued.batch.iter() {
                     QueuedTxIndex::<T>::remove(t2, item.tx_id);
@@ -1928,7 +1945,7 @@ pub mod pallet {
 
         /// 紧急立即轮换验证密钥（跳过延迟窗口），用于旧密钥泄露场景。
         #[pallet::call_index(21)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(10, 10))]
+        #[pallet::weight(T::DbWeight::get().reads_writes(26, 10))]
         pub fn emergency_rotate_verify_key(
             origin: OriginFor<T>,
             institution: InstitutionPalletId,
@@ -2047,8 +2064,8 @@ pub mod pallet {
         /// 批量取消指定机构已过保留期的 Pending 队列批次（仅管理员）。
         #[pallet::call_index(23)]
         #[pallet::weight(T::DbWeight::get().reads_writes(
-            4 + *max_count as u64 * 3,
-            1 + *max_count as u64 * (4 + T::MaxBatchSize::get() as u64),
+            5 + *max_count as u64 * 3,
+            2 + *max_count as u64 * (4 + T::MaxBatchSize::get() as u64),
         ))]
         pub fn cancel_stale_queued_batches(
             origin: OriginFor<T>,
@@ -2064,7 +2081,10 @@ pub mod pallet {
 
             let now = frame_system::Pallet::<T>::block_number();
             let next_queue_id = NextQueuedBatchId::<T>::get();
-            let mut queue_id = QueuedBatchPruneCursor::<T>::get();
+            let mut queue_id = StaleCancelCursorByInstitution::<T>::get(institution);
+            if queue_id == 0 {
+                queue_id = QueuedBatchPruneCursor::<T>::get();
+            }
             if queue_id >= next_queue_id {
                 queue_id = 0;
             }
@@ -2108,6 +2128,8 @@ pub mod pallet {
                 }
                 queue_id = queue_id.saturating_add(1);
             }
+            let next_cursor = if queue_id >= next_queue_id { 0 } else { queue_id };
+            StaleCancelCursorByInstitution::<T>::insert(institution, next_cursor);
 
             Self::deposit_event(Event::<T>::OffchainStaleQueuedBatchesCancelled {
                 institution,
@@ -2507,6 +2529,11 @@ pub mod pallet {
                 QueuedBatchStatus::Pending => {
                     let elapsed: u64 = now.saturating_sub(queued.enqueued_at).saturated_into();
                     if elapsed >= QUEUED_BATCH_RETENTION_BLOCKS {
+                        let current_seq = LastBatchSeq::<T>::get(queued.institution);
+                        let expected_seq = current_seq.saturating_add(1);
+                        if queued.batch_seq == expected_seq {
+                            LastBatchSeq::<T>::insert(queued.institution, queued.batch_seq);
+                        }
                         if let Some(t2) = institution_t2_code(queued.institution) {
                             for item in queued.batch.iter() {
                                 QueuedTxIndex::<T>::remove(t2, item.tx_id);
@@ -2568,6 +2595,37 @@ pub mod pallet {
             BatchSummaryPruneCursor::<T>::put(next_cursor);
             Self::deposit_event(Event::<T>::BatchSummaryPruned { batch_id: cursor });
             true
+        }
+
+        fn queued_prune_budget_hint(now: BlockNumberFor<T>) -> Option<(u64, u64)> {
+            let cursor = QueuedBatchPruneCursor::<T>::get();
+            let next = NextQueuedBatchId::<T>::get();
+            if cursor >= next {
+                return None;
+            }
+            let Some(queued) = QueuedBatches::<T>::get(cursor) else {
+                return Some((3, 1));
+            };
+            let finalized_at = match queued.status {
+                QueuedBatchStatus::Processed => queued.processed_at,
+                QueuedBatchStatus::Failed | QueuedBatchStatus::Cancelled => queued.last_attempt_at,
+                QueuedBatchStatus::Pending => {
+                    let elapsed: u64 = now.saturating_sub(queued.enqueued_at).saturated_into();
+                    if elapsed >= QUEUED_BATCH_RETENTION_BLOCKS {
+                        return Some((4, queued.batch.len() as u64 + 3));
+                    }
+                    return None;
+                }
+            };
+            let Some(finalized_at) = finalized_at else {
+                return None;
+            };
+            let elapsed: u64 = now.saturating_sub(finalized_at).saturated_into();
+            if elapsed >= QUEUED_BATCH_RETENTION_BLOCKS {
+                Some((3, queued.batch.len() as u64 + 2))
+            } else {
+                None
+            }
         }
 
         fn track_pending_rotation_institution(institution: InstitutionPalletId) -> DispatchResult {
@@ -2818,6 +2876,14 @@ pub mod pallet {
             assert!(BP_DENOMINATOR > 0);
             assert!(PACK_TX_THRESHOLD > 0);
             assert!(T::MaxBatchSize::get() > 0);
+            assert!(VERIFY_KEY_ROTATION_DELAY_BLOCKS > 0);
+            assert!(MAX_QUEUE_RETRY_COUNT > 0);
+            assert!(MAX_STALE_CANCEL_SCAN_STEPS > 0);
+            assert!(PROCESSED_TX_RETENTION_BLOCKS > 0);
+            assert!(QUEUED_BATCH_RETENTION_BLOCKS > 0);
+            assert!(BATCH_SUMMARY_RETENTION_BLOCKS > 0);
+            assert!(FEE_SWEEP_MAX_PERCENT > 0 && FEE_SWEEP_MAX_PERCENT <= 100);
+            assert!(FEE_ADDRESS_MIN_RESERVE_FEN > 0);
         }
 
         fn on_initialize(now: BlockNumberFor<T>) -> Weight {
@@ -2872,10 +2938,9 @@ pub mod pallet {
         fn on_idle(now: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
             let db = T::DbWeight::get();
             let processed_budget = db.reads_writes(3, 4);
-            let queued_budget = db.reads_writes(3, T::MaxBatchSize::get() as u64 + 2);
+            let queued_peek_budget = db.reads(3);
             let summary_budget = db.reads_writes(3, 2);
             let processed_idle = db.reads(2);
-            let queued_idle = db.reads(2);
             let summary_idle = db.reads(2);
 
             let mut consumed = Weight::zero();
@@ -2889,13 +2954,16 @@ pub mod pallet {
                 consumed = consumed.saturating_add(used);
             }
 
-            if remaining_weight.all_gte(consumed.saturating_add(queued_budget)) {
-                let used = if Self::auto_prune_one_queued_batch(now) {
-                    queued_budget
-                } else {
-                    queued_idle
-                };
-                consumed = consumed.saturating_add(used);
+            if remaining_weight.all_gte(consumed.saturating_add(queued_peek_budget)) {
+                consumed = consumed.saturating_add(queued_peek_budget);
+                if let Some((reads, writes)) = Self::queued_prune_budget_hint(now) {
+                    let queued_budget = db.reads_writes(reads, writes);
+                    if remaining_weight.all_gte(consumed.saturating_add(queued_budget))
+                        && Self::auto_prune_one_queued_batch(now)
+                    {
+                        consumed = consumed.saturating_add(queued_budget);
+                    }
+                }
             }
 
             if remaining_weight.all_gte(consumed.saturating_add(summary_budget)) {
@@ -5071,6 +5139,71 @@ mod tests {
             let full_weight = Weight::from_parts(u64::MAX, u64::MAX);
             let _ = OffchainTransactionFee::on_idle(System::block_number(), full_weight);
             assert!(OffchainTransactionFee::queued_batch_by_id(0).is_none());
+            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 1);
+        });
+    }
+
+    #[test]
+    fn prune_queued_batch_pending_advances_last_batch_seq() {
+        new_test_ext().execute_with(|| {
+            let institution = prb_institution();
+            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+                RuntimeOrigin::signed(prb_admin(0)),
+                institution,
+                1
+            ));
+            for i in 0..6 {
+                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                    RuntimeOrigin::signed(prb_admin(i)),
+                    0,
+                    true
+                ));
+            }
+            assert_ok!(OffchainTransactionFee::init_verify_key(
+                RuntimeOrigin::signed(prb_account()),
+                institution,
+                b"default-key".to_vec().try_into().expect("fit")
+            ));
+            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
+                .try_into()
+                .expect("fit");
+            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+                RuntimeOrigin::signed(prb_account()),
+                institution,
+                relays
+            ));
+            let payer = AccountId32::new([1u8; 32]);
+            let recipient = AccountId32::new([3u8; 32]);
+            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+                RuntimeOrigin::signed(recipient.clone()),
+                institution
+            ));
+
+            let tx = <Test as frame_system::Config>::Hashing::hash(b"manual-prune-pending");
+            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
+                tx_id: tx,
+                payer,
+                recipient,
+                transfer_amount: 100,
+                offchain_fee_amount: 1,
+            }]
+            .try_into()
+            .expect("fit");
+            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+                RuntimeOrigin::signed(relay_account()),
+                institution,
+                1,
+                batch,
+                b"ok".to_vec().try_into().expect("fit"),
+            ));
+
+            System::set_block_number(System::block_number() + QUEUED_BATCH_RETENTION_BLOCKS + 1);
+            assert_ok!(OffchainTransactionFee::prune_queued_batch(
+                RuntimeOrigin::signed(relay_account()),
+                0
+            ));
+            assert!(OffchainTransactionFee::queued_batch_by_id(0).is_none());
+            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 1);
         });
     }
 
@@ -5263,6 +5396,7 @@ mod tests {
             assert!(matches!(queued.status, QueuedBatchStatus::Cancelled));
             assert_eq!(queued.last_error, Some(QueuedBatchLastError::Cancelled));
             assert_eq!(Balances::free_balance(&payer), payer_before);
+            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 1);
         });
     }
 

@@ -145,6 +145,26 @@ wuminapp/
 2. 后端执行广播与状态订阅（入池/上链/失败原因）。
 3. 后端返回统一状态机给移动端（`pending/confirmed/failed`）。
 
+### 6.4 统一离线双向扫码登录流程（`WUMINAPP_LOGIN_V1`）
+
+- 登录模式统一为“离线双向扫码”：
+  - 第一次扫码：`wuminapp` 扫描系统挑战二维码。
+  - 第二次扫码：系统扫描 `wuminapp` 展示的签名回执二维码。
+- 私钥仅在手机端本地使用，离线签名，私钥不出端。
+- 三个系统统一认证方式，授权策略分离：
+  - `cpms`：仅允许本地 RBAC 账户（3 个超级管理员 + 超级管理员新增的 n 个操作管理员）。
+  - `sfid`：仅允许内置 45 个超级管理员及其新增操作管理员。
+  - `citizenchain`：内置管理员账户进入对应界面；其他账户默认进入“全节点”界面。
+
+离线登录时序：
+
+1. 登录端（PC/前端软件）生成挑战并展示二维码（挑战码）。
+2. `wuminapp` 扫码后校验协议、时效、系统标识与本地白名单。
+3. 用户在手机端确认登录信息（系统名、设备标识、账户地址）。
+4. `wuminapp` 用本地账户私钥签名并生成回执二维码（签名结果）。
+5. 登录端扫描回执二维码，完成验签与授权判定。
+6. 通过则进入对应界面，失败则给出拒绝原因并记录审计日志。
+
 ## 7. API 规范（MVP + 扩展）
 
 ### 7.1 基础约定
@@ -197,6 +217,55 @@ wuminapp/
 - `3xxx` 业务规则
 - `5xxx` 系统依赖
 
+### 7.6 离线扫码登录协议规范（`WUMINAPP_LOGIN_V1`）
+
+挑战二维码（系统 -> 手机）：
+
+```json
+{
+  "proto": "WUMINAPP_LOGIN_V1",
+  "system": "cpms|sfid|citizenchain",
+  "request_id": "uuid",
+  "challenge": "base64-32bytes",
+  "nonce": "uuid",
+  "issued_at": 1760000000,
+  "expires_at": 1760000060,
+  "aud": "local-app-id",
+  "origin": "local-device-id"
+}
+```
+
+签名原文（固定串联顺序）：
+
+```text
+WUMINAPP_LOGIN_V1|system|aud|origin|request_id|challenge|nonce|expires_at
+```
+
+回执二维码（手机 -> 系统）：
+
+```json
+{
+  "proto": "WUMINAPP_LOGIN_V1",
+  "request_id": "uuid",
+  "account": "ss58-address",
+  "pubkey": "0x...",
+  "sig_alg": "sr25519",
+  "signature": "0x...",
+  "signed_at": 1760000020
+}
+```
+
+登录错误码建议：
+
+- `1101`：二维码协议头无效（`proto` 不匹配）
+- `1102`：二维码已过期
+- `1103`：挑战重复使用（`request_id` 已消费）
+- `1201`：签名验签失败
+- `1202`：账户与公钥不一致
+- `2201`：账户不在 `cpms` 授权名单
+- `2202`：账户不在 `sfid` 授权名单
+- `2203`：`citizenchain` 角色判定失败
+
 ## 8. 区块链与通信集成原则
 
 - 链上：资产、认证结果、投票、关键审计锚点。
@@ -213,6 +282,9 @@ wuminapp/
 - P0：助记词/私钥仅存系统安全区（iOS Keychain / Android Keystore）。
 - P0：所有 SFID/投票相关请求必须携带 nonce 与过期时间，后端做二次时效校验。
 - P0：后端落地 `trace_id + account + sfid_hash + tx_hash + result` 审计日志。
+- P0：离线登录挑战 `request_id` 必须一次性消费，禁止复用。
+- P0：离线登录挑战有效期建议 `60s`，超时必须拒绝。
+- P0：`wuminapp` 必须校验 `system/aud/origin` 白名单，不可信来源禁止签名。
 - P1：签名前人机确认（金额、收款方、提案编号、链 ID）。
 - P1：设备完整性校验接入（当前 `attestation_service.dart` 为占位实现）。
 - 敏感操作建议启用二次确认（生物识别或本地 PIN）。
@@ -244,7 +316,7 @@ wuminapp/
 - M3：E2EE 聊天、语音视频、动态发布
 
 补充的工程落地里程碑：
-- M1（链路打通）：完成 SFID 绑定真实上链、余额查询与基础转账提交
+- M1（链路打通）：完成 `WUMINAPP_LOGIN_V1` 离线双向扫码登录、SFID 绑定真实上链、余额查询与基础转账提交
 - M2（治理能力）：完成提案列表与投票上链、投票回执与状态同步
 - M3（体验与安全）：完成安全区密钥迁移、通知/审计看板/异常告警
 
