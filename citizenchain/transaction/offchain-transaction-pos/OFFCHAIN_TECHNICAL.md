@@ -1,132 +1,113 @@
 # OFFCHAIN_TECHNICAL
 
 模块：`offchain-transaction-pos`  
-范围：链下确认、批次上链与重试治理
+范围：省储行链下清算批次的上链验证、队列重试、治理配置与清理
 
 ## 1. 目标与边界
-- 本模块目标：支持省储行清算的链下交易批量上链。
-- 业务终态发生在链下清算系统，不依赖上链成功。
-- 上链打包是独立动作：用于链上记账/审计/对账。
-- 上链手续费由省储行支付。
+- 本模块不负责链下“确认终态”，仅负责批次上链执行与治理控制。
+- 链下系统负责业务撮合和不可变确认；本模块负责链上可审计落账。
+- 上链手续费由机构手续费账户承担。
 
-## 2. 业务模型（按制度定稿）
-1. 收款方账户先绑定一个清算省储行（例如 G 省储行）。
-2. 该交易手续费费率使用该省储行当前费率（制度范围内可治理配置）。
-3. 用户付款时，链下系统即时完成并固化交易终态（不可更改）：
-   - 付款方扣减：`amount + fee`
-   - 收款方增加：`amount`
-   - 省储行费用账户增加：`fee`
-4. 交易链下确认后即结束，禁止修改、禁止冲正。
-5. 省储行按时间/笔数阈值将“已确认链下交易”打包上链。
+## 2. 核心业务口径
+1. 收款账户需先绑定清算省储行。
+2. 机构费率由治理维护，范围 `1..=10 bp`。
+3. 链下已确认交易可按批次上链（直接提交或先入队后处理）。
+4. 每条批次项包含：
+   - `tx_id`
+   - `payer`
+   - `recipient`
+   - `transfer_amount`
+   - `offchain_fee_amount`
+5. 要求：
+   - `transfer_amount > 0`
+   - `payer != recipient`
+   - `tx_id` 在批次内唯一
+   - `recipient` 已绑定且绑定机构一致
 
-## 3. 示例（制度示例）
-- 收款方 A 绑定 G 省储行。
-- B 向 A 支付 1000 元。
-- G 省储行费率 0.01%。
-- 结果即时固定：
-  - B 实付 1000.1
-  - A 实收 1000.0
-  - G 省储行得 0.1
-  - B 余额减少 1000.1
+## 3. 签名与验证密钥
+- 批次消息为 `blake2_256("GMB_OFFCHAIN_BATCH_V1", institution, batch_seq, batch)`。
+- 入队路径必须验签（当前机构生效密钥）。
+- 出队处理路径不重复验签；依赖入队验签结果与密钥纪元机制防止旧签名继续执行。
 
-## 4. 关键设计原则
-- 清算终态与上链解耦：
-  - 链下确认不等待上链。
-  - 上链失败不回滚已确认清算。
-- 不可变交易：
-  - 已确认交易不可修改。
-  - 错单由用户与商户线下协商后发起新交易，不在系统内冲正。
-- 幂等防重：
-  - 同一业务交易只能确认一次。
-  - 打包与上链可重试但不得重复生效。
-- 确认即终态（技术定义）：
-  - 以单事务完成：三方余额变更 + 流水写入 + 状态置 `CONFIRMED`。
-  - 事务提交成功即对外可见，不允许“确认后再改”。
+### 3.1 密钥轮换（普通）
+- 普通治理轮换在通过后进入 `PendingVerifyKeys`，延迟生效。
+- `on_initialize` 到激活高度时切换到新 key，并递增 `VerifyKeyEpoch`。
+- 若机构已有 pending 轮换，再次通过新轮换会被拒绝（防覆盖）。
 
-## 5. 模块职责拆分
-- 链下清算系统（新增/链下服务）负责：
-  - 收款方绑定省储行
-  - 实时清算并固化终态
-  - 生成可上链批次数据
-- `offchain-transaction-pos`（本模块）负责：
-  - 验签、费率校验、防重
-  - 批次上链执行
-  - 批次摘要与状态落链
+### 3.2 密钥轮换（紧急）
+- `emergency_rotate_verify_key` 采用双管理员确认（至少 `EMERGENCY_ROTATE_MIN_ADMINS=2`）。
+- 支持 `cancel_emergency_rotation_approval` 撤回审批。
+- 紧急轮换成功后：
+  - 立即替换当前 key
+  - 清空 `PendingVerifyKeys`
+  - 从 `PendingRotationInstitutions` 主动移除机构
+  - 递增 `VerifyKeyEpoch`
+  - 清空该机构下所有紧急审批键空间（`clear_prefix`）
 
-## 6. 数据对象（建议）
-- `RecipientClearingBinding`（链下主存）
-  - `recipient_account`
-  - `institution`
-  - `last_switch_block`
-- `OffchainConfirmedTx`（链下主存）
-  - `tx_id`
-  - `institution`
-  - `payer`
-  - `recipient`
-  - `amount`
-  - `fee`
-  - `confirmed_at`
-  - `fee_rate_snapshot`（确认时费率快照）
-  - `immutable = true`
-- `PackOutbox`（链下主存）
-  - `batch_seq`
-  - `institution`
-  - `items[]`
-  - `retry_count`
-  - `next_retry_at`
-  - `status`
+## 4. 防重放与队列
+- 已执行交易防重：`ProcessedOffchainTx + ProcessedOffchainTxAt`（带保留窗口）。
+- 待处理队列防重：`QueuedTxIndex` 防止跨入队批次重复 `tx_id`。
+- 批次顺序：
+  - 执行序号：`LastBatchSeq`
+  - 入队序号：`NextEnqueueBatchSeq`
+- 队列状态：`Pending | Processed | Failed | Cancelled`。
 
-## 7. 处理流程
-### 7.1 链下确认流程
-1. 收款方查绑定省储行。
-2. 取该省储行费率计算手续费。
-3. 原子记账：付款方、收款方、省储行费用账户三方同时更新。
-4. 写入不可变交易记录（状态 `CONFIRMED`）。
-5. 返回实时结果给前端钱包。
+### 4.1 密钥纪元失效
+- 入队时记录 `verify_key_epoch_snapshot`。
+- 处理时若与当前 `VerifyKeyEpoch` 不一致，批次会自动标记 `Cancelled` 并释放 `QueuedTxIndex`，不会执行资金转移。
 
-### 7.2 打包上链流程
-1. 省储行从已确认交易中按阈值组批。
-2. 生成批次签名并提交到链上。
-3. 链上执行批次并记录摘要。
-4. 失败进入持久化重试队列，直到成功。
+## 5. 执行与重试
+- 直接路径：`submit_offchain_batch`（事务包裹执行）。
+- 队列路径：
+  - `enqueue_offchain_batch`（持久化）
+  - `process_queued_batch`（重试执行）
+- 失败策略：
+  - 可重试错误保留队列并累计 `retry_count`
+  - 超过 `MAX_QUEUE_RETRY_COUNT` 变为 `Failed`
+  - 管理员可 `skip_failed_batch` 推进序号
+  - 管理员可 `cancel_queued_batch` 取消队头 pending 批次
+  - 管理员可 `cancel_stale_queued_batches` 批量取消过期 pending（按队头可推进序列原则）
 
-## 8. 失败与重试策略（必须成功）
-- 使用持久化 Outbox 重试队列。
-- 指数退避 + 最大间隔，不设失败终止态。
-- 重试期间保持幂等，防止重复记账。
-- 上链成功后回写链下 `PACKED` 状态。
-- Outbox 必备字段：
-  - `idempotency_key`（建议 `institution + batch_seq`）
-  - `last_error`
-  - `first_failed_at`
-  - `last_retry_at`
-- 失败重试不中断主链下清算，只影响“上链进度”。
+## 6. 清理与存储治理
+- 手动清理入口：
+  - `prune_queued_batch`
+  - `prune_batch_summary`
+  - `prune_processed_tx`
+  - `prune_expired_proposal_action`
+- 自动清理入口：
+  - `on_idle` 有界清理 `processed/queued/summary`
+- 过期 pending 队列：
+  - `auto_prune_one_queued_batch` 对过期 pending 会直接清理存储与 `QueuedTxIndex`。
+  - `prune_queued_batch` 对 pending 也可用 `enqueued_at` 判定过期后清理。
 
-## 9. 安全与一致性要求
-- 交易确认必须可审计（trace_id、operator、签名摘要）。
-- 所有确认交易必须可追溯到批次与链上摘要。
-- 对账任务持续校验：链下确认总额 == 链上批次总额（按机构分桶）。
-- 不可篡改约束（Append-only）：
-  - `OffchainConfirmedTx` 仅允许 `INSERT`，禁止 `UPDATE/DELETE`。
-  - DB 账号权限分离：清算写账号无删除/更新权限，运维账号无业务写权限。
-  - 应用层二次防护：对已确认流水一律拒绝修改接口。
+## 7. 治理动作
+- 费率治理：`propose/vote_institution_rate`。
+- 验签密钥治理：`propose/vote_verify_key`。
+- 机构资金归集治理：`propose/vote_sweep_to_main`。
+- relay 白名单治理：`propose/vote_relay_submitters`。
+- 对“已通过但执行失败”的提案：`retry_execute_proposal`。
 
-## 10. 与现有模块对接点
-- 费率来源：沿用本模块内部治理费率。
-- 打包阈值：沿用现有时间/笔数阈值。
-- 上链手续费承担账户：沿用省储行手续费账户。
-- 后续代码实现以本文件为唯一口径。
+## 8. 权重与完整性约束
+- 关键权重按最坏项上界声明（含 `MaxBatchSize` 影响）。
+- 关键常量完整性在 `integrity_test` 中断言：
+  - 费率上下界
+  - 紧急管理员阈值
+  - 分母与阈值非零
+  - `MaxBatchSize > 0`
 
-## 11. 待实现任务清单
-1. 链下清算服务：账户绑定、实时清算、不可变流水。
-2. 持久化 Outbox：批次构建与重试。
-3. 对账服务：链下确认 vs 链上摘要。
-4. 运维能力：失败告警、重试监控、审计查询接口。
+## 9. 存储版本
+- pallet 已声明 `#[pallet::storage_version]`，当前版本为 `1`，用于未来安全迁移判定。
 
-## 12. 测试清单（必须覆盖）
-1. 确认事务原子性：三方余额与流水状态同时成功/同时失败。
-2. 重复提交同一交易：仅首笔生效，其余命中幂等返回。
-3. 节点重启恢复：Outbox 重启后继续重试，不丢单、不重单。
-4. 批次重复上报：链上/链下均不重复记账。
-5. 网络抖动与超时：可持续重试直到成功。
-6. 费率变更前后：历史交易按 `fee_rate_snapshot` 可追溯解释一致。
+## 10. 关键事件（观测建议）
+- 批次：`Submitted/Queued/Processed/Failed/Cancelled/Pruned`
+- 紧急换钥：`Approval`、`ApprovalCancelled`、`EmergencyRotated`
+- 密钥普通轮换：`RotationScheduled`、`VerifyKeyRotated`
+- 治理执行：`InternalProposalExecutionFailed`、`ProposalExecutionRetried`
+
+## 11. 当前测试覆盖（摘要）
+- 紧急换钥双管理员门限、审批撤回、单审批不生效。
+- 密钥纪元失效导致已入队批次自动取消。
+- pending key 不覆盖保护。
+- retry_execute_proposal 成功/失败分支。
+- on_idle 自动清理（含 stale pending）与 on_initialize 轮换 epoch 递增。
+- 批量取消 stale pending、序列推进与队列行为一致性。
