@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:wuminapp_mobile/login/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/pages/profile_page.dart';
-import 'package:wuminapp_mobile/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/services/api_client.dart';
 
 void main() {
