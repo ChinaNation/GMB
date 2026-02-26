@@ -405,7 +405,7 @@ impl offchain_transaction_fee::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type MaxVerifyKeyLen = ConstU32<256>;
-    type MaxBatchSize = ConstU32<200000>;
+    type MaxBatchSize = ConstU32<1000>;
     type MaxBatchSignatureLength = ConstU32<64>;
     type MaxRelaySubmitters = ConstU32<8>;
     type InternalVoteEngine = VotingEngineSystem;

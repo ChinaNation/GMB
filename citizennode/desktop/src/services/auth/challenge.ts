@@ -1,21 +1,13 @@
-import type { UserRole } from '../../types/auth';
-
 export type LoginCrypto = 'sr25519' | 'ed25519';
 
 export type LoginChallenge = {
   nonce: string;
   issuedAt: number;
-  role: UserRole;
-  address: string;
-  province?: string;
 };
 
 export type LoginChallengePayload = {
   type: 'citizennode.login.challenge';
   version: 1;
-  role: UserRole;
-  address: string;
-  province?: string;
   issuedAt: number;
   nonce: string;
 };
@@ -37,17 +29,10 @@ function randomNonce(): string {
     .join('');
 }
 
-export function issueLoginChallenge(input: {
-  role: UserRole;
-  address: string;
-  province?: string;
-}): LoginChallenge {
+export function issueLoginChallenge(): LoginChallenge {
   return {
     nonce: randomNonce(),
-    issuedAt: Date.now(),
-    role: input.role,
-    address: input.address,
-    province: input.province
+    issuedAt: Date.now()
   };
 }
 
@@ -55,9 +40,6 @@ export function toChallengePayload(challenge: LoginChallenge): LoginChallengePay
   return {
     type: 'citizennode.login.challenge',
     version: 1,
-    role: challenge.role,
-    address: challenge.address,
-    province: challenge.province,
     issuedAt: challenge.issuedAt,
     nonce: challenge.nonce
   };

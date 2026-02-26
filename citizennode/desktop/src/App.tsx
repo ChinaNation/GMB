@@ -1,6 +1,6 @@
 import { Button, Card, Layout, Space, Tag, Typography } from 'antd';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
-import { AntdLoginPreview } from './features/auth/AntdLoginPreview';
+import { LoginCard } from './features/auth/LoginCard';
 import { RoleGate } from './features/auth/RoleGate';
 import { NrcDashboard } from './pages/Nrc/NrcDashboard';
 import { PrcDashboard } from './pages/Prc/PrcDashboard';
@@ -18,7 +18,13 @@ export default function App() {
   const homePath = session ? `/${session.role}` : '/';
 
   if (!session) {
-    return <AntdLoginPreview />;
+    return (
+      <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
+        <Content style={{ maxWidth: 820, width: '100%', margin: '0 auto', padding: '24px 20px' }}>
+          <LoginCard />
+        </Content>
+      </Layout>
+    );
   }
 
   return (
