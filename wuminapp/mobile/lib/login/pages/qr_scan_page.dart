@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:wuminapp_mobile/services/fcrc_login_service.dart';
+import 'package:wuminapp_mobile/login/models/login_models.dart';
+import 'package:wuminapp_mobile/login/services/wuminapp_login_service.dart';
 
 class QrScanPage extends StatefulWidget {
   const QrScanPage({super.key});
@@ -15,8 +16,7 @@ class QrScanPage extends StatefulWidget {
 
 class _QrScanPageState extends State<QrScanPage> {
   final MobileScannerController _controller = MobileScannerController();
-  final FcrcLoginSignatureService _loginSignatureService =
-      FcrcLoginSignatureService();
+  final WuminLoginService _loginService = WuminLoginService();
   bool _handled = false;
 
   @override
@@ -38,8 +38,8 @@ class _QrScanPageState extends State<QrScanPage> {
     }
 
     switch (mode) {
-      case _ScanMode.fcrcLogin:
-        await _showFcrcLoginDialog(raw);
+      case _ScanMode.login:
+        await _showLoginDialog(raw);
         break;
       case _ScanMode.transfer:
         final address = _extractAddress(raw);
@@ -54,7 +54,9 @@ class _QrScanPageState extends State<QrScanPage> {
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('无法识别二维码'),
-            content: const Text('请扫描 fcrc 登录二维码或账户收款二维码。'),
+            content: const Text(
+              '请扫描 WUMINAPP_LOGIN_V1 登录二维码或账户收款二维码。',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -75,8 +77,8 @@ class _QrScanPageState extends State<QrScanPage> {
 
   _ScanMode _detectMode(String raw) {
     final lower = raw.toLowerCase();
-    if (_isFcrcLoginCode(raw)) {
-      return _ScanMode.fcrcLogin;
+    if (_isWuminLoginCode(raw)) {
+      return _ScanMode.login;
     }
     if (lower.startsWith('gmb://account/')) {
       return _ScanMode.transfer;
@@ -87,24 +89,12 @@ class _QrScanPageState extends State<QrScanPage> {
     return _ScanMode.unknown;
   }
 
-  bool _isFcrcLoginCode(String raw) {
-    final lower = raw.toLowerCase().trim();
-    if (lower.startsWith('fcrc://login') ||
-        lower.startsWith('fcrc-login://') ||
-        (lower.contains('fcrc') && (lower.contains('login') || lower.contains('signin')))) {
-      return true;
-    }
+  bool _isWuminLoginCode(String raw) {
     try {
       final data = jsonDecode(raw);
       if (data is Map<String, dynamic>) {
-        final type = (data['type'] ?? '').toString().toLowerCase();
-        final scene = (data['scene'] ?? '').toString().toLowerCase();
-        if (type.contains('fcrc') && type.contains('login')) {
-          return true;
-        }
-        if (scene.contains('fcrc') && scene.contains('login')) {
-          return true;
-        }
+        final proto = (data['proto'] ?? '').toString();
+        return proto == WuminLoginService.protocol;
       }
     } catch (_) {
       // not json
@@ -119,10 +109,11 @@ class _QrScanPageState extends State<QrScanPage> {
     return raw.trim();
   }
 
-  Future<void> _showFcrcLoginDialog(String payload) async {
-    FcrcLoginChallenge challenge;
+  Future<void> _showLoginDialog(String payload) async {
+    WuminLoginChallenge challenge;
     try {
-      challenge = _loginSignatureService.parseChallenge(payload);
+      challenge = _loginService.parseChallenge(payload);
+      await _loginService.validateTrust(challenge);
     } catch (e) {
       await showDialog<void>(
         context: context,
@@ -146,8 +137,15 @@ class _QrScanPageState extends State<QrScanPage> {
     final shouldSign = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('登录 fcrc 系统'),
-        content: Text('已识别登录挑战。\nnonce: ${challenge.nonce}'),
+        title: Text('登录 ${challenge.system} 系统'),
+        content: Text(
+          '已识别离线登录挑战。\n'
+          'request_id: ${challenge.requestId}\n'
+          'nonce: ${challenge.nonce}\n'
+          'aud: ${challenge.aud}\n'
+          'origin: ${challenge.origin}\n'
+          '剩余有效期: ${challenge.ttlSeconds}s',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -155,19 +153,19 @@ class _QrScanPageState extends State<QrScanPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('挑战签名'),
+            child: const Text('本地签名并生成回执'),
           ),
         ],
       ),
     );
     if (shouldSign == true && mounted) {
-      await _signFcrcChallenge(payload);
+      await _signLoginChallenge(payload);
     }
   }
 
-  Future<void> _signFcrcChallenge(String payload) async {
+  Future<void> _signLoginChallenge(String payload) async {
     try {
-      final result = await _loginSignatureService.buildSignaturePayload(payload);
+      final result = await _loginService.buildReceiptPayload(payload);
       if (!mounted) {
         return;
       }
@@ -177,7 +175,7 @@ class _QrScanPageState extends State<QrScanPage> {
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('登录签名已生成'),
+          title: const Text('登录回执已生成'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -197,7 +195,7 @@ class _QrScanPageState extends State<QrScanPage> {
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: pretty));
                 messenger.showSnackBar(
-                  const SnackBar(content: Text('签名 JSON 已复制')),
+                  const SnackBar(content: Text('回执 JSON 已复制')),
                 );
               },
               child: const Text('复制'),
@@ -215,8 +213,8 @@ class _QrScanPageState extends State<QrScanPage> {
       }
       await showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('签名失败'),
+          builder: (context) => AlertDialog(
+          title: const Text('登录回执生成失败'),
           content: Text('$e'),
           actions: [
             TextButton(
@@ -259,7 +257,7 @@ class _QrScanPageState extends State<QrScanPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
-                '扫描 fcrc 登录码或账户收款码',
+                '扫描登录挑战码或账户收款码',
                 style: TextStyle(color: Colors.white),
               ),
             ),
@@ -271,7 +269,7 @@ class _QrScanPageState extends State<QrScanPage> {
 }
 
 enum _ScanMode {
-  fcrcLogin,
+  login,
   transfer,
   unknown,
 }

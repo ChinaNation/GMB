@@ -76,6 +76,59 @@
 - SFID 验签通过后向链上提交授权交易（绑定认证/投票认证/人数快照等）。
 - 链上仅接受 SFID 授权账户签名调用。
 
+### 5.1 CitizenChain 离线扫码登录（`WUMINAPP_LOGIN_V1`）
+
+- CitizenChain 相关前端软件统一采用 `WUMINAPP_LOGIN_V1` 与 `wuminapp` 对接。
+- 登录方式固定为离线双向扫码：
+  - 第一次：`wuminapp` 扫描登录端挑战二维码。
+  - 第二次：登录端扫描 `wuminapp` 回执二维码。
+- 手机端本地离线签名，私钥不出端，账户使用公钥地址。
+
+挑战二维码（登录端 -> 手机）：
+
+```json
+{
+  "proto": "WUMINAPP_LOGIN_V1",
+  "system": "citizenchain",
+  "request_id": "uuid",
+  "challenge": "base64-32bytes",
+  "nonce": "uuid",
+  "issued_at": 1760000000,
+  "expires_at": 1760000060,
+  "aud": "citizenchain-front",
+  "origin": "citizenchain-device-id"
+}
+```
+
+签名原文：
+
+```text
+WUMINAPP_LOGIN_V1|citizenchain|aud|origin|request_id|challenge|nonce|expires_at
+```
+
+回执二维码（手机 -> 登录端）：
+
+```json
+{
+  "proto": "WUMINAPP_LOGIN_V1",
+  "request_id": "uuid",
+  "account": "ss58-address",
+  "pubkey": "0x...",
+  "sig_alg": "sr25519",
+  "signature": "0x...",
+  "signed_at": 1760000020
+}
+```
+
+角色判定规则：
+
+- 验签通过后按账户映射角色：
+  - 命中国储会管理员 -> 国储会界面
+  - 命中省储会管理员 -> 省储会界面
+  - 命中省储行管理员 -> 省储行界面
+  - 其余账户 -> 全节点界面
+- 挑战 `request_id` 必须一次性消费，超时（建议 60 秒）拒绝。
+
 ## 6. 安全控制基线
 - 地址安全：
   - 关键保留地址、fee 地址、keyless 地址进入禁止抢注册集合。
@@ -126,4 +179,3 @@
   - 跨系统信任链的防重放与密钥轮换机制固化；
   - 链下清算持久化重试与监控告警完善；
   - 治理与运行时升级流程的最小权限化和审计闭环。
-
