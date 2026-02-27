@@ -14,7 +14,7 @@ class WuminLoginService {
     LoginWhitelistPolicy? whitelistPolicy,
   })  : _walletService = walletService ?? WalletService(),
         _replayGuard = replayGuard ?? LoginReplayGuard(),
-        _whitelistPolicy = whitelistPolicy ?? const LoginWhitelistPolicy();
+        _whitelistPolicy = whitelistPolicy ?? LoginWhitelistPolicy();
 
   static const String protocol = 'WUMINAPP_LOGIN_V1';
   static const Set<String> allowedSystems = {
@@ -79,10 +79,23 @@ class WuminLoginService {
   Future<Map<String, dynamic>> buildReceiptPayload(String rawChallenge) async {
     final challenge = parseChallenge(rawChallenge);
     await validateTrust(challenge);
+    return buildReceiptPayloadForChallenge(challenge);
+  }
+
+  Future<Map<String, dynamic>> buildReceiptPayloadForChallenge(
+    WuminLoginChallenge challenge, {
+    int? walletIndex,
+  }) async {
+    await validateTrust(challenge);
     await _replayGuard.assertNotConsumed(challenge.requestId);
-    final walletSecret = await _walletService.getLatestWalletSecret();
+    final walletSecret = walletIndex == null
+        ? await _walletService.getLatestWalletSecret()
+        : await _walletService.getWalletSecretByIndex(walletIndex);
     if (walletSecret == null) {
-      throw Exception('请先创建或导入钱包');
+      if (walletIndex == null) {
+        throw Exception('请先创建或导入钱包');
+      }
+      throw Exception('未找到指定钱包（walletIndex=$walletIndex）');
     }
 
     final wallet = walletSecret.profile;
@@ -117,6 +130,10 @@ class WuminLoginService {
 
   String buildSignPreview(String rawChallenge) {
     final challenge = parseChallenge(rawChallenge);
+    return _buildSignMessage(challenge);
+  }
+
+  String buildSignPreviewForChallenge(WuminLoginChallenge challenge) {
     return _buildSignMessage(challenge);
   }
 

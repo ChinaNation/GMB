@@ -76,13 +76,17 @@
 - SFID 验签通过后向链上提交授权交易（绑定认证/投票认证/人数快照等）。
 - 链上仅接受 SFID 授权账户签名调用。
 
-### 5.1 CitizenChain 离线扫码登录（`WUMINAPP_LOGIN_V1`）
+### 5.1 CitizenChain 离线扫码登录（`WUMINAPP_LOGIN_V1`，实现对齐）
 
 - CitizenChain 相关前端软件统一采用 `WUMINAPP_LOGIN_V1` 与 `wuminapp` 对接。
 - 登录方式固定为离线双向扫码：
   - 第一次：`wuminapp` 扫描登录端挑战二维码。
   - 第二次：登录端扫描 `wuminapp` 回执二维码。
 - 手机端本地离线签名，私钥不出端，账户使用公钥地址。
+- 当前实现对齐口径：
+  - 手机端已实现扫码识别、确认签名、回执二维码生成。
+  - SFID 已完成实测登录成功。
+  - CitizenChain 端按同协议字段与验签顺序接入即可复用。
 
 挑战二维码（登录端 -> 手机）：
 
@@ -120,6 +124,15 @@ WUMINAPP_LOGIN_V1|citizenchain|aud|origin|request_id|challenge|nonce|expires_at
 }
 ```
 
+系统端验签流程（统一核心层）：
+
+1. 读取回执 `request_id/account/pubkey/signature`。
+2. 查找挑战缓存并重建签名原文：
+   `WUMINAPP_LOGIN_V1|citizenchain|aud|origin|request_id|challenge|nonce|expires_at`。
+3. 使用 `sr25519` 验签。
+4. 校验 `expires_at`、`request_id` 一次性消费。
+5. 验签通过后执行角色路由（管理员三类/全节点）。
+
 角色判定规则：
 
 - 验签通过后按账户映射角色：
@@ -128,6 +141,12 @@ WUMINAPP_LOGIN_V1|citizenchain|aud|origin|request_id|challenge|nonce|expires_at
   - 命中省储行管理员 -> 省储行界面
   - 其余账户 -> 全节点界面
 - 挑战 `request_id` 必须一次性消费，超时（建议 60 秒）拒绝。
+
+### 5.2 三端统一实现约束
+
+- 手机端统一：所有系统登录请求均由 `wuminapp` 同一扫码登录模块处理。
+- 系统端核心统一：CitizenChain 与 SFID/CPMS 共用登录核心层（挑战、回执、验签、防重放、错误码）。
+- 授权层独立：CitizenChain 仅实现本链角色映射与界面路由策略，不复制核心认证逻辑。
 
 ## 6. 安全控制基线
 - 地址安全：

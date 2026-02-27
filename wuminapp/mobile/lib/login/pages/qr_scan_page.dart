@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -8,7 +9,14 @@ import 'package:wuminapp_mobile/login/models/login_models.dart';
 import 'package:wuminapp_mobile/login/services/wuminapp_login_service.dart';
 
 class QrScanPage extends StatefulWidget {
-  const QrScanPage({super.key});
+  const QrScanPage({
+    super.key,
+    this.walletIndex,
+    this.walletAddress,
+  });
+
+  final int? walletIndex;
+  final String? walletAddress;
 
   @override
   State<QrScanPage> createState() => _QrScanPageState();
@@ -32,47 +40,63 @@ class _QrScanPageState extends State<QrScanPage> {
     _handled = true;
     await _controller.stop();
 
-    final mode = _detectMode(raw);
-    if (!mounted) {
-      return;
-    }
+    try {
+      final mode = _detectMode(raw);
+      if (!mounted) {
+        return;
+      }
 
-    switch (mode) {
-      case _ScanMode.login:
-        await _showLoginDialog(raw);
-        break;
-      case _ScanMode.transfer:
-        final address = _extractAddress(raw);
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => TransferDraftPage(toAddress: address),
-          ),
-        );
-        break;
-      case _ScanMode.unknown:
-        await showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('无法识别二维码'),
-            content: const Text(
-              '请扫描 WUMINAPP_LOGIN_V1 登录二维码或账户收款二维码。',
+      switch (mode) {
+        case _ScanMode.login:
+          await _showLoginDialog(raw);
+          break;
+        case _ScanMode.transfer:
+          final address = _extractAddress(raw);
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => TransferDraftPage(toAddress: address),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('确定'),
-              ),
-            ],
-          ),
-        );
-        break;
+          );
+          break;
+        case _ScanMode.unknown:
+          await showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('无法识别二维码'),
+              content: const Text('请扫描 WUMINAPP_LOGIN_V1 登录二维码或账户收款二维码。'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('确定'),
+                ),
+              ],
+            ),
+          );
+          break;
+      }
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('扫码处理异常'),
+          content: Text('$e'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      if (mounted) {
+        _handled = false;
+        await _controller.start();
+      }
     }
-
-    if (!mounted) {
-      return;
-    }
-    _handled = false;
-    await _controller.start();
   }
 
   _ScanMode _detectMode(String raw) {
@@ -111,10 +135,15 @@ class _QrScanPageState extends State<QrScanPage> {
 
   Future<void> _showLoginDialog(String payload) async {
     WuminLoginChallenge challenge;
+    String signPreview;
     try {
       challenge = _loginService.parseChallenge(payload);
       await _loginService.validateTrust(challenge);
+      signPreview = _loginService.buildSignPreviewForChallenge(challenge);
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -130,6 +159,7 @@ class _QrScanPageState extends State<QrScanPage> {
       );
       return;
     }
+
     if (!mounted) {
       return;
     }
@@ -141,10 +171,12 @@ class _QrScanPageState extends State<QrScanPage> {
         content: Text(
           '已识别离线登录挑战。\n'
           'request_id: ${challenge.requestId}\n'
+          '签名钱包: ${widget.walletAddress ?? "最新钱包"}\n'
           'nonce: ${challenge.nonce}\n'
           'aud: ${challenge.aud}\n'
           'origin: ${challenge.origin}\n'
-          '剩余有效期: ${challenge.ttlSeconds}s',
+          '剩余有效期: ${challenge.ttlSeconds}s\n\n'
+          '签名原文:\n$signPreview',
         ),
         actions: [
           TextButton(
@@ -158,53 +190,44 @@ class _QrScanPageState extends State<QrScanPage> {
         ],
       ),
     );
+
     if (shouldSign == true && mounted) {
-      await _signLoginChallenge(payload);
+      await _signLoginChallenge(challenge);
     }
   }
 
-  Future<void> _signLoginChallenge(String payload) async {
+  Future<void> _signLoginChallenge(WuminLoginChallenge challenge) async {
     try {
-      final result = await _loginService.buildReceiptPayload(payload);
+      if (challenge.isExpired) {
+        throw Exception('登录挑战已过期，请重新扫码');
+      }
+
+      final result = await _loginService.buildReceiptPayloadForChallenge(
+        challenge,
+        walletIndex: widget.walletIndex,
+      );
+
       if (!mounted) {
         return;
       }
+
       final messenger = ScaffoldMessenger.of(context);
       final compact = jsonEncode(result);
       final pretty = const JsonEncoder.withIndent('  ').convert(result);
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('登录回执已生成'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                QrImageView(
-                  data: compact,
-                  version: QrVersions.auto,
-                  size: 220,
-                ),
-                const SizedBox(height: 12),
-                SelectableText(pretty),
-              ],
-            ),
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => _LoginReceiptPage(
+            compactPayload: compact,
+            prettyPayload: pretty,
+            expiresAt: challenge.expiresAt,
+            onCopy: () {
+              Clipboard.setData(ClipboardData(text: pretty));
+              messenger.showSnackBar(
+                const SnackBar(content: Text('回执 JSON 已复制')),
+              );
+            },
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: pretty));
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('回执 JSON 已复制')),
-                );
-              },
-              child: const Text('复制'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('完成'),
-            ),
-          ],
         ),
       );
     } catch (e) {
@@ -213,7 +236,7 @@ class _QrScanPageState extends State<QrScanPage> {
       }
       await showDialog<void>(
         context: context,
-          builder: (context) => AlertDialog(
+        builder: (context) => AlertDialog(
           title: const Text('登录回执生成失败'),
           content: Text('$e'),
           actions: [
@@ -231,7 +254,7 @@ class _QrScanPageState extends State<QrScanPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('扫码'),
+        title: Text(widget.walletIndex == null ? '扫码' : '扫码（钱包${widget.walletIndex}）'),
         centerTitle: true,
       ),
       body: Stack(
@@ -261,6 +284,130 @@ class _QrScanPageState extends State<QrScanPage> {
                 style: TextStyle(color: Colors.white),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LoginReceiptPage extends StatefulWidget {
+  const _LoginReceiptPage({
+    required this.compactPayload,
+    required this.prettyPayload,
+    required this.expiresAt,
+    required this.onCopy,
+  });
+
+  final String compactPayload;
+  final String prettyPayload;
+  final int expiresAt;
+  final VoidCallback onCopy;
+
+  @override
+  State<_LoginReceiptPage> createState() => _LoginReceiptPageState();
+}
+
+class _LoginReceiptPageState extends State<_LoginReceiptPage> {
+  Timer? _timer;
+  late int _remainingSeconds;
+
+  @override
+  void initState() {
+    super.initState();
+    _remainingSeconds = _secondsLeft();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _remainingSeconds = _secondsLeft();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  int _secondsLeft() {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final left = widget.expiresAt - now;
+    return left > 0 ? left : 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final expired = _remainingSeconds <= 0;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('登录回执'),
+        centerTitle: true,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: expired ? Colors.red.shade50 : Colors.green.shade50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              expired ? '该回执已过期，请重新扫码' : '回执有效期剩余：${_remainingSeconds}s',
+              style: TextStyle(
+                color: expired ? Colors.red.shade700 : Colors.green.shade700,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: QrImageView(
+              data: widget.compactPayload,
+              version: QrVersions.auto,
+              size: 220,
+              errorStateBuilder: (cxt, err) {
+                return Container(
+                  width: 220,
+                  height: 220,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '回执二维码渲染失败：$err',
+                      style: TextStyle(color: Colors.red.shade700),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          SelectableText(widget.prettyPayload),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: widget.onCopy,
+                  child: const Text('复制 JSON'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('完成'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

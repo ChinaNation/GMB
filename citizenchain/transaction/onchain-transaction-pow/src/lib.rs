@@ -16,6 +16,24 @@ use sp_runtime::{
 };
 use sp_std::{marker::PhantomData, prelude::*};
 
+const _: () = {
+    assert!(
+        primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT
+            .saturating_add(primitives::core_const::ONCHAIN_FEE_NRC_PERCENT)
+            .saturating_add(primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT)
+            > 0,
+        "fee distribution percents must sum to positive"
+    );
+    assert!(
+        primitives::core_const::ONCHAIN_MIN_FEE > 0,
+        "ONCHAIN_MIN_FEE must be positive"
+    );
+    assert!(
+        primitives::core_const::ONCHAIN_FEE_RATE.deconstruct() > 0,
+        "ONCHAIN_FEE_RATE must be non-zero"
+    );
+};
+
 /// 链上 PoW 交易手续费分配器（统一入口）：
 /// - 全节点（绑定钱包）分成：`ONCHAIN_FEE_FULLNODE_PERCENT`
 /// - 国储会分成：`ONCHAIN_FEE_NRC_PERCENT`
@@ -208,7 +226,13 @@ where
         match AuthorFinder::find_author(pre_runtime_digests) {
             Some(miner) => {
                 if let Some(wallet) = fullnode_pow_reward::RewardWalletByMiner::<T>::get(&miner) {
-                    let _ = Currency::resolve(&wallet, fullnode_credit);
+                    if let Err(remaining) = Currency::resolve(&wallet, fullnode_credit) {
+                        log::warn!(
+                            target: "runtime::onchain_transaction_pow",
+                            "burn fullnode fee share: failed to resolve reward wallet credit: {:?}",
+                            remaining.peek()
+                        );
+                    }
                 } else {
                     log::warn!(
                         target: "runtime::onchain_transaction_pow",
@@ -228,7 +252,13 @@ where
 
         // 中文注释：国储会分成发到 CHINA_CB[0] 对应交易地址；解析失败则自动销毁。
         if let Some(nrc_account) = NrcProvider::nrc_account() {
-            let _ = Currency::resolve(&nrc_account, nrc_credit);
+            if let Err(remaining) = Currency::resolve(&nrc_account, nrc_credit) {
+                log::warn!(
+                    target: "runtime::onchain_transaction_pow",
+                    "burn nrc fee share: failed to resolve nrc account credit: {:?}",
+                    remaining.peek()
+                );
+            }
         } else {
             log::warn!(
                 target: "runtime::onchain_transaction_pow",
@@ -386,6 +416,13 @@ mod tests {
             Some(AccountId32::new(
                 primitives::china::china_cb::CHINA_CB[0].duoqian_address,
             ))
+        }
+    }
+
+    struct MockNrcAccountProviderNone;
+    impl NrcAccountProvider<AccountId32> for MockNrcAccountProviderNone {
+        fn nrc_account() -> Option<AccountId32> {
+            None
         }
     }
 
@@ -660,6 +697,172 @@ mod tests {
             assert_eq!(Balances::free_balance(nrc), expected_nrc);
             // 无作者钱包时：全节点分成+黑洞分成均销毁。
             assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
+        });
+    }
+
+    #[test]
+    fn fee_router_burns_fullnode_share_when_author_not_found() {
+        new_test_ext().execute_with(|| {
+            let payer = account(1);
+            let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
+            let issuance_before = Balances::total_issuance();
+            let total_fee = 100u128;
+            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let blackhole_percent = primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT as u128;
+            let total_percent = fullnode_percent
+                .saturating_add(nrc_percent)
+                .saturating_add(blackhole_percent);
+            let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
+            let remainder = total_fee.saturating_sub(expected_fullnode);
+            let expected_nrc = if nrc_percent.saturating_add(blackhole_percent) == 0 {
+                0
+            } else {
+                remainder.saturating_mul(nrc_percent)
+                    / nrc_percent.saturating_add(blackhole_percent)
+            };
+            let expected_burn = total_fee.saturating_sub(expected_nrc);
+
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = None);
+            let credit = <Balances as Balanced<AccountId32>>::withdraw(
+                &payer,
+                total_fee,
+                Precision::Exact,
+                Preservation::Preserve,
+                Fortitude::Polite,
+            )
+            .expect("payer should have enough balance");
+
+            PowOnchainFeeRouter::<Test, Balances, MockFindAuthor, MockNrcAccountProvider>::on_nonzero_unbalanced(credit);
+
+            assert_eq!(Balances::free_balance(payer), 900);
+            assert_eq!(Balances::free_balance(nrc), expected_nrc);
+            assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
+        });
+    }
+
+    #[test]
+    fn fee_router_burns_nrc_share_when_nrc_account_missing() {
+        new_test_ext().execute_with(|| {
+            let payer = account(1);
+            let miner = account(9);
+            let reward_wallet = account(8);
+            let issuance_before = Balances::total_issuance();
+            let total_fee = 100u128;
+            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let blackhole_percent = primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT as u128;
+            let total_percent = fullnode_percent
+                .saturating_add(nrc_percent)
+                .saturating_add(blackhole_percent);
+            let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
+            let expected_burn = total_fee.saturating_sub(expected_fullnode);
+
+            fullnode_pow_reward::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
+            let credit = <Balances as Balanced<AccountId32>>::withdraw(
+                &payer,
+                total_fee,
+                Precision::Exact,
+                Preservation::Preserve,
+                Fortitude::Polite,
+            )
+            .expect("payer should have enough balance");
+
+            PowOnchainFeeRouter::<Test, Balances, MockFindAuthor, MockNrcAccountProviderNone>::on_nonzero_unbalanced(credit);
+
+            assert_eq!(Balances::free_balance(payer), 900);
+            assert_eq!(Balances::free_balance(reward_wallet), expected_fullnode);
+            assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
+        });
+    }
+
+    #[test]
+    fn correct_and_deposit_does_not_refund_overpayment() {
+        type Adapter = PowOnchainChargeAdapter<
+            Balances,
+            PowOnchainFeeRouter<Test, Balances, MockFindAuthor, MockNrcAccountProviderNone>,
+            AmountExtractorAmount,
+            (),
+        >;
+
+        new_test_ext().execute_with(|| {
+            let who = account(1);
+            let call = sample_call();
+            let info = call.get_dispatch_info();
+            let issuance_before = Balances::total_issuance();
+
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = None);
+            let liquidity =
+                <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 5)
+                    .expect("withdraw should succeed");
+            assert_eq!(Balances::free_balance(&who), 945);
+
+            assert_ok!(<Adapter as OnChargeTransaction<Test>>::correct_and_deposit_fee(
+                &who,
+                &info,
+                &Default::default(),
+                1, // pretend corrected fee is tiny; adapter intentionally ignores it
+                5,
+                liquidity,
+            ));
+
+            assert_eq!(Balances::free_balance(&who), 945);
+            assert_eq!(Balances::total_issuance(), issuance_before - 55);
+        });
+    }
+
+    #[test]
+    fn tip_is_routed_with_fee_using_same_distribution() {
+        type Adapter = PowOnchainChargeAdapter<
+            Balances,
+            PowOnchainFeeRouter<Test, Balances, MockFindAuthor, MockNrcAccountProvider>,
+            AmountExtractorTiny,
+            (),
+        >;
+
+        new_test_ext().execute_with(|| {
+            let who = account(1);
+            let call = sample_call();
+            let info = call.get_dispatch_info();
+            let miner = account(9);
+            let reward_wallet = account(8);
+            let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
+
+            fullnode_pow_reward::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
+
+            let total_fee = 15u128; // base 10 + tip 5
+            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let blackhole_percent = primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT as u128;
+            let total_percent = fullnode_percent
+                .saturating_add(nrc_percent)
+                .saturating_add(blackhole_percent);
+            let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
+            let remainder = total_fee.saturating_sub(expected_fullnode);
+            let expected_nrc = if nrc_percent.saturating_add(blackhole_percent) == 0 {
+                0
+            } else {
+                remainder.saturating_mul(nrc_percent)
+                    / nrc_percent.saturating_add(blackhole_percent)
+            };
+
+            let liquidity =
+                <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 5)
+                    .expect("withdraw should succeed");
+            assert_ok!(<Adapter as OnChargeTransaction<Test>>::correct_and_deposit_fee(
+                &who,
+                &info,
+                &Default::default(),
+                total_fee,
+                5,
+                liquidity,
+            ));
+
+            assert_eq!(Balances::free_balance(who), 985);
+            assert_eq!(Balances::free_balance(reward_wallet), expected_fullnode);
+            assert_eq!(Balances::free_balance(nrc), expected_nrc);
         });
     }
 }
