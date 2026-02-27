@@ -16,6 +16,7 @@ dependencies:
   bip39: ^1.0.6
   mobile_scanner: ^7.1.4
   qr_flutter: ^4.1.0
+  flutter_svg: ^2.0.10+1
 
 dev_dependencies:
   flutter_test:
@@ -24,3 +25,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icons/scan-line.svg
+    - assets/icons/wallet.svg
+    - assets/icons/copy.svg

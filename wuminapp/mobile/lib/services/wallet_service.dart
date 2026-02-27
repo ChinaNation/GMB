@@ -102,6 +102,27 @@ class WalletService {
     );
   }
 
+  Future<WalletSecret?> getWalletSecretByIndex(int walletIndex) async {
+    final records = await _loadWalletRecords();
+    for (final record in records) {
+      if (record.walletIndex == walletIndex) {
+        return WalletSecret(
+          profile: WalletProfile(
+            walletIndex: record.walletIndex,
+            address: record.address,
+            pubkeyHex: record.pubkeyHex,
+            alg: record.alg,
+            ss58: record.ss58,
+            createdAtMillis: record.createdAtMillis,
+            source: record.source,
+          ),
+          mnemonic: record.mnemonic,
+        );
+      }
+    }
+    return null;
+  }
+
   Future<WalletCreationResult> createWallet() async {
     final mnemonic = bip39.generateMnemonic();
     final derived = await _deriveSr25519Ss58Address(mnemonic);
@@ -160,6 +181,18 @@ class WalletService {
     await prefs.remove(_kCreatedAtMillis);
     await prefs.remove(_kSource);
     await prefs.remove(_kMnemonic);
+  }
+
+  Future<void> deleteWallet(int walletIndex) async {
+    final prefs = await SharedPreferences.getInstance();
+    final records = await _loadWalletRecords();
+    records.removeWhere((r) => r.walletIndex == walletIndex);
+    if (records.isEmpty) {
+      await clearWallet();
+      return;
+    }
+    await prefs.setBool(_kHasWallet, true);
+    await _saveWalletRecords(records);
   }
 
   Future<int> _nextWalletIndex() async {

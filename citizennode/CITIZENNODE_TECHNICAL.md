@@ -48,13 +48,23 @@ citizennode/
 - `desktop/src/pages/Full`：全节点挖矿界面
 - `desktop/src/features/auth`：挑战签名登录与角色识别
 
-## 6. 认证与路由规则
+## 6. 认证与路由规则（实现对齐）
 
-- 统一挑战签名登录（与 SFID/CPMS 一致）。
-- 登录页由系统生成一次性登录二维码（challenge）。
-- 手机扫码后回传签名结果，签名内容中携带用户公钥。
-- 系统从签名内容提取公钥并识别角色。
-- 命中机构公钥才允许登录并进入对应工作台；未命中直接拒绝登录。
+- 协议统一：`WUMINAPP_LOGIN_V1`（与 SFID/CPMS 完全一致）。
+- 离线双向扫码：登录端出挑战码，手机端确认签名并出回执码，登录端扫码完成验签。
+- 手机端签名原文固定：
+  - `WUMINAPP_LOGIN_V1|citizenchain|aud|origin|request_id|challenge|nonce|expires_at`
+- 回执核心字段：
+  - `proto/request_id/account/pubkey/sig_alg/signature/signed_at`
+- 系统端顺序：
+  1. 解析回执
+  2. 读取挑战并重建原文
+  3. `sr25519` 验签
+  4. 校验时效与 `request_id` 一次性消费
+  5. 角色识别与路由（NRC/PRC/PRB/FULL）
+- 角色规则：
+  - 命中国储会、省储会、省储行管理员公钥进入对应界面。
+  - 其他用户进入全节点界面。
 
 ## 7. 开发与运行
 

@@ -1,22 +1,19 @@
-# CPMS 技术文档
+# CPMS 技术文档（扫码登录实现对齐）
 
-## 1. 登录方案定位
+## 1. 方案定位与状态
 
-- CPMS 为完全离线软件，登录协议统一使用 `WUMINAPP_LOGIN_V1`。
-- 登录方式固定为“离线双向扫码”：
-  - 第一次：`wuminapp` 扫描 CPMS 挑战二维码。
-  - 第二次：CPMS 扫描 `wuminapp` 回执二维码。
-- 用户公钥即账户标识，私钥仅在手机端本地离线签名。
+- CPMS 为完全离线软件，统一使用 `WUMINAPP_LOGIN_V1` 离线双向扫码。
+- 流程：`手机扫挑战码 -> 用户确认签名 -> 手机出回执码 -> CPMS 扫回执并验签授权`。
+- 当前状态：协议、字段、签名原文与 `wuminapp` 已对齐，可按同一核心层接入。
 
 ## 2. 角色与授权规则
 
-- 系统初始化生成 3 个超级管理员账户。
-- 超级管理员可新增 n 个操作管理员账户。
-- 登录准入规则：
-  - 验签通过且账户在 CPMS 本地 RBAC 授权库中，允许登录。
-  - 不在本地授权库中，拒绝登录。
+- 初始化生成 3 个超级管理员账户。
+- 超级管理员可新增 n 个操作管理员。
+- 登录判定：先验签后授权。
+- 授权规则：账户在 CPMS 本地 RBAC 名单中才允许登录。
 
-## 3. 协议与数据结构
+## 3. 协议对齐（与实现保持一致）
 
 挑战二维码（CPMS -> 手机）：
 
@@ -25,7 +22,7 @@
   "proto": "WUMINAPP_LOGIN_V1",
   "system": "cpms",
   "request_id": "uuid",
-  "challenge": "base64-32bytes",
+  "challenge": "string",
   "nonce": "uuid",
   "issued_at": 1760000000,
   "expires_at": 1760000060,
@@ -34,7 +31,7 @@
 }
 ```
 
-签名原文：
+签名原文（固定顺序）：
 
 ```text
 WUMINAPP_LOGIN_V1|cpms|aud|origin|request_id|challenge|nonce|expires_at
@@ -54,19 +51,19 @@ WUMINAPP_LOGIN_V1|cpms|aud|origin|request_id|challenge|nonce|expires_at
 }
 ```
 
-## 4. 校验与风控
+## 4. CPMS 端验签与授权步骤
 
-- `request_id` 一次性消费，禁止重放。
-- 挑战有效期建议 60 秒，超时拒绝。
-- 验签算法固定 `sr25519`，签名与账户公钥必须一致。
-- `system` 必须为 `cpms`，`aud/origin` 必须在 CPMS 本地白名单。
-- 全链路离线审计字段：`request_id/account/role/device/result/time`。
+1. 解析回执并读取 `request_id/account/signature`。
+2. 用挑战缓存重建签名原文。
+3. `sr25519` 验签通过后，检查挑战时效与一次性消费状态。
+4. 消费 `request_id`，进入 RBAC 授权判定。
+5. 授权通过进入系统，失败返回拒绝原因。
 
-## 5. 错误码建议
+## 5. 风控与错误码
 
 - `1101`：协议头无效
 - `1102`：挑战过期
-- `1103`：挑战已消费
+- `1103`：挑战已消费（重放）
 - `1201`：签名验签失败
 - `1202`：账户与公钥不一致
 - `2201`：账户不在 CPMS 授权名单
