@@ -36,3 +36,23 @@ export function resolveOrganizationByAddress(address: string): LoginSession | nu
     organizationName: hit.organizationName
   };
 }
+
+export function resolveCitizenchainSession(address: string): LoginSession | null {
+  let normalizedInput: string;
+  try {
+    normalizedInput = normalized(asHexAddress(address));
+  } catch {
+    return null;
+  }
+
+  const org = resolveOrganizationByAddress(normalizedInput);
+  if (org) {
+    return org;
+  }
+
+  return {
+    role: 'full',
+    publicKey: normalizedInput,
+    organizationName: '全节点'
+  };
+}

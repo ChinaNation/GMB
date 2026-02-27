@@ -3,11 +3,12 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   getChallengeMessage,
+  getSignMessage,
   issueLoginChallenge,
   parseSignedLoginPayload,
   type LoginChallenge
 } from '../../services/auth/challenge';
-import { asHexAddress, resolveOrganizationByAddress } from '../../services/auth/organization';
+import { asHexAddress, resolveCitizenchainSession } from '../../services/auth/organization';
 import { generateOfflineQrDataUrl } from '../../services/auth/qr';
 import { verifyLoginSignature } from '../../services/auth/verify';
 import { useAuthStore } from '../../stores/auth';
@@ -22,6 +23,7 @@ export function LoginCard() {
   const [scannedPayload, setScannedPayload] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [consumedRequestIds, setConsumedRequestIds] = useState<Set<string>>(new Set());
 
   const canGenerateChallenge = true;
   const parsedSignature = parseSignedLoginPayload(scannedPayload);
@@ -47,40 +49,44 @@ export function LoginCard() {
       setLoginError('请先生成挑战二维码。');
       return;
     }
-    if (Date.now() - challenge.issuedAt > 120_000) {
+    if (Math.floor(Date.now() / 1000) > challenge.expiresAt) {
       setLoginError('挑战已过期，请重新生成二维码。');
       return;
     }
     if (!parsedSignature) {
-      setLoginError('签名二维码格式错误。请使用标准 JSON：citizennode.login.signature v1。');
+      setLoginError('签名二维码格式错误。请使用标准 JSON：WUMINAPP_LOGIN_V1 回执。');
+      return;
+    }
+    if (consumedRequestIds.has(parsedSignature.request_id)) {
+      setLoginError('该回执已使用，请重新生成挑战二维码。');
+      return;
+    }
+    if (parsedSignature.request_id !== challenge.requestId) {
+      setLoginError('回执中的 request_id 与当前挑战不一致，请重新扫码。');
       return;
     }
 
     let signerHex = '';
     try {
-      signerHex = asHexAddress(parsedSignature.publicKey);
+      signerHex = asHexAddress(parsedSignature.pubkey);
     } catch {
-      setLoginError('签名中的 publicKey 地址格式不合法。');
+      setLoginError('签名中的 pubkey 地址格式不合法。');
       return;
     }
-    const loginSession = resolveOrganizationByAddress(signerHex);
+    const loginSession = resolveCitizenchainSession(signerHex);
     if (!loginSession) {
-      setLoginError('系统中没有该管理员公钥，拒绝登录。');
-      return;
-    }
-    if (parsedSignature.nonce !== challenge.nonce) {
-      setLoginError('签名中的 nonce 与当前挑战不一致，请重新扫码。');
+      setLoginError('无法识别登录账户。');
       return;
     }
 
-    const payload = getChallengeMessage(challenge);
+    const payload = getSignMessage(challenge);
     let verified = false;
     try {
       verified = await verifyLoginSignature({
         payload,
         signature: parsedSignature.signature,
         publicKey: signerHex,
-        crypto: parsedSignature.crypto
+        crypto: parsedSignature.sig_alg
       });
     } catch {
       setLoginError('调用本地验签失败，请确认桌面壳正在运行。');
@@ -94,6 +100,7 @@ export function LoginCard() {
 
     setLoginError(null);
     setChallenge(null);
+    setConsumedRequestIds((prev) => new Set(prev).add(parsedSignature.request_id));
     setScannedPayload('');
     login(loginSession);
     navigate(`/${loginSession.role}`);
@@ -120,7 +127,7 @@ export function LoginCard() {
         {challenge ? (
           <Space direction="vertical" size={12} style={{ width: '100%' }}>
             <Typography.Text type="secondary">
-              请用手机钱包/硬件钱包扫码挑战二维码并返回签名二维码。
+              请使用 wuminapp 扫描挑战二维码并回扫回执二维码。
             </Typography.Text>
 
             <Space size={16} align="start" wrap>
@@ -137,7 +144,7 @@ export function LoginCard() {
                 <Input.TextArea
                   value={scannedPayload}
                   onChange={(event) => setScannedPayload(event.target.value)}
-                  placeholder="扫码得到的签名 JSON（备用可手动粘贴）"
+                  placeholder="扫码得到的 WUMINAPP_LOGIN_V1 回执 JSON（备用可手动粘贴）"
                   rows={5}
                 />
               </Space>
@@ -161,7 +168,7 @@ export function LoginCard() {
             </Button>
           </Space>
         ) : (
-          <Typography.Text type="secondary">系统不会手工录入公钥，公钥来自扫码签名内容。</Typography.Text>
+          <Typography.Text type="secondary">系统不会手工录入公钥，公钥来自扫码回执内容。</Typography.Text>
         )}
       </Space>
     </Card>

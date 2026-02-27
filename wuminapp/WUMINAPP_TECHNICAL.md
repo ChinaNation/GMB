@@ -165,6 +165,20 @@ wuminapp/
 5. 登录端扫描回执二维码，完成验签与授权判定。
 6. 通过则进入对应界面，失败则给出拒绝原因并记录审计日志。
 
+### 6.5 三端统一设计（手机端统一 + 系统端核心统一）
+
+- 手机端统一（`wuminapp`）：
+  - 三端登录统一使用 `mobile/lib/login/` 模块。
+  - 统一协议解析、字段校验、白名单校验、离线签名、回执二维码生成、防重放。
+  - 不为 `cpms/sfid/citizenchain` 分叉实现三套扫码代码。
+- 系统端核心统一（`shared/wumin_login_core`）：
+  - 统一挑战码生成、回执解析、签名原文拼接、`sr25519` 验签、过期校验、`request_id` 一次性消费。
+  - 输入输出结构与错误码统一，避免三端实现差异。
+- 授权层三端分离（Adapter）：
+  - `cpms_login_adapter`：本地 RBAC（3 超管 + 操作员）判定。
+  - `sfid_login_adapter`：内置 45 超管 + 操作员名单判定。
+  - `citizenchain_login_adapter`：三类内置管理员角色映射；其余用户进入全节点界面。
+
 ## 7. API 规范（MVP + 扩展）
 
 ### 7.1 基础约定
@@ -361,3 +375,65 @@ flutter run
 - `wuminapp` 已完成轻节点最小骨架（钱包本地能力 + 扫码登录签名 + 后端健康探针）。
 - 区块链侧 SFID 绑定、认证发行、防重放与投票验签规则已在 `citizenchain` 落地。
 - 下一阶段重点是按现有链规则打通移动端/后端全链路并补齐安全基线。
+
+## 16. 扫码登录实现态对齐（以本节为准）
+
+### 16.1 当前已实现范围
+
+- 已实现完整离线流程：`扫码挑战 -> 用户确认 -> 本地签名 -> 展示回执二维码 -> 系统端扫码验签 -> 登录结果`。
+- 协议固定：`WUMINAPP_LOGIN_V1`。
+- 算法固定：`sr25519`。
+- 当前联调状态：`sfid` 已实测登录成功；`cpms/citizenchain` 按同一协议与核心逻辑对齐。
+
+### 16.2 挑战二维码字段（系统 -> 手机）
+
+```json
+{
+  "proto": "WUMINAPP_LOGIN_V1",
+  "system": "sfid|cpms|citizenchain",
+  "request_id": "uuid",
+  "challenge": "string",
+  "nonce": "uuid",
+  "issued_at": 1760000000,
+  "expires_at": 1760000060,
+  "aud": "local-app-id",
+  "origin": "local-device-id"
+}
+```
+
+### 16.3 手机端签名原文（固定顺序）
+
+```text
+WUMINAPP_LOGIN_V1|system|aud|origin|request_id|challenge|nonce|expires_at
+```
+
+### 16.4 回执二维码字段（手机 -> 系统）
+
+```json
+{
+  "proto": "WUMINAPP_LOGIN_V1",
+  "request_id": "uuid",
+  "account": "ss58-address",
+  "pubkey": "0x...",
+  "sig_alg": "sr25519",
+  "signature": "0x...",
+  "signed_at": 1760000020
+}
+```
+
+### 16.5 手机端校验与交互（已实现）
+
+- 协议校验：`proto` 必须为 `WUMINAPP_LOGIN_V1`。
+- 系统校验：`system` 仅允许 `cpms/sfid/citizenchain`。
+- 时效校验：`expires_at` 过期直接拒绝签名。
+- 白名单校验：对 `system/aud/origin` 执行本地白名单策略。
+- 防重放：`request_id` 本地一次性消费，已消费请求拒绝再次签名。
+- 人机确认：扫码后必须点击“本地签名并生成回执”，不自动签名。
+
+### 16.6 系统端验签对齐要求
+
+- 按 16.3 的固定原文重建消息后做 `sr25519` 验签。
+- 验签公钥优先使用 `signer_pubkey`（如有），否则使用 `account/admin_pubkey`。
+- `request_id` 必须一次性消费，重复提交直接拒绝。
+- 校验 `system/aud/origin` 与本系统配置一致。
+- 验签通过后再做本系统授权判定（管理员名单/角色映射）。
