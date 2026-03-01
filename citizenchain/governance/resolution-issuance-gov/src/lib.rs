@@ -168,7 +168,7 @@ pub mod pallet {
         }
 
         fn finalize_joint_vote_rejected() -> Weight {
-            T::DbWeight::get().reads_writes(2, 4)
+            T::DbWeight::get().reads_writes(3, 4)
         }
 
         fn set_allowed_recipients(recipient_count: u32) -> Weight {
@@ -204,7 +204,7 @@ pub mod pallet {
         }
 
         fn finalize_joint_vote_rejected() -> Weight {
-            RocksDbWeight::get().reads_writes(2, 4)
+            RocksDbWeight::get().reads_writes(3, 4)
         }
 
         fn set_allowed_recipients(recipient_count: u32) -> Weight {
@@ -482,7 +482,7 @@ pub mod pallet {
                 FinalizeOutcome::ApprovedExecutionFailed => {
                     Some(T::DbWeight::get().reads_writes(3, 5))
                 }
-                FinalizeOutcome::Rejected => Some(T::DbWeight::get().reads_writes(2, 4)),
+                FinalizeOutcome::Rejected => Some(T::DbWeight::get().reads_writes(3, 4)),
             };
             Ok(actual.into())
         }
@@ -920,13 +920,13 @@ mod benchmarking {
         fn retry_failed_execution() {
             let proposal_id = 7u64;
             let proposer = nrc_admin::<T>();
-            let reason = reason_ok::<T>();
-            let allocations = one_allocation::<T>();
+            let reason = reason_max::<T>();
+            let (allocations, total_amount) = full_allocations::<T>();
             let proposal = pallet::Proposal::<T> {
                 proposer: proposer.clone(),
-                reason: reason.clone(),
-                total_amount: 1_000_000u128,
-                allocations: allocations.clone(),
+                reason,
+                total_amount,
+                allocations,
                 vote_kind: pallet::VoteKind::Joint,
                 status: pallet::ProposalStatus::ExecutionFailed,
             };
