@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wuminapp_mobile/pages/my_wallet_page.dart';
+import 'package:wuminapp_mobile/pages/settings_page.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -28,6 +29,25 @@ class ProfilePage extends StatelessWidget {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const MyWalletPage()),
+              );
+            },
+          ),
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(
+              Icons.settings_outlined,
+              color: _inkGreen,
+              size: 22,
+            ),
+            title: const Text(
+              '设置',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsPage()),
               );
             },
           ),

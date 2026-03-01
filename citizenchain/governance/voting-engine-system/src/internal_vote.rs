@@ -5,14 +5,12 @@ use codec::Encode;
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 
-use primitives::count_const::{
-    NRC_INTERNAL_THRESHOLD, PRB_INTERNAL_THRESHOLD, PRC_INTERNAL_THRESHOLD, VOTING_DURATION_BLOCKS,
-};
-use primitives::china::china_cb::{
-    shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
-};
+use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
 use primitives::china::china_ch::{
     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
+};
+use primitives::count_const::{
+    NRC_INTERNAL_THRESHOLD, PRB_INTERNAL_THRESHOLD, PRC_INTERNAL_THRESHOLD, VOTING_DURATION_BLOCKS,
 };
 
 use crate::{

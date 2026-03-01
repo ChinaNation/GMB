@@ -42,6 +42,14 @@ pub trait InternalVoteEngine<AccountId> {
         org: u8,
         institution: InstitutionPalletId,
     ) -> Result<u64, DispatchError>;
+
+    fn cast_internal_vote(
+        who: AccountId,
+        proposal_id: u64,
+        approve: bool,
+    ) -> Result<(), DispatchError>;
+
+    fn cleanup_internal_proposal(_proposal_id: u64) {}
 }
 
 impl<AccountId> InternalVoteEngine<AccountId> for () {
@@ -50,6 +58,14 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
         _org: u8,
         _institution: InstitutionPalletId,
     ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other("InternalVoteEngineNotConfigured"))
+    }
+
+    fn cast_internal_vote(
+        _who: AccountId,
+        _proposal_id: u64,
+        _approve: bool,
+    ) -> Result<(), DispatchError> {
         Err(DispatchError::Other("InternalVoteEngineNotConfigured"))
     }
 }
@@ -311,11 +327,12 @@ pub mod pallet {
         #[pallet::weight(T::DbWeight::get().reads_writes(4, 4))]
         pub fn internal_vote(
             origin: OriginFor<T>,
-            proposal_id: u64,
-            approve: bool,
+            _proposal_id: u64,
+            _approve: bool,
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            Self::do_internal_vote(who, proposal_id, approve)
+            let _ = ensure_signed(origin)?;
+            // 中文注释：内部投票只能由事项模块通过 InternalVoteEngine trait 转发。
+            Err(Error::<T>::NoPermission.into())
         }
 
         #[pallet::call_index(3)]
@@ -448,6 +465,25 @@ impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
     ) -> Result<u64, DispatchError> {
         pallet::Pallet::<T>::do_create_internal_proposal(who, org, institution)
     }
+
+    fn cast_internal_vote(
+        who: T::AccountId,
+        proposal_id: u64,
+        approve: bool,
+    ) -> Result<(), DispatchError> {
+        pallet::Pallet::<T>::do_internal_vote(who, proposal_id, approve)
+    }
+
+    fn cleanup_internal_proposal(proposal_id: u64) {
+        pallet::Proposals::<T>::remove(proposal_id);
+        pallet::InternalTallies::<T>::remove(proposal_id);
+        let clear_result =
+            pallet::InternalVotesByAccount::<T>::clear_prefix(proposal_id, u32::MAX, None);
+        debug_assert!(
+            clear_result.maybe_cursor.is_none(),
+            "internal votes were not fully cleared"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -575,11 +611,13 @@ mod tests {
     }
 
     fn nrc_pid() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("nrc id should be shenfen_id bytes")
+        reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
+            .expect("nrc id should be shenfen_id bytes")
     }
 
     fn prc_pid() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINA_CB[1].shenfen_id).expect("prc id should be shenfen_id bytes")
+        reserve_pallet_id_to_bytes(CHINA_CB[1].shenfen_id)
+            .expect("prc id should be shenfen_id bytes")
     }
 
     fn prb_pid() -> InstitutionPalletId {
@@ -605,7 +643,8 @@ mod tests {
             .skip(1)
             .map(|n| {
                 (
-                    reserve_pallet_id_to_bytes(n.shenfen_id).expect("prc id should be shenfen_id bytes"),
+                    reserve_pallet_id_to_bytes(n.shenfen_id)
+                        .expect("prc id should be shenfen_id bytes"),
                     AccountId32::new(n.duoqian_address),
                 )
             })
@@ -617,7 +656,8 @@ mod tests {
             .iter()
             .map(|n| {
                 (
-                    shengbank_pallet_id_to_bytes(n.shenfen_id).expect("prb id should be shenfen_id bytes"),
+                    shengbank_pallet_id_to_bytes(n.shenfen_id)
+                        .expect("prb id should be shenfen_id bytes"),
                     AccountId32::new(n.duoqian_address),
                 )
             })
@@ -726,15 +766,21 @@ mod tests {
             ));
 
             assert_noop!(
-                VotingEngineSystem::internal_vote(RuntimeOrigin::signed(nrc_admin(0)), 0, true,),
+                <VotingEngineSystem as InternalVoteEngine<AccountId32>>::cast_internal_vote(
+                    nrc_admin(0),
+                    0,
+                    true,
+                ),
                 pallet::Error::<Test>::InvalidInstitution
             );
 
-            assert_ok!(VotingEngineSystem::internal_vote(
-                RuntimeOrigin::signed(prb_admin(1)),
-                0,
-                true,
-            ));
+            assert_ok!(
+                <VotingEngineSystem as InternalVoteEngine<AccountId32>>::cast_internal_vote(
+                    prb_admin(1),
+                    0,
+                    true,
+                )
+            );
         });
     }
 
@@ -748,11 +794,13 @@ mod tests {
             ));
 
             for i in 0..12 {
-                assert_ok!(VotingEngineSystem::internal_vote(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
-                    true,
-                ));
+                assert_ok!(
+                    <VotingEngineSystem as InternalVoteEngine<AccountId32>>::cast_internal_vote(
+                        nrc_admin(i),
+                        0,
+                        true,
+                    )
+                );
             }
             assert_eq!(
                 VotingEngineSystem::proposals(0)
@@ -761,11 +809,13 @@ mod tests {
                 STATUS_VOTING
             );
 
-            assert_ok!(VotingEngineSystem::internal_vote(
-                RuntimeOrigin::signed(nrc_admin(12)),
-                0,
-                true,
-            ));
+            assert_ok!(
+                <VotingEngineSystem as InternalVoteEngine<AccountId32>>::cast_internal_vote(
+                    nrc_admin(12),
+                    0,
+                    true,
+                )
+            );
             assert_eq!(
                 VotingEngineSystem::proposals(0)
                     .expect("proposal exists")
@@ -1197,7 +1247,10 @@ mod tests {
             let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
             assert_eq!(proposal.status, STATUS_PASSED);
             assert_eq!(proposal.stage, STAGE_JOINT);
-            assert_eq!(JointTallies::<Test>::get(0).yes, primitives::count_const::JOINT_VOTE_TOTAL);
+            assert_eq!(
+                JointTallies::<Test>::get(0).yes,
+                primitives::count_const::JOINT_VOTE_TOTAL
+            );
         });
     }
 
@@ -1214,7 +1267,9 @@ mod tests {
                     sig.as_slice()
                 )
             );
-            let joint_end = Proposals::<Test>::get(0).expect("proposal should exist").end;
+            let joint_end = Proposals::<Test>::get(0)
+                .expect("proposal should exist")
+                .end;
 
             assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
                 RuntimeOrigin::signed(nrc_multisig()),
