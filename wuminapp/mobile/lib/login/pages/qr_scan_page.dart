@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wuminapp_mobile/login/models/login_models.dart';
+import 'package:wuminapp_mobile/login/services/login_sign_confirm_service.dart';
 import 'package:wuminapp_mobile/login/services/wuminapp_login_service.dart';
 
 class QrScanPage extends StatefulWidget {
@@ -25,6 +25,7 @@ class QrScanPage extends StatefulWidget {
 class _QrScanPageState extends State<QrScanPage> {
   final MobileScannerController _controller = MobileScannerController();
   final WuminLoginService _loginService = WuminLoginService();
+  final LoginSignConfirmService _signConfirmService = LoginSignConfirmService();
   bool _handled = false;
 
   @override
@@ -135,11 +136,9 @@ class _QrScanPageState extends State<QrScanPage> {
 
   Future<void> _showLoginDialog(String payload) async {
     WuminLoginChallenge challenge;
-    String signPreview;
     try {
       challenge = _loginService.parseChallenge(payload);
       await _loginService.validateTrust(challenge);
-      signPreview = _loginService.buildSignPreviewForChallenge(challenge);
     } catch (e) {
       if (!mounted) {
         return;
@@ -167,17 +166,8 @@ class _QrScanPageState extends State<QrScanPage> {
     final shouldSign = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('登录 ${challenge.system} 系统'),
-        content: Text(
-          '已识别离线登录挑战。\n'
-          'request_id: ${challenge.requestId}\n'
-          '签名钱包: ${widget.walletAddress ?? "最新钱包"}\n'
-          'nonce: ${challenge.nonce}\n'
-          'aud: ${challenge.aud}\n'
-          'origin: ${challenge.origin}\n'
-          '剩余有效期: ${challenge.ttlSeconds}s\n\n'
-          '签名原文:\n$signPreview',
-        ),
+        title: Text('登录 ${_displaySystemName(challenge.system)}系统'),
+        content: const Text('请确认后生成登录签名二维码。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -185,7 +175,7 @@ class _QrScanPageState extends State<QrScanPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('本地签名并生成回执'),
+            child: const Text('签名并生成二维码'),
           ),
         ],
       ),
@@ -201,6 +191,7 @@ class _QrScanPageState extends State<QrScanPage> {
       if (challenge.isExpired) {
         throw Exception('登录挑战已过期，请重新扫码');
       }
+      await _signConfirmService.confirmBeforeSign();
 
       final result = await _loginService.buildReceiptPayloadForChallenge(
         challenge,
@@ -211,25 +202,19 @@ class _QrScanPageState extends State<QrScanPage> {
         return;
       }
 
-      final messenger = ScaffoldMessenger.of(context);
       final compact = jsonEncode(result);
-      final pretty = const JsonEncoder.withIndent('  ').convert(result);
 
-      await Navigator.of(context).push(
+      final goWallet = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => _LoginReceiptPage(
             compactPayload: compact,
-            prettyPayload: pretty,
             expiresAt: challenge.expiresAt,
-            onCopy: () {
-              Clipboard.setData(ClipboardData(text: pretty));
-              messenger.showSnackBar(
-                const SnackBar(content: Text('回执 JSON 已复制')),
-              );
-            },
           ),
         ),
       );
+      if (goWallet == true && mounted) {
+        Navigator.of(context).pop();
+      }
     } catch (e) {
       if (!mounted) {
         return;
@@ -248,6 +233,13 @@ class _QrScanPageState extends State<QrScanPage> {
         ),
       );
     }
+  }
+
+  String _displaySystemName(String system) {
+    if (system.toLowerCase() == 'sfid') {
+      return 'SFID';
+    }
+    return system;
   }
 
   @override
@@ -294,15 +286,11 @@ class _QrScanPageState extends State<QrScanPage> {
 class _LoginReceiptPage extends StatefulWidget {
   const _LoginReceiptPage({
     required this.compactPayload,
-    required this.prettyPayload,
     required this.expiresAt,
-    required this.onCopy,
   });
 
   final String compactPayload;
-  final String prettyPayload;
   final int expiresAt;
-  final VoidCallback onCopy;
 
   @override
   State<_LoginReceiptPage> createState() => _LoginReceiptPageState();
@@ -390,24 +378,15 @@ class _LoginReceiptPageState extends State<_LoginReceiptPage> {
             ),
           ),
           const SizedBox(height: 12),
-          SelectableText(widget.prettyPayload),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: widget.onCopy,
-                  child: const Text('复制 JSON'),
-                ),
+          const SizedBox(height: 20),
+          Center(
+            child: SizedBox(
+              width: 180,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('完成'),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('完成'),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),

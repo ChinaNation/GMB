@@ -5,15 +5,13 @@ use frame_support::{ensure, pallet_prelude::DispatchResult};
 use sp_runtime::traits::Hash;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 
+use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
+use primitives::china::china_ch::{
+    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
+};
 use primitives::count_const::{
     JOINT_VOTE_PASS_THRESHOLD, JOINT_VOTE_TOTAL, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT,
     PRC_JOINT_VOTE_WEIGHT, VOTING_DURATION_BLOCKS,
-};
-use primitives::china::china_cb::{
-    shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
-};
-use primitives::china::china_ch::{
-    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
 
 use crate::{
@@ -52,12 +50,20 @@ fn is_nrc_admin<T: Config>(who: &T::AccountId) -> bool {
     // 中文注释：生产环境仅信任动态管理员来源（链上治理替换后的最终状态）。
     #[cfg(not(test))]
     {
-        T::InternalAdminProvider::is_internal_admin(crate::internal_vote::ORG_NRC, nrc_pallet_id_bytes(), who)
+        T::InternalAdminProvider::is_internal_admin(
+            crate::internal_vote::ORG_NRC,
+            nrc_pallet_id_bytes(),
+            who,
+        )
     }
     // 中文注释：单测环境允许回退到常量管理员，便于独立测试本 pallet。
     #[cfg(test)]
     {
-        if T::InternalAdminProvider::is_internal_admin(crate::internal_vote::ORG_NRC, nrc_pallet_id_bytes(), who) {
+        if T::InternalAdminProvider::is_internal_admin(
+            crate::internal_vote::ORG_NRC,
+            nrc_pallet_id_bytes(),
+            who,
+        ) {
             return true;
         }
         let who_bytes = who.encode();

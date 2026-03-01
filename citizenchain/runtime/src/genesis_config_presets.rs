@@ -97,6 +97,16 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
 
     // 中文注释：机构创世数据由链规格外部注入；这里默认留空数组。
     let institutions_json: Vec<Value> = Vec::new();
+    // 中文注释：决议发行合法收款账户改为链上存储初始化，后续可由治理动态更新。
+    let issuance_allowed_recipients_json: Vec<Value> = CHINA_CB
+        .iter()
+        .skip(1)
+        .map(|n| {
+            let account = AccountId::decode(&mut &n.duoqian_address[..])
+                .expect("PRC duoqian_address must decode to AccountId");
+            Value::String(account_to_genesis_ss58(&account))
+        })
+        .collect();
 
     json!({
         "balances": {
@@ -109,6 +119,9 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
         },
         "nationalInstitutionalRegistry": {
             "institutions": institutions_json,
+        },
+        "resolutionIssuanceGov": {
+            "allowedRecipients": issuance_allowed_recipients_json,
         },
     })
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/pages/profile_page.dart';
+import 'package:wuminapp_mobile/trade/trade.dart';
 
 void main() {
   runApp(const WuminApp());
@@ -37,7 +38,7 @@ class _AppShellState extends State<AppShell> {
   final List<Widget> _pages = const [
     HomePage(),
     VotingPage(),
-    TransactionPage(),
+    TradePage(),
     ProfilePage(),
   ];
 
@@ -77,9 +78,12 @@ class _AppShellState extends State<AppShell> {
           },
           destinations: const [
             NavigationDestination(icon: Icon(Icons.home_outlined), label: '首页'),
-            NavigationDestination(icon: Icon(Icons.how_to_vote_outlined), label: '投票'),
-            NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: '交易'),
-            NavigationDestination(icon: Icon(Icons.person_outline), label: '我的'),
+            NavigationDestination(
+                icon: Icon(Icons.how_to_vote_outlined), label: '投票'),
+            NavigationDestination(
+                icon: Icon(Icons.receipt_long_outlined), label: '交易'),
+            NavigationDestination(
+                icon: Icon(Icons.person_outline), label: '我的'),
           ],
         ),
       ),
@@ -97,7 +101,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text('投票页面（开发中）'));
+    return const Center(child: Text('首页页面（开发中）'));
   }
 }
 
@@ -107,14 +111,5 @@ class VotingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(child: Text('投票页面（开发中）'));
-  }
-}
-
-class TransactionPage extends StatelessWidget {
-  const TransactionPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text('交易页面（开发中）'));
   }
 }

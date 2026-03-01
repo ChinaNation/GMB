@@ -52,6 +52,7 @@ citizennode/
 
 - 协议统一：`WUMINAPP_LOGIN_V1`（与 SFID/CPMS 完全一致）。
 - 离线双向扫码：登录端出挑战码，手机端确认签名并出回执码，登录端扫码完成验签。
+- 手机端边界：仅执行挑战签名与回执码展示，不接收、不轮询登录结果回传。
 - 手机端签名原文固定：
   - `WUMINAPP_LOGIN_V1|citizenchain|aud|origin|request_id|challenge|nonce|expires_at`
 - 回执核心字段：
@@ -62,6 +63,7 @@ citizennode/
   3. `sr25519` 验签
   4. 校验时效与 `request_id` 一次性消费
   5. 角色识别与路由（NRC/PRC/PRB/FULL）
+- 登录结果展示责任在登录端（citizennode），不回传到手机签名端。
 - 角色规则：
   - 命中国储会、省储会、省储行管理员公钥进入对应界面。
   - 其他用户进入全节点界面。

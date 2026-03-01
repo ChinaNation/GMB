@@ -72,7 +72,8 @@ void main() {
       );
     });
 
-    test('buildReceiptPayloadForChallenge should sign with selected wallet', () async {
+    test('buildReceiptPayloadForChallenge should sign with selected wallet',
+        () async {
       final raw = _challengeJson(
         requestId: 'req-wallet-2',
         system: 'sfid',
@@ -96,7 +97,8 @@ void main() {
       expect(receipt['signature'], startsWith('0x'));
     });
 
-    test('buildReceiptPayloadForChallenge should block replay request_id', () async {
+    test('buildReceiptPayloadForChallenge should block replay request_id',
+        () async {
       final raw = _challengeJson(
         requestId: 'req-replay',
         expiresAt: _nowSec() + 60,
@@ -105,7 +107,8 @@ void main() {
 
       await service.buildReceiptPayloadForChallenge(challenge, walletIndex: 1);
       expect(
-        () => service.buildReceiptPayloadForChallenge(challenge, walletIndex: 1),
+        () =>
+            service.buildReceiptPayloadForChallenge(challenge, walletIndex: 1),
         throwsA(
           isA<Exception>().having(
             (e) => e.toString(),
@@ -116,7 +119,9 @@ void main() {
       );
     });
 
-    test('buildReceiptPayloadForChallenge should fail when walletIndex not found', () async {
+    test(
+        'buildReceiptPayloadForChallenge should fail when walletIndex not found',
+        () async {
       final raw = _challengeJson(
         requestId: 'req-wallet-missing',
         expiresAt: _nowSec() + 60,
@@ -124,7 +129,8 @@ void main() {
       final challenge = service.parseChallenge(raw);
 
       expect(
-        () => service.buildReceiptPayloadForChallenge(challenge, walletIndex: 99),
+        () =>
+            service.buildReceiptPayloadForChallenge(challenge, walletIndex: 99),
         throwsA(
           isA<Exception>().having(
             (e) => e.toString(),
@@ -223,6 +229,7 @@ class _FakeWalletService extends WalletService {
     return _WalletFixture(
       profile: WalletProfile(
         walletIndex: index,
+        walletName: '测试钱包$index',
         address: pair.address,
         pubkeyHex: pubkeyHex,
         alg: 'sr25519',

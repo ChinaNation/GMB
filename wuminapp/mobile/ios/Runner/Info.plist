@@ -68,5 +68,7 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>WuminApp 需要使用摄像头扫描二维码登录和转账。</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>WuminApp 使用 Face ID 确认登录签名操作。</string>
 </dict>
 </plist>

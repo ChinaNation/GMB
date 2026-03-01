@@ -87,17 +87,34 @@ pub mod pallet {
             wallet: T::AccountId,
             amount: BalanceOf<T>,
         },
+        /// 本区块奖励跳过：未能从 digest 识别出作者。
+        PowRewardSkippedNoAuthor { block: u32 },
+        /// 本区块奖励跳过：作者未绑定奖励钱包。
+        PowRewardSkippedNoBoundWallet {
+            block: u32,
+            miner: T::AccountId,
+        },
+        /// 矿工身份钱包重新绑定。
+        RewardWalletRebound {
+            miner: T::AccountId,
+            new_wallet: T::AccountId,
+        },
     }
 
     #[pallet::error]
     pub enum Error<T> {
         /// 同一个矿工身份只允许绑定一次奖励钱包。
         RewardWalletAlreadyBound,
+        /// 矿工身份未绑定奖励钱包。
+        RewardWalletNotBound,
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// 由矿工身份账户（powr 对应账户）发起一次性绑定。
+        ///
+        /// 注意：当前不做“是否真实矿工”的额外校验。若未来 runtime 引入矿工注册表/白名单，
+        /// 建议在此处增加资格检查以降低无效绑定造成的状态膨胀风险。
         #[pallet::call_index(0)]
         #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
         pub fn bind_reward_wallet(origin: OriginFor<T>, wallet: T::AccountId) -> DispatchResult {
@@ -111,10 +128,40 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::RewardWalletBound { miner, wallet });
             Ok(())
         }
+
+        /// 允许矿工身份账户主动重绑奖励钱包（无需治理权限）。
+        #[pallet::call_index(1)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
+        pub fn rebind_reward_wallet(
+            origin: OriginFor<T>,
+            new_wallet: T::AccountId,
+        ) -> DispatchResult {
+            let miner = ensure_signed(origin)?;
+            ensure!(
+                RewardWalletByMiner::<T>::contains_key(&miner),
+                Error::<T>::RewardWalletNotBound
+            );
+            RewardWalletByMiner::<T>::insert(&miner, &new_wallet);
+            Self::deposit_event(Event::<T>::RewardWalletRebound { miner, new_wallet });
+            Ok(())
+        }
     }
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+            let block_number: u32 = n.saturated_into::<u32>();
+            if block_number >= FULLNODE_REWARD_START_BLOCK
+                && block_number <= FULLNODE_REWARD_END_BLOCK
+            {
+                // 预申报 on_finalize 最坏路径预算：
+                // digest + wallet map + balances/issuance + event 相关读写
+                T::DbWeight::get().reads_writes(3, 3)
+            } else {
+                Weight::zero()
+            }
+        }
+
         fn on_finalize(n: BlockNumberFor<T>) {
             // 制度前提：本链区块高度使用 u32 表示
             let block_number: u32 = n.saturated_into::<u32>();
@@ -132,13 +179,24 @@ pub mod pallet {
 
             let author = match T::FindAuthor::find_author(pre_runtime_digests) {
                 Some(a) => a,
-                None => return, // 理论上不应发生，发生则不发奖励
+                None => {
+                    Self::deposit_event(Event::<T>::PowRewardSkippedNoAuthor {
+                        block: block_number,
+                    });
+                    return;
+                } // 理论上不应发生，发生则不发奖励
             };
 
             // 仅向已绑定钱包的矿工发放奖励；未绑定则不发放。
             let wallet = match RewardWalletByMiner::<T>::get(&author) {
                 Some(w) => w,
-                None => return,
+                None => {
+                    Self::deposit_event(Event::<T>::PowRewardSkippedNoBoundWallet {
+                        block: block_number,
+                        miner: author,
+                    });
+                    return;
+                }
             };
 
             // 发放固定的全节点 PoW 铸块奖励
@@ -160,6 +218,7 @@ mod tests {
     use frame_support::{
         assert_noop, assert_ok, derive_impl,
         traits::{Hooks, VariantCountOf},
+        weights::Weight,
     };
     use frame_system as system;
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
@@ -213,6 +272,7 @@ mod tests {
         type Block = Block;
         type AccountId = AccountId32;
         type AccountData = pallet_balances::AccountData<Balance>;
+        type DbWeight = frame_support::weights::constants::RocksDbWeight;
         type Lookup = IdentityLookup<Self::AccountId>;
         type Nonce = u64;
     }
@@ -323,12 +383,205 @@ mod tests {
             // 区块 0 不发放
             <FullnodePowReward as Hooks<u64>>::on_finalize(0);
             assert_eq!(Balances::free_balance(wallet.clone()), 0);
+            let has_event_block_0 = System::events().iter().any(|r| {
+                matches!(
+                    r.event,
+                    RuntimeEvent::FullnodePowReward(Event::PowRewardSkippedNoAuthor { block: 0 })
+                )
+            });
+            assert!(!has_event_block_0);
 
             // 超出结束高度不发放
             <FullnodePowReward as Hooks<u64>>::on_finalize(
                 (primitives::pow_const::FULLNODE_REWARD_END_BLOCK + 1).into(),
             );
             assert_eq!(Balances::free_balance(wallet), 0);
+        });
+    }
+
+    #[test]
+    fn reward_issued_on_end_boundary_block() {
+        new_test_ext().execute_with(|| {
+            let miner = account(77);
+            let wallet = account(88);
+            assert_ok!(FullnodePowReward::bind_reward_wallet(
+                RuntimeOrigin::signed(miner.clone()),
+                wallet.clone()
+            ));
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
+
+            let end = primitives::pow_const::FULLNODE_REWARD_END_BLOCK as u64;
+            <FullnodePowReward as Hooks<u64>>::on_finalize(end);
+
+            assert_eq!(
+                Balances::free_balance(wallet.clone()),
+                primitives::pow_const::FULLNODE_BLOCK_REWARD
+            );
+            let has_event = System::events().iter().any(|r| {
+                matches!(
+                    r.event,
+                    RuntimeEvent::FullnodePowReward(Event::PowRewardIssued { block, .. })
+                    if block == primitives::pow_const::FULLNODE_REWARD_END_BLOCK
+                )
+            });
+            assert!(has_event);
+        });
+    }
+
+    #[test]
+    fn reward_accumulates_across_multiple_blocks() {
+        new_test_ext().execute_with(|| {
+            let miner = account(91);
+            let wallet = account(92);
+            assert_ok!(FullnodePowReward::bind_reward_wallet(
+                RuntimeOrigin::signed(miner.clone()),
+                wallet.clone()
+            ));
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
+
+            <FullnodePowReward as Hooks<u64>>::on_finalize(1);
+            <FullnodePowReward as Hooks<u64>>::on_finalize(2);
+            <FullnodePowReward as Hooks<u64>>::on_finalize(3);
+
+            assert_eq!(
+                Balances::free_balance(wallet),
+                primitives::pow_const::FULLNODE_BLOCK_REWARD * 3
+            );
+        });
+    }
+
+    #[test]
+    fn skip_event_emitted_when_author_not_found() {
+        new_test_ext().execute_with(|| {
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = None);
+
+            <FullnodePowReward as Hooks<u64>>::on_finalize(1);
+
+            let has_event = System::events().iter().any(|r| {
+                matches!(
+                    r.event,
+                    RuntimeEvent::FullnodePowReward(Event::PowRewardSkippedNoAuthor { block: 1 })
+                )
+            });
+            assert!(has_event);
+        });
+    }
+
+    #[test]
+    fn skip_event_emitted_when_wallet_not_bound() {
+        new_test_ext().execute_with(|| {
+            let miner = account(101);
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
+
+            <FullnodePowReward as Hooks<u64>>::on_finalize(1);
+
+            let has_event = System::events().iter().any(|r| {
+                matches!(
+                    r.event,
+                    RuntimeEvent::FullnodePowReward(Event::PowRewardSkippedNoBoundWallet {
+                        block: 1,
+                        miner: ref m
+                    }) if m == &miner
+                )
+            });
+            assert!(has_event);
+        });
+    }
+
+    #[test]
+    fn reward_wallet_can_be_rebound_by_miner() {
+        new_test_ext().execute_with(|| {
+            let miner = account(111);
+            let wallet1 = account(112);
+            let wallet2 = account(113);
+            assert_ok!(FullnodePowReward::bind_reward_wallet(
+                RuntimeOrigin::signed(miner.clone()),
+                wallet1
+            ));
+
+            assert_ok!(FullnodePowReward::rebind_reward_wallet(
+                RuntimeOrigin::signed(miner.clone()),
+                wallet2.clone()
+            ));
+            assert_eq!(RewardWalletByMiner::<Test>::get(&miner), Some(wallet2.clone()));
+
+            let has_event = System::events().iter().any(|r| {
+                matches!(
+                    r.event,
+                    RuntimeEvent::FullnodePowReward(Event::RewardWalletRebound {
+                        miner: ref m,
+                        new_wallet: ref w
+                    }) if m == &miner && w == &wallet2
+                )
+            });
+            assert!(has_event);
+        });
+    }
+
+    #[test]
+    fn rebind_requires_existing_binding() {
+        new_test_ext().execute_with(|| {
+            let miner = account(121);
+            let wallet = account(122);
+            assert_noop!(
+                FullnodePowReward::rebind_reward_wallet(RuntimeOrigin::signed(miner), wallet),
+                Error::<Test>::RewardWalletNotBound
+            );
+        });
+    }
+
+    #[test]
+    fn reward_goes_to_new_wallet_after_rebind() {
+        new_test_ext().execute_with(|| {
+            let miner = account(131);
+            let wallet1 = account(132);
+            let wallet2 = account(133);
+
+            assert_ok!(FullnodePowReward::bind_reward_wallet(
+                RuntimeOrigin::signed(miner.clone()),
+                wallet1.clone()
+            ));
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
+
+            // 第 1 块奖励 -> wallet1
+            <FullnodePowReward as Hooks<u64>>::on_finalize(1);
+            assert_eq!(
+                Balances::free_balance(wallet1.clone()),
+                primitives::pow_const::FULLNODE_BLOCK_REWARD
+            );
+
+            // 重绑到 wallet2
+            assert_ok!(FullnodePowReward::rebind_reward_wallet(
+                RuntimeOrigin::signed(miner),
+                wallet2.clone()
+            ));
+
+            // 第 2 块奖励 -> wallet2，wallet1 不再增长
+            <FullnodePowReward as Hooks<u64>>::on_finalize(2);
+            assert_eq!(
+                Balances::free_balance(wallet1),
+                primitives::pow_const::FULLNODE_BLOCK_REWARD
+            );
+            assert_eq!(
+                Balances::free_balance(wallet2),
+                primitives::pow_const::FULLNODE_BLOCK_REWARD
+            );
+        });
+    }
+
+    #[test]
+    fn on_initialize_declares_weight_only_within_reward_range() {
+        new_test_ext().execute_with(|| {
+            let w0 = <FullnodePowReward as Hooks<u64>>::on_initialize(0);
+            assert_eq!(w0, Weight::zero());
+
+            let w1 = <FullnodePowReward as Hooks<u64>>::on_initialize(1);
+            assert_ne!(w1, Weight::zero());
+
+            let w_after = <FullnodePowReward as Hooks<u64>>::on_initialize(
+                (primitives::pow_const::FULLNODE_REWARD_END_BLOCK + 1) as u64,
+            );
+            assert_eq!(w_after, Weight::zero());
         });
     }
 }

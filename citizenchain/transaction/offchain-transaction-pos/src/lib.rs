@@ -1423,11 +1423,7 @@ pub mod pallet {
                 Error::<T>::UnauthorizedAdmin
             );
 
-            voting_engine_system::Pallet::<T>::internal_vote(
-                frame_system::RawOrigin::Signed(who.clone()).into(),
-                proposal_id,
-                approve,
-            )?;
+            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
 
             Self::deposit_event(Event::<T>::InstitutionRateVoteSubmitted {
                 proposal_id,
@@ -1505,11 +1501,7 @@ pub mod pallet {
                 Error::<T>::UnauthorizedAdmin
             );
 
-            voting_engine_system::Pallet::<T>::internal_vote(
-                frame_system::RawOrigin::Signed(who.clone()).into(),
-                proposal_id,
-                approve,
-            )?;
+            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
 
             Self::deposit_event(Event::<T>::VerifyKeyVoteSubmitted {
                 proposal_id,
@@ -1589,11 +1581,7 @@ pub mod pallet {
                 Error::<T>::UnauthorizedAdmin
             );
 
-            voting_engine_system::Pallet::<T>::internal_vote(
-                frame_system::RawOrigin::Signed(who.clone()).into(),
-                proposal_id,
-                approve,
-            )?;
+            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
 
             Self::deposit_event(Event::<T>::SweepToMainVoteSubmitted {
                 proposal_id,
@@ -1667,11 +1655,7 @@ pub mod pallet {
                 Self::is_prb_admin(action.institution, &who),
                 Error::<T>::UnauthorizedAdmin
             );
-            voting_engine_system::Pallet::<T>::internal_vote(
-                frame_system::RawOrigin::Signed(who.clone()).into(),
-                proposal_id,
-                approve,
-            )?;
+            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
             Self::deposit_event(Event::<T>::RelaySubmittersVoteSubmitted {
                 proposal_id,
                 voter: who,
@@ -2128,7 +2112,11 @@ pub mod pallet {
                 }
                 queue_id = queue_id.saturating_add(1);
             }
-            let next_cursor = if queue_id >= next_queue_id { 0 } else { queue_id };
+            let next_cursor = if queue_id >= next_queue_id {
+                0
+            } else {
+                queue_id
+            };
             StaleCancelCursorByInstitution::<T>::insert(institution, next_cursor);
 
             Self::deposit_event(Event::<T>::OffchainStaleQueuedBatchesCancelled {

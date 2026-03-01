@@ -5,6 +5,7 @@ pub use pallet::*;
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
+use frame_support::weights::Weight;
 
 #[derive(
     Clone,
@@ -63,6 +64,14 @@ pub trait OnSfidBound<AccountId, Hash> {
 
 impl<AccountId, Hash> OnSfidBound<AccountId, Hash> for () {}
 
+pub trait OnSfidBoundWeight {
+    fn on_sfid_bound_weight() -> Weight {
+        Weight::zero()
+    }
+}
+
+impl OnSfidBoundWeight for () {}
+
 /// 中文注释：给投票模块使用的统一资格接口。
 pub trait SfidEligibilityProvider<AccountId> {
     fn is_eligible(sfid: &[u8], who: &AccountId) -> bool;
@@ -118,7 +127,7 @@ pub mod pallet {
         >;
 
         /// 中文注释：绑定后回调到发行模块发放认证奖励。
-        type OnSfidBound: OnSfidBound<Self::AccountId, Self::Hash>;
+        type OnSfidBound: OnSfidBound<Self::AccountId, Self::Hash> + OnSfidBoundWeight;
     }
 
     #[pallet::pallet]
@@ -259,7 +268,11 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 中文注释：使用 SFID 系统签发的一次性凭证绑定钱包。
         #[pallet::call_index(0)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(6, 6))]
+        #[pallet::weight(
+            T::DbWeight::get()
+                .reads_writes(6, 6)
+                .saturating_add(T::OnSfidBound::on_sfid_bound_weight())
+        )]
         pub fn bind_sfid(
             origin: OriginFor<T>,
             sfid_code: SfidOf<T>,

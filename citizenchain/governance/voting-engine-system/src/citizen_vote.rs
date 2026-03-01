@@ -4,7 +4,7 @@ use frame_support::{ensure, pallet_prelude::DispatchResult};
 use sp_runtime::traits::Hash;
 
 use crate::{
-    pallet::{SfidOf, CitizenTallies, CitizenVotesBySfid, Config, Error, Event, Pallet, Proposals},
+    pallet::{CitizenTallies, CitizenVotesBySfid, Config, Error, Event, Pallet, Proposals, SfidOf},
     PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STATUS_PASSED,
 };
 

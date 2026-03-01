@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:wuminapp_mobile/login/models/login_models.dart';
+import 'package:wuminapp_mobile/login/models/login_exception.dart';
 import 'package:wuminapp_mobile/login/services/login_replay_guard.dart';
 import 'package:wuminapp_mobile/login/services/login_whitelist_policy.dart';
 import 'package:wuminapp_mobile/services/wallet_service.dart';
@@ -31,18 +32,21 @@ class WuminLoginService {
     final text = raw.trim();
     final decoded = jsonDecode(text);
     if (decoded is! Map) {
-      throw Exception('二维码格式错误：必须为 JSON 对象');
+      throw const LoginException(
+        LoginErrorCode.invalidFormat,
+        '二维码格式错误：必须为 JSON 对象',
+      );
     }
     final data = decoded.map((k, v) => MapEntry(k.toString(), v));
 
     final proto = _requiredString(data, 'proto');
     if (proto != protocol) {
-      throw Exception('不支持的协议：$proto');
+      throw LoginException(LoginErrorCode.invalidProtocol, '不支持的协议：$proto');
     }
 
     final system = _requiredString(data, 'system').toLowerCase();
     if (!allowedSystems.contains(system)) {
-      throw Exception('不支持的系统：$system');
+      throw LoginException(LoginErrorCode.invalidSystem, '不支持的系统：$system');
     }
 
     final requestId = _requiredString(data, 'request_id');
@@ -67,7 +71,7 @@ class WuminLoginService {
     );
 
     if (challengeData.isExpired) {
-      throw Exception('登录挑战已过期，请刷新后重试');
+      throw const LoginException(LoginErrorCode.expired, '登录挑战已过期，请刷新后重试');
     }
     return challengeData;
   }
@@ -93,9 +97,12 @@ class WuminLoginService {
         : await _walletService.getWalletSecretByIndex(walletIndex);
     if (walletSecret == null) {
       if (walletIndex == null) {
-        throw Exception('请先创建或导入钱包');
+        throw const LoginException(LoginErrorCode.walletMissing, '请先创建或导入钱包');
       }
-      throw Exception('未找到指定钱包（walletIndex=$walletIndex）');
+      throw LoginException(
+        LoginErrorCode.walletNotFound,
+        '未找到指定钱包（walletIndex=$walletIndex）',
+      );
     }
 
     final wallet = walletSecret.profile;
@@ -105,7 +112,10 @@ class WuminLoginService {
 
     final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
     if (localPubkeyHex.toLowerCase() != wallet.pubkeyHex.toLowerCase()) {
-      throw Exception('本地签名密钥与当前钱包不一致，请重新导入钱包');
+      throw const LoginException(
+        LoginErrorCode.walletMismatch,
+        '本地签名密钥与当前钱包不一致，请重新导入钱包',
+      );
     }
 
     final signMessage = _buildSignMessage(challenge);
@@ -153,7 +163,7 @@ class WuminLoginService {
   String _requiredString(Map<String, dynamic> data, String key) {
     final value = data[key]?.toString().trim();
     if (value == null || value.isEmpty) {
-      throw Exception('二维码缺少字段：$key');
+      throw LoginException(LoginErrorCode.missingField, '二维码缺少字段：$key');
     }
     return value;
   }
@@ -169,7 +179,7 @@ class WuminLoginService {
         return parsed;
       }
     }
-    throw Exception('二维码字段格式错误：$key');
+    throw LoginException(LoginErrorCode.invalidField, '二维码字段格式错误：$key');
   }
 
   String _toHex(List<int> bytes) {

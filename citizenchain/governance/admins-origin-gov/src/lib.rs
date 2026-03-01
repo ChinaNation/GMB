@@ -4,27 +4,33 @@
 //! - 投票流程本身由 voting-engine-system 提供（内部投票）
 //! - 约束：仅替换，不增删；且仅能在本机构范围内更换
 
-use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{ensure, pallet_prelude::*, Blake2_128Concat};
+extern crate alloc;
+
+use alloc::vec::Vec;
+use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+use frame_support::{
+    ensure, pallet_prelude::*, traits::StorageVersion, weights::Weight, Blake2_128Concat,
+    Twox64Concat,
+};
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
-use sp_std::vec::Vec;
+use sp_runtime::traits::Saturating;
 
-use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
-use primitives::china::china_cb::{
-    shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
-};
+use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
 use primitives::china::china_ch::{
     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
+use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, STATUS_PASSED,
+    InstitutionPalletId, STATUS_PASSED, STATUS_REJECTED,
 };
 
 pub use pallet::*;
 
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
+)]
 pub struct AdminReplacementAction<AccountId> {
     /// 目标机构（机构标识 pallet_id）
     pub institution: InstitutionPalletId,
@@ -36,6 +42,8 @@ pub struct AdminReplacementAction<AccountId> {
     pub executed: bool,
 }
 
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+
 fn str_to_pallet_id(s: &str) -> Option<InstitutionPalletId> {
     reserve_pallet_id_to_bytes(s)
 }
@@ -44,17 +52,16 @@ fn str_to_shengbank_pallet_id(s: &str) -> Option<InstitutionPalletId> {
     shengbank_pallet_id_to_bytes(s)
 }
 
-fn nrc_pallet_id_bytes() -> InstitutionPalletId {
+fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
     // 中文注释：国储会ID统一从常量数组读取并转码。
     CHINA_CB
         .first()
         .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
-        .expect("NRC shenfen_id must be valid")
 }
 
 fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
     // 国储会固定 shenfen_id
-    if institution == nrc_pallet_id_bytes() {
+    if Some(institution) == nrc_pallet_id_bytes() {
         return Some(ORG_NRC);
     }
 
@@ -101,20 +108,23 @@ pub mod pallet {
         /// 单个机构管理员最大数量上限（用于 BoundedVec）
         type MaxAdminsPerInstitution: Get<u32>;
 
+        #[pallet::constant]
+        /// 超过该时长仍未执行的提案可被清理。
+        type StaleProposalLifetime: Get<BlockNumberFor<Self>>;
+
         /// 中文注释：内部投票引擎（返回真实 proposal_id，避免外部猜测 next_proposal_id）。
         type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
     }
 
     #[pallet::pallet]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
     #[pallet::storage]
-    #[pallet::getter(fn proposal_action)]
     pub type ProposalActions<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, AdminReplacementAction<T::AccountId>, OptionQuery>;
+        StorageMap<_, Twox64Concat, u64, AdminReplacementAction<T::AccountId>, OptionQuery>;
 
     #[pallet::storage]
-    #[pallet::getter(fn current_admins)]
     pub type CurrentAdmins<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -123,9 +133,17 @@ pub mod pallet {
         OptionQuery,
     >;
 
+    #[pallet::storage]
+    pub type ProposalCreatedAt<T: Config> =
+        StorageMap<_, Twox64Concat, u64, BlockNumberFor<T>, OptionQuery>;
+
+    #[pallet::storage]
+    pub type ActiveProposalByInstitution<T: Config> =
+        StorageMap<_, Blake2_128Concat, InstitutionPalletId, u64, OptionQuery>;
+
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
-        pub _phantom: sp_std::marker::PhantomData<T>,
+        pub _phantom: core::marker::PhantomData<T>,
     }
 
     impl<T: Config> Default for GenesisConfig<T> {
@@ -133,6 +151,18 @@ pub mod pallet {
             Self {
                 _phantom: Default::default(),
             }
+        }
+    }
+
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        #[cfg(feature = "std")]
+        fn integrity_test() {
+            let required = NRC_ADMIN_COUNT.max(PRC_ADMIN_COUNT).max(PRB_ADMIN_COUNT);
+            assert!(
+                T::MaxAdminsPerInstitution::get() >= required,
+                "MaxAdminsPerInstitution must be >= largest expected admin count"
+            );
         }
     }
 
@@ -195,12 +225,19 @@ pub mod pallet {
             who: T::AccountId,
             approve: bool,
         },
+        /// 提案达到通过状态但自动执行失败（投票不回滚）
+        AdminReplacementExecutionFailed { proposal_id: u64 },
         /// 管理员列表已完成替换执行
         AdminReplaced {
             proposal_id: u64,
             institution: InstitutionPalletId,
             old_admin: T::AccountId,
             new_admin: T::AccountId,
+        },
+        /// 过期且未执行的提案被清理
+        StaleProposalCancelled {
+            proposal_id: u64,
+            institution: InstitutionPalletId,
         },
     }
 
@@ -224,12 +261,19 @@ pub mod pallet {
         ProposalNotPassed,
         /// 该提案已执行过替换
         ProposalAlreadyExecuted,
+        /// 同一机构已有活跃提案
+        ActiveProposalExists,
+        /// 提案尚未达到可清理的过期时间
+        ProposalNotStale,
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(4, 4))]
+        #[pallet::weight(
+            Weight::from_parts(80_000_000, 4_096)
+                .saturating_add(T::DbWeight::get().reads_writes(8, 8))
+        )]
         pub fn propose_admin_replacement(
             origin: OriginFor<T>,
             org: u8,
@@ -242,6 +286,7 @@ pub mod pallet {
             // 1) 校验机构归属范围（国储会/省储会/省储行）
             let actual_org = institution_org(institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(actual_org == org, Error::<T>::InstitutionOrgMismatch);
+            Self::ensure_no_active_proposal(institution)?;
 
             // 2) 校验发起人与替换参数合法性
             let admins = Self::admins_for_institution(institution)?;
@@ -253,11 +298,8 @@ pub mod pallet {
             );
 
             // 3) 在投票引擎中创建内部投票提案，并记录业务动作
-            let proposal_id = T::InternalVoteEngine::create_internal_proposal(
-                who.clone(),
-                org,
-                institution,
-            )?;
+            let proposal_id =
+                T::InternalVoteEngine::create_internal_proposal(who.clone(), org, institution)?;
 
             ProposalActions::<T>::insert(
                 proposal_id,
@@ -268,6 +310,8 @@ pub mod pallet {
                     executed: false,
                 },
             );
+            ProposalCreatedAt::<T>::insert(proposal_id, frame_system::Pallet::<T>::block_number());
+            ActiveProposalByInstitution::<T>::insert(institution, proposal_id);
 
             Self::deposit_event(Event::<T>::AdminReplacementProposed {
                 proposal_id,
@@ -281,7 +325,10 @@ pub mod pallet {
         }
 
         #[pallet::call_index(1)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(5, 5))]
+        #[pallet::weight(
+            Weight::from_parts(200_000_000, 8_192)
+                .saturating_add(T::DbWeight::get().reads_writes(12, 10))
+        )]
         pub fn vote_admin_replacement(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -298,11 +345,7 @@ pub mod pallet {
             ensure!(admins.contains(&who), Error::<T>::UnauthorizedAdmin);
 
             // 转发到投票引擎做计票与阈值判断
-            voting_engine_system::Pallet::<T>::internal_vote(
-                frame_system::RawOrigin::Signed(who.clone()).into(),
-                proposal_id,
-                approve,
-            )?;
+            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
 
             Self::deposit_event(Event::<T>::AdminReplacementVoteSubmitted {
                 proposal_id,
@@ -314,10 +357,51 @@ pub mod pallet {
                 // 中文注释：只在内部投票状态达到 PASSED 时执行替换，避免前置赞成票被回滚。
                 if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
                     if proposal.status == STATUS_PASSED {
-                        Self::try_execute_replacement(proposal_id)?;
+                        if Self::try_execute_replacement_from_action(proposal_id, action).is_err() {
+                            Self::deposit_event(Event::<T>::AdminReplacementExecutionFailed {
+                                proposal_id,
+                            });
+                        }
                     }
                 }
             }
+            Ok(())
+        }
+
+        #[pallet::call_index(2)]
+        #[pallet::weight(
+            Weight::from_parts(120_000_000, 4_096)
+                .saturating_add(T::DbWeight::get().reads_writes(8, 7))
+        )]
+        pub fn execute_admin_replacement(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
+            let _ = ensure_signed(origin)?;
+            Self::try_execute_replacement(proposal_id)
+        }
+
+        #[pallet::call_index(3)]
+        #[pallet::weight(
+            Weight::from_parts(60_000_000, 4_096)
+                .saturating_add(T::DbWeight::get().reads_writes(4, 4))
+        )]
+        pub fn cancel_stale_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
+            let _ = ensure_signed(origin)?;
+            let action =
+                ProposalActions::<T>::get(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
+            ensure!(!action.executed, Error::<T>::ProposalAlreadyExecuted);
+            let created_at = ProposalCreatedAt::<T>::get(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            let now = frame_system::Pallet::<T>::block_number();
+            let stale_at = created_at.saturating_add(T::StaleProposalLifetime::get());
+            ensure!(now >= stale_at, Error::<T>::ProposalNotStale);
+
+            ProposalActions::<T>::remove(proposal_id);
+            ProposalCreatedAt::<T>::remove(proposal_id);
+            Self::remove_active_proposal_if_matches(action.institution, proposal_id);
+
+            Self::deposit_event(Event::<T>::StaleProposalCancelled {
+                proposal_id,
+                institution: action.institution,
+            });
             Ok(())
         }
     }
@@ -327,8 +411,38 @@ pub mod pallet {
             institution: InstitutionPalletId,
         ) -> Result<Vec<T::AccountId>, DispatchError> {
             // 中文注释：创世后只信任链上管理员状态，不再回退常量管理员。
-            let stored = CurrentAdmins::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let stored =
+                CurrentAdmins::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
             Ok(stored.into_inner())
+        }
+
+        fn ensure_no_active_proposal(institution: InstitutionPalletId) -> DispatchResult {
+            if let Some(existing_id) = ActiveProposalByInstitution::<T>::get(institution) {
+                if let Some(action) = ProposalActions::<T>::get(existing_id) {
+                    if !action.executed {
+                        let still_active =
+                            voting_engine_system::Pallet::<T>::proposals(existing_id)
+                                .map(|proposal| proposal.status != STATUS_REJECTED)
+                                .unwrap_or(false);
+                        if still_active {
+                            return Err(Error::<T>::ActiveProposalExists.into());
+                        }
+                    }
+                    ProposalActions::<T>::remove(existing_id);
+                    ProposalCreatedAt::<T>::remove(existing_id);
+                } else {
+                    ProposalCreatedAt::<T>::remove(existing_id);
+                }
+                // 清理悬挂索引，避免历史脏数据阻塞新提案。
+                ActiveProposalByInstitution::<T>::remove(institution);
+            }
+            Ok(())
+        }
+
+        fn remove_active_proposal_if_matches(institution: InstitutionPalletId, proposal_id: u64) {
+            if ActiveProposalByInstitution::<T>::get(institution) == Some(proposal_id) {
+                ActiveProposalByInstitution::<T>::remove(institution);
+            }
         }
 
         fn validate_admin_count(org: u8, admins_len: usize) -> DispatchResult {
@@ -345,7 +459,13 @@ pub mod pallet {
             let action =
                 ProposalActions::<T>::get(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
             ensure!(!action.executed, Error::<T>::ProposalAlreadyExecuted);
+            Self::try_execute_replacement_from_action(proposal_id, action)
+        }
 
+        fn try_execute_replacement_from_action(
+            proposal_id: u64,
+            action: AdminReplacementAction<T::AccountId>,
+        ) -> DispatchResult {
             // 仅在内部投票提案状态为 PASSED 时执行替换
             let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
@@ -377,11 +497,9 @@ pub mod pallet {
                     .map_err(|_| Error::<T>::InvalidAdminCount)?;
             CurrentAdmins::<T>::insert(action.institution, bounded);
 
-            ProposalActions::<T>::mutate(proposal_id, |maybe| {
-                if let Some(inner) = maybe {
-                    inner.executed = true;
-                }
-            });
+            ProposalActions::<T>::remove(proposal_id);
+            ProposalCreatedAt::<T>::remove(proposal_id);
+            Self::remove_active_proposal_if_matches(action.institution, proposal_id);
 
             Self::deposit_event(Event::<T>::AdminReplaced {
                 proposal_id,
@@ -399,7 +517,10 @@ pub mod pallet {
 mod tests {
     use super::*;
     use codec::Encode;
-    use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
+    use frame_support::{
+        assert_noop, assert_ok, derive_impl,
+        traits::{ConstU32, ConstU64},
+    };
     use frame_system as system;
     use primitives::china::china_cb::{
         shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
@@ -408,7 +529,10 @@ mod tests {
         shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
     };
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-    use voting_engine_system::internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC};
+    use voting_engine_system::{
+        internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
+        STATUS_PASSED, STATUS_REJECTED,
+    };
 
     type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -526,6 +650,7 @@ mod tests {
     impl Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxAdminsPerInstitution = ConstU32<32>;
+        type StaleProposalLifetime = ConstU64<100>;
         type InternalVoteEngine = voting_engine_system::Pallet<Test>;
     }
 
@@ -589,14 +714,13 @@ mod tests {
                 ));
             }
 
-            let admins = AdminsOriginGov::current_admins(institution)
+            let admins = CurrentAdmins::<Test>::get(institution)
                 .expect("current admins should be stored after execution")
                 .into_inner();
             assert!(admins.iter().any(|a| a == &new_admin));
             assert!(!admins.iter().any(|a| a == &old_admin));
 
-            let action = AdminsOriginGov::proposal_action(0).expect("action should exist");
-            assert!(action.executed);
+            assert!(ProposalActions::<Test>::get(0).is_none());
         });
     }
 
@@ -630,7 +754,11 @@ mod tests {
             ));
 
             assert_noop!(
-                AdminsOriginGov::vote_admin_replacement(RuntimeOrigin::signed(prc_admin(0)), 0, true),
+                AdminsOriginGov::vote_admin_replacement(
+                    RuntimeOrigin::signed(prc_admin(0)),
+                    0,
+                    true
+                ),
                 Error::<Test>::UnauthorizedAdmin
             );
         });
@@ -692,7 +820,7 @@ mod tests {
                 ));
             }
 
-            let admins = AdminsOriginGov::current_admins(institution)
+            let admins = CurrentAdmins::<Test>::get(institution)
                 .expect("current admins should be stored after execution")
                 .into_inner();
             assert!(admins.iter().any(|a| a == &new_admin));
@@ -724,7 +852,7 @@ mod tests {
                 ));
             }
 
-            let admins = AdminsOriginGov::current_admins(institution)
+            let admins = CurrentAdmins::<Test>::get(institution)
                 .expect("current admins should be stored after execution")
                 .into_inner();
             assert!(admins.iter().any(|a| a == &new_admin));
@@ -757,7 +885,11 @@ mod tests {
             ));
 
             assert_noop!(
-                AdminsOriginGov::vote_admin_replacement(RuntimeOrigin::signed(prb_admin(0)), 0, true),
+                AdminsOriginGov::vote_admin_replacement(
+                    RuntimeOrigin::signed(prb_admin(0)),
+                    0,
+                    true
+                ),
                 Error::<Test>::UnauthorizedAdmin
             );
         });
@@ -788,8 +920,390 @@ mod tests {
             ));
 
             assert_noop!(
-                AdminsOriginGov::vote_admin_replacement(RuntimeOrigin::signed(prc_admin(0)), 0, true),
+                AdminsOriginGov::vote_admin_replacement(
+                    RuntimeOrigin::signed(prc_admin(0)),
+                    0,
+                    true
+                ),
                 Error::<Test>::UnauthorizedAdmin
+            );
+        });
+    }
+
+    #[test]
+    fn vote_does_not_rollback_when_auto_execute_fails() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let old_admin = nrc_admin(1);
+            let new_admin = AccountId32::new([61u8; 32]);
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                old_admin.clone(),
+                new_admin
+            ));
+
+            CurrentAdmins::<Test>::mutate(institution, |maybe| {
+                let admins = maybe.as_mut().expect("institution should exist");
+                let pos = admins
+                    .iter()
+                    .position(|a| a == &old_admin)
+                    .expect("old_admin should be in admins");
+                admins[pos] = nrc_admin(18);
+            });
+
+            for i in [0usize, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
+                assert_ok!(AdminsOriginGov::vote_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(i)),
+                    0,
+                    true
+                ));
+            }
+
+            let proposal =
+                voting_engine_system::Pallet::<Test>::proposals(0).expect("proposal should exist");
+            assert_eq!(proposal.status, STATUS_PASSED);
+            assert!(
+                !ProposalActions::<Test>::get(0)
+                    .expect("proposal action should exist")
+                    .executed
+            );
+            assert_noop!(
+                AdminsOriginGov::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), 0),
+                Error::<Test>::OldAdminNotFound
+            );
+        });
+    }
+
+    #[test]
+    fn cannot_create_second_active_proposal_for_same_institution() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                nrc_admin(1),
+                AccountId32::new([70u8; 32])
+            ));
+
+            assert_noop!(
+                AdminsOriginGov::propose_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    ORG_NRC,
+                    institution,
+                    nrc_admin(2),
+                    AccountId32::new([71u8; 32])
+                ),
+                Error::<Test>::ActiveProposalExists
+            );
+        });
+    }
+
+    #[test]
+    fn stale_proposal_can_be_cancelled_and_unblocks_new_proposal() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                nrc_admin(1),
+                AccountId32::new([72u8; 32])
+            ));
+
+            System::set_block_number(99);
+            assert_noop!(
+                AdminsOriginGov::cancel_stale_proposal(RuntimeOrigin::signed(nrc_admin(0)), 0),
+                Error::<Test>::ProposalNotStale
+            );
+
+            System::set_block_number(100);
+            assert_ok!(AdminsOriginGov::cancel_stale_proposal(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0
+            ));
+            assert!(ProposalActions::<Test>::get(0).is_none());
+            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                nrc_admin(2),
+                AccountId32::new([73u8; 32])
+            ));
+        });
+    }
+
+    #[test]
+    fn org_mismatch_is_rejected() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                AdminsOriginGov::propose_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    ORG_PRC,
+                    nrc_pallet_id(),
+                    nrc_admin(1),
+                    AccountId32::new([74u8; 32])
+                ),
+                Error::<Test>::InstitutionOrgMismatch
+            );
+        });
+    }
+
+    #[test]
+    fn reject_vote_does_not_trigger_execution() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let old_admin = nrc_admin(1);
+            let new_admin = AccountId32::new([75u8; 32]);
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                old_admin.clone(),
+                new_admin.clone()
+            ));
+
+            assert_ok!(AdminsOriginGov::vote_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(2)),
+                0,
+                false
+            ));
+
+            let admins = CurrentAdmins::<Test>::get(institution)
+                .expect("current admins should remain stored")
+                .into_inner();
+            assert!(admins.iter().any(|a| a == &old_admin));
+            assert!(!admins.iter().any(|a| a == &new_admin));
+            assert!(
+                !ProposalActions::<Test>::get(0)
+                    .expect("proposal action should exist")
+                    .executed
+            );
+        });
+    }
+
+    #[test]
+    fn propose_fails_when_old_admin_missing() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                AdminsOriginGov::propose_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    ORG_NRC,
+                    nrc_pallet_id(),
+                    AccountId32::new([201u8; 32]),
+                    AccountId32::new([202u8; 32])
+                ),
+                Error::<Test>::OldAdminNotFound
+            );
+        });
+    }
+
+    #[test]
+    fn propose_fails_when_new_admin_already_exists() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                AdminsOriginGov::propose_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    ORG_NRC,
+                    nrc_pallet_id(),
+                    nrc_admin(1),
+                    nrc_admin(2)
+                ),
+                Error::<Test>::NewAdminAlreadyExists
+            );
+        });
+    }
+
+    #[test]
+    fn executed_proposal_cannot_be_executed_again() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                nrc_admin(1),
+                AccountId32::new([203u8; 32])
+            ));
+
+            for i in 0..13 {
+                assert_ok!(AdminsOriginGov::vote_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(i)),
+                    0,
+                    true
+                ));
+            }
+
+            assert_noop!(
+                AdminsOriginGov::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), 0),
+                Error::<Test>::ProposalActionNotFound
+            );
+        });
+    }
+
+    #[test]
+    fn rejected_proposal_does_not_block_new_proposal() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                nrc_admin(1),
+                AccountId32::new([206u8; 32])
+            ));
+
+            let end = voting_engine_system::Pallet::<Test>::proposals(0)
+                .expect("proposal should exist")
+                .end;
+            System::set_block_number(end + 1);
+            assert_ok!(voting_engine_system::Pallet::<Test>::finalize_proposal(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0
+            ));
+            assert_eq!(
+                voting_engine_system::Pallet::<Test>::proposals(0)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_REJECTED
+            );
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                nrc_admin(2),
+                AccountId32::new([207u8; 32])
+            ));
+
+            assert!(ProposalActions::<Test>::get(0).is_none());
+            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
+            assert_eq!(
+                ActiveProposalByInstitution::<Test>::get(institution),
+                Some(1)
+            );
+        });
+    }
+
+    #[test]
+    fn execute_admin_replacement_succeeds_after_failed_auto_execute() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let old_admin = nrc_admin(1);
+            let new_admin = AccountId32::new([208u8; 32]);
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                old_admin.clone(),
+                new_admin.clone()
+            ));
+
+            CurrentAdmins::<Test>::mutate(institution, |maybe| {
+                let admins = maybe.as_mut().expect("institution should exist");
+                let old_pos = admins
+                    .iter()
+                    .position(|a| a == &old_admin)
+                    .expect("old_admin should be in admins");
+                admins[old_pos] = nrc_admin(18);
+            });
+
+            for i in [0usize, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
+                assert_ok!(AdminsOriginGov::vote_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(i)),
+                    0,
+                    true
+                ));
+            }
+
+            assert_eq!(
+                voting_engine_system::Pallet::<Test>::proposals(0)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_PASSED
+            );
+            assert!(ProposalActions::<Test>::get(0).is_some());
+
+            CurrentAdmins::<Test>::mutate(institution, |maybe| {
+                let admins = maybe.as_mut().expect("institution should exist");
+                let restore_pos = admins
+                    .iter()
+                    .position(|a| a == &nrc_admin(18))
+                    .expect("temporary admin marker should exist");
+                admins[restore_pos] = old_admin.clone();
+            });
+
+            assert_ok!(AdminsOriginGov::execute_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0
+            ));
+            let admins = CurrentAdmins::<Test>::get(institution)
+                .expect("current admins should be stored")
+                .into_inner();
+            assert!(admins.iter().any(|a| a == &new_admin));
+            assert!(!admins.iter().any(|a| a == &old_admin));
+            assert!(ProposalActions::<Test>::get(0).is_none());
+            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
+            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
+        });
+    }
+
+    #[test]
+    fn vote_below_threshold_does_not_trigger_execution() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let old_admin = nrc_admin(1);
+            let new_admin = AccountId32::new([204u8; 32]);
+
+            assert_ok!(AdminsOriginGov::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                old_admin.clone(),
+                new_admin.clone()
+            ));
+
+            assert_ok!(AdminsOriginGov::vote_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(2)),
+                0,
+                true
+            ));
+
+            let admins = CurrentAdmins::<Test>::get(institution)
+                .expect("current admins should remain stored")
+                .into_inner();
+            assert!(admins.iter().any(|a| a == &old_admin));
+            assert!(!admins.iter().any(|a| a == &new_admin));
+            assert!(
+                !ProposalActions::<Test>::get(0)
+                    .expect("proposal action should exist")
+                    .executed
+            );
+        });
+    }
+
+    #[test]
+    fn invalid_institution_is_rejected() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                AdminsOriginGov::propose_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    ORG_NRC,
+                    [0u8; 48],
+                    nrc_admin(1),
+                    AccountId32::new([205u8; 32])
+                ),
+                Error::<Test>::InvalidInstitution
             );
         });
     }

@@ -127,6 +127,9 @@ runtime-benchmarks = [
 	"pallet-balances/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-transaction-payment/runtime-benchmarks",
+	"onchain-transaction-fee/runtime-benchmarks",
+	"resolution-issuance-gov/runtime-benchmarks",
+	"resolution-destro-gov/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 try-runtime = [

@@ -29,4 +29,6 @@ frame_benchmarking::define_benchmarks!(
     [frame_system_extensions, SystemExtensionsBench::<Runtime>]
     [pallet_balances, Balances]
     [pallet_timestamp, Timestamp]
+    [resolution_issuance_gov, ResolutionIssuanceGov]
+    [resolution_destro_gov, ResolutionDestroGov]
 );
