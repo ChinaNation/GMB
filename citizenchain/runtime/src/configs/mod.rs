@@ -313,6 +313,9 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::FullnodePowReward(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
+            RuntimeCall::ShengBankStakeInterest(_) => {
+                onchain_transaction_fee::AmountExtractResult::NoAmount
+            }
             RuntimeCall::ResolutionIssuanceIss(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
@@ -707,29 +710,38 @@ impl
         nonce: &voting_engine_system::pallet::VoteNonceOf<Runtime>,
         signature: &voting_engine_system::pallet::VoteSignatureOf<Runtime>,
     ) -> bool {
-        let public = match current_sfid_verify_public() {
-            Some(v) => v,
-            None => return false,
-        };
-        let sig_bytes = signature.as_slice();
-        if sig_bytes.len() != 64 {
-            return false;
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            let _ = who;
+            eligible_total > 0 && !nonce.is_empty() && !signature.is_empty()
         }
 
-        let mut sig_raw = [0u8; 64];
-        sig_raw.copy_from_slice(sig_bytes);
-        let signature = sr25519::Signature::from_raw(sig_raw);
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
+            let public = match current_sfid_verify_public() {
+                Some(v) => v,
+                None => return false,
+            };
+            let sig_bytes = signature.as_slice();
+            if sig_bytes.len() != 64 {
+                return false;
+            }
 
-        let payload = (
-            b"GMB_SFID_POPULATION_V1",
-            frame_system::Pallet::<Runtime>::block_hash(0),
-            who,
-            eligible_total,
-            nonce.as_slice(),
-        );
-        let msg = blake2_256(&payload.encode());
+            let mut sig_raw = [0u8; 64];
+            sig_raw.copy_from_slice(sig_bytes);
+            let signature = sr25519::Signature::from_raw(sig_raw);
 
-        sr25519_verify(&signature, &msg, &public)
+            let payload = (
+                b"GMB_SFID_POPULATION_V1",
+                frame_system::Pallet::<Runtime>::block_hash(0),
+                who,
+                eligible_total,
+                nonce.as_slice(),
+            );
+            let msg = blake2_256(&payload.encode());
+
+            sr25519_verify(&signature, &msg, &public)
+        }
     }
 }
 
@@ -742,24 +754,31 @@ parameter_types! {
     /// 决议发行治理参数（统一来源于 primitives 常量）。
     pub const ResolutionIssuanceMaxReasonLen: u32 = primitives::count_const::RESOLUTION_ISSUANCE_MAX_REASON_LEN;
     pub const ResolutionIssuanceMaxAllocations: u32 = primitives::count_const::RESOLUTION_ISSUANCE_MAX_ALLOCATIONS;
+    pub const ResolutionIssuanceMaxTotalIssuance: u128 = u128::MAX;
     /// Runtime 升级治理提案备注最大长度。
     pub const RuntimeUpgradeMaxReasonLen: u32 = 1024;
     /// Runtime wasm 最大长度（字节）。
     pub const RuntimeUpgradeMaxCodeSize: u32 = 5 * 1024 * 1024;
     /// 管理员治理：单机构管理员列表上限（覆盖国储会 19 人规模）。
     pub const MaxAdminsPerInstitution: u32 = 32;
+    /// 管理员替换提案过期清理窗口（区块数）。
+    pub const AdminReplacementStaleProposalLifetime: u32 =
+        primitives::count_const::VOTING_DURATION_BLOCKS * 2;
 }
 
 impl admins_origin_gov::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
+    type StaleProposalLifetime = AdminReplacementStaleProposalLifetime;
     type InternalVoteEngine = VotingEngineSystem;
 }
 
 impl resolution_destro_gov::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
+    type StaleProposalLifetime = AdminReplacementStaleProposalLifetime;
     type InternalVoteEngine = VotingEngineSystem;
+    type WeightInfo = resolution_destro_gov::SubstrateWeight<Runtime>;
 }
 
 /// 禁用特权原点：始终拒绝任何 Origin，确保不存在可被调用的特权入口。
@@ -775,6 +794,28 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNoPrivilegeOrigin {
     #[cfg(feature = "runtime-benchmarks")]
     fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
         Err(())
+    }
+}
+
+pub struct EnsureJointVoteFinalizeOrigin;
+
+impl EnsureOrigin<RuntimeOrigin> for EnsureJointVoteFinalizeOrigin {
+    type Success = ();
+
+    fn try_origin(o: RuntimeOrigin) -> Result<Self::Success, RuntimeOrigin> {
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            return frame_system::EnsureRoot::<AccountId>::try_origin(o).map(|_| ());
+        }
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
+            Err(o)
+        }
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
+        Ok(RuntimeOrigin::from(frame_system::RawOrigin::Root))
     }
 }
 
@@ -794,7 +835,8 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 
     #[cfg(feature = "runtime-benchmarks")]
     fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
-        Err(())
+        let admin = AccountId::new(primitives::china::china_cb::CHINA_CB[0].admins[0]);
+        Ok(RuntimeOrigin::from(frame_system::RawOrigin::Signed(admin)))
     }
 }
 
@@ -805,7 +847,7 @@ fn is_nrc_admin(who: &AccountId) -> bool {
         .expect("NRC shenfen_id must be valid");
 
     // 中文注释：创世后只信任链上管理员治理模块中的当前管理员名单。
-    if let Some(admins) = admins_origin_gov::Pallet::<Runtime>::current_admins(nrc_institution) {
+    if let Some(admins) = admins_origin_gov::CurrentAdmins::<Runtime>::get(nrc_institution) {
         admins.into_inner().iter().any(|admin| admin == who)
     } else {
         false
@@ -817,19 +859,29 @@ impl resolution_issuance_iss::Config for Runtime {
     type Currency = Balances;
     // 中文注释：协议层封死特权入口，执行发行不接受任何外部特权调用。
     type ExecuteOrigin = EnsureNoPrivilegeOrigin;
+    // 中文注释：仅保留清理类维护入口，避免执行入口暴露。
+    type MaintenanceOrigin = frame_system::EnsureRoot<AccountId>;
     type MaxReasonLen = ResolutionIssuanceMaxReasonLen;
     type MaxAllocations = ResolutionIssuanceMaxAllocations;
+    type MaxTotalIssuance = ResolutionIssuanceMaxTotalIssuance;
+    type WeightInfo = ();
 }
 
 impl resolution_issuance_gov::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type NrcProposeOrigin = EnsureNrcAdmin;
+    type RecipientSetOrigin = frame_system::EnsureRoot<AccountId>;
+    // 中文注释：禁用外部 finalize 入口，只允许投票引擎回调路径落地结果。
+    type JointVoteFinalizeOrigin = EnsureJointVoteFinalizeOrigin;
     type IssuanceExecutor = ResolutionIssuanceIss;
+    type IssuanceWeightInfo = ();
+    type WeightInfo = resolution_issuance_gov::SubstrateWeight<Runtime>;
     type JointVoteEngine = VotingEngineSystem;
     type MaxReasonLen = ResolutionIssuanceMaxReasonLen;
     type MaxAllocations = ResolutionIssuanceMaxAllocations;
     type MaxSnapshotNonceLength = ConstU32<64>;
     type MaxSnapshotSignatureLength = ConstU32<64>;
+    type MaxExecutionRetries = ConstU32<5>;
 }
 
 impl runtime_root_upgrade::Config for Runtime {
@@ -983,9 +1035,9 @@ mod tests {
                     .is_none()
             );
 
-            assert!(resolution_issuance_iss::pallet::Executed::<Runtime>::get(
-                proposal_id
-            ));
+            assert!(
+                resolution_issuance_iss::pallet::Executed::<Runtime>::get(proposal_id).is_some()
+            );
             assert_eq!(
                 resolution_issuance_iss::pallet::TotalIssued::<Runtime>::get(),
                 total_amount
@@ -1021,9 +1073,7 @@ mod tests {
                 ));
             }
 
-            let action = resolution_destro_gov::Pallet::<Runtime>::proposal_action(0)
-                .expect("destroy action should exist");
-            assert!(action.executed);
+            assert!(resolution_destro_gov::Pallet::<Runtime>::proposal_action(0).is_none());
 
             assert_eq!(
                 Balances::free_balance(&nrc_account),
@@ -1680,7 +1730,7 @@ impl voting_engine_system::InternalAdminProvider<AccountId> for RuntimeInternalA
         who: &AccountId,
     ) -> bool {
         // 中文注释：生产逻辑只信任链上当前管理员状态；无状态则拒绝（不再回退常量）。
-        if let Some(admins) = admins_origin_gov::Pallet::<Runtime>::current_admins(institution) {
+        if let Some(admins) = admins_origin_gov::CurrentAdmins::<Runtime>::get(institution) {
             admins.into_inner().iter().any(|admin| admin == who)
         } else {
             false
