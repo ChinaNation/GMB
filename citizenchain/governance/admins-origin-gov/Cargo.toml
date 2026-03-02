@@ -20,6 +20,8 @@ voting-engine-system = { path = "../voting-engine-system", default-features = fa
 
 [features]
 default = ["std"]
+runtime-benchmarks = []
+try-runtime = []
 std = [
     "codec/std",
     "scale-info/std",

@@ -120,6 +120,9 @@ pub mod pallet {
         #[pallet::constant]
         type MaxTotalIssuance: Get<BalanceOf<Self>>;
 
+        #[pallet::constant]
+        type MaxSingleIssuance: Get<BalanceOf<Self>>;
+
         type WeightInfo: WeightInfo;
     }
 
@@ -175,6 +178,7 @@ pub mod pallet {
         BelowExistentialDeposit,
         DepositFailed,
         ExceedsTotalIssuanceCap,
+        ExceedsSingleIssuanceCap,
         NotExecuted,
         PalletPaused,
     }
@@ -190,6 +194,10 @@ pub mod pallet {
             assert!(
                 !T::MaxTotalIssuance::get().is_zero(),
                 "MaxTotalIssuance must be greater than 0"
+            );
+            assert!(
+                !T::MaxSingleIssuance::get().is_zero(),
+                "MaxSingleIssuance must be greater than 0"
             );
             assert!(
                 T::MaxReasonLen::get() > 0,
@@ -292,6 +300,10 @@ pub mod pallet {
             }
 
             ensure!(sum == total_amount, Error::<T>::TotalMismatch);
+            ensure!(
+                total_amount <= T::MaxSingleIssuance::get(),
+                Error::<T>::ExceedsSingleIssuanceCap
+            );
 
             // 中文注释：先做累计量溢出校验，再执行发币，避免出现“先发币后报错”的不一致风险。
             let new_total = TotalIssued::<T>::get()
@@ -429,6 +441,7 @@ mod tests {
         type MaxReasonLen = ConstU32<128>;
         type MaxAllocations = ConstU32<4>;
         type MaxTotalIssuance = ConstU128<1_000_000>;
+        type MaxSingleIssuance = ConstU128<14_434_973_780_000>;
         type WeightInfo = ();
     }
 

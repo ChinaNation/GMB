@@ -31,9 +31,9 @@ use frame_support::{
     dispatch::DispatchResult,
     parameter_types,
     traits::{
-        fungible::Inspect,
+        fungible::{Balanced, Credit, Inspect},
         tokens::{Fortitude, Preservation},
-        ConstU128, ConstU32, ConstU64, ConstU8, Contains, EnsureOrigin, FindAuthor,
+        ConstU128, ConstU32, ConstU64, ConstU8, Contains, EnsureOrigin, FindAuthor, OnUnbalanced,
         UnfilteredDispatchable, VariantCountOf,
     },
     weights::{
@@ -51,6 +51,8 @@ use sp_runtime::{
     MultiSigner, Perbill,
 };
 use sp_version::RuntimeVersion;
+use duoqian_transaction_pow::{DuoqianReservedAddressChecker as _, ProtectedSourceChecker as _};
+use onchain_transaction_fee::NrcAccountProvider as _;
 
 // Local module imports
 use super::{
@@ -112,6 +114,16 @@ impl Contains<RuntimeCall> for RuntimeCallFilter {
             RuntimeCall::Balances(pallet_balances::Call::force_transfer { source, .. }) => {
                 !is_keyless_multi_address(source)
             }
+            RuntimeCall::Balances(pallet_balances::Call::force_unreserve { who, .. }) => {
+                !is_keyless_multi_address(who)
+            }
+            RuntimeCall::Balances(pallet_balances::Call::force_set_balance { who, .. }) => {
+                !is_keyless_multi_address(who)
+            }
+            // force_adjust_total_issuance 直接影响全局发行量；统一在 BaseCallFilter 禁用外部入口。
+            RuntimeCall::Balances(pallet_balances::Call::force_adjust_total_issuance { .. }) => {
+                false
+            }
             _ => true,
         }
     }
@@ -144,7 +156,7 @@ impl frame_system::Config for Runtime {
     type AccountData = pallet_balances::AccountData<Balance>;
     /// 地址显示编号（SS58 前缀），统一来自 primitives 制度常量。
     type SS58Prefix = SS58Prefix;
-    /// 中文注释：全局调用过滤器，禁止从 keyless_address 发起 force_transfer。
+    /// 中文注释：全局调用过滤器，禁止 keyless_address 参与 force_* 余额调用，并封禁强制总发行量调整入口。
     type BaseCallFilter = RuntimeCallFilter;
     type MaxConsumers = frame_support::traits::ConstU32<16>;
     type SingleBlockMigrations = SingleBlockMigrations;
@@ -156,7 +168,7 @@ impl pallet_timestamp::Config for Runtime {
     // 纯 PoW 共识：时间戳不再依赖 Aura 插槽回调。
     type OnTimestampSet = ();
     type MinimumPeriod = ConstU64<{ SLOT_DURATION / 2 }>;
-    type WeightInfo = ();
+    type WeightInfo = pallet_timestamp::weights::SubstrateWeight<Runtime>;
 }
 
 impl pallet_balances::Config for Runtime {
@@ -167,7 +179,7 @@ impl pallet_balances::Config for Runtime {
     type Balance = Balance;
     /// The ubiquitous event type.
     type RuntimeEvent = RuntimeEvent;
-    type DustRemoval = ();
+    type DustRemoval = RuntimeDustHandler;
     type ExistentialDeposit = ConstU128<EXISTENTIAL_DEPOSIT>;
     type AccountStore = System;
     type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
@@ -209,6 +221,20 @@ impl onchain_transaction_fee::NrcAccountProvider<AccountId> for RuntimeNrcAccoun
         Some(AccountId::new(
             primitives::china::china_cb::CHINA_CB[0].duoqian_address,
         ))
+    }
+}
+
+pub struct RuntimeDustHandler;
+
+impl OnUnbalanced<Credit<AccountId, Balances>> for RuntimeDustHandler {
+    fn on_nonzero_unbalanced(amount: Credit<AccountId, Balances>) {
+        if let Some(nrc_account) = RuntimeNrcAccountProvider::nrc_account() {
+            if let Err(remaining) = Balances::resolve(&nrc_account, amount) {
+                drop(remaining);
+            }
+        } else {
+            drop(amount);
+        }
     }
 }
 
@@ -258,23 +284,12 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::OffchainTransactionFee(
                 offchain_transaction_fee::pallet::Call::submit_offchain_batch {
                     institution,
-                    batch_seq,
                     batch,
-                    batch_signature,
+                    ..
                 },
             ) => {
-                // 中文注释：链下批次只有通过完整预检才可进入链上扣费流程；
-                // 预检失败直接按 Unknown 拒绝，避免提交账户/手续费账户被异常扣费。
-                if OffchainTransactionFee::precheck_submit_offchain_batch(
-                    who,
-                    *institution,
-                    *batch_seq,
-                    batch,
-                    batch_signature,
-                )
-                .is_ok()
-                    && OffchainTransactionFee::fee_account_of(*institution).is_ok()
-                {
+                // 中文注释：仅做轻量金额提取，避免在交易池验证阶段执行完整预检造成 DoS 面放大。
+                if !batch.is_empty() && OffchainTransactionFee::fee_account_of(*institution).is_ok() {
                     let sum = batch.iter().fold(0u128, |acc: u128, item| {
                         acc.saturating_add(item.offchain_fee_amount)
                     });
@@ -424,7 +439,15 @@ impl duoqian_transaction_pow::DuoqianAdminAuth<AccountId> for RuntimeDuoqianAdmi
     type Signature = [u8; 64];
 
     fn is_valid_public_key(public_key: &Self::PublicKey) -> bool {
-        public_key.iter().any(|b| *b != 0)
+        if public_key.iter().all(|b| *b == 0) {
+            return false;
+        }
+        let account = {
+            let signer = MultiSigner::from(sr25519::Public::from_raw(*public_key));
+            <MultiSigner as IdentifyAccount>::into_account(signer)
+        };
+        !RuntimeProtectedSourceChecker::is_protected(&account)
+            && !RuntimeDuoqianReservedAddressChecker::is_reserved(&account)
     }
 
     fn public_key_to_account(public_key: &Self::PublicKey) -> Option<AccountId> {
@@ -755,6 +778,7 @@ parameter_types! {
     pub const ResolutionIssuanceMaxReasonLen: u32 = primitives::count_const::RESOLUTION_ISSUANCE_MAX_REASON_LEN;
     pub const ResolutionIssuanceMaxAllocations: u32 = primitives::count_const::RESOLUTION_ISSUANCE_MAX_ALLOCATIONS;
     pub const ResolutionIssuanceMaxTotalIssuance: u128 = u128::MAX;
+    pub const ResolutionIssuanceMaxSingleIssuance: u128 = 14_434_973_780_000;
     /// Runtime 升级治理提案备注最大长度。
     pub const RuntimeUpgradeMaxReasonLen: u32 = 1024;
     /// Runtime wasm 最大长度（字节）。
@@ -864,6 +888,7 @@ impl resolution_issuance_iss::Config for Runtime {
     type MaxReasonLen = ResolutionIssuanceMaxReasonLen;
     type MaxAllocations = ResolutionIssuanceMaxAllocations;
     type MaxTotalIssuance = ResolutionIssuanceMaxTotalIssuance;
+    type MaxSingleIssuance = ResolutionIssuanceMaxSingleIssuance;
     type WeightInfo = ();
 }
 
@@ -1452,6 +1477,25 @@ mod tests {
             value: 1,
         });
         assert!(RuntimeCallFilter::contains(&allowed));
+
+        let blocked_force_unreserve =
+            RuntimeCall::Balances(pallet_balances::Call::force_unreserve {
+                who: sp_runtime::MultiAddress::Id(AccountId::new(
+                    primitives::china::china_ch::CHINA_CH[0].keyless_address,
+                )),
+                amount: 1,
+            });
+        assert!(!RuntimeCallFilter::contains(&blocked_force_unreserve));
+
+        let blocked_force_set_balance =
+            RuntimeCall::Balances(pallet_balances::Call::force_set_balance {
+                who: sp_runtime::MultiAddress::Id(AccountId::new(
+                    primitives::china::china_ch::CHINA_CH[0].keyless_address,
+                )),
+                new_free: 1,
+            });
+        assert!(!RuntimeCallFilter::contains(&blocked_force_set_balance));
+
     }
 
     #[test]

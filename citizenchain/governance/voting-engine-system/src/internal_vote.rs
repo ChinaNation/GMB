@@ -36,17 +36,16 @@ pub fn org_pass_threshold(org: u8) -> Option<u32> {
     }
 }
 
-fn nrc_pallet_id_bytes() -> InstitutionPalletId {
+fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
     CHINA_CB
         .first()
         .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
-        .expect("NRC shenfen_id must be valid")
 }
 
 fn is_valid_internal_institution(org: u8, institution: InstitutionPalletId) -> bool {
     match org {
         // 国储会只有一个机构
-        ORG_NRC => institution == nrc_pallet_id_bytes(),
+        ORG_NRC => nrc_pallet_id_bytes().map(|nrc| institution == nrc).unwrap_or(false),
         // 省储会从 CHINA_CB 中排除国储会
         ORG_PRC => CHINA_CB
             .iter()
@@ -123,7 +122,7 @@ impl<T: Config> Pallet<T> {
             Error::<T>::InvalidInstitution
         );
 
-        let id = Self::allocate_proposal_id();
+        let id = Self::allocate_proposal_id()?;
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::internal_stage_duration());
 
@@ -153,7 +152,7 @@ impl<T: Config> Pallet<T> {
         proposal_id: u64,
         approve: bool,
     ) -> DispatchResult {
-        let mut proposal = Self::ensure_open_proposal(proposal_id)?;
+        let proposal = Self::ensure_open_proposal(proposal_id)?;
 
         ensure!(
             proposal.kind == PROPOSAL_KIND_INTERNAL,
@@ -180,12 +179,13 @@ impl<T: Config> Pallet<T> {
         );
 
         InternalVotesByAccount::<T>::insert(proposal_id, &who, approve);
-        InternalTallies::<T>::mutate(proposal_id, |tally| {
+        let tally = InternalTallies::<T>::mutate(proposal_id, |tally| {
             if approve {
                 tally.yes = tally.yes.saturating_add(1);
             } else {
                 tally.no = tally.no.saturating_add(1);
             }
+            *tally
         });
 
         Self::deposit_event(Event::<T>::InternalVoteCast {
@@ -195,21 +195,17 @@ impl<T: Config> Pallet<T> {
         });
 
         let threshold = org_pass_threshold(org).ok_or(Error::<T>::InvalidInternalOrg)?;
-        let tally = InternalTallies::<T>::get(proposal_id);
         if tally.yes >= threshold {
-            proposal.status = STATUS_PASSED;
-            Proposals::<T>::insert(proposal_id, proposal);
-            Self::deposit_event(Event::<T>::ProposalFinalized {
-                proposal_id,
-                status: STATUS_PASSED,
-            });
+            Self::set_status_and_emit(proposal_id, STATUS_PASSED)?;
         }
 
         Ok(())
     }
 
-    pub(crate) fn do_finalize_internal_timeout(proposal_id: u64) -> DispatchResult {
-        let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
+    pub(crate) fn do_finalize_internal_timeout(
+        proposal: &crate::Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
+        proposal_id: u64,
+    ) -> DispatchResult {
         ensure!(
             proposal.stage == STAGE_INTERNAL,
             Error::<T>::InvalidProposalStage

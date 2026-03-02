@@ -25,6 +25,7 @@ runtime-benchmarks = [
     "frame-system/runtime-benchmarks",
     "pallet-transaction-payment/runtime-benchmarks",
 ]
+try-runtime = []
 std = [
     "codec/std",
     "frame-support/std",

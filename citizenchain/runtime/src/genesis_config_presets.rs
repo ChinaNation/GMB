@@ -41,6 +41,14 @@ fn account_to_genesis_ss58(account: &AccountId) -> String {
     account.to_ss58check_with_version(Ss58AddressFormat::custom(SS58_FORMAT))
 }
 
+#[cfg(all(feature = "std", test))]
+fn json_amount_to_u128(v: &Value) -> Option<u128> {
+    if let Some(value) = v.as_u64() {
+        return Some(value as u128);
+    }
+    v.as_str().and_then(|s| s.parse::<u128>().ok())
+}
+
 // Returns the genesis config presets populated with given parameters.
 #[cfg(feature = "std")]
 fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value {
@@ -95,8 +103,6 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
         0x34, 0x65,
     ]);
 
-    // 中文注释：机构创世数据由链规格外部注入；这里默认留空数组。
-    let institutions_json: Vec<Value> = Vec::new();
     // 中文注释：决议发行合法收款账户改为链上存储初始化，后续可由治理动态更新。
     let issuance_allowed_recipients_json: Vec<Value> = CHINA_CB
         .iter()
@@ -117,9 +123,6 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
             "sfidBackupAccount1": account_to_genesis_ss58(&sfid_backup_1),
             "sfidBackupAccount2": account_to_genesis_ss58(&sfid_backup_2),
         },
-        "nationalInstitutionalRegistry": {
-            "institutions": institutions_json,
-        },
         "resolutionIssuanceGov": {
             "allowedRecipients": issuance_allowed_recipients_json,
         },
@@ -129,7 +132,12 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
 /// Return the development genesis config.
 #[cfg(feature = "std")]
 pub fn mainnet_config_genesis() -> Value {
-    testnet_genesis(vec![], AccountId::new([0u8; 32]))
+    // 临时测试账户（发行前请删除）
+    let temporary_test_account = AccountId::from_ss58check(
+        "w5DXdrGjekPX6f2JDJzTAXGZyu2iLq5GPMPAbhpUmunEqEpSU",
+    )
+    .expect("temporary test account ss58 must be valid");
+    testnet_genesis(vec![temporary_test_account], AccountId::new([0u8; 32]))
 }
 
 /// Provides the JSON representation of predefined genesis config for given `id`.
@@ -175,8 +183,8 @@ mod tests {
             .as_array()
             .expect("balances.balances should be an array");
 
-        // 中文注释：创世应包含 1 个国储会地址 + 43 个省储行 keyless 质押地址。
-        assert_eq!(balances.len(), 1 + CHINA_CH.len());
+        // 中文注释：创世应包含 1 个国储会地址 + 43 个省储行 keyless 质押地址 + 1 个临时测试地址。
+        assert_eq!(balances.len(), 1 + CHINA_CH.len() + 1);
     }
 
     #[test]
@@ -198,7 +206,7 @@ mod tests {
                 let arr = entry.as_array()?;
                 let account = arr.first()?.as_str()?;
                 if account == nrc_ss58 {
-                    arr.get(1)?.as_u64().map(|v| v as u128)
+                    arr.get(1).and_then(json_amount_to_u128)
                 } else {
                     None
                 }
@@ -214,15 +222,17 @@ mod tests {
                 entry
                     .as_array()
                     .and_then(|arr| arr.get(1))
-                    .and_then(|v| v.as_u64())
-                    .map(|v| v as u128)
-                    .expect("each balance amount must be u64-compatible JSON number")
+                    .and_then(json_amount_to_u128)
+                    .expect("each balance amount must be u64 number or u128 string")
             })
             .sum();
         let total_shengbank_stake: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
 
-        // 中文注释：创世总注入 = 国储会创世发行 + 省储行创立发行。
-        assert_eq!(total_in_patch, GENESIS_ISSUANCE + total_shengbank_stake);
+        // 中文注释：创世总注入 = 国储会创世发行 + 省储行创立发行 + 临时测试账户初始余额（1_000_000_000 分）。
+        assert_eq!(
+            total_in_patch,
+            GENESIS_ISSUANCE + total_shengbank_stake + 1_000_000_000u128
+        );
     }
 
     #[test]

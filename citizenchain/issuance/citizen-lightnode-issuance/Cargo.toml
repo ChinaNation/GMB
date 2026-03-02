@@ -20,6 +20,8 @@ primitives = { path = "../../../primitives", default-features = false }
 
 [features]
 default = ["std"]
+runtime-benchmarks = []
+try-runtime = []
 std = [
     "codec/std",
     "scale-info/std",
