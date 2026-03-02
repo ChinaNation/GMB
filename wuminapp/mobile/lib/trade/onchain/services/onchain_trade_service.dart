@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart_keyring/polkadart_keyring.dart';
@@ -53,28 +52,36 @@ class OnchainTradeService {
       );
     }
 
-    final signedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final nonce = DateTime.now().microsecondsSinceEpoch.toString();
-    final amountText = draft.amount.toStringAsFixed(8);
-    final signMessage = [
-      'WUMINAPP_TX_V1',
-      wallet.address,
-      toAddress,
-      amountText,
-      symbol,
-      nonce,
-      signedAt.toString(),
-    ].join('|');
-    final signature = pair.sign(Uint8List.fromList(utf8.encode(signMessage)));
-    final signedTransfer = OnchainSignedTransfer(
-      fromAddress: wallet.address,
+    OnchainPrepareResult prepared;
+    try {
+      prepared = await _gateway.prepareTransfer(
+        OnchainPrepareRequest(
+          fromAddress: wallet.address,
+          pubkeyHex: '0x${wallet.pubkeyHex}',
+          toAddress: toAddress,
+          amount: draft.amount,
+          symbol: symbol,
+        ),
+      );
+    } catch (_) {
+      throw const OnchainTradeException(
+        OnchainTradeErrorCode.broadcastFailed,
+        '交易预处理失败，请检查节点和后端服务',
+      );
+    }
+
+    final signerPayloadBytes = _hexToBytes(prepared.signerPayloadHex);
+    if (signerPayloadBytes.isEmpty) {
+      throw const OnchainTradeException(
+        OnchainTradeErrorCode.broadcastFailed,
+        '签名负载为空，无法提交交易',
+      );
+    }
+
+    final signature = pair.sign(Uint8List.fromList(signerPayloadBytes));
+    final signedTransfer = OnchainSignedPreparedTransfer(
+      preparedId: prepared.preparedId,
       pubkeyHex: '0x${wallet.pubkeyHex}',
-      toAddress: toAddress,
-      amount: draft.amount,
-      symbol: symbol,
-      nonce: nonce,
-      signedAt: signedAt,
-      signMessage: signMessage,
       signatureHex: '0x${_toHex(signature.toList(growable: false))}',
     );
 
@@ -149,5 +156,35 @@ class OnchainTradeService {
         ..write(chars[b & 0x0f]);
     }
     return buf.toString();
+  }
+
+  List<int> _hexToBytes(String input) {
+    final text = input.startsWith('0x') ? input.substring(2) : input;
+    if (text.isEmpty || text.length.isOdd) {
+      return const <int>[];
+    }
+    final out = <int>[];
+    for (var i = 0; i < text.length; i += 2) {
+      final hi = _fromHexNibble(text.codeUnitAt(i));
+      final lo = _fromHexNibble(text.codeUnitAt(i + 1));
+      if (hi < 0 || lo < 0) {
+        return const <int>[];
+      }
+      out.add((hi << 4) | lo);
+    }
+    return out;
+  }
+
+  int _fromHexNibble(int c) {
+    if (c >= 48 && c <= 57) {
+      return c - 48;
+    }
+    if (c >= 65 && c <= 70) {
+      return c - 55;
+    }
+    if (c >= 97 && c <= 102) {
+      return c - 87;
+    }
+    return -1;
   }
 }

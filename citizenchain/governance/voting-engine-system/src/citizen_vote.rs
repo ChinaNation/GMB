@@ -4,7 +4,7 @@ use frame_support::{ensure, pallet_prelude::DispatchResult};
 use sp_runtime::traits::Hash;
 
 use crate::{
-    pallet::{CitizenTallies, CitizenVotesBySfid, Config, Error, Event, Pallet, Proposals, SfidOf},
+    pallet::{CitizenTallies, CitizenVotesBySfid, Config, Error, Event, Pallet, SfidOf},
     PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STATUS_PASSED,
 };
 
@@ -89,12 +89,13 @@ impl<T: Config> Pallet<T> {
         );
 
         CitizenVotesBySfid::<T>::insert(proposal_id, sfid_hash, approve);
-        CitizenTallies::<T>::mutate(proposal_id, |tally| {
+        let tally = CitizenTallies::<T>::mutate(proposal_id, |tally| {
             if approve {
                 tally.yes = tally.yes.saturating_add(1);
             } else {
                 tally.no = tally.no.saturating_add(1);
             }
+            *tally
         });
 
         Self::deposit_event(Event::<T>::CitizenVoteCast {
@@ -104,9 +105,7 @@ impl<T: Config> Pallet<T> {
             approve,
         });
 
-        let tally = CitizenTallies::<T>::get(proposal_id);
-        let current = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
-        if is_citizen_vote_passed(tally.yes, current.citizen_eligible_total) {
+        if is_citizen_vote_passed(tally.yes, proposal.citizen_eligible_total) {
             Self::set_status_and_emit(proposal_id, STATUS_PASSED)?;
         }
 
@@ -116,8 +115,10 @@ impl<T: Config> Pallet<T> {
     /// 公民投票超时处理：
     /// - 按 >50% 规则计算是否通过；
     /// - 未达到阈值则否决。
-    pub(crate) fn do_finalize_citizen_timeout(proposal_id: u64) -> DispatchResult {
-        let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
+    pub(crate) fn do_finalize_citizen_timeout(
+        proposal: &crate::Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
+        proposal_id: u64,
+    ) -> DispatchResult {
         ensure!(
             proposal.stage == STAGE_CITIZEN,
             Error::<T>::InvalidProposalStage

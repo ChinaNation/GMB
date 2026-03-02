@@ -23,7 +23,10 @@ async fn main() {
 
     let app = routes::build_router(state);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8787));
+    let addr = std::env::var("BIND_ADDR")
+        .ok()
+        .and_then(|v| v.parse::<SocketAddr>().ok())
+        .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 8787)));
     info!("wuminapp-backend listening on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr)
