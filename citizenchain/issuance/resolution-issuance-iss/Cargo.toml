@@ -18,6 +18,8 @@ sp-std = { workspace = true }
 
 [features]
 default = ["std"]
+runtime-benchmarks = []
+try-runtime = []
 std = [
     "codec/std",
     "scale-info/std",

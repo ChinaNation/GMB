@@ -63,17 +63,13 @@ class OnchainTransferDraft {
   final String symbol;
 }
 
-class OnchainSignedTransfer {
-  const OnchainSignedTransfer({
+class OnchainPrepareRequest {
+  const OnchainPrepareRequest({
     required this.fromAddress,
     required this.pubkeyHex,
     required this.toAddress,
     required this.amount,
     required this.symbol,
-    required this.nonce,
-    required this.signedAt,
-    required this.signMessage,
-    required this.signatureHex,
   });
 
   final String fromAddress;
@@ -81,9 +77,29 @@ class OnchainSignedTransfer {
   final String toAddress;
   final double amount;
   final String symbol;
-  final String nonce;
-  final int signedAt;
-  final String signMessage;
+}
+
+class OnchainPrepareResult {
+  const OnchainPrepareResult({
+    required this.preparedId,
+    required this.signerPayloadHex,
+    required this.expiresAt,
+  });
+
+  final String preparedId;
+  final String signerPayloadHex;
+  final int expiresAt;
+}
+
+class OnchainSignedPreparedTransfer {
+  const OnchainSignedPreparedTransfer({
+    required this.preparedId,
+    required this.pubkeyHex,
+    required this.signatureHex,
+  });
+
+  final String preparedId;
+  final String pubkeyHex;
   final String signatureHex;
 }
 

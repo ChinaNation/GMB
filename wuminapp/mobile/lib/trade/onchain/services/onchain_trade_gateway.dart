@@ -4,7 +4,11 @@ import 'package:wuminapp_mobile/services/api_client.dart';
 import 'package:wuminapp_mobile/trade/onchain/models/onchain_trade_models.dart';
 
 abstract class OnchainTradeGateway {
-  Future<OnchainSubmitResult> submitTransfer(OnchainSignedTransfer transfer);
+  Future<OnchainPrepareResult> prepareTransfer(OnchainPrepareRequest request);
+
+  Future<OnchainSubmitResult> submitTransfer(
+    OnchainSignedPreparedTransfer transfer,
+  );
 
   Future<OnchainSubmitResult> queryStatus(String txHash);
 }
@@ -16,17 +20,31 @@ class HttpOnchainTradeGateway implements OnchainTradeGateway {
   final ApiClient _apiClient;
 
   @override
+  Future<OnchainPrepareResult> prepareTransfer(
+    OnchainPrepareRequest request,
+  ) async {
+    final response = await _apiClient.prepareTx({
+      'from_address': request.fromAddress,
+      'pubkey_hex': request.pubkeyHex,
+      'to_address': request.toAddress,
+      'amount': request.amount,
+      'symbol': request.symbol,
+    });
+
+    return OnchainPrepareResult(
+      preparedId: response.preparedId,
+      signerPayloadHex: response.signerPayloadHex,
+      expiresAt: response.expiresAt,
+    );
+  }
+
+  @override
   Future<OnchainSubmitResult> submitTransfer(
-      OnchainSignedTransfer transfer) async {
+    OnchainSignedPreparedTransfer transfer,
+  ) async {
     final response = await _apiClient.submitTx({
-      'from_address': transfer.fromAddress,
+      'prepared_id': transfer.preparedId,
       'pubkey_hex': transfer.pubkeyHex,
-      'to_address': transfer.toAddress,
-      'amount': transfer.amount,
-      'symbol': transfer.symbol,
-      'nonce': transfer.nonce,
-      'signed_at': transfer.signedAt,
-      'sign_message': transfer.signMessage,
       'signature_hex': transfer.signatureHex,
     });
 
@@ -68,8 +86,20 @@ class MockOnchainTradeGateway implements OnchainTradeGateway {
   final Random _random = Random();
 
   @override
+  Future<OnchainPrepareResult> prepareTransfer(
+    OnchainPrepareRequest request,
+  ) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    return OnchainPrepareResult(
+      preparedId: now.toString(),
+      signerPayloadHex: '0xdeadbeef',
+      expiresAt: now + 120,
+    );
+  }
+
+  @override
   Future<OnchainSubmitResult> submitTransfer(
-      OnchainSignedTransfer transfer) async {
+      OnchainSignedPreparedTransfer transfer) async {
     final now = DateTime.now();
     final txHash = '0x${now.microsecondsSinceEpoch.toRadixString(16)}';
     final failed = _random.nextDouble() < _failureRate;

@@ -1,3 +1,44 @@
 /target
 .claude/
 citizenchain/target
+target/
+citizenchain/citizenui/target/
+citizenchain/citizenui/desktop/src-tauri/binaries/
+citizenchain/citizenui/desktop/src-tauri/gen/schemas/
+citizenchain/nodekey_*
+*.sst
+
+# OS / Editor junk
+.DS_Store
+**/.DS_Store
+*.swp
+*.tmp
+*.log
+
+# IDE local settings
+.vscode/
+.idea/
+
+# JS/TS local artifacts
+**/node_modules/
+**/*.tsbuildinfo
+
+# Dart / Flutter generated files
+**/.dart_tool/
+**/.packages
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.pub/
+**/build/
+**/coverage/
+
+# Flutter iOS generated dependencies
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+
+# Flutter Android local/generated files
+**/android/.gradle/
+**/android/local.properties

@@ -9,6 +9,8 @@ class WalletProfile {
   const WalletProfile({
     required this.walletIndex,
     required this.walletName,
+    required this.walletIcon,
+    required this.balance,
     required this.address,
     required this.pubkeyHex,
     required this.alg,
@@ -19,6 +21,8 @@ class WalletProfile {
 
   final int walletIndex;
   final String walletName;
+  final String walletIcon;
+  final double balance;
   final String address;
   final String pubkeyHex;
   final String alg;
@@ -48,7 +52,6 @@ class WalletService {
   static const int _ss58Format = 2027;
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static const _kHasWallet = 'wallet.has_wallet';
-  static const _kWalletCounter = 'wallet.counter';
   static const _kWallets = 'wallet.items';
   static const _kActiveWalletIndex = 'wallet.active_index';
 
@@ -69,6 +72,8 @@ class WalletService {
           (r) => WalletProfile(
             walletIndex: r.walletIndex,
             walletName: r.walletName,
+            walletIcon: r.walletIcon,
+            balance: r.balance,
             address: r.address,
             pubkeyHex: r.pubkeyHex,
             alg: r.alg,
@@ -103,6 +108,8 @@ class WalletService {
     return WalletProfile(
       walletIndex: selected.walletIndex,
       walletName: selected.walletName,
+      walletIcon: selected.walletIcon,
+      balance: selected.balance,
       address: selected.address,
       pubkeyHex: selected.pubkeyHex,
       alg: selected.alg,
@@ -154,6 +161,8 @@ class WalletService {
           profile: WalletProfile(
             walletIndex: record.walletIndex,
             walletName: record.walletName,
+            walletIcon: record.walletIcon,
+            balance: record.balance,
             address: record.address,
             pubkeyHex: record.pubkeyHex,
             alg: record.alg,
@@ -176,6 +185,8 @@ class WalletService {
     final profile = WalletProfile(
       walletIndex: walletIndex,
       walletName: _defaultWalletName(walletIndex),
+      walletIcon: _defaultWalletIcon(),
+      balance: 0,
       address: derived.address,
       pubkeyHex: derived.pubkeyHex,
       alg: 'sr25519',
@@ -198,6 +209,8 @@ class WalletService {
     final profile = WalletProfile(
       walletIndex: walletIndex,
       walletName: _defaultWalletName(walletIndex),
+      walletIcon: _defaultWalletIcon(),
+      balance: 0,
       address: derived.address,
       pubkeyHex: derived.pubkeyHex,
       alg: 'sr25519',
@@ -224,6 +237,7 @@ class WalletService {
     await prefs.remove(_kHasWallet);
     await prefs.remove(_kWallets);
     await prefs.remove(_kActiveWalletIndex);
+    await prefs.remove('wallet.counter');
 
     // Legacy cleanup.
     await prefs.remove(_kWalletIndex);
@@ -254,10 +268,26 @@ class WalletService {
   }
 
   Future<void> renameWallet(int walletIndex, String walletName) async {
-    final name = walletName.trim();
-    if (name.isEmpty) {
+    await updateWalletDisplay(walletIndex, walletName: walletName);
+  }
+
+  Future<void> updateWalletDisplay(
+    int walletIndex, {
+    String? walletName,
+    String? walletIcon,
+  }) async {
+    if (walletName == null && walletIcon == null) {
+      return;
+    }
+    final nextName = walletName?.trim();
+    if (walletName != null && (nextName == null || nextName.isEmpty)) {
       throw Exception('钱包名称不能为空');
     }
+    if (walletIcon != null && walletIcon.trim().isEmpty) {
+      throw Exception('钱包图标不能为空');
+    }
+
+    final icon = walletIcon?.trim();
     final records = await _loadWalletRecords();
     bool found = false;
     final updated = records.map((r) {
@@ -267,7 +297,37 @@ class WalletService {
       found = true;
       return _WalletRecord(
         walletIndex: r.walletIndex,
-        walletName: name,
+        walletName: nextName ?? r.walletName,
+        walletIcon: icon ?? r.walletIcon,
+        balance: r.balance,
+        address: r.address,
+        pubkeyHex: r.pubkeyHex,
+        alg: r.alg,
+        ss58: r.ss58,
+        createdAtMillis: r.createdAtMillis,
+        source: r.source,
+        mnemonic: null,
+      );
+    }).toList(growable: false);
+    if (!found) {
+      throw Exception('未找到钱包');
+    }
+    await _saveWalletRecords(updated);
+  }
+
+  Future<void> setWalletBalance(int walletIndex, double balance) async {
+    final records = await _loadWalletRecords();
+    bool found = false;
+    final updated = records.map((r) {
+      if (r.walletIndex != walletIndex) {
+        return r;
+      }
+      found = true;
+      return _WalletRecord(
+        walletIndex: r.walletIndex,
+        walletName: r.walletName,
+        walletIcon: r.walletIcon,
+        balance: balance,
         address: r.address,
         pubkeyHex: r.pubkeyHex,
         alg: r.alg,
@@ -284,11 +344,16 @@ class WalletService {
   }
 
   Future<int> _nextWalletIndex() async {
-    final prefs = await SharedPreferences.getInstance();
-    final current = prefs.getInt(_kWalletCounter) ?? 0;
-    final next = current + 1;
-    await prefs.setInt(_kWalletCounter, next);
-    return next;
+    final records = await _loadWalletRecords();
+    if (records.isEmpty) {
+      return 1;
+    }
+    final used = records.map((r) => r.walletIndex).toSet();
+    var candidate = records.length + 1;
+    while (used.contains(candidate)) {
+      candidate++;
+    }
+    return candidate;
   }
 
   Future<void> _appendWallet(WalletProfile profile, String mnemonic) async {
@@ -298,6 +363,8 @@ class WalletService {
       _WalletRecord(
         walletIndex: profile.walletIndex,
         walletName: profile.walletName,
+        walletIcon: profile.walletIcon,
+        balance: profile.balance,
         address: profile.address,
         pubkeyHex: profile.pubkeyHex,
         alg: profile.alg,
@@ -382,6 +449,8 @@ class WalletService {
     return _WalletRecord(
       walletIndex: walletIndex,
       walletName: _defaultWalletName(walletIndex),
+      walletIcon: _defaultWalletIcon(),
+      balance: 0,
       address: address,
       pubkeyHex: pubkeyHex,
       alg: alg,
@@ -412,6 +481,8 @@ class WalletService {
       records[i] = _WalletRecord(
         walletIndex: records[i].walletIndex,
         walletName: records[i].walletName,
+        walletIcon: records[i].walletIcon,
+        balance: records[i].balance,
         address: records[i].address,
         pubkeyHex: records[i].pubkeyHex,
         alg: records[i].alg,
@@ -461,12 +532,18 @@ class WalletService {
   String _defaultWalletName(int walletIndex) {
     return '钱包$walletIndex';
   }
+
+  String _defaultWalletIcon() {
+    return 'wallet';
+  }
 }
 
 class _WalletRecord {
   const _WalletRecord({
     required this.walletIndex,
     required this.walletName,
+    required this.walletIcon,
+    required this.balance,
     required this.address,
     required this.pubkeyHex,
     required this.alg,
@@ -478,6 +555,8 @@ class _WalletRecord {
 
   final int walletIndex;
   final String walletName;
+  final String walletIcon;
+  final double balance;
   final String address;
   final String pubkeyHex;
   final String alg;
@@ -489,9 +568,18 @@ class _WalletRecord {
   factory _WalletRecord.fromJson(Map<String, dynamic> json) {
     final walletIndex = (json['walletIndex'] as num).toInt();
     final name = (json['walletName'] as String?)?.trim();
+    final icon = (json['walletIcon'] as String?)?.trim();
+    final rawBalance = json['balance'];
+    final balance = switch (rawBalance) {
+      num v => v.toDouble(),
+      String v => double.tryParse(v) ?? 0.0,
+      _ => 0.0,
+    };
     return _WalletRecord(
       walletIndex: walletIndex,
       walletName: (name == null || name.isEmpty) ? '钱包$walletIndex' : name,
+      walletIcon: (icon == null || icon.isEmpty) ? 'wallet' : icon,
+      balance: balance,
       address: json['address'] as String,
       pubkeyHex: json['pubkeyHex'] as String,
       alg: json['alg'] as String,
@@ -506,6 +594,8 @@ class _WalletRecord {
     return {
       'walletIndex': walletIndex,
       'walletName': walletName,
+      'walletIcon': walletIcon,
+      'balance': balance,
       'address': address,
       'pubkeyHex': pubkeyHex,
       'alg': alg,

@@ -28,3 +28,4 @@ std = [
     "voting-engine-system/std",
 ]
 runtime-benchmarks = []
+try-runtime = []

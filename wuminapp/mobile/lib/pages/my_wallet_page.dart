@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wuminapp_mobile/login/pages/qr_scan_page.dart';
+import 'package:wuminapp_mobile/services/api_client.dart';
 import 'package:wuminapp_mobile/services/wallet_service.dart';
 
 class MyWalletPage extends StatefulWidget {
   const MyWalletPage({
     super.key,
     this.selectForTrade = false,
+    this.selectForBind = false,
   });
 
   final bool selectForTrade;
+  final bool selectForBind;
 
   @override
   State<MyWalletPage> createState() => _MyWalletPageState();
@@ -18,16 +21,19 @@ class MyWalletPage extends StatefulWidget {
 
 class _MyWalletPageState extends State<MyWalletPage> {
   final WalletService _walletService = WalletService();
-  static const double _actionIconSize = 18;
-  static const double _actionSlotWidth = 34;
+  final ApiClient _apiClient = ApiClient();
+  static const double _actionIconSize = 20;
   late Future<List<WalletProfile>> _walletsFuture;
   int? _activeWalletIndex;
+
+  bool get _isSelectionMode => widget.selectForTrade || widget.selectForBind;
 
   @override
   void initState() {
     super.initState();
     _walletsFuture = _walletService.getWallets();
     _loadActiveWallet();
+    _refreshBalancesFromChain();
   }
 
   void _reload() {
@@ -35,6 +41,30 @@ class _MyWalletPageState extends State<MyWalletPage> {
       _walletsFuture = _walletService.getWallets();
     });
     _loadActiveWallet();
+    _refreshBalancesFromChain();
+  }
+
+  Future<void> _refreshBalancesFromChain() async {
+    final wallets = await _walletService.getWallets();
+    bool updated = false;
+    for (final wallet in wallets) {
+      try {
+        final result = await _apiClient.fetchWalletBalance(wallet.address);
+        if (result.balance != wallet.balance) {
+          await _walletService.setWalletBalance(
+              wallet.walletIndex, result.balance);
+          updated = true;
+        }
+      } catch (e) {
+        debugPrint('wallet balance refresh failed: ${wallet.address}, err=$e');
+      }
+    }
+    if (!mounted || !updated) {
+      return;
+    }
+    setState(() {
+      _walletsFuture = _walletService.getWallets();
+    });
   }
 
   Future<void> _loadActiveWallet() async {
@@ -96,6 +126,26 @@ class _MyWalletPageState extends State<MyWalletPage> {
     }
   }
 
+  Future<bool?> _confirmBindWallet(WalletProfile wallet) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('绑定身份'),
+        content: Text('确认使用该钱包绑定身份？\n${wallet.address}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openWalletDetail(WalletProfile wallet) async {
     if (widget.selectForTrade) {
       await _walletService.setActiveWallet(wallet.walletIndex);
@@ -103,6 +153,17 @@ class _MyWalletPageState extends State<MyWalletPage> {
         return;
       }
       Navigator.of(context).pop(true);
+      return;
+    }
+    if (widget.selectForBind) {
+      final confirmed = await _confirmBindWallet(wallet);
+      if (!mounted || confirmed != true) {
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop(wallet);
       return;
     }
     final changed = await Navigator.of(context).push<bool>(
@@ -144,100 +205,101 @@ class _MyWalletPageState extends State<MyWalletPage> {
     );
   }
 
-  Widget _buildWalletCard(WalletProfile wallet) {
+  Widget _buildWalletCard(WalletProfile wallet, {required bool isLast}) {
+    final iconData = WalletIconRegistry.iconFor(wallet.walletIcon);
+    final cardColor = isLast
+        ? const Color(0xFFFFF4E3)
+        : (_activeWalletIndex == wallet.walletIndex
+            ? const Color(0xFFE9F5EF)
+            : null);
     return Card(
-      color: _activeWalletIndex == wallet.walletIndex
-          ? const Color(0xFFE9F5EF)
-          : null,
+      color: cardColor,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => _openWalletDetail(wallet),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Stack(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Transform.translate(
-                      offset: const Offset(0, -2),
-                      child: Text(
-                        '名称: ${wallet.walletName}',
-                      ),
-                    ),
-                  ),
-                  if (!widget.selectForTrade)
-                    SizedBox(
-                      width: _actionSlotWidth,
-                      child: Transform.translate(
-                        offset: const Offset(2, -6),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(8),
-                          onTap: () {
-                            Clipboard.setData(
-                              ClipboardData(text: wallet.address),
-                            );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('已复制: ${wallet.address}'),
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: SvgPicture.asset(
-                              'assets/icons/copy.svg',
-                              width: _actionIconSize,
-                              height: _actionIconSize,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (!widget.selectForTrade)
-                    SizedBox(
-                      width: _actionSlotWidth,
-                      child: Transform.translate(
-                        offset: const Offset(2, -6),
-                        child: IconButton(
-                          tooltip: '扫码',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          visualDensity: VisualDensity.compact,
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => QrScanPage(
-                                  walletIndex: wallet.walletIndex,
-                                  walletAddress: wallet.address,
-                                ),
-                              ),
-                            );
-                          },
-                          icon: SvgPicture.asset(
-                            'assets/icons/scan-line.svg',
-                            width: _actionIconSize,
-                            height: _actionIconSize,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 1),
-              Row(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      '地址: ${wallet.address}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE3EFE8),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          iconData,
+                          color: const Color(0xFF0B3D2E),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          wallet.walletName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8, top: 4),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.monetization_on_outlined,
+                          size: 22,
+                          color: Color(0xFF0B3D2E),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _formatBalance(wallet.balance),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  if (!_isSelectionMode) const SizedBox(height: 24),
                 ],
               ),
+              if (!_isSelectionMode)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: IconButton(
+                    tooltip: '扫码',
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => QrScanPage(
+                            walletIndex: wallet.walletIndex,
+                            walletAddress: wallet.address,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: SvgPicture.asset(
+                      'assets/icons/scan-line.svg',
+                      width: _actionIconSize,
+                      height: _actionIconSize,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -245,11 +307,19 @@ class _MyWalletPageState extends State<MyWalletPage> {
     );
   }
 
+  String _formatBalance(double balance) {
+    return balance.toStringAsFixed(2);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.selectForTrade ? '选择交易钱包' : '我的钱包'),
+        title: Text(
+          widget.selectForTrade
+              ? '选择交易钱包'
+              : (widget.selectForBind ? '选择绑定钱包' : '我的钱包'),
+        ),
         centerTitle: true,
       ),
       body: Padding(
@@ -282,8 +352,11 @@ class _MyWalletPageState extends State<MyWalletPage> {
             return ListView(
               children: [
                 for (int i = 0; i < wallets.length; i++) ...[
-                  (widget.selectForTrade
-                      ? _buildWalletCard(wallets[i])
+                  (_isSelectionMode
+                      ? _buildWalletCard(
+                          wallets[i],
+                          isLast: i == wallets.length - 1,
+                        )
                       : Dismissible(
                           key: ValueKey(wallets[i].walletIndex),
                           direction: DismissDirection.endToStart,
@@ -301,11 +374,14 @@ class _MyWalletPageState extends State<MyWalletPage> {
                               color: Colors.white,
                             ),
                           ),
-                          child: _buildWalletCard(wallets[i]),
+                          child: _buildWalletCard(
+                            wallets[i],
+                            isLast: i == wallets.length - 1,
+                          ),
                         )),
                   const SizedBox(height: 10),
                 ],
-                if (!widget.selectForTrade) ...[
+                if (!_isSelectionMode) ...[
                   const SizedBox(height: 12),
                   OutlinedButton(
                     onPressed: _showWalletEntryChooser,
@@ -333,12 +409,15 @@ class WalletDetailPage extends StatefulWidget {
 class _WalletDetailPageState extends State<WalletDetailPage> {
   final WalletService _walletService = WalletService();
   late final TextEditingController _nameController;
+  late String _selectedWalletIcon;
+  bool _iconPanelExpanded = false;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.wallet.walletName);
+    _selectedWalletIcon = widget.wallet.walletIcon;
   }
 
   @override
@@ -347,7 +426,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     super.dispose();
   }
 
-  Future<void> _saveName() async {
+  Future<void> _saveWalletDisplay() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(
@@ -355,7 +434,9 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       ).showSnackBar(const SnackBar(content: Text('钱包名称不能为空')));
       return;
     }
-    if (name == widget.wallet.walletName) {
+    final hasChanged = name != widget.wallet.walletName ||
+        _selectedWalletIcon != widget.wallet.walletIcon;
+    if (!hasChanged) {
       Navigator.of(context).pop(false);
       return;
     }
@@ -363,7 +444,11 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       _saving = true;
     });
     try {
-      await _walletService.renameWallet(widget.wallet.walletIndex, name);
+      await _walletService.updateWalletDisplay(
+        widget.wallet.walletIndex,
+        walletName: name,
+        walletIcon: _selectedWalletIcon,
+      );
       if (!mounted) {
         return;
       }
@@ -384,7 +469,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final accountAddress = '0x${widget.wallet.pubkeyHex}';
     return Scaffold(
       appBar: AppBar(
         title: const Text('钱包详情'),
@@ -393,22 +477,62 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(
-            controller: _nameController,
-            decoration: const InputDecoration(
-              labelText: '钱包名称',
-              hintText: '请输入钱包名称',
-              border: OutlineInputBorder(),
-            ),
-            textInputAction: TextInputAction.done,
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '钱包图标',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
+              InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () {
+                  setState(() {
+                    _iconPanelExpanded = !_iconPanelExpanded;
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    _iconPanelExpanded
+                        ? Icons.keyboard_arrow_down
+                        : Icons.keyboard_arrow_right,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final option in (_iconPanelExpanded
+                  ? WalletIconRegistry.options
+                  : WalletIconRegistry.options.take(4)))
+                _WalletIconChoiceChip(
+                  option: option,
+                  selected: option.key == _selectedWalletIcon,
+                  onTap: () {
+                    setState(() {
+                      _selectedWalletIcon = option.key;
+                    });
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            '钱包地址：',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: SelectableText('钱包地址: ${widget.wallet.address}'),
-              ),
+              Expanded(child: SelectableText(widget.wallet.address)),
               IconButton(
                 tooltip: '复制钱包地址',
                 onPressed: () {
@@ -425,35 +549,107 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: SelectableText('账户地址: $accountAddress'),
-              ),
-              IconButton(
-                tooltip: '复制账户地址',
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: accountAddress));
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('账户地址已复制')));
-                },
-                icon: SvgPicture.asset(
-                  'assets/icons/copy.svg',
-                  width: 18,
-                  height: 18,
-                ),
-              ),
-            ],
+          const SizedBox(height: 10),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(
+              labelText: '钱包名称',
+              hintText: '请输入钱包名称',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.done,
           ),
           const SizedBox(height: 20),
-          FilledButton(
-            onPressed: _saving ? null : _saveName,
-            child: Text(_saving ? '保存中...' : '保存名称'),
+          Align(
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: 190,
+              child: FilledButton(
+                onPressed: _saving ? null : _saveWalletDisplay,
+                child: Text(
+                  _saving ? '保存中...' : '保存钱包信息',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class WalletIconOption {
+  const WalletIconOption({
+    required this.key,
+    required this.label,
+    required this.icon,
+  });
+
+  final String key;
+  final String label;
+  final IconData icon;
+}
+
+class WalletIconRegistry {
+  static const List<WalletIconOption> options = [
+    WalletIconOption(
+        key: 'wallet',
+        label: '钱包',
+        icon: Icons.account_balance_wallet_outlined),
+    WalletIconOption(key: 'shield', label: '盾牌', icon: Icons.shield_outlined),
+    WalletIconOption(key: 'star', label: '星标', icon: Icons.star_border),
+    WalletIconOption(key: 'leaf', label: '树叶', icon: Icons.eco_outlined),
+    WalletIconOption(key: 'key', label: '钥匙', icon: Icons.vpn_key_outlined),
+    WalletIconOption(
+        key: 'safe', label: '保险箱', icon: Icons.inventory_2_outlined),
+  ];
+
+  static IconData iconFor(String key) {
+    for (final option in options) {
+      if (option.key == key) {
+        return option.icon;
+      }
+    }
+    return Icons.account_balance_wallet_outlined;
+  }
+}
+
+class _WalletIconChoiceChip extends StatelessWidget {
+  const _WalletIconChoiceChip({
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final WalletIconOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Container(
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFD7E9E1) : const Color(0xFFF4F7F5),
+          border: Border.all(
+            color: selected ? const Color(0xFF0B3D2E) : const Color(0xFFD3DAD6),
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          option.icon,
+          size: 20,
+          color: const Color(0xFF0B3D2E),
+        ),
       ),
     );
   }

@@ -23,6 +23,7 @@ voting-engine-system = { path = "../../governance/voting-engine-system", default
 [features]
 default = ["std"]
 runtime-benchmarks = []
+try-runtime = []
 std = [
     "codec/std",
     "scale-info/std",

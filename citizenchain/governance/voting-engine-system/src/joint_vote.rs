@@ -31,12 +31,11 @@ fn str_to_shengbank_pallet_id(s: &str) -> Option<InstitutionPalletId> {
     shengbank_pallet_id_to_bytes(s)
 }
 
-fn nrc_pallet_id_bytes() -> InstitutionPalletId {
+fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
     // 中文注释：国储会ID统一从常量数组读取并转码。
     CHINA_CB
         .first()
         .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
-        .expect("NRC shenfen_id must be valid")
 }
 
 fn is_nrc_admin_account(who: &[u8; 32]) -> bool {
@@ -50,18 +49,20 @@ fn is_nrc_admin<T: Config>(who: &T::AccountId) -> bool {
     // 中文注释：生产环境仅信任动态管理员来源（链上治理替换后的最终状态）。
     #[cfg(not(test))]
     {
-        T::InternalAdminProvider::is_internal_admin(
-            crate::internal_vote::ORG_NRC,
-            nrc_pallet_id_bytes(),
-            who,
-        )
+        let Some(nrc) = nrc_pallet_id_bytes() else {
+            return false;
+        };
+        T::InternalAdminProvider::is_internal_admin(crate::internal_vote::ORG_NRC, nrc, who)
     }
     // 中文注释：单测环境允许回退到常量管理员，便于独立测试本 pallet。
     #[cfg(test)]
     {
+        let Some(nrc) = nrc_pallet_id_bytes() else {
+            return false;
+        };
         if T::InternalAdminProvider::is_internal_admin(
             crate::internal_vote::ORG_NRC,
-            nrc_pallet_id_bytes(),
+            nrc,
             who,
         ) {
             return true;
@@ -95,43 +96,27 @@ fn is_institution_multisig_account(institution: InstitutionPalletId, who: &[u8; 
         .unwrap_or(false)
 }
 
-pub fn is_valid_institution(id: InstitutionPalletId) -> bool {
-    if id == nrc_pallet_id_bytes() {
-        return true;
+pub fn institution_info(id: InstitutionPalletId) -> Option<u32> {
+    if let Some(nrc) = nrc_pallet_id_bytes() {
+        if id == nrc {
+            return Some(NRC_JOINT_VOTE_WEIGHT);
+        }
     }
 
-    let in_prc = CHINA_CB
+    if CHINA_CB
         .iter()
+        .skip(1)
         .filter_map(|n| str_to_pallet_id(n.shenfen_id))
-        .any(|pid| pid == id);
-    if in_prc {
-        return true;
-    }
-
-    CHINA_CH
-        .iter()
-        .filter_map(|n| str_to_shengbank_pallet_id(n.shenfen_id))
         .any(|pid| pid == id)
-}
-
-pub fn institution_weight(id: InstitutionPalletId) -> Option<u32> {
-    if id == nrc_pallet_id_bytes() {
-        return Some(NRC_JOINT_VOTE_WEIGHT);
-    }
-
-    let in_prc = CHINA_CB
-        .iter()
-        .filter_map(|n| str_to_pallet_id(n.shenfen_id))
-        .any(|pid| pid == id);
-    if in_prc {
+    {
         return Some(PRC_JOINT_VOTE_WEIGHT);
     }
 
-    let in_prb = CHINA_CH
+    if CHINA_CH
         .iter()
         .filter_map(|n| str_to_shengbank_pallet_id(n.shenfen_id))
-        .any(|pid| pid == id);
-    if in_prb {
+        .any(|pid| pid == id)
+    {
         return Some(PRB_JOINT_VOTE_WEIGHT);
     }
 
@@ -171,7 +156,7 @@ impl<T: Config> Pallet<T> {
             Error::<T>::InvalidPopulationSnapshot
         );
 
-        let id = Self::allocate_proposal_id();
+        let id = Self::allocate_proposal_id()?;
         let snapshot_nonce_hash = T::Hashing::hash(snapshot_nonce.as_slice());
         ensure!(
             !UsedPopulationSnapshotNonce::<T>::get(snapshot_nonce_hash),
@@ -224,7 +209,7 @@ impl<T: Config> Pallet<T> {
             .encode()
             .as_slice()
             .try_into()
-            .map_err(|_| Error::<T>::NoPermission)?;
+            .map_err(|_| Error::<T>::AccountIdEncodingMismatch)?;
         ensure!(
             is_institution_multisig_account(institution, &who_arr),
             Error::<T>::NoPermission
@@ -240,10 +225,7 @@ impl<T: Config> Pallet<T> {
             proposal.stage == STAGE_JOINT,
             Error::<T>::InvalidProposalStage
         );
-        ensure!(
-            is_valid_institution(institution),
-            Error::<T>::InvalidInstitution
-        );
+        let weight = institution_info(institution).ok_or(Error::<T>::InvalidInstitution)?;
         ensure!(
             !JointVotesByInstitution::<T>::contains_key(proposal_id, institution),
             Error::<T>::AlreadyVoted
@@ -251,13 +233,13 @@ impl<T: Config> Pallet<T> {
 
         JointVotesByInstitution::<T>::insert(proposal_id, institution, internal_passed);
 
-        let weight = institution_weight(institution).ok_or(Error::<T>::InvalidInstitution)?;
-        JointTallies::<T>::mutate(proposal_id, |tally| {
+        let tally = JointTallies::<T>::mutate(proposal_id, |tally| {
             if internal_passed {
                 tally.yes = tally.yes.saturating_add(weight);
             } else {
                 tally.no = tally.no.saturating_add(weight);
             }
+            *tally
         });
 
         Self::deposit_event(Event::<T>::JointInstitutionVoteCast {
@@ -266,7 +248,6 @@ impl<T: Config> Pallet<T> {
             internal_passed,
         });
 
-        let tally = JointTallies::<T>::get(proposal_id);
         if is_joint_unanimous(tally.yes) {
             Self::set_status_and_emit(proposal_id, STATUS_PASSED)?;
             return Ok(());
@@ -282,8 +263,10 @@ impl<T: Config> Pallet<T> {
     /// 联合投票超时处理：
     /// - 若已全票通过，直接通过；
     /// - 否则进入公民投票阶段，并重新计算公民投票的 30 天时限。
-    pub(crate) fn do_finalize_joint_timeout(proposal_id: u64) -> DispatchResult {
-        let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
+    pub(crate) fn do_finalize_joint_timeout(
+        proposal: &crate::Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
+        proposal_id: u64,
+    ) -> DispatchResult {
         ensure!(
             proposal.stage == STAGE_JOINT,
             Error::<T>::InvalidProposalStage
@@ -307,17 +290,16 @@ impl<T: Config> Pallet<T> {
     /// 联合投票未全票通过时，进入公民投票并重新计算公民投票阶段的 30 天截止区块。
     /// 中文注释：公民总人口分母必须由事项模块在提案创建时写入，这里只做阶段切换，绝不重置。
     fn advance_joint_to_citizen(proposal_id: u64) -> DispatchResult {
-        let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
         let now = <frame_system::Pallet<T>>::block_number();
         let citizen_end = now.saturating_add(Self::citizen_stage_duration());
-        let eligible_total = proposal.citizen_eligible_total;
-
-        Proposals::<T>::try_mutate(proposal_id, |maybe| -> DispatchResult {
+        let eligible_total =
+            Proposals::<T>::try_mutate(proposal_id, |maybe| -> Result<u64, sp_runtime::DispatchError> {
             let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
+            let eligible_total = proposal.citizen_eligible_total;
             proposal.stage = crate::STAGE_CITIZEN;
             proposal.start = now;
             proposal.end = citizen_end;
-            Ok(())
+            Ok(eligible_total)
         })?;
 
         Self::deposit_event(Event::<T>::ProposalAdvancedToCitizen {
