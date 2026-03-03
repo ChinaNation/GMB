@@ -1,20 +1,45 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { ORG_REGISTRY } from '../src/constants/orgRegistry.generated.js';
-import { resolveCitizenchainSession, resolveOrganizationByAddress } from '../src/services/auth/organization.js';
+import {
+  AmbiguousAdminMappingError,
+  asHexAddress,
+  resolveCitizenchainSessionRuntime,
+  resolveOrganizationByAddressFromRegistry
+} from '../src/services/auth/organization.js';
 
-test('resolveOrganizationByAddress matches known registry entry', () => {
-  const first = ORG_REGISTRY[0];
-  assert.ok(first, 'registry should contain entries');
-
-  const session = resolveOrganizationByAddress(first.adminAddress);
-  assert.ok(session);
-  assert.equal(session?.publicKey, first.adminAddress);
-  assert.equal(session?.role, first.role);
+test('asHexAddress keeps valid hex pubkey unchanged', () => {
+  const hex = '0x1111111111111111111111111111111111111111111111111111111111111111';
+  const normalized = asHexAddress(hex);
+  assert.equal(normalized, hex);
 });
 
-test('resolveCitizenchainSession rejects unknown address', () => {
+test('resolveCitizenchainSessionRuntime returns null without runtime snapshot', async () => {
   const unknown = '0x1111111111111111111111111111111111111111111111111111111111111111';
-  const session = resolveCitizenchainSession(unknown);
+  const session = await resolveCitizenchainSessionRuntime(unknown);
   assert.equal(session, null);
+});
+
+test('resolveOrganizationByAddressFromRegistry returns org session for single match', () => {
+  const admin = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const session = resolveOrganizationByAddressFromRegistry(admin, [
+    { role: 'prb', organizationName: '贵州省储行', province: '贵州', adminAddress: admin }
+  ]);
+  assert.deepEqual(session, {
+    role: 'prb',
+    publicKey: admin,
+    province: '贵州',
+    organizationName: '贵州省储行'
+  });
+});
+
+test('resolveOrganizationByAddressFromRegistry throws for ambiguous admin mappings', () => {
+  const admin = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  assert.throws(
+    () =>
+      resolveOrganizationByAddressFromRegistry(admin, [
+        { role: 'prc', organizationName: '贵州省储会', province: '贵州', adminAddress: admin },
+        { role: 'prb', organizationName: '贵州省储行', province: '贵州', adminAddress: admin }
+      ]),
+    AmbiguousAdminMappingError
+  );
 });

@@ -18,6 +18,7 @@ class WuminLoginService {
         _whitelistPolicy = whitelistPolicy ?? LoginWhitelistPolicy();
 
   static const String protocol = 'WUMINAPP_LOGIN_V1';
+  static const int challengeTtlSeconds = 90;
   static const Set<String> allowedSystems = {
     'cpms',
     'sfid',
@@ -72,6 +73,13 @@ class WuminLoginService {
 
     if (challengeData.isExpired) {
       throw const LoginException(LoginErrorCode.expired, '登录挑战已过期，请刷新后重试');
+    }
+    if ((challengeData.expiresAt - challengeData.issuedAt) !=
+        challengeTtlSeconds) {
+      throw const LoginException(
+        LoginErrorCode.invalidTtl,
+        '登录挑战有效期必须为 90 秒',
+      );
     }
     return challengeData;
   }

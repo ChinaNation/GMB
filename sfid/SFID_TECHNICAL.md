@@ -64,12 +64,9 @@
 2. SFID 页面展示登录二维码（`WUMINAPP_LOGIN_V1` 协议）。
 3. 管理员手机扫码后完成签名，并在手机端展示“签名结果二维码”。
 4. SFID 前端扫描该签名结果二维码（或粘贴签名原文）后，提交到 `/api/v1/admin/auth/qr/complete`。
-5. SFID 校验扫码公钥与签名：
-1. 公钥属于 `SUPER_ADMIN/OPERATOR_ADMIN` 且状态正常：登录管理员模式。
-2. 公钥不在管理员库：拒绝登录。
-3. 公钥在管理员库但被停用、或签名失败：拒绝登录。
+5. SFID 校验扫码公钥与签名：是管理员则登录管理员模式，不是管理员或签名失败则拒绝登录。
 6. 页面轮询 challenge 结果，成功后自动写入会话并完成登录。
-7. challenge 必须短时有效且一次性消费，防重放。
+7. challenge 固定有效期 `90` 秒，且 `request_id` 一次性消费，防重放。
 8. 登录二维码协议固定为 `WUMINAPP_LOGIN_V1`，字段必须包含：
 `proto/system/request_id/challenge/nonce/issued_at/expires_at/aud/origin`（时间戳为秒级）。
 
@@ -142,7 +139,7 @@
 1. 整页背景图（含顶部区域）由前端静态资源提供（`/assets/login-bg.png`）。
 2. 顶部左侧文案两行：`中华民族联邦共和国`（上）与 `身份识别码系统`（下，右下对齐）。
 3. 登录流程为“页面出示登录二维码 + 手机扫码签名 + 前端扫描签名二维码提交”，前端轮询登录状态并自动登录。
-4. 非管理员扫码登录直接拒绝；禁用管理员或签名失败同样拒绝登录。
+4. 非管理员扫码登录直接拒绝；签名失败同样拒绝登录。
 
 ### 7.2 后端
 - `Rust + Axum`
@@ -401,7 +398,7 @@
   "challenge": "string",
   "nonce": "uuid",
   "issued_at": 1760000000,
-  "expires_at": 1760000060,
+  "expires_at": 1760000090,
   "aud": "sfid-local-app",
   "origin": "sfid-device-id"
 }
@@ -429,8 +426,8 @@ WUMINAPP_LOGIN_V1|sfid|aud|origin|request_id|challenge|nonce|expires_at
 1. 解析回执并读取 `request_id/account/signature`。
 2. 按挑战缓存重建签名原文。
 3. 使用 `sr25519` 验签。
-4. 校验挑战未过期、`request_id` 未消费。
-5. 一次性消费 `request_id` 后再做管理员授权判定。
+4. 校验挑战固定 `90` 秒时效、`request_id` 未消费。
+5. 一次性消费 `request_id` 后再做管理员授权判定（是管理员登录，不是管理员拒绝）。
 - `archive_no` 校验位算法与 SFID `sfid_code` 统一：`BLAKE3` 摘要字节和 `mod 10`。
 - 投票资格最终以 CPMS 二维码状态为准（`NORMAL` 可投票，`ABNORMAL` 不可投票）。
 

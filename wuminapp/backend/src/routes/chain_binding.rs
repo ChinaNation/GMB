@@ -9,19 +9,19 @@ use axum::{
 
 use crate::{
     app_state::AppState,
-    models::{ApiResponse, SfidPubkeyPushData, SfidPubkeyPushRequest},
-    services::sfid_service,
+    models::{ApiResponse, ChainBindRequest, ChainBindRequestData},
+    services::chain_binding_service,
 };
 
 pub fn router() -> Router<Arc<AppState>> {
-    Router::new().route("/api/v1/auth/sfid/pubkey", post(push_pubkey))
+    Router::new().route("/api/v1/chain/bind/request", post(request_bind))
 }
 
-async fn push_pubkey(
+async fn request_bind(
     State(_state): State<Arc<AppState>>,
-    Json(req): Json<SfidPubkeyPushRequest>,
+    Json(req): Json<ChainBindRequest>,
 ) -> impl IntoResponse {
-    match sfid_service::push_pubkey_to_sfid(&req.pubkey_hex).await {
+    match chain_binding_service::request_chain_bind(&req.account_pubkey).await {
         Ok(data) => Json(ApiResponse {
             code: 0,
             message: "ok",
@@ -30,9 +30,9 @@ async fn push_pubkey(
         Err(err) => Json(ApiResponse {
             code: err.code,
             message: err.message,
-            data: SfidPubkeyPushData {
+            data: ChainBindRequestData {
                 accepted: false,
-                pushed_at: 0,
+                requested_at: 0,
             },
         }),
     }

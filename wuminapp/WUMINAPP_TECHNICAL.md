@@ -115,7 +115,7 @@ wuminapp/
   - 根路由与健康检查：`/`、`/api/v1/health`
   - 统一响应包裹：`{ code, message, data }`
 - 未完成：
-  - SFID 绑定 API、投票 API、钱包余额/交易 API
+  - 链侧绑定请求 API、投票 API、钱包余额/交易 API
   - 与 citizenchain RPC 的连接层与交易回执订阅
   - 鉴权、限流、审计追踪、错误码体系落地
 
@@ -152,9 +152,9 @@ wuminapp/
   - 第二次扫码：系统扫描 `wuminapp` 展示的签名回执二维码。
 - 私钥仅在手机端本地使用，离线签名，私钥不出端。
 - 三个系统统一认证方式，授权策略分离：
-  - `cpms`：仅允许本地 RBAC 账户（3 个超级管理员 + 超级管理员新增的 n 个操作管理员）。
-  - `sfid`：仅允许内置 45 个超级管理员及其新增操作管理员。
-  - `citizenchain`：内置管理员账户进入对应界面；其他账户默认进入“全节点”界面。
+  - `cpms`：是管理员就登录，不是管理员直接拒绝。
+  - `sfid`：是管理员就登录，不是管理员直接拒绝。
+  - `citizenchain`：`is_admin=true` 进入 `nrc/prc/prb`；`is_admin=false` 进入 `full`。
 
 离线登录时序：
 
@@ -209,16 +209,16 @@ wuminapp/
 
 ### 7.3 占位接口（待实现）
 
-- `POST /api/v1/auth/sfid/bind`
-  - body 草案：`account`、`sfid_code`、`credential_nonce`、`signature`
+- `POST /api/v1/chain/bind/request`
+  - body 草案：`account_pubkey`
+  - 说明：`wuminapp` 仅发起链侧绑定请求，不直连 `sfid`；由链侧服务与 `sfid` 交互
 - `GET /api/v1/wallet/balance?account=<address>`
 - `POST /api/v1/tx/create`
 - `GET /api/v1/tx/history?account=<address>&page=1&page_size=20`
 
 ### 7.4 下一步最小闭环建议
 
-- `POST /api/v1/auth/sfid/challenge`
-- `POST /api/v1/auth/sfid/bind`
+- `POST /api/v1/chain/bind/request`
 - `GET /api/v1/wallet/balance?account=...`
 - `POST /api/v1/tx/submit`
 - `GET /api/v1/vote/proposals`
@@ -243,7 +243,7 @@ wuminapp/
   "challenge": "base64-32bytes",
   "nonce": "uuid",
   "issued_at": 1760000000,
-  "expires_at": 1760000060,
+  "expires_at": 1760000090,
   "aud": "local-app-id",
   "origin": "local-device-id"
 }
@@ -276,9 +276,9 @@ WUMINAPP_LOGIN_V1|system|aud|origin|request_id|challenge|nonce|expires_at
 - `1103`：挑战重复使用（`request_id` 已消费）
 - `1201`：签名验签失败
 - `1202`：账户与公钥不一致
-- `2201`：账户不在 `cpms` 授权名单
-- `2202`：账户不在 `sfid` 授权名单
-- `2203`：`citizenchain` 角色判定失败
+- `2201`：`cpms` 端判定为非管理员（拒绝登录）
+- `2202`：`sfid` 端判定为非管理员（拒绝登录）
+- `2203`：`citizenchain` 端角色判定失败
 
 ## 8. 区块链与通信集成原则
 
@@ -396,7 +396,7 @@ flutter run
   "challenge": "string",
   "nonce": "uuid",
   "issued_at": 1760000000,
-  "expires_at": 1760000060,
+  "expires_at": 1760000090,
   "aud": "local-app-id",
   "origin": "local-device-id"
 }
@@ -427,6 +427,7 @@ WUMINAPP_LOGIN_V1|system|aud|origin|request_id|challenge|nonce|expires_at
 - 协议校验：`proto` 必须为 `WUMINAPP_LOGIN_V1`。
 - 系统校验：`system` 仅允许 `cpms/sfid/citizenchain`。
 - 时效校验：`expires_at` 过期直接拒绝签名。
+- TTL 校验：`expires_at - issued_at` 必须等于 `90` 秒。
 - 白名单校验：对 `system/aud/origin` 执行本地白名单策略。
 - 防重放：`request_id` 本地一次性消费，已消费请求拒绝再次签名。
 - 人机确认：扫码后必须点击“本地签名并生成回执”，不自动签名。
@@ -437,7 +438,9 @@ WUMINAPP_LOGIN_V1|system|aud|origin|request_id|challenge|nonce|expires_at
 - 验签公钥优先使用 `signer_pubkey`（如有），否则使用 `account/admin_pubkey`。
 - `request_id` 必须一次性消费，重复提交直接拒绝。
 - 校验 `system/aud/origin` 与本系统配置一致。
-- 验签通过后再做本系统授权判定（管理员名单/角色映射）。
+- 验签通过后再做本系统授权判定：
+  - `cpms/sfid`：是管理员登录，不是管理员拒绝。
+  - `citizenchain`：`is_admin=true` 进入 `nrc/prc/prb`；`is_admin=false` 进入 `full`。
 - 登录成功/失败提示只在系统端展示，手机签名端不做结果回执链路。
 
 ### 16.7 模块完成清单（wuminapp 侧）

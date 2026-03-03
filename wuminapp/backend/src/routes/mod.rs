@@ -1,4 +1,4 @@
-pub mod auth_sfid;
+pub mod chain_binding;
 pub mod health;
 pub mod tx;
 pub mod wallet;
@@ -11,7 +11,7 @@ use crate::app_state::AppState;
 
 pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
-        .merge(auth_sfid::router())
+        .merge(chain_binding::router())
         .merge(health::router())
         .merge(tx::router())
         .merge(wallet::router())

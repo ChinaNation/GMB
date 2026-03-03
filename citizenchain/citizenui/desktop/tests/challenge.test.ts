@@ -43,7 +43,7 @@ test('issueLoginChallenge keeps a stable persisted device origin', () => {
     const second = issueLoginChallenge();
     assert.equal(first.origin, second.origin);
     assert.match(first.origin, /^[0-9a-f-]{16,}$/i);
-    assert.equal(first.expiresAt - first.issuedAt, 180);
+    assert.equal(first.expiresAt - first.issuedAt, 90);
   } finally {
     if (original) {
       Object.defineProperty(globalThis, 'localStorage', original);

@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "sync:org-registry": "node ./scripts/sync-org-registry.mjs",
     "prepare:sidecar": "node ./scripts/prepare-sidecar.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",

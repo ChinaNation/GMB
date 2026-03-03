@@ -21,6 +21,7 @@ class _ProfilePageState extends State<ProfilePage> {
   static const Color _inkGreen = Color(0xFF0B3D2E);
   final SfidBindingService _sfidBindingService = SfidBindingService();
   final UserProfileService _userProfileService = UserProfileService();
+  bool _bindingSubmitting = false;
   SfidBindState _bindState =
       const SfidBindState(status: SfidBindStatus.unbound);
   UserProfileState _userProfile = const UserProfileState(nickname: '公民用户');
@@ -45,25 +46,8 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
-  Future<void> _simulateSfidCallback() async {
-    await Future<void>.delayed(const Duration(seconds: 2));
-    if (!mounted || _bindState.status != SfidBindStatus.pending) {
-      return;
-    }
-    final state = await _sfidBindingService.markBound();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _bindState = state;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('SFID 回传绑定成功')),
-    );
-  }
-
   Future<void> _handleBindIdentity() async {
-    if (_bindState.status != SfidBindStatus.unbound) {
+    if (_bindState.status != SfidBindStatus.unbound || _bindingSubmitting) {
       return;
     }
     final wallet = await Navigator.of(context).push<WalletProfile>(
@@ -74,20 +58,37 @@ class _ProfilePageState extends State<ProfilePage> {
     if (!mounted || wallet == null) {
       return;
     }
-    final state = await _sfidBindingService.submitBinding(
-      wallet.address,
-      wallet.pubkeyHex,
-    );
-    if (!mounted) {
-      return;
-    }
     setState(() {
-      _bindState = state;
+      _bindingSubmitting = true;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已发送账户公钥到 SFID 系统，等待回传')),
-    );
-    _simulateSfidCallback();
+    try {
+      final state = await _sfidBindingService.submitBinding(
+        wallet.address,
+        wallet.pubkeyHex,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _bindState = state;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已提交链上绑定请求，等待链侧与SFID确认')),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('绑定请求发送失败：$e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _bindingSubmitting = false;
+        });
+      }
+    }
   }
 
   Future<void> _openProfileEdit() async {
@@ -157,18 +158,26 @@ class _ProfilePageState extends State<ProfilePage> {
     return SizedBox(
       height: 20,
       child: FilledButton(
-        onPressed: _handleBindIdentity,
+        onPressed: _bindingSubmitting ? null : _handleBindIdentity,
         style: const ButtonStyle(
           padding: WidgetStatePropertyAll(
             EdgeInsets.symmetric(horizontal: 6),
           ),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.verified_user_outlined, size: 4),
-            SizedBox(width: 2),
-            Text('绑定身份', style: TextStyle(fontSize: 9)),
+            Icon(
+              _bindingSubmitting
+                  ? Icons.hourglass_top_outlined
+                  : Icons.verified_user_outlined,
+              size: 4,
+            ),
+            const SizedBox(width: 2),
+            Text(
+              _bindingSubmitting ? '提交中' : '绑定身份',
+              style: const TextStyle(fontSize: 9),
+            ),
           ],
         ),
       ),

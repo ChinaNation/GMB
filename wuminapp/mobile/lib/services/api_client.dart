@@ -73,13 +73,8 @@ class ApiClient {
   final String _baseUrl;
 
   static String get _defaultBaseUrl {
-    if (Platform.isAndroid) {
-      const fromDefine = String.fromEnvironment('WUMINAPP_API_BASE_URL');
-      if (fromDefine.isEmpty) {
-        throw StateError(
-          'Android真机调试请传 --dart-define=WUMINAPP_API_BASE_URL=http://<电脑局域网IP>:8787',
-        );
-      }
+    const fromDefine = String.fromEnvironment('WUMINAPP_API_BASE_URL');
+    if (fromDefine.isNotEmpty) {
       return fromDefine;
     }
     return 'http://127.0.0.1:8787';
@@ -242,23 +237,36 @@ class ApiClient {
     );
   }
 
-  Future<void> pushSfidPubkey(String pubkeyHex) async {
+  Future<void> requestChainBindByPubkey(String pubkeyHex) async {
     final normalized = _normalizePubkeyHex(pubkeyHex);
-    final uri = Uri.parse('$_baseUrl/api/v1/auth/sfid/pubkey');
-    final response = await http.post(
-      uri,
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({'pubkey_hex': normalized}),
-    );
+    final uri = Uri.parse('$_baseUrl/api/v1/chain/bind/request');
+    http.Response response;
+    try {
+      response = await http.post(
+        uri,
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({'account_pubkey': normalized}),
+      );
+    } on SocketException catch (_) {
+      if ((Platform.isAndroid || Platform.isIOS) &&
+          _baseUrl.contains('127.0.0.1')) {
+        throw Exception(
+          '当前使用$_baseUrl，手机真机无法访问本机回环地址。请用 --dart-define=WUMINAPP_API_BASE_URL=http://<电脑局域网IP>:8787',
+        );
+      }
+      rethrow;
+    }
     if (response.statusCode != 200) {
-      throw Exception('sfid pubkey push failed: ${response.statusCode}');
+      throw Exception('chain bind request failed: ${response.statusCode}');
     }
 
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
     final code = payload['code'] as int? ?? -1;
     final message = payload['message']?.toString() ?? 'unknown';
     if (code != 0) {
-      throw Exception('sfid pubkey push rejected: code=$code message=$message');
+      throw Exception(
+        'chain bind request rejected: code=$code message=$message',
+      );
     }
   }
 

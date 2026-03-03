@@ -42,13 +42,13 @@ class SfidBindingService {
     String walletAddress,
     String walletPubkeyHex,
   ) async {
-    await _apiClient.pushSfidPubkey(walletPubkeyHex);
+    await _apiClient.requestChainBindByPubkey(walletPubkeyHex);
     final now = DateTime.now().millisecondsSinceEpoch;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kStatus, 'pending');
     await prefs.setString(_kAddress, walletAddress);
     await prefs.setInt(_kUpdatedAt, now);
-    debugPrint('sfid bind request sent: pubkey=$walletPubkeyHex');
+    debugPrint('chain bind request sent: pubkey=$walletPubkeyHex');
     return getState();
   }
 

@@ -12,9 +12,9 @@
   },
   "include": [
     "tests/**/*.ts",
-    "src/constants/orgRegistry.generated.ts",
     "src/constants/orgRegistry.types.ts",
     "src/services/auth/challenge.ts",
+    "src/services/auth/runtimeRegistry.ts",
     "src/services/auth/organization.ts",
     "src/types/auth.ts",
     "src/utils/address.ts",

@@ -94,10 +94,10 @@
 ### 5.2 扫码签名登录流程
 1. 登录页点击“生成登录二维码”，系统下发一次性 challenge 二维码。
 2. 管理员手机扫码后，手机端回传 `admin_pubkey + signature` 到 CPMS。
-3. 后端验证管理员公钥是否存在且状态正常；不存在或停用直接拒绝登录。
+3. 后端判定扫码公钥是否为 CPMS 管理员；是管理员继续，不是管理员直接拒绝登录。
 4. 后端验证签名与 challenge 一致，失败直接拒绝登录。
 5. 登录页轮询 challenge 结果，成功后自动建立会话并进入系统。
-6. challenge 必须短时有效且一次性消费，防重放。
+6. challenge 固定有效期 `90` 秒，且 `request_id` 一次性消费，防重放。
 
 ### 5.3 安全要求
 - 私钥不上传、不落库。
@@ -325,7 +325,7 @@
   "challenge": "string",
   "nonce": "uuid",
   "issued_at": 1760000000,
-  "expires_at": 1760000060,
+  "expires_at": 1760000090,
   "aud": "cpms-local-app",
   "origin": "cpms-device-id"
 }
@@ -353,8 +353,8 @@ WUMINAPP_LOGIN_V1|cpms|aud|origin|request_id|challenge|nonce|expires_at
 1. 解析回执并读取 `request_id/account/signature`。
 2. 按挑战缓存重建签名原文。
 3. 使用 `sr25519` 验签。
-4. 校验挑战时效与 `request_id` 一次性消费。
-5. 验签通过后再做本地 RBAC 授权判定（3 超管 + 操作管理员）。
+4. 校验挑战固定 `90` 秒时效与 `request_id` 一次性消费。
+5. 验签通过后判定是否为管理员（3 超管 + 操作管理员），是则登录，否则拒绝。
 
 ### 13.2 安全验收
 - 非管理员公钥无法登录。
