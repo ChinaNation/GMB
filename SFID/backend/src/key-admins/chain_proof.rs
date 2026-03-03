@@ -1,0 +1,53 @@
+use schnorrkel::{signing_context, Keypair as Sr25519Keypair};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignatureEnvelope {
+    pub key_id: String,
+    pub key_version: String,
+    pub alg: String,
+    pub payload: String,
+    pub signature_hex: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PublicKeyOutput {
+    pub key_id: String,
+    pub key_version: String,
+    pub alg: String,
+    pub public_key_hex: String,
+}
+
+pub fn build_public_key_output(
+    key_id: &str,
+    key_version: &str,
+    key_alg: &str,
+    public_key_hex: &str,
+) -> PublicKeyOutput {
+    PublicKeyOutput {
+        key_id: key_id.to_string(),
+        key_version: key_version.to_string(),
+        alg: key_alg.to_string(),
+        public_key_hex: public_key_hex.to_string(),
+    }
+}
+
+pub fn make_signature_envelope<T: Serialize>(
+    key_id: &str,
+    key_version: &str,
+    key_alg: &str,
+    signing_key: &Sr25519Keypair,
+    payload: &T,
+) -> SignatureEnvelope {
+    let payload_text = serde_json::to_string(payload).expect("serialize payload");
+    let ctx = signing_context(b"substrate");
+    let signature = signing_key.sign(ctx.bytes(payload_text.as_bytes()));
+
+    SignatureEnvelope {
+        key_id: key_id.to_string(),
+        key_version: key_version.to_string(),
+        alg: key_alg.to_string(),
+        payload: payload_text,
+        signature_hex: hex::encode(signature.to_bytes()),
+    }
+}
