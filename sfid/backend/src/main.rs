@@ -20,7 +20,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
     thread,
 };
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -1761,6 +1761,35 @@ fn required_env(key: &str) -> String {
 }
 
 fn build_cors_layer() -> CorsLayer {
+    let allow_all = std::env::var("SFID_CORS_ALLOWED_ORIGINS")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .is_some_and(|v| v == "*");
+    if allow_all {
+        return CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(vec![
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::DELETE,
+                Method::OPTIONS,
+            ])
+            .allow_headers(vec![
+                HeaderName::from_static("authorization"),
+                HeaderName::from_static("content-type"),
+                HeaderName::from_static("x-request-id"),
+                HeaderName::from_static("x-chain-token"),
+                HeaderName::from_static("x-chain-request-id"),
+                HeaderName::from_static("x-chain-nonce"),
+                HeaderName::from_static("x-chain-timestamp"),
+                HeaderName::from_static("x-chain-signature"),
+                HeaderName::from_static("x-wallet-pubkey"),
+                HeaderName::from_static("x-wallet-signature"),
+                HeaderName::from_static("x-wallet-signature-message"),
+            ]);
+    }
+
     let configured = std::env::var("SFID_CORS_ALLOWED_ORIGINS")
         .ok()
         .map(|raw| {

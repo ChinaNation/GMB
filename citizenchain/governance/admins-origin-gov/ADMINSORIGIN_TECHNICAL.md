@@ -236,3 +236,23 @@ Runtime 配置：
 
 当前现实中的运维要求：
 - 对超时未 finalize 的内部投票，需及时调用投票引擎 finalize 以尽快解锁机构提案通道。
+
+---
+
+## 13. 推送层（Rust 内置，不改 pallet 本体）
+
+定位：
+- 推送层已内置到 `citizenui-desktop-shell`（`desktop/src-tauri/src/main.rs`）。
+- 只做“链上管理员状态 -> 登录端授权快照 JSON”的同步，不参与投票、不参与替换执行。
+- 不修改 `admins-origin-gov/src/lib.rs` 的任何业务逻辑。
+
+同步来源：
+- 读取 `adminsOriginGov.currentAdmins` 链上存储（finalized 状态）。
+
+同步目标：
+- 运行时快照文件：`app_data/org-registry.snapshot.json`（由桌面壳维护）。
+- `citizenui` 登录判权实时读取该快照，不再依赖静态 `ORG_REGISTRY`。
+
+运行方式：
+- `citizenui` 启动时自动拉起内置同步线程，以 finalized 区块订阅驱动链上变更并写入快照（断线自动重连）。
+- 无需部署独立 Node 推送服务，无需额外安装 `push-layer` 依赖。

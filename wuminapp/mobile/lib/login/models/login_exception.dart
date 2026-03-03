@@ -16,6 +16,7 @@ class LoginErrorCode {
   static const String invalidField = 'L1005';
   static const String expired = 'L1101';
   static const String replay = 'L1102';
+  static const String invalidTtl = 'L1103';
   static const String unauthorizedAud = 'L1201';
   static const String unauthorizedOrigin = 'L1202';
   static const String walletMissing = 'L1301';

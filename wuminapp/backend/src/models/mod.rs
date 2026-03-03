@@ -61,12 +61,12 @@ pub struct WalletBalanceData {
 }
 
 #[derive(Deserialize)]
-pub struct SfidPubkeyPushRequest {
-    pub pubkey_hex: String,
+pub struct ChainBindRequest {
+    pub account_pubkey: String,
 }
 
 #[derive(Serialize)]
-pub struct SfidPubkeyPushData {
+pub struct ChainBindRequestData {
     pub accepted: bool,
-    pub pushed_at: i64,
+    pub requested_at: i64,
 }

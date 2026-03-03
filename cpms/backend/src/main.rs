@@ -926,10 +926,16 @@ async fn auth_qr_challenge(
 
     let challenge_id = format!("chl_{}", Uuid::new_v4().simple());
     let nonce = Uuid::new_v4().simple().to_string();
+    let challenge_token = Uuid::new_v4().simple().to_string();
+    let issued_at = Utc::now().timestamp();
     let expire_at = (Utc::now() + Duration::seconds(CHALLENGE_EXPIRES_SECONDS)).timestamp();
+    let qr_aud =
+        std::env::var("CPMS_LOGIN_QR_AUD").unwrap_or_else(|_| "cpms-local-app".to_string());
+    let qr_origin =
+        std::env::var("CPMS_LOGIN_QR_ORIGIN").unwrap_or_else(|_| "cpms-device-id".to_string());
     let challenge_payload = format!(
-        "cpms-admin-qr-login-v1|{}|{}|{}|{}|{}|{}",
-        challenge_id, origin, domain, session_id, nonce, expire_at
+        "WUMINAPP_LOGIN_V1|{}|{}|{}|{}|{}|{}|{}",
+        "cpms", qr_aud, qr_origin, challenge_id, challenge_token, nonce, expire_at
     );
 
     let challenge = LoginChallenge {
@@ -949,13 +955,19 @@ async fn auth_qr_challenge(
         .map_err(|reason| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &reason))?;
 
     let login_qr_payload = serde_json::json!({
-        "ver": "1",
-        "type": "CPMS_ADMIN_LOGIN",
+        "proto": "WUMINAPP_LOGIN_V1",
+        "system": "cpms",
+        "request_id": challenge_id,
+        "challenge": challenge_token,
+        "issued_at": issued_at,
+        "expires_at": expire_at,
+        "aud": qr_aud,
+        "origin": qr_origin,
         "challenge_id": challenge_id,
         "challenge_payload": challenge_payload,
         "session_id": session_id,
         "nonce": nonce,
-        "origin": origin,
+        "page_origin": origin,
         "domain": domain,
         "expire_at": expire_at
     })
@@ -1020,7 +1032,7 @@ async fn auth_qr_complete(
     if admin.status != "ACTIVE" {
         return Err(err(StatusCode::UNAUTHORIZED, 2002, "admin is not active"));
     }
-    if verify_challenge_signature(
+    if verify_wumin_login_signature(
         req.admin_pubkey.trim(),
         &challenge_payload,
         req.signature.trim(),
@@ -2077,6 +2089,34 @@ fn verify_challenge_signature(
         signature,
         b"CPMS-ADMIN-AUTH-V1",
     )
+}
+
+fn verify_wumin_login_signature(
+    admin_pubkey: &str,
+    challenge_payload: &str,
+    signature: &str,
+) -> Result<(), &'static str> {
+    let pubkey_bytes = decode_bytes(admin_pubkey).ok_or("invalid admin_pubkey encoding")?;
+    if pubkey_bytes.len() != 32 {
+        return Err("invalid admin_pubkey length");
+    }
+    let sig_bytes = decode_bytes(signature).ok_or("invalid signature encoding")?;
+    if sig_bytes.len() != 64 {
+        return Err("invalid signature length");
+    }
+
+    let pk = PublicKey::from_bytes(&pubkey_bytes).map_err(|_| "invalid sr25519 public key")?;
+    let sig = Signature::from_bytes(&sig_bytes).map_err(|_| "invalid sr25519 signature")?;
+    let ctx = signing_context(b"substrate");
+    if pk
+        .verify(ctx.bytes(challenge_payload.as_bytes()), &sig)
+        .is_ok()
+    {
+        return Ok(());
+    }
+    let wrapped = format!("<Bytes>{}</Bytes>", challenge_payload);
+    pk.verify(ctx.bytes(wrapped.as_bytes()), &sig)
+        .map_err(|_| "sr25519 verify failed")
 }
 
 fn verify_signature_with_context(

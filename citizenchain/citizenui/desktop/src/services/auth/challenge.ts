@@ -1,5 +1,5 @@
 export type LoginCrypto = 'sr25519' | 'ed25519';
-const CHALLENGE_TTL_SECONDS = 180;
+const CHALLENGE_TTL_SECONDS = 90;
 const DEVICE_ID_STORAGE_KEY = 'citizenui.auth.deviceId';
 
 export type LoginChallenge = {
