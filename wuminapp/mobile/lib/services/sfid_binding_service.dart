@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wuminapp_mobile/services/api_client.dart';
 
 enum SfidBindStatus { unbound, pending, bound }
 
@@ -16,6 +17,8 @@ class SfidBindState {
 }
 
 class SfidBindingService {
+  final ApiClient _apiClient = ApiClient();
+
   static const _kStatus = 'sfid.bind.status';
   static const _kAddress = 'sfid.bind.address';
   static const _kUpdatedAt = 'sfid.bind.updated_at';
@@ -35,13 +38,17 @@ class SfidBindingService {
     );
   }
 
-  Future<SfidBindState> submitBinding(String walletAddress) async {
+  Future<SfidBindState> submitBinding(
+    String walletAddress,
+    String walletPubkeyHex,
+  ) async {
+    await _apiClient.pushSfidPubkey(walletPubkeyHex);
     final now = DateTime.now().millisecondsSinceEpoch;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kStatus, 'pending');
     await prefs.setString(_kAddress, walletAddress);
     await prefs.setInt(_kUpdatedAt, now);
-    debugPrint('sfid bind request sent: wallet=$walletAddress');
+    debugPrint('sfid bind request sent: pubkey=$walletPubkeyHex');
     return getState();
   }
 

@@ -59,3 +59,14 @@ pub struct WalletBalanceData {
     pub symbol: &'static str,
     pub updated_at: i64,
 }
+
+#[derive(Deserialize)]
+pub struct SfidPubkeyPushRequest {
+    pub pubkey_hex: String,
+}
+
+#[derive(Serialize)]
+pub struct SfidPubkeyPushData {
+    pub accepted: bool,
+    pub pushed_at: i64,
+}
