@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: ${CPMS_POSTGRES_IMAGE:-postgres:16-alpine}
+    container_name: cpms-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${CPMS_DB_NAME:-cpms}
+      POSTGRES_USER: ${CPMS_DB_USER:-cpms}
+      POSTGRES_PASSWORD: ${CPMS_DB_PASSWORD:-cpms_local_change_me}
+    ports:
+      - "${CPMS_DB_BIND:-127.0.0.1}:5432:5432"
+    volumes:
+      - cpms-pg-data:/var/lib/postgresql/data
+      - ../backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ../backend/db/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CPMS_DB_USER:-cpms} -d ${CPMS_DB_NAME:-cpms}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: ${CPMS_BACKEND_IMAGE:-cpms-backend:local}
+    container_name: cpms-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CPMS_BIND: ${CPMS_BIND:-0.0.0.0:8080}
+      CPMS_DATABASE_URL: postgresql://${CPMS_DB_USER:-cpms}:${CPMS_DB_PASSWORD:-cpms_local_change_me}@postgres:5432/${CPMS_DB_NAME:-cpms}
+    ports:
+      - "${CPMS_HTTP_PORT:-8080}:8080"
+
+volumes:
+  cpms-pg-data:
