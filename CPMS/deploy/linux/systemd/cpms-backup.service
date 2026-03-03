@@ -1,0 +1,13 @@
+[Unit]
+Description=CPMS Backup To Storage
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/opt/cpms/bin/backup_to_storage.sh
+
+[Install]
+WantedBy=multi-user.target
