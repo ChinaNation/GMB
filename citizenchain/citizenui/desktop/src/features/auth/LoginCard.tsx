@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Input, Space, Tag, Typography } from 'antd';
-import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { type ChangeEvent, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   getChallengeMessage,
@@ -8,7 +8,11 @@ import {
   parseSignedLoginPayload,
   type LoginChallenge
 } from '../../services/auth/challenge';
-import { asHexAddress, resolveCitizenchainSession } from '../../services/auth/organization';
+import {
+  AmbiguousAdminMappingError,
+  asHexAddress,
+  resolveCitizenchainSessionRuntime
+} from '../../services/auth/organization';
 import { generateOfflineQrDataUrl } from '../../services/auth/qr';
 import { verifyLoginSignature } from '../../services/auth/verify';
 import { useAuthStore } from '../../stores/auth';
@@ -17,8 +21,6 @@ import { CameraQrScanner } from './CameraQrScanner';
 
 const CONSUMED_REQUEST_ID_STORAGE_KEY = 'citizenui.auth.consumedRequestIds';
 const MAX_CONSUMED_REQUEST_IDS = 200;
-const MAX_FAILED_ATTEMPTS = 5;
-const LOGIN_COOLDOWN_SECONDS = 30;
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
@@ -55,22 +57,13 @@ export function LoginCard() {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [consumedRequestIds, setConsumedRequestIds] = useState<Set<string>>(() => loadConsumedRequestIds());
-  const [failedAttempts, setFailedAttempts] = useState(0);
-  const [cooldownUntil, setCooldownUntil] = useState(0);
-  const [clock, setClock] = useState(nowSeconds());
 
   const canGenerateChallenge = true;
   const parsedSignature = parseSignedLoginPayload(scannedPayload);
-  const cooldownRemaining = Math.max(cooldownUntil - clock, 0);
   const canLogin = useMemo(
-    () => challenge !== null && parsedSignature !== null && cooldownRemaining === 0,
-    [challenge, parsedSignature, cooldownRemaining]
+    () => challenge !== null && parsedSignature !== null,
+    [challenge, parsedSignature]
   );
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setClock(nowSeconds()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const generateChallenge = async () => {
     const next = issueLoginChallenge();
@@ -85,27 +78,11 @@ export function LoginCard() {
   };
 
   const doLogin = async () => {
-    const reject = (message: string, countAttempt = true) => {
+    const reject = (message: string) => {
       setLoginError(message);
-      if (!countAttempt) {
-        return;
-      }
-      setFailedAttempts((prev) => {
-        const next = prev + 1;
-        if (next >= MAX_FAILED_ATTEMPTS) {
-          setCooldownUntil(nowSeconds() + LOGIN_COOLDOWN_SECONDS);
-          return 0;
-        }
-        return next;
-      });
     };
-
-    if (cooldownRemaining > 0) {
-      setLoginError(`登录失败次数过多，请在 ${cooldownRemaining} 秒后重试。`);
-      return;
-    }
     if (!challenge) {
-      reject('请先生成挑战二维码。', false);
+      reject('请先生成挑战二维码。');
       return;
     }
     if (nowSeconds() > challenge.expiresAt) {
@@ -136,9 +113,19 @@ export function LoginCard() {
       reject('签名中的 pubkey 地址格式不合法。');
       return;
     }
-    const loginSession = resolveCitizenchainSession(signerHex);
-    if (!loginSession) {
-      reject('该账户未在组织注册表中授权，禁止登录。');
+    let loginSession;
+    try {
+      loginSession = (await resolveCitizenchainSessionRuntime(signerHex)) ?? {
+        role: 'full' as const,
+        publicKey: signerHex,
+        organizationName: '全节点'
+      };
+    } catch (error) {
+      if (error instanceof AmbiguousAdminMappingError) {
+        reject('管理员授权数据异常：同一公钥命中多个机构，请稍后重试或联系运维处理。');
+        return;
+      }
+      reject('读取管理员授权快照失败，请稍后重试。');
       return;
     }
 
@@ -162,8 +149,6 @@ export function LoginCard() {
     }
 
     setLoginError(null);
-    setFailedAttempts(0);
-    setCooldownUntil(0);
     setChallenge(null);
     setConsumedRequestIds((prev) => {
       const next = new Set(prev).add(parsedSignature.request_id);
@@ -197,15 +182,6 @@ export function LoginCard() {
             验签并登录
           </Button>
         </Space>
-        {cooldownRemaining > 0 ? (
-          <Typography.Text type="warning">
-            登录冷却中：{cooldownRemaining} 秒后可再次尝试。
-          </Typography.Text>
-        ) : failedAttempts > 0 ? (
-          <Typography.Text type="secondary">
-            连续失败 {failedAttempts} 次，达到 {MAX_FAILED_ATTEMPTS} 次将触发冷却。
-          </Typography.Text>
-        ) : null}
 
         {challenge ? (
           <Space direction="vertical" size={12} style={{ width: '100%' }}>

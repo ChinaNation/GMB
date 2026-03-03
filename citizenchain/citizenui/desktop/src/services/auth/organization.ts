@@ -1,6 +1,14 @@
 import { decodeAddress } from '@polkadot/util-crypto';
-import { ORG_REGISTRY } from '../../constants/orgRegistry.generated';
+import type { OrganizationRegistryItem } from '../../constants/orgRegistry.types';
 import type { LoginIdentity } from '../../types/auth';
+import { loadRuntimeOrgRegistry } from './runtimeRegistry';
+
+export class AmbiguousAdminMappingError extends Error {
+  constructor() {
+    super('admin address matches multiple organizations');
+    this.name = 'AmbiguousAdminMappingError';
+  }
+}
 
 function normalized(value: string): string {
   return value.trim().toLowerCase();
@@ -18,7 +26,10 @@ export function asHexAddress(address: string): string {
     .join('')}`;
 }
 
-export function resolveOrganizationByAddress(address: string): LoginIdentity | null {
+export function resolveOrganizationByAddressFromRegistry(
+  address: string,
+  registry: OrganizationRegistryItem[]
+): LoginIdentity | null {
   let normalizedInput: string;
   try {
     normalizedInput = normalized(asHexAddress(address));
@@ -26,8 +37,12 @@ export function resolveOrganizationByAddress(address: string): LoginIdentity | n
     return null;
   }
 
-  const hit = ORG_REGISTRY.find((item) => normalized(item.adminAddress) === normalizedInput);
-  if (!hit) return null;
+  const hits = registry.filter((item) => normalized(item.adminAddress) === normalizedInput);
+  if (hits.length === 0) return null;
+  if (hits.length > 1) {
+    throw new AmbiguousAdminMappingError();
+  }
+  const hit = hits[0];
 
   return {
     role: hit.role,
@@ -37,13 +52,18 @@ export function resolveOrganizationByAddress(address: string): LoginIdentity | n
   };
 }
 
-export function resolveCitizenchainSession(address: string): LoginIdentity | null {
+export async function resolveCitizenchainSessionRuntime(
+  address: string
+): Promise<LoginIdentity | null> {
   let normalizedInput: string;
   try {
     normalizedInput = normalized(asHexAddress(address));
   } catch {
     return null;
   }
-
-  return resolveOrganizationByAddress(normalizedInput);
+  const runtimeRegistry = await loadRuntimeOrgRegistry();
+  if (runtimeRegistry && runtimeRegistry.length > 0) {
+    return resolveOrganizationByAddressFromRegistry(normalizedInput, runtimeRegistry);
+  }
+  return null;
 }

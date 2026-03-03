@@ -27,7 +27,7 @@ void main() {
     test('parseChallenge should parse a valid challenge', () {
       final raw = _challengeJson(
         requestId: 'req-1',
-        expiresAt: _nowSec() + 60,
+        expiresAt: _nowSec() + 90,
       );
       final challenge = service.parseChallenge(raw);
 
@@ -56,6 +56,24 @@ void main() {
       );
     });
 
+    test('parseChallenge should reject non-90-second ttl', () {
+      final raw = _challengeJson(
+        requestId: 'req-invalid-ttl',
+        issuedAt: _nowSec() - 1,
+        expiresAt: _nowSec() + 60,
+      );
+      expect(
+        () => service.parseChallenge(raw),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('必须为 90 秒'),
+          ),
+        ),
+      );
+    });
+
     test('buildSignPreviewForChallenge should follow canonical format', () {
       final raw = _challengeJson(
         requestId: 'req-preview',
@@ -79,7 +97,7 @@ void main() {
         system: 'sfid',
         aud: 'sfid-local-app',
         origin: 'sfid-device-id',
-        expiresAt: _nowSec() + 60,
+        expiresAt: _nowSec() + 90,
       );
       final challenge = service.parseChallenge(raw);
 
@@ -101,7 +119,7 @@ void main() {
         () async {
       final raw = _challengeJson(
         requestId: 'req-replay',
-        expiresAt: _nowSec() + 60,
+        expiresAt: _nowSec() + 90,
       );
       final challenge = service.parseChallenge(raw);
 
@@ -124,7 +142,7 @@ void main() {
         () async {
       final raw = _challengeJson(
         requestId: 'req-wallet-missing',
-        expiresAt: _nowSec() + 60,
+        expiresAt: _nowSec() + 90,
       );
       final challenge = service.parseChallenge(raw);
 
@@ -155,7 +173,7 @@ String _challengeJson({
   String aud = 'cpms-local-app',
   String origin = 'cpms-device-id',
 }) {
-  final iat = issuedAt ?? (_nowSec() - 1);
+  final iat = issuedAt ?? (expiresAt - WuminLoginService.challengeTtlSeconds);
   return '''
 {
   "proto": "WUMINAPP_LOGIN_V1",
@@ -230,6 +248,8 @@ class _FakeWalletService extends WalletService {
       profile: WalletProfile(
         walletIndex: index,
         walletName: '测试钱包$index',
+        walletIcon: 'wallet.svg',
+        balance: 0,
         address: pair.address,
         pubkeyHex: pubkeyHex,
         alg: 'sr25519',
