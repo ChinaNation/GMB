@@ -8,11 +8,13 @@ class ObservedAccount {
     required this.source,
   });
 
+  static const Object _noBalanceChange = Object();
+
   final String id;
   final String orgName;
   final String publicKey;
   final String address;
-  final double balance;
+  final double? balance;
   final String source;
 
   ObservedAccount copyWith({
@@ -20,7 +22,7 @@ class ObservedAccount {
     String? orgName,
     String? publicKey,
     String? address,
-    double? balance,
+    Object? balance = _noBalanceChange,
     String? source,
   }) {
     return ObservedAccount(
@@ -28,7 +30,9 @@ class ObservedAccount {
       orgName: orgName ?? this.orgName,
       publicKey: publicKey ?? this.publicKey,
       address: address ?? this.address,
-      balance: balance ?? this.balance,
+      balance: identical(balance, _noBalanceChange)
+          ? this.balance
+          : balance as double?,
       source: source ?? this.source,
     );
   }

@@ -20,9 +20,22 @@ class _ObserveAccountsPageState extends State<ObserveAccountsPage> {
   }
 
   void _reload() {
+    _refreshNow();
+  }
+
+  Future<void> _refreshNow() async {
+    final future = _service.getObservedAccounts();
     setState(() {
-      _accountsFuture = _service.getObservedAccounts();
+      _accountsFuture = future;
     });
+    await future;
+  }
+
+  String _formatBalance(double? balance) {
+    if (balance == null) {
+      return '余额更新失败';
+    }
+    return '${balance.toStringAsFixed(2)} 元';
   }
 
   Future<void> _openObservedAccountDetail(ObservedAccount item) async {
@@ -134,101 +147,115 @@ class _ObserveAccountsPageState extends State<ObserveAccountsPage> {
             }
             final accounts = snapshot.data ?? const <ObservedAccount>[];
             if (accounts.isEmpty) {
-              return const Center(
-                child: Text('暂无观察账户，请点击右上角 + 添加'),
+              return RefreshIndicator(
+                onRefresh: _refreshNow,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const [
+                    SizedBox(height: 220),
+                    Center(
+                      child: Text('暂无观察账户，请点击右上角 + 添加'),
+                    ),
+                  ],
+                ),
               );
             }
-            return ListView.separated(
-              itemCount: accounts.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final item = accounts[index];
-                return Dismissible(
-                  key: ValueKey(item.id),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade400,
-                      borderRadius: BorderRadius.circular(12),
+            return RefreshIndicator(
+              onRefresh: _refreshNow,
+              child: ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: accounts.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final item = accounts[index];
+                  return Dismissible(
+                    key: ValueKey(item.id),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade400,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.white,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.delete_outline,
-                      color: Colors.white,
-                    ),
-                  ),
-                  confirmDismiss: (_) => _confirmDelete(item),
-                  onDismissed: (_) async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    await _service.removeObservedAccount(item);
-                    if (!mounted) {
-                      return;
-                    }
-                    _reload();
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('已删除观察账户')),
-                    );
-                  },
-                  child: Card(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () => _openObservedAccountDetail(item),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.remove_red_eye_outlined,
-                                    size: 20),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    item.orgName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                    confirmDismiss: (_) => _confirmDelete(item),
+                    onDismissed: (_) async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      await _service.removeObservedAccount(item);
+                      if (!mounted) {
+                        return;
+                      }
+                      _reload();
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('已删除观察账户')),
+                      );
+                    },
+                    child: Card(
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => _openObservedAccountDetail(item),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.remove_red_eye_outlined,
+                                      size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      item.orgName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.monetization_on_outlined,
+                                    size: 20,
+                                    color: Color(0xFF0B3D2E),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _formatBalance(item.balance),
                                     style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
+                                      fontWeight: FontWeight.w600,
                                       fontSize: 16,
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.monetization_on_outlined,
-                                  size: 20,
-                                  color: Color(0xFF0B3D2E),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '${item.balance.toStringAsFixed(2)} 元',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            const Text(
-                              '观察地址：',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 4),
-                            SelectableText(item.address),
-                          ],
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              const Text(
+                                '观察地址：',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 4),
+                              SelectableText(item.address),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             );
           },
         ),
@@ -248,7 +275,8 @@ class ObserveAccountDetailPage extends StatefulWidget {
   final ObservedAccountService service;
 
   @override
-  State<ObserveAccountDetailPage> createState() => _ObserveAccountDetailPageState();
+  State<ObserveAccountDetailPage> createState() =>
+      _ObserveAccountDetailPageState();
 }
 
 class _ObserveAccountDetailPageState extends State<ObserveAccountDetailPage> {

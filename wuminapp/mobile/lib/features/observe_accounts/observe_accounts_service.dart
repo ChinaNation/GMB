@@ -49,6 +49,7 @@ class ObservedAccountService {
     final orgName = role == WalletTypeService.defaultType
         ? '自定义观察账户'
         : _extractOrgName(role);
+    final initialBalance = await _fetchBalanceOrNull(address, pubkey);
 
     final next = List<ObservedAccount>.from(current)
       ..add(
@@ -57,7 +58,7 @@ class ObservedAccountService {
           orgName: orgName,
           publicKey: pubkey,
           address: address,
-          balance: 0,
+          balance: initialBalance,
           source: 'manual',
         ),
       );
@@ -77,15 +78,13 @@ class ObservedAccountService {
     }
     final current = await getObservedAccounts();
     bool found = false;
-    final updated = current
-        .map((it) {
-          if (it.id != id) {
-            return it;
-          }
-          found = true;
-          return it.copyWith(orgName: name);
-        })
-        .toList(growable: false);
+    final updated = current.map((it) {
+      if (it.id != id) {
+        return it;
+      }
+      found = true;
+      return it.copyWith(orgName: name);
+    }).toList(growable: false);
     if (!found) {
       throw Exception('未找到观察账户');
     }
@@ -182,25 +181,28 @@ class ObservedAccountService {
   ) async {
     final out = <ObservedAccount>[];
     for (final item in items) {
-      try {
-        final data = await _apiClient.fetchWalletBalance(item.address);
-        out.add(item.copyWith(balance: data.balance));
-      } catch (e) {
-        try {
-          final fallback = await _apiClient.fetchWalletBalance(
-            '0x${item.publicKey}',
-          );
-          out.add(item.copyWith(balance: fallback.balance));
-        } catch (fallbackError) {
-          debugPrint(
-            'observe account balance refresh failed: ${item.address} / ${item.publicKey} '
-            'err=$e fallbackErr=$fallbackError',
-          );
-          out.add(item);
-        }
-      }
+      final balance = await _fetchBalanceOrNull(item.address, item.publicKey);
+      out.add(item.copyWith(balance: balance));
     }
     return out;
+  }
+
+  Future<double?> _fetchBalanceOrNull(String address, String pubkey) async {
+    try {
+      final data = await _apiClient.fetchWalletBalance(address);
+      return data.balance;
+    } catch (e) {
+      try {
+        final fallback = await _apiClient.fetchWalletBalance('0x$pubkey');
+        return fallback.balance;
+      } catch (fallbackError) {
+        debugPrint(
+          'observe account balance refresh failed: $address / $pubkey '
+          'err=$e fallbackErr=$fallbackError',
+        );
+        return null;
+      }
+    }
   }
 
   bool _hasBalanceChanged(
@@ -235,8 +237,8 @@ class ObservedAccountService {
       final rawBalance = m['balance'];
       final balance = switch (rawBalance) {
         num v => v.toDouble(),
-        String v => double.tryParse(v) ?? 0.0,
-        _ => 0.0,
+        String v => double.tryParse(v),
+        _ => null,
       };
       var pubkey = _normalizeHexPubkey(m['publicKey']?.toString() ?? '');
       final address = (m['address']?.toString() ?? '').trim();

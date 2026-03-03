@@ -74,7 +74,10 @@ class _ProfilePageState extends State<ProfilePage> {
     if (!mounted || wallet == null) {
       return;
     }
-    final state = await _sfidBindingService.submitBinding(wallet.address);
+    final state = await _sfidBindingService.submitBinding(
+      wallet.address,
+      wallet.pubkeyHex,
+    );
     if (!mounted) {
       return;
     }
@@ -82,7 +85,7 @@ class _ProfilePageState extends State<ProfilePage> {
       _bindState = state;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已发送钱包地址到 SFID 系统，等待回传')),
+      const SnackBar(content: Text('已发送账户公钥到 SFID 系统，等待回传')),
     );
     _simulateSfidCallback();
   }

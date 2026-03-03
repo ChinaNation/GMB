@@ -241,4 +241,32 @@ class ApiClient {
       updatedAt: data['updated_at'] as int? ?? 0,
     );
   }
+
+  Future<void> pushSfidPubkey(String pubkeyHex) async {
+    final normalized = _normalizePubkeyHex(pubkeyHex);
+    final uri = Uri.parse('$_baseUrl/api/v1/auth/sfid/pubkey');
+    final response = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({'pubkey_hex': normalized}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('sfid pubkey push failed: ${response.statusCode}');
+    }
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final code = payload['code'] as int? ?? -1;
+    final message = payload['message']?.toString() ?? 'unknown';
+    if (code != 0) {
+      throw Exception('sfid pubkey push rejected: code=$code message=$message');
+    }
+  }
+
+  String _normalizePubkeyHex(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('pubkey is empty');
+    }
+    return trimmed.startsWith('0x') ? trimmed : '0x$trimmed';
+  }
 }
