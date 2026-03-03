@@ -1,0 +1,25 @@
+.DS_Store
+.vscode/
+.idea/
+
+admin-web/node_modules/
+admin-web/dist/
+admin-web/tsconfig.tsbuildinfo
+
+backend/target/
+target/
+frontend/node_modules
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+
+# Local env/runtime files
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs and temp files
+*.log
+*.pid
+*.tmp
