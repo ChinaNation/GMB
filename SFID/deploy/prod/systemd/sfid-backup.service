@@ -1,0 +1,8 @@
+[Unit]
+Description=SFID PostgreSQL Backup To Standby
+After=network.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/sfid/sfid.env
+ExecStart=/opt/sfid/scripts/backup_to_standby.sh
