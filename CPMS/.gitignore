@@ -1,0 +1,20 @@
+# Build artifacts
+target/
+backend/target/
+
+# Packaging output
+dist/
+
+# Runtime/local data
+runtime/
+backend/runtime/
+*.log
+
+# Local environment/secrets
+.env
+.env.*
+*.local
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
