@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:wuminapp_mobile/login/services/login_whitelist_store.dart';
 
 class LoginWhitelistPage extends StatefulWidget {
@@ -10,6 +12,7 @@ class LoginWhitelistPage extends StatefulWidget {
 
 class _LoginWhitelistPageState extends State<LoginWhitelistPage> {
   final LoginWhitelistStore _store = LoginWhitelistStore();
+  final LocalAuthentication _localAuth = LocalAuthentication();
   bool _loading = true;
   late LoginWhitelistConfig _config;
 
@@ -92,6 +95,16 @@ class _LoginWhitelistPageState extends State<LoginWhitelistPage> {
     if (ok != true) {
       return;
     }
+    final passed = await _confirmBiometric();
+    if (!passed) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('需要生物识别确认后才能修改白名单')),
+      );
+      return;
+    }
 
     final newAud = _parseCsv(audCtl.text);
     final newOrigin = _parseCsv(originCtl.text);
@@ -121,6 +134,22 @@ class _LoginWhitelistPageState extends State<LoginWhitelistPage> {
     setState(() {
       _config = next;
     });
+  }
+
+  Future<bool> _confirmBiometric() async {
+    try {
+      final canCheck = await _localAuth.canCheckBiometrics;
+      final isSupported = await _localAuth.isDeviceSupported();
+      if (!canCheck || !isSupported) {
+        return false;
+      }
+      return _localAuth.authenticate(
+        localizedReason: '修改登录白名单需要生物识别确认',
+        options: const AuthenticationOptions(biometricOnly: true),
+      );
+    } on PlatformException {
+      return false;
+    }
   }
 
   Set<String> _parseCsv(String input) {

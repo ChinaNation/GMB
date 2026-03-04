@@ -719,7 +719,6 @@ export async function commitKeyringRotate(
     challenge_id: string;
     signature: string;
     new_backup_pubkey: string;
-    new_backup_seed_hex?: string;
   }
 ): Promise<KeyringRotateCommitResult> {
   return request<KeyringRotateCommitResult>('/api/v1/admin/attestor/rotate/commit', {

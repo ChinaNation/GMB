@@ -17,7 +17,10 @@ use std::{
     collections::HashMap,
     hash::Hash,
     net::{IpAddr, SocketAddr},
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex, RwLock,
+    },
     thread,
 };
 use tower_http::cors::{Any, CorsLayer};
@@ -98,7 +101,8 @@ struct StoreHandle {
 enum StoreBackend {
     Memory(Arc<RwLock<Store>>),
     Postgres {
-        client: Arc<Mutex<postgres::Client>>,
+        clients: Arc<Vec<Mutex<postgres::Client>>>,
+        next_client_idx: Arc<AtomicUsize>,
     },
 }
 
@@ -423,15 +427,21 @@ impl Drop for StoreWriteGuard {
 
 impl StoreBackend {
     fn with_postgres_client<R>(
-        client: &Arc<Mutex<postgres::Client>>,
+        clients: &Arc<Vec<Mutex<postgres::Client>>>,
+        next_client_idx: &Arc<AtomicUsize>,
         op: impl FnOnce(&mut postgres::Client) -> Result<R, String> + Send,
     ) -> Result<R, String>
     where
         R: Send,
     {
+        if clients.is_empty() {
+            return Err("postgres client pool is empty".to_string());
+        }
+        let idx = next_client_idx.fetch_add(1, Ordering::Relaxed) % clients.len();
+        let selected = Arc::clone(clients);
         thread::scope(|scope| {
             let handle = scope.spawn(|| {
-                let mut conn = client
+                let mut conn = selected[idx]
                     .lock()
                     .map_err(|_| "postgres client lock poisoned".to_string())?;
                 op(&mut conn)
@@ -741,8 +751,11 @@ impl StoreBackend {
                 .read()
                 .map(|v| v.clone())
                 .map_err(|_| "memory store read lock poisoned".to_string()),
-            Self::Postgres { client } => {
-                Self::with_postgres_client(client, Self::load_store_postgres)
+            Self::Postgres {
+                clients,
+                next_client_idx,
+            } => {
+                Self::with_postgres_client(clients, next_client_idx, Self::load_store_postgres)
             }
         }
     }
@@ -756,9 +769,12 @@ impl StoreBackend {
                 *guard = store.clone();
                 Ok(())
             }
-            Self::Postgres { client } => {
+            Self::Postgres {
+                clients,
+                next_client_idx,
+            } => {
                 let snapshot = store.clone();
-                Self::with_postgres_client(client, move |conn| {
+                Self::with_postgres_client(clients, next_client_idx, move |conn| {
                     Self::save_store_postgres(conn, &snapshot)
                 })?;
                 Ok(())
@@ -777,10 +793,15 @@ impl StoreHandle {
 
     fn from_database_url(database_url: &str) -> Result<Self, String> {
         let db_url = database_url.to_string();
+        let pool_size = std::env::var("SFID_PG_POOL_SIZE")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(4);
         let handle = thread::spawn(move || {
-            let mut client = postgres::Client::connect(db_url.as_str(), postgres::NoTls)
+            let mut bootstrap = postgres::Client::connect(db_url.as_str(), postgres::NoTls)
                 .map_err(|e| format!("connect postgres failed: {e}"))?;
-            client
+            bootstrap
                 .batch_execute(
                     "CREATE TABLE IF NOT EXISTS runtime_misc (
                     id INTEGER PRIMARY KEY,
@@ -797,19 +818,28 @@ impl StoreHandle {
                     payload JSONB NOT NULL,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
                  );
+                 ALTER TABLE runtime_meta ADD COLUMN IF NOT EXISTS payload_enc BYTEA;
                  ALTER TABLE IF EXISTS admins
                    ADD COLUMN IF NOT EXISTS admin_name TEXT NOT NULL DEFAULT '';",
                 )
                 .map_err(|e| format!("init runtime tables failed: {e}"))?;
-            Ok::<postgres::Client, String>(client)
+            let mut clients = Vec::with_capacity(pool_size);
+            clients.push(Mutex::new(bootstrap));
+            for _ in 1..pool_size {
+                let conn = postgres::Client::connect(db_url.as_str(), postgres::NoTls)
+                    .map_err(|e| format!("connect postgres pool client failed: {e}"))?;
+                clients.push(Mutex::new(conn));
+            }
+            Ok::<Vec<Mutex<postgres::Client>>, String>(clients)
         });
-        let client = match handle.join() {
+        let clients = match handle.join() {
             Ok(v) => v?,
             Err(_) => return Err("postgres init thread panicked".to_string()),
         };
         Ok(Self {
             backend: StoreBackend::Postgres {
-                client: Arc::new(Mutex::new(client)),
+                clients: Arc::new(clients),
+                next_client_idx: Arc::new(AtomicUsize::new(0)),
             },
             write_gate: Arc::new(tokio::sync::Mutex::new(())),
         })
@@ -822,12 +852,7 @@ impl StoreHandle {
     }
 
     fn write(&self) -> Result<StoreWriteGuard, String> {
-        let write_guard = loop {
-            if let Ok(guard) = self.write_gate.clone().try_lock_owned() {
-                break guard;
-            }
-            std::thread::yield_now();
-        };
+        let write_guard = self.write_gate.clone().blocking_lock_owned();
         Ok(StoreWriteGuard {
             store: self.backend.load_store()?,
             backend: self.backend.clone(),
@@ -1386,7 +1411,6 @@ struct KeyringRotateCommitInput {
     challenge_id: String,
     signature: String,
     new_backup_pubkey: String,
-    new_backup_seed_hex: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1479,6 +1503,7 @@ fn main() {
     let _ = required_env("SFID_CHAIN_TOKEN");
     let _ = required_env("SFID_CHAIN_SIGNING_SECRET");
     let _ = required_env("SFID_PUBLIC_SEARCH_TOKEN");
+    let _ = required_env("SFID_RUNTIME_META_KEY");
 
     let main_seed = required_env("SFID_SIGNING_SEED_HEX");
     let main_key = key_admins::chain_keyring::load_signing_key_from_seed(main_seed.as_str());
@@ -1760,12 +1785,32 @@ fn required_env(key: &str) -> String {
     }
 }
 
+fn optional_env(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn runtime_meta_cipher_key() -> String {
+    required_env("SFID_RUNTIME_META_KEY")
+}
+
 fn build_cors_layer() -> CorsLayer {
+    let env_mode = optional_env("SFID_ENV")
+        .or_else(|| optional_env("ENV"))
+        .unwrap_or_else(|| "dev".to_string())
+        .to_ascii_lowercase();
+    let is_prod = env_mode == "prod" || env_mode == "production";
+    let allow_any_in_prod = env_flag_enabled("SFID_ALLOW_CORS_ANY_IN_PROD");
     let allow_all = std::env::var("SFID_CORS_ALLOWED_ORIGINS")
         .ok()
         .map(|v| v.trim().to_string())
         .is_some_and(|v| v == "*");
     if allow_all {
+        if is_prod && !allow_any_in_prod {
+            panic!("SFID_CORS_ALLOWED_ORIGINS='*' is forbidden in production");
+        }
         return CorsLayer::new()
             .allow_origin(Any)
             .allow_methods(vec![
@@ -2484,6 +2529,7 @@ fn admin_auth(
             .and_then(|v| v.parse::<i64>().ok())
             .filter(|v| *v > 0)
             .unwrap_or(10);
+        cleanup_admin_sessions(&mut store, now, idle_timeout_minutes);
         let (session_pubkey, session_role) = {
             let Some(session) = store.admin_sessions.get_mut(&token) else {
                 return Err(api_error(
@@ -2626,6 +2672,19 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
     Some(token.trim().to_string())
 }
 
+fn constant_time_eq(left: &str, right: &str) -> bool {
+    let l = left.as_bytes();
+    let r = right.as_bytes();
+    let max_len = l.len().max(r.len());
+    let mut diff = l.len() ^ r.len();
+    for i in 0..max_len {
+        let lb = l.get(i).copied().unwrap_or(0);
+        let rb = r.get(i).copied().unwrap_or(0);
+        diff |= usize::from(lb ^ rb);
+    }
+    diff == 0
+}
+
 pub(crate) fn require_public_search_auth(
     headers: &HeaderMap,
 ) -> Result<(), axum::response::Response> {
@@ -2643,7 +2702,7 @@ pub(crate) fn require_public_search_auth(
         ));
     }
     let expected = required_env("SFID_PUBLIC_SEARCH_TOKEN");
-    if incoming != expected {
+    if !constant_time_eq(incoming.as_str(), expected.as_str()) {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1008,
@@ -2668,7 +2727,7 @@ fn require_chain_auth(headers: &HeaderMap) -> Result<(), axum::response::Respons
         ));
     }
     let expected = required_env("SFID_CHAIN_TOKEN");
-    if incoming != expected {
+    if !constant_time_eq(incoming.as_str(), expected.as_str()) {
         return Err(api_error(StatusCode::FORBIDDEN, 1008, "chain auth invalid"));
     }
     Ok(())
@@ -3038,10 +3097,14 @@ fn ensure_chain_request_db(
     auth: &ChainRequestAuth,
     fingerprint: &str,
 ) -> Result<(), axum::response::Response> {
-    let StoreBackend::Postgres { client } = &state.store.backend else {
+    let StoreBackend::Postgres {
+        clients,
+        next_client_idx,
+    } = &state.store.backend
+    else {
         return Ok(());
     };
-    let insert = StoreBackend::with_postgres_client(client, |conn| {
+    let insert = StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
         conn.execute(
             "INSERT INTO chain_idempotency_requests(route_key, request_id, nonce, request_timestamp, fingerprint, created_at)
              VALUES ($1,$2,$3,$4,$5, now())",
@@ -3078,10 +3141,14 @@ fn ensure_binding_lock_db(
     account_pubkey: &str,
     archive_index: &str,
 ) -> Result<(), axum::response::Response> {
-    let StoreBackend::Postgres { client } = &state.store.backend else {
+    let StoreBackend::Postgres {
+        clients,
+        next_client_idx,
+    } = &state.store.backend
+    else {
         return Ok(());
     };
-    let check = StoreBackend::with_postgres_client(client, |conn| {
+    let check = StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
         let mut tx = conn.transaction().map_err(|e| e.to_string())?;
         let row_by_pub = tx
             .query_opt(
@@ -3141,10 +3208,14 @@ fn ensure_binding_lock_db(
 }
 
 fn release_binding_lock_db(state: &AppState, account_pubkey: &str) {
-    let StoreBackend::Postgres { client } = &state.store.backend else {
+    let StoreBackend::Postgres {
+        clients,
+        next_client_idx,
+    } = &state.store.backend
+    else {
         return;
     };
-    let _ = StoreBackend::with_postgres_client(client, |conn| {
+    let _ = StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
         conn.execute(
             "DELETE FROM binding_unique_locks WHERE account_pubkey=$1",
             &[&account_pubkey],
@@ -3155,10 +3226,14 @@ fn release_binding_lock_db(state: &AppState, account_pubkey: &str) {
 }
 
 fn persist_reward_state_db(state: &AppState, reward: &RewardStateRecord) {
-    let StoreBackend::Postgres { client } = &state.store.backend else {
+    let StoreBackend::Postgres {
+        clients,
+        next_client_idx,
+    } = &state.store.backend
+    else {
         return;
     };
-    let _ = StoreBackend::with_postgres_client(client, |conn| {
+    let _ = StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
         conn.execute(
             "INSERT INTO bind_reward_states(
                account_pubkey, archive_index, callback_id, reward_status, retry_count, max_retries,
@@ -3194,10 +3269,14 @@ fn persist_reward_state_db(state: &AppState, reward: &RewardStateRecord) {
 }
 
 fn remove_reward_state_db(state: &AppState, account_pubkey: &str) {
-    let StoreBackend::Postgres { client } = &state.store.backend else {
+    let StoreBackend::Postgres {
+        clients,
+        next_client_idx,
+    } = &state.store.backend
+    else {
         return;
     };
-    let _ = StoreBackend::with_postgres_client(client, |conn| {
+    let _ = StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
         conn.execute(
             "DELETE FROM bind_reward_states WHERE account_pubkey=$1",
             &[&account_pubkey],
@@ -3320,6 +3399,25 @@ fn cleanup_expired_challenges(store: &mut Store, now: DateTime<Utc>) {
     });
 }
 
+fn cleanup_admin_sessions(store: &mut Store, now: DateTime<Utc>, idle_timeout_minutes: i64) {
+    store.admin_sessions.retain(|_, session| {
+        now <= session.expire_at && now <= session.last_active_at + Duration::minutes(idle_timeout_minutes)
+    });
+    let max_sessions = bounded_cache_limit("SFID_ADMIN_SESSION_MAX", 50_000);
+    if store.admin_sessions.len() > max_sessions {
+        let mut entries = store
+            .admin_sessions
+            .iter()
+            .map(|(token, session)| (token.clone(), session.last_active_at))
+            .collect::<Vec<_>>();
+        entries.sort_by_key(|(_, last_active)| *last_active);
+        let overflow = store.admin_sessions.len() - max_sessions;
+        for (token, _) in entries.into_iter().take(overflow) {
+            store.admin_sessions.remove(&token);
+        }
+    }
+}
+
 fn parse_birth_date_from_archive_no(archive_no: &str) -> Option<NaiveDate> {
     let trimmed = archive_no.trim();
     if trimmed.len() < 8 {
@@ -3363,11 +3461,16 @@ pub(crate) fn store_write_or_500(
 }
 
 fn load_runtime_state(state: &AppState) -> bool {
-    let StoreBackend::Postgres { client } = &state.store.backend else {
+    let StoreBackend::Postgres {
+        clients,
+        next_client_idx,
+    } = &state.store.backend
+    else {
         return false;
     };
-    let row = match StoreBackend::with_postgres_client(client, |conn| {
-        conn.query_opt("SELECT payload FROM runtime_meta WHERE id=1", &[])
+    let cipher_key = runtime_meta_cipher_key();
+    let row = match StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
+        conn.query_opt("SELECT payload, payload_enc FROM runtime_meta WHERE id=1", &[])
             .map_err(|e| format!("failed to load runtime_meta: {e}"))
     }) {
         Ok(v) => v,
@@ -3380,12 +3483,42 @@ fn load_runtime_state(state: &AppState) -> bool {
         return false;
     };
     let payload: serde_json::Value = row.get(0);
-    let snapshot: PersistedRuntimeMeta = match serde_json::from_value(payload) {
-        Ok(v) => v,
-        Err(err) => {
-            warn!(error = %err, "failed to decode runtime_meta");
-            return false;
+    let payload_enc: Option<Vec<u8>> = row.get(1);
+    let snapshot: PersistedRuntimeMeta = match payload_enc {
+        Some(ciphertext) if !ciphertext.is_empty() => {
+            let decrypted_text = match StoreBackend::with_postgres_client(
+                clients,
+                next_client_idx,
+                move |conn| {
+                    conn.query_one(
+                        "SELECT pgp_sym_decrypt($1::bytea, $2)::text",
+                        &[&ciphertext, &cipher_key],
+                    )
+                    .map(|row| row.get::<usize, String>(0))
+                    .map_err(|e| format!("failed to decrypt runtime_meta payload: {e}"))
+                },
+            ) {
+                Ok(v) => v,
+                Err(err) => {
+                    warn!(error = %err, "failed to decrypt runtime_meta");
+                    return false;
+                }
+            };
+            match serde_json::from_str::<PersistedRuntimeMeta>(&decrypted_text) {
+                Ok(v) => v,
+                Err(err) => {
+                    warn!(error = %err, "failed to decode decrypted runtime_meta");
+                    return false;
+                }
+            }
         }
+        _ => match serde_json::from_value(payload) {
+            Ok(v) => v,
+            Err(err) => {
+                warn!(error = %err, "failed to decode runtime_meta");
+                return false;
+            }
+        },
     };
 
     {
@@ -3428,22 +3561,32 @@ fn persist_runtime_state(state: &AppState) {
             Err(_) => return,
         },
     };
-
-    let StoreBackend::Postgres { client } = &state.store.backend else {
-        return;
-    };
-    let payload = match serde_json::to_value(snapshot) {
+    let payload_text = match serde_json::to_string(&snapshot) {
         Ok(v) => v,
         Err(err) => {
             warn!(error = %err, "failed to encode runtime_meta");
             return;
         }
     };
-    if let Err(err) = StoreBackend::with_postgres_client(client, move |conn| {
+    let payload = serde_json::json!({"encrypted": true, "version": snapshot.version});
+    let cipher_key = runtime_meta_cipher_key();
+
+    let StoreBackend::Postgres {
+        clients,
+        next_client_idx,
+    } = &state.store.backend
+    else {
+        return;
+    };
+    if let Err(err) = StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
         conn.execute(
-            "INSERT INTO runtime_meta(id, payload, updated_at) VALUES (1, $1, now())
-             ON CONFLICT (id) DO UPDATE SET payload=excluded.payload, updated_at=now()",
-            &[&payload],
+            "INSERT INTO runtime_meta(id, payload, payload_enc, updated_at)
+             VALUES (1, $1, pgp_sym_encrypt($2, $3, 'cipher-algo=aes256,compress-algo=1'), now())
+             ON CONFLICT (id) DO UPDATE SET
+               payload=excluded.payload,
+               payload_enc=excluded.payload_enc,
+               updated_at=now()",
+            &[&payload, &payload_text, &cipher_key],
         )
         .map(|_| ())
         .map_err(|e| format!("failed to persist runtime_meta: {e}"))
@@ -3603,6 +3746,30 @@ fn enqueue_bind_callback_job(
     });
 }
 
+async fn ensure_callback_delivery_target_safe(callback_url: &str) -> Result<(), String> {
+    let parsed = Url::parse(callback_url).map_err(|_| "invalid callback url".to_string())?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "callback url host is missing".to_string())?;
+    let port = parsed
+        .port_or_known_default()
+        .ok_or_else(|| "callback url port is missing".to_string())?;
+    let resolved = tokio::net::lookup_host((host, port))
+        .await
+        .map_err(|e| format!("callback dns resolve failed: {e}"))?;
+    let mut has_addr = false;
+    for addr in resolved {
+        has_addr = true;
+        if is_blocked_callback_ip(addr.ip()) {
+            return Err("callback target resolves to private/local address".to_string());
+        }
+    }
+    if !has_addr {
+        return Err("callback dns resolve returned no addresses".to_string());
+    }
+    Ok(())
+}
+
 async fn bind_callback_worker(state: AppState) {
     let client = reqwest::Client::new();
     loop {
@@ -3630,6 +3797,38 @@ async fn bind_callback_worker(state: AppState) {
         };
 
         for mut job in due_jobs {
+            if let Err(err) = ensure_callback_delivery_target_safe(job.callback_url.as_str()).await {
+                job.attempts += 1;
+                let mut store = match state.store.write() {
+                    Ok(guard) => guard,
+                    Err(lock_err) => {
+                        warn!(error = %lock_err, "bind callback worker lock failed on dns validation");
+                        continue;
+                    }
+                };
+                if job.attempts >= job.max_attempts {
+                    store.metrics.bind_callback_failed_total += 1;
+                    append_audit_log(
+                        &mut store,
+                        "BIND_CALLBACK",
+                        "system",
+                        Some(job.payload.account_pubkey.clone()),
+                        Some(job.payload.archive_index.clone()),
+                        "FAILED",
+                        format!(
+                            "callback exhausted callback_id={} error={}",
+                            job.callback_id, err
+                        ),
+                    );
+                } else {
+                    store.metrics.bind_callback_retry_total += 1;
+                    let backoff_secs = (2_i64.pow(job.attempts.min(6))).min(300);
+                    job.next_attempt_at = Utc::now() + Duration::seconds(backoff_secs);
+                    job.last_error = Some(err);
+                    store.bind_callback_jobs.push(job);
+                }
+                continue;
+            }
             let mut request = client
                 .post(job.callback_url.clone())
                 .header("content-type", "application/json")
@@ -4046,7 +4245,6 @@ mod tests {
                 new_backup_pubkey: key_admins::chain_keyring::derive_pubkey_hex_from_seed(
                     new_backup_seed.as_str(),
                 ),
-                new_backup_seed_hex: Some(new_backup_seed),
             }),
         )
         .await
@@ -4110,7 +4308,6 @@ mod tests {
                 challenge_id,
                 signature,
                 new_backup_pubkey,
-                new_backup_seed_hex: Some(new_backup_seed),
             }),
         )
         .await

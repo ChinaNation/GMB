@@ -3,20 +3,24 @@
 use codec::{Decode, Encode};
 use futures::FutureExt;
 use gmb_runtime::{self, apis::RuntimeApi, opaque::Block};
-use sc_client_api::Backend;
+use sc_client_api::{Backend, BlockBackend};
 use sc_consensus_pow::{MiningHandle, PowAlgorithm, PowBlockImport};
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
+use sc_service::WarpSyncConfig;
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_consensus::NoNetwork;
 use sp_core::{
     crypto::KeyTypeId,
     hashing::blake2_256,
+    sr25519,
+    Pair,
     U256,
 };
 use sp_keystore::Keystore;
 use sp_runtime::traits::{Block as BlockT, IdentifyAccount};
 use std::{
+    env,
     sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
@@ -36,14 +40,25 @@ pub type Service = sc_service::PartialComponents<
     FullSelectChain,
     sc_consensus::DefaultImportQueue<Block>,
     sc_transaction_pool::TransactionPoolHandle<Block, FullClient>,
-    Option<Telemetry>,
+    (
+        sc_consensus_grandpa::GrandpaBlockImport<
+            FullBackend,
+            Block,
+            FullClient,
+            FullSelectChain,
+        >,
+        sc_consensus_grandpa::LinkHalf<Block, FullClient, FullSelectChain>,
+        Option<Telemetry>,
+    ),
 >;
 
 // PoW 作者密钥类型：纯 PoW 链使用独立 key type，避免与 Aura 语义混用。
 const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
+const POWR_MINER_SURI_ENV: &str = "POWR_MINER_SURI";
 const POW_DIFFICULTY: u64 = primitives::pow_const::POW_INITIAL_DIFFICULTY;
 const POW_MINING_TIMEOUT_SECS: u64 = 10;
 const POW_PROPOSAL_BUILD_SECS: u64 = 2;
+const GRANDPA_JUSTIFICATION_PERIOD: u32 = 64;
 
 #[derive(Clone)]
 struct SimplePow {
@@ -107,17 +122,47 @@ fn hash_meets_difficulty(hash: &[u8; 32], difficulty: U256) -> bool {
 }
 
 fn author_pre_digest(keystore: &sp_keystore::KeystorePtr) -> Option<Vec<u8>> {
-    let author_public = keystore
-        .sr25519_public_keys(POW_AUTHOR_KEY_TYPE)
-        .into_iter()
-        .next()?;
+    let keys = keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE);
+    if keys.is_empty() {
+        return None;
+    }
+
+    let author_public = if let Some(suri) = env::var(POWR_MINER_SURI_ENV).ok().filter(|v| !v.trim().is_empty()) {
+        match sr25519::Pair::from_string(&suri, None) {
+            Ok(pair) => {
+                let target = pair.public();
+                keys.into_iter().find(|k| *k == target).unwrap_or(target)
+            }
+            Err(_) => keys.into_iter().next()?,
+        }
+    } else {
+        keys.into_iter().next()?
+    };
+
     let account: gmb_runtime::AccountId =
         sp_runtime::MultiSigner::from(author_public).into_account();
     Some(account.encode())
 }
 
 fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceError> {
-    if !keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE).is_empty() {
+    let keys = keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE);
+    let configured_suri = env::var(POWR_MINER_SURI_ENV).ok().filter(|v| !v.trim().is_empty());
+
+    if let Some(suri) = configured_suri.as_ref() {
+        let pair = sr25519::Pair::from_string(suri, None).map_err(|e| {
+            ServiceError::Other(format!("invalid {}: {e}", POWR_MINER_SURI_ENV))
+        })?;
+        let configured_public = pair.public();
+        if keys.iter().any(|k| *k == configured_public) {
+            return Ok(());
+        }
+        keystore
+            .sr25519_generate_new(POW_AUTHOR_KEY_TYPE, Some(suri))
+            .map_err(|e| ServiceError::Other(format!("failed to generate configured powr key: {e}")))?;
+        return Ok(());
+    }
+
+    if !keys.is_empty() {
         return Ok(());
     }
 
@@ -208,9 +253,17 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
         .build(),
     );
 
+    let (grandpa_block_import, grandpa_link) = sc_consensus_grandpa::block_import(
+        client.clone(),
+        GRANDPA_JUSTIFICATION_PERIOD,
+        &(client.clone() as Arc<_>),
+        select_chain.clone(),
+        telemetry.as_ref().map(|x| x.handle()),
+    )?;
+
     let algorithm = SimplePow::new(client.clone());
     let pow_block_import = PowBlockImport::new(
-        client.clone(),
+        grandpa_block_import.clone(),
         client.clone(),
         algorithm.clone(),
         0,
@@ -223,7 +276,7 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
 
     let import_queue = sc_consensus_pow::import_queue(
         Box::new(pow_block_import),
-        None,
+        Some(Box::new(grandpa_block_import.clone())),
         algorithm,
         &task_manager.spawn_essential_handle(),
         config.prometheus_registry(),
@@ -237,7 +290,7 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
         keystore_container,
         select_chain,
         transaction_pool,
-        other: telemetry,
+        other: (grandpa_block_import, grandpa_link, telemetry),
     })
 }
 
@@ -255,15 +308,33 @@ pub fn new_full<
         keystore_container,
         select_chain,
         transaction_pool,
-        other: mut telemetry,
+        other: (block_import, grandpa_link, mut telemetry),
     } = new_partial(&config)?;
 
-    let net_config = sc_network::config::FullNetworkConfiguration::<
+    let mut net_config = sc_network::config::FullNetworkConfiguration::<
         Block,
         <Block as sp_runtime::traits::Block>::Hash,
         N,
     >::new(&config.network, config.prometheus_registry().cloned());
     let metrics = N::register_notification_metrics(config.prometheus_registry());
+    let peer_store_handle = net_config.peer_store_handle();
+    let grandpa_protocol_name = sc_consensus_grandpa::protocol_standard_name(
+        &client.block_hash(0).ok().flatten().expect("Genesis block exists; qed"),
+        &config.chain_spec,
+    );
+    let (grandpa_protocol_config, grandpa_notification_service) =
+        sc_consensus_grandpa::grandpa_peers_set_config::<_, N>(
+            grandpa_protocol_name.clone(),
+            metrics.clone(),
+            peer_store_handle,
+        );
+    net_config.add_notification_protocol(grandpa_protocol_config);
+
+    let warp_sync = Arc::new(sc_consensus_grandpa::warp_proof::NetworkProvider::new(
+        backend.clone(),
+        grandpa_link.shared_authority_set().clone(),
+        Vec::new(),
+    ));
 
     let (network, system_rpc_tx, tx_handler_controller, sync_service) =
         sc_service::build_network(sc_service::BuildNetworkParams {
@@ -274,7 +345,7 @@ pub fn new_full<
             spawn_handle: task_manager.spawn_handle(),
             import_queue,
             block_announce_validator_builder: None,
-            warp_sync_config: None,
+            warp_sync_config: Some(WarpSyncConfig::WithProvider(warp_sync)),
             block_relay: None,
             metrics,
         })?;
@@ -302,6 +373,9 @@ pub fn new_full<
         );
     }
 
+    let role = config.role;
+    let name = config.network.node_name.clone();
+    let enable_grandpa = !config.disable_grandpa;
     let prometheus_registry = config.prometheus_registry().cloned();
 
     let rpc_extensions_builder = {
@@ -317,10 +391,11 @@ pub fn new_full<
         })
     };
 
+    let keystore = keystore_container.keystore();
     let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         network: Arc::new(network.clone()),
         client: client.clone(),
-        keystore: keystore_container.keystore(),
+        keystore: keystore.clone(),
         task_manager: &mut task_manager,
         transaction_pool: transaction_pool.clone(),
         rpc_builder: rpc_extensions_builder,
@@ -334,7 +409,6 @@ pub fn new_full<
     })?;
 
     // 中文注释：本链制度要求“安装全节点软件即可参与挖矿”，不再依赖 authority 角色开关。
-    let keystore = keystore_container.keystore();
     ensure_powr_key(&keystore)?;
 
     let proposer_factory = sc_basic_authorship::ProposerFactory::new(
@@ -350,7 +424,7 @@ pub fn new_full<
         .ok_or_else(|| ServiceError::Other("powr key missing after generation attempt".into()))?;
 
     let pow_block_import = PowBlockImport::new(
-        client.clone(),
+        block_import,
         client.clone(),
         algorithm.clone(),
         0,
@@ -385,6 +459,53 @@ pub fn new_full<
     );
 
     start_cpu_miner(worker);
+
+    if enable_grandpa {
+        let local_grandpa_keys = keystore.ed25519_public_keys(sp_consensus_grandpa::KEY_TYPE);
+        let current_authorities = grandpa_link.shared_authority_set().current_authorities();
+        let has_local_grandpa_authority = current_authorities
+            .iter()
+            .any(|(id, _)| local_grandpa_keys.iter().any(|local| id.encode() == local.encode()));
+        let grandpa_keystore = if role.is_authority() && has_local_grandpa_authority {
+            Some(keystore.clone())
+        } else {
+            None
+        };
+        if role.is_authority() && grandpa_keystore.is_none() {
+            eprintln!(
+                "WARNING: authority role enabled but no matching local GRANDPA key for current authority set; this node will not cast finality votes."
+            );
+        }
+        let grandpa_config = sc_consensus_grandpa::Config {
+            gossip_duration: Duration::from_millis(333),
+            justification_generation_period: GRANDPA_JUSTIFICATION_PERIOD,
+            name: Some(name),
+            observer_enabled: !role.is_authority() || grandpa_keystore.is_none(),
+            keystore: grandpa_keystore,
+            local_role: role,
+            telemetry: telemetry.as_ref().map(|x| x.handle()),
+            protocol_name: grandpa_protocol_name,
+        };
+
+        let grandpa_params = sc_consensus_grandpa::GrandpaParams {
+            config: grandpa_config,
+            link: grandpa_link,
+            network: network.clone(),
+            sync: Arc::new(sync_service),
+            notification_service: grandpa_notification_service,
+            voting_rule: sc_consensus_grandpa::VotingRulesBuilder::default().build(),
+            prometheus_registry,
+            shared_voter_state: sc_consensus_grandpa::SharedVoterState::empty(),
+            telemetry: telemetry.as_ref().map(|x| x.handle()),
+            offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool),
+        };
+
+        task_manager.spawn_essential_handle().spawn_blocking(
+            "grandpa-voter",
+            None,
+            sc_consensus_grandpa::run_grandpa_voter(grandpa_params)?,
+        );
+    }
 
     Ok(task_manager)
 }

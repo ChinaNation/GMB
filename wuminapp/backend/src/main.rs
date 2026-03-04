@@ -16,6 +16,11 @@ async fn main() {
         .compact()
         .init();
 
+    match std::env::var("WUMINAPP_API_TOKEN") {
+        Ok(v) if !v.trim().is_empty() => {}
+        _ => panic!("WUMINAPP_API_TOKEN is required and must be non-empty"),
+    }
+
     let state = Arc::new(AppState {
         service: "wuminapp-backend",
         version: env!("CARGO_PKG_VERSION"),

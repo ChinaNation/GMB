@@ -251,22 +251,6 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
             "challenge_id, signature, new_backup_pubkey are required",
         );
     }
-    let new_backup_seed_hex = input
-        .new_backup_seed_hex
-        .as_ref()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
-    if let Some(seed) = new_backup_seed_hex.as_ref() {
-        let derived_pubkey = derive_pubkey_hex_from_seed(seed.as_str());
-        if !derived_pubkey.eq_ignore_ascii_case(input.new_backup_pubkey.trim()) {
-            return api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "new_backup_seed_hex does not match new_backup_pubkey",
-            );
-        }
-    }
-
     let now = Utc::now();
     let (challenge_id, rotate_result, promoted_slot, new_main_pubkey, next_version) = {
         let mut store = match store_write_or_500(&state) {
@@ -375,9 +359,6 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
             .get_mut(input.challenge_id.trim())
         {
             challenge_mut.consumed = true;
-        }
-        if let Some(seed) = new_backup_seed_hex.as_ref() {
-            upsert_seed_for_pubkey(&state, input.new_backup_pubkey.trim(), seed.as_str());
         }
         store.chain_keyring_state = Some(rotate_result.state.clone());
         sync_key_admin_users(&mut store);

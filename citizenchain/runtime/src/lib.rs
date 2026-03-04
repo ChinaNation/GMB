@@ -41,6 +41,8 @@ pub mod genesis_config_presets;
 /// to even the core data structures.
 pub mod opaque {
     use super::*;
+    use sp_consensus_grandpa::AuthorityId as GrandpaId;
+    use sp_runtime::impl_opaque_keys;
     use sp_runtime::{
         generic,
         traits::{BlakeTwo256, Hash as HashT},
@@ -56,6 +58,12 @@ pub mod opaque {
     pub type BlockId = generic::BlockId<Block>;
     /// Opaque block hash type.
     pub type Hash = <BlakeTwo256 as HashT>::Output;
+
+    impl_opaque_keys! {
+        pub struct SessionKeys {
+            pub grandpa: GrandpaId,
+        }
+    }
 }
 
 // To learn more about runtime versioning, see:
@@ -263,12 +271,15 @@ mod runtime {
     #[runtime::pallet_index(1)]
     pub type Timestamp = pallet_timestamp;
 
-    // 纯 PoW 共识链：移除 Aura/Grandpa，保留基础系统与业务模块。
+    // 纯 PoW 出块 + GRANDPA 最终性。
     #[runtime::pallet_index(2)]
     pub type Balances = pallet_balances;
 
     #[runtime::pallet_index(3)]
     pub type TransactionPayment = pallet_transaction_payment;
+
+    #[runtime::pallet_index(15)]
+    pub type Grandpa = pallet_grandpa;
 
     // 链下交易手续费与清算上链模块
     #[runtime::pallet_index(4)]
@@ -313,6 +324,10 @@ mod runtime {
     // 决议销毁治理模块：本机构内部投票通过后销毁本机构交易地址余额
     #[runtime::pallet_index(14)]
     pub type ResolutionDestroGov = resolution_destro_gov;
+
+    // 最终性密钥治理模块：国储会/省储会内部投票通过后替换 GRANDPA 投票公钥
+    #[runtime::pallet_index(16)]
+    pub type FinalityKeyGov = finality_key_gov;
 
     // 多签交易模块：duoqian_address 创建/注销与半数签名校验
     #[runtime::pallet_index(17)]

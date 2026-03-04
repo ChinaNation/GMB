@@ -30,6 +30,7 @@ use frame_support::{
     weights::Weight,
 };
 use sp_api::impl_runtime_apis;
+use sp_consensus_grandpa::{AuthorityId, AuthorityList, OpaqueKeyOwnershipProof, SetId};
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
     traits::Block as BlockT,
@@ -40,7 +41,7 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-    AccountId, Balance, Block, Executive, InherentDataExt, Nonce, Runtime, RuntimeCall,
+    AccountId, Balance, Block, Executive, Grandpa, InherentDataExt, Nonce, Runtime, RuntimeCall,
     RuntimeGenesisConfig, System, TransactionPayment, VERSION,
 };
 
@@ -117,12 +118,39 @@ impl_runtime_apis! {
     }
 
     impl sp_session::SessionKeys<Block> for Runtime {
-        fn generate_session_keys(_seed: Option<Vec<u8>>) -> Vec<u8> {
-            Vec::new()
+        fn generate_session_keys(seed: Option<Vec<u8>>) -> Vec<u8> {
+            super::opaque::SessionKeys::generate(seed)
         }
 
-        fn decode_session_keys(_encoded: Vec<u8>) -> Option<Vec<(Vec<u8>, KeyTypeId)>> {
-            Some(Vec::new())
+        fn decode_session_keys(encoded: Vec<u8>) -> Option<Vec<(Vec<u8>, KeyTypeId)>> {
+            super::opaque::SessionKeys::decode_into_raw_public_keys(&encoded)
+        }
+    }
+
+    impl sp_consensus_grandpa::GrandpaApi<Block> for Runtime {
+        fn grandpa_authorities() -> AuthorityList {
+            Grandpa::grandpa_authorities()
+        }
+
+        fn current_set_id() -> SetId {
+            Grandpa::current_set_id()
+        }
+
+        fn submit_report_equivocation_unsigned_extrinsic(
+            _equivocation_proof: sp_consensus_grandpa::EquivocationProof<
+                <Block as BlockT>::Hash,
+                sp_runtime::traits::NumberFor<Block>,
+            >,
+            _key_owner_proof: OpaqueKeyOwnershipProof,
+        ) -> Option<()> {
+            None
+        }
+
+        fn generate_key_ownership_proof(
+            _set_id: SetId,
+            _authority_id: AuthorityId,
+        ) -> Option<OpaqueKeyOwnershipProof> {
+            None
         }
     }
 
