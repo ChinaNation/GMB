@@ -44,7 +44,7 @@ use frame_support::{
 };
 use frame_system::limits::{BlockLength, BlockWeights};
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
-use sp_core::sr25519;
+use sp_core::{sr25519, Void};
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
 use sp_runtime::{
     traits::{AccountIdConversion, IdentifyAccount, One},
@@ -188,6 +188,25 @@ impl pallet_balances::Config for Runtime {
     type RuntimeHoldReason = RuntimeHoldReason;
     type RuntimeFreezeReason = RuntimeFreezeReason;
     type DoneSlashHandler = ();
+}
+
+parameter_types! {
+    pub const MaxGrandpaAuthorities: u32 = 64;
+    pub const MaxGrandpaNominators: u32 = 0;
+    // 中文注释：保留最近若干 set_id 与会话映射，便于后续接入等值投票追溯/举报能力。
+    pub const MaxSetIdSessionEntries: u64 = 128;
+}
+
+impl pallet_grandpa::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
+    type MaxAuthorities = MaxGrandpaAuthorities;
+    type MaxNominators = MaxGrandpaNominators;
+    type MaxSetIdSessionEntries = MaxSetIdSessionEntries;
+    // 中文注释：当前版本不启用链上等值投票惩罚（无 session/historical 证明体系）。
+    // 但保留 MaxSetIdSessionEntries 以便后续平滑接入。
+    type KeyOwnerProof = Void;
+    type EquivocationReportSystem = ();
 }
 
 parameter_types! {
@@ -353,11 +372,15 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::ResolutionDestroGov(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
+            RuntimeCall::FinalityKeyGov(_) => {
+                onchain_transaction_fee::AmountExtractResult::NoAmount
+            }
             RuntimeCall::DuoqianTransactionPow(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免“有金额但漏提取”。
             RuntimeCall::Balances(_) => onchain_transaction_fee::AmountExtractResult::Unknown,
+            _ => onchain_transaction_fee::AmountExtractResult::Unknown,
         }
     }
 }
@@ -788,6 +811,12 @@ parameter_types! {
     /// 管理员替换提案过期清理窗口（区块数）。
     pub const AdminReplacementStaleProposalLifetime: u32 =
         primitives::count_const::VOTING_DURATION_BLOCKS * 2;
+    /// 最终性密钥替换提案过期清理窗口（区块数）。
+    pub const FinalityKeyStaleProposalLifetime: u32 =
+        primitives::count_const::VOTING_DURATION_BLOCKS * 2;
+    /// GRANDPA authority set 变更生效延迟（单位：区块）。
+    /// 取非 0，给运维注入新 gran 私钥预留窗口，避免立即切换导致短时失票。
+    pub const GrandpaAuthoritySetChangeDelay: u32 = 30;
 }
 
 impl admins_origin_gov::Config for Runtime {
@@ -803,6 +832,14 @@ impl resolution_destro_gov::Config for Runtime {
     type StaleProposalLifetime = AdminReplacementStaleProposalLifetime;
     type InternalVoteEngine = VotingEngineSystem;
     type WeightInfo = resolution_destro_gov::SubstrateWeight<Runtime>;
+}
+
+impl finality_key_gov::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type StaleProposalLifetime = FinalityKeyStaleProposalLifetime;
+    type GrandpaChangeDelay = GrandpaAuthoritySetChangeDelay;
+    type InternalVoteEngine = VotingEngineSystem;
+    type WeightInfo = finality_key_gov::SubstrateWeight<Runtime>;
 }
 
 /// 禁用特权原点：始终拒绝任何 Origin，确保不存在可被调用的特权入口。

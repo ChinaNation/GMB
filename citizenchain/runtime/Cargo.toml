@@ -19,6 +19,7 @@ workspace = true
 codec = { features = ["derive"], workspace = true }
 scale-info = { features = ["derive", "serde"], workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
+hex = { version = "0.4", default-features = false }
 primitives = { path = "../../primitives", default-features = false } # 引用统一常量
 
 # frame
@@ -30,6 +31,7 @@ frame-try-runtime = { optional = true, workspace = true }
 
 # frame pallets
 pallet-balances = { workspace = true }
+pallet-grandpa = { workspace = true }
 pallet-timestamp = { workspace = true }
 pallet-transaction-payment = { workspace = true }
 
@@ -37,6 +39,7 @@ pallet-transaction-payment = { workspace = true }
 sp-api = { workspace = true }
 sp-block-builder = { workspace = true }
 sp-consensus-pow = { workspace = true }
+sp-consensus-grandpa = { workspace = true }
 sp-core = { features = ["serde"], workspace = true }
 sp-genesis-builder = { workspace = true }
 sp-inherents = { workspace = true }
@@ -67,6 +70,7 @@ resolution-issuance-iss = { path = "../issuance/resolution-issuance-iss", defaul
 resolution-issuance-gov = { path = "../governance/resolution-issuance-gov", default-features = false }
 voting-engine-system = { path = "../governance/voting-engine-system", default-features = false }
 admins-origin-gov = { path = "../governance/admins-origin-gov", default-features = false }
+finality-key-gov = { path = "../governance/finality-key-gov", default-features = false }
 runtime-root-upgrade = { path = "../governance/runtime-root-upgrade", default-features = false }
 resolution-destro-gov = { path = "../governance/resolution-destro-gov", default-features = false }
 
@@ -86,6 +90,7 @@ std = [
 	"frame-system/std",
 	"frame-try-runtime?/std",
 	"pallet-balances/std",
+	"pallet-grandpa/std",
 	"shengbank-stake-interest/std",
 	"fullnode-pow-reward/std",
 	"citizen-lightnode-issuance/std",
@@ -97,6 +102,7 @@ std = [
 	"resolution-issuance-gov/std",
 	"voting-engine-system/std",
 	"admins-origin-gov/std",
+	"finality-key-gov/std",
 	"runtime-root-upgrade/std",
 	"resolution-destro-gov/std",
 	"pallet-timestamp/std",
@@ -104,9 +110,11 @@ std = [
 	"pallet-transaction-payment/std",
 	"scale-info/std",
 	"serde_json/std",
+	"hex/std",
 	"sp-api/std",
 	"sp-block-builder/std",
 	"sp-consensus-pow/std",
+	"sp-consensus-grandpa/std",
 	"sp-core/std",
 	"sp-genesis-builder/std",
 	"sp-inherents/std",
@@ -125,6 +133,7 @@ runtime-benchmarks = [
 	"frame-system-benchmarking/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
 	"pallet-balances/runtime-benchmarks",
+	"pallet-grandpa/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-transaction-payment/runtime-benchmarks",
 	"shengbank-stake-interest/runtime-benchmarks",
@@ -138,6 +147,7 @@ runtime-benchmarks = [
 	"resolution-issuance-gov/runtime-benchmarks",
 	"voting-engine-system/runtime-benchmarks",
 	"admins-origin-gov/runtime-benchmarks",
+	"finality-key-gov/runtime-benchmarks",
 	"runtime-root-upgrade/runtime-benchmarks",
 	"resolution-destro-gov/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
@@ -148,6 +158,7 @@ try-runtime = [
 	"frame-system/try-runtime",
 	"frame-try-runtime/try-runtime",
 	"pallet-balances/try-runtime",
+	"pallet-grandpa/try-runtime",
 	"pallet-timestamp/try-runtime",
 	"pallet-transaction-payment/try-runtime",
 	"shengbank-stake-interest/try-runtime",
@@ -161,6 +172,7 @@ try-runtime = [
 	"resolution-issuance-gov/try-runtime",
 	"voting-engine-system/try-runtime",
 	"admins-origin-gov/try-runtime",
+	"finality-key-gov/try-runtime",
 	"runtime-root-upgrade/try-runtime",
 	"resolution-destro-gov/try-runtime",
 	"sp-runtime/try-runtime",
@@ -178,3 +190,6 @@ metadata-hash = ["substrate-wasm-builder/metadata-hash"]
 # A convenience feature for enabling things when doing a build
 # for an on-chain release.
 on-chain-release-build = ["metadata-hash", "sp-api/disable-logging"]
+
+[dev-dependencies]
+ed25519-dalek = "2.2.0"
