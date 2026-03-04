@@ -58,6 +58,7 @@ SFID_PUBLIC_SEARCH_TOKEN=CHANGE_ME_PUBLIC_SEARCH_TOKEN
 # 主签名密钥和 key id（必须替换）
 SFID_SIGNING_SEED_HEX=CHANGE_ME_SIGNING_SEED_HEX
 SFID_KEY_ID=sfid-master-v1
+SFID_RUNTIME_META_KEY=CHANGE_ME_RUNTIME_META_KEY
 
 # PII 列加密密钥（用于 archive_bindings 加密列）
 SFID_PII_KEY=CHANGE_ME_PII_KEY
@@ -78,6 +79,7 @@ required_vars=(
   SFID_PUBLIC_SEARCH_TOKEN
   SFID_SIGNING_SEED_HEX
   SFID_KEY_ID
+  SFID_RUNTIME_META_KEY
   SFID_PII_KEY
 )
 
@@ -108,12 +110,19 @@ for f in \
   006_super_admin_catalog.sql \
   007_refresh_admin_views.sql \
   008_chain_idempotency_reward_state.sql \
-  009_runtime_cache_and_pii_encryption.sql
+  009_runtime_cache_and_pii_encryption.sql \
+  010_drop_plaintext_pii_columns.sql
 
 do
   echo "执行迁移: ${f}"
   psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f "${APP_HOME}/backend/db/migrations/${f}"
 done
+
+# 收敛应用角色 DELETE 权限：仅允许必要运行时表，禁止删除审计日志
+psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 <<'SQL'
+GRANT DELETE ON TABLE binding_unique_locks, bind_reward_states, runtime_cache_entries, runtime_misc TO sfid_app;
+REVOKE DELETE ON TABLE audit_logs FROM sfid_app;
+SQL
 
 systemctl daemon-reload
 systemctl enable sfid-backend

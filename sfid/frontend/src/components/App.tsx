@@ -308,10 +308,7 @@ export default function App() {
   }>();
   const [replaceSuperForm] = Form.useForm<{ province: string; admin_pubkey: string }>();
   const [keyringForm] = Form.useForm<{ initiator_pubkey: string }>();
-  const [keyringCommitForm] = Form.useForm<{
-    new_backup_pubkey: string;
-    new_backup_seed_hex?: string;
-  }>();
+  const [keyringCommitForm] = Form.useForm<{ new_backup_pubkey: string }>();
   const [sfidToolForm] = Form.useForm<{
     a3: string;
     p1: string;
@@ -823,10 +820,7 @@ export default function App() {
     }
   };
 
-  const onCommitKeyringRotate = async (values: {
-    new_backup_pubkey: string;
-    new_backup_seed_hex?: string;
-  }) => {
+  const onCommitKeyringRotate = async (values: { new_backup_pubkey: string }) => {
     if (!auth || !keyringSignedPayload || !keyringChallenge) {
       message.error('请先完成签名校验');
       return;
@@ -836,8 +830,7 @@ export default function App() {
       const result = await commitKeyringRotate(auth, {
         challenge_id: keyringSignedPayload.challenge_id,
         signature: keyringSignedPayload.signature,
-        new_backup_pubkey: values.new_backup_pubkey.trim(),
-        new_backup_seed_hex: values.new_backup_seed_hex?.trim() || undefined
+        new_backup_pubkey: values.new_backup_pubkey.trim()
       });
       if (result.chain_submit_ok) {
         message.success(`主密钥轮换成功，新版本：${result.version}`);
@@ -2287,13 +2280,6 @@ export default function App() {
                     ]}
                   >
                     <Input placeholder="新备用公钥" />
-                  </Form.Item>
-                  <Form.Item
-                    name="new_backup_seed_hex"
-                    label="新备用私钥(可选)"
-                    tooltip="可选：如果要让新备用未来可升主并由系统主签名，请填其私钥种子"
-                  >
-                    <Input.Password placeholder="新备用私钥(可选)" />
                   </Form.Item>
                   <Space>
                     <Button

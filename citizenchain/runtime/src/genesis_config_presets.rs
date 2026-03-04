@@ -24,6 +24,8 @@ use crate::AccountId;
 #[cfg(feature = "std")]
 use codec::Decode;
 #[cfg(feature = "std")]
+use hex_literal::hex;
+#[cfg(feature = "std")]
 use primitives::{
     china::china_cb::CHINA_CB, china::china_ch::CHINA_CH, core_const::SS58_FORMAT,
     genesis::GENESIS_ISSUANCE,
@@ -40,6 +42,55 @@ fn account_to_genesis_ss58(account: &AccountId) -> String {
     // 创世配置地址使用链统一 SS58 前缀（2027）。
     account.to_ss58check_with_version(Ss58AddressFormat::custom(SS58_FORMAT))
 }
+
+#[cfg(feature = "std")]
+const GRANDPA_AUTHORITY_KEYS_HEX: &[&str] = &[
+    // 中文注释：44 个最终性验证节点公钥（1 国储会 + 43 省储会），固定在创世配置。
+    "3719c39cf92462da2e22a7dfa760f463c801dd86a27a4151d24935e42692e5b5",
+    "14803cd63d5ad6c76e0141f730f18f2c4a30ecfaa3631681e490cb5e25ca0958",
+    "8d9de5d1b44d39f9567b76a5348d68a497d06b73215d5e89bfdf4f6a6b2f36aa",
+    "febdaa3b1c416bffc6ba1e13f799b5295c4644a0d695fe6da7bff3cf6754a903",
+    "669d64a0c7c7ba5be629580d8898f9003105b13d18372392cd85562b2782b233",
+    "8860948348df8b4efe240829671408476643dbf8d2e07d0bca8f3ea6271c5c51",
+    "2d6cfe57d3212c066260cb568645ed0d442a632b24031930b97ca3242111e021",
+    "26498679676d181b1346964f5815b94bf766bd284d529ce8e5625547af1fbab3",
+    "1c03da677a1ae2e9b4907dc72016ea65adc3d20711f93b8e96f2aa75468072c0",
+    "4b9547092662fba8d70658eee8c999c5f5044b2574054a3ce62b2ed19b5645d1",
+    "782c1fc618af8c3e1eb225f1b068eb35dfc54e3db2c8067a0ddb55308d62a3d4",
+    "a2a7643951e81f6189834bd5c70ee27eddd402ac7c4ef749f40955042b4bb43e",
+    "a3819330ccac67a93f09679f81e919e5cc2eedf7166e69a62d402be6ec39de2a",
+    "ecbfcf8a0c4e9954f0d8ea71d85b91ad0142b5c5821a74fab99a041be4192948",
+    "63e4ac90760504c650773312df9c4ce2faec662c544aeec9c6fcad41654a78c8",
+    "e9227e239d61c3ba1463ac0b2206cecf35ebe73a48c7a702a76aeac20327c653",
+    "7ce0745ab3270b66570b4b2fa7ef0ea2fd4df5065488c05282cd8ed8c938c199",
+    "b10a24b974dabe5f008973007ea3fb67c4af2c7ae77b71f01e0249ac366daab8",
+    "14cd5c8e07f738cc3719b4e66c33d81fa3a4baf6f6e50ae1d48d4e2ffb8e47b2",
+    "599aa6bb3cf9d48d99599de3c5948308e32dbb427f49346cdab95fe82863b747",
+    "26daeb08619448a235d712daa63bf81b97710f684801d22c847624e070e4f600",
+    "fa9e7becc8a5984cf15c50ca83e3918adc79521281e2d75ebfcccb7d3e5be8f3",
+    "e0dfc5bde6f32d6d41648006c69f6489dea06c37259c57b716ff025fa4fa31af",
+    "015829c6f8588903ecbf17207b5fad6d5e766f7512325b13850b43ddd2886305",
+    "1527123566372a8082a2d1b62f2dbd00ae3c56f2f71b51b8228178400774c3f3",
+    "db5d32816bddb7a0e1d0d17d3863923eb32f76eed87604d0d410a74900195b87",
+    "9ffdedc39ab82f7766022a3b53149ffb0f2611567961c0570880adab1a01af88",
+    "8133cf439c9142737b34655c48658135d7f946c9d60615a80ed14bad4fec1141",
+    "94a7d8f2f0b613dbb1509cc31ffa832188af9f547a0ce25ffe4be56a1cb10e07",
+    "6c5ee4dd2a7b9f82a2f04e9eb3bf5ba970adce79cffa662d2dc84adc4ce42492",
+    "903f1fcba7a60aeca0221c0fe9dad52b28437775732360a318bc07326638dd39",
+    "2f0fcd64f31a318077484148bdf3db0d95de25860764985214356dc3371d598e",
+    "eaf447ce1635e7165e9588b6d2864ddf31e2a33ccff69f7a46d69ee2317b4a52",
+    "004de5bc4fa8fe5cdce4c1cb00ddce6db55ce5926b8189741cb3cd43d8155f99",
+    "ad9ea30f1f967672f8d1b7aabbd8443d860dd2af2e9c9fd9b6a0358fe1690d20",
+    "e1dfa8bc752665d0becd9287b28415ced4193371f7cde21e244a8f5b6a1a1a48",
+    "ad5fa47ad61097e5dbe077066f34e3cdba31ca0194c184fe556a2f62c4c18172",
+    "ae47a89d45e0649ac98aa832eb7d6ae10d6111b30cf64eb118c428c24a00081d",
+    "82842c89fe9ce2eca5df47ad92d787e255c0b0dd3ec18947b801077b57743520",
+    "4684cd4740972bca1df018cce973771df605cf404c3762c1976f52f9700db391",
+    "87f64d53701b846b019341f356e738a87d6c20b244bf2e2d89351717b385a8f3",
+    "e7ef1b4ae92e95e9c8b3fb5856e86ea77f596e82c75af20802d61106ca26a25d",
+    "0bde5599cdd158c196a45025689be5166a0e4e0ef9e932523040debed85f8b59",
+    "a69514c16012e39f3bc49941afa58871aeb46bbfb7825bd296133bad9cd0db9a",
+];
 
 #[cfg(all(feature = "std", test))]
 fn json_amount_to_u128(v: &Value) -> Option<u128> {
@@ -87,21 +138,15 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
         .collect();
 
     // 中文注释：SFID 三把创世账户固定为已确认公钥；不依赖 primitives 常量命名。
-    let sfid_main = AccountId::new([
-        0xc6, 0xed, 0x4e, 0x83, 0x20, 0x57, 0xd9, 0x3c, 0x08, 0xc3, 0x3e, 0xb9, 0xb0, 0x29, 0x13,
-        0x4d, 0x88, 0x13, 0x0f, 0x88, 0xb5, 0x85, 0x7a, 0x9c, 0x8a, 0x74, 0xcd, 0xb2, 0xf6, 0x72,
-        0xb1, 0x0a,
-    ]);
-    let sfid_backup_1 = AccountId::new([
-        0x46, 0x9e, 0x28, 0xdc, 0x42, 0xf5, 0xb3, 0x7f, 0xb6, 0x91, 0xcd, 0x01, 0xc9, 0xe8, 0xf8,
-        0x06, 0xb2, 0x0a, 0x3c, 0xb2, 0xd7, 0x5c, 0x9f, 0x94, 0x68, 0xe3, 0x29, 0x84, 0xa3, 0x32,
-        0x60, 0x56,
-    ]);
-    let sfid_backup_2 = AccountId::new([
-        0x56, 0x70, 0x1c, 0xdf, 0x56, 0x29, 0xb9, 0x6e, 0xc0, 0xd1, 0x1f, 0x41, 0xaf, 0x78, 0x5b,
-        0x3a, 0x9e, 0x03, 0xa0, 0xfd, 0x7d, 0xa5, 0x97, 0xce, 0x58, 0x62, 0xbe, 0xe0, 0xe3, 0xe8,
-        0x34, 0x65,
-    ]);
+    let sfid_main = AccountId::new(hex!(
+        "14e4f684453a0ccf9ebb3113d05ae1da934b7f7b2dbd3b9dcdf4138357ab1607"
+    ));
+    let sfid_backup_1 = AccountId::new(hex!(
+        "9084bbff7d86275a50a3f460a435ce4d89c49e659df30a52bce67d9c7e614303"
+    ));
+    let sfid_backup_2 = AccountId::new(hex!(
+        "502a1021f41e025c8c86cb5f486ae9cb83fb8cadd9db29d2dde354baa650f73a"
+    ));
 
     // 中文注释：决议发行合法收款账户改为链上存储初始化，后续可由治理动态更新。
     let issuance_allowed_recipients_json: Vec<Value> = CHINA_CB
@@ -114,9 +159,18 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
         })
         .collect();
 
+    // 中文注释：最终性公钥从本文件固定清单读取，不依赖 CHINA_CB 动态映射。
+    let grandpa_authorities_json: Vec<Value> = GRANDPA_AUTHORITY_KEYS_HEX
+        .iter()
+        .map(|hex_key| json!([format!("0x{hex_key}"), 1]))
+        .collect();
+
     json!({
         "balances": {
             "balances": balances_json,
+        },
+        "grandpa": {
+            "authorities": grandpa_authorities_json,
         },
         "sfidCodeAuth": {
             "sfidMainAccount": account_to_genesis_ss58(&sfid_main),
@@ -132,12 +186,12 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
 /// Return the development genesis config.
 #[cfg(feature = "std")]
 pub fn mainnet_config_genesis() -> Value {
-    // 临时测试账户（发行前请删除）
-    let temporary_test_account = AccountId::from_ss58check(
-        "w5DXdrGjekPX6f2JDJzTAXGZyu2iLq5GPMPAbhpUmunEqEpSU",
+    // 开发账户
+    let development_account = AccountId::from_ss58check(
+        "w5Gyz7cNSa4UPqvwC1L4UPCcJwdFbZHt7TL1CCwWyxzDuYCnS",
     )
-    .expect("temporary test account ss58 must be valid");
-    testnet_genesis(vec![temporary_test_account], AccountId::new([0u8; 32]))
+    .expect("development account ss58 must be valid");
+    testnet_genesis(vec![development_account], AccountId::new([0u8; 32]))
 }
 
 /// Provides the JSON representation of predefined genesis config for given `id`.
@@ -174,7 +228,9 @@ pub fn preset_names() -> Vec<PresetId> {
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use super::*;
+    use ed25519_dalek::VerifyingKey;
     use primitives::china::china_cb::CHINA_CB;
+    use std::collections::BTreeSet;
 
     #[test]
     fn mainnet_genesis_contains_nrc_and_all_shengbank_balances() {
@@ -183,7 +239,7 @@ mod tests {
             .as_array()
             .expect("balances.balances should be an array");
 
-        // 中文注释：创世应包含 1 个国储会地址 + 43 个省储行 keyless 质押地址 + 1 个临时测试地址。
+        // 中文注释：创世包含 1 个国储会地址 + 43 个省储行 keyless 质押地址 + 1 个开发地址。
         assert_eq!(balances.len(), 1 + CHINA_CH.len() + 1);
     }
 
@@ -228,7 +284,7 @@ mod tests {
             .sum();
         let total_shengbank_stake: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
 
-        // 中文注释：创世总注入 = 国储会创世发行 + 省储行创立发行 + 临时测试账户初始余额（1_000_000_000 分）。
+        // 中文注释：创世总注入 = 国储会创世发行 + 省储行创立发行 + 开发账户初始余额（1_000_000_000 分）。
         assert_eq!(
             total_in_patch,
             GENESIS_ISSUANCE + total_shengbank_stake + 1_000_000_000u128
@@ -242,5 +298,44 @@ mod tests {
             .as_array()
             .expect("nationalInstitutionalRegistry.institutions should be an array");
         assert!(institutions.is_empty());
+    }
+
+    #[test]
+    fn grandpa_authority_keys_are_unique_valid_hex_and_32_bytes() {
+        let mut uniq = BTreeSet::new();
+        for key in GRANDPA_AUTHORITY_KEYS_HEX {
+            assert_eq!(key.len(), 64, "grandpa key hex must be 64 chars");
+            let bytes = hex::decode(key).expect("grandpa key must be valid hex");
+            assert_eq!(bytes.len(), 32, "grandpa pubkey must be 32 bytes");
+            let mut pubkey = [0u8; 32];
+            pubkey.copy_from_slice(&bytes);
+            VerifyingKey::from_bytes(&pubkey).expect("grandpa key must be valid ed25519 point");
+            assert!(uniq.insert(bytes), "grandpa pubkey must be unique");
+        }
+        assert_eq!(uniq.len(), 44, "must contain exactly 44 grandpa keys");
+    }
+
+    #[test]
+    fn grandpa_keys_match_china_cb_finality_keys() {
+        assert_eq!(
+            GRANDPA_AUTHORITY_KEYS_HEX.len(),
+            CHINA_CB.len(),
+            "grandpa key list length must match CHINA_CB length"
+        );
+        for (i, node) in CHINA_CB.iter().enumerate() {
+            let expected = hex::encode(node.finality_key);
+            assert_eq!(
+                GRANDPA_AUTHORITY_KEYS_HEX[i], expected,
+                "grandpa key at index {i} must match CHINA_CB.finality_key"
+            );
+        }
+    }
+
+    #[test]
+    fn china_cb_finality_keys_are_valid_ed25519_pubkeys() {
+        for node in CHINA_CB {
+            VerifyingKey::from_bytes(&node.finality_key)
+                .expect("CHINA_CB.finality_key must be valid ed25519 point");
+        }
     }
 }

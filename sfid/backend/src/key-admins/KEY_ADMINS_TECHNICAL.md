@@ -52,7 +52,6 @@
    - 必须基于已 `verify` 成功的 challenge 才可提交（未验签会返回 `rotation challenge not verified`）。
    - 提交参数：
      - `new_backup_pubkey`（新备用公钥）
-     - `new_backup_seed_hex`（可选）
    - 说明：发起备用私钥不再通过前端上传；服务端从受控密钥库按 `initiator_pubkey` 查找对应 seed。
    - 后端先完成本地主备替换，再异步推送新主公钥到区块链。
    - 不等待链上确认，不阻塞本地主密钥切换。

@@ -26,6 +26,8 @@ const FAIL_REASON_BROADCAST: &str = "broadcast failed";
 const FAIL_REASON_EXECUTION: &str = "onchain execution failed";
 const DEFAULT_CHAIN_WS_URL: &str = "ws://127.0.0.1:9944";
 const PREPARED_TTL_SECS: i64 = 180;
+const TX_STATE_TTL_SECS: i64 = 24 * 60 * 60;
+const TX_STATE_MAX: usize = 20_000;
 const AMOUNT_DECIMALS: f64 = 100.0;
 
 #[derive(Clone)]
@@ -131,6 +133,7 @@ pub async fn submit_tx(req: TxSubmitRequest) -> Result<TxSubmitData, ApiError> {
     let tx_hash_for_task = tx_hash.clone();
 
     if let Ok(mut map) = tx_state().lock() {
+        prune_tx_state(&mut map, now_secs());
         map.insert(
             tx_hash.clone(),
             TxRuntimeState {
@@ -169,7 +172,10 @@ pub async fn submit_tx(req: TxSubmitRequest) -> Result<TxSubmitData, ApiError> {
 
 pub fn get_tx_status(tx_hash: &str) -> Result<TxStatusData, ApiError> {
     let state = match tx_state().lock() {
-        Ok(map) => map.get(tx_hash).cloned(),
+        Ok(mut map) => {
+            prune_tx_state(&mut map, now_secs());
+            map.get(tx_hash).cloned()
+        }
         Err(_) => None,
     };
 
@@ -187,6 +193,7 @@ pub fn get_tx_status(tx_hash: &str) -> Result<TxStatusData, ApiError> {
 
 fn update_tx_runtime(tx_hash: &str, status: &str, failure_reason: Option<String>) {
     if let Ok(mut map) = tx_state().lock() {
+        prune_tx_state(&mut map, now_secs());
         map.insert(
             tx_hash.to_string(),
             TxRuntimeState {
@@ -195,6 +202,22 @@ fn update_tx_runtime(tx_hash: &str, status: &str, failure_reason: Option<String>
                 failure_reason,
             },
         );
+    }
+}
+
+fn prune_tx_state(map: &mut HashMap<String, TxRuntimeState>, now: i64) {
+    map.retain(|_, item| now.saturating_sub(item.updated_at) < TX_STATE_TTL_SECS);
+    if map.len() <= TX_STATE_MAX {
+        return;
+    }
+    let mut entries = map
+        .iter()
+        .map(|(k, v)| (k.clone(), v.updated_at))
+        .collect::<Vec<_>>();
+    entries.sort_by_key(|(_, ts)| *ts);
+    let overflow = map.len() - TX_STATE_MAX;
+    for (key, _) in entries.into_iter().take(overflow) {
+        map.remove(&key);
     }
 }
 
