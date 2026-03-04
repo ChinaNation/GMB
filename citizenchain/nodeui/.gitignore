@@ -1,9 +1,8 @@
 node_modules
 dist
+target
 .vite
 .DS_Store
-.test-dist
-target
 src-tauri/binaries
 src-tauri/gen/schemas
 *.tsbuildinfo

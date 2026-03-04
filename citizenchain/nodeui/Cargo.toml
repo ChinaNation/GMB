@@ -10,13 +10,3 @@ version = "0.0.1"
 authors = ["voyager_rhett <chinanation@icloud.com>"]
 repository = "https://github.com/ChinaNation/GMB"
 license = "MIT"
-
-[package]
-name = "nodeui-frontend"  # 前端模块
-edition.workspace = true
-version.workspace = true
-authors.workspace = true
-repository.workspace = true
-license = "MIT"
-
-[dependencies]
