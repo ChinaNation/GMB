@@ -3665,6 +3665,7 @@ dependencies = [
  "frame-try-runtime",
  "fullnode-pow-reward",
  "hex",
+ "hex-literal",
  "offchain-transaction-fee",
  "onchain-transaction-fee",
  "pallet-balances",

@@ -1,3 +1,4 @@
+pub mod admins;
 pub mod chain_binding;
 pub mod health;
 pub mod tx;
@@ -130,6 +131,7 @@ fn build_cors_layer() -> CorsLayer {
 
 pub fn build_router(state: Arc<AppState>) -> Router {
     let protected = Router::new()
+        .merge(admins::router())
         .merge(chain_binding::router())
         .merge(tx::router())
         .merge(wallet::router())

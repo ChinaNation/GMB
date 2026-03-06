@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wuminapp_mobile/login/models/login_models.dart';
-import 'package:wuminapp_mobile/login/services/login_sign_confirm_service.dart';
-import 'package:wuminapp_mobile/login/services/wuminapp_login_service.dart';
+import 'package:wuminapp_mobile/wallet/capabilities/sign_service.dart';
+import 'package:wuminapp_mobile/wallet/core/user_identification.dart';
 
 class QrScanPage extends StatefulWidget {
   const QrScanPage({
@@ -24,8 +24,9 @@ class QrScanPage extends StatefulWidget {
 
 class _QrScanPageState extends State<QrScanPage> {
   final MobileScannerController _controller = MobileScannerController();
-  final WuminLoginService _loginService = WuminLoginService();
-  final LoginSignConfirmService _signConfirmService = LoginSignConfirmService();
+  final SignService _loginService = SignService();
+  final UserIdentificationService _signConfirmService =
+      UserIdentificationService();
   bool _handled = false;
 
   @override
@@ -42,38 +43,25 @@ class _QrScanPageState extends State<QrScanPage> {
     await _controller.stop();
 
     try {
-      final mode = _detectMode(raw);
-      if (!mounted) {
-        return;
-      }
-
-      switch (mode) {
-        case _ScanMode.login:
-          await _showLoginDialog(raw);
-          break;
-        case _ScanMode.transfer:
-          final address = _extractAddress(raw);
-          await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => TransferDraftPage(toAddress: address),
-            ),
-          );
-          break;
-        case _ScanMode.unknown:
-          await showDialog<void>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('无法识别二维码'),
-              content: const Text('请扫描 WUMINAPP_LOGIN_V1 登录二维码或账户收款二维码。'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('确定'),
-                ),
-              ],
-            ),
-          );
-          break;
+      if (_isWuminLoginCode(raw)) {
+        await _showLoginDialog(raw);
+      } else {
+        if (!mounted) {
+          return;
+        }
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('无法识别登录二维码'),
+            content: const Text('请扫描 WUMINAPP_LOGIN_V1 登录二维码。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('确定'),
+              ),
+            ],
+          ),
+        );
       }
     } catch (e) {
       if (!mounted) {
@@ -100,38 +88,17 @@ class _QrScanPageState extends State<QrScanPage> {
     }
   }
 
-  _ScanMode _detectMode(String raw) {
-    final lower = raw.toLowerCase();
-    if (_isWuminLoginCode(raw)) {
-      return _ScanMode.login;
-    }
-    if (lower.startsWith('gmb://account/')) {
-      return _ScanMode.transfer;
-    }
-    if (RegExp(r'^[1-9A-HJ-NP-Za-km-z]{30,80}$').hasMatch(raw)) {
-      return _ScanMode.transfer;
-    }
-    return _ScanMode.unknown;
-  }
-
   bool _isWuminLoginCode(String raw) {
     try {
       final data = jsonDecode(raw);
       if (data is Map<String, dynamic>) {
         final proto = (data['proto'] ?? '').toString();
-        return proto == WuminLoginService.protocol;
+        return proto == SignService.protocol;
       }
     } catch (_) {
       // not json
     }
     return false;
-  }
-
-  String _extractAddress(String raw) {
-    if (raw.toLowerCase().startsWith('gmb://account/')) {
-      return raw.substring('gmb://account/'.length).trim();
-    }
-    return raw.trim();
   }
 
   Future<void> _showLoginDialog(String payload) async {
@@ -246,7 +213,8 @@ class _QrScanPageState extends State<QrScanPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.walletIndex == null ? '扫码' : '扫码（钱包${widget.walletIndex}）'),
+        title: Text(
+            widget.walletIndex == null ? '扫码' : '扫码（钱包${widget.walletIndex}）'),
         centerTitle: true,
       ),
       body: Stack(
@@ -272,7 +240,7 @@ class _QrScanPageState extends State<QrScanPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
-                '扫描登录挑战码或账户收款码',
+                '扫描登录挑战二维码',
                 style: TextStyle(color: Colors.white),
               ),
             ),
@@ -379,83 +347,24 @@ class _LoginReceiptPageState extends State<_LoginReceiptPage> {
           ),
           const SizedBox(height: 12),
           const SizedBox(height: 20),
-          Center(
-            child: SizedBox(
-              width: 180,
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('完成'),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('重新扫码'),
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('完成'),
+                ),
+              ),
+            ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-enum _ScanMode {
-  login,
-  transfer,
-  unknown,
-}
-
-class TransferDraftPage extends StatefulWidget {
-  const TransferDraftPage({super.key, required this.toAddress});
-
-  final String toAddress;
-
-  @override
-  State<TransferDraftPage> createState() => _TransferDraftPageState();
-}
-
-class _TransferDraftPageState extends State<TransferDraftPage> {
-  final TextEditingController _amountController = TextEditingController();
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('发起转账'),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('收款地址: ${widget.toAddress}'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: '金额',
-                hintText: '请输入转账金额',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      '已生成转账草稿：${_amountController.text}（开发中）',
-                    ),
-                  ),
-                );
-              },
-              child: const Text('确认转账'),
-            ),
-          ],
-        ),
       ),
     );
   }
