@@ -449,6 +449,14 @@
       });
     }
 
+    function inferTocLevel(text, fallbackLevel) {
+      if (/^\d+\.\d+\.\d+/.test(text)) return 3;
+      if (/^\d+\.\d+/.test(text)) return 2;
+      if (/^\d+[\.\u3002、)\s]/.test(text)) return 1;
+      if (/^第[一二三四五六七八九十百千万0-9]+章/.test(text)) return 1;
+      return fallbackLevel;
+    }
+
     function buildToc() {
       tocNavEl.innerHTML = "";
       const headings = contentEl.querySelectorAll("h1, h2, h3");
@@ -460,7 +468,8 @@
         if (!text) return;
         const id = slugify(text, used);
         heading.id = id;
-        const level = Number(heading.tagName.slice(1));
+        const tagLevel = Number(heading.tagName.slice(1));
+        const level = inferTocLevel(text, tagLevel);
         items.push({ id, text, level });
       });
 
