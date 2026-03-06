@@ -26,7 +26,7 @@ type TabKey =
   | 'settings';
 
 const WHITEPAPER_HTML_URL =
-  '/README.web.html';
+  'https://chinanation.github.io/GMB/GMB_README.html';
 const CONSTITUTION_RAW_URL =
   'https://raw.githubusercontent.com/ChinaNation/FRC/main/README.md';
 
