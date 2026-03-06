@@ -1,22 +1,19 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
+import 'package:isar/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/features/observe_accounts/observe_accounts_model.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/api_client.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/wallet_type_service.dart';
+import 'package:wuminapp_mobile/wallet/core/wallet_isar.dart';
 
 class ObservedAccountService {
   static const int _ss58Format = 2027;
-  static const _kObservedAccounts = 'observe.accounts';
   final Keyring _keyring = Keyring.sr25519;
   final ApiClient _apiClient = ApiClient();
   final WalletTypeService _walletTypeService = WalletTypeService();
 
   Future<List<ObservedAccount>> getObservedAccounts() async {
-    final prefs = await SharedPreferences.getInstance();
-    final stored = await _decode(prefs.getString(_kObservedAccounts));
+    final stored = await _load();
     if (stored.isEmpty) {
       return stored;
     }
@@ -161,25 +158,29 @@ class ObservedAccountService {
   }
 
   Future<void> _save(List<ObservedAccount> items) async {
-    final prefs = await SharedPreferences.getInstance();
+    final isar = await WalletIsar.instance.db();
     final data = items
         .map(
-          (it) => {
-            'id': it.id,
-            'orgName': it.orgName,
-            'publicKey': it.publicKey,
-            'address': it.address,
-            'balance': it.balance,
-            'source': it.source,
-          },
+          (it) => ObservedAccountEntity()
+            ..accountId = it.id
+            ..orgName = it.orgName
+            ..publicKey = it.publicKey
+            ..address = it.address
+            ..balance = it.balance
+            ..source = it.source,
         )
         .toList(growable: false);
-    await prefs.setString(_kObservedAccounts, jsonEncode(data));
+
+    await isar.writeTxn(() async {
+      await isar.observedAccountEntitys.clear();
+      if (data.isNotEmpty) {
+        await isar.observedAccountEntitys.putAll(data);
+      }
+    });
   }
 
   Future<List<ObservedAccount>> _refreshBalances(
-    List<ObservedAccount> items,
-  ) async {
+      List<ObservedAccount> items) async {
     final out = <ObservedAccount>[];
     for (final item in items) {
       final balance = await _fetchBalanceOrNull(item.address, item.publicKey);
@@ -207,9 +208,7 @@ class ObservedAccountService {
   }
 
   bool _hasBalanceChanged(
-    List<ObservedAccount> previous,
-    List<ObservedAccount> next,
-  ) {
+      List<ObservedAccount> previous, List<ObservedAccount> next) {
     if (previous.length != next.length) {
       return true;
     }
@@ -221,52 +220,43 @@ class ObservedAccountService {
     return false;
   }
 
-  Future<List<ObservedAccount>> _decode(String? raw) async {
-    if (raw == null || raw.isEmpty) {
+  Future<List<ObservedAccount>> _load() async {
+    final isar = await WalletIsar.instance.db();
+    final rows = await isar.observedAccountEntitys.where().anyId().findAll();
+    if (rows.isEmpty) {
       return <ObservedAccount>[];
     }
-    final decoded = jsonDecode(raw);
-    if (decoded is! List) {
-      return <ObservedAccount>[];
-    }
+
     final out = <ObservedAccount>[];
-    for (final item in decoded) {
-      if (item is! Map) {
-        continue;
-      }
-      final m = item.map((k, v) => MapEntry(k.toString(), v));
-      final rawBalance = m['balance'];
-      final balance = switch (rawBalance) {
-        num v => v.toDouble(),
-        String v => double.tryParse(v),
-        _ => null,
-      };
-      var pubkey = _normalizeHexPubkey(m['publicKey']?.toString() ?? '');
-      final address = (m['address']?.toString() ?? '').trim();
-      if (pubkey == null && address.isNotEmpty) {
-        pubkey = _normalizeInputToPubkey(address);
-      }
+    for (final row in rows) {
+      final pubkey = _normalizeHexPubkey(row.publicKey);
       if (pubkey == null) {
         continue;
       }
-      final normalizedAddress =
-          address.isNotEmpty ? address : _encodeAddress(pubkey);
+
+      final normalizedAddress = row.address.trim().isNotEmpty
+          ? row.address.trim()
+          : _encodeAddress(pubkey);
       final role = await _walletTypeService.resolveWalletType(pubkey);
+      final normalizedOrg = row.orgName.trim().isNotEmpty
+          ? row.orgName.trim()
+          : (role == WalletTypeService.defaultType
+              ? '自定义观察账户'
+              : _extractOrgName(role));
+
       out.add(
         ObservedAccount(
-          id: (m['id']?.toString() ?? 'manual:$pubkey'),
-          orgName: (m['orgName']?.toString() ?? '').trim().isEmpty
-              ? (role == WalletTypeService.defaultType
-                  ? '自定义观察账户'
-                  : _extractOrgName(role))
-              : m['orgName'].toString(),
+          id: row.accountId,
+          orgName: normalizedOrg,
           publicKey: pubkey,
           address: normalizedAddress,
-          balance: balance,
-          source: (m['source']?.toString() ?? 'manual'),
+          balance: row.balance,
+          source: row.source,
         ),
       );
     }
+
+    out.sort((a, b) => a.orgName.compareTo(b.orgName));
     return out;
   }
 }

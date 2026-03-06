@@ -1,5 +1,3 @@
--- CPMS PostgreSQL schema (current implementation baseline)
-
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS system_install (

@@ -9,6 +9,12 @@
 - `BACKUP_A`：备用密钥管理员 A（仅备用公钥，或由钱包持有私钥参与轮换签名）。
 - `BACKUP_B`：备用密钥管理员 B（仅备用公钥，或由钱包持有私钥参与轮换签名）。
 
+### 2.1 链上参数命名对齐
+1. `sfidMainAccount` 对应本模块 `MAIN.main_pubkey`。
+2. `sfidBackupAccount1` 对应本模块 `BACKUP_A.backup_a_pubkey`。
+3. `sfidBackupAccount2` 对应本模块 `BACKUP_B.backup_b_pubkey`。
+4. 主备轮换时链上参数 `new_backup` 对应本模块接口字段 `new_backup_pubkey`。
+
 ## 3. 权限定义（最终口径）
 - 三个密钥管理员共同拥有系统最高业务权限：
 1. 更换超级管理员（43 省）。
@@ -40,6 +46,7 @@
    - 新 `backup_b` = `new_backup_pubkey`
    - `backup_a` 保持不变
 5. 旧主退出活动密钥集，结果始终保持一主两备。
+6. 链侧交易发起 `origin` 必须为 `backup_a` 或 `backup_b` 之一；`main` 不可直接发起轮换。
 
 ## 5. 轮换执行流程（两阶段，强约束）
 1. `rotate/challenge`：
@@ -65,6 +72,12 @@
 2. 配置 `SFID_CHAIN_RPC_METHOD`（默认 `sfid_set_main_pubkey`），参数固定 `[new_main_pubkey, version, ticket]`。
 3. 可选配置 `SFID_CHAIN_RPC_TOKEN`（Bearer Token）。
 4. 提交成功返回 `chain_tx_hash`；提交失败返回 `chain_submit_ok=false` 与 `chain_submit_error`，便于运维补偿重提。
+
+### 6.1 与区块链“验签主备账户管理”对齐口径
+1. 创世固定三账户：`sfidMainAccount`、`sfidBackupAccount1`、`sfidBackupAccount2`。
+2. 轮换动作由 `backup_1/backup_2` 发起，提交 `new_backup`（本模块字段 `new_backup_pubkey`）。
+3. 本模块输出的 keyring 状态（`main_pubkey`、`backup_a_pubkey`、`backup_b_pubkey`）是链侧账户映射的权威来源。
+4. 本模块 `rotate/commit` 返回 `chain_submit_ok` 与 `chain_tx_hash`，用于链侧运维对账。
 
 ## 7. 链证明签名要求
 - 仅 `MAIN` 私钥执行签名。

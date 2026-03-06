@@ -4,12 +4,14 @@ use axum::{
     routing::{get, post, put},
     Json, Router,
 };
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
-    authz, dangan, err, find_admin_by_pubkey, ok, validate_admin_status, write_audit, AdminUser,
-    ApiError, ApiResponse, AppState,
+    authz, dangan, err, find_admin_by_pubkey, ok, validate_admin_status, write_audit, ApiError,
+    ApiResponse, AppState,
 };
 
 #[derive(Deserialize)]
@@ -85,15 +87,29 @@ async fn list_operators(
 ) -> Result<Json<ApiResponse<Vec<OperatorData>>>, (StatusCode, Json<ApiError>)> {
     authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
 
-    let users = state.admin_users.read().await;
-    let operators = users
-        .values()
-        .filter(|u| u.role == "OPERATOR_ADMIN")
-        .map(|u| OperatorData {
-            user_id: u.user_id.clone(),
-            admin_pubkey: u.admin_pubkey.clone(),
-            role: u.role.clone(),
-            status: u.status.clone(),
+    let rows = sqlx::query(
+        "SELECT user_id, admin_pubkey, role, status
+         FROM admin_users
+         WHERE role = 'OPERATOR_ADMIN'
+         ORDER BY user_id",
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query operators failed",
+        )
+    })?;
+
+    let operators = rows
+        .into_iter()
+        .map(|r| OperatorData {
+            user_id: r.get("user_id"),
+            admin_pubkey: r.get("admin_pubkey"),
+            role: r.get("role"),
+            status: r.get("status"),
         })
         .collect::<Vec<OperatorData>>();
 
@@ -110,7 +126,7 @@ async fn create_operator(
         return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid admin_pubkey"));
     }
 
-    if find_admin_by_pubkey(&state, &req.admin_pubkey)
+    if find_admin_by_pubkey(&state, req.admin_pubkey.trim())
         .await
         .is_ok()
     {
@@ -121,18 +137,27 @@ async fn create_operator(
         ));
     }
 
-    let operator = AdminUser {
+    let now_ts = Utc::now().timestamp();
+    let operator = OperatorData {
         user_id: format!("u_operator_{}", Uuid::new_v4().simple()),
-        admin_pubkey: req.admin_pubkey,
+        admin_pubkey: req.admin_pubkey.trim().to_string(),
         role: "OPERATOR_ADMIN".to_string(),
         status: "ACTIVE".to_string(),
-        immutable: false,
     };
-    state
-        .admin_users
-        .write()
-        .await
-        .insert(operator.user_id.clone(), operator.clone());
+
+    sqlx::query(
+        "INSERT INTO admin_users (user_id, admin_pubkey, role, status, immutable, managed_key_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, FALSE, NULL, $5, $6)",
+    )
+    .bind(&operator.user_id)
+    .bind(&operator.admin_pubkey)
+    .bind(&operator.role)
+    .bind(&operator.status)
+    .bind(now_ts)
+    .bind(now_ts)
+    .execute(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::CONFLICT, 3001, "admin_pubkey already exists"))?;
 
     write_audit(
         &state,
@@ -145,12 +170,7 @@ async fn create_operator(
     )
     .await?;
 
-    Ok(Json(ok(OperatorData {
-        user_id: operator.user_id,
-        admin_pubkey: operator.admin_pubkey,
-        role: operator.role,
-        status: operator.status,
-    })))
+    Ok(Json(ok(operator)))
 }
 
 async fn update_operator(
@@ -160,12 +180,26 @@ async fn update_operator(
     Json(req): Json<UpdateOperatorRequest>,
 ) -> Result<Json<ApiResponse<OperatorData>>, (StatusCode, Json<ApiError>)> {
     let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
-    let mut users = state.admin_users.write().await;
-    let current = users
-        .get(&id)
-        .cloned()
-        .ok_or_else(|| err(StatusCode::NOT_FOUND, 3002, "operator not found"))?;
-    if current.role != "OPERATOR_ADMIN" {
+
+    let row = sqlx::query(
+        "SELECT user_id, admin_pubkey, role, status
+         FROM admin_users
+         WHERE user_id = $1",
+    )
+    .bind(&id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query operator failed",
+        )
+    })?
+    .ok_or_else(|| err(StatusCode::NOT_FOUND, 3002, "operator not found"))?;
+
+    let role: String = row.get("role");
+    if role != "OPERATOR_ADMIN" {
         return Err(err(
             StatusCode::BAD_REQUEST,
             3003,
@@ -177,10 +211,24 @@ async fn update_operator(
         if admin_pubkey.trim().is_empty() {
             return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid admin_pubkey"));
         }
-        let duplicated = users
-            .values()
-            .any(|u| u.user_id != current.user_id && u.admin_pubkey == *admin_pubkey);
-        if duplicated {
+        let dup: Option<String> = sqlx::query_scalar(
+            "SELECT user_id
+             FROM admin_users
+             WHERE admin_pubkey = $1 AND user_id <> $2
+             LIMIT 1",
+        )
+        .bind(admin_pubkey.trim())
+        .bind(&id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "check pubkey failed",
+            )
+        })?;
+        if dup.is_some() {
             return Err(err(
                 StatusCode::CONFLICT,
                 3001,
@@ -189,38 +237,52 @@ async fn update_operator(
         }
     }
 
-    let operator = users
-        .get_mut(&id)
-        .ok_or_else(|| err(StatusCode::NOT_FOUND, 3002, "operator not found"))?;
+    let mut admin_pubkey: String = row.get("admin_pubkey");
+    let mut status: String = row.get("status");
 
-    if let Some(admin_pubkey) = req.admin_pubkey {
-        operator.admin_pubkey = admin_pubkey;
+    if let Some(v) = req.admin_pubkey {
+        admin_pubkey = v.trim().to_string();
+    }
+    if let Some(v) = req.status {
+        validate_admin_status(&v)?;
+        status = v;
     }
 
-    if let Some(status) = req.status {
-        validate_admin_status(&status)?;
-        operator.status = status;
-    }
-
-    let updated = operator.clone();
-    drop(users);
+    sqlx::query(
+        "UPDATE admin_users
+         SET admin_pubkey = $1, status = $2, updated_at = $3
+         WHERE user_id = $4",
+    )
+    .bind(&admin_pubkey)
+    .bind(&status)
+    .bind(Utc::now().timestamp())
+    .bind(&id)
+    .execute(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "update operator failed",
+        )
+    })?;
 
     write_audit(
         &state,
         Some(ctx.user_id),
         "UPDATE_OPERATOR",
         "ADMIN_USER",
-        Some(updated.user_id.clone()),
+        Some(id.clone()),
         "SUCCESS",
-        serde_json::json!({"status": updated.status}),
+        serde_json::json!({"status": status}),
     )
     .await?;
 
     Ok(Json(ok(OperatorData {
-        user_id: updated.user_id,
-        admin_pubkey: updated.admin_pubkey,
-        role: updated.role,
-        status: updated.status,
+        user_id: id,
+        admin_pubkey,
+        role,
+        status,
     })))
 }
 
@@ -230,19 +292,42 @@ async fn delete_operator(
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiError>)> {
     let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
-    let mut users = state.admin_users.write().await;
-    let user = users
-        .get(&id)
-        .ok_or_else(|| err(StatusCode::NOT_FOUND, 3002, "operator not found"))?;
-    if user.role != "OPERATOR_ADMIN" {
+
+    let role: Option<String> =
+        sqlx::query_scalar("SELECT role FROM admin_users WHERE user_id = $1 LIMIT 1")
+            .bind(&id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| {
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    5001,
+                    "query operator failed",
+                )
+            })?;
+
+    let Some(role) = role else {
+        return Err(err(StatusCode::NOT_FOUND, 3002, "operator not found"));
+    };
+    if role != "OPERATOR_ADMIN" {
         return Err(err(
             StatusCode::BAD_REQUEST,
             3003,
             "target is not operator admin",
         ));
     }
-    users.remove(&id);
-    drop(users);
+
+    sqlx::query("DELETE FROM admin_users WHERE user_id = $1")
+        .bind(&id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "delete operator failed",
+            )
+        })?;
 
     write_audit(
         &state,
@@ -267,11 +352,23 @@ async fn update_operator_status(
     let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
     validate_admin_status(&req.status)?;
 
-    let mut users = state.admin_users.write().await;
-    let operator = users
-        .get_mut(&id)
-        .ok_or_else(|| err(StatusCode::NOT_FOUND, 3002, "operator not found"))?;
-    if operator.role != "OPERATOR_ADMIN" {
+    let role: Option<String> =
+        sqlx::query_scalar("SELECT role FROM admin_users WHERE user_id = $1 LIMIT 1")
+            .bind(&id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| {
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    5001,
+                    "query operator failed",
+                )
+            })?;
+
+    let Some(role) = role else {
+        return Err(err(StatusCode::NOT_FOUND, 3002, "operator not found"));
+    };
+    if role != "OPERATOR_ADMIN" {
         return Err(err(
             StatusCode::BAD_REQUEST,
             3003,
@@ -279,8 +376,19 @@ async fn update_operator_status(
         ));
     }
 
-    operator.status = req.status.clone();
-    drop(users);
+    sqlx::query("UPDATE admin_users SET status = $1, updated_at = $2 WHERE user_id = $3")
+        .bind(&req.status)
+        .bind(Utc::now().timestamp())
+        .bind(&id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "update status failed",
+            )
+        })?;
 
     write_audit(
         &state,
@@ -334,35 +442,60 @@ async fn update_archive_citizen_status(
     let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
     dangan::validate_citizen_status(&req.citizen_status)?;
 
-    let mut archives = state.archives.write().await;
-    let archive = archives
-        .get_mut(&archive_id)
-        .ok_or_else(|| err(StatusCode::NOT_FOUND, 3004, "archive not found"))?;
-    let before = archive.citizen_status.clone();
-    archive.citizen_status = req.citizen_status.clone();
-    let updated = archive.clone();
-    drop(archives);
+    let row = sqlx::query(
+        "SELECT archive_id, archive_no, citizen_status
+         FROM archives
+         WHERE archive_id = $1",
+    )
+    .bind(&archive_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query archive failed",
+        )
+    })?
+    .ok_or_else(|| err(StatusCode::NOT_FOUND, 3004, "archive not found"))?;
+
+    let before: String = row.get("citizen_status");
+    let archive_no: String = row.get("archive_no");
+
+    sqlx::query("UPDATE archives SET citizen_status = $1, updated_at = $2 WHERE archive_id = $3")
+        .bind(req.citizen_status.trim())
+        .bind(Utc::now().timestamp())
+        .bind(&archive_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "update archive failed",
+            )
+        })?;
 
     write_audit(
         &state,
         Some(ctx.user_id),
         "UPDATE_ARCHIVE_CITIZEN_STATUS",
         "CITIZEN_ARCHIVE",
-        Some(updated.archive_id.clone()),
+        Some(archive_id.clone()),
         "SUCCESS",
         serde_json::json!({
-            "archive_no": updated.archive_no,
+            "archive_no": archive_no,
             "before_citizen_status": before,
-            "after_citizen_status": updated.citizen_status,
-            "voting_eligible": updated.citizen_status == "NORMAL"
+            "after_citizen_status": req.citizen_status,
+            "voting_eligible": req.citizen_status == "NORMAL"
         }),
     )
     .await?;
 
     Ok(Json(ok(UpdateCitizenStatusData {
-        archive_id: updated.archive_id,
-        archive_no: updated.archive_no,
-        citizen_status: updated.citizen_status.clone(),
-        voting_eligible: updated.citizen_status == "NORMAL",
+        archive_id,
+        archive_no,
+        citizen_status: req.citizen_status.clone(),
+        voting_eligible: req.citizen_status == "NORMAL",
     })))
 }
