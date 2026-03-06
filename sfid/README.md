@@ -4,7 +4,7 @@
 * 每次编写代码后都要更新技术文档；
 * 需要其他模块和仓库联测的同步更新对应的技术文档；
 * 编写代码的同时必须完善中文注释；
-* SFID系统只有两个md文档，一个是需求文档（README）、一个是技术文档（SFID_TECHNICAL）。
+* 根级文档为 `README.md` 与 `SFID_TECHNICAL.md`，模块级文档位于 `backend/src/*/*TECHNICAL.md`。
 
 SFID 是在线身份绑定系统，用于接收线下二维码并服务区块链身份校验。
 安全基线（2026-03）：后端已移除默认开发密钥/Token，关键环境变量缺失时会拒绝启动。
@@ -17,7 +17,7 @@ SFID 是在线身份绑定系统，用于接收线下二维码并服务区块链
 - 绑定/解绑结果可回传区块链。
 - 公开身份查询需携带 `x-public-search-token`。
 - 支持扫码登录：仅 SFID 管理员允许登录，非管理员扫码直接拒绝。
-- 前端 UI 体系与 CPMS、CitizenNode 保持统一，统一采用 Tabler 风格。
+- 前端 UI 体系与 CPMS、CitizenNode 保持统一，当前实现基于 Ant Design。
 
 ## 管理员体系
 - 密钥管理员（`KEY_ADMIN`）：固定 3 个（一主两备槽位映射）。
@@ -41,7 +41,7 @@ SFID 是在线身份绑定系统，用于接收线下二维码并服务区块链
 5. 权限校验以后端 RBAC 为准，前端菜单控制仅用于展示。
 
 ## 仓库结构
-- `frontend/`：管理员前端网站（React + TypeScript + Vite + Tabler）
+- `frontend/`：管理员前端网站（React + TypeScript + Vite + Ant Design）
 - `backend/`：后端 API（Rust + Axum）
 - `backend/db/`：数据库迁移与初始化数据
 - `backend/scripts/`：后端脚本（联调/冒烟）
@@ -62,15 +62,16 @@ docker run -d --name sfid-pg \
 
 ### 1) 执行数据库迁移
 ```bash
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < /Users/rhett/SFID/backend/db/migrations/001_init_sfid.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < /Users/rhett/SFID/backend/db/migrations/002_runtime_store.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < /Users/rhett/SFID/backend/db/migrations/003_admin_role_partition.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < /Users/rhett/SFID/backend/db/migrations/004_finalize_no_runtime_store.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < /Users/rhett/SFID/backend/db/migrations/005_drop_sfid_prefix.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < /Users/rhett/SFID/backend/db/migrations/006_super_admin_catalog.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < /Users/rhett/SFID/backend/db/migrations/007_refresh_admin_views.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < /Users/rhett/SFID/backend/db/migrations/008_chain_idempotency_reward_state.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < /Users/rhett/SFID/backend/db/migrations/009_runtime_cache_and_pii_encryption.sql
+docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/001_init_sfid.sql
+docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/002_runtime_store.sql
+docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/003_admin_role_partition.sql
+docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/004_finalize_no_runtime_store.sql
+docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/005_drop_sfid_prefix.sql
+docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/006_super_admin_catalog.sql
+docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/007_refresh_admin_views.sql
+docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/008_chain_idempotency_reward_state.sql
+docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/009_runtime_cache_and_pii_encryption.sql
+docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/010_drop_plaintext_pii_columns.sql
 ```
 
 ### 2) 启动后端
@@ -82,11 +83,17 @@ export SFID_KEY_ID='sfid-master-v1'
 export SFID_CHAIN_TOKEN='<required>'
 export SFID_CHAIN_SIGNING_SECRET='<required>=32chars'
 export SFID_PUBLIC_SEARCH_TOKEN='<required>'
-export SFID_PII_KEY='<required-for-PII-encryption>'
+export SFID_RUNTIME_META_KEY='<required-runtime-meta-encryption-key>'
 cargo run
 ```
 默认地址：`http://127.0.0.1:8899`
 说明：区块链接口必须携带请求头 `x-chain-token` 和 `x-chain-signature`。
+
+### 2.1) 一键启动前后端（开发）
+```bash
+./start-dev.sh
+```
+说明：脚本会加载 `.env.dev.local`，并同时启动后端与前端开发服务。
 
 ### 3) 启动前端开发模式
 ```bash
@@ -105,8 +112,9 @@ curl http://127.0.0.1:8899/api/v1/health
 ## 数据库说明（当前）
 - 本项目当前使用 PostgreSQL。
 - 运行态拆分为：
-1. `runtime_misc`：运行杂项（JSONB）。
-2. `runtime_meta`：签名种子与公钥元信息（JSONB）。
+1. `runtime_cache_entries`：按键分片运行态缓存（JSONB）。
+2. `runtime_misc`：运行杂项（JSONB）。
+3. `runtime_meta`：签名种子与公钥元信息（JSONB）。
 - 管理员与密钥采用结构化分表：
 1. `admins`
 2. `provinces`
@@ -117,6 +125,10 @@ curl http://127.0.0.1:8899/api/v1/health
 1. `v_key_admins`
 2. `v_super_admins`
 3. `v_operator_admins`
+- 链路一致性与防重放表：
+1. `chain_idempotency_requests`
+2. `binding_unique_locks`
+3. `bind_reward_states`
 - 已下线内容：
 1. `backend/data/runtime_state.json`
 2. `runtime_store`

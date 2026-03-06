@@ -1,16 +1,11 @@
-use std::{
-    collections::HashMap,
-    fs,
-    net::SocketAddr,
-    path::{Path as FsPath, PathBuf},
-    sync::Arc,
-};
+use std::{env, net::SocketAddr, sync::Arc};
 
 use axum::{http::StatusCode, routing::get, Json, Router};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Utc;
 use schnorrkel::{signing_context, PublicKey, Signature};
 use serde::{Deserialize, Serialize};
+use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -20,27 +15,12 @@ mod initialize;
 mod login;
 mod operator_admin;
 mod super_admin;
-use initialize::{init_super_admin_users, load_or_init_install_data, QrSignKeyRuntime};
 
 #[derive(Clone)]
 struct AppState {
-    runtime_store_path: PathBuf,
-    install: Arc<RwLock<InstallRuntime>>,
-    admin_users: Arc<RwLock<HashMap<String, AdminUser>>>,
-    sessions: Arc<RwLock<HashMap<String, login::Session>>>,
-    login_challenges: Arc<RwLock<HashMap<String, login::LoginChallenge>>>,
-    qr_login_results: Arc<RwLock<HashMap<String, login::QrLoginResult>>>,
-    archives: Arc<RwLock<HashMap<String, Archive>>>,
-    sequence: Arc<RwLock<HashMap<String, u32>>>,
-    qr_print_records: Arc<RwLock<Vec<QrPrintRecord>>>,
-    audit_logs: Arc<RwLock<Vec<AuditLog>>>,
-}
-
-#[derive(Clone)]
-struct InstallRuntime {
-    file_path: PathBuf,
-    site_sfid: Option<String>,
-    qr_sign_keys: Vec<QrSignKeyRuntime>,
+    db: PgPool,
+    // 登录和二维码场景需要快速本地互斥逻辑，仍保留轻量进程内锁用于并发窗口控制。
+    qr_result_gc_lock: Arc<RwLock<()>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -50,6 +30,9 @@ struct AdminUser {
     role: String,
     status: String,
     immutable: bool,
+    managed_key_id: Option<String>,
+    created_at: i64,
+    updated_at: i64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -65,18 +48,8 @@ struct Archive {
     passport_no: String,
     status: String,
     citizen_status: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct AuditLog {
-    log_id: String,
-    operator_user_id: Option<String>,
-    action: String,
-    target_type: String,
-    target_id: Option<String>,
-    result: String,
-    detail: serde_json::Value,
     created_at: i64,
+    updated_at: i64,
 }
 
 #[derive(Serialize)]
@@ -96,85 +69,26 @@ struct ApiError {
     trace_id: String,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-struct QrPrintRecord {
-    print_id: String,
-    archive_id: String,
-    archive_no: String,
-    citizen_status: String,
-    voting_eligible: bool,
-    printed_at: i64,
-}
-
-#[derive(Clone, Default, Serialize, Deserialize)]
-struct RuntimeStore {
-    admin_users: HashMap<String, AdminUser>,
-    sessions: HashMap<String, login::Session>,
-    login_challenges: HashMap<String, login::LoginChallenge>,
-    qr_login_results: HashMap<String, login::QrLoginResult>,
-    archives: HashMap<String, Archive>,
-    sequence: HashMap<String, u32>,
-    qr_print_records: Vec<QrPrintRecord>,
-    audit_logs: Vec<AuditLog>,
-}
+static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("db/migrations");
 
 #[tokio::main]
 async fn main() {
-    let install = load_or_init_install_data().unwrap_or_else(|reason| panic!("{reason}"));
-    if install.was_created {
-        println!(
-            "cpms-backend install bootstrap initialized at {}",
-            install.file_path.display()
-        );
-    }
-    if install.data.is_none() {
-        println!("cpms-backend waiting for SFID install qr initialization");
-    }
+    let database_url = env::var("CPMS_DATABASE_URL")
+        .or_else(|_| env::var("DATABASE_URL"))
+        .unwrap_or_else(|_| "postgres://cpms:cpms@127.0.0.1:5433/cpms_dev".to_string());
 
-    let super_admins = install
-        .data
-        .as_ref()
-        .map(|d| d.super_admins.clone())
-        .unwrap_or_default();
-    let site_sfid = install.data.as_ref().map(|d| d.site_sfid.clone());
-    let runtime_store_path = PathBuf::from(
-        std::env::var("CPMS_RUNTIME_STORE_FILE")
-            .unwrap_or_else(|_| "runtime/cpms_runtime_store.json".to_string()),
-    );
-    let mut runtime_store = match load_runtime_store(&runtime_store_path) {
-        Ok(store) => store,
-        Err(reason) => {
-            eprintln!("failed to load runtime store: {reason}");
-            RuntimeStore::default()
-        }
-    };
-    if runtime_store.admin_users.is_empty() {
-        runtime_store.admin_users = init_super_admin_users(&super_admins);
-    } else {
-        for (k, v) in init_super_admin_users(&super_admins) {
-            runtime_store.admin_users.entry(k).or_insert(v);
-        }
-    }
+    let db = PgPoolOptions::new()
+        .max_connections(20)
+        .connect(&database_url)
+        .await
+        .expect("connect postgres failed");
+
+    MIGRATOR.run(&db).await.expect("run migrations failed");
 
     let state = AppState {
-        runtime_store_path,
-        install: Arc::new(RwLock::new(InstallRuntime {
-            file_path: install.file_path,
-            site_sfid,
-            qr_sign_keys: install.qr_sign_keys,
-        })),
-        admin_users: Arc::new(RwLock::new(runtime_store.admin_users)),
-        sessions: Arc::new(RwLock::new(runtime_store.sessions)),
-        login_challenges: Arc::new(RwLock::new(runtime_store.login_challenges)),
-        qr_login_results: Arc::new(RwLock::new(runtime_store.qr_login_results)),
-        archives: Arc::new(RwLock::new(runtime_store.archives)),
-        sequence: Arc::new(RwLock::new(runtime_store.sequence)),
-        qr_print_records: Arc::new(RwLock::new(runtime_store.qr_print_records)),
-        audit_logs: Arc::new(RwLock::new(runtime_store.audit_logs)),
+        db,
+        qr_result_gc_lock: Arc::new(RwLock::new(())),
     };
-    if let Err(reason) = persist_runtime_store(&state).await {
-        eprintln!("failed to persist runtime store on startup: {reason}");
-    }
 
     let app = Router::new()
         .route("/api/v1/health", get(health))
@@ -184,7 +98,7 @@ async fn main() {
         .merge(operator_admin::router())
         .with_state(state);
 
-    let addr: SocketAddr = std::env::var("CPMS_BIND")
+    let addr: SocketAddr = env::var("CPMS_BIND")
         .unwrap_or_else(|_| "0.0.0.0:8080".to_string())
         .parse()
         .expect("invalid CPMS_BIND");
@@ -204,23 +118,54 @@ async fn find_admin_by_pubkey(
     state: &AppState,
     admin_pubkey: &str,
 ) -> Result<AdminUser, (StatusCode, Json<ApiError>)> {
-    let users = state.admin_users.read().await;
-    users
-        .values()
-        .find(|u| u.admin_pubkey == admin_pubkey)
-        .cloned()
-        .ok_or_else(|| err(StatusCode::UNAUTHORIZED, 2002, "admin_pubkey not found"))
+    let row = sqlx::query(
+        "SELECT user_id, admin_pubkey, role, status, immutable, managed_key_id, created_at, updated_at
+         FROM admin_users
+         WHERE admin_pubkey = $1",
+    )
+    .bind(admin_pubkey)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query admin failed"))?
+    .ok_or_else(|| err(StatusCode::UNAUTHORIZED, 2002, "admin_pubkey not found"))?;
+
+    Ok(AdminUser {
+        user_id: row.get("user_id"),
+        admin_pubkey: row.get("admin_pubkey"),
+        role: row.get("role"),
+        status: row.get("status"),
+        immutable: row.get("immutable"),
+        managed_key_id: row.get("managed_key_id"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
 }
 
 async fn find_admin_by_user_id(
     state: &AppState,
     user_id: &str,
 ) -> Result<AdminUser, (StatusCode, Json<ApiError>)> {
-    let users = state.admin_users.read().await;
-    users
-        .get(user_id)
-        .cloned()
-        .ok_or_else(|| err(StatusCode::UNAUTHORIZED, 2002, "admin user not found"))
+    let row = sqlx::query(
+        "SELECT user_id, admin_pubkey, role, status, immutable, managed_key_id, created_at, updated_at
+         FROM admin_users
+         WHERE user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query admin failed"))?
+    .ok_or_else(|| err(StatusCode::UNAUTHORIZED, 2002, "admin user not found"))?;
+
+    Ok(AdminUser {
+        user_id: row.get("user_id"),
+        admin_pubkey: row.get("admin_pubkey"),
+        role: row.get("role"),
+        status: row.get("status"),
+        immutable: row.get("immutable"),
+        managed_key_id: row.get("managed_key_id"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
 }
 
 fn validate_admin_status(status: &str) -> Result<(), (StatusCode, Json<ApiError>)> {
@@ -271,63 +216,6 @@ fn decode_bytes(input: &str) -> Option<Vec<u8>> {
     None
 }
 
-fn load_runtime_store(path: &FsPath) -> Result<RuntimeStore, String> {
-    if !path.exists() {
-        return Ok(RuntimeStore::default());
-    }
-    let raw =
-        fs::read(path).map_err(|e| format!("read runtime store {} failed: {e}", path.display()))?;
-    if raw.is_empty() {
-        return Ok(RuntimeStore::default());
-    }
-    serde_json::from_slice::<RuntimeStore>(&raw)
-        .map_err(|e| format!("parse runtime store {} failed: {e}", path.display()))
-}
-
-async fn snapshot_runtime_store(state: &AppState) -> RuntimeStore {
-    RuntimeStore {
-        admin_users: state.admin_users.read().await.clone(),
-        sessions: state.sessions.read().await.clone(),
-        login_challenges: state.login_challenges.read().await.clone(),
-        qr_login_results: state.qr_login_results.read().await.clone(),
-        archives: state.archives.read().await.clone(),
-        sequence: state.sequence.read().await.clone(),
-        qr_print_records: state.qr_print_records.read().await.clone(),
-        audit_logs: state.audit_logs.read().await.clone(),
-    }
-}
-
-fn persist_runtime_store_to_path(path: &FsPath, store: &RuntimeStore) -> Result<(), String> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("runtime store path has no parent: {}", path.display()))?;
-    fs::create_dir_all(parent)
-        .map_err(|e| format!("create runtime store dir {} failed: {e}", parent.display()))?;
-    let bytes = serde_json::to_vec_pretty(store)
-        .map_err(|e| format!("serialize runtime store failed: {e}"))?;
-    let tmp_path = parent.join(format!(
-        ".{}.tmp",
-        path.file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("cpms_runtime_store.json")
-    ));
-    fs::write(&tmp_path, bytes)
-        .map_err(|e| format!("write runtime store tmp {} failed: {e}", tmp_path.display()))?;
-    fs::rename(&tmp_path, path).map_err(|e| {
-        format!(
-            "rename runtime store {} -> {} failed: {e}",
-            tmp_path.display(),
-            path.display()
-        )
-    })?;
-    Ok(())
-}
-
-async fn persist_runtime_store(state: &AppState) -> Result<(), String> {
-    let snapshot = snapshot_runtime_store(state).await;
-    persist_runtime_store_to_path(&state.runtime_store_path, &snapshot)
-}
-
 async fn write_audit(
     state: &AppState,
     operator_user_id: Option<String>,
@@ -337,20 +225,21 @@ async fn write_audit(
     result: &str,
     detail: serde_json::Value,
 ) -> Result<(), (StatusCode, Json<ApiError>)> {
-    let log = AuditLog {
-        log_id: format!("log_{}", Uuid::new_v4().simple()),
-        operator_user_id,
-        action: action.to_string(),
-        target_type: target_type.to_string(),
-        target_id,
-        result: result.to_string(),
-        detail,
-        created_at: Utc::now().timestamp(),
-    };
-    state.audit_logs.write().await.push(log);
-    persist_runtime_store(state)
-        .await
-        .map_err(|reason| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &reason))?;
+    sqlx::query(
+        "INSERT INTO audit_logs (log_id, operator_user_id, action, target_type, target_id, result, detail, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+    )
+    .bind(format!("log_{}", Uuid::new_v4().simple()))
+    .bind(operator_user_id)
+    .bind(action)
+    .bind(target_type)
+    .bind(target_id)
+    .bind(result)
+    .bind(sqlx::types::Json(detail))
+    .bind(Utc::now().timestamp())
+    .execute(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "write audit failed"))?;
     Ok(())
 }
 

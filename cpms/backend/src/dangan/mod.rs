@@ -7,6 +7,7 @@ use axum::{http::StatusCode, Json};
 use chrono::Utc;
 use schnorrkel::{signing_context, MiniSecretKey};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{err, initialize::QrSignKeyRuntime, ApiError, AppState, Archive};
@@ -63,16 +64,26 @@ pub(crate) async fn generate_archive_no_with_retry(
     admin_pubkey: &str,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
     let seq_key = format!("{}|{}|{}", province_code, city_code, created_date_yyyymmdd);
-    let mut nonce = {
-        let mut seq = state.sequence.write().await;
-        let current = seq.entry(seq_key.clone()).or_insert(1);
-        let value = *current;
-        *current += 1;
-        value
-    };
+
+    let mut nonce: i64 = sqlx::query_scalar(
+        "INSERT INTO sequence_counters (seq_key, next_seq)
+         VALUES ($1, 2)
+         ON CONFLICT (seq_key) DO UPDATE SET next_seq = sequence_counters.next_seq + 1
+         RETURNING next_seq - 1",
+    )
+    .bind(&seq_key)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "sequence alloc failed",
+        )
+    })?;
 
     for _ in 0..ARCHIVE_NO_MAX_RETRY {
-        let random9 = generate_random9(terminal_id, admin_pubkey, nonce);
+        let random9 = generate_random9(terminal_id, admin_pubkey, nonce as u32);
         let check_digit =
             archive_checksum_digit(province_code, city_code, &random9, created_date_yyyymmdd);
         let archive_no = format!(
@@ -80,10 +91,19 @@ pub(crate) async fn generate_archive_no_with_retry(
             province_code, city_code, check_digit, random9, created_date_yyyymmdd
         );
 
-        let exists = {
-            let archives = state.archives.read().await;
-            archives.values().any(|a| a.archive_no == archive_no)
-        };
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM archives WHERE archive_no = $1)")
+                .bind(&archive_no)
+                .fetch_one(&state.db)
+                .await
+                .map_err(|_| {
+                    err(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        5001,
+                        "archive lookup failed",
+                    )
+                })?;
+
         if !exists {
             return Ok(archive_no);
         }
@@ -174,6 +194,7 @@ pub(crate) async fn build_site_key_registration_payload(
                 "missing active qr sign key",
             )
         })?;
+
     let issued_at = Utc::now().timestamp();
     let qr_id = format!("qr_{}", Uuid::new_v4().simple());
     let keys: Vec<SiteKeyPublicItem> = keys_runtime
@@ -213,19 +234,31 @@ pub(crate) async fn build_site_key_registration_payload(
 async fn install_snapshot(
     state: &AppState,
 ) -> Result<(String, Vec<QrSignKeyRuntime>), (StatusCode, Json<ApiError>)> {
-    let install = state.install.read().await;
-    let site_sfid = install
-        .site_sfid
-        .clone()
+    let site_row = sqlx::query("SELECT site_sfid FROM system_install WHERE id = 1")
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "query install failed",
+            )
+        })?;
+
+    let site_sfid = site_row
+        .and_then(|r| r.try_get::<Option<String>, _>("site_sfid").ok().flatten())
         .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "cpms not initialized"))?;
-    if install.qr_sign_keys.is_empty() {
+
+    let keys = crate::initialize::load_qr_sign_keys(state).await?;
+    if keys.is_empty() {
         return Err(err(
             StatusCode::CONFLICT,
             4005,
             "missing qr sign keys after initialization",
         ));
     }
-    Ok((site_sfid, install.qr_sign_keys.clone()))
+
+    Ok((site_sfid, keys))
 }
 
 async fn active_qr_sign_key(
@@ -265,7 +298,7 @@ pub(crate) fn sign_qr_payload_with_secret(
         ));
     }
 
-    let mini = MiniSecretKey::from_bytes(&secret_bytes).map_err(|_| {
+    let mini = MiniSecretKey::from_bytes(secret_bytes).map_err(|_| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5003,

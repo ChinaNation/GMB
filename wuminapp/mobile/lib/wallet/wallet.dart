@@ -1,4 +1,5 @@
 export 'core/wallet_manager.dart';
+export 'core/wallet_secure_keys.dart';
 export 'core/user_identification.dart';
 export 'core/user_identification_settings.dart';
 export 'ui/wallet_page.dart';

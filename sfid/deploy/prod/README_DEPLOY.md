@@ -20,7 +20,7 @@
 3. 在应用服务器执行：`install_sfid_app.sh /opt/sfid /path/to/sfid-backend`。
 4. 在应用服务器修改 `/etc/sfid/sfid.env`：
    - `DATABASE_URL` 指向主库（建议 `sslmode=verify-full`）。
-   - 必填：`SFID_SIGNING_SEED_HEX`、`SFID_KEY_ID`、`SFID_CHAIN_TOKEN`、`SFID_CHAIN_SIGNING_SECRET`、`SFID_PUBLIC_SEARCH_TOKEN`、`SFID_PII_KEY`。
+   - 必填：`SFID_SIGNING_SEED_HEX`、`SFID_KEY_ID`、`SFID_CHAIN_TOKEN`、`SFID_CHAIN_SIGNING_SECRET`、`SFID_PUBLIC_SEARCH_TOKEN`、`SFID_RUNTIME_META_KEY`、`SFID_PII_KEY`（安装脚本会校验）。
 5. 启动服务：
    - `systemctl daemon-reload`
    - `systemctl enable --now sfid-backend`

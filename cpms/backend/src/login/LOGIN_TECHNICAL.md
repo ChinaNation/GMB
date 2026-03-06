@@ -12,7 +12,7 @@
 - 登录签名验签
 - 登录结果轮询
 - 登录会话创建与登出
-- 登录相关状态持久化（challenge/result/session 写入运行时存储）
+- 登录相关状态持久化（`sessions/login_challenges/qr_login_results`）
 
 ### 2.2 本模块不负责
 - 角色权限控制（`SUPER_ADMIN` / `OPERATOR_ADMIN` 的业务授权）
@@ -31,10 +31,10 @@
 - `GET /api/v1/admin/auth/qr/result`
 - `POST /api/v1/admin/auth/logout`
 
-## 4. 关键数据结构
-- `Session`：登录成功后的访问会话
-- `LoginChallenge`：一次性 challenge（含过期、消费标记）
-- `QrLoginResult`：二维码登录完成后的轮询结果
+## 4. 持久化表（PostgreSQL）
+- `sessions`
+- `login_challenges`
+- `qr_login_results`
 
 ## 5. 安全约束
 - challenge 一次性消费，防重放
@@ -54,7 +54,7 @@
 - `expires_at`: 秒级时间戳（TTL=90 秒）
 - `aud`: 登录来源标识（默认 `cpms-local-app`）
 
-说明：`origin` 不再作为扫码签名要素，也不再下发到移动端登录挑战协议字段中。
+说明：`origin` 不再作为扫码签名要素，也不作为移动端登录挑战协议字段。
 
 ### 6.2 验签拼串（后端与移动端一致）
 ```text
@@ -65,7 +65,7 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 本模块依赖主模块提供通用能力：
 - 统一响应封装与错误结构
 - 管理员公钥查询
-- 运行时存储持久化
+- PostgreSQL 连接池
 - 审计日志写入
 - 通用签名工具方法
 

@@ -1,7 +1,6 @@
-import 'dart:convert';
-
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:isar/isar.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/onchain_trade_models.dart';
+import 'package:wuminapp_mobile/wallet/core/wallet_isar.dart';
 
 abstract class OnchainTradeRepository {
   Future<void> save(OnchainTxRecord record);
@@ -12,9 +11,6 @@ abstract class OnchainTradeRepository {
 }
 
 class LocalOnchainTradeRepository implements OnchainTradeRepository {
-  static const String _kOnchainRecords = 'trade.onchain.records';
-  List<OnchainTxRecord>? _cache;
-
   @override
   Future<void> save(OnchainTxRecord record) async {
     await upsert(record);
@@ -22,64 +18,46 @@ class LocalOnchainTradeRepository implements OnchainTradeRepository {
 
   @override
   Future<void> upsert(OnchainTxRecord record) async {
-    final records = List<OnchainTxRecord>.from(await _load());
-    final index = records.indexWhere((it) => it.txHash == record.txHash);
-    if (index >= 0) {
-      records[index] = record;
-    } else {
-      records.insert(0, record);
-    }
-    records.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    await _save(records);
+    final isar = await WalletIsar.instance.db();
+    await isar.writeTxn(() async {
+      await isar.txRecordEntitys.put(_toEntity(record));
+    });
   }
 
   @override
   Future<List<OnchainTxRecord>> listRecent() async {
-    final records = await _load();
-    return List<OnchainTxRecord>.unmodifiable(records);
+    final isar = await WalletIsar.instance.db();
+    final rows = await isar.txRecordEntitys
+        .where()
+        .anyId()
+        .sortByCreatedAtMillisDesc()
+        .findAll();
+    return rows.map(_toModel).toList(growable: false);
   }
 
-  Future<List<OnchainTxRecord>> _load() async {
-    if (_cache != null) {
-      return _cache!;
-    }
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_kOnchainRecords);
-    if (raw == null || raw.isEmpty) {
-      _cache = <OnchainTxRecord>[];
-      return _cache!;
-    }
-
-    final decoded = jsonDecode(raw);
-    if (decoded is! List) {
-      _cache = <OnchainTxRecord>[];
-      return _cache!;
-    }
-
-    final records = <OnchainTxRecord>[];
-    for (final item in decoded) {
-      if (item is Map<String, dynamic>) {
-        records.add(OnchainTxRecord.fromJson(item));
-      } else if (item is Map) {
-        records.add(
-          OnchainTxRecord.fromJson(
-            item.map((k, v) => MapEntry(k.toString(), v)),
-          ),
-        );
-      }
-    }
-    records.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    _cache = records;
-    return _cache!;
+  TxRecordEntity _toEntity(OnchainTxRecord model) {
+    return TxRecordEntity()
+      ..txHash = model.txHash
+      ..fromAddress = model.fromAddress
+      ..toAddress = model.toAddress
+      ..amount = model.amount
+      ..symbol = model.symbol
+      ..createdAtMillis = model.createdAt.millisecondsSinceEpoch
+      ..status = onchainTxStatusToString(model.status)
+      ..failureReason = model.failureReason;
   }
 
-  Future<void> _save(List<OnchainTxRecord> records) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _kOnchainRecords,
-      jsonEncode(records.map((it) => it.toJson()).toList(growable: false)),
+  OnchainTxRecord _toModel(TxRecordEntity entity) {
+    return OnchainTxRecord(
+      txHash: entity.txHash,
+      fromAddress: entity.fromAddress,
+      toAddress: entity.toAddress,
+      amount: entity.amount,
+      symbol: entity.symbol,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(entity.createdAtMillis),
+      status: onchainTxStatusFromString(entity.status),
+      failureReason: entity.failureReason,
     );
-    _cache = records;
   }
 }
 

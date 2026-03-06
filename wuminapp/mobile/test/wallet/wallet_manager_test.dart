@@ -2,6 +2,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
+import 'package:wuminapp_mobile/wallet/core/wallet_isar.dart';
+import 'package:wuminapp_mobile/wallet/core/wallet_secure_keys.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -10,9 +12,14 @@ void main() {
       MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
   final secureStorage = <String, String>{};
 
+  setUpAll(() async {
+    await WalletIsar.instance.ensureTestCoreInitialized();
+  });
+
   setUp(() async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     secureStorage.clear();
+    await WalletIsar.instance.resetForTest();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(secureStorageChannel, (call) async {
       final args = (call.arguments as Map?)?.cast<String, dynamic>() ??
@@ -64,7 +71,7 @@ void main() {
       var wallets = await manager.getWallets();
       expect(wallets.length, 1);
       expect(await manager.getActiveWalletIndex(), 1);
-      expect(secureStorage['wallet.mnemonic.1'], isNotEmpty);
+      expect(secureStorage[WalletSecureKeys.mnemonicV1(1)], isNotEmpty);
 
       final imported = await manager.importWallet(
         'legal winner thank year wave sausage worth useful legal winner thank yellow',
@@ -75,7 +82,7 @@ void main() {
       wallets = await manager.getWallets();
       expect(wallets.length, 2);
       expect(await manager.getActiveWalletIndex(), 2);
-      expect(secureStorage['wallet.mnemonic.2'], isNotEmpty);
+      expect(secureStorage[WalletSecureKeys.mnemonicV1(2)], isNotEmpty);
 
       final latestSecret = await manager.getLatestWalletSecret();
       expect(latestSecret, isNotNull);
@@ -85,7 +92,8 @@ void main() {
       wallets = await manager.getWallets();
       expect(wallets.length, 1);
       expect(await manager.getActiveWalletIndex(), 1);
-      expect(secureStorage.containsKey('wallet.mnemonic.2'), isFalse);
+      expect(
+          secureStorage.containsKey(WalletSecureKeys.mnemonicV1(2)), isFalse);
 
       await manager.deleteWallet(1);
       expect(await manager.getWallet(), isNull);
@@ -105,6 +113,22 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('should not read removed legacy mnemonic key', () async {
+      final manager = WalletManager();
+      final imported = await manager.importWallet(
+        'legal winner thank year wave sausage worth useful legal winner thank yellow',
+      );
+      final walletIndex = imported.walletIndex;
+      final v1Key = WalletSecureKeys.mnemonicV1(walletIndex);
+      final mnemonic = secureStorage[v1Key]!;
+
+      secureStorage.remove(v1Key);
+      secureStorage['wallet.mnemonic.$walletIndex'] = mnemonic;
+
+      final secret = await manager.getWalletSecretByIndex(walletIndex);
+      expect(secret, isNull);
     });
   });
 }

@@ -7,40 +7,13 @@ use axum::{
 use chrono::{Duration, Utc};
 use schnorrkel::{signing_context, PublicKey, Signature};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use uuid::Uuid;
 
-use crate::{
-    authz, err, find_admin_by_pubkey, ok, persist_runtime_store, write_audit, ApiError,
-    ApiResponse, AppState,
-};
+use crate::{authz, err, find_admin_by_pubkey, ok, write_audit, ApiError, ApiResponse, AppState};
 
 pub(crate) const TOKEN_EXPIRES_SECONDS: i64 = 30 * 60;
 const CHALLENGE_EXPIRES_SECONDS: i64 = 90;
-
-#[derive(Clone, Serialize, Deserialize)]
-pub(crate) struct Session {
-    pub(crate) user_id: String,
-    pub(crate) role: String,
-    pub(crate) expires_at: i64,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub(crate) struct LoginChallenge {
-    pub(crate) admin_pubkey: String,
-    pub(crate) challenge_payload: String,
-    pub(crate) session_id: String,
-    pub(crate) expire_at: i64,
-    pub(crate) consumed: bool,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub(crate) struct QrLoginResult {
-    pub(crate) session_id: String,
-    pub(crate) access_token: String,
-    pub(crate) expires_in: i64,
-    pub(crate) user: SessionUser,
-    pub(crate) created_at: i64,
-}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct SessionUser {
@@ -194,22 +167,19 @@ async fn auth_challenge(
         challenge_id, req.admin_pubkey, nonce, expire_at
     );
 
-    let challenge = LoginChallenge {
-        admin_pubkey: req.admin_pubkey,
-        challenge_payload: challenge_payload.clone(),
-        session_id: challenge_id.clone(),
-        expire_at,
-        consumed: false,
-    };
-
-    state
-        .login_challenges
-        .write()
-        .await
-        .insert(challenge_id.clone(), challenge);
-    persist_runtime_store(&state)
-        .await
-        .map_err(|reason| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &reason))?;
+    sqlx::query(
+        "INSERT INTO login_challenges (challenge_id, admin_pubkey, challenge_payload, session_id, expire_at, consumed, created_at)
+         VALUES ($1, $2, $3, $4, $5, FALSE, $6)",
+    )
+    .bind(&challenge_id)
+    .bind(req.admin_pubkey.trim())
+    .bind(&challenge_payload)
+    .bind(&challenge_id)
+    .bind(expire_at)
+    .bind(Utc::now().timestamp())
+    .execute(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save challenge failed"))?;
 
     write_audit(
         &state,
@@ -240,33 +210,67 @@ async fn auth_verify(
     }
 
     let now_ts = Utc::now().timestamp();
-    let challenge_payload = {
-        let mut challenges = state.login_challenges.write().await;
-        let challenge = challenges
-            .get_mut(&req.challenge_id)
-            .ok_or_else(|| err(StatusCode::BAD_REQUEST, 2003, "challenge not found"))?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
 
-        if challenge.admin_pubkey != req.admin_pubkey {
-            return Err(err(
-                StatusCode::BAD_REQUEST,
-                2004,
-                "challenge pubkey mismatch",
-            ));
-        }
-        if challenge.consumed {
-            return Err(err(
-                StatusCode::BAD_REQUEST,
-                2005,
-                "challenge already consumed",
-            ));
-        }
-        if challenge.expire_at < now_ts {
-            return Err(err(StatusCode::BAD_REQUEST, 2006, "challenge expired"));
-        }
+    let row = sqlx::query(
+        "SELECT admin_pubkey, challenge_payload, expire_at, consumed
+         FROM login_challenges
+         WHERE challenge_id = $1
+         FOR UPDATE",
+    )
+    .bind(req.challenge_id.trim())
+    .fetch_optional(tx.as_mut())
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query challenge failed",
+        )
+    })?
+    .ok_or_else(|| err(StatusCode::BAD_REQUEST, 2003, "challenge not found"))?;
 
-        challenge.consumed = true;
-        challenge.challenge_payload.clone()
-    };
+    let challenge_pubkey: String = row.get("admin_pubkey");
+    if challenge_pubkey != req.admin_pubkey {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            2004,
+            "challenge pubkey mismatch",
+        ));
+    }
+    let consumed: bool = row.get("consumed");
+    if consumed {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            2005,
+            "challenge already consumed",
+        ));
+    }
+    let expire_at: i64 = row.get("expire_at");
+    if expire_at < now_ts {
+        return Err(err(StatusCode::BAD_REQUEST, 2006, "challenge expired"));
+    }
+    let challenge_payload: String = row.get("challenge_payload");
+
+    sqlx::query("UPDATE login_challenges SET consumed = TRUE WHERE challenge_id = $1")
+        .bind(req.challenge_id.trim())
+        .execute(tx.as_mut())
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "consume challenge failed",
+            )
+        })?;
+
+    tx.commit()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
     if let Err(reason) =
         verify_challenge_signature(&req.admin_pubkey, &challenge_payload, &req.signature)
@@ -290,16 +294,25 @@ async fn auth_verify(
 
     let access_token = format!("atk_{}", Uuid::new_v4().simple());
     let expires_at = (Utc::now() + Duration::seconds(TOKEN_EXPIRES_SECONDS)).timestamp();
-    let session = Session {
-        user_id: admin.user_id.clone(),
-        role: admin.role.clone(),
-        expires_at,
-    };
-    state
-        .sessions
-        .write()
-        .await
-        .insert(access_token.clone(), session);
+
+    sqlx::query(
+        "INSERT INTO sessions (access_token, user_id, role, expires_at, created_at)
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(&access_token)
+    .bind(&admin.user_id)
+    .bind(&admin.role)
+    .bind(expires_at)
+    .bind(Utc::now().timestamp())
+    .execute(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "create session failed",
+        )
+    })?;
 
     write_audit(
         &state,
@@ -353,21 +366,18 @@ async fn auth_qr_challenge(
         "cpms", qr_aud, challenge_id, challenge_token, nonce, expire_at
     );
 
-    let challenge = LoginChallenge {
-        admin_pubkey: String::new(),
-        challenge_payload: challenge_payload.clone(),
-        session_id: session_id.clone(),
-        expire_at,
-        consumed: false,
-    };
-    state
-        .login_challenges
-        .write()
-        .await
-        .insert(challenge_id.clone(), challenge);
-    persist_runtime_store(&state)
-        .await
-        .map_err(|reason| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &reason))?;
+    sqlx::query(
+        "INSERT INTO login_challenges (challenge_id, admin_pubkey, challenge_payload, session_id, expire_at, consumed, created_at)
+         VALUES ($1, '', $2, $3, $4, FALSE, $5)",
+    )
+    .bind(&challenge_id)
+    .bind(&challenge_payload)
+    .bind(&session_id)
+    .bind(expire_at)
+    .bind(issued_at)
+    .execute(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save challenge failed"))?;
 
     let login_qr_payload = serde_json::json!({
         "proto": "WUMINAPP_LOGIN_V1",
@@ -413,32 +423,76 @@ async fn auth_qr_complete(
         ));
     }
     let now_ts = Utc::now().timestamp();
-    let challenge_payload = {
-        let mut challenges = state.login_challenges.write().await;
-        let challenge = challenges
-            .get_mut(req.challenge_id.trim())
-            .ok_or_else(|| err(StatusCode::BAD_REQUEST, 2003, "challenge not found"))?;
-        if challenge.consumed {
-            return Err(err(
-                StatusCode::BAD_REQUEST,
-                2005,
-                "challenge already consumed",
-            ));
-        }
-        if challenge.expire_at < now_ts {
-            return Err(err(StatusCode::BAD_REQUEST, 2006, "challenge expired"));
-        }
-        if challenge.session_id != req.session_id.trim() {
-            return Err(err(
-                StatusCode::BAD_REQUEST,
-                2004,
-                "challenge session mismatch",
-            ));
-        }
-        challenge.consumed = true;
-        challenge.admin_pubkey = req.admin_pubkey.trim().to_string();
-        challenge.challenge_payload.clone()
-    };
+
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
+
+    let row = sqlx::query(
+        "SELECT challenge_payload, session_id, expire_at, consumed
+         FROM login_challenges
+         WHERE challenge_id = $1
+         FOR UPDATE",
+    )
+    .bind(req.challenge_id.trim())
+    .fetch_optional(tx.as_mut())
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query challenge failed",
+        )
+    })?
+    .ok_or_else(|| err(StatusCode::BAD_REQUEST, 2003, "challenge not found"))?;
+
+    let consumed: bool = row.get("consumed");
+    if consumed {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            2005,
+            "challenge already consumed",
+        ));
+    }
+
+    let expire_at: i64 = row.get("expire_at");
+    if expire_at < now_ts {
+        return Err(err(StatusCode::BAD_REQUEST, 2006, "challenge expired"));
+    }
+
+    let challenge_session_id: String = row.get("session_id");
+    if challenge_session_id != req.session_id.trim() {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            2004,
+            "challenge session mismatch",
+        ));
+    }
+
+    let challenge_payload: String = row.get("challenge_payload");
+
+    sqlx::query(
+        "UPDATE login_challenges
+         SET consumed = TRUE, admin_pubkey = $1
+         WHERE challenge_id = $2",
+    )
+    .bind(req.admin_pubkey.trim())
+    .bind(req.challenge_id.trim())
+    .execute(tx.as_mut())
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "consume challenge failed",
+        )
+    })?;
+
+    tx.commit()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
     let admin = find_admin_by_pubkey(&state, req.admin_pubkey.trim()).await?;
     if admin.status != "ACTIVE" {
@@ -460,32 +514,57 @@ async fn auth_qr_complete(
 
     let access_token = format!("atk_{}", Uuid::new_v4().simple());
     let expires_at = (Utc::now() + Duration::seconds(TOKEN_EXPIRES_SECONDS)).timestamp();
-    let session = Session {
-        user_id: admin.user_id.clone(),
-        role: admin.role.clone(),
-        expires_at,
-    };
-    state
-        .sessions
-        .write()
+
+    let mut tx2 = state
+        .db
+        .begin()
         .await
-        .insert(access_token.clone(), session);
-    state.qr_login_results.write().await.insert(
-        req.challenge_id.clone(),
-        QrLoginResult {
-            session_id: req.session_id.trim().to_string(),
-            access_token,
-            expires_in: TOKEN_EXPIRES_SECONDS,
-            user: SessionUser {
-                user_id: admin.user_id,
-                role: admin.role,
-            },
-            created_at: now_ts,
-        },
-    );
-    persist_runtime_store(&state)
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
+
+    sqlx::query(
+        "INSERT INTO sessions (access_token, user_id, role, expires_at, created_at)
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(&access_token)
+    .bind(&admin.user_id)
+    .bind(&admin.role)
+    .bind(expires_at)
+    .bind(now_ts)
+    .execute(tx2.as_mut())
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "create session failed",
+        )
+    })?;
+
+    sqlx::query(
+        "INSERT INTO qr_login_results (challenge_id, session_id, access_token, expires_in, user_id, role, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (challenge_id) DO UPDATE SET
+           session_id = EXCLUDED.session_id,
+           access_token = EXCLUDED.access_token,
+           expires_in = EXCLUDED.expires_in,
+           user_id = EXCLUDED.user_id,
+           role = EXCLUDED.role,
+           created_at = EXCLUDED.created_at",
+    )
+    .bind(req.challenge_id.trim())
+    .bind(req.session_id.trim())
+    .bind(&access_token)
+    .bind(TOKEN_EXPIRES_SECONDS)
+    .bind(&admin.user_id)
+    .bind(&admin.role)
+    .bind(now_ts)
+    .execute(tx2.as_mut())
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save qr result failed"))?;
+
+    tx2.commit()
         .await
-        .map_err(|reason| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &reason))?;
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
     Ok(Json(ok(serde_json::json!({"status": "SUCCESS"}))))
 }
@@ -502,26 +581,38 @@ async fn auth_qr_result(
         ));
     }
     let now_ts = Utc::now().timestamp();
-    let changed = {
-        let mut results = state.qr_login_results.write().await;
-        let before = results.len();
-        results.retain(|_, v| v.created_at + 3600 > now_ts);
-        before != results.len()
-    };
-    if changed {
-        persist_runtime_store(&state)
-            .await
-            .map_err(|reason| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &reason))?;
-    }
 
-    if let Some(result) = state
-        .qr_login_results
-        .read()
+    // 清理结果需要幂等即可，使用轻量锁避免高并发下重复清理抖动。
+    let _guard = state.qr_result_gc_lock.write().await;
+    sqlx::query("DELETE FROM qr_login_results WHERE created_at + 3600 <= $1")
+        .bind(now_ts)
+        .execute(&state.db)
         .await
-        .get(query.challenge_id.trim())
-        .cloned()
-    {
-        if result.session_id != query.session_id.trim() {
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "gc qr result failed",
+            )
+        })?;
+
+    if let Some(row) = sqlx::query(
+        "SELECT session_id, access_token, expires_in, user_id, role
+         FROM qr_login_results
+         WHERE challenge_id = $1",
+    )
+    .bind(query.challenge_id.trim())
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query qr result failed",
+        )
+    })? {
+        let session_id: String = row.get("session_id");
+        if session_id != query.session_id.trim() {
             return Err(err(
                 StatusCode::BAD_REQUEST,
                 2004,
@@ -531,24 +622,39 @@ async fn auth_qr_result(
         return Ok(Json(ok(QrResultData {
             status: "SUCCESS".to_string(),
             message: "login success".to_string(),
-            access_token: Some(result.access_token),
-            expires_in: Some(result.expires_in),
-            user: Some(result.user),
+            access_token: Some(row.get("access_token")),
+            expires_in: Some(row.get("expires_in")),
+            user: Some(SessionUser {
+                user_id: row.get("user_id"),
+                role: row.get("role"),
+            }),
         })));
     }
 
-    let challenge_map = state.login_challenges.read().await;
-    let Some(challenge) = challenge_map.get(query.challenge_id.trim()) else {
-        return Err(err(StatusCode::BAD_REQUEST, 2003, "challenge not found"));
-    };
-    if challenge.session_id != query.session_id.trim() {
+    let challenge_row =
+        sqlx::query("SELECT session_id, expire_at FROM login_challenges WHERE challenge_id = $1")
+            .bind(query.challenge_id.trim())
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| {
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    5001,
+                    "query challenge failed",
+                )
+            })?
+            .ok_or_else(|| err(StatusCode::BAD_REQUEST, 2003, "challenge not found"))?;
+
+    let challenge_session_id: String = challenge_row.get("session_id");
+    if challenge_session_id != query.session_id.trim() {
         return Err(err(
             StatusCode::BAD_REQUEST,
             2004,
             "challenge session mismatch",
         ));
     }
-    if challenge.expire_at < now_ts {
+    let expire_at: i64 = challenge_row.get("expire_at");
+    if expire_at < now_ts {
         return Ok(Json(ok(QrResultData {
             status: "EXPIRED".to_string(),
             message: "challenge expired".to_string(),
@@ -572,13 +678,21 @@ async fn auth_logout(
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiError>)> {
     let token = authz::bearer_token(&headers)?;
-    let removed = state.sessions.write().await.remove(&token);
-    if removed.is_none() {
+    let result = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
+        .bind(token)
+        .execute(&state.db)
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "delete session failed",
+            )
+        })?;
+
+    if result.rows_affected() == 0 {
         return Err(err(StatusCode::UNAUTHORIZED, 2001, "invalid token"));
     }
-    persist_runtime_store(&state)
-        .await
-        .map_err(|reason| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &reason))?;
 
     Ok(Json(ok(serde_json::json!({"status": "SIGNED_OUT"}))))
 }

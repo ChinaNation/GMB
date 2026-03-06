@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashSet, env};
 
 use axum::{
     extract::State,
@@ -15,8 +11,9 @@ use chrono::Utc;
 use rand::rngs::OsRng;
 use schnorrkel::{signing_context, MiniSecretKey, PublicKey, Signature};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 
-use crate::{err, ok, write_audit, AdminUser, ApiError, ApiResponse, AppState};
+use crate::{err, ok, write_audit, ApiError, ApiResponse, AppState};
 
 const FIXED_SUPER_ADMIN_COUNT: usize = 3;
 const FIXED_QR_SIGN_KEY_COUNT: usize = 3;
@@ -28,40 +25,6 @@ pub struct QrSignKeyRuntime {
     pub status: String,
     pub pubkey: String,
     pub secret_bytes: Vec<u8>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct BootstrapInstallData {
-    pub site_sfid: String,
-    pub super_admins: Vec<BootstrapSuperAdmin>,
-    qr_sign_keys: Vec<BootstrapQrSignKey>,
-    version: String,
-    created_at: i64,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct BootstrapSuperAdmin {
-    pub user_id: String,
-    pub admin_pubkey: String,
-    #[serde(default)]
-    pub managed_key_id: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct BootstrapQrSignKey {
-    key_id: String,
-    purpose: String,
-    status: String,
-    pubkey: String,
-    secret: String,
-}
-
-#[derive(Clone)]
-pub struct RuntimeInstallData {
-    pub was_created: bool,
-    pub file_path: PathBuf,
-    pub data: Option<BootstrapInstallData>,
-    pub qr_sign_keys: Vec<QrSignKeyRuntime>,
 }
 
 #[derive(Deserialize)]
@@ -145,18 +108,54 @@ pub(crate) fn router() -> Router<AppState> {
 async fn install_status(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<InstallStatusData>>, (StatusCode, Json<ApiError>)> {
-    let (site_sfid, keys) = {
-        let install = state.install.read().await;
-        (install.site_sfid.clone(), install.qr_sign_keys.clone())
-    };
-    let users = state.admin_users.read().await;
-    let super_admin_bound_count = users.values().filter(|u| u.role == "SUPER_ADMIN").count();
-    let bind_qrs = build_super_admin_bind_qrs(site_sfid.clone(), &keys, &users)?;
+    let site_sfid = sqlx::query("SELECT site_sfid FROM system_install WHERE id = 1")
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "query install failed",
+            )
+        })?
+        .and_then(|r| r.try_get::<Option<String>, _>("site_sfid").ok().flatten());
+
+    let keys = load_qr_sign_keys(&state).await?;
+
+    let super_admin_bound_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM admin_users WHERE role = 'SUPER_ADMIN' AND status = 'ACTIVE'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query super admin failed",
+        )
+    })?;
+
+    let bound_key_rows = sqlx::query(
+        "SELECT managed_key_id FROM admin_users WHERE role = 'SUPER_ADMIN' AND managed_key_id IS NOT NULL",
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query bound keys failed"))?;
+
+    let mut bound_keys = HashSet::new();
+    for row in bound_key_rows {
+        let key_id: Option<String> = row.get("managed_key_id");
+        if let Some(v) = key_id {
+            bound_keys.insert(v);
+        }
+    }
+
+    let bind_qrs = build_super_admin_bind_qrs(site_sfid.clone(), &keys, &bound_keys)?;
 
     Ok(Json(ok(InstallStatusData {
         initialized: site_sfid.is_some() && !keys.is_empty(),
         site_sfid,
-        super_admin_bound_count,
+        super_admin_bound_count: super_admin_bound_count as usize,
         super_admin_bind_qrs: bind_qrs,
     })))
 }
@@ -173,59 +172,123 @@ async fn initialize_install(
         ));
     }
 
-    {
-        let install = state.install.read().await;
-        if install.site_sfid.is_some() {
-            return Err(err(
-                StatusCode::CONFLICT,
-                4001,
-                "cpms is already initialized",
-            ));
-        }
-    }
-
-    let initialized = initialize_install_data_from_sfid_qr(&req.sfid_init_qr_content)
+    let qr_payload = parse_sfid_install_qr_content(&req.sfid_init_qr_content)
         .map_err(|reason| err(StatusCode::BAD_REQUEST, 4002, &reason))?;
-    let data = initialized.data.ok_or_else(|| {
-        err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5001,
-            "missing install data",
+    validate_sfid_install_qr(&qr_payload)
+        .map_err(|reason| err(StatusCode::BAD_REQUEST, 4002, &reason))?;
+
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
+
+    let current_site = sqlx::query("SELECT site_sfid FROM system_install WHERE id = 1 FOR UPDATE")
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "lock install failed",
+            )
+        })?
+        .and_then(|r| r.try_get::<Option<String>, _>("site_sfid").ok().flatten());
+
+    if current_site.is_some() {
+        return Err(err(
+            StatusCode::CONFLICT,
+            4001,
+            "cpms is already initialized",
+        ));
+    }
+
+    let now_ts = Utc::now().timestamp();
+    sqlx::query(
+        "INSERT INTO system_install (id, site_sfid, initialized_at)
+         VALUES (1, $1, $2)
+         ON CONFLICT (id) DO UPDATE SET site_sfid = EXCLUDED.site_sfid, initialized_at = EXCLUDED.initialized_at",
+    )
+    .bind(qr_payload.site_sfid.trim())
+    .bind(now_ts)
+    .execute(tx.as_mut())
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save install state failed"))?;
+
+    sqlx::query("DELETE FROM qr_sign_keys")
+        .execute(tx.as_mut())
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "clear qr keys failed",
+            )
+        })?;
+
+    let key_meta = [
+        ("K1", "PRIMARY", "ACTIVE"),
+        ("K2", "BACKUP", "STANDBY"),
+        ("K3", "EMERGENCY", "STANDBY"),
+    ];
+
+    let mut keys_runtime = Vec::with_capacity(FIXED_QR_SIGN_KEY_COUNT);
+    for (key_id, purpose, status) in key_meta {
+        let (pubkey, secret) = generate_sr25519_keypair_hex();
+        sqlx::query(
+            "INSERT INTO qr_sign_keys (key_id, purpose, status, pubkey, secret, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
         )
-    })?;
+        .bind(key_id)
+        .bind(purpose)
+        .bind(status)
+        .bind(&pubkey)
+        .bind(&secret)
+        .bind(now_ts)
+        .bind(now_ts)
+        .execute(tx.as_mut())
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "insert qr key failed"))?;
 
-    {
-        let mut install = state.install.write().await;
-        install.file_path = initialized.file_path;
-        install.site_sfid = Some(data.site_sfid.clone());
-        install.qr_sign_keys = initialized.qr_sign_keys;
+        let secret_bytes = decode_bytes(&secret).ok_or_else(|| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "decode generated key failed",
+            )
+        })?;
+        keys_runtime.push(QrSignKeyRuntime {
+            key_id: key_id.to_string(),
+            purpose: purpose.to_string(),
+            status: status.to_string(),
+            pubkey,
+            secret_bytes,
+        });
     }
 
-    {
-        let mut users = state.admin_users.write().await;
-        *users = init_super_admin_users(&data.super_admins);
-    }
+    tx.commit()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
     write_audit(
         &state,
         None,
         "INSTALL_INITIALIZE",
         "CPMS_INSTALL",
-        Some(data.site_sfid.clone()),
+        Some(qr_payload.site_sfid.clone()),
         "SUCCESS",
         serde_json::json!({}),
     )
     .await?;
 
-    let users = state.admin_users.read().await;
-    let keys = {
-        let install = state.install.read().await;
-        install.qr_sign_keys.clone()
-    };
-    let bind_qrs = build_super_admin_bind_qrs(Some(data.site_sfid.clone()), &keys, &users)?;
+    let bind_qrs = build_super_admin_bind_qrs(
+        Some(qr_payload.site_sfid.clone()),
+        &keys_runtime,
+        &HashSet::new(),
+    )?;
 
     Ok(Json(ok(InstallInitializeData {
-        site_sfid: data.site_sfid,
+        site_sfid: qr_payload.site_sfid,
         super_admin_bind_qrs: bind_qrs,
     })))
 }
@@ -242,243 +305,204 @@ async fn bind_super_admin_from_wuminapp(
         return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid bind request"));
     }
 
-    let (site_sfid, file_path, keys) = {
-        let install = state.install.read().await;
-        (
-            install.site_sfid.clone(),
-            install.file_path.clone(),
-            install.qr_sign_keys.clone(),
-        )
-    };
-    let site_sfid =
-        site_sfid.ok_or_else(|| err(StatusCode::CONFLICT, 4003, "cpms not initialized"))?;
-    if !keys.iter().any(|k| k.key_id == req.key_id) {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid key_id"));
-    }
+    let site_sfid = sqlx::query("SELECT site_sfid FROM system_install WHERE id = 1")
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "query install failed",
+            )
+        })?
+        .and_then(|r| r.try_get::<Option<String>, _>("site_sfid").ok().flatten())
+        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "cpms not initialized"))?;
 
-    let expected_nonce = super_admin_bind_nonce(
-        &site_sfid,
-        &req.key_id,
-        keys.iter()
-            .find(|k| k.key_id == req.key_id)
-            .map(|k| k.pubkey.as_str())
-            .unwrap_or(""),
-    );
-    if req.bind_nonce != expected_nonce {
+    let key_row = sqlx::query("SELECT pubkey FROM qr_sign_keys WHERE key_id = $1")
+        .bind(req.key_id.trim())
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query key failed"))?
+        .ok_or_else(|| err(StatusCode::BAD_REQUEST, 1001, "invalid key_id"))?;
+    let sign_key_pubkey: String = key_row.get("pubkey");
+
+    let expected_nonce = super_admin_bind_nonce(&site_sfid, req.key_id.trim(), &sign_key_pubkey);
+    if req.bind_nonce.trim() != expected_nonce {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid bind_nonce"));
     }
 
-    let bind_sign_source =
-        super_admin_bind_sign_source(&site_sfid, &req.key_id, &req.admin_pubkey, &req.bind_nonce);
+    let bind_sign_source = super_admin_bind_sign_source(
+        &site_sfid,
+        req.key_id.trim(),
+        req.admin_pubkey.trim(),
+        req.bind_nonce.trim(),
+    );
     crate::verify_signature_with_context(
-        &req.admin_pubkey,
+        req.admin_pubkey.trim(),
         &bind_sign_source,
-        &req.signature,
+        req.signature.trim(),
         b"CPMS-SUPER-ADMIN-BIND-V1",
     )
     .map_err(|reason| err(StatusCode::UNAUTHORIZED, 2002, reason))?;
 
-    let created = bind_super_admin(&file_path, &req.key_id, &req.admin_pubkey)
-        .map_err(|reason| err(StatusCode::CONFLICT, 4004, &reason))?;
+    let user_id = super_admin_user_id_for_key_id(req.key_id.trim())
+        .ok_or_else(|| err(StatusCode::BAD_REQUEST, 1001, "invalid key_id"))?;
+    let now_ts = Utc::now().timestamp();
 
-    let user = AdminUser {
-        user_id: created.user_id.clone(),
-        admin_pubkey: created.admin_pubkey.clone(),
-        role: "SUPER_ADMIN".to_string(),
-        status: "ACTIVE".to_string(),
-        immutable: true,
-    };
-    state
-        .admin_users
-        .write()
+    let mut tx = state
+        .db
+        .begin()
         .await
-        .insert(user.user_id.clone(), user.clone());
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
+
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE role = 'SUPER_ADMIN'")
+            .fetch_one(tx.as_mut())
+            .await
+            .map_err(|_| {
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    5001,
+                    "count super admin failed",
+                )
+            })?;
+    if count as usize >= FIXED_SUPER_ADMIN_COUNT {
+        return Err(err(
+            StatusCode::CONFLICT,
+            4004,
+            "super admin count reached 3",
+        ));
+    }
+
+    let key_occupied: Option<String> =
+        sqlx::query_scalar("SELECT user_id FROM admin_users WHERE managed_key_id = $1 LIMIT 1")
+            .bind(req.key_id.trim())
+            .fetch_optional(tx.as_mut())
+            .await
+            .map_err(|_| {
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    5001,
+                    "check key binding failed",
+                )
+            })?;
+    if key_occupied.is_some() {
+        return Err(err(
+            StatusCode::CONFLICT,
+            4004,
+            "sign key already bound to super admin",
+        ));
+    }
+
+    let pubkey_exists: Option<String> =
+        sqlx::query_scalar("SELECT user_id FROM admin_users WHERE admin_pubkey = $1 LIMIT 1")
+            .bind(req.admin_pubkey.trim())
+            .fetch_optional(tx.as_mut())
+            .await
+            .map_err(|_| {
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    5001,
+                    "check pubkey failed",
+                )
+            })?;
+    if pubkey_exists.is_some() {
+        return Err(err(
+            StatusCode::CONFLICT,
+            4004,
+            "admin_pubkey already bound",
+        ));
+    }
+
+    sqlx::query(
+        "INSERT INTO admin_users (user_id, admin_pubkey, role, status, immutable, managed_key_id, created_at, updated_at)
+         VALUES ($1, $2, 'SUPER_ADMIN', 'ACTIVE', TRUE, $3, $4, $5)",
+    )
+    .bind(&user_id)
+    .bind(req.admin_pubkey.trim())
+    .bind(req.key_id.trim())
+    .bind(now_ts)
+    .bind(now_ts)
+    .execute(tx.as_mut())
+    .await
+    .map_err(|_| err(StatusCode::CONFLICT, 4004, "bind super admin failed"))?;
+
+    tx.commit()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
     write_audit(
         &state,
-        Some(user.user_id.clone()),
+        Some(user_id.clone()),
         "BIND_SUPER_ADMIN",
         "ADMIN_USER",
-        Some(user.user_id.clone()),
+        Some(user_id.clone()),
         "SUCCESS",
         serde_json::json!({
-            "managed_key_id": created.managed_key_id,
+            "managed_key_id": req.key_id.trim(),
         }),
     )
     .await?;
 
     Ok(Json(ok(BindSuperAdminData {
-        user_id: user.user_id,
-        admin_pubkey: user.admin_pubkey,
-        role: user.role,
-        status: user.status,
-        managed_key_id: created.managed_key_id,
+        user_id,
+        admin_pubkey: req.admin_pubkey.trim().to_string(),
+        role: "SUPER_ADMIN".to_string(),
+        status: "ACTIVE".to_string(),
+        managed_key_id: req.key_id.trim().to_string(),
     })))
 }
 
-pub fn load_or_init_install_data() -> Result<RuntimeInstallData, String> {
-    let file_path = install_file_path();
-    if !file_path.exists() {
-        // 首次启动允许处于“待初始化”状态，等待扫码 SFID 安装二维码后再创建安装文件。
-        return Ok(RuntimeInstallData {
-            was_created: false,
-            file_path,
-            data: None,
-            qr_sign_keys: Vec::new(),
+pub(crate) async fn load_qr_sign_keys(
+    state: &AppState,
+) -> Result<Vec<QrSignKeyRuntime>, (StatusCode, Json<ApiError>)> {
+    let rows = sqlx::query(
+        "SELECT key_id, purpose, status, pubkey, secret
+         FROM qr_sign_keys
+         ORDER BY key_id",
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query qr keys failed",
+        )
+    })?;
+
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let secret: String = row.get("secret");
+        let secret_bytes = decode_bytes(&secret).ok_or_else(|| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5003,
+                "invalid qr sign secret encoding",
+            )
+        })?;
+        if secret_bytes.len() != 32 {
+            return Err(err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5003,
+                "invalid qr sign secret length",
+            ));
+        }
+        out.push(QrSignKeyRuntime {
+            key_id: row.get("key_id"),
+            purpose: row.get("purpose"),
+            status: row.get("status"),
+            pubkey: row.get("pubkey"),
+            secret_bytes,
         });
     }
-
-    let content = fs::read_to_string(&file_path).map_err(|e| {
-        format!(
-            "read install bootstrap file '{}' failed: {e}",
-            file_path.display()
-        )
-    })?;
-    let mut data: BootstrapInstallData = serde_json::from_str(&content).map_err(|e| {
-        format!(
-            "parse install bootstrap file '{}' failed: {e}",
-            file_path.display()
-        )
-    })?;
-    normalize_legacy_super_admins(&mut data);
-    validate_install_data(&data)?;
-    let qr_sign_keys = runtime_qr_sign_keys(&data.qr_sign_keys)?;
-
-    Ok(RuntimeInstallData {
-        was_created: false,
-        file_path,
-        data: Some(data),
-        qr_sign_keys,
-    })
-}
-
-pub fn initialize_install_data_from_sfid_qr(
-    sfid_init_qr_content: &str,
-) -> Result<RuntimeInstallData, String> {
-    let file_path = install_file_path();
-    if file_path.exists() {
-        return Err(format!(
-            "install bootstrap file '{}' already exists",
-            file_path.display()
-        ));
-    }
-
-    let qr_payload = parse_sfid_install_qr_content(sfid_init_qr_content)?;
-    validate_sfid_install_qr(&qr_payload)?;
-
-    let data = create_install_data(qr_payload.site_sfid);
-    validate_install_data(&data)?;
-    persist_install_data(&file_path, &data)?;
-    let qr_sign_keys = runtime_qr_sign_keys(&data.qr_sign_keys)?;
-
-    Ok(RuntimeInstallData {
-        was_created: true,
-        file_path,
-        data: Some(data),
-        qr_sign_keys,
-    })
-}
-
-pub fn bind_super_admin(
-    file_path: &Path,
-    key_id: &str,
-    admin_pubkey: &str,
-) -> Result<BootstrapSuperAdmin, String> {
-    let content = fs::read_to_string(file_path).map_err(|e| {
-        format!(
-            "read install bootstrap file '{}' failed: {e}",
-            file_path.display()
-        )
-    })?;
-    let mut data: BootstrapInstallData = serde_json::from_str(&content).map_err(|e| {
-        format!(
-            "parse install bootstrap file '{}' failed: {e}",
-            file_path.display()
-        )
-    })?;
-    normalize_legacy_super_admins(&mut data);
-    validate_install_data(&data)?;
-
-    if data.super_admins.len() >= FIXED_SUPER_ADMIN_COUNT {
-        return Err(format!(
-            "super admin count reached {}",
-            FIXED_SUPER_ADMIN_COUNT
-        ));
-    }
-
-    let trimmed_key_id = key_id.trim();
-    let trimmed_admin_pubkey = admin_pubkey.trim();
-    if trimmed_key_id.is_empty() || trimmed_admin_pubkey.is_empty() {
-        return Err("invalid key_id or admin_pubkey".to_string());
-    }
-
-    if !data.qr_sign_keys.iter().any(|k| k.key_id == trimmed_key_id) {
-        return Err(format!("unknown sign key_id '{}'", trimmed_key_id));
-    }
-
-    if data
-        .super_admins
-        .iter()
-        .any(|a| a.managed_key_id == trimmed_key_id)
-    {
-        return Err(format!(
-            "sign key '{}' already bound to super admin",
-            trimmed_key_id
-        ));
-    }
-
-    if data
-        .super_admins
-        .iter()
-        .any(|a| a.admin_pubkey == trimmed_admin_pubkey)
-    {
-        return Err("admin_pubkey already bound to super admin".to_string());
-    }
-
-    let user_id = super_admin_user_id_for_key_id(trimmed_key_id)
-        .ok_or_else(|| format!("unsupported sign key_id '{}'", trimmed_key_id))?;
-
-    let created = BootstrapSuperAdmin {
-        user_id,
-        admin_pubkey: trimmed_admin_pubkey.to_string(),
-        managed_key_id: trimmed_key_id.to_string(),
-    };
-
-    data.super_admins.push(created.clone());
-    validate_install_data(&data)?;
-    persist_install_data(file_path, &data)?;
-
-    Ok(created)
-}
-
-pub fn init_super_admin_users(super_admins: &[BootstrapSuperAdmin]) -> HashMap<String, AdminUser> {
-    let mut users = HashMap::new();
-    for super_admin in super_admins {
-        let user = AdminUser {
-            user_id: super_admin.user_id.clone(),
-            admin_pubkey: super_admin.admin_pubkey.clone(),
-            role: "SUPER_ADMIN".to_string(),
-            status: "ACTIVE".to_string(),
-            immutable: true,
-        };
-        users.insert(user.user_id.clone(), user);
-    }
-    users
-}
-
-pub fn super_admin_user_id_for_key_id(key_id: &str) -> Option<String> {
-    match key_id {
-        "K1" => Some("u_super_admin_01".to_string()),
-        "K2" => Some("u_super_admin_02".to_string()),
-        "K3" => Some("u_super_admin_03".to_string()),
-        _ => None,
-    }
+    Ok(out)
 }
 
 fn build_super_admin_bind_qrs(
     site_sfid: Option<String>,
     keys: &[QrSignKeyRuntime],
-    users: &HashMap<String, AdminUser>,
+    bound_keys: &HashSet<String>,
 ) -> Result<Vec<SuperAdminBindQrData>, (StatusCode, Json<ApiError>)> {
     let Some(site_sfid) = site_sfid else {
         return Ok(Vec::new());
@@ -486,18 +510,6 @@ fn build_super_admin_bind_qrs(
 
     keys.iter()
         .map(|key| {
-            let expected_user_id =
-                super_admin_user_id_for_key_id(&key.key_id).ok_or_else(|| {
-                    err(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        5001,
-                        "invalid fixed sign key id",
-                    )
-                })?;
-            let bound = users
-                .get(&expected_user_id)
-                .map(|u| u.role == "SUPER_ADMIN")
-                .unwrap_or(false);
             let bind_nonce = super_admin_bind_nonce(&site_sfid, &key.key_id, &key.pubkey);
             let qr_payload = SuperAdminBindQrPayload {
                 ver: "1".to_string(),
@@ -513,7 +525,7 @@ fn build_super_admin_bind_qrs(
                 .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "qr encode failed"))?;
             Ok(SuperAdminBindQrData {
                 key_id: key.key_id.clone(),
-                bound,
+                bound: bound_keys.contains(&key.key_id),
                 qr_payload,
                 qr_content,
             })
@@ -542,200 +554,13 @@ fn super_admin_bind_sign_source(
     )
 }
 
-fn install_file_path() -> PathBuf {
-    std::env::var("CPMS_INSTALL_FILE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("runtime/cpms_install_init.json"))
-}
-
-fn create_install_data(site_sfid: String) -> BootstrapInstallData {
-    let trimmed_site_sfid = site_sfid.trim().to_string();
-    if trimmed_site_sfid.is_empty() {
-        panic!("site_sfid from SFID install QR is empty");
+pub(crate) fn super_admin_user_id_for_key_id(key_id: &str) -> Option<String> {
+    match key_id {
+        "K1" => Some("u_super_admin_01".to_string()),
+        "K2" => Some("u_super_admin_02".to_string()),
+        "K3" => Some("u_super_admin_03".to_string()),
+        _ => None,
     }
-
-    let mut qr_sign_keys = Vec::with_capacity(FIXED_QR_SIGN_KEY_COUNT);
-    let key_meta = [
-        (
-            "K1".to_string(),
-            "PRIMARY".to_string(),
-            "ACTIVE".to_string(),
-        ),
-        (
-            "K2".to_string(),
-            "BACKUP".to_string(),
-            "STANDBY".to_string(),
-        ),
-        (
-            "K3".to_string(),
-            "EMERGENCY".to_string(),
-            "STANDBY".to_string(),
-        ),
-    ];
-    for (key_id, purpose, status) in key_meta {
-        let (pubkey, secret) = generate_sr25519_keypair_hex();
-        qr_sign_keys.push(BootstrapQrSignKey {
-            key_id,
-            purpose,
-            status,
-            pubkey,
-            secret,
-        });
-    }
-
-    BootstrapInstallData {
-        version: "2".to_string(),
-        created_at: Utc::now().timestamp(),
-        site_sfid: trimmed_site_sfid,
-        super_admins: Vec::new(),
-        qr_sign_keys,
-    }
-}
-
-fn persist_install_data(file_path: &Path, data: &BootstrapInstallData) -> Result<(), String> {
-    if let Some(parent) = file_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| {
-            format!(
-                "create install bootstrap dir '{}' failed: {e}",
-                parent.display()
-            )
-        })?;
-    }
-    let json = serde_json::to_string_pretty(data)
-        .map_err(|e| format!("encode install bootstrap json failed: {e}"))?;
-    fs::write(file_path, json).map_err(|e| {
-        format!(
-            "write install bootstrap file '{}' failed: {e}",
-            file_path.display()
-        )
-    })?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let permissions = fs::Permissions::from_mode(0o600);
-        let _ = fs::set_permissions(file_path, permissions);
-    }
-    Ok(())
-}
-
-fn normalize_legacy_super_admins(data: &mut BootstrapInstallData) {
-    // 兼容旧安装文件：若缺少 managed_key_id，则按固定账号后缀回填 K1/K2/K3。
-    for admin in &mut data.super_admins {
-        if !admin.managed_key_id.trim().is_empty() {
-            continue;
-        }
-        admin.managed_key_id = match admin.user_id.as_str() {
-            "u_super_admin_01" => "K1".to_string(),
-            "u_super_admin_02" => "K2".to_string(),
-            "u_super_admin_03" => "K3".to_string(),
-            _ => String::new(),
-        };
-    }
-}
-
-fn validate_install_data(data: &BootstrapInstallData) -> Result<(), String> {
-    if data.site_sfid.trim().is_empty() {
-        return Err("install bootstrap site_sfid is empty".to_string());
-    }
-
-    if data.qr_sign_keys.len() != FIXED_QR_SIGN_KEY_COUNT {
-        return Err(format!(
-            "install bootstrap qr_sign_keys count must be {}",
-            FIXED_QR_SIGN_KEY_COUNT
-        ));
-    }
-
-    if data.super_admins.len() > FIXED_SUPER_ADMIN_COUNT {
-        return Err(format!(
-            "install bootstrap super_admins count must be <= {}",
-            FIXED_SUPER_ADMIN_COUNT
-        ));
-    }
-
-    let mut key_ids = HashMap::new();
-    for key in &data.qr_sign_keys {
-        if key.key_id.trim().is_empty()
-            || key.pubkey.trim().is_empty()
-            || key.secret.trim().is_empty()
-            || key.status.trim().is_empty()
-            || key.purpose.trim().is_empty()
-        {
-            return Err("install bootstrap qr_sign_key item is invalid".to_string());
-        }
-        if key_ids.insert(key.key_id.clone(), ()).is_some() {
-            return Err("install bootstrap has duplicated key_id".to_string());
-        }
-    }
-
-    let mut admin_pubkeys = HashMap::new();
-    let mut managed_key_ids = HashMap::new();
-    for admin in &data.super_admins {
-        if admin.user_id.trim().is_empty()
-            || admin.admin_pubkey.trim().is_empty()
-            || admin.managed_key_id.trim().is_empty()
-        {
-            return Err("install bootstrap super_admin item is invalid".to_string());
-        }
-
-        if admin_pubkeys
-            .insert(admin.admin_pubkey.clone(), ())
-            .is_some()
-        {
-            return Err("install bootstrap has duplicated super admin pubkey".to_string());
-        }
-
-        if managed_key_ids
-            .insert(admin.managed_key_id.clone(), ())
-            .is_some()
-        {
-            return Err("install bootstrap has duplicated managed_key_id".to_string());
-        }
-
-        if !data
-            .qr_sign_keys
-            .iter()
-            .any(|k| k.key_id == admin.managed_key_id)
-        {
-            return Err("install bootstrap super admin managed_key_id is invalid".to_string());
-        }
-
-        let expected_user_id =
-            super_admin_user_id_for_key_id(&admin.managed_key_id).ok_or_else(|| {
-                "install bootstrap super admin managed_key_id is unsupported".to_string()
-            })?;
-        if expected_user_id != admin.user_id {
-            return Err("install bootstrap super admin user_id/key_id mismatch".to_string());
-        }
-    }
-
-    if !data
-        .qr_sign_keys
-        .iter()
-        .any(|k| k.status == "ACTIVE" && k.purpose == "PRIMARY")
-    {
-        return Err("install bootstrap missing active primary qr sign key".to_string());
-    }
-
-    Ok(())
-}
-
-fn runtime_qr_sign_keys(keys: &[BootstrapQrSignKey]) -> Result<Vec<QrSignKeyRuntime>, String> {
-    keys.iter()
-        .map(|k| {
-            let secret_bytes = decode_bytes(&k.secret)
-                .ok_or_else(|| format!("invalid qr sign secret encoding for {}", k.key_id))?;
-            if secret_bytes.len() != 32 {
-                return Err(format!("invalid qr sign secret length for {}", k.key_id));
-            }
-            Ok(QrSignKeyRuntime {
-                key_id: k.key_id.clone(),
-                purpose: k.purpose.clone(),
-                status: k.status.clone(),
-                pubkey: k.pubkey.clone(),
-                secret_bytes,
-            })
-        })
-        .collect::<Result<Vec<QrSignKeyRuntime>, String>>()
 }
 
 fn parse_sfid_install_qr_content(content: &str) -> Result<SfidInstallQrPayload, String> {
@@ -778,7 +603,7 @@ fn validate_sfid_install_qr(payload: &SfidInstallQrPayload) -> Result<(), String
         ));
     }
 
-    let sfid_pubkey = std::env::var("SFID_ROOT_PUBKEY")
+    let sfid_pubkey = env::var("SFID_ROOT_PUBKEY")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())

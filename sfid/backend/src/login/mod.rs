@@ -16,6 +16,8 @@ use crate::business::scope::province_scope_for_role;
 use crate::sfid::province::super_admin_display_name;
 use crate::*;
 
+const LOGIN_CHALLENGE_TTL_SECONDS: i64 = 90;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct LoginChallenge {
     pub(crate) challenge_id: String,
@@ -266,7 +268,7 @@ pub(crate) async fn admin_auth_challenge(
     }
 
     let now = Utc::now();
-    let expire_at = now + Duration::minutes(2);
+    let expire_at = now + Duration::seconds(LOGIN_CHALLENGE_TTL_SECONDS);
     let challenge_id = Uuid::new_v4().to_string();
     let nonce = Uuid::new_v4().to_string();
     let challenge_text = format!(
@@ -453,7 +455,7 @@ pub(crate) async fn admin_auth_qr_challenge(
     }
 
     let now = Utc::now();
-    let expire_at = now + Duration::minutes(2);
+    let expire_at = now + Duration::seconds(LOGIN_CHALLENGE_TTL_SECONDS);
     let challenge_id = Uuid::new_v4().to_string();
     let nonce = Uuid::new_v4().to_string();
     let challenge_token = Uuid::new_v4().to_string();

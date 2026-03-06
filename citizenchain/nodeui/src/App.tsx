@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
 import { WalletSection } from './components/WalletSection';
 import { NodeKeySection } from './components/NodeKeySection';
 import { ChainSection } from './components/ChainSection';
@@ -27,8 +25,8 @@ type TabKey =
 
 const WHITEPAPER_HTML_URL =
   'https://chinanation.github.io/GMB/GMB_README.html';
-const CONSTITUTION_RAW_URL =
-  'https://raw.githubusercontent.com/ChinaNation/FRC/main/README.md';
+const CONSTITUTION_HTML_URL =
+  'https://chinanation.github.io/GMB/FRC_README.html';
 
 function formatIncomeDisplay(raw: string): string {
   const normalized = raw.replace(/,/g, '').trim();
@@ -71,9 +69,6 @@ export default function App() {
     fullNodes: 0,
     lightNodes: 0,
   });
-  const [constitutionContent, setConstitutionContent] = useState<string>('');
-  const [constitutionLoading, setConstitutionLoading] = useState(false);
-  const [constitutionError, setConstitutionError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>('home');
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -111,25 +106,6 @@ export default function App() {
     setNetwork(data);
   }, []);
 
-  const loadConstitution = useCallback(async () => {
-    setConstitutionLoading(true);
-    try {
-      const res = await fetch(`${CONSTITUTION_RAW_URL}?t=${Date.now()}`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) {
-        throw new Error(`公民宪法拉取失败: HTTP ${res.status}`);
-      }
-      const text = await res.text();
-      setConstitutionContent(text);
-      setConstitutionError(null);
-    } catch (e) {
-      setConstitutionError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setConstitutionLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     const timer = globalThis.setInterval(() => {
       void Promise.all([api.getNodeStatus(), api.getChainStatus(), api.getNodeIdentity()])
@@ -160,25 +136,6 @@ export default function App() {
     }, 5000);
     return () => globalThis.clearInterval(timer);
   }, [loadNetwork, tab]);
-
-  useEffect(() => {
-    if (tab !== 'constitution') return;
-    void loadConstitution().catch(() => undefined);
-    const timer = globalThis.setInterval(() => {
-      void loadConstitution().catch(() => undefined);
-    }, 60000);
-    return () => globalThis.clearInterval(timer);
-  }, [loadConstitution, tab]);
-
-  const constitutionHtml = useMemo(() => {
-    if (!constitutionContent) return '';
-    const parsed = marked.parse(constitutionContent, {
-      gfm: true,
-      breaks: false,
-    });
-    const html = typeof parsed === 'string' ? parsed : '';
-    return DOMPurify.sanitize(html);
-  }, [constitutionContent]);
 
   const onStart = useCallback(async (unlockPasswordInput: string) => {
     if (starting || stopping) return;
@@ -432,16 +389,11 @@ export default function App() {
 
         {tab === 'constitution' ? (
           <section className="section whitepaper-section">
-            {constitutionLoading ? <p className="whitepaper-meta">加载中...</p> : null}
-            {constitutionError ? <p className="whitepaper-error">{constitutionError}</p> : null}
-            {constitutionHtml ? (
-              <article
-                className="whitepaper-content markdown-body"
-                dangerouslySetInnerHTML={{ __html: constitutionHtml }}
-              />
-            ) : (
-              <div className="whitepaper-content">暂无内容</div>
-            )}
+            <iframe
+              className="whitepaper-iframe"
+              src={CONSTITUTION_HTML_URL}
+              title="公民宪法"
+            />
           </section>
         ) : null}
         </section>

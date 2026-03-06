@@ -3,6 +3,7 @@ use axum::{
     Json,
 };
 use chrono::Utc;
+use sqlx::Row;
 
 use crate::{err, ApiError, AppState};
 
@@ -30,17 +31,27 @@ pub(crate) async fn require_auth(
 ) -> Result<AuthContext, (StatusCode, Json<ApiError>)> {
     let token = bearer_token(headers)?;
 
-    let sessions = state.sessions.read().await;
-    let session = sessions
-        .get(&token)
+    let row = sqlx::query("SELECT user_id, role, expires_at FROM sessions WHERE access_token = $1")
+        .bind(token)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "query session failed",
+            )
+        })?
         .ok_or_else(|| err(StatusCode::UNAUTHORIZED, 2001, "invalid token"))?;
-    if session.expires_at < Utc::now().timestamp() {
+
+    let expires_at: i64 = row.get("expires_at");
+    if expires_at < Utc::now().timestamp() {
         return Err(err(StatusCode::UNAUTHORIZED, 2009, "token expired"));
     }
 
     Ok(AuthContext {
-        user_id: session.user_id.clone(),
-        role: session.role.clone(),
+        user_id: row.get("user_id"),
+        role: row.get("role"),
     })
 }
 

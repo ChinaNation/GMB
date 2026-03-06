@@ -18,7 +18,7 @@
 ## 3. 后端模块架构（`cpms/backend/src`）
 
 ### 3.1 模块目录
-- `main.rs`：应用启动、全局状态、通用错误响应、审计写入、运行时快照持久化。
+- `main.rs`：应用启动、PostgreSQL 连接池与迁移、通用错误响应、审计写入。
 - `initialize/`：安装初始化与超级管理员绑定。
 - `login/`：管理员登录（普通 challenge + 扫码 challenge）。
 - `authz/`：Bearer token 鉴权与角色校验。
@@ -59,10 +59,10 @@
 ### 5.2 初始化流程
 1. `install/initialize` 接收 `sfid_init_qr_content`（支持 JSON 或 Base64(JSON)）。
 2. 校验 `qr_type=SFID_CPMS_INSTALL`，并使用环境变量 `SFID_ROOT_PUBKEY` 验签。
-3. 初始化成功后写入安装文件（默认 `runtime/cpms_install_init.json`）：
-   - `site_sfid`
-   - 3 把机构二维码签名密钥（`K1/K2/K3`，主/备/应急）
-   - 已绑定超级管理员列表（初始为空）
+3. 初始化成功后写入 PostgreSQL：
+   - `system_install.site_sfid`
+   - `qr_sign_keys`（固定 3 把：`K1/K2/K3`，主/备/应急）
+   - 超级管理员绑定信息写入 `admin_users`（`managed_key_id` 标识归属键位）
 4. `install/super-admin/bind` 接收 `key_id/admin_pubkey/bind_nonce/signature` 绑定超管：
    - `key_id` 仅允许固定键位。
    - 每个 `key_id` 只能绑定一次，`admin_pubkey` 不可重复。
@@ -70,8 +70,8 @@
 
 ### 5.3 安全约束
 - 未设置 `SFID_ROOT_PUBKEY` 时拒绝初始化。
-- 安装文件已存在时拒绝重复初始化。
-- 安装文件写入后在 Unix 下收敛为 `0600` 权限。
+- `system_install.site_sfid` 已存在时拒绝重复初始化。
+- 绑定时 `managed_key_id` 与 `admin_pubkey` 全局唯一，防止重复绑定。
 
 ## 6. 登录模块（`login/`）
 
@@ -164,22 +164,23 @@ cpms-qr-v1|site_sfid|sign_key_id|archive_no|citizen_status|voting_eligible|issue
 ## 10. 数据模型与持久化
 
 ### 10.1 当前持久化形态
-- 当前实现为“内存 + JSON 快照文件”，未接入关系型数据库。
-- 运行时快照默认路径：`runtime/cpms_runtime_store.json`。
-- 安装数据默认路径：`runtime/cpms_install_init.json`。
+- 当前实现已完全切换为 PostgreSQL 持久化（无 JSON 运行时快照）。
+- 启动时自动执行迁移：`backend/db/migrations/0001_init_cpms_pg.sql`。
 
-### 10.2 运行时核心数据
+### 10.2 核心表
+- `system_install`
+- `qr_sign_keys`
 - `admin_users`
 - `sessions`
 - `login_challenges`
 - `qr_login_results`
 - `archives`
-- `sequence`
+- `sequence_counters`
 - `qr_print_records`
 - `audit_logs`
 
 ### 10.3 审计落库时机
-- 初始化、登录、管理员管理、档案创建、二维码生成、二维码打印等关键动作均写审计并持久化。
+- 初始化、登录、管理员管理、档案创建、二维码生成、二维码打印等关键动作均实时写入 `audit_logs`。
 
 ## 11. API 总览（当前实现）
 
@@ -218,8 +219,8 @@ cpms-qr-v1|site_sfid|sign_key_id|archive_no|citizen_status|voting_eligible|issue
 
 ## 12. 配置项（环境变量）
 - `CPMS_BIND`：服务监听地址，默认 `0.0.0.0:8080`。
-- `CPMS_RUNTIME_STORE_FILE`：运行时快照文件路径，默认 `runtime/cpms_runtime_store.json`。
-- `CPMS_INSTALL_FILE`：安装文件路径，默认 `runtime/cpms_install_init.json`。
+- `CPMS_DATABASE_URL`：PostgreSQL 连接串（优先级高于 `DATABASE_URL`）。
+- `DATABASE_URL`：PostgreSQL 连接串兜底配置。
 - `SFID_ROOT_PUBKEY`：SFID 初始化二维码验签公钥（初始化必填）。
 - `CPMS_LOGIN_QR_AUD`：登录挑战二维码 `aud`，默认 `cpms-local-app`。
 

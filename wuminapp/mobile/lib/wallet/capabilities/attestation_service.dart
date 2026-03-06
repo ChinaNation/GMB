@@ -1,7 +1,10 @@
 import 'dart:math';
 
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:isar/isar.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
+import 'package:wuminapp_mobile/wallet/core/wallet_isar.dart';
+import 'package:wuminapp_mobile/wallet/core/wallet_secure_keys.dart';
 
 class AttestationState {
   const AttestationState({
@@ -26,23 +29,30 @@ class AttestationState {
 }
 
 class AttestationService {
-  static const _kToken = 'attest.token';
-  static const _kExpiresAtMillis = 'attest.expires_at_millis';
-  static const _kPolicy = 'attest.policy';
-  static const _kLastPayload = 'attest.last_payload';
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+
+  static const String _kScope = 'attest';
+  static const String _kMetaExpiresAtMillis =
+      'wallet.session.attest.expires_at_millis.v1';
+  static const String _kMetaPolicy = 'wallet.session.attest.policy.v1';
+  static const String _kMetaLastPayload =
+      'wallet.session.attest.last_payload.v1';
+
   static const _kTokenTtlMillis = 15 * 60 * 1000; // 15 min short-lived token
   static const _kRenewThresholdMillis = 2 * 60 * 1000; // renew before expire
 
   Future<AttestationState> getState() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(_kToken);
-    final expiresAtMillis = prefs.getInt(_kExpiresAtMillis);
-    final policy = prefs.getString(_kPolicy) ?? 'DEFAULT_DERIVATION_PATH_ONLY';
-    final payload = prefs.getString(_kLastPayload);
-    final hasToken = token != null && expiresAtMillis != null;
+    final isar = await WalletIsar.instance.db();
+    final token = await _secureStorage.read(key: _tokenKey());
+    final expiresAtMillis = await _getKvInt(isar, _kMetaExpiresAtMillis);
+    final policy = await _getKvString(isar, _kMetaPolicy) ??
+        'DEFAULT_DERIVATION_PATH_ONLY';
+    final payload = await _getKvString(isar, _kMetaLastPayload);
+    final hasToken =
+        token != null && token.trim().isNotEmpty && expiresAtMillis != null;
     return AttestationState(
       hasToken: hasToken,
-      token: token,
+      token: token?.trim(),
       expiresAtMillis: expiresAtMillis,
       policy: policy,
       lastRequestPayload: payload,
@@ -65,20 +75,24 @@ class AttestationService {
     final payload = _buildPayload(wallet);
     final token = _issueToken();
     final expiresAt = DateTime.now().millisecondsSinceEpoch + _kTokenTtlMillis;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kToken, token);
-    await prefs.setInt(_kExpiresAtMillis, expiresAt);
-    await prefs.setString(_kPolicy, walletServicePolicy(wallet));
-    await prefs.setString(_kLastPayload, payload);
+    final isar = await WalletIsar.instance.db();
+    await _secureStorage.write(key: _tokenKey(), value: token);
+    await isar.writeTxn(() async {
+      await _putKvInt(isar, _kMetaExpiresAtMillis, expiresAt);
+      await _putKvString(isar, _kMetaPolicy, walletServicePolicy(wallet));
+      await _putKvString(isar, _kMetaLastPayload, payload);
+    });
     return getState();
   }
 
   Future<void> clearToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kToken);
-    await prefs.remove(_kExpiresAtMillis);
-    await prefs.remove(_kPolicy);
-    await prefs.remove(_kLastPayload);
+    final isar = await WalletIsar.instance.db();
+    await _secureStorage.delete(key: _tokenKey());
+    await isar.writeTxn(() async {
+      await _deleteKv(isar, _kMetaExpiresAtMillis);
+      await _deleteKv(isar, _kMetaPolicy);
+      await _deleteKv(isar, _kMetaLastPayload);
+    });
   }
 
   Future<SfidBindDraft> buildSfidBindDraft({
@@ -123,6 +137,46 @@ class AttestationService {
   String _issueChallenge() {
     final now = DateTime.now().millisecondsSinceEpoch;
     return 'challenge_$now';
+  }
+
+  String _tokenKey() => WalletSecureKeys.sessionTokenV1(_kScope);
+
+  Future<int?> _getKvInt(Isar isar, String key) async {
+    final row = await isar.appKvEntitys.filter().keyEqualTo(key).findFirst();
+    return row?.intValue;
+  }
+
+  Future<String?> _getKvString(Isar isar, String key) async {
+    final row = await isar.appKvEntitys.filter().keyEqualTo(key).findFirst();
+    return row?.stringValue;
+  }
+
+  Future<void> _putKvInt(Isar isar, String key, int value) async {
+    await isar.appKvEntitys.put(
+      AppKvEntity()
+        ..key = key
+        ..intValue = value
+        ..stringValue = null
+        ..boolValue = null,
+    );
+  }
+
+  Future<void> _putKvString(Isar isar, String key, String value) async {
+    await isar.appKvEntitys.put(
+      AppKvEntity()
+        ..key = key
+        ..stringValue = value
+        ..intValue = null
+        ..boolValue = null,
+    );
+  }
+
+  Future<void> _deleteKv(Isar isar, String key) async {
+    final row = await isar.appKvEntitys.filter().keyEqualTo(key).findFirst();
+    if (row == null) {
+      return;
+    }
+    await isar.appKvEntitys.delete(row.id);
   }
 
   String _signChallengeLocally(String challenge, WalletProfile wallet) {
