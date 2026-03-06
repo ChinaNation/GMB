@@ -1,11 +1,21 @@
-# Login 模块技术文档
+# Login 模块技术文档（当前实现态）
 
-## 1. 目标
+## 1. 模块目标
 
-`mobile/lib/login` 负责扫码登录业务编排，不负责钱包密钥持有。  
-模块目标是：识别登录二维码、做登录挑战校验、触发签名前确认、生成登录回执二维码。
+`mobile/lib/login` 负责扫码登录流程编排，不直接持有钱包密钥。
 
-## 2. 目录
+模块职责：
+
+- 扫描并识别登录挑战二维码
+- 校验协议与字段
+- 校验白名单（`aud`）
+- 防重放（`request_id`）
+- 触发签名前身份确认
+- 展示回执二维码供对端扫码
+
+签名能力由钱包模块 `wallet/capabilities/sign_service.dart` 完成。
+
+## 2. 目录结构
 
 ```text
 login/
@@ -21,41 +31,32 @@ login/
 └── LOGIN_TECHNICAL.md
 ```
 
-## 3. 责任边界
+## 3. 协议口径
 
-- 登录模块负责：
-  - 扫码识别登录挑战二维码
-  - 登录 challenge 协议校验
-  - `aud` 白名单校验
-  - `request_id` 防重放
-  - 用户交互确认与回执二维码展示
-- 钱包模块负责：
-  - 读取钱包机密材料
-  - `sr25519` 签名
-  - 钱包公钥一致性校验
+### 3.1 挑战二维码（系统 -> 手机）
 
-## 4. 协议规范（当前口径）
+字段：
 
-### 4.1 挑战二维码（手机扫描输入）
+- `proto`：固定 `WUMINAPP_LOGIN_V1`
+- `system`：当前支持 `cpms`、`sfid`
+- `request_id`
+- `challenge`
+- `nonce`
+- `issued_at`（秒）
+- `expires_at`（秒）
+- `aud`
 
-- `proto`: 固定 `WUMINAPP_LOGIN_V1`
-- `system`: 当前仅支持 `cpms`、`sfid`
-- `request_id`: 挑战唯一 ID
-- `challenge`: 随机挑战串
-- `nonce`: 随机串
-- `issued_at`: 秒级时间戳
-- `expires_at`: 秒级时间戳
-- `aud`: 登录来源标识（白名单校验字段）
+说明：`origin` 已移除，不参与签名与白名单。
 
-说明：`origin` 已从手机端登录协议移除，不再参与扫码签名与白名单校验。
-
-### 4.2 签名原文（手机端固定拼接）
+### 3.2 签名原文
 
 ```text
 WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 ```
 
-### 4.3 回执二维码（手机展示输出）
+### 3.3 回执二维码（手机 -> 系统）
+
+字段：
 
 - `proto`
 - `request_id`
@@ -65,35 +66,46 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 - `signature`
 - `signed_at`
 
-## 5. 运行流程
+## 4. 执行流程
 
-1. `QrScanPage` 扫码识别 `proto == WUMINAPP_LOGIN_V1`。
-2. `SignService.parseChallenge()` 校验字段完整性、系统范围、过期时间、固定 TTL=90 秒。
-3. `LoginWhitelistPolicy.assertAllowed()` 校验 `aud` 白名单。
-4. `UserIdentificationService.confirmBeforeSign()` 做生物识别确认（若开关开启）。
-5. `LoginReplayGuard.assertNotConsumed(request_id)` 防重放。
-6. 钱包模块读取当前钱包助记词并执行 `sr25519` 签名。
-7. 生成回执 JSON 并展示二维码。
-8. `LoginReplayGuard.consume(request_id)` 记录已消费。
+1. `QrScanPage` 扫码，识别 `proto`
+2. `SignService.parseChallenge()` 校验字段、时效、TTL（固定 90 秒）
+3. `LoginWhitelistPolicy.assertAllowed()` 校验 `aud` 白名单
+4. `UserIdentificationService.confirmBeforeSign()`（开启时）
+5. `LoginReplayGuard.assertNotConsumed(request_id)`
+6. 钱包模块执行 `sr25519` 签名
+7. 生成并展示回执二维码
+8. `LoginReplayGuard.consume(request_id)` 记录已消费
 
-## 6. 安全机制
+回执页交互：
 
-- 协议与字段校验：拒绝非 `WUMINAPP_LOGIN_V1`、拒绝不支持系统、拒绝无效字段。
-- 时效约束：challenge 必须未过期，且 `expires_at - issued_at == 90`。
-- 白名单：仅校验 `aud`，默认：
-  - `cpms -> cpms-local-app`
-  - `sfid -> sfid-local-app`
-- 防重放：本地持久化已消费 `request_id`，过期条目自动清理。
-- 设备身份确认：签名前可要求生物识别。
-- 钱包一致性：签名前校验“助记词派生公钥 == 当前钱包公钥”。
+- 按钮 `重新扫码`
+- 按钮 `完成`
+- 页面显示剩余有效期倒计时
 
-## 7. 本地存储
+## 5. 安全机制
 
-- `SharedPreferences`：
-  - `login.used_request_ids`（防重放记录）
+- 协议强校验：拒绝非 `WUMINAPP_LOGIN_V1`
+- 系统强校验：仅允许 `cpms/sfid`
+- 时效校验：过期拒绝
+- TTL 校验：`expires_at - issued_at == 90`
+- 防重放：`request_id` 一次性消费
+- 白名单：按 `system -> aud 集合` 校验
+- 签名前身份确认：生物识别守卫（开关控制）
+- 钱包一致性：助记词派生公钥必须匹配当前钱包公钥
+
+## 6. 本地存储
+
+- `SharedPreferences`
+  - `login.used_request_ids`（防重放）
   - `login.whitelist_config.v1`（白名单配置 envelope）
-- `flutter_secure_storage`：
+- `flutter_secure_storage`
   - `login.whitelist_hmac_secret.v1`（白名单配置签名密钥）
+
+## 7. 默认白名单
+
+- `cpms -> cpms-local-app`
+- `sfid -> sfid-local-app`
 
 ## 8. 错误码
 
@@ -112,22 +124,16 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 - `L1401` 生物识别不可用
 - `L1402` 生物识别拒绝
 
-## 9. 对端系统联调要求（CPMS/SFID）
+## 9. 对端联调要求（CPMS / SFID）
 
-- 对端验签拼串必须使用当前手机端口径：
-  - `WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at`
-- 对端挑战二维码不应再要求 `origin` 字段作为签名要素。
-- 对端仍需执行：
-  - `request_id` 一次性消费
-  - 过期校验
-  - 管理员权限判定
+- 验签拼串必须与 3.2 完全一致
+- 对端必须自行做 `request_id` 一次性消费
+- 对端必须做过期校验与业务授权校验
 
 ## 10. 测试
 
-- 关键测试：`test/wallet/sign_service_test.dart`
-- 覆盖点：
-  - challenge 解析
-  - TTL 校验
-  - canonical 签名原文
-  - 选定钱包签名
-  - 防重放
+关键测试文件：
+
+- `test/wallet/sign_service_test.dart`
+- `test/login/login_replay_guard_test.dart`
+- `test/login/login_whitelist_store_test.dart`

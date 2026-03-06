@@ -1,457 +1,233 @@
-# WUMINAPP 技术总文档（整合版）
+# WUMINAPP 技术总文档（当前实现态）
 
-## 1. 目标与边界
+## 1. 项目定位
 
-- `wuminapp` 是 GMB 体系的轻节点应用（移动端为主），面向公民/访客用户。
-- 核心职责：钱包、SFID 绑定、公民投票、交易入口、轻社交能力（分期）。
-- 工程边界：
-  - 区块链共识与 Runtime 逻辑在 `citizenchain/`。
-  - 机构治理与全节点运维不在 `wuminapp` 内实现。
-  - `wuminapp/backend` 负责移动端安全代理、链交互聚合、风控与审计。
+`wuminapp` 是移动端优先的轻节点应用，目录分为两部分：
 
-## 2. 产品定位
+- `mobile/`：Flutter 客户端（iOS/Android）
+- `backend/`：Rust/Axum 服务端（链交互聚合 + 状态持久化）
 
-- 产品名称：`wuminapp`
-- 目标用户：访客轻节点、公民轻节点
-- 核心业务域：钱包、转账、SFID 绑定、公民投票、隐私通信、动态发布
-- 非目标范围：全节点运维、委员会后台审批
+边界说明：
 
-## 3. 与当前区块链实现对齐约束
+- 区块链 Runtime/共识逻辑不在本仓库实现（由 `citizenchain` 提供）
+- `wuminapp` 负责钱包、登录签名、链上交易入口、绑定请求与管理目录拉取
 
-### 3.1 链侧已实现能力（wuminapp 必须对齐）
+## 2. 当前技术栈
 
-- SFID 绑定与验证：`citizenchain/otherpallet/sfid-code-auth`
-  - 绑定入口：`bind_sfid`
-  - 一人一票基础：`SfidToAccount` / `AccountToSfid` / `BoundCount`
-  - 防重放：`UsedCredentialNonce`、`UsedVoteNonce`
-  - 投票验签接口：`SfidVoteVerifier`
-- 公民轻节点认证发行：`citizenchain/issuance/citizen-lightnode-issuance`
-  - 绑定成功触发 `OnSfidBound` 回调发奖
-  - 奖励规则常量来自 `primitives/src/citizen_const.rs`：
-    - 前 `14,436,417` 个：`9999.00` 元（`999900` 分）
-    - 后续：`999.00` 元（`99900` 分）
-    - 总量上限：`CITIZEN_LIGHTNODE_MAX_COUNT`
-    - 同一 SFID 仅一次奖励：`CITIZEN_LIGHTNODE_ONE_TIME_ONLY=true`
-- Runtime 验签规则：`citizenchain/runtime/src/configs/mod.rs`
-  - SFID 绑定签名消息域：`GMB_SFID_BIND_V1`
-  - 公民投票签名消息域：`GMB_SFID_VOTE_V1`
-  - 算法：`sr25519`，签名长度 64 字节
+- Mobile：Flutter + Dart
+- Backend：Rust + Axum + sqlx + PostgreSQL
+- 链交互：
+  - 后端交易提交流程：`subxt`（`ws://...`）
+  - 后端余额/管理员目录读取：JSON-RPC（`http://...`）
+- 手机机密存储：`flutter_secure_storage`（Keychain/Keystore）
+- 手机业务存储：Isar
 
-### 3.2 制度需求（仓库约束）
-
-- SFID 与地址一对一绑定后，用户从“访客轻节点”升级为“公民轻节点”。
-- 仅完成 SFID 绑定的轻节点可参与公民投票。
-- 公民轻节点认证发行遵循两阶段奖励与总量上限。
-
-## 4. 技术栈与架构分层
-
-### 4.1 技术栈
-
-- 移动端：`Flutter + Dart`（一套代码覆盖 iOS/Android）
-- 链接入：Substrate API（推荐 `PAPI` / `Dedot` 的服务端适配层）
-- 后端：`Rust`（HTTP/WebSocket）
-- 通信：`Matrix`（E2EE）+ `WebRTC`（语音/视频）
-- 存储：
-  - 本地：`SQLite`/`Hive`
-  - 服务端：`PostgreSQL`
-- 推送：APNs（iOS）+ FCM（Android）
-
-### 4.2 架构分层
-
-- UI 层：Flutter 页面与组件
-- 应用层：状态管理、路由、用例编排
-- 服务层：链交互、认证、消息、推送、文件
-- 领域层：账户、交易、投票、社交模型
-- 基础设施层：本地数据库、缓存、日志、网络
-
-### 4.3 目录建议
+## 3. 当前目录结构
 
 ```text
 wuminapp/
 ├── backend/
-│   ├── src/
-│   ├── tests/
-│   └── migrations/
+│   ├── db/migrations/
+│   └── src/
+│       ├── routes/
+│       ├── services/
+│       └── models/
 ├── mobile/
-│   ├── pubspec.yaml
 │   ├── lib/
 │   │   ├── main.dart
-│   │   ├── pages/
-│   │   ├── widgets/
-│   │   ├── services/
-│   │   └── utils/
-│   ├── assets/
-│   ├── test/
-│   ├── ios/
-│   └── android/
-└── docs/
-    ├── TECH-BASELINE.md
-    ├── API-SPEC.md
-    └── RELEASE.md
+│   │   ├── login/
+│   │   ├── wallet/
+│   │   ├── trade/
+│   │   ├── features/observe_accounts/
+│   │   └── pages/
+│   └── test/
+└── WUMINAPP_TECHNICAL.md
 ```
 
-## 5. 当前实现现状（代码事实）
+## 4. Mobile 当前实现
 
-### 5.1 mobile（Flutter）
+### 4.1 主导航
 
-- 已实现：
-  - 4 Tab 框架：首页/投票/交易/我的（投票和交易仍为“开发中”页面）
-  - 后端健康检查：`GET /api/v1/health`（`api_client.dart`）
-  - 本地钱包创建/导入：`sr25519 + SS58(2027)`（`wallet_service.dart`）
-  - 多钱包本地管理（SharedPreferences）
-  - 扫码登录挑战识别与签名（`fcrc_login_service.dart` + `qr_scan_page.dart`）
-  - 收款码识别并生成转账草稿页（UI 草稿）
-  - 公钥到机构角色映射能力（`wallet_type_service.dart`，本地静态映射表）
-- 未完成：
-  - 链上 `bind_sfid` 真实交易构造与提交
-  - 公民投票交易签名与提交
-  - 转账交易签名、广播、回执追踪
-  - 本地密钥安全区存储（当前助记词明文存于 SharedPreferences）
+底部 5 Tab：
 
-### 5.2 backend（Rust/Axum）
+- `广场`
+- `治理`
+- `消息`
+- `金融`
+- `我的`
 
-- 已实现：
-  - `127.0.0.1:8787` 本地监听
-  - 根路由与健康检查：`/`、`/api/v1/health`
-  - 统一响应包裹：`{ code, message, data }`
-- 未完成：
-  - 链侧绑定请求 API、投票 API、钱包余额/交易 API
-  - 与 citizenchain RPC 的连接层与交易回执订阅
-  - 鉴权、限流、审计追踪、错误码体系落地
+### 4.2 治理页
 
-## 6. 关键流程设计
+- 机构分类卡片已内置：
+  - 国储会 1
+  - 省储会 43
+  - 省储行 43
 
-### 6.1 SFID 绑定流程
+### 4.3 金融页
 
-1. 客户端请求后端获取绑定挑战（nonce + trace_id）。
-2. 客户端使用本地 `sr25519` 对链规则要求的 payload 签名。
-3. 后端校验请求结构后提交链上 `bind_sfid`。
-4. 链上执行：
-   - 验签通过，建立 `SFID <-> Account` 映射
-   - 消耗 nonce 防重放
-   - 触发 `OnSfidBound`（可能发放认证奖励）
-5. 后端回传交易哈希、区块高度、奖励结果（如有）。
+- 入口页标题为“金融”
+- 已接入“链上交易”页面
+- 链下交易仍为开发中占位
 
-### 6.2 公民投票流程
+### 4.4 钱包与签名
 
-1. 客户端拉取提案与投票资格摘要。
-2. 客户端构造 `GMB_SFID_VOTE_V1` 对应签名消息并签名。
-3. 后端提交投票交易。
-4. 链上依据 `SfidVoteVerifier + UsedVoteNonce` 完成验签与防重放。
+钱包能力收口在 `mobile/lib/wallet/`：
 
-### 6.3 资产与交易流程
+- `core/`：钱包生命周期、Isar、机密 key 规范、生物识别守卫
+- `capabilities/`：登录签名、链上交易编排、余额/API、管理员目录、绑定、证明态
+- `ui/`：钱包页面
 
-1. 客户端本地签名交易（`sr25519`）。
-2. 后端执行广播与状态订阅（入池/上链/失败原因）。
-3. 后端返回统一状态机给移动端（`pending/confirmed/failed`）。
+签名算法：`sr25519`。
 
-### 6.4 统一离线双向扫码登录流程（`WUMINAPP_LOGIN_V1`）
+签名前守卫：`UserIdentificationService.confirmBeforeSign()`。
 
-- 登录模式统一为“离线双向扫码”：
-  - 第一次扫码：`wuminapp` 扫描系统挑战二维码。
-  - 第二次扫码：系统扫描 `wuminapp` 展示的签名回执二维码。
-- 私钥仅在手机端本地使用，离线签名，私钥不出端。
-- 三个系统统一认证方式，授权策略分离：
-  - `cpms`：是管理员就登录，不是管理员直接拒绝。
-  - `sfid`：是管理员就登录，不是管理员直接拒绝。
-  - `citizenchain`：`is_admin=true` 进入 `nrc/prc/prb`；`is_admin=false` 进入 `full`。
+调用点：
 
-离线登录时序：
+- 登录扫码签名前
+- 链上交易签名前
 
-1. 登录端（PC/前端软件）生成挑战并展示二维码（挑战码）。
-2. `wuminapp` 扫码后校验协议、时效、系统标识与本地白名单。
-3. 用户在手机端确认登录信息（系统名、设备标识、账户地址）。
-4. `wuminapp` 用本地账户私钥签名并生成回执二维码（签名结果）。
-5. 登录端扫描回执二维码，完成验签与授权判定。
-6. 通过则进入对应界面，失败则给出拒绝原因并记录审计日志。
+### 4.5 登录模块
 
-### 6.5 三端统一设计（手机端统一 + 系统端核心统一）
+登录模块在 `mobile/lib/login/`，负责：
 
-- 手机端统一（`wuminapp`）：
-  - 三端登录统一使用 `mobile/lib/login/` 模块。
-  - 统一协议解析、字段校验、白名单校验、离线签名、回执二维码生成、防重放。
-  - 不为 `cpms/sfid/citizenchain` 分叉实现三套扫码代码。
-- 系统端核心统一（`shared/wumin_login_core`）：
-  - 统一挑战码生成、回执解析、签名原文拼接、`sr25519` 验签、过期校验、`request_id` 一次性消费。
-  - 输入输出结构与错误码统一，避免三端实现差异。
-- 授权层三端分离（Adapter）：
-  - `cpms_login_adapter`：本地 RBAC（3 超管 + 操作员）判定。
-  - `sfid_login_adapter`：内置 45 超管 + 操作员名单判定。
-  - `citizenchain_login_adapter`：三类内置管理员角色映射；其余用户进入全节点界面。
+- 扫码识别挑战码
+- 协议校验
+- `aud` 白名单校验
+- 防重放（`request_id`）
+- 展示回执二维码
 
-## 7. API 规范（MVP + 扩展）
+关键口径：
 
-### 7.1 基础约定
+- 协议：`WUMINAPP_LOGIN_V1`
+- 当前系统白名单：`cpms`、`sfid`
+- 签名串：
 
-- Base URL：`http://<host>:8787`
-- Prefix：`/api/v1`
-- 响应结构：
-  - 成功：`{ code: 0, message: "ok", data: ... }`
-  - 失败：`{ code: <non-zero>, message: "...", trace_id: "..." }`
+```text
+WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
+```
 
-### 7.2 已有接口
+## 5. 手机端三层存储（当前）
 
+### 5.1 机密层（Secure Storage）
+
+仅存高敏感数据：
+
+- `wallet.secret.<wallet_id>.mnemonic.v1`
+- `wallet.session.<scope>.token.v1`
+- `wallet.session.<scope>.key.v1`（预留）
+
+### 5.2 业务层（Isar）
+
+钱包域核心集合：
+
+- `WalletProfileEntity`
+- `WalletSettingsEntity`
+- `TxRecordEntity`
+- `AdminRoleCacheEntity`
+- `ObservedAccountEntity`
+- `LoginReplayEntity`
+- `AppKvEntity`
+
+当前 schema 版本：`wallet.data.schema.version = 4`。
+
+### 5.3 偏好层（SharedPreferences）
+
+仍有少量非机密配置使用（按模块逐步收口）：
+
+- 登录白名单配置：`login.whitelist_config.v1`
+- 登录防重放记录：`login.used_request_ids`
+- SFID 绑定状态：`sfid.bind.*`
+- 用户资料：`user_profile_service` 相关键
+
+## 6. Backend 当前实现
+
+### 6.1 启动前置
+
+必须提供：
+
+- `WUMINAPP_API_TOKEN`
+- `WUMINAPP_DATABASE_URL`
+
+启动时行为：
+
+1. 连接 PostgreSQL
+2. 自动执行 `db/migrations`
+3. 启动 Axum（默认 `0.0.0.0:8787`）
+
+### 6.2 认证与 CORS
+
+- 除健康检查外，接口要求 API Token
+- 支持头：
+  - `Authorization: Bearer <token>`
+  - `x-api-token: <token>`
+- Token 比较为常量时间比较
+- CORS 通过 `WUMINAPP_CORS_ALLOWED_ORIGINS` 配置
+
+### 6.3 已实现 API
+
+公开接口：
+
+- `GET /`
 - `GET /api/v1/health`
 
-示例：
+鉴权接口：
 
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "service": "wuminapp-backend",
-    "version": "0.0.1",
-    "status": "UP"
-  }
-}
-```
-
-### 7.3 占位接口（待实现）
-
-- `POST /api/v1/chain/bind/request`
-  - body 草案：`account_pubkey`
-  - 说明：`wuminapp` 仅发起链侧绑定请求，不直连 `sfid`；由链侧服务与 `sfid` 交互
-- `GET /api/v1/wallet/balance?account=<address>`
-- `POST /api/v1/tx/create`
-- `GET /api/v1/tx/history?account=<address>&page=1&page_size=20`
-
-### 7.4 下一步最小闭环建议
-
-- `POST /api/v1/chain/bind/request`
-- `GET /api/v1/wallet/balance?account=...`
+- `GET /api/v1/wallet/balance`
+- `POST /api/v1/tx/prepare`
 - `POST /api/v1/tx/submit`
-- `GET /api/v1/vote/proposals`
-- `POST /api/v1/vote/cast`
+- `GET /api/v1/tx/status/:tx_hash`
+- `POST /api/v1/chain/bind/request`
+- `GET /api/v1/admins/catalog`
 
-### 7.5 错误码规划
+### 6.4 PostgreSQL 表（当前 migration）
 
-- `1xxx` 参数/校验
-- `2xxx` 身份/权限
-- `3xxx` 业务规则
-- `5xxx` 系统依赖
+- `tx_prepared`
+- `tx_runtime`
+- `chain_bind_requests`
 
-### 7.6 离线扫码登录协议规范（`WUMINAPP_LOGIN_V1`）
+说明：
 
-挑战二维码（系统 -> 手机）：
+- `tx_runtime` 已持久化，后端重启后状态不丢
+- `tx_prepared` 入库但 `PartialTransaction` 仍在进程内，重启后需重新 prepare
 
-```json
-{
-  "proto": "WUMINAPP_LOGIN_V1",
-  "system": "cpms|sfid|citizenchain",
-  "request_id": "uuid",
-  "challenge": "base64-32bytes",
-  "nonce": "uuid",
-  "issued_at": 1760000000,
-  "expires_at": 1760000090,
-  "aud": "local-app-id",
-  "origin": "local-device-id"
-}
-```
+## 7. 安全基线（当前）
 
-签名原文（固定串联顺序）：
+- 私钥/助记词不落 Isar 与 Postgres
+- 登录与交易签名前有设备侧身份确认能力（可开关）
+- 登录白名单配置有本地 HMAC 完整性保护
+- API 统一 token 鉴权
+- 交易状态与绑定请求落库，支持审计追踪基础字段
 
-```text
-WUMINAPP_LOGIN_V1|system|aud|origin|request_id|challenge|nonce|expires_at
-```
+## 8. 已知限制
 
-回执二维码（手机 -> 系统）：
+- 登录防重放当前仍在 `SharedPreferences`，尚未切到 Isar 的 `LoginReplayEntity`
+- `SfidBindingService` 状态仍在 `SharedPreferences`（`sfid.bind.*`）
+- `tx_prepared` 的可提交态依赖进程内对象，重启后需重新发起 prepare
 
-```json
-{
-  "proto": "WUMINAPP_LOGIN_V1",
-  "request_id": "uuid",
-  "account": "ss58-address",
-  "pubkey": "0x...",
-  "sig_alg": "sr25519",
-  "signature": "0x...",
-  "signed_at": 1760000020
-}
-```
+## 9. 本地开发
 
-登录错误码建议：
-
-- `1101`：二维码协议头无效（`proto` 不匹配）
-- `1102`：二维码已过期
-- `1103`：挑战重复使用（`request_id` 已消费）
-- `1201`：签名验签失败
-- `1202`：账户与公钥不一致
-- `2201`：`cpms` 端判定为非管理员（拒绝登录）
-- `2202`：`sfid` 端判定为非管理员（拒绝登录）
-- `2203`：`citizenchain` 端角色判定失败
-
-## 8. 区块链与通信集成原则
-
-- 链上：资产、认证结果、投票、关键审计锚点。
-- 链下：聊天消息、动态正文、媒体文件、推荐流。
-- 私钥不出端：签名默认在移动端完成。
-- 交易流程：本地构造与签名 -> 广播 -> 事件订阅 -> 状态回执。
-- 私聊/群聊：Matrix E2EE（Olm/Megolm）。
-- 语音/视频：WebRTC，采用端到端媒体加密。
-- 动态发布：正文与媒体走链下存储，哈希与签名可选锚定上链。
-- 内容审核：服务端做策略过滤，不触碰用户私钥。
-
-## 9. 安全基线
-
-- P0：助记词/私钥仅存系统安全区（iOS Keychain / Android Keystore）。
-- P0：所有 SFID/投票相关请求必须携带 nonce 与过期时间，后端做二次时效校验。
-- P0：后端落地 `trace_id + account + sfid_hash + tx_hash + result` 审计日志。
-- P0：离线登录挑战 `request_id` 必须一次性消费，禁止复用。
-- P0：离线登录挑战有效期建议 `60s`，超时必须拒绝。
-- P0：`wuminapp` 必须校验 `system/aud/origin` 白名单，不可信来源禁止签名。
-- P1：签名前人机确认（金额、收款方、提案编号、链 ID）。
-- P1：设备完整性校验接入（当前 `attestation_service.dart` 为占位实现）。
-- 敏感操作建议启用二次确认（生物识别或本地 PIN）。
-
-## 10. 工程质量与发布
-
-### 10.1 质量基线
-
-- Flutter：`dart format`、`flutter analyze`、`flutter test`
-- Rust：`cargo fmt`、`cargo clippy`、`cargo test`
-- 提交门禁：格式化 + 静态检查 + 单元测试
-
-### 10.2 发布与环境
-
-- 平台：iOS、Android
-- 制品：IPA、AAB/APK
-- 环境：`dev` / `staging` / `prod`
-- 最小配置：
-  - `CHAIN_RPC_URL`
-  - `MATRIX_HOMESERVER_URL`
-  - `BACKEND_BASE_URL`
-  - `PUSH_PROVIDER_CONFIG`
-  - `LOG_LEVEL`
-
-## 11. 分期里程碑
-
-- M1：钱包、链上转账、SFID 绑定、交易记录
-- M2：公民投票、消息通知、多账户
-- M3：E2EE 聊天、语音视频、动态发布
-
-补充的工程落地里程碑：
-- M1（链路打通）：完成 `WUMINAPP_LOGIN_V1` 离线双向扫码登录、SFID 绑定真实上链、余额查询与基础转账提交
-- M2（治理能力）：完成提案列表与投票上链、投票回执与状态同步
-- M3（体验与安全）：完成安全区密钥迁移、通知/审计看板/异常告警
-
-## 12. 开发与联调
-
-### 12.1 Prerequisites
-
-- 安装 Flutter SDK（stable）
-- 执行 `flutter doctor` 并完成 iOS/Android 工具链检查
-
-### 12.2 Quick Start
+### 9.1 Backend
 
 ```bash
-cd /Users/rhett/GMB/wuminapp/backend
-cargo run
+cd /Users/rhett/GMB/wuminapp
+export WUMINAPP_API_TOKEN='wuminapp-dev-token-001'
+export WUMINAPP_DATABASE_URL='postgres://wuminapp:wuminapp_dev_pwd@127.0.0.1:5440/wuminapp_dev'
+cargo run -p wuminapp-backend
+```
 
+### 9.2 Mobile
+
+```bash
 cd /Users/rhett/GMB/wuminapp/mobile
 flutter pub get
-flutter run
+flutter run \
+  --dart-define=WUMINAPP_API_BASE_URL=http://127.0.0.1:8787 \
+  --dart-define=WUMINAPP_API_TOKEN=wuminapp-dev-token-001
 ```
 
-- Android 模拟器访问后端：`http://10.0.2.2:8787`
-- iOS/桌面调试访问后端：`http://127.0.0.1:8787`
+真机调试时 `WUMINAPP_API_BASE_URL` 需改为局域网 IP，不可用 `127.0.0.1`。
 
-## 13. iOS 启动图资产说明
+## 10. 关联模块文档
 
-- 目录：`wuminapp/mobile/ios/Runner/Assets.xcassets/LaunchImage.imageset/`
-- 可通过替换该目录图片文件来自定义 launch screen。
-- 也可在 Xcode 打开 `ios/Runner.xcworkspace` 后，在 `Runner/Assets.xcassets` 拖拽替换图片。
-
-## 14. 实施检查清单
-
-- [ ] Flutter 工程骨架已初始化
-- [ ] 链交互服务已完成抽象
-- [ ] 私钥与签名安全策略已落地
-- [ ] Matrix + WebRTC 链路已联调
-- [ ] API 规范与错误码已统一
-- [ ] iOS/Android CI 构建可用
-
-## 15. 当前结论
-
-- `wuminapp` 已完成轻节点最小骨架（钱包本地能力 + 扫码登录签名 + 后端健康探针）。
-- 区块链侧 SFID 绑定、认证发行、防重放与投票验签规则已在 `citizenchain` 落地。
-- 下一阶段重点是按现有链规则打通移动端/后端全链路并补齐安全基线。
-
-## 16. 扫码登录实现态对齐（以本节为准）
-
-### 16.1 当前已实现范围
-
-- 已实现完整离线流程：`扫码挑战 -> 用户确认 -> 本地签名 -> 展示回执二维码 -> 系统端扫码验签 -> 登录结果`。
-- 协议固定：`WUMINAPP_LOGIN_V1`。
-- 算法固定：`sr25519`。
-- 当前联调状态：`sfid` 已实测登录成功；`cpms/citizenchain` 按同一协议与核心逻辑对齐。
-- 登录边界固定：`wuminapp` 仅负责挑战签名与展示签名二维码，不接收、不轮询、不回传登录结果状态。
-
-### 16.2 挑战二维码字段（系统 -> 手机）
-
-```json
-{
-  "proto": "WUMINAPP_LOGIN_V1",
-  "system": "sfid|cpms|citizenchain",
-  "request_id": "uuid",
-  "challenge": "string",
-  "nonce": "uuid",
-  "issued_at": 1760000000,
-  "expires_at": 1760000090,
-  "aud": "local-app-id",
-  "origin": "local-device-id"
-}
-```
-
-### 16.3 手机端签名原文（固定顺序）
-
-```text
-WUMINAPP_LOGIN_V1|system|aud|origin|request_id|challenge|nonce|expires_at
-```
-
-### 16.4 回执二维码字段（手机 -> 系统）
-
-```json
-{
-  "proto": "WUMINAPP_LOGIN_V1",
-  "request_id": "uuid",
-  "account": "ss58-address",
-  "pubkey": "0x...",
-  "sig_alg": "sr25519",
-  "signature": "0x...",
-  "signed_at": 1760000020
-}
-```
-
-### 16.5 手机端校验与交互（已实现）
-
-- 协议校验：`proto` 必须为 `WUMINAPP_LOGIN_V1`。
-- 系统校验：`system` 仅允许 `cpms/sfid/citizenchain`。
-- 时效校验：`expires_at` 过期直接拒绝签名。
-- TTL 校验：`expires_at - issued_at` 必须等于 `90` 秒。
-- 白名单校验：对 `system/aud/origin` 执行本地白名单策略。
-- 防重放：`request_id` 本地一次性消费，已消费请求拒绝再次签名。
-- 人机确认：扫码后必须点击“本地签名并生成回执”，不自动签名。
-
-### 16.6 系统端验签对齐要求
-
-- 按 16.3 的固定原文重建消息后做 `sr25519` 验签。
-- 验签公钥优先使用 `signer_pubkey`（如有），否则使用 `account/admin_pubkey`。
-- `request_id` 必须一次性消费，重复提交直接拒绝。
-- 校验 `system/aud/origin` 与本系统配置一致。
-- 验签通过后再做本系统授权判定：
-  - `cpms/sfid`：是管理员登录，不是管理员拒绝。
-  - `citizenchain`：`is_admin=true` 进入 `nrc/prc/prb`；`is_admin=false` 进入 `full`。
-- 登录成功/失败提示只在系统端展示，手机签名端不做结果回执链路。
-
-### 16.7 模块完成清单（wuminapp 侧）
-
-- 已完成：扫码解析、协议校验、白名单校验、防重放、本地签名、签名二维码展示。
-- 已完成：签名前用户确认、可选生物识别开关、开启时生物识别验证。
-- 已完成：钱包助记词从本地偏好存储迁移到系统安全存储（Keychain/Keystore）。
-- 已完成：登录白名单设置页（按 `system` 管理 `aud/origin`，支持重置默认）。
-- 已完成：错误码化异常（含协议错误、白名单拒绝、过期、重放、生物识别失败、钱包缺失）。
-
-### 16.8 已知限制（当前版本）
-
-- 白名单仍是本地配置，尚未接入多端统一下发与签名更新机制。
-- 仅支持离线双向扫码登录，不提供手机端登录结果回传。
+- 登录模块：`mobile/lib/login/LOGIN_TECHNICAL.md`
+- 钱包模块：`mobile/lib/wallet/WALLET_TECHNICAL.md`

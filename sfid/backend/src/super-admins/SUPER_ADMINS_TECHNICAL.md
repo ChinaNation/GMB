@@ -69,6 +69,7 @@
 2. `POST /api/v1/admin/cpms-keys/sfid/generate`
    - 权限：`SUPER_ADMIN`
    - 功能：调用 `sfid` 生成机构身份识别码（`A3=GFR`,`P1=0`），并生成 SFID 签名初始化二维码。
+   - 链侧字段对齐：机构识别码对链口径统一为 `sfid_id`，对应本系统内部字段 `site_sfid`。
 3. `POST /api/v1/admin/cpms-keys/register-scan`
    - 权限：`SUPER_ADMIN`
    - 功能：扫码录入 CPMS 初始化后产生的机构公钥二维码；写审计 `CPMS_KEYS_REGISTER_SCAN`。
@@ -87,7 +88,7 @@
 
 ## 5. 机构数据模型
 `CpmsSiteKeys` 关键字段：
-1. `site_sfid`
+1. `site_sfid`（对链字段名：`sfid_id`）
 2. `pubkey_1 | pubkey_2 | pubkey_3`
 3. `status`：`PENDING | ACTIVE | DISABLED | REVOKED`
 4. `version`：内部版本号（用于状态/更新追踪）
@@ -119,6 +120,13 @@
    - 录入时提交的 `init_qr_payload` 必须与该 `site_sfid` 生成阶段保存值一致。
 5. 校验通过后机构置为 `ACTIVE`，写入 3 把公钥。
 
+### 6.3 与区块链“机构 SFID 登记（多签前置）”对齐口径
+1. 本模块负责生成并治理机构识别码：`site_sfid`（对链口径 `sfid_id`）。
+2. 链侧该功能必传数据 `sfid_id`，由本模块提供来源。
+3. 链侧要求“交易 `origin` 必须是 SFID 主账户/备份账户之一”属于链上账户权限与签名校验，不在本模块内完成。
+4. 该流程无额外业务签名字段，本模块不输出额外业务签名。
+5. 主备账户来源与轮换能力由 `key-admins` 模块维护，本模块不维护主备账户状态机。
+
 ## 7. 前端对接口径（机构页）
 1. 列表列名为“身份识别码”，展示 `site_sfid`。
 2. 行内支持小二维码预览与下载。
@@ -141,6 +149,7 @@
 2. 省域隔离由 `in_scope_cpms_site` 强校验。
 3. 机构登记二维码有防重放 token（24 小时窗口）。
 4. 只有 `ACTIVE` 机构可用于后续 CPMS 业务二维码验签。
+5. 机构登记面与链上多签发起面解耦：本模块只治理 `sfid_id` 主数据，链上 `origin` 由链与钱包侧校验。
 
 ## 10. 审计事件
 1. `SUPER_ADMIN_REPLACE`

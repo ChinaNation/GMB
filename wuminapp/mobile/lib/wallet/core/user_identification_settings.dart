@@ -1,15 +1,20 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wuminapp_mobile/wallet/core/wallet_isar.dart';
 
 class UserIdentificationSettings {
-  static const String _kFaceAuthEnabled = 'settings.face_auth_enabled';
-
   Future<bool> isFaceAuthEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_kFaceAuthEnabled) ?? true;
+    final isar = await WalletIsar.instance.db();
+    final settings = await isar.walletSettingsEntitys.get(0);
+    return settings?.faceAuthEnabled ?? true;
   }
 
   Future<void> setFaceAuthEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kFaceAuthEnabled, enabled);
+    final isar = await WalletIsar.instance.db();
+    await isar.writeTxn(() async {
+      final settings = await isar.walletSettingsEntitys.get(0) ??
+          (WalletSettingsEntity()..id = 0);
+      settings.faceAuthEnabled = enabled;
+      settings.updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
+      await isar.walletSettingsEntitys.put(settings);
+    });
   }
 }

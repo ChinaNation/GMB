@@ -30,6 +30,13 @@
 - 区块链端：调用 SFID 自动接口获取可投票人数、绑定有效性等结果。
 - 普通用户：不登录管理员后台，但可使用公开查询页查询档案号、身份识别码、公钥地址。
 
+## 3.1 区块链五项能力模块归属（对齐口径）
+1. 机构 SFID 登记（多签创建前置）：`super-admins` 模块（`sfid_id` 对应内部 `site_sfid`）。
+2. 公民身份绑定凭证：`chain` 模块（`/api/v1/bind/result`）。
+3. 公民投票凭证：`chain` 模块（`/api/v1/vote/verify`）。
+4. 联合投票人口快照：`chain` 模块（当前 `eligible_total` 可对齐，`snapshot_nonce/snapshot_signature` 待扩展）。
+5. SFID 验签主备账户管理：`key-admins` 模块（一主两备与轮换）。
+
 ## 4. 管理员模型与登录机制
 ### 4.1 管理员类型
 - 密钥管理员（`KEY_ADMIN`）：
@@ -191,6 +198,7 @@
 - `backend/src/chain/binding.rs`：链侧公钥绑定请求/结果、绑定校验、奖励回执与状态查询。
 - `backend/src/chain/voters.rs`：链侧公民数获取。
 - `backend/src/chain/vote.rs`：链侧投票资格验证。
+- `backend/src/chain/CHAIN_TECHNICAL.md`：链侧接口与参数对齐说明（含绑定凭证/投票凭证/人口快照对齐口径）。
 - `backend/src/sfid/mod.rs`：SFID 码生成工具主实现（由管理端生成接口调用）。
 - `backend/src/models/mod.rs`：后端统一数据结构定义（Store、DTO、状态枚举）。
 - 主密钥轮换规则（强约束）：
@@ -213,43 +221,45 @@
 
 ## 8. 数据模型
 ### 8.1 核心表（当前落地）
-- 业务主表：
-1. `bind_requests`：区块链侧提交的待绑定记录。
-2. `archive_bindings`：档案号与公钥绑定关系。
-3. `admin_login_challenges`：登录挑战（nonce/challenge）记录与消费状态。
-4. `audit_logs`：绑定/解绑及关键动作日志。
-5. `cpms_site_keys`：机构公钥信任库。
-- 运行态表：
-1. `runtime_misc`：非管理员结构化拆分前的运行杂项快照（JSONB）。
-2. `runtime_meta`：签名种子/公钥元信息快照（JSONB）。
-- 管理员与密钥分表：
-1. `admins`：管理员主表（`KEY_ADMIN|SUPER_ADMIN|OPERATOR_ADMIN|QUERY_ONLY`）。
-2. `provinces`：省份维度表。
-3. `super_admin_scope`：超级管理员省域归属（含 `scope_no`）。
-4. `operator_admin_scope`：操作管理员归属超级管理员关系。
-5. `key_admin_keyring`：密钥管理员一主两备槽位映射。
+- 当前主流程持久化表：
+1. `runtime_cache_entries`：运行态分片缓存（JSONB，按 `entry_key` 存储）。
+2. `runtime_misc`：运行态兼容快照。
+3. `runtime_meta`：运行态元数据（签名种子/公钥，含加密载荷）。
+4. `admins`：管理员主表（`KEY_ADMIN|SUPER_ADMIN|OPERATOR_ADMIN|QUERY_ONLY`）。
+5. `provinces`：省份维度表。
+6. `super_admin_scope`：超级管理员省域归属（含 `scope_no`）。
+7. `operator_admin_scope`：操作管理员归属超级管理员关系。
+8. `key_admin_keyring`：密钥管理员一主两备槽位映射。
+9. `chain_idempotency_requests`：链路幂等与防重放记录。
+10. `binding_unique_locks`：绑定唯一性锁（公钥/档案号双向唯一）。
+11. `bind_reward_states`：奖励回执状态机。
 - 管理员视图：
 1. `v_key_admins`
 2. `v_super_admins`
 3. `v_operator_admins`
+- 历史兼容表（仍在迁移历史中）：
+1. `bind_requests`
+2. `archive_bindings`
+3. `admin_login_challenges`
+4. `audit_logs`
+5. `cpms_site_keys`
 
 ### 8.2 关键约束
-- `archive_bindings.archive_index` 唯一。
-- `archive_bindings.account_pubkey` 唯一。
-- 解绑保留历史，使用状态字段表达，不物理删除。
 - `admins.admin_pubkey` 全局唯一。
 - `super_admin_scope.province_name` 唯一（每省仅 1 名超级管理员）。
 - `super_admin_scope.scope_no` 唯一（1..43 编号）。
 - `key_admin_keyring.slot` 固定且唯一：`MAIN|BACKUP_A|BACKUP_B`。
+- `chain_idempotency_requests` 双唯一：`(route_key, request_id)` 与 `(route_key, nonce)`。
+- `binding_unique_locks`：`account_pubkey` 与 `archive_index` 均唯一。
+- `bind_reward_states`：`account_pubkey` 与 `callback_id` 均唯一。
 
 ### 8.3 状态机
-- `bind_requests.status`：`PENDING | APPROVED | REJECTED | EXPIRED`
-- `archive_bindings.status`：`ACTIVE | UNBOUND | SUSPENDED`
 - `audit_logs.result`：`SUCCESS | FAILED`
 - `admins.role`：`KEY_ADMIN | SUPER_ADMIN | OPERATOR_ADMIN | QUERY_ONLY`
 - 会话角色：`KEY_ADMIN | SUPER_ADMIN | OPERATOR_ADMIN`
 - `admins.status`：`ACTIVE | DISABLED`
-- `admin_login_challenges.status`：`ISSUED | CONSUMED | EXPIRED | FAILED`
+- 登录挑战：运行态 `login_challenges`（一次性消费 + TTL）。
+- 奖励状态：`PENDING | RETRY_WAITING | FAILED | REWARDED`。
 
 ## 9. API 设计（v1 建议）
 ### 9.1 通用返回
@@ -501,12 +511,13 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 3. `SFID_PUBLIC_SEARCH_TOKEN`：公开身份检索鉴权 Token。
 4. `SFID_SIGNING_SEED_HEX`：后端主签名种子（必填）。
 5. `SFID_KEY_ID`：签名 key id（必填）。
-6. `SFID_BIND_CALLBACK_URL`：默认绑定回调地址。
-7. `SFID_BIND_CALLBACK_AUTH_TOKEN`：回调 Bearer Token（仅后端环境变量配置）。
-8. `SFID_CALLBACK_ALLOWED_HOSTS`：回调地址域名白名单（逗号分隔）。
-9. `SFID_ALLOW_INSECURE_CALLBACK_HTTP`：仅开发联调放开 `http://` 回调。
-10. `SFID_CORS_ALLOWED_ORIGINS`：CORS 来源白名单（逗号分隔，禁止 `*`）。
-11. `SFID_PII_KEY`：PII 加密主密钥（用于 `archive_bindings` 加密列写入/回填）。
+6. `SFID_RUNTIME_META_KEY`：运行态元数据加密密钥（必填）。
+7. `SFID_BIND_CALLBACK_URL`：默认绑定回调地址。
+8. `SFID_BIND_CALLBACK_AUTH_TOKEN`：回调 Bearer Token（仅后端环境变量配置）。
+9. `SFID_CALLBACK_ALLOWED_HOSTS`：回调地址域名白名单（逗号分隔）。
+10. `SFID_ALLOW_INSECURE_CALLBACK_HTTP`：仅开发联调放开 `http://` 回调。
+11. `SFID_CORS_ALLOWED_ORIGINS`：CORS 来源白名单（逗号分隔，禁止 `*`）。
+12. `SFID_PII_KEY`：仅部署脚本兼容保留，非后端启动强依赖。
 - 常见故障排查：
 1. 前端提示 `Failed to fetch` 且 `curl` 返回 `Empty reply from server`：优先检查后端进程是否 panic。
 2. 日志出现 `AddrInUse`：说明 `8899` 端口被旧进程占用，先清理占用进程再启动。
@@ -574,7 +585,7 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 ### 15.1 P0（上线前建议完成）
 - 登录 challenge 绑定 `domain/aud/session_id/nonce/expires_at`，防钓鱼和跨环境签名。
 - 冻结二维码签名原文规范（字段顺序、编码、时间格式），避免 CPMS/SFID 联调歧义。
-- 重放防护双层化：`qr_id` 一次性消费 + `admin_login_challenges` 一次性消费与 TTL。
+- 重放防护双层化：`qr_id` 一次性消费 + `login_challenges` 一次性消费与 TTL。
 - 超级管理员保护：除“不可删改角色”外，增加最小可用数量保护（避免误操作锁死）。
 
 ### 15.2 P1（首版稳定后建议）
@@ -596,11 +607,11 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 - 验收标准：前后端、测试、区块链对接口与字段无歧义。
 
 ### 16.2 里程碑 1：数据层与系统初始化（2-3 天）
-- 完成核心表与索引：`admin_login_challenges`、`bind_requests`、`archive_bindings`、`audit_logs`、`cpms_site_keys`。
+- 完成核心表与索引：`runtime_cache_entries`、`runtime_meta`、`admins`、`key_admin_keyring`、`chain_idempotency_requests`、`binding_unique_locks`、`bind_reward_states`。
 - 完成管理员与密钥分表：`admins`、`provinces`、`super_admin_scope`、`operator_admin_scope`、`key_admin_keyring`。
 - 完成运行态拆分：`runtime_misc`、`runtime_meta`，并下线 `runtime_store`。
 - 运行态缓存升级：`runtime_cache_entries`（按键分片存储），`runtime_misc` 仅保留兼容快照。
-- 完成 PII 加密落地：`archive_bindings.identity_code_enc`、`archive_bindings.birth_date_enc`。
+- 完成运行态加密落地：`runtime_meta.payload_enc`。
 - 交付物：`backend/db/migrations`、初始化器代码、数据字典。
 - 当前落地迁移：
   - `backend/db/migrations/001_init_sfid.sql`
@@ -612,6 +623,7 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
   - `backend/db/migrations/007_refresh_admin_views.sql`
   - `backend/db/migrations/008_chain_idempotency_reward_state.sql`
   - `backend/db/migrations/009_runtime_cache_and_pii_encryption.sql`
+  - `backend/db/migrations/010_drop_plaintext_pii_columns.sql`
 - 验收标准：重复执行迁移可幂等，视图和约束稳定可查询。
 
 ### 16.3 里程碑 2：管理员认证与 RBAC（2-3 天）

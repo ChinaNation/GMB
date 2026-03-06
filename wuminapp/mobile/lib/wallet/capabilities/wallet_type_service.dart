@@ -1,16 +1,14 @@
-import 'dart:convert';
-
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:isar/isar.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/api_client.dart';
+import 'package:wuminapp_mobile/wallet/core/wallet_isar.dart';
 
 class WalletTypeService {
   WalletTypeService({ApiClient? apiClient})
       : _apiClient = apiClient ?? ApiClient();
 
   static const String defaultType = '手机钱包';
-  static const String _kRoleMap = 'wallet.admin_catalog.role_map';
-  static const String _kRoleMapUpdatedAt = 'wallet.admin_catalog.updated_at';
   static const int _catalogTtlSeconds = 300;
+  static const String _kUpdatedAtKey = 'wallet.admin_catalog.updated_at';
 
   final ApiClient _apiClient;
   Map<String, String>? _memoryRoleMap;
@@ -48,9 +46,27 @@ class WalletTypeService {
       next[normalized] = entry.roleName.trim();
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kRoleMap, jsonEncode(next));
-    await prefs.setInt(_kRoleMapUpdatedAt, now);
+    final isar = await WalletIsar.instance.db();
+    await isar.writeTxn(() async {
+      await isar.adminRoleCacheEntitys.clear();
+      if (next.isNotEmpty) {
+        final rows = next.entries
+            .map(
+              (entry) => AdminRoleCacheEntity()
+                ..pubkeyHex = entry.key
+                ..roleName = entry.value
+                ..updatedAt = now,
+            )
+            .toList(growable: false);
+        await isar.adminRoleCacheEntitys.putAll(rows);
+      }
+      await isar.appKvEntitys.put(
+        AppKvEntity()
+          ..key = _kUpdatedAtKey
+          ..intValue = now,
+      );
+    });
+
     _memoryRoleMap = next;
     _memoryUpdatedAt = now;
   }
@@ -77,25 +93,11 @@ class WalletTypeService {
       return inMemory;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_kRoleMap);
-    if (raw == null || raw.isEmpty) {
-      _memoryRoleMap = <String, String>{};
-      return _memoryRoleMap!;
-    }
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map) {
-      _memoryRoleMap = <String, String>{};
-      return _memoryRoleMap!;
-    }
+    final isar = await WalletIsar.instance.db();
+    final rows = await isar.adminRoleCacheEntitys.where().anyId().findAll();
     final out = <String, String>{};
-    for (final entry in decoded.entries) {
-      final key = _normalizePubkeyHex(entry.key.toString());
-      final value = entry.value?.toString().trim() ?? '';
-      if (key == null || value.isEmpty) {
-        continue;
-      }
-      out[key] = value;
+    for (final row in rows) {
+      out[row.pubkeyHex] = row.roleName;
     }
     _memoryRoleMap = out;
     return out;
@@ -106,10 +108,12 @@ class WalletTypeService {
     if (inMemory != null) {
       return inMemory;
     }
-    final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getInt(_kRoleMapUpdatedAt);
-    _memoryUpdatedAt = value;
-    return value;
+
+    final isar = await WalletIsar.instance.db();
+    final kv =
+        await isar.appKvEntitys.where().keyEqualTo(_kUpdatedAtKey).findFirst();
+    _memoryUpdatedAt = kv?.intValue;
+    return _memoryUpdatedAt;
   }
 
   String? _normalizePubkeyHex(String input) {

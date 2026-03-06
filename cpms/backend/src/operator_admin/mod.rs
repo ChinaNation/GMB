@@ -6,11 +6,12 @@ use axum::{
 };
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
     authz, dangan, err, find_admin_by_user_id, ok, write_audit, ApiError, ApiResponse, AppState,
-    Archive, QrPrintRecord,
+    Archive,
 };
 
 #[derive(Deserialize)]
@@ -110,6 +111,7 @@ async fn create_archive(
     )
     .await?;
 
+    let now_ts = Utc::now().timestamp();
     let archive = Archive {
         archive_id: format!("ar_{}", Uuid::new_v4().simple()),
         archive_no: archive_no.clone(),
@@ -122,13 +124,30 @@ async fn create_archive(
         passport_no: req.passport_no,
         status: "ACTIVE".to_string(),
         citizen_status,
+        created_at: now_ts,
+        updated_at: now_ts,
     };
 
-    state
-        .archives
-        .write()
-        .await
-        .insert(archive.archive_id.clone(), archive.clone());
+    sqlx::query(
+        "INSERT INTO archives (archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, status, citizen_status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+    )
+    .bind(&archive.archive_id)
+    .bind(&archive.archive_no)
+    .bind(&archive.province_code)
+    .bind(&archive.city_code)
+    .bind(&archive.full_name)
+    .bind(&archive.birth_date)
+    .bind(&archive.gender_code)
+    .bind(archive.height_cm)
+    .bind(&archive.passport_no)
+    .bind(&archive.status)
+    .bind(&archive.citizen_status)
+    .bind(archive.created_at)
+    .bind(archive.updated_at)
+    .execute(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::CONFLICT, 3005, "archive_no conflict, retry exhausted"))?;
 
     write_audit(
         &state,
@@ -158,26 +177,70 @@ async fn list_archives(
 
     let page = query.page.unwrap_or(1).max(1);
     let page_size = query.page_size.unwrap_or(20).clamp(1, 100);
+    let offset = ((page - 1) * page_size) as i64;
+    let limit = page_size as i64;
 
-    let archives = state.archives.read().await;
-    let mut items: Vec<Archive> = archives.values().cloned().collect();
+    let (total, rows) = if let Some(name) = query.full_name {
+        let pattern = format!("%{}%", name);
+        let total: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM archives WHERE full_name LIKE $1")
+                .bind(&pattern)
+                .fetch_one(&state.db)
+                .await
+                .map_err(|_| {
+                    err(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        5001,
+                        "count archives failed",
+                    )
+                })?;
 
-    if let Some(name) = query.full_name {
-        items.retain(|a| a.full_name.contains(&name));
-    }
+        let rows = sqlx::query(
+            "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, status, citizen_status, created_at, updated_at
+             FROM archives
+             WHERE full_name LIKE $1
+             ORDER BY archive_id
+             LIMIT $2 OFFSET $3",
+        )
+        .bind(&pattern)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query archives failed"))?;
 
-    items.sort_by(|a, b| a.archive_id.cmp(&b.archive_id));
-    let total = items.len();
-    let start = (page - 1) * page_size;
-    let end = (start + page_size).min(total);
-    let page_items = if start >= total {
-        vec![]
+        (total, rows)
     } else {
-        items[start..end].to_vec()
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM archives")
+            .fetch_one(&state.db)
+            .await
+            .map_err(|_| {
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    5001,
+                    "count archives failed",
+                )
+            })?;
+
+        let rows = sqlx::query(
+            "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, status, citizen_status, created_at, updated_at
+             FROM archives
+             ORDER BY archive_id
+             LIMIT $1 OFFSET $2",
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query archives failed"))?;
+
+        (total, rows)
     };
 
+    let items: Vec<Archive> = rows.into_iter().map(row_to_archive).collect();
+
     Ok(Json(ok(serde_json::json!({
-        "items": page_items,
+        "items": items,
         "page": page,
         "page_size": page_size,
         "total": total
@@ -191,12 +254,7 @@ async fn get_archive(
 ) -> Result<Json<ApiResponse<Archive>>, (StatusCode, Json<ApiError>)> {
     authz::require_role(&state, &headers, "OPERATOR_ADMIN").await?;
 
-    let archives = state.archives.read().await;
-    let archive = archives
-        .get(&archive_id)
-        .ok_or_else(|| err(StatusCode::NOT_FOUND, 3004, "archive not found"))?
-        .clone();
-
+    let archive = fetch_archive_by_id(&state, &archive_id).await?;
     Ok(Json(ok(archive)))
 }
 
@@ -206,13 +264,8 @@ async fn generate_archive_qr(
     Path(archive_id): Path<String>,
 ) -> Result<Json<ApiResponse<QrGenerateData>>, (StatusCode, Json<ApiError>)> {
     let ctx = authz::require_role(&state, &headers, "OPERATOR_ADMIN").await?;
-    let archive = {
-        let archives = state.archives.read().await;
-        archives
-            .get(&archive_id)
-            .cloned()
-            .ok_or_else(|| err(StatusCode::NOT_FOUND, 3004, "archive not found"))?
-    };
+    let archive = fetch_archive_by_id(&state, &archive_id).await?;
+
     let qr_payload = dangan::build_qr_payload(&state, &archive).await?;
     let qr_content = serde_json::to_string(&qr_payload)
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "qr encode failed"))?;
@@ -246,16 +299,11 @@ async fn print_archive_qr(
     Path(archive_id): Path<String>,
 ) -> Result<Json<ApiResponse<QrPrintData>>, (StatusCode, Json<ApiError>)> {
     let ctx = authz::require_role(&state, &headers, "OPERATOR_ADMIN").await?;
-    let archive = {
-        let archives = state.archives.read().await;
-        archives
-            .get(&archive_id)
-            .cloned()
-            .ok_or_else(|| err(StatusCode::NOT_FOUND, 3004, "archive not found"))?
-    };
+    let archive = fetch_archive_by_id(&state, &archive_id).await?;
+
     let qr_payload = dangan::build_qr_payload(&state, &archive).await?;
 
-    let record = QrPrintRecord {
+    let record = QrPrintData {
         print_id: format!("qpr_{}", Uuid::new_v4().simple()),
         archive_id: archive.archive_id,
         archive_no: qr_payload.archive_no.clone(),
@@ -263,7 +311,20 @@ async fn print_archive_qr(
         voting_eligible: qr_payload.voting_eligible,
         printed_at: Utc::now().timestamp(),
     };
-    state.qr_print_records.write().await.push(record.clone());
+
+    sqlx::query(
+        "INSERT INTO qr_print_records (print_id, archive_id, archive_no, citizen_status, voting_eligible, printed_at)
+         VALUES ($1, $2, $3, $4, $5, $6)",
+    )
+    .bind(&record.print_id)
+    .bind(&record.archive_id)
+    .bind(&record.archive_no)
+    .bind(&record.citizen_status)
+    .bind(record.voting_eligible)
+    .bind(record.printed_at)
+    .execute(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save print record failed"))?;
 
     write_audit(
         &state,
@@ -282,12 +343,41 @@ async fn print_archive_qr(
     )
     .await?;
 
-    Ok(Json(ok(QrPrintData {
-        print_id: record.print_id,
-        archive_id: record.archive_id,
-        archive_no: record.archive_no,
-        citizen_status: record.citizen_status,
-        voting_eligible: record.voting_eligible,
-        printed_at: record.printed_at,
-    })))
+    Ok(Json(ok(record)))
+}
+
+async fn fetch_archive_by_id(
+    state: &AppState,
+    archive_id: &str,
+) -> Result<Archive, (StatusCode, Json<ApiError>)> {
+    let row = sqlx::query(
+        "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, status, citizen_status, created_at, updated_at
+         FROM archives
+         WHERE archive_id = $1",
+    )
+    .bind(archive_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query archive failed"))?
+    .ok_or_else(|| err(StatusCode::NOT_FOUND, 3004, "archive not found"))?;
+
+    Ok(row_to_archive(row))
+}
+
+fn row_to_archive(row: sqlx::postgres::PgRow) -> Archive {
+    Archive {
+        archive_id: row.get("archive_id"),
+        archive_no: row.get("archive_no"),
+        province_code: row.get("province_code"),
+        city_code: row.get("city_code"),
+        full_name: row.get("full_name"),
+        birth_date: row.get("birth_date"),
+        gender_code: row.get("gender_code"),
+        height_cm: row.get("height_cm"),
+        passport_no: row.get("passport_no"),
+        status: row.get("status"),
+        citizen_status: row.get("citizen_status"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    }
 }
