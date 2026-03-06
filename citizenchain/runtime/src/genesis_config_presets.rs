@@ -28,7 +28,7 @@ use hex_literal::hex;
 #[cfg(feature = "std")]
 use primitives::{
     china::china_cb::CHINA_CB, china::china_ch::CHINA_CH, core_const::SS58_FORMAT,
-    genesis::GENESIS_ISSUANCE,
+    genesis::{GENESIS_DEV_ACCOUNT_SS58, GENESIS_DEV_ALLOCATION, GENESIS_ISSUANCE},
 };
 #[cfg(feature = "std")]
 use serde_json::{json, Value};
@@ -109,9 +109,19 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
         .and_then(|n| AccountId::decode(&mut &n.duoqian_address[..]).ok())
         .expect("NRC pallet_address must decode to AccountId");
 
-    // 中文注释：创世发行总量直接预置到国储会交易地址，单位为“分”。
+    // 中文注释：开发/测试附加账户在创世时从国储会创世发行中划拨固定金额。
+    let dev_accounts: Vec<AccountId> = endowed_accounts
+        .into_iter()
+        .filter(|a| a != &nrc_account)
+        .collect();
+    let dev_total_allocation = GENESIS_DEV_ALLOCATION
+        .checked_mul(dev_accounts.len() as u128)
+        .expect("development allocation total should not overflow");
+    let nrc_genesis_balance = GENESIS_ISSUANCE
+        .checked_sub(dev_total_allocation)
+        .expect("development allocation must not exceed genesis issuance");
     let mut genesis_balances: Vec<(AccountId, u128)> =
-        vec![(nrc_account.clone(), GENESIS_ISSUANCE)];
+        vec![(nrc_account.clone(), nrc_genesis_balance)];
 
     // 中文注释：省储行创立发行在创世时直接预置到各自 keyless_address（无私钥永久质押地址）。
     genesis_balances.extend(
@@ -120,12 +130,11 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
             .map(|bank| (AccountId::new(bank.keyless_address), bank.stake_amount)),
     );
 
-    // 中文注释：开发/测试附加账户继续保留，但避免与国储会地址重复。
+    // 中文注释：开发/测试附加账户继续保留；其余额来自国储会创世发行切分。
     genesis_balances.extend(
-        endowed_accounts
+        dev_accounts
             .into_iter()
-            .filter(|a| a != &nrc_account)
-            .map(|a| (a, 1_000_000_000u128)),
+            .map(|account| (account, GENESIS_DEV_ALLOCATION)),
     );
 
     // 中文注释：创世账户统一输出为链 SS58 地址（前缀 2027）。
@@ -187,10 +196,8 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
 #[cfg(feature = "std")]
 pub fn mainnet_config_genesis() -> Value {
     // 开发账户
-    let development_account = AccountId::from_ss58check(
-        "w5Gyz7cNSa4UPqvwC1L4UPCcJwdFbZHt7TL1CCwWyxzDuYCnS",
-    )
-    .expect("development account ss58 must be valid");
+    let development_account = AccountId::from_ss58check(GENESIS_DEV_ACCOUNT_SS58)
+        .expect("development account ss58 must be valid");
     testnet_genesis(vec![development_account], AccountId::new([0u8; 32]))
 }
 
@@ -269,8 +276,25 @@ mod tests {
             })
             .expect("NRC balance entry should exist");
 
-        // 中文注释：国储会地址仅承载创世发行，不应与省储行创立发行混淆。
-        assert_eq!(nrc_amount, GENESIS_ISSUANCE);
+        let development_account = AccountId::from_ss58check(GENESIS_DEV_ACCOUNT_SS58)
+            .expect("development account ss58 must be valid");
+        let dev_ss58 = account_to_genesis_ss58(&development_account);
+        let dev_amount = balances
+            .iter()
+            .find_map(|entry| {
+                let arr = entry.as_array()?;
+                let account = arr.first()?.as_str()?;
+                if account == dev_ss58 {
+                    arr.get(1).and_then(json_amount_to_u128)
+                } else {
+                    None
+                }
+            })
+            .expect("development balance entry should exist");
+
+        // 中文注释：创世发行先入国储会，再从国储会划拨开发账户固定金额。
+        assert_eq!(nrc_amount, GENESIS_ISSUANCE - GENESIS_DEV_ALLOCATION);
+        assert_eq!(dev_amount, GENESIS_DEV_ALLOCATION);
 
         let total_in_patch: u128 = balances
             .iter()
@@ -284,10 +308,10 @@ mod tests {
             .sum();
         let total_shengbank_stake: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
 
-        // 中文注释：创世总注入 = 国储会创世发行 + 省储行创立发行 + 开发账户初始余额（1_000_000_000 分）。
+        // 中文注释：创世总注入 = 创世发行 + 省储行创立发行（开发账户余额来自国储会切分）。
         assert_eq!(
             total_in_patch,
-            GENESIS_ISSUANCE + total_shengbank_stake + 1_000_000_000u128
+            GENESIS_ISSUANCE + total_shengbank_stake
         );
     }
 

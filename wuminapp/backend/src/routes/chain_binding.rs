@@ -1,11 +1,6 @@
 use std::sync::Arc;
 
-use axum::{
-    extract::State,
-    response::IntoResponse,
-    routing::post,
-    Json, Router,
-};
+use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 
 use crate::{
     app_state::AppState,
@@ -18,10 +13,10 @@ pub fn router() -> Router<Arc<AppState>> {
 }
 
 async fn request_bind(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<ChainBindRequest>,
 ) -> impl IntoResponse {
-    match chain_binding_service::request_chain_bind(&req.account_pubkey).await {
+    match chain_binding_service::request_chain_bind(&state.db, &req.account_pubkey).await {
         Ok(data) => Json(ApiResponse {
             code: 0,
             message: "ok",

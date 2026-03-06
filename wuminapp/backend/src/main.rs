@@ -1,4 +1,5 @@
 mod app_state;
+mod db;
 mod errors;
 mod models;
 mod routes;
@@ -21,9 +22,19 @@ async fn main() {
         _ => panic!("WUMINAPP_API_TOKEN is required and must be non-empty"),
     }
 
+    let database_url = match std::env::var("WUMINAPP_DATABASE_URL") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => panic!("WUMINAPP_DATABASE_URL is required and must be non-empty"),
+    };
+    let pool = db::connect(database_url.trim())
+        .await
+        .expect("connect postgres");
+    db::migrate(&pool).await.expect("run postgres migrations");
+
     let state = Arc::new(AppState {
         service: "wuminapp-backend",
         version: env!("CARGO_PKG_VERSION"),
+        db: pool,
     });
 
     let app = routes::build_router(state);

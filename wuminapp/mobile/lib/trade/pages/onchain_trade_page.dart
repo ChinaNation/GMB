@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wuminapp_mobile/login/models/login_exception.dart';
-import 'package:wuminapp_mobile/login/services/login_sign_confirm_service.dart';
-import 'package:wuminapp_mobile/pages/my_wallet_page.dart';
-import 'package:wuminapp_mobile/services/wallet_service.dart';
-import 'package:wuminapp_mobile/trade/onchain/models/onchain_trade_models.dart';
-import 'package:wuminapp_mobile/trade/onchain/services/onchain_trade_service.dart';
+import 'package:wuminapp_mobile/wallet/capabilities/onchain_trade_models.dart';
+import 'package:wuminapp_mobile/wallet/capabilities/onchain_trade_service.dart';
 import 'package:wuminapp_mobile/trade/pages/trade_qr_scan_page.dart';
+import 'package:wuminapp_mobile/wallet/core/user_identification.dart';
+import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
+import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
 
 class OnchainTradePage extends StatefulWidget {
   const OnchainTradePage({super.key});
@@ -19,7 +19,8 @@ class OnchainTradePage extends StatefulWidget {
 
 class _OnchainTradePageState extends State<OnchainTradePage> {
   final OnchainTradeService _tradeService = OnchainTradeService();
-  final LoginSignConfirmService _signConfirmService = LoginSignConfirmService();
+  final UserIdentificationService _signConfirmService =
+      UserIdentificationService();
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   static const List<String> _symbols = ['GMB'];
@@ -109,6 +110,12 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
     if (changed == true) {
       await _reloadWallet();
     }
+  }
+
+  Future<void> _openContactsPage() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const _ContactsPlaceholderPage()),
+    );
   }
 
   Future<void> _scanToAddress() async {
@@ -262,7 +269,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   Widget _buildWalletCard() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
         child: _loadingWallet
             ? const Text('加载当前钱包中...')
             : _currentWallet == null
@@ -280,29 +287,34 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '当前钱包：${_currentWallet!.walletName}',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w700),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '付款钱包：${_currentWallet!.walletName}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700),
+                              ),
                             ),
-                          ),
-                          TextButton(
-                            onPressed: _openMyWalletPage,
-                            style: TextButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 8),
+                            InkWell(
+                              onTap: _openMyWalletPage,
+                              borderRadius: BorderRadius.circular(6),
+                              child: Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: SvgPicture.asset(
+                                  'assets/icons/arrow-right-left.svg',
+                                  width: 20,
+                                  height: 20,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
                             ),
-                            child: const Text('更换'),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 2),
-                      Text('地址：${_currentWallet!.address}'),
+                      Text(_currentWallet!.address),
                     ],
                   ),
       ),
@@ -312,19 +324,16 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   Widget _buildSubmitCard() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    '发起链上转账',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                  ),
-                ),
-                IconButton(
+            TextField(
+              controller: _toController,
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                labelText: '收款地址',
+                suffixIcon: IconButton(
                   tooltip: '扫码填入收款地址',
                   onPressed: _scanToAddress,
                   icon: SvgPicture.asset(
@@ -333,14 +342,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                     height: 18,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            TextField(
-              controller: _toController,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: '收款地址',
               ),
             ),
             const SizedBox(height: 12),
@@ -570,9 +571,13 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         centerTitle: true,
         actions: [
           IconButton(
-            tooltip: '刷新',
-            onPressed: () => _reloadRecords(syncPending: true),
-            icon: const Icon(Icons.refresh),
+            tooltip: '我的通讯录',
+            onPressed: _openContactsPage,
+            icon: SvgPicture.asset(
+              'assets/icons/file-user.svg',
+              width: 20,
+              height: 20,
+            ),
           ),
         ],
       ),
@@ -594,8 +599,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             ),
             const SizedBox(height: 8),
             _buildFilterRow(),
-            const SizedBox(height: 8),
-            _buildRecordsSection(),
             if (_lastSyncedAt != null) ...[
               const SizedBox(height: 10),
               Text(
@@ -603,8 +606,27 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                 style: const TextStyle(color: Colors.black54, fontSize: 12),
               ),
             ],
+            const SizedBox(height: 8),
+            _buildRecordsSection(),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ContactsPlaceholderPage extends StatelessWidget {
+  const _ContactsPlaceholderPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('我的通讯录'),
+        centerTitle: true,
+      ),
+      body: const Center(
+        child: Text('我的通讯录（开发中）'),
       ),
     );
   }

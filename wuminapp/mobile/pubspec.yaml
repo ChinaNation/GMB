@@ -33,3 +33,5 @@ flutter:
     - assets/icons/scan-line.svg
     - assets/icons/wallet.svg
     - assets/icons/copy.svg
+    - assets/icons/arrow-right-left.svg
+    - assets/icons/file-user.svg

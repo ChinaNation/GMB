@@ -4,18 +4,19 @@ import 'package:flutter/foundation.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/features/observe_accounts/observe_accounts_model.dart';
-import 'package:wuminapp_mobile/services/api_client.dart';
-import 'package:wuminapp_mobile/services/wallet_type_service.dart';
+import 'package:wuminapp_mobile/wallet/capabilities/api_client.dart';
+import 'package:wuminapp_mobile/wallet/capabilities/wallet_type_service.dart';
 
 class ObservedAccountService {
   static const int _ss58Format = 2027;
   static const _kObservedAccounts = 'observe.accounts';
   final Keyring _keyring = Keyring.sr25519;
   final ApiClient _apiClient = ApiClient();
+  final WalletTypeService _walletTypeService = WalletTypeService();
 
   Future<List<ObservedAccount>> getObservedAccounts() async {
     final prefs = await SharedPreferences.getInstance();
-    final stored = _decode(prefs.getString(_kObservedAccounts));
+    final stored = await _decode(prefs.getString(_kObservedAccounts));
     if (stored.isEmpty) {
       return stored;
     }
@@ -45,7 +46,7 @@ class ObservedAccountService {
       throw Exception('该观察账户已存在');
     }
 
-    final role = WalletTypeService.resolveWalletType(pubkey);
+    final role = await _walletTypeService.resolveWalletType(pubkey);
     final orgName = role == WalletTypeService.defaultType
         ? '自定义观察账户'
         : _extractOrgName(role);
@@ -220,7 +221,7 @@ class ObservedAccountService {
     return false;
   }
 
-  List<ObservedAccount> _decode(String? raw) {
+  Future<List<ObservedAccount>> _decode(String? raw) async {
     if (raw == null || raw.isEmpty) {
       return <ObservedAccount>[];
     }
@@ -250,7 +251,7 @@ class ObservedAccountService {
       }
       final normalizedAddress =
           address.isNotEmpty ? address : _encodeAddress(pubkey);
-      final role = WalletTypeService.resolveWalletType(pubkey);
+      final role = await _walletTypeService.resolveWalletType(pubkey);
       out.add(
         ObservedAccount(
           id: (m['id']?.toString() ?? 'manual:$pubkey'),

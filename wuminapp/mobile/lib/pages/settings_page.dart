@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:wuminapp_mobile/pages/login_whitelist_page.dart';
-import 'package:wuminapp_mobile/services/app_settings_service.dart';
+import 'package:wuminapp_mobile/wallet/core/user_identification_settings.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -12,7 +12,8 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final AppSettingsService _settingsService = AppSettingsService();
+  final UserIdentificationSettings _settingsService =
+      UserIdentificationSettings();
   final LocalAuthentication _localAuth = LocalAuthentication();
   bool _loading = true;
   bool _faceAuthEnabled = true;

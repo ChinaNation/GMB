@@ -3,12 +3,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wuminapp_mobile/features/observe_accounts/observe_accounts_page.dart';
-import 'package:wuminapp_mobile/pages/my_wallet_page.dart';
 import 'package:wuminapp_mobile/pages/profile_edit_page.dart';
 import 'package:wuminapp_mobile/pages/settings_page.dart';
-import 'package:wuminapp_mobile/services/sfid_binding_service.dart';
+import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
 import 'package:wuminapp_mobile/services/user_profile_service.dart';
-import 'package:wuminapp_mobile/services/wallet_service.dart';
+import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
+import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -111,16 +111,16 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildBindAction() {
     if (_bindState.status == SfidBindStatus.pending) {
-      return SizedBox(
+      return const SizedBox(
         height: 20,
         child: FilledButton(
           onPressed: null,
-          style: const ButtonStyle(
+          style: ButtonStyle(
             padding: WidgetStatePropertyAll(
               EdgeInsets.symmetric(horizontal: 6),
             ),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.schedule, size: 4),

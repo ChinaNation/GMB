@@ -16,7 +16,7 @@ class _LoginWhitelistPageState extends State<LoginWhitelistPage> {
   bool _loading = true;
   late LoginWhitelistConfig _config;
 
-  static const List<String> _systems = ['cpms', 'sfid', 'citizenchain'];
+  static const List<String> _systems = ['cpms', 'sfid'];
 
   @override
   void initState() {
@@ -38,7 +38,6 @@ class _LoginWhitelistPageState extends State<LoginWhitelistPage> {
   Future<void> _resetDefault() async {
     const config = LoginWhitelistConfig(
       audWhitelist: LoginWhitelistStore.defaultAudWhitelist,
-      originWhitelist: LoginWhitelistStore.defaultOriginWhitelist,
     );
     await _store.save(config);
     if (!mounted) {
@@ -53,9 +52,6 @@ class _LoginWhitelistPageState extends State<LoginWhitelistPage> {
     final audCtl = TextEditingController(
       text: (_config.audWhitelist[system] ?? const <String>{}).join(','),
     );
-    final originCtl = TextEditingController(
-      text: (_config.originWhitelist[system] ?? const <String>{}).join(','),
-    );
 
     final ok = await showDialog<bool>(
       context: context,
@@ -68,13 +64,6 @@ class _LoginWhitelistPageState extends State<LoginWhitelistPage> {
               controller: audCtl,
               decoration: const InputDecoration(
                 labelText: 'aud 列表（逗号分隔）',
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: originCtl,
-              decoration: const InputDecoration(
-                labelText: 'origin 列表（逗号分隔）',
               ),
             ),
           ],
@@ -107,25 +96,21 @@ class _LoginWhitelistPageState extends State<LoginWhitelistPage> {
     }
 
     final newAud = _parseCsv(audCtl.text);
-    final newOrigin = _parseCsv(originCtl.text);
-    if (newAud.isEmpty || newOrigin.isEmpty) {
+    if (newAud.isEmpty) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('aud 和 origin 至少各保留 1 项')),
+        const SnackBar(content: Text('aud 至少保留 1 项')),
       );
       return;
     }
 
     final audMap = Map<String, Set<String>>.from(_config.audWhitelist);
-    final originMap = Map<String, Set<String>>.from(_config.originWhitelist);
     audMap[system] = newAud;
-    originMap[system] = newOrigin;
 
     final next = LoginWhitelistConfig(
       audWhitelist: audMap,
-      originWhitelist: originMap,
     );
     await _store.save(next);
     if (!mounted) {
@@ -162,8 +147,7 @@ class _LoginWhitelistPageState extends State<LoginWhitelistPage> {
 
   String _subtitle(String system) {
     final aud = _config.audWhitelist[system] ?? const <String>{};
-    final origin = _config.originWhitelist[system] ?? const <String>{};
-    return 'aud:${aud.join('|')}  origin:${origin.join('|')}';
+    return 'aud:${aud.join('|')}';
   }
 
   @override

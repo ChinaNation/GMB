@@ -70,3 +70,21 @@ pub struct ChainBindRequestData {
     pub accepted: bool,
     pub requested_at: i64,
 }
+
+#[derive(Serialize)]
+pub struct AdminCatalogEntryData {
+    pub pubkey_hex: String,
+    pub role_name: String,
+    pub institution_name: String,
+    pub institution_id_hex: String,
+    pub org: String,
+}
+
+#[derive(Serialize)]
+pub struct AdminCatalogData {
+    pub source: &'static str,
+    pub updated_at: i64,
+    pub institution_count: u32,
+    pub admin_count: u32,
+    pub entries: Vec<AdminCatalogEntryData>,
+}

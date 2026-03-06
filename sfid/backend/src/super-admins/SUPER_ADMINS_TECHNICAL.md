@@ -68,7 +68,7 @@
    - 范围：仅本省机构。
 2. `POST /api/v1/admin/cpms-keys/sfid/generate`
    - 权限：`SUPER_ADMIN`
-   - 功能：调用 `sfid-tool` 生成机构身份识别码（`A3=GFR`,`P1=0`），并生成 SFID 签名初始化二维码。
+   - 功能：调用 `sfid` 生成机构身份识别码（`A3=GFR`,`P1=0`），并生成 SFID 签名初始化二维码。
 3. `POST /api/v1/admin/cpms-keys/register-scan`
    - 权限：`SUPER_ADMIN`
    - 功能：扫码录入 CPMS 初始化后产生的机构公钥二维码；写审计 `CPMS_KEYS_REGISTER_SCAN`。
@@ -101,7 +101,7 @@
 
 ### 6.1 生成机构身份识别码
 1. `SUPER_ADMIN` 在机构管理页发起“生成身份识别码”。
-2. 后端调用 `sfid-tool` 生成 `site_sfid`：
+2. 后端调用 `sfid` 生成 `site_sfid`：
    - 不输入机构公钥。
    - `A3` 固定 `GFR`，`P1` 固定 `0`。
 3. 后端生成 `purpose=cpms_init` 的 SFID 签名二维码（`qr_payload`）。
@@ -162,4 +162,4 @@
    - `backend/src/super-admins/operators.rs`
    - `backend/src/super-admins/institutions.rs`
 4. 省域判定：`backend/src/business/scope.rs`
-5. CPMS 状态扫码联动：`backend/src/business/status.rs`
+5. CPMS 状态扫码联动：`backend/src/operate/status.rs`

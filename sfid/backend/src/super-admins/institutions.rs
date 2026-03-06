@@ -7,7 +7,7 @@ use axum::{
 use chrono::{Duration, Utc};
 use serde::Serialize;
 
-use crate::sfid_tool::{generate_sfid_code, GenerateSfidInput};
+use crate::sfid::{generate_sfid_code, GenerateSfidInput};
 use crate::*;
 
 #[derive(Debug, Clone, Serialize)]
@@ -100,6 +100,16 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
     }
     let issued_at = Utc::now().timestamp();
     let expire_at = 0_i64;
+    let public_key = match state.public_key_hex.read() {
+        Ok(v) => v.clone(),
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "public key unavailable",
+            )
+        }
+    };
     let claims = CpmsInstitutionInitClaims {
         ver: "1".to_string(),
         issuer_id: "sfid".to_string(),
@@ -116,15 +126,20 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
         sig_alg: "sr25519".to_string(),
         key_id: state.key_id.clone(),
         key_version: state.key_version.clone(),
-        public_key: state
-            .public_key_hex
-            .read()
-            .expect("public key read lock poisoned")
-            .clone(),
+        public_key,
     };
-    let claims_text = serde_json::to_string(&claims).expect("serialize cpms init claims");
+    let claims_text = match serde_json::to_string(&claims) {
+        Ok(v) => v,
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "serialize cpms init claims failed",
+            )
+        }
+    };
     let signature = make_signature_envelope(&state, &claims).signature_hex;
-    let qr_payload = serde_json::to_string(&CpmsInstitutionInitQrPayload {
+    let qr_payload = match serde_json::to_string(&CpmsInstitutionInitQrPayload {
         ver: claims.ver.clone(),
         issuer_id: claims.issuer_id.clone(),
         purpose: claims.purpose.clone(),
@@ -142,8 +157,16 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
         key_version: claims.key_version.clone(),
         public_key: claims.public_key.clone(),
         signature,
-    })
-    .expect("serialize cpms init qr payload");
+    }) {
+        Ok(v) => v,
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "serialize cpms init qr payload failed",
+            )
+        }
+    };
     let created_at = Utc::now();
     store.cpms_site_keys.insert(
         site_sfid.clone(),
@@ -313,7 +336,16 @@ pub(crate) async fn register_cpms_keys_scan(
         key_version: init_qr_payload.key_version.clone(),
         public_key: init_qr_payload.public_key.clone(),
     };
-    let claims_text = serde_json::to_string(&claims).expect("serialize init claims");
+    let claims_text = match serde_json::to_string(&claims) {
+        Ok(v) => v,
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "serialize init claims failed",
+            )
+        }
+    };
     if !verify_admin_signature(
         init_qr_payload.public_key.as_str(),
         claims_text.as_str(),
@@ -639,7 +671,7 @@ async fn update_cpms_site_status(
             output.site_sfid,
             output.status,
             output.version,
-            reason.unwrap_or_default().trim().to_string()
+            reason.unwrap_or_default().trim()
         ),
     );
     drop(store);
@@ -681,21 +713,20 @@ fn is_trusted_attestor_pubkey(state: &AppState, public_key: &str) -> bool {
     let Some(candidate) = parse_sr25519_pubkey(public_key) else {
         return false;
     };
-    let current = state
-        .public_key_hex
-        .read()
-        .expect("public key read lock poisoned")
-        .clone();
+    let current = match state.public_key_hex.read() {
+        Ok(v) => v.clone(),
+        Err(_) => return false,
+    };
     if parse_sr25519_pubkey(current.as_str())
         .map(|v| v == candidate)
         .unwrap_or(false)
     {
         return true;
     }
-    let known = state
-        .known_key_seeds
-        .read()
-        .expect("known key seeds read lock poisoned");
+    let known = match state.known_key_seeds.read() {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
     known.keys().any(|k| {
         parse_sr25519_pubkey(k.as_str())
             .map(|v| v == candidate)

@@ -9,3 +9,8 @@ pub const GENESIS_CITIZEN_MAX: u64 = 1_443_497_378; // 中共国第7次人口普
 
 /// 三、创世发行（单位：分）：144,349,737,800.00 元 = 14_434_973_780_000 分
 pub const GENESIS_ISSUANCE: u128 = 14_434_973_780_000; // 每人100元的创世发行总量，单位为分
+
+/// 四、创世开发账户（单位：分）
+pub const GENESIS_DEV_ALLOCATION: u128 = 1_000_000_000; // 创世时开发账户初始余额：10,000,000.00 元
+pub const GENESIS_DEV_ACCOUNT_SS58: &str =
+    "w5Gyz7cNSa4UPqvwC1L4UPCcJwdFbZHt7TL1CCwWyxzDuYCnS"; // 主网开发账户地址

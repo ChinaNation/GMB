@@ -1,4 +1,4 @@
-use crate::sfid_tool::province::super_admin_province;
+use crate::sfid::province::super_admin_province;
 use crate::{AdminRole, BindingRecord, CpmsSiteKeys, PendingRequest, Store};
 
 pub(crate) fn province_scope_for_role(

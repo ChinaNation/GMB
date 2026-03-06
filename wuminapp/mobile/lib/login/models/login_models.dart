@@ -8,7 +8,6 @@ class WuminLoginChallenge {
     required this.issuedAt,
     required this.expiresAt,
     required this.aud,
-    required this.origin,
     required this.raw,
   });
 
@@ -20,13 +19,13 @@ class WuminLoginChallenge {
   final int issuedAt;
   final int expiresAt;
   final String aud;
-  final String origin;
   final String raw;
 
   bool get isExpired => _nowEpochSeconds() > expiresAt;
   int get ttlSeconds => expiresAt - _nowEpochSeconds();
 
-  static int _nowEpochSeconds() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  static int _nowEpochSeconds() =>
+      DateTime.now().millisecondsSinceEpoch ~/ 1000;
 }
 
 class WuminLoginReceipt {
