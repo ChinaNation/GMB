@@ -23,6 +23,7 @@
       --shadow: 0 16px 40px rgba(11, 44, 76, 0.12);
       --radius: 16px;
       --toc-width: 300px;
+      --sticky-header-offset: 164px;
     }
 
     * {
@@ -53,7 +54,9 @@
         var(--paper);
       box-shadow: var(--shadow);
       padding: 24px 28px;
-      position: relative;
+      position: sticky;
+      top: 8px;
+      z-index: 40;
       overflow: hidden;
     }
 
@@ -98,13 +101,13 @@
 
     .toc {
       position: sticky;
-      top: 16px;
+      top: var(--sticky-header-offset);
       border-radius: var(--radius);
       border: 1px solid #cedae8;
       background: rgba(255, 255, 255, 0.9);
       backdrop-filter: blur(6px);
       box-shadow: var(--shadow);
-      max-height: calc(100vh - 32px);
+      max-height: calc(100vh - var(--sticky-header-offset) - 12px);
       overflow: auto;
     }
 
@@ -121,12 +124,30 @@
 
     .toc nav {
       padding: 8px;
+      display: block;
+    }
+
+    .toc-node {
+      margin: 2px 0;
+    }
+
+    .toc-children {
+      margin: 2px 0 4px 14px;
+      padding-left: 8px;
+      border-left: 1px dashed #cfdae8;
       display: grid;
-      gap: 4px;
+      gap: 2px;
+    }
+
+    .toc-node:not(.expanded) > .toc-children {
+      display: none;
     }
 
     .toc-link {
-      display: block;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
       color: #305170;
       text-decoration: none;
       border-radius: 10px;
@@ -134,17 +155,46 @@
       line-height: 1.4;
       font-size: 13px;
       transition: background 120ms ease, color 120ms ease;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      font-family: inherit;
+      box-shadow: none;
     }
 
     .toc-link.level-2 {
-      margin-left: 10px;
       font-size: 12px;
     }
 
     .toc-link.level-3 {
-      margin-left: 20px;
       font-size: 12px;
       opacity: 0.9;
+    }
+
+    .toc-row.branch {
+      cursor: pointer;
+    }
+
+    .toc-caret {
+      width: 10px;
+      flex: 0 0 10px;
+      font-size: 11px;
+      color: #52708d;
+      transform: rotate(0deg);
+      transition: transform 120ms ease;
+    }
+
+    .toc-row.leaf .toc-caret {
+      visibility: hidden;
+    }
+
+    .toc-node.expanded > .toc-row.branch .toc-caret {
+      transform: rotate(90deg);
+    }
+
+    .toc-text {
+      min-width: 0;
+      word-break: break-word;
     }
 
     .toc-link:hover {
@@ -376,8 +426,19 @@
   <script>
     const readmePath = "https://raw.githubusercontent.com/ChinaNation/FRC/main/README.md";
     const contentEl = document.getElementById("content");
+    const tocEl = document.querySelector(".toc");
     const tocNavEl = document.getElementById("toc-nav");
     const toTopEl = document.getElementById("to-top");
+    let tocWheelHandler = null;
+    let tocWheelDeltaBuffer = 0;
+    let tocWheelIndex = 0;
+    let tocObserver = null;
+    let tocActiveId = "";
+    let tocItemsInOrder = [];
+    const tocLinkById = new Map();
+    const tocNodeById = new Map();
+    const tocItemById = new Map();
+    const tocExpanded = new Set();
 
     function escapeHtml(input) {
       return input
@@ -449,28 +510,321 @@
       });
     }
 
+    function stripInlineToc(rootEl) {
+      const normalize = (value) => (value || "").replace(/\s+/g, "");
+      const headings = rootEl.querySelectorAll("h1, h2, h3");
+      let tocHeading = null;
+
+      headings.forEach((heading) => {
+        if (tocHeading) return;
+        if (normalize(heading.textContent) === "目录") {
+          tocHeading = heading;
+        }
+      });
+
+      if (!tocHeading) return;
+
+      let node = tocHeading.nextElementSibling;
+      tocHeading.remove();
+
+      while (node) {
+        const nextNode = node.nextElementSibling;
+        if (/^H[1-6]$/.test(node.tagName)) break;
+        node.remove();
+        node = nextNode;
+      }
+    }
+
+    function stripHorizontalRules(rootEl) {
+      const isRuleText = (text) => {
+        const compact = (text || "").replace(/\s+/g, "");
+        return /^[-*]{3,}$/.test(compact);
+      };
+
+      rootEl.querySelectorAll("hr").forEach((el) => el.remove());
+      rootEl.querySelectorAll("p").forEach((el) => {
+        if (isRuleText(el.textContent)) {
+          el.remove();
+        }
+      });
+      rootEl.querySelectorAll("ul,ol").forEach((list) => {
+        const items = Array.from(list.children).filter((node) => node.tagName === "LI");
+        if (!items.length) return;
+        const allRuleItems = items.every((item) => /^[-*]+$/.test((item.textContent || "").trim()));
+        if (allRuleItems) {
+          list.remove();
+        }
+      });
+    }
+
+    function stripSeparatorBetweenTitleAndChapter(rootEl) {
+      const normalize = (value) => (value || "").replace(/\s+/g, "");
+      const title = rootEl.querySelector("h1");
+      const firstChapter = Array.from(rootEl.querySelectorAll("h2")).find((el) =>
+        normalize(el.textContent).startsWith("第一章")
+      );
+      if (!title || !firstChapter) return;
+
+      let node = title.nextSibling;
+      while (node && node !== firstChapter) {
+        const nextNode = node.nextSibling;
+        let shouldRemove = false;
+
+        if (node.nodeType === Node.TEXT_NODE) {
+          shouldRemove = /^[-*\s]+$/.test(node.textContent || "");
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          const el = node;
+          if (el.tagName === "HR") {
+            shouldRemove = true;
+          } else if (el.tagName === "P") {
+            shouldRemove = /^[-*\s]+$/.test(el.textContent || "");
+          } else if (el.tagName === "UL" || el.tagName === "OL") {
+            const items = Array.from(el.querySelectorAll(":scope > li"));
+            shouldRemove = items.length > 0 && items.every((li) => /^[-*\s]+$/.test(li.textContent || ""));
+          }
+        }
+
+        if (shouldRemove) {
+          node.remove();
+        }
+        node = nextNode;
+      }
+    }
+
     function inferTocLevel(text, fallbackLevel) {
       if (/^\d+\.\d+\.\d+/.test(text)) return 3;
       if (/^\d+\.\d+/.test(text)) return 2;
       if (/^\d+[\.\u3002、)\s]/.test(text)) return 1;
       if (/^第[一二三四五六七八九十百千万0-9]+章/.test(text)) return 1;
+      if (/^第[一二三四五六七八九十百千万0-9]+节/.test(text)) return 2;
+      if (/^第[一二三四五六七八九十百千万0-9]+条/.test(text)) return 3;
       return fallbackLevel;
+    }
+
+    function buildTocTree(items) {
+      const roots = [];
+      const stack = [];
+      items.forEach((item) => {
+        item.children = [];
+        item.parentId = null;
+        while (stack.length && stack[stack.length - 1].level >= item.level) {
+          stack.pop();
+        }
+        if (stack.length) {
+          const parent = stack[stack.length - 1];
+          item.parentId = parent.id;
+          parent.children.push(item);
+        } else {
+          roots.push(item);
+        }
+        stack.push(item);
+      });
+      return roots;
+    }
+
+    function getVisibleAncestorId(id) {
+      let currentId = id;
+      while (currentId) {
+        const link = tocLinkById.get(currentId);
+        if (link && link.offsetParent !== null) {
+          return currentId;
+        }
+        const item = tocItemById.get(currentId);
+        currentId = item ? item.parentId : null;
+      }
+      return id;
+    }
+
+    function setTocActive(id) {
+      if (!id) return;
+      const displayId = getVisibleAncestorId(id);
+      const lastDisplayId = getVisibleAncestorId(tocActiveId);
+      if (lastDisplayId && tocLinkById.has(lastDisplayId)) {
+        tocLinkById.get(lastDisplayId).classList.remove("active");
+      }
+      if (displayId && tocLinkById.has(displayId)) {
+        tocLinkById.get(displayId).classList.add("active");
+      }
+      tocActiveId = id;
+    }
+
+    function toggleTocNode(id) {
+      const node = tocNodeById.get(id);
+      if (!node) return;
+      if (tocExpanded.has(id)) {
+        tocExpanded.delete(id);
+        node.classList.remove("expanded");
+      } else {
+        tocExpanded.add(id);
+        node.classList.add("expanded");
+      }
+    }
+
+    function renderTocNode(item) {
+      const hasChildren = item.children && item.children.length > 0;
+      const node = document.createElement("div");
+      node.className = "toc-node level-" + String(item.level) + (hasChildren ? " branch" : " leaf");
+      node.dataset.id = item.id;
+      if (hasChildren && tocExpanded.has(item.id)) {
+        node.classList.add("expanded");
+      }
+      tocNodeById.set(item.id, node);
+
+      const row = hasChildren ? document.createElement("button") : document.createElement("a");
+      row.className = "toc-link toc-row " + (hasChildren ? "branch" : "leaf") + " level-" + String(item.level);
+      row.dataset.id = item.id;
+
+      if (hasChildren) {
+        row.type = "button";
+        row.addEventListener("click", () => {
+          toggleTocNode(item.id);
+        });
+      } else {
+        row.href = "#" + item.id;
+        row.addEventListener("click", (event) => {
+          event.preventDefault();
+          const heading = document.getElementById(item.id);
+          if (heading) {
+            heading.scrollIntoView({ behavior: "smooth", block: "start" });
+            setTocActive(item.id);
+          }
+        });
+      }
+
+      const caret = document.createElement("span");
+      caret.className = "toc-caret";
+      caret.textContent = hasChildren ? "▸" : "•";
+
+      const text = document.createElement("span");
+      text.className = "toc-text";
+      text.textContent = item.text;
+
+      row.append(caret, text);
+      node.appendChild(row);
+      tocLinkById.set(item.id, row);
+
+      if (hasChildren) {
+        const children = document.createElement("div");
+        children.className = "toc-children";
+        item.children.forEach((child) => {
+          children.appendChild(renderTocNode(child));
+        });
+        node.appendChild(children);
+      }
+
+      return node;
+    }
+
+    function getCurrentTocIndex() {
+      if (!tocItemsInOrder.length) return 0;
+      const probeY = window.scrollY + 220;
+      let index = 0;
+      tocItemsInOrder.forEach((item, i) => {
+        const heading = document.getElementById(item.id);
+        if (!heading) return;
+        const absoluteTop = heading.getBoundingClientRect().top + window.scrollY;
+        if (absoluteTop <= probeY) {
+          index = i;
+        }
+      });
+      return index;
+    }
+
+    function bindTocWheelSync() {
+      if (!tocEl) return;
+      if (tocWheelHandler) {
+        tocEl.removeEventListener("wheel", tocWheelHandler);
+        tocWheelHandler = null;
+      }
+      if (!tocItemsInOrder.length) return;
+      tocWheelDeltaBuffer = 0;
+      const WHEEL_STEP = 32;
+
+      tocWheelHandler = (event) => {
+        if (Math.abs(event.deltaY) <= Math.abs(event.deltaX || 0)) return;
+        event.preventDefault();
+
+        const previousBuffer = tocWheelDeltaBuffer;
+        tocWheelDeltaBuffer += event.deltaY;
+        if ((previousBuffer > 0 && tocWheelDeltaBuffer < 0) || (previousBuffer < 0 && tocWheelDeltaBuffer > 0)) {
+          tocWheelDeltaBuffer = event.deltaY;
+        }
+
+        const movesRaw = Math.trunc(tocWheelDeltaBuffer / WHEEL_STEP);
+        if (movesRaw === 0) return;
+        tocWheelDeltaBuffer -= movesRaw * WHEEL_STEP;
+
+        const visibleLinks = Array.from(tocNavEl.querySelectorAll(".toc-row"))
+          .filter((link) => link.offsetParent !== null);
+        if (!visibleLinks.length) return;
+
+        const activeVisibleId = getVisibleAncestorId(tocActiveId) || "";
+        let currentIndex = visibleLinks.findIndex((link) => link.dataset.id === activeVisibleId);
+        if (currentIndex < 0) {
+          const fallbackId = tocItemsInOrder[getCurrentTocIndex()]?.id || "";
+          const fallbackVisibleId = getVisibleAncestorId(fallbackId);
+          currentIndex = visibleLinks.findIndex((link) => link.dataset.id === fallbackVisibleId);
+        }
+        if (currentIndex < 0) currentIndex = 0;
+
+        const direction = movesRaw > 0 ? 1 : -1;
+        const steps = Math.min(6, Math.abs(movesRaw));
+        let nextIndex = currentIndex;
+        for (let i = 0; i < steps; i += 1) {
+          const candidate = nextIndex + direction;
+          if (candidate < 0 || candidate >= visibleLinks.length) break;
+          nextIndex = candidate;
+        }
+        if (nextIndex === currentIndex) return;
+
+        const targetId = visibleLinks[nextIndex].dataset.id;
+        if (!targetId) return;
+        const target = document.getElementById(targetId);
+        if (!target) return;
+
+        const orderedIndex = tocItemsInOrder.findIndex((item) => item.id === targetId);
+        if (orderedIndex >= 0) {
+          tocWheelIndex = orderedIndex;
+        }
+        target.scrollIntoView({ behavior: "auto", block: "start" });
+        visibleLinks[nextIndex].scrollIntoView({ block: "nearest" });
+        setTocActive(targetId);
+      };
+
+      tocEl.addEventListener("wheel", tocWheelHandler, { passive: false });
     }
 
     function buildToc() {
       tocNavEl.innerHTML = "";
+      tocLinkById.clear();
+      tocNodeById.clear();
+      tocItemById.clear();
+      tocExpanded.clear();
+      tocActiveId = "";
+
+      if (tocObserver) {
+        tocObserver.disconnect();
+        tocObserver = null;
+      }
+
       const headings = contentEl.querySelectorAll("h1, h2, h3");
       const used = new Map();
       const items = [];
+      const normalizedPageTitle = ((document.querySelector(".hero h1")?.textContent) || "").replace(/\s+/g, "");
 
       headings.forEach((heading) => {
         const text = (heading.textContent || "").trim();
         if (!text) return;
+        const normalized = text.replace(/\s+/g, "");
+        if (normalized === "目录") return;
+        if (normalizedPageTitle && normalized === normalizedPageTitle) return;
         const id = slugify(text, used);
         heading.id = id;
         const tagLevel = Number(heading.tagName.slice(1));
         const level = inferTocLevel(text, tagLevel);
-        items.push({ id, text, level });
+        const item = { id, text, level, parentId: null, children: [] };
+        items.push(item);
+        tocItemById.set(id, item);
       });
 
       if (!items.length) {
@@ -478,31 +832,37 @@
         return;
       }
 
-      items.forEach((item) => {
-        const link = document.createElement("a");
-        link.className = "toc-link level-" + String(item.level);
-        link.href = "#" + item.id;
-        link.textContent = item.text;
-        tocNavEl.appendChild(link);
+      tocItemsInOrder = items;
+      const tree = buildTocTree(items);
+      tree.forEach((item) => {
+        tocNavEl.appendChild(renderTocNode(item));
       });
 
-      const links = tocNavEl.querySelectorAll(".toc-link");
-      const headingMap = new Map(items.map((item) => [item.id, item]));
-      const observer = new IntersectionObserver((entries) => {
+      const headingMap = new Map(tocItemsInOrder.map((item) => [item.id, item]));
+      const indexById = new Map(items.map((item, idx) => [item.id, idx]));
+      tocObserver = new IntersectionObserver((entries) => {
         entries.forEach((entry) => {
           if (!entry.isIntersecting) return;
           const id = entry.target.id;
           if (!headingMap.has(id)) return;
-          links.forEach((link) => {
-            link.classList.toggle("active", link.getAttribute("href") === "#" + id);
-          });
+          const idx = indexById.get(id);
+          if (typeof idx === "number") {
+            tocWheelIndex = idx;
+          }
+          setTocActive(id);
         });
       }, { rootMargin: "-40% 0px -45% 0px", threshold: 0.1 });
 
-      items.forEach((item) => {
+      tocItemsInOrder.forEach((item) => {
         const heading = document.getElementById(item.id);
-        if (heading) observer.observe(heading);
+        if (heading) tocObserver.observe(heading);
       });
+
+      tocWheelIndex = getCurrentTocIndex();
+      if (tocItemsInOrder[tocWheelIndex]) {
+        setTocActive(tocItemsInOrder[tocWheelIndex].id);
+      }
+      bindTocWheelSync();
     }
 
     async function renderReadme() {
@@ -526,6 +886,9 @@
         });
         contentEl.innerHTML = window.DOMPurify.sanitize(html);
         upgradeTableCodeBlocks(contentEl);
+        stripInlineToc(contentEl);
+        stripHorizontalRules(contentEl);
+        stripSeparatorBetweenTitleAndChapter(contentEl);
         buildToc();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
