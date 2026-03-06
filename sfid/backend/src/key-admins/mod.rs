@@ -13,6 +13,7 @@ use axum::{
 };
 use chrono::{DateTime, Duration, Utc};
 use std::time::Duration as StdDuration;
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::*;
@@ -316,10 +317,16 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
             );
         }
         let initiator_seed_hex = {
-            let known = state
-                .known_key_seeds
-                .read()
-                .expect("known seeds read lock poisoned");
+            let known = match state.known_key_seeds.read() {
+                Ok(v) => v,
+                Err(_) => {
+                    return api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        1004,
+                        "known signer seeds unavailable",
+                    )
+                }
+            };
             let Some(seed) = known
                 .iter()
                 .find(|(pubkey, _)| {
@@ -362,11 +369,18 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
         }
         store.chain_keyring_state = Some(rotate_result.state.clone());
         sync_key_admin_users(&mut store);
-        set_active_main_signer(
+        if let Err(err) = set_active_main_signer(
             &state,
             new_main_pubkey.as_str(),
             initiator_seed_hex.as_str(),
-        );
+        ) {
+            warn!(error = %err, "failed to switch active main signer");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "failed to switch active main signer",
+            );
+        }
         (
             challenge.challenge_id,
             rotate_result,
@@ -485,8 +499,14 @@ pub(crate) fn seed_chain_keyring(state: &AppState) {
     let main_pubkey = state
         .public_key_hex
         .read()
-        .expect("public key read lock poisoned")
-        .clone();
+        .map(|v| v.clone())
+        .unwrap_or_else(|_| {
+            warn!("public key read lock poisoned while seeding keyring");
+            String::new()
+        });
+    if main_pubkey.is_empty() {
+        return;
+    }
     let mut backup_a = resolve_backup_slot(
         "SFID_BACKUP_A_SEED_HEX",
         "SFID_BACKUP_A_PUBKEY",
@@ -519,14 +539,26 @@ pub(crate) fn seed_chain_keyring(state: &AppState) {
     let main_seed = state
         .signing_seed_hex
         .read()
-        .expect("signing seed read lock poisoned")
-        .clone();
-    upsert_seed_for_pubkey(state, main_pubkey.as_str(), main_seed.as_str());
+        .map(|v| v.clone())
+        .unwrap_or_else(|_| {
+            warn!("signing seed read lock poisoned while seeding keyring");
+            String::new()
+        });
+    if main_seed.is_empty() {
+        return;
+    }
+    if let Err(err) = upsert_seed_for_pubkey(state, main_pubkey.as_str(), main_seed.as_str()) {
+        warn!(error = %err, "failed to upsert main key seed while seeding keyring");
+    }
     if let Some(seed) = backup_a.seed_hex.as_ref() {
-        upsert_seed_for_pubkey(state, backup_a.pubkey.as_str(), seed.as_str());
+        if let Err(err) = upsert_seed_for_pubkey(state, backup_a.pubkey.as_str(), seed.as_str()) {
+            warn!(error = %err, "failed to upsert backup_a key seed while seeding keyring");
+        }
     }
     if let Some(seed) = backup_b.seed_hex.as_ref() {
-        upsert_seed_for_pubkey(state, backup_b.pubkey.as_str(), seed.as_str());
+        if let Err(err) = upsert_seed_for_pubkey(state, backup_b.pubkey.as_str(), seed.as_str()) {
+            warn!(error = %err, "failed to upsert backup_b key seed while seeding keyring");
+        }
     }
 
     store.chain_keyring_state = Some(ChainKeyringState::new(
@@ -633,35 +665,41 @@ fn resolve_backup_slot(
     }
 }
 
-fn upsert_seed_for_pubkey(state: &AppState, pubkey: &str, seed_hex: &str) {
+fn upsert_seed_for_pubkey(state: &AppState, pubkey: &str, seed_hex: &str) -> Result<(), String> {
     let mut seeds = state
         .known_key_seeds
         .write()
-        .expect("known seeds write lock poisoned");
+        .map_err(|_| "known seeds write lock poisoned".to_string())?;
     let target = seeds
         .keys()
         .find(|k| k.eq_ignore_ascii_case(pubkey))
         .cloned()
         .unwrap_or_else(|| pubkey.to_string());
     seeds.insert(target, seed_hex.to_string());
+    Ok(())
 }
 
-fn set_active_main_signer(state: &AppState, main_pubkey: &str, main_seed_hex: &str) {
+fn set_active_main_signer(
+    state: &AppState,
+    main_pubkey: &str,
+    main_seed_hex: &str,
+) -> Result<(), String> {
     {
         let mut seed_guard = state
             .signing_seed_hex
             .write()
-            .expect("signing seed write lock poisoned");
+            .map_err(|_| "signing seed write lock poisoned".to_string())?;
         *seed_guard = main_seed_hex.to_string();
     }
     {
         let mut pubkey_guard = state
             .public_key_hex
             .write()
-            .expect("public key write lock poisoned");
+            .map_err(|_| "public key write lock poisoned".to_string())?;
         *pubkey_guard = main_pubkey.to_string();
     }
-    upsert_seed_for_pubkey(state, main_pubkey, main_seed_hex);
+    upsert_seed_for_pubkey(state, main_pubkey, main_seed_hex)?;
+    Ok(())
 }
 
 async fn push_main_pubkey_to_chain(new_main_pubkey: &str, version: u64) -> Result<String, String> {

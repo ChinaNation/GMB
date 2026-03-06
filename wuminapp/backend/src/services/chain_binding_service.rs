@@ -5,10 +5,14 @@ use std::{
 
 use reqwest::Client;
 use serde_json::Value;
+use sqlx::PgPool;
 
 use crate::{errors::ApiError, models::ChainBindRequestData};
 
-pub async fn request_chain_bind(account_pubkey: &str) -> Result<ChainBindRequestData, ApiError> {
+pub async fn request_chain_bind(
+    db: &PgPool,
+    account_pubkey: &str,
+) -> Result<ChainBindRequestData, ApiError> {
     let normalized = normalize_pubkey_hex(account_pubkey)?;
     let gateway_url = env::var("WUMINAPP_CHAIN_BIND_REQUEST_URL")
         .ok()
@@ -37,6 +41,7 @@ pub async fn request_chain_bind(account_pubkey: &str) -> Result<ChainBindRequest
         .await
         .map_err(|_| ApiError::new(5202, "chain bind gateway request failed"))?;
     if !response.status().is_success() {
+        persist_chain_bind_request(db, &normalized, false, Some(5203)).await;
         return Err(ApiError::new(5203, "chain bind gateway http status failed"));
     }
 
@@ -44,14 +49,41 @@ pub async fn request_chain_bind(account_pubkey: &str) -> Result<ChainBindRequest
         .json::<Value>()
         .await
         .map_err(|_| ApiError::new(5204, "chain bind gateway response parse failed"))?;
-    if payload.get("code").and_then(Value::as_i64).is_some_and(|v| v != 0) {
+    if payload
+        .get("code")
+        .and_then(Value::as_i64)
+        .is_some_and(|v| v != 0)
+    {
+        persist_chain_bind_request(db, &normalized, false, Some(5205)).await;
         return Err(ApiError::new(5205, "chain bind gateway rejected"));
     }
 
+    persist_chain_bind_request(db, &normalized, true, Some(0)).await;
     Ok(ChainBindRequestData {
         accepted: true,
         requested_at: now_secs(),
     })
+}
+
+async fn persist_chain_bind_request(
+    db: &PgPool,
+    account_pubkey: &str,
+    accepted: bool,
+    result_code: Option<i32>,
+) {
+    let now = now_secs();
+    let _ = sqlx::query(
+        "INSERT INTO chain_bind_requests \
+         (account_pubkey, accepted, result_code, requested_at, updated_at) \
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(account_pubkey)
+    .bind(accepted)
+    .bind(result_code)
+    .bind(now)
+    .bind(now)
+    .execute(db)
+    .await;
 }
 
 fn normalize_pubkey_hex(input: &str) -> Result<String, ApiError> {

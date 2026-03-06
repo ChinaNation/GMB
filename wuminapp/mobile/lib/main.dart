@@ -77,11 +77,11 @@ class _AppShellState extends State<AppShell> {
           destinations: const [
             NavigationDestination(icon: Icon(Icons.home_outlined), label: '广场'),
             NavigationDestination(
-                icon: Icon(Icons.how_to_vote_outlined), label: '投票'),
+                icon: Icon(Icons.how_to_vote_outlined), label: '治理'),
             NavigationDestination(
                 icon: Icon(Icons.message_outlined), label: '消息'),
             NavigationDestination(
-                icon: Icon(Icons.travel_explore_outlined), label: '发现'),
+                icon: Icon(Icons.travel_explore_outlined), label: '金融'),
             NavigationDestination(
                 icon: Icon(Icons.person_outline), label: '我的'),
           ],
@@ -133,7 +133,7 @@ class VotingPage extends StatefulWidget {
 
 class _VotingPageState extends State<VotingPage> {
   int _selectedTab = 0;
-  static const List<String> _tabs = ['活动', '选举', '治理', '机构'];
+  static const List<String> _tabs = ['活动', '选举', '机构'];
   static const List<String> _nationalCouncil = ['国家储备委员会'];
   static const List<String> _provincialCouncils = [
     '中枢省储备委员会',
@@ -257,8 +257,6 @@ class _VotingPageState extends State<VotingPage> {
       case 1:
         return const Center(child: Text('选举页面（开发中）'));
       case 2:
-        return const Center(child: Text('治理页面（开发中）'));
-      case 3:
         return const _InstitutionCategoryView(
           nationalCouncil: _nationalCouncil,
           provincialCouncils: _provincialCouncils,

@@ -9,18 +9,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 class LoginWhitelistConfig {
   const LoginWhitelistConfig({
     required this.audWhitelist,
-    required this.originWhitelist,
   });
 
   final Map<String, Set<String>> audWhitelist;
-  final Map<String, Set<String>> originWhitelist;
 
   Map<String, dynamic> toJson() {
     return {
       'aud_whitelist': audWhitelist.map(
-        (k, v) => MapEntry(k, v.toList(growable: false)),
-      ),
-      'origin_whitelist': originWhitelist.map(
         (k, v) => MapEntry(k, v.toList(growable: false)),
       ),
     };
@@ -35,13 +30,6 @@ class LoginWhitelistStore {
   static const Map<String, Set<String>> defaultAudWhitelist = {
     'cpms': {'cpms-local-app'},
     'sfid': {'sfid-local-app'},
-    'citizenchain': {'citizenchain-front'},
-  };
-
-  static const Map<String, Set<String>> defaultOriginWhitelist = {
-    'cpms': {'cpms-device-id'},
-    'sfid': {'sfid-device-id'},
-    'citizenchain': {'citizenchain-device-id'},
   };
 
   Future<LoginWhitelistConfig> load() async {
@@ -50,7 +38,6 @@ class LoginWhitelistStore {
     if (raw == null || raw.isEmpty) {
       return const LoginWhitelistConfig(
         audWhitelist: defaultAudWhitelist,
-        originWhitelist: defaultOriginWhitelist,
       );
     }
 
@@ -59,26 +46,21 @@ class LoginWhitelistStore {
       if (decoded is! Map<String, dynamic>) {
         return const LoginWhitelistConfig(
           audWhitelist: defaultAudWhitelist,
-          originWhitelist: defaultOriginWhitelist,
         );
       }
       final payload = await _extractVerifiedPayload(decoded);
       if (payload == null) {
         return const LoginWhitelistConfig(
           audWhitelist: defaultAudWhitelist,
-          originWhitelist: defaultOriginWhitelist,
         );
       }
       final aud = _parseMap(payload['aud_whitelist']);
-      final origin = _parseMap(payload['origin_whitelist']);
       return LoginWhitelistConfig(
         audWhitelist: aud.isEmpty ? defaultAudWhitelist : aud,
-        originWhitelist: origin.isEmpty ? defaultOriginWhitelist : origin,
       );
     } catch (_) {
       return const LoginWhitelistConfig(
         audWhitelist: defaultAudWhitelist,
-        originWhitelist: defaultOriginWhitelist,
       );
     }
   }

@@ -68,7 +68,9 @@
 6. 页面轮询 challenge 结果，成功后自动写入会话并完成登录。
 7. challenge 固定有效期 `90` 秒，且 `request_id` 一次性消费，防重放。
 8. 登录二维码协议固定为 `WUMINAPP_LOGIN_V1`，字段必须包含：
-`proto/system/request_id/challenge/nonce/issued_at/expires_at/aud/origin`（时间戳为秒级）。
+`proto/system/request_id/challenge/nonce/issued_at/expires_at/aud`（时间戳为秒级）。
+9. 登录签名原文固定为：`WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at`。
+10. `origin` 已从登录协议移除，不参与扫码签名与白名单校验。
 
 ## 5. 核心业务流程
 ### 5.1 绑定流程（人工）
@@ -107,7 +109,7 @@
 - 管理员“修改”弹窗支持同时修改姓名和公钥。
 - 身份信息页“操作”列内按钮文案固定为“绑定”“变更”（列名仍为“操作”）。
 - 超级管理员维护机构管理：
-1. 先在机构页生成机构身份识别码（调用 `sfid-tool`，`A3=GFR`,`P1=0`，不输入公钥）。
+1. 先在机构页生成机构身份识别码（调用 `sfid`，`A3=GFR`,`P1=0`，不输入公钥）。
 2. 持 SFID 二维码去 CPMS 初始化系统，CPMS 初始化后生成机构公钥登记二维码。
 3. 回到 SFID 机构页扫码录入机构，完成 3 把机构公钥入库并激活。
 
@@ -159,9 +161,12 @@
 1. `backend/src/key-admins/`：密钥管理员逻辑（密钥轮换、超级管理员替换、链证明签名/公钥输出）。
 2. `backend/src/super-admins/`：超级管理员逻辑（已拆分为 `operators.rs` 管理员管理、`institutions.rs` 机构管理）。
 3. `backend/src/operator-admins/`：操作管理员入口逻辑（角色入口与路由适配）。
-4. `backend/src/business/`：共用业务逻辑（绑定、状态、查询、CPMS 二维码验签、SFID 生成、审计、省域隔离）。
-5. `backend/src/sfid-tool/`：SFID 码生成工具（Rust 实现，唯一生成入口）。
-6. `backend/src/main.rs`：路由装配与认证/通用基础能力，避免角色与业务逻辑堆积在单文件。
+4. `backend/src/business/`：共用后台查询与审计能力（查询、审计、省域隔离）。
+5. `backend/src/operate/`：操作业务逻辑（管理员绑定流程、状态扫码、CPMS 二维码验签）。
+6. `backend/src/chain/`：区块链业务接口逻辑（公钥绑定、公民数获取、投票验证、链侧校验/回执）。
+7. `backend/src/sfid/`：SFID 生成与元数据模块（码生成工具 + 管理端 SFID 业务接口）。
+8. `backend/src/models/`：统一数据结构模块（领域模型、接口 DTO、状态枚举）。
+9. `backend/src/main.rs`：路由装配与启动骨架（核心能力已下沉到模块）。
 - 架构冻结口径：管理员治理与机构治理继续在 `super-admins` 目录内演进，不新增独立模块。
 
 ### 7.3 签名与密钥
@@ -176,14 +181,18 @@
 - `backend/src/key-admins/chain_keyring.rs`：SFID 区块链签名密钥（一主两备）管理、轮换状态机、轮换签名验签。
 - `backend/src/key-admins/chain_proof.rs`：区块链业务证明签名封装（公民数、投票资格、公钥绑定/SFID/奖励相关证明）与公钥输出。
 - `backend/src/super-admins/institutions.rs`：CPMS 机构管理与登记校验（`site_sfid` 与机构公钥信任建立）。
-- `backend/src/business/binding.rs`：绑定扫码/确认/解绑 + 对链绑定结果查询共用实现。
-- `backend/src/business/status.rs`：投票资格与 CPMS 状态变更扫码业务。
-- `backend/src/business/query.rs`：身份信息查询、按公钥查询、链侧统计与绑定校验查询。
-- `backend/src/business/cpms_qr.rs`：CPMS 二维码原文规范化与验签共用方法。
-- `backend/src/business/sfid.rs`：SFID 生成、元数据与城市列表查询业务。
+- `backend/src/operate/binding.rs`：管理员绑定扫码/确认/解绑实现。
+- `backend/src/operate/status.rs`：CPMS 状态变更扫码业务。
+- `backend/src/business/query.rs`：身份信息查询、按公钥查询等后台查询能力。
+- `backend/src/operate/cpms_qr.rs`：CPMS 二维码原文规范化与验签共用方法。
+- `backend/src/sfid/admin.rs`：管理端 SFID 生成、元数据与城市列表查询业务。
 - `backend/src/business/audit.rs`：审计日志查询共用实现。
 - `backend/src/business/scope.rs`：省域隔离与作用域判定共用实现。
-- `backend/src/sfid-tool/mod.rs`：SFID 码生成工具主实现（由管理端生成接口调用）。
+- `backend/src/chain/binding.rs`：链侧公钥绑定请求/结果、绑定校验、奖励回执与状态查询。
+- `backend/src/chain/voters.rs`：链侧公民数获取。
+- `backend/src/chain/vote.rs`：链侧投票资格验证。
+- `backend/src/sfid/mod.rs`：SFID 码生成工具主实现（由管理端生成接口调用）。
+- `backend/src/models/mod.rs`：后端统一数据结构定义（Store、DTO、状态枚举）。
 - 主密钥轮换规则（强约束）：
 1. 区块链验证只使用主公钥（`main`）。
 2. 更换主公钥只能由两把备用公钥之一发起。
@@ -352,7 +361,7 @@
 - 区块链接口必须执行 `request_id + nonce + timestamp` 防重放，并落库幂等表。
 - 生产必须配置 `SFID_CHAIN_SIGNING_SECRET`，并强制 `x-chain-signature` 请求签名校验。
 - 公开查询接口允许匿名访问，但必须启用限流、IP 频控和访问日志审计。
-- 登录 challenge 必须一次性、短时效，并绑定会话来源。
+- 登录 challenge 必须一次性、短时效，并绑定 `aud + session` 上下文。
 - 审计日志保留不少于 3 年。
 - 状态变更扫码、绑定确认、解绑、机构公钥登记、链路资格查询、链路计数查询必须写入审计日志（操作者、公钥/档案号、结果、时间、request_id、actor_ip）。
 - CORS 不允许全开放；应通过 `SFID_CORS_ALLOWED_ORIGINS` 显式配置前端来源（禁止 `*`）。
@@ -399,14 +408,13 @@
   "nonce": "uuid",
   "issued_at": 1760000000,
   "expires_at": 1760000090,
-  "aud": "sfid-local-app",
-  "origin": "sfid-device-id"
+  "aud": "sfid-local-app"
 }
 ```
 
 ### 12.3 签名原文（固定）
 ```text
-WUMINAPP_LOGIN_V1|sfid|aud|origin|request_id|challenge|nonce|expires_at
+WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 ```
 
 ### 12.4 回执码（手机 -> SFID）
@@ -424,10 +432,11 @@ WUMINAPP_LOGIN_V1|sfid|aud|origin|request_id|challenge|nonce|expires_at
 
 ### 12.5 SFID 验签顺序
 1. 解析回执并读取 `request_id/account/signature`。
-2. 按挑战缓存重建签名原文。
-3. 使用 `sr25519` 验签。
-4. 校验挑战固定 `90` 秒时效、`request_id` 未消费。
-5. 一次性消费 `request_id` 后再做管理员授权判定（是管理员登录，不是管理员拒绝）。
+2. 按 `request_id` 查挑战缓存，校验 `proto/system/aud/request_id/challenge/nonce/issued_at/expires_at` 字段完整性与格式。
+3. 校验系统固定为 `sfid`，并执行 `aud` 白名单校验（默认 `sfid-local-app`）。
+4. 校验挑战固定 `90` 秒时效：`expires_at - issued_at == 90` 且当前未过期。
+5. 按固定拼串 `WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at` 重建签名原文并执行 `sr25519` 验签。
+6. 校验 `request_id` 未消费后一次性消费，再做管理员授权判定（是管理员登录，不是管理员拒绝）。
 - `archive_no` 校验位算法与 SFID `sfid_code` 统一：`BLAKE3` 摘要字节和 `mod 10`。
 - 投票资格最终以 CPMS 二维码状态为准（`NORMAL` 可投票，`ABNORMAL` 不可投票）。
 
@@ -536,9 +545,9 @@ WUMINAPP_LOGIN_V1|sfid|aud|origin|request_id|challenge|nonce|expires_at
 
 ### 14.1 SFID码生成工具（Rust）
 #### 14.1.1 代码位置
-- 工具主模块：`backend/src/sfid-tool/mod.rs`
-- 省定义：`backend/src/sfid-tool/province.rs`
-- 市级代码表：`backend/src/sfid-tool/city_codes/01_ZS.rs` 至 `backend/src/sfid-tool/city_codes/43_HJ.rs`
+- 工具主模块：`backend/src/sfid/mod.rs`
+- 省定义：`backend/src/sfid/province.rs`
+- 市级代码表：`backend/src/sfid/city_codes/01_ZS.rs` 至 `backend/src/sfid/city_codes/43_HJ.rs`
 
 #### 14.1.2 生成输入
 - `account_pubkey`（必填）
@@ -563,7 +572,7 @@ WUMINAPP_LOGIN_V1|sfid|aud|origin|request_id|challenge|nonce|expires_at
 
 ## 15. 优化路线（优先级）
 ### 15.1 P0（上线前建议完成）
-- 登录 challenge 绑定 `domain/origin/session_id/nonce/expire_at`，防钓鱼和跨环境签名。
+- 登录 challenge 绑定 `domain/aud/session_id/nonce/expires_at`，防钓鱼和跨环境签名。
 - 冻结二维码签名原文规范（字段顺序、编码、时间格式），避免 CPMS/SFID 联调歧义。
 - 重放防护双层化：`qr_id` 一次性消费 + `admin_login_challenges` 一次性消费与 TTL。
 - 超级管理员保护：除“不可删改角色”外，增加最小可用数量保护（避免误操作锁死）。
@@ -576,7 +585,7 @@ WUMINAPP_LOGIN_V1|sfid|aud|origin|request_id|challenge|nonce|expires_at
 
 ### 15.3 P2（运维与结构优化）
 - 可观测完善：增加扫码验签失败率、登录验签失败率、绑定成功率、链查询 P95、重放拦截次数（链路 P95/P99、重放拦截、链请求失败、回调失败已落地）。
-- 工程结构已采用：`frontend`（前端）、`backend`（后端）、`deploy`；数据库与脚本统一归档在 `backend/db`、`backend/scripts`，测试归档在 `backend/tests`。角色专属逻辑归档在 `backend/src/key-admins`、`backend/src/super-admins`、`backend/src/operator-admins`，共用业务归档在 `backend/src/business`，SFID 码生成归档在 `backend/src/sfid-tool`。
+- 工程结构已采用：`frontend`（前端）、`backend`（后端）、`deploy`；数据库与脚本统一归档在 `backend/db`、`backend/scripts`，测试归档在 `backend/tests`。角色专属逻辑归档在 `backend/src/key-admins`、`backend/src/super-admins`、`backend/src/operator-admins`，共用后台查询与审计归档在 `backend/src/business`，操作业务归档在 `backend/src/operate`，区块链业务归档在 `backend/src/chain`，SFID 生成与元数据归档在 `backend/src/sfid`，统一数据结构归档在 `backend/src/models`。
 
 ## 16. 开发步骤（执行版）
 ### 16.1 里程碑 0：规格冻结（0.5 天）
@@ -607,7 +616,7 @@ WUMINAPP_LOGIN_V1|sfid|aud|origin|request_id|challenge|nonce|expires_at
 
 ### 16.3 里程碑 2：管理员认证与 RBAC（2-3 天）
 - 实现认证链路：`identify -> challenge -> verify`。
-- challenge 绑定 `origin/domain/session_id/nonce/expire_at`，一次性消费与 TTL 过期清理。
+- challenge 绑定 `aud/domain/session_id/nonce/expires_at`，一次性消费与 TTL 过期清理。
 - 落地后端 RBAC 中间件，对每个管理接口进行角色强校验。
 - 实现操作管理员管理接口（仅超级管理员可访问）。
 - 交付物：认证 API、会话/JWT、权限中间件、管理员管理 API。

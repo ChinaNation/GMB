@@ -10,20 +10,12 @@ class LoginWhitelistPolicy {
 
   Future<void> assertAllowed(WuminLoginChallenge challenge) async {
     final config = await _whitelistStore.load();
-    final audAllowed = config.audWhitelist[challenge.system] ?? const <String>{};
+    final audAllowed =
+        config.audWhitelist[challenge.system] ?? const <String>{};
     if (!audAllowed.contains(challenge.aud)) {
       throw LoginException(
         LoginErrorCode.unauthorizedAud,
         '登录来源未授权（aud=${challenge.aud}）。',
-      );
-    }
-
-    final originAllowed =
-        config.originWhitelist[challenge.system] ?? const <String>{};
-    if (!originAllowed.contains(challenge.origin)) {
-      throw LoginException(
-        LoginErrorCode.unauthorizedOrigin,
-        '登录设备未授权（origin=${challenge.origin}）。',
       );
     }
   }

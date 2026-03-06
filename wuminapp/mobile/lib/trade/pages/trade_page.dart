@@ -13,7 +13,7 @@ class TradePage extends StatelessWidget {
         children: [
           const SizedBox(height: 14),
           const Text(
-            '发现',
+            '金融',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           Expanded(
@@ -37,21 +37,20 @@ class TradePage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Card(
+                const Card(
                   child: ListTile(
-                    leading: const Icon(
+                    leading: Icon(
                       Icons.swap_horiz_outlined,
                       color: Colors.grey,
                     ),
-                    title: const Text(
+                    title: Text(
                       '链下交易（开发中）',
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         color: Colors.grey,
                       ),
                     ),
-                    trailing:
-                        const Icon(Icons.chevron_right, color: Colors.grey),
+                    trailing: Icon(Icons.chevron_right, color: Colors.grey),
                   ),
                 ),
               ],

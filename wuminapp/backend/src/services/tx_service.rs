@@ -6,6 +6,7 @@ use std::{
 };
 
 use blake2::digest::Digest;
+use sqlx::{PgPool, Row};
 use subxt::{
     config::substrate::{AccountId32, MultiSignature},
     dynamic::{tx, Value},
@@ -27,34 +28,21 @@ const FAIL_REASON_EXECUTION: &str = "onchain execution failed";
 const DEFAULT_CHAIN_WS_URL: &str = "ws://127.0.0.1:9944";
 const PREPARED_TTL_SECS: i64 = 180;
 const TX_STATE_TTL_SECS: i64 = 24 * 60 * 60;
-const TX_STATE_MAX: usize = 20_000;
+const TX_STATE_MAX: i64 = 20_000;
 const AMOUNT_DECIMALS: f64 = 100.0;
 
-#[derive(Clone)]
-struct TxRuntimeState {
-    updated_at: i64,
-    status: String,
-    failure_reason: Option<String>,
-}
-
 struct PreparedTxState {
-    created_at: i64,
     signer_pubkey: [u8; 32],
     partial_tx: subxt::tx::PartialTransaction<PolkadotConfig, OnlineClient<PolkadotConfig>>,
 }
 
-static TX_STATE: OnceLock<Mutex<HashMap<String, TxRuntimeState>>> = OnceLock::new();
 static PREPARED_STATE: OnceLock<Mutex<HashMap<String, PreparedTxState>>> = OnceLock::new();
-
-fn tx_state() -> &'static Mutex<HashMap<String, TxRuntimeState>> {
-    TX_STATE.get_or_init(|| Mutex::new(HashMap::new()))
-}
 
 fn prepared_state() -> &'static Mutex<HashMap<String, PreparedTxState>> {
     PREPARED_STATE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-pub async fn prepare_tx(req: TxPrepareRequest) -> Result<TxPrepareData, ApiError> {
+pub async fn prepare_tx(db: &PgPool, req: TxPrepareRequest) -> Result<TxPrepareData, ApiError> {
     validate_prepare_request(&req)?;
 
     let signer_pubkey = parse_pubkey_hex(&req.pubkey_hex)?;
@@ -88,16 +76,40 @@ pub async fn prepare_tx(req: TxPrepareRequest) -> Result<TxPrepareData, ApiError
     let expires_at = now + PREPARED_TTL_SECS;
 
     if let Ok(mut map) = prepared_state().lock() {
-        map.retain(|_, v| now.saturating_sub(v.created_at) < PREPARED_TTL_SECS);
         map.insert(
             prepared_id.clone(),
             PreparedTxState {
-                created_at: now,
                 signer_pubkey,
                 partial_tx,
             },
         );
     }
+
+    prune_prepared_rows(db, now).await?;
+    sqlx::query(
+        "INSERT INTO tx_prepared \
+         (prepared_id, created_at, expires_at, signer_pubkey, from_address, to_address, amount_fen, symbol) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
+         ON CONFLICT (prepared_id) DO UPDATE SET \
+             created_at = EXCLUDED.created_at, \
+             expires_at = EXCLUDED.expires_at, \
+             signer_pubkey = EXCLUDED.signer_pubkey, \
+             from_address = EXCLUDED.from_address, \
+             to_address = EXCLUDED.to_address, \
+             amount_fen = EXCLUDED.amount_fen, \
+             symbol = EXCLUDED.symbol",
+    )
+    .bind(&prepared_id)
+    .bind(now)
+    .bind(expires_at)
+    .bind(signer_pubkey.as_slice())
+    .bind(req.from_address.trim())
+    .bind(req.to_address.trim())
+    .bind(amount_fen.to_string())
+    .bind(req.symbol.trim())
+    .execute(db)
+    .await
+    .map_err(|_| ApiError::new(5002, "tx state persistence failed"))?;
 
     Ok(TxPrepareData {
         prepared_id,
@@ -106,23 +118,47 @@ pub async fn prepare_tx(req: TxPrepareRequest) -> Result<TxPrepareData, ApiError
     })
 }
 
-pub async fn submit_tx(req: TxSubmitRequest) -> Result<TxSubmitData, ApiError> {
+pub async fn submit_tx(db: &PgPool, req: TxSubmitRequest) -> Result<TxSubmitData, ApiError> {
     let signer_pubkey = parse_pubkey_hex(&req.pubkey_hex)?;
     let signature = parse_signature(&req.signature_hex)?;
+    let now = now_secs();
+
+    prune_prepared_rows(db, now).await?;
+    prune_tx_runtime_rows(db, now).await?;
 
     let mut state = {
         let mut map = prepared_state()
             .lock()
             .map_err(|_| ApiError::new(5002, "prepared tx lock failed"))?;
-        let now = now_secs();
-        map.retain(|_, v| now.saturating_sub(v.created_at) < PREPARED_TTL_SECS);
         map.remove(&req.prepared_id)
-    }
-    .ok_or(ApiError::new(3004, FAIL_REASON_PREPARED_NOT_FOUND))?;
+    };
 
+    if state.is_none() {
+        let exists = sqlx::query("SELECT 1 FROM tx_prepared WHERE prepared_id = $1")
+            .bind(&req.prepared_id)
+            .fetch_optional(db)
+            .await
+            .map_err(|_| ApiError::new(5002, "tx state persistence failed"))?
+            .is_some();
+        if !exists {
+            return Err(ApiError::new(3004, FAIL_REASON_PREPARED_NOT_FOUND));
+        }
+        // `PartialTransaction` 仍在进程内；重启后需重新 prepare。
+        return Err(ApiError::new(3004, FAIL_REASON_PREPARED_NOT_FOUND));
+    }
+
+    let state = state
+        .as_mut()
+        .ok_or(ApiError::new(3004, FAIL_REASON_PREPARED_NOT_FOUND))?;
     if state.signer_pubkey != signer_pubkey {
         return Err(ApiError::new(1001, "signer mismatch"));
     }
+
+    sqlx::query("DELETE FROM tx_prepared WHERE prepared_id = $1")
+        .bind(&req.prepared_id)
+        .execute(db)
+        .await
+        .map_err(|_| ApiError::new(5002, "tx state persistence failed"))?;
 
     let account_id = AccountId32(signer_pubkey);
     let multi_sig = MultiSignature::Sr25519(signature);
@@ -130,36 +166,46 @@ pub async fn submit_tx(req: TxSubmitRequest) -> Result<TxSubmitData, ApiError> {
         .partial_tx
         .sign_with_account_and_signature(&account_id, &multi_sig);
     let tx_hash = format!("0x{}", hex_encode(tx.hash().as_ref()));
+
+    upsert_tx_runtime(db, &tx_hash, STATUS_PENDING, None, now).await?;
+
     let tx_hash_for_task = tx_hash.clone();
-
-    if let Ok(mut map) = tx_state().lock() {
-        prune_tx_state(&mut map, now_secs());
-        map.insert(
-            tx_hash.clone(),
-            TxRuntimeState {
-                updated_at: now_secs(),
-                status: STATUS_PENDING.to_string(),
-                failure_reason: None,
-            },
-        );
-    }
-
+    let db_for_task = db.clone();
     tokio::spawn(async move {
         let result = tx.submit_and_watch().await;
         match result {
             Ok(progress) => match progress.wait_for_finalized_success().await {
-                Ok(_) => update_tx_runtime(&tx_hash_for_task, STATUS_CONFIRMED, None),
-                Err(_) => update_tx_runtime(
+                Ok(_) => {
+                    let _ = upsert_tx_runtime(
+                        &db_for_task,
+                        &tx_hash_for_task,
+                        STATUS_CONFIRMED,
+                        None,
+                        now_secs(),
+                    )
+                    .await;
+                }
+                Err(_) => {
+                    let _ = upsert_tx_runtime(
+                        &db_for_task,
+                        &tx_hash_for_task,
+                        STATUS_FAILED,
+                        Some(FAIL_REASON_EXECUTION),
+                        now_secs(),
+                    )
+                    .await;
+                }
+            },
+            Err(_) => {
+                let _ = upsert_tx_runtime(
+                    &db_for_task,
                     &tx_hash_for_task,
                     STATUS_FAILED,
-                    Some(FAIL_REASON_EXECUTION.to_string()),
-                ),
-            },
-            Err(_) => update_tx_runtime(
-                &tx_hash_for_task,
-                STATUS_FAILED,
-                Some(FAIL_REASON_BROADCAST.to_string()),
-            ),
+                    Some(FAIL_REASON_BROADCAST),
+                    now_secs(),
+                )
+                .await;
+            }
         }
     });
 
@@ -170,55 +216,97 @@ pub async fn submit_tx(req: TxSubmitRequest) -> Result<TxSubmitData, ApiError> {
     })
 }
 
-pub fn get_tx_status(tx_hash: &str) -> Result<TxStatusData, ApiError> {
-    let state = match tx_state().lock() {
-        Ok(mut map) => {
-            prune_tx_state(&mut map, now_secs());
-            map.get(tx_hash).cloned()
-        }
-        Err(_) => None,
-    };
+pub async fn get_tx_status(db: &PgPool, tx_hash: &str) -> Result<TxStatusData, ApiError> {
+    prune_tx_runtime_rows(db, now_secs()).await?;
 
-    let Some(state) = state else {
+    let row =
+        sqlx::query("SELECT status, failure_reason, updated_at FROM tx_runtime WHERE tx_hash = $1")
+            .bind(tx_hash)
+            .fetch_optional(db)
+            .await
+            .map_err(|_| ApiError::new(5002, "tx state persistence failed"))?;
+
+    let Some(row) = row else {
         return Err(ApiError::new(3004, FAIL_REASON_NOT_FOUND));
     };
 
     Ok(TxStatusData {
         tx_hash: tx_hash.to_string(),
-        status: state.status,
-        failure_reason: state.failure_reason,
-        updated_at: state.updated_at,
+        status: row
+            .try_get::<String, _>("status")
+            .unwrap_or_else(|_| STATUS_FAILED.to_string()),
+        failure_reason: row
+            .try_get::<Option<String>, _>("failure_reason")
+            .unwrap_or(None),
+        updated_at: row.try_get::<i64, _>("updated_at").unwrap_or_default(),
     })
 }
 
-fn update_tx_runtime(tx_hash: &str, status: &str, failure_reason: Option<String>) {
-    if let Ok(mut map) = tx_state().lock() {
-        prune_tx_state(&mut map, now_secs());
-        map.insert(
-            tx_hash.to_string(),
-            TxRuntimeState {
-                updated_at: now_secs(),
-                status: status.to_string(),
-                failure_reason,
-            },
-        );
-    }
+async fn upsert_tx_runtime(
+    db: &PgPool,
+    tx_hash: &str,
+    status: &str,
+    failure_reason: Option<&str>,
+    updated_at: i64,
+) -> Result<(), ApiError> {
+    sqlx::query(
+        "INSERT INTO tx_runtime (tx_hash, status, failure_reason, updated_at) \
+         VALUES ($1, $2, $3, $4) \
+         ON CONFLICT (tx_hash) DO UPDATE SET \
+             status = EXCLUDED.status, \
+             failure_reason = EXCLUDED.failure_reason, \
+             updated_at = EXCLUDED.updated_at",
+    )
+    .bind(tx_hash)
+    .bind(status)
+    .bind(failure_reason)
+    .bind(updated_at)
+    .execute(db)
+    .await
+    .map_err(|_| ApiError::new(5002, "tx state persistence failed"))?;
+
+    Ok(())
 }
 
-fn prune_tx_state(map: &mut HashMap<String, TxRuntimeState>, now: i64) {
-    map.retain(|_, item| now.saturating_sub(item.updated_at) < TX_STATE_TTL_SECS);
-    if map.len() <= TX_STATE_MAX {
-        return;
+async fn prune_prepared_rows(db: &PgPool, now: i64) -> Result<(), ApiError> {
+    sqlx::query("DELETE FROM tx_prepared WHERE expires_at < $1")
+        .bind(now)
+        .execute(db)
+        .await
+        .map_err(|_| ApiError::new(5002, "tx state persistence failed"))?;
+    Ok(())
+}
+
+async fn prune_tx_runtime_rows(db: &PgPool, now: i64) -> Result<(), ApiError> {
+    let expire_before = now.saturating_sub(TX_STATE_TTL_SECS);
+    sqlx::query("DELETE FROM tx_runtime WHERE updated_at < $1")
+        .bind(expire_before)
+        .execute(db)
+        .await
+        .map_err(|_| ApiError::new(5002, "tx state persistence failed"))?;
+
+    let total = sqlx::query("SELECT COUNT(1) AS cnt FROM tx_runtime")
+        .fetch_one(db)
+        .await
+        .map_err(|_| ApiError::new(5002, "tx state persistence failed"))?
+        .try_get::<i64, _>("cnt")
+        .unwrap_or_default();
+    if total <= TX_STATE_MAX {
+        return Ok(());
     }
-    let mut entries = map
-        .iter()
-        .map(|(k, v)| (k.clone(), v.updated_at))
-        .collect::<Vec<_>>();
-    entries.sort_by_key(|(_, ts)| *ts);
-    let overflow = map.len() - TX_STATE_MAX;
-    for (key, _) in entries.into_iter().take(overflow) {
-        map.remove(&key);
-    }
+
+    sqlx::query(
+        "WITH overflow AS ( \
+            SELECT tx_hash FROM tx_runtime ORDER BY updated_at DESC OFFSET $1 \
+         ) \
+         DELETE FROM tx_runtime t USING overflow o WHERE t.tx_hash = o.tx_hash",
+    )
+    .bind(TX_STATE_MAX)
+    .execute(db)
+    .await
+    .map_err(|_| ApiError::new(5002, "tx state persistence failed"))?;
+
+    Ok(())
 }
 
 fn validate_prepare_request(req: &TxPrepareRequest) -> Result<(), ApiError> {

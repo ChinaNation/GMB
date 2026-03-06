@@ -20,6 +20,7 @@ codec = { features = ["derive"], workspace = true }
 scale-info = { features = ["derive", "serde"], workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 hex = { version = "0.4", default-features = false }
+hex-literal = "0.4"
 primitives = { path = "../../primitives", default-features = false } # 引用统一常量
 
 # frame

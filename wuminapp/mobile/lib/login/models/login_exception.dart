@@ -18,7 +18,6 @@ class LoginErrorCode {
   static const String replay = 'L1102';
   static const String invalidTtl = 'L1103';
   static const String unauthorizedAud = 'L1201';
-  static const String unauthorizedOrigin = 'L1202';
   static const String walletMissing = 'L1301';
   static const String walletNotFound = 'L1302';
   static const String walletMismatch = 'L1303';

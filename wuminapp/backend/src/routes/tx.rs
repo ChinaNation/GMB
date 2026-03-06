@@ -23,10 +23,10 @@ pub fn router() -> Router<Arc<AppState>> {
 }
 
 async fn prepare_tx(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<TxPrepareRequest>,
 ) -> impl IntoResponse {
-    match tx_service::prepare_tx(req).await {
+    match tx_service::prepare_tx(&state.db, req).await {
         Ok(data) => Json(ApiResponse {
             code: 0,
             message: "ok",
@@ -45,10 +45,10 @@ async fn prepare_tx(
 }
 
 async fn submit_tx(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<TxSubmitRequest>,
 ) -> impl IntoResponse {
-    match tx_service::submit_tx(req).await {
+    match tx_service::submit_tx(&state.db, req).await {
         Ok(data) => Json(ApiResponse {
             code: 0,
             message: "ok",
@@ -67,10 +67,10 @@ async fn submit_tx(
 }
 
 async fn tx_status(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(tx_hash): Path<String>,
 ) -> impl IntoResponse {
-    match tx_service::get_tx_status(&tx_hash) {
+    match tx_service::get_tx_status(&state.db, &tx_hash).await {
         Ok(data) => Json(ApiResponse {
             code: 0,
             message: "ok",
