@@ -1,4 +1,4 @@
-name: Deploy GMB README Page
+name: Deploy README Pages
 
 on:
   push:
@@ -23,44 +23,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build static page artifact
-        env:
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           mkdir -p site
-          cp README.web.html site/GMB_README.html
-
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-
-          repo = os.environ["GITHUB_REPOSITORY"]
-          raw_url = f"https://raw.githubusercontent.com/{repo}/main/README.md"
-          page = Path("site/GMB_README.html")
-          text = page.read_text(encoding="utf-8")
-          text = text.replace(
-              'const readmePath = "./README.md";',
-              f'const readmePath = "{raw_url}";'
-          )
-          page.write_text(text, encoding="utf-8")
-          PY
-
-          cat > site/index.html <<'EOF'
-          <!doctype html>
-          <html lang="zh-CN">
-          <head>
-            <meta charset="utf-8">
-            <meta http-equiv="refresh" content="0; url=./GMB_README.html">
-            <meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>Redirecting...</title>
-            <script>
-              window.location.replace('./GMB_README.html');
-            </script>
-          </head>
-          <body>
-            <p>Redirecting to <a href="./GMB_README.html">GMB_README.html</a> ...</p>
-          </body>
-          </html>
-          EOF
+          cp docs/index.html site/index.html
+          cp docs/GMB_README.html site/GMB_README.html
+          cp docs/FRC_README.html site/FRC_README.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
