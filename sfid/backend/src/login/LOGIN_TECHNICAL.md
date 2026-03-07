@@ -53,6 +53,9 @@ src/login/
   - `require_super_or_key_admin`
   - `require_key_admin`
   - `require_super_or_operator_or_key_admin`
+- 省域防御（`SUPER_ADMIN`）：
+  - `require_super_admin` 要求 `admin_province` 非空。
+  - `require_super_or_key_admin` 在 `ctx.role == SUPER_ADMIN` 时同样要求 `admin_province` 非空。
 
 ## 7. 与业务模块边界
 - `src/login`：只做认证和会话校验。

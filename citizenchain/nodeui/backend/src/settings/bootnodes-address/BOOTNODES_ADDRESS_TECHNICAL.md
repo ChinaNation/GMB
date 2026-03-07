@@ -1,0 +1,48 @@
+# Bootnodes Address 模块技术文档
+
+## 1. 模块位置
+
+- 路径：`nodeui/backend/src/settings/bootnodes-address/mod.rs`
+- 对外命令：
+  - `get_bootnode_key`
+  - `set_bootnode_key`
+  - `get_genesis_bootnode_options`
+
+## 2. 模块职责
+
+- 管理“区块链引导节点私钥”的上传、校验、存储与读取。
+- 从结构化机构清单 `settings/institution-catalog.json` 读取引导节点名称与 PeerId 清单。
+- 校验上传私钥是否匹配创世引导节点。
+- 节点运行中上传后自动重启，并校验本机 PeerId 已切换为目标引导节点。
+
+## 3. 存储设计
+
+- 系统安全存储（Keychain/Keyring）键：`bootnode-node-key`
+- 本地元数据文件：`<app_data_dir>/bootnode-meta.json`
+  - `peer_id`
+  - `institution_name`
+
+## 4. 关键流程
+
+### 4.1 上传引导节点私钥 `set_bootnode_key`
+
+1. 校验设备开机密码。
+2. 校验 `node-key` 格式（64 位 hex）。
+3. 由私钥推导 `PeerId`。
+4. 校验推导 `PeerId` 必须在创世引导节点清单内。
+5. 私钥加密写入系统安全存储。
+6. 保存 `bootnode-meta.json`。
+7. 若节点运行中，执行 `stop_node -> start_node`。
+8. 轮询 `system_localPeerId`，确认重启后 PeerId 与目标一致。
+
+### 4.2 节点启动协同
+
+- `home::home_node::start_node` 内部启动流程会调用 `load_bootnode_node_key` 读取已保存私钥。
+- 启动参数通过 `--node-key-file` 注入，避免私钥出现在命令行。
+
+## 5. 对外协作接口（给 home-node）
+
+- `load_bootnode_node_key(app, unlock_password)`
+- `verify_bootnode_secret_unlock(unlock_password)`
+- `genesis_bootnode_options() -> Result<Vec<GenesisBootnodeOption>, String>`
+- `find_genesis_bootnode_name_by_peer_id(peer_id) -> Result<Option<String>, String>`

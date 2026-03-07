@@ -1,5 +1,5 @@
 use axum::{
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     middleware,
     response::IntoResponse,
     routing::{get, post, put},
@@ -9,7 +9,7 @@ use blake3;
 use chrono::{DateTime, NaiveDate, Utc};
 use postgres::config::Host;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     net::SocketAddr,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -19,6 +19,7 @@ use std::{
 };
 use tracing::{info, warn};
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
 mod app_core;
 mod business;
@@ -48,9 +49,10 @@ pub(crate) use models::*;
 #[derive(Clone)]
 struct AppState {
     store: StoreHandle,
-    signing_seed_hex: Arc<RwLock<String>>,
-    known_key_seeds: Arc<RwLock<HashMap<String, String>>>,
+    signing_seed_hex: Arc<RwLock<SensitiveSeed>>,
+    known_key_seeds: Arc<RwLock<HashMap<String, SensitiveSeed>>>,
     request_limits: Arc<Mutex<HashMap<String, Vec<DateTime<Utc>>>>>,
+    cpms_register_inflight: Arc<Mutex<HashSet<String>>>,
     key_id: String,
     key_version: String,
     key_alg: String,
@@ -207,7 +209,7 @@ impl StoreBackend {
 
         let admin_rows = conn
             .query(
-                "SELECT admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at
+                "SELECT admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at
                  FROM admins",
                 &[],
             )
@@ -221,6 +223,7 @@ impl StoreBackend {
             let built_in: bool = row.get(5);
             let created_by: String = row.get(6);
             let created_at: DateTime<Utc> = row.get(7);
+            let updated_at: Option<DateTime<Utc>> = row.get(8);
             store.admin_users_by_pubkey.insert(
                 admin_pubkey.clone(),
                 AdminUser {
@@ -232,6 +235,7 @@ impl StoreBackend {
                     built_in,
                     created_by,
                     created_at,
+                    updated_at,
                 },
             );
         }
@@ -342,8 +346,8 @@ impl StoreBackend {
         for admin in store.admin_users_by_pubkey.values() {
             let row = tx
                 .query_one(
-                    "INSERT INTO admins(admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    "INSERT INTO admins(admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                      RETURNING admin_id",
                     &[
                         &(admin.id as i64),
@@ -354,6 +358,7 @@ impl StoreBackend {
                         &admin.built_in,
                         &admin.created_by,
                         &admin.created_at,
+                        &admin.updated_at.unwrap_or(admin.created_at),
                     ],
                 )
                 .map_err(|e| format!("insert admins failed: {e}"))?;
@@ -505,7 +510,9 @@ impl StoreHandle {
                  );
                  ALTER TABLE runtime_meta ADD COLUMN IF NOT EXISTS payload_enc BYTEA;
                  ALTER TABLE IF EXISTS admins
-                   ADD COLUMN IF NOT EXISTS admin_name TEXT NOT NULL DEFAULT '';",
+                   ADD COLUMN IF NOT EXISTS admin_name TEXT NOT NULL DEFAULT '';
+                 ALTER TABLE IF EXISTS admins
+                   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;",
                 )
                 .map_err(|e| format!("init runtime tables failed: {e}"))?;
             let mut clients = Vec::with_capacity(pool_size);
@@ -574,20 +581,39 @@ fn database_url_targets_local_host_only(database_url: &str) -> Result<bool, Stri
     }))
 }
 
+fn disable_core_dumps() {
+    #[cfg(unix)]
+    {
+        let limit = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        // Best-effort hardening: avoid leaking in-memory secrets through coredumps.
+        let rc = unsafe { libc::setrlimit(libc::RLIMIT_CORE, &limit) };
+        if rc != 0 {
+            warn!(
+                error = %std::io::Error::last_os_error(),
+                "failed to disable core dumps"
+            );
+        }
+    }
+}
+
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter("info")
         .with_target(false)
         .compact()
         .init();
+    disable_core_dumps();
 
     let _ = required_env("SFID_CHAIN_TOKEN");
     let _ = required_env("SFID_CHAIN_SIGNING_SECRET");
     let _ = required_env("SFID_PUBLIC_SEARCH_TOKEN");
     let _ = required_env("SFID_RUNTIME_META_KEY");
 
-    let main_seed = required_env("SFID_SIGNING_SEED_HEX");
-    let main_key = key_admins::chain_keyring::load_signing_key_from_seed(main_seed.as_str());
+    let main_seed = SensitiveSeed::from(required_env("SFID_SIGNING_SEED_HEX"));
+    let main_key = key_admins::chain_keyring::load_signing_key_from_seed(main_seed.expose_secret());
     let public_key_hex = format!("0x{}", hex::encode(main_key.public.to_bytes()));
     let mut known_key_seeds = HashMap::new();
     known_key_seeds.insert(public_key_hex.clone(), main_seed.clone());
@@ -611,6 +637,7 @@ fn main() {
         signing_seed_hex: Arc::new(RwLock::new(main_seed)),
         known_key_seeds: Arc::new(RwLock::new(known_key_seeds)),
         request_limits: Arc::new(Mutex::new(HashMap::new())),
+        cpms_register_inflight: Arc::new(Mutex::new(HashSet::new())),
         key_id: required_env("SFID_KEY_ID"),
         key_version: "v1".to_string(),
         key_alg: "sr25519".to_string(),
@@ -626,6 +653,9 @@ fn main() {
         key_admins::seed_key_admins(&state);
         persist_runtime_state(&state);
         info!("initialized runtime state with defaults");
+    }
+    if let Err(err) = key_admins::reconcile_main_signer_with_keyring(&state) {
+        panic!("failed to reconcile main signer with keyring: {err}");
     }
     seed_demo_record(&state);
 
@@ -697,6 +727,10 @@ fn main() {
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/disable",
                 put(super_admins::disable_cpms_keys),
+            )
+            .route(
+                "/api/v1/admin/cpms-keys/:site_sfid/enable",
+                put(super_admins::enable_cpms_keys),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/revoke",
@@ -849,12 +883,12 @@ fn ensure_chain_request_db(
         Err(err) if err.contains("uq_chain_idempotency_route_nonce") => Err(api_error(
             StatusCode::CONFLICT,
             1016,
-            "duplicate chain nonce",
+            "duplicate chain nonce (db)",
         )),
         Err(err) if err.contains("uq_chain_idempotency_route_request") => Err(api_error(
             StatusCode::CONFLICT,
             1017,
-            "duplicate chain request",
+            "duplicate chain request (db)",
         )),
         Err(err) => {
             warn!("chain idempotency db insert failed: {err}");
@@ -865,6 +899,62 @@ fn ensure_chain_request_db(
             ))
         }
     }
+}
+
+pub(crate) fn prepare_chain_request(
+    state: &AppState,
+    headers: &HeaderMap,
+    route_key: &str,
+    fingerprint: &str,
+) -> Result<ChainRequestAuth, axum::response::Response> {
+    let chain_auth = match parse_chain_request_auth(headers, route_key, fingerprint) {
+        Ok(v) => v,
+        Err(resp) => {
+            match state.store.write() {
+                Ok(mut store) => {
+                    store.metrics.chain_request_total += 1;
+                    store.metrics.chain_auth_failures += 1;
+                    store.metrics.chain_request_failed_total += 1;
+                }
+                Err(err) => {
+                    warn!(
+                        error = %err,
+                        route_key = route_key,
+                        "failed to record chain auth failure metrics"
+                    );
+                }
+            }
+            return Err(resp);
+        }
+    };
+
+    {
+        let mut store = store_write_or_500(state)?;
+        store.metrics.chain_request_total += 1;
+        if let Err(resp) = track_chain_request(&mut store, route_key, &chain_auth, fingerprint) {
+            return Err(resp);
+        }
+    }
+
+    if let Err(resp) = ensure_chain_request_db(state, route_key, &chain_auth, fingerprint) {
+        match state.store.write() {
+            Ok(mut store) => {
+                rollback_chain_request_tracking(&mut store, route_key, &chain_auth);
+                store.metrics.chain_request_failed_total += 1;
+            }
+            Err(err) => {
+                warn!(
+                    error = %err,
+                    route_key = route_key,
+                    request_id = chain_auth.request_id,
+                    "failed to rollback chain request tracking after db error"
+                );
+            }
+        }
+        return Err(resp);
+    }
+
+    Ok(chain_auth)
 }
 
 fn ensure_binding_lock_db(
@@ -956,47 +1046,85 @@ fn release_binding_lock_db(state: &AppState, account_pubkey: &str) {
     });
 }
 
-fn persist_reward_state_db(state: &AppState, reward: &RewardStateRecord) {
+fn persist_reward_state_db(
+    state: &AppState,
+    reward: &RewardStateRecord,
+    expected_updated_at: Option<DateTime<Utc>>,
+) -> Result<bool, String> {
     let StoreBackend::Postgres {
         clients,
         next_client_idx,
     } = &state.store.backend
     else {
-        return;
+        return Ok(true);
     };
-    let _ = StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
-        conn.execute(
-            "INSERT INTO bind_reward_states(
-               account_pubkey, archive_index, callback_id, reward_status, retry_count, max_retries,
-               reward_tx_hash, last_error, next_retry_at, updated_at, created_at
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-             ON CONFLICT (account_pubkey) DO UPDATE SET
-               archive_index=excluded.archive_index,
-               callback_id=excluded.callback_id,
-               reward_status=excluded.reward_status,
-               retry_count=excluded.retry_count,
-               max_retries=excluded.max_retries,
-               reward_tx_hash=excluded.reward_tx_hash,
-               last_error=excluded.last_error,
-               next_retry_at=excluded.next_retry_at,
-               updated_at=excluded.updated_at",
-            &[
-                &reward.account_pubkey,
-                &reward.archive_index,
-                &reward.callback_id,
-                &format!("{:?}", reward.reward_status).to_uppercase(),
-                &(reward.retry_count as i32),
-                &(reward.max_retries as i32),
-                &reward.reward_tx_hash,
-                &reward.last_error,
-                &reward.next_retry_at,
-                &reward.updated_at,
-                &reward.created_at,
-            ],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    });
+    StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
+        let status_text = format!("{:?}", reward.reward_status).to_uppercase();
+        if let Some(previous_updated_at) = expected_updated_at {
+            let affected = conn
+                .execute(
+                    "UPDATE bind_reward_states SET
+                       archive_index=$2,
+                       callback_id=$3,
+                       reward_status=$4,
+                       retry_count=$5,
+                       max_retries=$6,
+                       reward_tx_hash=$7,
+                       last_error=$8,
+                       next_retry_at=$9,
+                       updated_at=$10
+                     WHERE account_pubkey=$1 AND updated_at=$11",
+                    &[
+                        &reward.account_pubkey,
+                        &reward.archive_index,
+                        &reward.callback_id,
+                        &status_text,
+                        &(reward.retry_count as i32),
+                        &(reward.max_retries as i32),
+                        &reward.reward_tx_hash,
+                        &reward.last_error,
+                        &reward.next_retry_at,
+                        &reward.updated_at,
+                        &previous_updated_at,
+                    ],
+                )
+                .map_err(|e| e.to_string())?;
+            return Ok(affected > 0);
+        }
+
+        let affected = conn
+            .execute(
+                "INSERT INTO bind_reward_states(
+                   account_pubkey, archive_index, callback_id, reward_status, retry_count, max_retries,
+                   reward_tx_hash, last_error, next_retry_at, updated_at, created_at
+                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                 ON CONFLICT (account_pubkey) DO UPDATE SET
+                   archive_index=excluded.archive_index,
+                   callback_id=excluded.callback_id,
+                   reward_status=excluded.reward_status,
+                   retry_count=excluded.retry_count,
+                   max_retries=excluded.max_retries,
+                   reward_tx_hash=excluded.reward_tx_hash,
+                   last_error=excluded.last_error,
+                   next_retry_at=excluded.next_retry_at,
+                   updated_at=excluded.updated_at",
+                &[
+                    &reward.account_pubkey,
+                    &reward.archive_index,
+                    &reward.callback_id,
+                    &status_text,
+                    &(reward.retry_count as i32),
+                    &(reward.max_retries as i32),
+                    &reward.reward_tx_hash,
+                    &reward.last_error,
+                    &reward.next_retry_at,
+                    &reward.updated_at,
+                    &reward.created_at,
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(affected > 0)
+    })
 }
 
 fn remove_reward_state_db(state: &AppState, account_pubkey: &str) {
@@ -1041,16 +1169,17 @@ fn api_error(status: StatusCode, code: u32, message: &str) -> axum::response::Re
 pub(crate) fn store_read_or_500(
     state: &AppState,
 ) -> Result<StoreReadGuard, axum::response::Response> {
-    state
-        .store
-        .read()
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed"))
+    state.store.read().map_err(|err| {
+        warn!(error = %err, "store read failed");
+        api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed")
+    })
 }
 
 pub(crate) fn store_write_or_500(
     state: &AppState,
 ) -> Result<StoreWriteGuard, axum::response::Response> {
-    state.store.write().map_err(|_| {
+    state.store.write().map_err(|err| {
+        warn!(error = %err, "store write failed");
         api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             1004,
@@ -1088,7 +1217,7 @@ fn load_runtime_state(state: &AppState) -> bool {
     let payload_enc: Option<Vec<u8>> = row.get(1);
     let snapshot: PersistedRuntimeMeta = match payload_enc {
         Some(ciphertext) if !ciphertext.is_empty() => {
-            let decrypted_text =
+            let decrypted_text = Zeroizing::new(
                 match StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
                     conn.query_one(
                         "SELECT pgp_sym_decrypt($1::bytea, $2)::text",
@@ -1102,8 +1231,9 @@ fn load_runtime_state(state: &AppState) -> bool {
                         warn!(error = %err, "failed to decrypt runtime_meta");
                         return false;
                     }
-                };
-            match serde_json::from_str::<PersistedRuntimeMeta>(&decrypted_text) {
+                },
+            );
+            match serde_json::from_str::<PersistedRuntimeMeta>(decrypted_text.as_str()) {
                 Ok(v) => v,
                 Err(err) => {
                     warn!(error = %err, "failed to decode decrypted runtime_meta");
@@ -1144,29 +1274,25 @@ fn load_runtime_state(state: &AppState) -> bool {
     true
 }
 
-fn persist_runtime_state(state: &AppState) {
+fn persist_runtime_state_checked(state: &AppState) -> Result<(), String> {
     let snapshot = PersistedRuntimeMeta {
         version: 1,
         signing_seed_hex: match state.signing_seed_hex.read() {
             Ok(v) => v.clone(),
-            Err(_) => return,
+            Err(_) => return Err("signing seed read lock poisoned".to_string()),
         },
         known_key_seeds: match state.known_key_seeds.read() {
             Ok(v) => v.clone(),
-            Err(_) => return,
+            Err(_) => return Err("known seeds read lock poisoned".to_string()),
         },
         public_key_hex: match state.public_key_hex.read() {
             Ok(v) => v.clone(),
-            Err(_) => return,
+            Err(_) => return Err("public key read lock poisoned".to_string()),
         },
     };
-    let payload_text = match serde_json::to_string(&snapshot) {
-        Ok(v) => v,
-        Err(err) => {
-            warn!(error = %err, "failed to encode runtime_meta");
-            return;
-        }
-    };
+    let payload_text = serde_json::to_string(&snapshot)
+        .map_err(|err| format!("failed to encode runtime_meta: {err}"))?;
+    let payload_text = Zeroizing::new(payload_text);
     let payload = serde_json::json!({"encrypted": true, "version": snapshot.version});
     let cipher_key = runtime_meta_cipher_key();
 
@@ -1175,9 +1301,9 @@ fn persist_runtime_state(state: &AppState) {
         next_client_idx,
     } = &state.store.backend
     else {
-        return;
+        return Ok(());
     };
-    if let Err(err) = StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
+    StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
         conn.execute(
             "INSERT INTO runtime_meta(id, payload, payload_enc, updated_at)
              VALUES (1, $1, pgp_sym_encrypt($2, $3, 'cipher-algo=aes256,compress-algo=1'), now())
@@ -1185,11 +1311,15 @@ fn persist_runtime_state(state: &AppState) {
                payload=excluded.payload,
                payload_enc=excluded.payload_enc,
                updated_at=now()",
-            &[&payload, &payload_text, &cipher_key],
+            &[&payload, &*payload_text, &cipher_key],
         )
         .map(|_| ())
         .map_err(|e| format!("failed to persist runtime_meta: {e}"))
-    }) {
+    })
+}
+
+fn persist_runtime_state(state: &AppState) {
+    if let Err(err) = persist_runtime_state_checked(state) {
         warn!(error = %err, "failed to persist runtime_meta");
     }
 }

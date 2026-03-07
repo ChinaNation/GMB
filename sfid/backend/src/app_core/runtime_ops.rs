@@ -36,6 +36,7 @@ pub(crate) fn seed_super_admins(state: &AppState) {
                 built_in: true,
                 created_by: "SYSTEM".to_string(),
                 created_at: now,
+                updated_at: Some(now),
             },
         );
         store
@@ -55,6 +56,32 @@ pub(crate) fn cleanup_pending_bind_scans(store: &mut Store, now: DateTime<Utc>) 
     store.pending_bind_scan_by_qr_id.retain(|_, pending| {
         pending.scanned_at > now - Duration::hours(24) && pending.expire_at >= now_ts
     });
+}
+
+pub(crate) fn cleanup_pending_bind_requests(store: &mut Store, now: DateTime<Utc>) {
+    store
+        .pending_by_pubkey
+        .retain(|_, pending| pending.requested_at > now - Duration::hours(24));
+}
+
+fn pending_bind_cleanup_interval_seconds() -> i64 {
+    std::env::var("SFID_PENDING_BIND_CLEANUP_INTERVAL_SECONDS")
+        .ok()
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(60)
+}
+
+pub(crate) fn maybe_cleanup_pending_bind_requests(store: &mut Store, now: DateTime<Utc>) {
+    let interval = Duration::seconds(pending_bind_cleanup_interval_seconds());
+    let should_cleanup = store
+        .pending_bind_last_cleanup_at
+        .map(|last| now - last >= interval)
+        .unwrap_or(true);
+    if should_cleanup {
+        cleanup_pending_bind_requests(store, now);
+        store.pending_bind_last_cleanup_at = Some(now);
+    }
 }
 
 pub(crate) fn vote_cache_key(account_pubkey: &str, proposal_id: Option<u64>) -> String {
@@ -85,6 +112,32 @@ pub(crate) fn normalize_optional(value: Option<String>) -> Option<String> {
             Some(trimmed.to_string())
         }
     })
+}
+
+pub(crate) fn normalize_account_pubkey(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let hex_body = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .or_else(|| {
+            if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+                Some(trimmed)
+            } else {
+                None
+            }
+        });
+    if let Some(body) = hex_body {
+        if body.len() != 64 || !body.chars().all(|c| c.is_ascii_hexdigit()) {
+            return None;
+        }
+        return Some(format!("0x{}", body.to_ascii_lowercase()));
+    }
+
+    None
 }
 
 pub(crate) fn bounded_cache_limit(key: &str, default_value: usize) -> usize {
@@ -409,7 +462,13 @@ pub(crate) fn seed_demo_record(state: &AppState) {
                 sfid_code: sfid.clone(),
                 issued_at: now.timestamp(),
             };
-            let proof = make_signature_envelope(state, &binding_payload);
+            let proof = match make_signature_envelope(state, &binding_payload) {
+                Ok(v) => v,
+                Err(err) => {
+                    warn!(error = %err, "failed to sign demo binding payload");
+                    return;
+                }
+            };
             store.bindings_by_pubkey.insert(
                 pubkey.clone(),
                 BindingRecord {
@@ -420,6 +479,13 @@ pub(crate) fn seed_demo_record(state: &AppState) {
                     citizen_status: CitizenStatus::Normal,
                     sfid_code: sfid,
                     sfid_signature: proof.signature_hex,
+                    runtime_bind_sfid_code_hash: None,
+                    runtime_bind_nonce: None,
+                    runtime_bind_signature: None,
+                    runtime_bind_key_id: None,
+                    runtime_bind_key_version: None,
+                    runtime_bind_alg: None,
+                    runtime_bind_signer_pubkey: None,
                     bound_at: now,
                     bound_by: "system-seed".to_string(),
                     admin_province: None,
@@ -474,13 +540,14 @@ pub(crate) fn deterministic_sfid_code(
 pub(crate) fn make_signature_envelope<T: Serialize>(
     state: &AppState,
     payload: &T,
-) -> SignatureEnvelope {
+) -> Result<SignatureEnvelope, String> {
     let seed = state
         .signing_seed_hex
         .read()
         .map(|v| v.clone())
-        .unwrap_or_default();
-    let signing_key = key_admins::chain_keyring::load_signing_key_from_seed(seed.as_str());
+        .map_err(|_| "signing seed read lock poisoned".to_string())?;
+    let signing_key =
+        key_admins::chain_keyring::try_load_signing_key_from_seed(seed.expose_secret())?;
     key_admins::chain_proof::make_signature_envelope(
         &state.key_id,
         &state.key_version,

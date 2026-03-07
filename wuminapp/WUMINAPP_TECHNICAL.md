@@ -36,10 +36,9 @@ wuminapp/
 │   ├── lib/
 │   │   ├── main.dart
 │   │   ├── login/
+│   │   ├── user/
 │   │   ├── wallet/
 │   │   ├── trade/
-│   │   ├── features/observe_accounts/
-│   │   └── pages/
 │   └── test/
 └── WUMINAPP_TECHNICAL.md
 ```
@@ -137,7 +136,9 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 - 登录白名单配置：`login.whitelist_config.v1`
 - 登录防重放记录：`login.used_request_ids`
 - SFID 绑定状态：`sfid.bind.*`
-- 用户资料：`user_profile_service` 相关键
+- 用户资料：
+  - `user.profile.nickname`
+  - `user.profile.avatar_path`
 
 ## 6. Backend 当前实现
 
@@ -230,4 +231,5 @@ flutter run \
 ## 10. 关联模块文档
 
 - 登录模块：`mobile/lib/login/LOGIN_TECHNICAL.md`
+- 用户模块：`mobile/lib/user/USER_TECHNICAL.md`
 - 钱包模块：`mobile/lib/wallet/WALLET_TECHNICAL.md`
