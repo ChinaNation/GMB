@@ -3,7 +3,7 @@
 ## 1. 模块定位
 
 - 路径：`backend/src/business`
-- 职责：承载“共用后台查询与审计能力”，并提供省域作用域判定函数。
+- 职责：承载“共用后台查询、审计、公钥归一化与作用域判定能力”。
 - 当前不再承载操作业务与区块链业务：
   - 操作业务在 `backend/src/operate`
   - 区块链业务在 `backend/src/chain`
@@ -25,8 +25,14 @@
   - `in_scope_pending`
   - `in_scope_cpms_site`
   - 用途：角色作用域与省域隔离判定
+- `pubkey.rs`
+  - `normalize_admin_pubkey`
+  - `normalize_cpms_pubkey`
+  - `same_admin_pubkey`
+  - `same_cpms_pubkey`
+  - 用途：统一 `sr25519` 公钥格式归一化与语义比较，避免多模块重复实现
 - `mod.rs`
-  - 统一导出 `audit/query/scope`
+  - 统一导出 `audit/pubkey/query/scope`
 
 ## 3. 路由接线（当前）
 

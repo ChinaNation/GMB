@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use tracing::warn;
 use uuid::Uuid;
 
+use crate::business::pubkey::same_admin_pubkey;
 use crate::business::scope::province_scope_for_role;
 use crate::sfid::province::super_admin_display_name;
 use crate::*;
@@ -865,6 +866,13 @@ pub(crate) fn require_super_admin(
             "super admin required",
         ));
     }
+    if ctx.admin_province.is_none() {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "admin province scope missing",
+        ));
+    }
     Ok(ctx)
 }
 
@@ -878,6 +886,13 @@ pub(crate) fn require_super_or_key_admin(
             StatusCode::FORBIDDEN,
             1003,
             "super admin or key admin required",
+        ));
+    }
+    if ctx.role == AdminRole::SuperAdmin && ctx.admin_province.is_none() {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "admin province scope missing",
         ));
     }
     Ok(ctx)
@@ -983,13 +998,6 @@ fn normalize_hex(value: &str) -> String {
         .or_else(|| value.trim().strip_prefix("0X"))
         .unwrap_or(value.trim())
         .to_string()
-}
-
-fn same_admin_pubkey(left: &str, right: &str) -> bool {
-    match (parse_sr25519_pubkey(left), parse_sr25519_pubkey(right)) {
-        (Some(l), Some(r)) => l == r,
-        _ => left.trim().eq_ignore_ascii_case(right.trim()),
-    }
 }
 
 fn resolve_admin_pubkey_key(store: &Store, candidate: &str) -> Option<String> {

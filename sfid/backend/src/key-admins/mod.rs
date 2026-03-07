@@ -2,8 +2,8 @@ pub(crate) mod chain_keyring;
 pub(crate) mod chain_proof;
 
 use self::chain_keyring::{
-    derive_pubkey_hex_from_seed, verify_rotation_signature, ChainKeyringState, KeySlot,
-    RotateMainError, RotateMainRequest,
+    try_derive_pubkey_hex_from_seed, try_load_signing_key_from_seed, verify_rotation_signature,
+    ChainKeyringState, KeySlot, RotateMainError, RotateMainRequest,
 };
 use axum::{
     extract::State,
@@ -12,7 +12,14 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Duration, Utc};
-use std::time::Duration as StdDuration;
+use schnorrkel::signing_context;
+use std::{sync::OnceLock, time::Duration as StdDuration};
+use subxt::{
+    config::substrate::{AccountId32, MultiSignature},
+    dynamic::{tx, Value},
+    OnlineClient, PolkadotConfig,
+};
+use tokio::sync::Mutex as TokioMutex;
 use tracing::warn;
 use uuid::Uuid;
 
@@ -21,7 +28,69 @@ use crate::*;
 #[derive(Debug, Clone)]
 struct BackupSlotMaterial {
     pubkey: String,
-    seed_hex: Option<String>,
+    seed_hex: Option<SensitiveSeed>,
+}
+
+fn rotate_challenge_ttl_minutes() -> i64 {
+    std::env::var("SFID_KEYRING_CHALLENGE_TTL_MINUTES")
+        .ok()
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(2)
+}
+
+fn rotate_challenge_max_active() -> usize {
+    std::env::var("SFID_KEYRING_CHALLENGE_MAX_ACTIVE")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(2)
+}
+
+fn rotate_chain_submit_timeout() -> StdDuration {
+    let seconds = std::env::var("SFID_CHAIN_ROTATE_FINALIZE_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(90);
+    StdDuration::from_secs(seconds)
+}
+
+fn rotate_commit_mutex() -> &'static TokioMutex<()> {
+    static ROTATE_COMMIT_MUTEX: OnceLock<TokioMutex<()>> = OnceLock::new();
+    ROTATE_COMMIT_MUTEX.get_or_init(|| TokioMutex::new(()))
+}
+
+fn is_production_mode() -> bool {
+    optional_env("SFID_ENV")
+        .or_else(|| optional_env("ENV"))
+        .map(|v| v.eq_ignore_ascii_case("prod") || v.eq_ignore_ascii_case("production"))
+        .unwrap_or(false)
+}
+
+fn normalize_pubkey_for_signing(value: &str) -> String {
+    let trimmed = value.trim();
+    let no_prefix = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed);
+    format!("0x{}", no_prefix.to_ascii_lowercase())
+}
+
+fn rotate_commit_signature_message(challenge_text: &str, new_backup_pubkey: &str) -> String {
+    format!(
+        "{challenge_text}|phase=commit|new_backup={}",
+        normalize_pubkey_for_signing(new_backup_pubkey)
+    )
+}
+
+fn should_keep_rotate_challenge(challenge: &KeyringRotateChallenge, now: DateTime<Utc>) -> bool {
+    if challenge.consumed {
+        // Consumed challenges are only retained until natural expiration for brief troubleshooting.
+        return challenge.expire_at > now;
+    }
+    // Unconsumed challenges are kept while active, plus a short post-expiry grace window.
+    challenge.expire_at > now - Duration::minutes(10)
 }
 
 pub(crate) async fn admin_get_chain_keyring(
@@ -72,7 +141,11 @@ pub(crate) async fn admin_chain_keyring_rotate_challenge(
             "initiator_pubkey is required",
         );
     }
-    if input.initiator_pubkey.trim() != ctx.admin_pubkey {
+    if !input
+        .initiator_pubkey
+        .trim()
+        .eq_ignore_ascii_case(ctx.admin_pubkey.as_str())
+    {
         return api_error(
             StatusCode::FORBIDDEN,
             1003,
@@ -81,7 +154,7 @@ pub(crate) async fn admin_chain_keyring_rotate_challenge(
     }
 
     let now = Utc::now();
-    let expire_at = now + Duration::minutes(2);
+    let expire_at = now + Duration::minutes(rotate_challenge_ttl_minutes());
     let challenge_id = Uuid::new_v4().to_string();
     let nonce = Uuid::new_v4().to_string();
 
@@ -90,6 +163,25 @@ pub(crate) async fn admin_chain_keyring_rotate_challenge(
         Err(resp) => return resp,
     };
     cleanup_keyring_rotate_challenges(&mut store, now);
+    let pending_for_initiator = store
+        .keyring_rotate_challenges
+        .values()
+        .filter(|challenge| {
+            !challenge.consumed
+                && challenge.expire_at > now
+                && challenge
+                    .initiator_pubkey
+                    .eq_ignore_ascii_case(ctx.admin_pubkey.as_str())
+        })
+        .count();
+    let max_active = rotate_challenge_max_active();
+    if pending_for_initiator >= max_active {
+        return api_error(
+            StatusCode::TOO_MANY_REQUESTS,
+            1029,
+            "too many active rotation challenges",
+        );
+    }
     let Some(current) = store.chain_keyring_state.as_ref().cloned() else {
         return api_error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -99,7 +191,7 @@ pub(crate) async fn admin_chain_keyring_rotate_challenge(
     };
 
     // Challenge 阶段只确认“发起者必须是当前备用”。
-    let initiator_pubkey = input.initiator_pubkey.trim().to_string();
+    let initiator_pubkey = normalize_pubkey_for_signing(input.initiator_pubkey.as_str());
     if !initiator_pubkey.eq_ignore_ascii_case(current.backup_a_pubkey.as_str())
         && !initiator_pubkey.eq_ignore_ascii_case(current.backup_b_pubkey.as_str())
     {
@@ -107,7 +199,7 @@ pub(crate) async fn admin_chain_keyring_rotate_challenge(
     }
 
     let challenge_text = format!(
-        "sfid-keyring-rotate-v1|challenge_id={}|version={}|initiator={}|nonce={}|iat={}|exp={}",
+        "sfid-keyring-rotate-v1|challenge_id={}|version={}|initiator={}|nonce={}|iat={}|exp={}|sigfmt=raw-v1",
         challenge_id,
         current.version,
         initiator_pubkey,
@@ -121,7 +213,7 @@ pub(crate) async fn admin_chain_keyring_rotate_challenge(
         KeyringRotateChallenge {
             challenge_id: challenge_id.clone(),
             keyring_version: current.version,
-            initiator_pubkey: input.initiator_pubkey.trim().to_string(),
+            initiator_pubkey: initiator_pubkey.clone(),
             challenge_text: challenge_text.clone(),
             expire_at,
             verified_at: None,
@@ -195,7 +287,10 @@ pub(crate) async fn admin_chain_keyring_rotate_verify(
     if now > challenge.expire_at {
         return api_error(StatusCode::UNAUTHORIZED, 1007, "rotation challenge expired");
     }
-    if challenge.initiator_pubkey != ctx.admin_pubkey {
+    if !challenge
+        .initiator_pubkey
+        .eq_ignore_ascii_case(ctx.admin_pubkey.as_str())
+    {
         return api_error(
             StatusCode::FORBIDDEN,
             1003,
@@ -252,8 +347,20 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
             "challenge_id, signature, new_backup_pubkey are required",
         );
     }
+    // Serialize commit requests per process to avoid local lost-update races.
+    let _commit_guard = rotate_commit_mutex().lock().await;
+
     let now = Utc::now();
-    let (challenge_id, rotate_result, promoted_slot, new_main_pubkey, next_version) = {
+    let (
+        challenge_id,
+        rotate_result,
+        promoted_slot,
+        new_main_pubkey,
+        initiator_seed_hex,
+        initiator_pubkey,
+        new_backup_pubkey,
+        current_state_before,
+    ) = {
         let mut store = match store_write_or_500(&state) {
             Ok(v) => v,
             Err(resp) => return resp,
@@ -283,16 +390,23 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
                 "rotation challenge not verified",
             );
         }
-        if challenge.initiator_pubkey != ctx.admin_pubkey {
+        if !challenge
+            .initiator_pubkey
+            .eq_ignore_ascii_case(ctx.admin_pubkey.as_str())
+        {
             return api_error(
                 StatusCode::FORBIDDEN,
                 1003,
                 "rotation challenge owner mismatch",
             );
         }
+        let commit_message = rotate_commit_signature_message(
+            challenge.challenge_text.as_str(),
+            input.new_backup_pubkey.as_str(),
+        );
         if !verify_rotation_signature(
             &challenge.initiator_pubkey,
-            &challenge.challenge_text,
+            commit_message.as_str(),
             input.signature.trim(),
         ) {
             return api_error(
@@ -316,6 +430,7 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
                 "chain keyring version changed, retry challenge",
             );
         }
+        let current_state_before = current.clone();
         let initiator_seed_hex = {
             let known = match state.known_key_seeds.read() {
                 Ok(v) => v,
@@ -342,7 +457,18 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
             };
             seed
         };
-        let initiator_seed_pubkey = derive_pubkey_hex_from_seed(initiator_seed_hex.as_str());
+        let initiator_seed_pubkey =
+            match try_derive_pubkey_hex_from_seed(initiator_seed_hex.expose_secret()) {
+                Ok(v) => v,
+                Err(err) => {
+                    warn!(error = %err, "failed to derive pubkey from initiator seed");
+                    return api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        1004,
+                        "invalid initiator signer seed",
+                    );
+                }
+            };
         if !initiator_seed_pubkey.eq_ignore_ascii_case(challenge.initiator_pubkey.as_str()) {
             return api_error(
                 StatusCode::UNAUTHORIZED,
@@ -352,7 +478,7 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
         }
         let rotate_req = RotateMainRequest {
             initiator_pubkey: challenge.initiator_pubkey.clone(),
-            new_backup_pubkey: input.new_backup_pubkey.trim().to_string(),
+            new_backup_pubkey: normalize_pubkey_for_signing(input.new_backup_pubkey.as_str()),
         };
         let rotate_result = match current.rotate_main(rotate_req) {
             Ok(v) => v,
@@ -360,59 +486,232 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
         };
         let promoted_slot = rotate_result.promoted_slot.clone();
         let new_main_pubkey = rotate_result.state.main_pubkey.clone();
-        let next_version = rotate_result.state.version;
-        if let Some(challenge_mut) = store
-            .keyring_rotate_challenges
-            .get_mut(input.challenge_id.trim())
-        {
-            challenge_mut.consumed = true;
-        }
-        store.chain_keyring_state = Some(rotate_result.state.clone());
-        sync_key_admin_users(&mut store);
-        if let Err(err) = set_active_main_signer(
-            &state,
-            new_main_pubkey.as_str(),
-            initiator_seed_hex.as_str(),
-        ) {
-            warn!(error = %err, "failed to switch active main signer");
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "failed to switch active main signer",
-            );
-        }
         (
             challenge.challenge_id,
             rotate_result,
             promoted_slot,
             new_main_pubkey,
-            next_version,
+            initiator_seed_hex,
+            challenge.initiator_pubkey,
+            normalize_pubkey_for_signing(input.new_backup_pubkey.as_str()),
+            current_state_before,
         )
     };
-    persist_runtime_state(&state);
 
-    let chain_submit = push_main_pubkey_to_chain(new_main_pubkey.as_str(), next_version).await;
-    let (chain_tx_hash, chain_submit_ok, chain_submit_error, commit_result, response_message) =
+    let chain_submit_timeout = rotate_chain_submit_timeout();
+    let chain_submit = match tokio::time::timeout(
+        chain_submit_timeout,
+        submit_rotate_sfid_keys_extrinsic(
+            initiator_pubkey.as_str(),
+            initiator_seed_hex.expose_secret(),
+            new_backup_pubkey.as_str(),
+        ),
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(_) => Err(format!(
+            "rotate_sfid_keys submit failed: timed out waiting for finalization after {}s",
+            chain_submit_timeout.as_secs()
+        )),
+    };
+    let (chain_tx_hash, block_number, chain_submit_ok, chain_submit_error, response_message) =
         match chain_submit {
-            Ok(tx) => (
-                tx,
+            Ok(receipt) => (
+                receipt.tx_hash,
+                Some(receipt.block_number),
                 true,
                 None,
-                "SUCCESS",
-                "chain keyring rotation committed and submitted to chain".to_string(),
+                "chain keyring rotation included on chain".to_string(),
             ),
             Err(err) => (
                 format!("submit_failed:{}", err),
+                None,
                 false,
                 Some(err.clone()),
-                "FAILED",
                 format!(
-                    "chain keyring rotation committed locally, but chain submit failed: {}",
+                    "chain keyring rotation failed on chain, local keyring unchanged: {}",
                     err
                 ),
             ),
         };
+
+    let promoted_slot = match promoted_slot {
+        KeySlot::Main => "MAIN",
+        KeySlot::BackupA => "BACKUP_A",
+        KeySlot::BackupB => "BACKUP_B",
+    };
+
+    if !chain_submit_ok {
+        let mut response_state = current_state_before.clone();
+        {
+            let mut store = match store_write_or_500(&state) {
+                Ok(v) => v,
+                Err(resp) => return resp,
+            };
+            if let Some(current) = store.chain_keyring_state.as_ref().cloned() {
+                response_state = current;
+            }
+            append_audit_log(
+                &mut store,
+                "CHAIN_KEYRING_ROTATE_COMMIT",
+                &ctx.admin_pubkey,
+                None,
+                None,
+                "FAILED",
+                format!(
+                    "challenge_id={} old_main={} new_main={} promoted_slot={} chain_tx_hash={} chain_submit_ok=false error={}",
+                    challenge_id,
+                    rotate_result.old_main_pubkey,
+                    rotate_result.state.main_pubkey,
+                    promoted_slot,
+                    chain_tx_hash,
+                    chain_submit_error.clone().unwrap_or_else(|| "unknown".to_string())
+                ),
+            );
+        }
+        return Json(ApiResponse {
+            code: 0,
+            message: "ok".to_string(),
+            data: KeyringRotateCommitOutput {
+                old_main_pubkey: response_state.main_pubkey.clone(),
+                promoted_slot: promoted_slot.to_string(),
+                chain_tx_hash,
+                block_number,
+                chain_submit_ok,
+                chain_submit_error,
+                version: response_state.version,
+                main_pubkey: response_state.main_pubkey,
+                backup_a_pubkey: response_state.backup_a_pubkey,
+                backup_b_pubkey: response_state.backup_b_pubkey,
+                updated_at: response_state.updated_at,
+                message: response_message,
+            },
+        })
+        .into_response();
+    }
+
     {
+        let mut store = match store_write_or_500(&state) {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
+        let Some(current) = store.chain_keyring_state.as_ref().cloned() else {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                1004,
+                "chain keyring not initialized",
+            );
+        };
+        if current.version != current_state_before.version {
+            if let Some(challenge_mut) = store
+                .keyring_rotate_challenges
+                .get_mut(input.challenge_id.trim())
+            {
+                challenge_mut.consumed = true;
+            }
+            append_audit_log(
+                &mut store,
+                "CHAIN_KEYRING_ROTATE_COMMIT",
+                &ctx.admin_pubkey,
+                None,
+                None,
+                "SKIPPED",
+                format!(
+                    "challenge_id={} expected_version={} current_version={} old_main={} new_main={} promoted_slot={} chain_tx_hash={} block_number={} chain_submit_ok=true reason=concurrent_rotation_detected",
+                    challenge_id,
+                    current_state_before.version,
+                    current.version,
+                    rotate_result.old_main_pubkey,
+                    rotate_result.state.main_pubkey,
+                    promoted_slot,
+                    chain_tx_hash,
+                    block_number.unwrap_or_default(),
+                ),
+            );
+            drop(store);
+            if let Err(err) = reconcile_main_signer_with_keyring(&state) {
+                warn!(
+                    error = %err,
+                    "failed to reconcile signer after concurrent rotation conflict"
+                );
+            }
+            return api_error(
+                StatusCode::CONFLICT,
+                1007,
+                "concurrent rotation completed, local state refresh required",
+            );
+        }
+    }
+
+    let previous_main_pubkey = match state.public_key_hex.read() {
+        Ok(v) => v.clone(),
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "public key unavailable",
+            );
+        }
+    };
+    let previous_main_seed = match state.signing_seed_hex.read() {
+        Ok(v) => v.clone(),
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "signing seed unavailable",
+            );
+        }
+    };
+    if let Err(err) = set_active_main_signer(
+        &state,
+        new_main_pubkey.as_str(),
+        initiator_seed_hex.expose_secret(),
+    ) {
+        warn!(error = %err, "failed to switch active main signer");
+        {
+            let mut store = match store_write_or_500(&state) {
+                Ok(v) => v,
+                Err(resp) => return resp,
+            };
+            append_audit_log(
+                &mut store,
+                "CHAIN_KEYRING_ROTATE_COMMIT",
+                &ctx.admin_pubkey,
+                None,
+                None,
+                "FAILED",
+                format!(
+                    "challenge_id={} chain_tx_hash={} block_number={} chain_submit_ok=true local_signer_switch_error={}",
+                    challenge_id,
+                    chain_tx_hash,
+                    block_number.unwrap_or_default(),
+                    err
+                ),
+            );
+        }
+        if let Err(reconcile_err) = reconcile_main_signer_with_keyring(&state) {
+            warn!(
+                error = %reconcile_err,
+                "failed to reconcile signer after local signer switch error"
+            );
+        }
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "failed to switch active main signer",
+        );
+    }
+    if let Err(err) = persist_runtime_state_checked(&state) {
+        warn!(error = %err, "failed to persist runtime signer state");
+        if let Err(revert_err) = set_active_main_signer(
+            &state,
+            previous_main_pubkey.as_str(),
+            previous_main_seed.expose_secret(),
+        ) {
+            warn!(error = %revert_err, "failed to rollback active main signer");
+        }
         let mut store = match store_write_or_500(&state) {
             Ok(v) => v,
             Err(resp) => return resp,
@@ -423,24 +722,50 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
             &ctx.admin_pubkey,
             None,
             None,
-            commit_result,
+            "FAILED",
             format!(
-                "challenge_id={} old_main={} new_main={} promoted_slot={:?} chain_tx_hash={} chain_submit_ok={}",
-                challenge_id,
-                rotate_result.old_main_pubkey,
-                rotate_result.state.main_pubkey,
-                rotate_result.promoted_slot,
-                chain_tx_hash,
-                chain_submit_ok
+                "challenge_id={} chain_tx_hash={} chain_submit_ok=true local_persist_error=failed to persist runtime signer state",
+                challenge_id, chain_tx_hash
             ),
+        );
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "failed to persist runtime signer state",
         );
     }
 
-    let promoted_slot = match promoted_slot {
-        KeySlot::Main => "MAIN",
-        KeySlot::BackupA => "BACKUP_A",
-        KeySlot::BackupB => "BACKUP_B",
-    };
+    {
+        let mut store = match store_write_or_500(&state) {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
+        if let Some(challenge_mut) = store
+            .keyring_rotate_challenges
+            .get_mut(input.challenge_id.trim())
+        {
+            challenge_mut.consumed = true;
+        }
+        store.chain_keyring_state = Some(rotate_result.state.clone());
+        sync_key_admin_users(&mut store);
+        append_audit_log(
+            &mut store,
+            "CHAIN_KEYRING_ROTATE_COMMIT",
+            &ctx.admin_pubkey,
+            None,
+            None,
+            "SUCCESS",
+            format!(
+                "challenge_id={} old_main={} new_main={} promoted_slot={} chain_tx_hash={} block_number={} chain_submit_ok=true",
+                challenge_id,
+                rotate_result.old_main_pubkey,
+                rotate_result.state.main_pubkey,
+                promoted_slot,
+                chain_tx_hash,
+                block_number.unwrap_or_default()
+            ),
+        );
+    }
 
     Json(ApiResponse {
         code: 0,
@@ -449,6 +774,7 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
             old_main_pubkey: rotate_result.old_main_pubkey,
             promoted_slot: promoted_slot.to_string(),
             chain_tx_hash,
+            block_number,
             chain_submit_ok,
             chain_submit_error,
             version: rotate_result.state.version,
@@ -463,9 +789,9 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
 }
 
 pub(crate) fn cleanup_keyring_rotate_challenges(store: &mut Store, now: DateTime<Utc>) {
-    store.keyring_rotate_challenges.retain(|_, c| {
-        c.expire_at > now - Duration::minutes(10) && (!c.consumed || c.expire_at > now)
-    });
+    store
+        .keyring_rotate_challenges
+        .retain(|_, challenge| should_keep_rotate_challenge(challenge, now));
 }
 
 pub(crate) fn map_rotate_main_error(err: RotateMainError) -> axum::response::Response {
@@ -542,21 +868,26 @@ pub(crate) fn seed_chain_keyring(state: &AppState) {
         .map(|v| v.clone())
         .unwrap_or_else(|_| {
             warn!("signing seed read lock poisoned while seeding keyring");
-            String::new()
+            SensitiveSeed::default()
         });
-    if main_seed.is_empty() {
+    if main_seed.expose_secret().is_empty() {
         return;
     }
-    if let Err(err) = upsert_seed_for_pubkey(state, main_pubkey.as_str(), main_seed.as_str()) {
+    if let Err(err) = upsert_seed_for_pubkey(state, main_pubkey.as_str(), main_seed.expose_secret())
+    {
         warn!(error = %err, "failed to upsert main key seed while seeding keyring");
     }
     if let Some(seed) = backup_a.seed_hex.as_ref() {
-        if let Err(err) = upsert_seed_for_pubkey(state, backup_a.pubkey.as_str(), seed.as_str()) {
+        if let Err(err) =
+            upsert_seed_for_pubkey(state, backup_a.pubkey.as_str(), seed.expose_secret())
+        {
             warn!(error = %err, "failed to upsert backup_a key seed while seeding keyring");
         }
     }
     if let Some(seed) = backup_b.seed_hex.as_ref() {
-        if let Err(err) = upsert_seed_for_pubkey(state, backup_b.pubkey.as_str(), seed.as_str()) {
+        if let Err(err) =
+            upsert_seed_for_pubkey(state, backup_b.pubkey.as_str(), seed.expose_secret())
+        {
             warn!(error = %err, "failed to upsert backup_b key seed while seeding keyring");
         }
     }
@@ -576,14 +907,52 @@ pub(crate) fn seed_key_admins(state: &AppState) {
     sync_key_admin_users(&mut store);
 }
 
+pub(crate) fn reconcile_main_signer_with_keyring(state: &AppState) -> Result<bool, String> {
+    let keyring_main = {
+        let store = state
+            .store
+            .read()
+            .map_err(|_| "store read lock poisoned".to_string())?;
+        let Some(kr) = store.chain_keyring_state.as_ref() else {
+            return Ok(false);
+        };
+        normalize_pubkey_for_signing(kr.main_pubkey.as_str())
+    };
+    let active_main = {
+        let pubkey = state
+            .public_key_hex
+            .read()
+            .map_err(|_| "public key read lock poisoned".to_string())?;
+        normalize_pubkey_for_signing(pubkey.as_str())
+    };
+    if keyring_main.eq_ignore_ascii_case(active_main.as_str()) {
+        return Ok(false);
+    }
+
+    let signer_seed = {
+        let known = state
+            .known_key_seeds
+            .read()
+            .map_err(|_| "known seeds read lock poisoned".to_string())?;
+        known
+            .iter()
+            .find(|(pubkey, _)| pubkey.eq_ignore_ascii_case(keyring_main.as_str()))
+            .map(|(_, seed)| seed.clone())
+            .ok_or_else(|| "keyring main signer seed is missing".to_string())?
+    };
+    set_active_main_signer(state, keyring_main.as_str(), signer_seed.expose_secret())?;
+    persist_runtime_state_checked(state)?;
+    Ok(true)
+}
+
 pub(crate) fn sync_key_admin_users(store: &mut Store) {
     let Some(kr) = store.chain_keyring_state.as_ref().cloned() else {
         return;
     };
     let desired = vec![
-        kr.main_pubkey.clone(),
-        kr.backup_a_pubkey.clone(),
-        kr.backup_b_pubkey.clone(),
+        normalize_pubkey_for_signing(kr.main_pubkey.as_str()),
+        normalize_pubkey_for_signing(kr.backup_a_pubkey.as_str()),
+        normalize_pubkey_for_signing(kr.backup_b_pubkey.as_str()),
     ];
 
     let stale: Vec<String> = store
@@ -597,35 +966,59 @@ pub(crate) fn sync_key_admin_users(store: &mut Store) {
         store.admin_users_by_pubkey.remove(&pubkey);
     }
 
-    let mut next_id = store
-        .admin_users_by_pubkey
-        .values()
-        .map(|u| u.id)
-        .max()
-        .unwrap_or(0)
-        + 1;
+    if store.next_admin_user_id == 0 {
+        store.next_admin_user_id = store
+            .admin_users_by_pubkey
+            .values()
+            .map(|u| u.id)
+            .max()
+            .unwrap_or(0)
+            + 1;
+    }
     for pubkey in desired {
-        if let Some(user) = store.admin_users_by_pubkey.get_mut(&pubkey) {
-            user.role = AdminRole::KeyAdmin;
-            user.status = AdminStatus::Active;
-            user.built_in = true;
-            user.created_by = "SYSTEM".to_string();
+        let now = Utc::now();
+        if let Some(existing_key) = store
+            .admin_users_by_pubkey
+            .keys()
+            .find(|k| k.eq_ignore_ascii_case(pubkey.as_str()))
+            .cloned()
+        {
+            if existing_key != pubkey {
+                if let Some(mut user) = store.admin_users_by_pubkey.remove(existing_key.as_str()) {
+                    user.admin_pubkey = pubkey.clone();
+                    user.role = AdminRole::KeyAdmin;
+                    user.status = AdminStatus::Active;
+                    user.built_in = true;
+                    user.created_by = "SYSTEM".to_string();
+                    user.updated_at = Some(now);
+                    store.admin_users_by_pubkey.insert(pubkey.clone(), user);
+                }
+            } else if let Some(user) = store.admin_users_by_pubkey.get_mut(pubkey.as_str()) {
+                user.admin_pubkey = pubkey.clone();
+                user.role = AdminRole::KeyAdmin;
+                user.status = AdminStatus::Active;
+                user.built_in = true;
+                user.created_by = "SYSTEM".to_string();
+                user.updated_at = Some(now);
+            }
             continue;
         }
+        let next_id = store.next_admin_user_id;
+        store.next_admin_user_id = store.next_admin_user_id.saturating_add(1);
         store.admin_users_by_pubkey.insert(
             pubkey.clone(),
             AdminUser {
                 id: next_id,
-                admin_pubkey: pubkey,
+                admin_pubkey: pubkey.clone(),
                 admin_name: String::new(),
                 role: AdminRole::KeyAdmin,
                 status: AdminStatus::Active,
                 built_in: true,
                 created_by: "SYSTEM".to_string(),
-                created_at: Utc::now(),
+                created_at: now,
+                updated_at: Some(now),
             },
         );
-        next_id += 1;
     }
 }
 
@@ -637,26 +1030,26 @@ fn resolve_backup_slot(
     if let Ok(seed) = std::env::var(seed_env) {
         let trimmed = seed.trim().to_string();
         if !trimmed.is_empty() {
-            let pubkey = derive_pubkey_hex_from_seed(trimmed.as_str());
+            let pubkey = try_derive_pubkey_hex_from_seed(trimmed.as_str())
+                .unwrap_or_else(|err| panic!("{seed_env} is invalid: {err}"));
             return BackupSlotMaterial {
                 pubkey,
-                seed_hex: Some(trimmed),
+                seed_hex: Some(SensitiveSeed::from(trimmed)),
             };
         }
     }
     if let Ok(pubkey) = std::env::var(pubkey_env) {
         let trimmed = pubkey.trim().to_string();
         if !trimmed.is_empty() {
-            let normalized = if trimmed.starts_with("0x") || trimmed.starts_with("0X") {
-                trimmed
-            } else {
-                format!("0x{}", trimmed)
-            };
+            let normalized = normalize_pubkey_for_signing(trimmed.as_str());
             return BackupSlotMaterial {
                 pubkey: normalized,
                 seed_hex: None,
             };
         }
+    }
+    if is_production_mode() {
+        panic!("{seed_env} or {pubkey_env} must be configured in production mode (SFID_ENV=prod)");
     }
     let digest = blake3::hash(fallback_label.as_bytes());
     BackupSlotMaterial {
@@ -670,12 +1063,13 @@ fn upsert_seed_for_pubkey(state: &AppState, pubkey: &str, seed_hex: &str) -> Res
         .known_key_seeds
         .write()
         .map_err(|_| "known seeds write lock poisoned".to_string())?;
+    let normalized = normalize_pubkey_for_signing(pubkey);
     let target = seeds
         .keys()
-        .find(|k| k.eq_ignore_ascii_case(pubkey))
+        .find(|k| k.eq_ignore_ascii_case(normalized.as_str()))
         .cloned()
-        .unwrap_or_else(|| pubkey.to_string());
-    seeds.insert(target, seed_hex.to_string());
+        .unwrap_or(normalized);
+    seeds.insert(target, SensitiveSeed::from(seed_hex.to_string()));
     Ok(())
 }
 
@@ -684,91 +1078,122 @@ fn set_active_main_signer(
     main_pubkey: &str,
     main_seed_hex: &str,
 ) -> Result<(), String> {
+    let normalized_main_pubkey = normalize_pubkey_for_signing(main_pubkey);
     {
         let mut seed_guard = state
             .signing_seed_hex
             .write()
             .map_err(|_| "signing seed write lock poisoned".to_string())?;
-        *seed_guard = main_seed_hex.to_string();
+        *seed_guard = SensitiveSeed::from(main_seed_hex.to_string());
     }
     {
         let mut pubkey_guard = state
             .public_key_hex
             .write()
             .map_err(|_| "public key write lock poisoned".to_string())?;
-        *pubkey_guard = main_pubkey.to_string();
+        *pubkey_guard = normalized_main_pubkey.clone();
     }
-    upsert_seed_for_pubkey(state, main_pubkey, main_seed_hex)?;
+    upsert_seed_for_pubkey(state, normalized_main_pubkey.as_str(), main_seed_hex)?;
     Ok(())
 }
 
-async fn push_main_pubkey_to_chain(new_main_pubkey: &str, version: u64) -> Result<String, String> {
-    let rpc_url = std::env::var("SFID_CHAIN_RPC_URL")
-        .map_err(|_| "SFID_CHAIN_RPC_URL not configured".to_string())?;
-    if rpc_url.trim().is_empty() {
-        return Err("SFID_CHAIN_RPC_URL is empty".to_string());
-    }
-    let method = std::env::var("SFID_CHAIN_RPC_METHOD")
-        .unwrap_or_else(|_| "sfid_set_main_pubkey".to_string());
-    if method.trim().is_empty() {
-        return Err("SFID_CHAIN_RPC_METHOD is empty".to_string());
-    }
+#[derive(Debug, Clone)]
+struct ChainRotateReceipt {
+    tx_hash: String,
+    block_number: u64,
+}
 
-    let ticket = format!("push-{}", Uuid::new_v4());
-    let id = format!("sfid-{}", Uuid::new_v4());
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "method": method,
-        "params": [new_main_pubkey, version, ticket]
-    });
-
-    let client = reqwest::Client::builder()
-        .timeout(StdDuration::from_secs(10))
-        .build()
-        .map_err(|e| format!("build chain rpc client failed: {}", e))?;
-    let mut request = client.post(rpc_url.trim()).json(&payload);
-    if let Ok(token) = std::env::var("SFID_CHAIN_RPC_TOKEN") {
-        if !token.trim().is_empty() {
-            request = request.bearer_auth(token.trim());
-        }
+fn normalize_chain_ws_url(input: &str) -> String {
+    if let Some(rest) = input.strip_prefix("http://") {
+        return format!("ws://{rest}");
     }
+    if let Some(rest) = input.strip_prefix("https://") {
+        return format!("wss://{rest}");
+    }
+    input.to_string()
+}
 
-    let response = request
-        .send()
+fn resolve_chain_ws_url() -> Result<String, String> {
+    let ws_url = std::env::var("SFID_CHAIN_WS_URL")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .or_else(|| {
+            std::env::var("SFID_CHAIN_RPC_URL")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+        })
+        .ok_or_else(|| "SFID_CHAIN_RPC_URL or SFID_CHAIN_WS_URL not configured".to_string())?;
+    Ok(normalize_chain_ws_url(ws_url.as_str()))
+}
+
+fn parse_account_id32(pubkey: &str) -> Result<[u8; 32], String> {
+    parse_sr25519_pubkey_bytes(pubkey).ok_or_else(|| "invalid sr25519 account pubkey".to_string())
+}
+
+async fn submit_rotate_sfid_keys_extrinsic(
+    initiator_pubkey: &str,
+    initiator_seed_hex: &str,
+    new_backup_pubkey: &str,
+) -> Result<ChainRotateReceipt, String> {
+    let ws_url =
+        resolve_chain_ws_url().map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
+    let client = OnlineClient::<PolkadotConfig>::from_url(ws_url)
         .await
-        .map_err(|e| format!("chain rpc request failed: {}", e))?;
-    let status = response.status();
-    let value: serde_json::Value = response
-        .json()
+        .map_err(|e| {
+            format!("rotate_sfid_keys submit failed: chain websocket connect failed: {e}")
+        })?;
+
+    let signer_account = AccountId32(
+        parse_account_id32(initiator_pubkey)
+            .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?,
+    );
+    let new_backup_account = parse_account_id32(new_backup_pubkey)
+        .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
+    let payload = tx(
+        "SfidCodeAuth",
+        "rotate_sfid_keys",
+        vec![Value::from_bytes(new_backup_account)],
+    );
+    let mut partial_tx = client
+        .tx()
+        .create_partial(&payload, &signer_account, Default::default())
         .await
-        .map_err(|e| format!("parse chain rpc response failed: {}", e))?;
-    if !status.is_success() {
-        return Err(format!("chain rpc http status {}", status));
-    }
-    if let Some(err) = value.get("error") {
-        return Err(format!("chain rpc returned error: {}", err));
-    }
-    if let Some(result) = value.get("result") {
-        if let Some(tx_hash) = result
-            .as_str()
-            .map(|v| v.to_string())
-            .or_else(|| {
-                result
-                    .get("tx_hash")
-                    .and_then(|v| v.as_str())
-                    .map(|v| v.to_string())
-            })
-            .or_else(|| {
-                result
-                    .get("hash")
-                    .and_then(|v| v.as_str())
-                    .map(|v| v.to_string())
-            })
-        {
-            return Ok(tx_hash);
-        }
-        return Ok(format!("accepted:{}", ticket));
-    }
-    Err("chain rpc result field missing".to_string())
+        .map_err(|e| format!("rotate_sfid_keys submit failed: build extrinsic failed: {e}"))?;
+    let signing_key = try_load_signing_key_from_seed(initiator_seed_hex)
+        .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
+    let signature = signing_key
+        .sign(signing_context(b"substrate").bytes(&partial_tx.signer_payload()))
+        .to_bytes();
+    let tx = partial_tx
+        .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
+    let tx_hash = format!("0x{}", hex::encode(tx.hash().as_ref()));
+
+    let in_block = tx
+        .submit_and_watch()
+        .await
+        .map_err(|e| format!("rotate_sfid_keys submit failed: submit_and_watch failed: {e}"))?
+        .wait_for_finalized()
+        .await
+        .map_err(|e| format!("rotate_sfid_keys submit failed: wait_for_finalized failed: {e}"))?;
+    in_block
+        .wait_for_success()
+        .await
+        .map_err(|e| format!("rotate_sfid_keys included failed: {e}"))?;
+
+    let block = client
+        .blocks()
+        .at(in_block.block_hash())
+        .await
+        .map_err(|e| format!("rotate_sfid_keys included failed: fetch block failed: {e}"))?;
+    let block_number =
+        block.number().to_string().parse::<u64>().map_err(|e| {
+            format!("rotate_sfid_keys included failed: parse block number failed: {e}")
+        })?;
+
+    Ok(ChainRotateReceipt {
+        tx_hash,
+        block_number,
+    })
 }

@@ -63,22 +63,22 @@ impl ChainKeyringState {
             return Err(RotateMainError::NewBackupPubkeyRequired);
         }
 
-        if new_backup == self.main_pubkey
-            || new_backup == self.backup_a_pubkey
-            || new_backup == self.backup_b_pubkey
+        if new_backup.eq_ignore_ascii_case(self.main_pubkey.as_str())
+            || new_backup.eq_ignore_ascii_case(self.backup_a_pubkey.as_str())
+            || new_backup.eq_ignore_ascii_case(self.backup_b_pubkey.as_str())
         {
             return Err(RotateMainError::NewBackupPubkeyConflict);
         }
 
         let (promoted_slot, next_main, next_backup_a, next_backup_b) =
-            if initiator == self.backup_a_pubkey {
+            if initiator.eq_ignore_ascii_case(self.backup_a_pubkey.as_str()) {
                 (
                     KeySlot::BackupA,
                     self.backup_a_pubkey.clone(),
                     new_backup.to_string(),
                     self.backup_b_pubkey.clone(),
                 )
-            } else if initiator == self.backup_b_pubkey {
+            } else if initiator.eq_ignore_ascii_case(self.backup_b_pubkey.as_str()) {
                 (
                     KeySlot::BackupB,
                     self.backup_b_pubkey.clone(),
@@ -90,7 +90,7 @@ impl ChainKeyringState {
             };
 
         let next_state = ChainKeyringState {
-            version: self.version + 1,
+            version: self.version.saturating_add(1),
             main_pubkey: next_main,
             backup_a_pubkey: next_backup_a,
             backup_b_pubkey: next_backup_b,
@@ -122,15 +122,41 @@ pub fn load_signing_key() -> Sr25519Keypair {
     load_signing_key_from_seed(raw.as_str())
 }
 
+pub fn try_load_signing_key_from_seed(seed_text: &str) -> Result<Sr25519Keypair, String> {
+    let seed = decode_seed_to_32(seed_text)?;
+    let mini = MiniSecretKey::from_bytes(&seed)
+        .map_err(|_| "invalid sr25519 mini secret key".to_string())?;
+    Ok(mini.expand_to_keypair(ExpansionMode::Uniform))
+}
+
 pub fn load_signing_key_from_seed(seed_text: &str) -> Sr25519Keypair {
-    let seed = decode_seed_to_32(seed_text);
-    let mini = MiniSecretKey::from_bytes(&seed).expect("valid sr25519 mini secret key");
-    mini.expand_to_keypair(ExpansionMode::Uniform)
+    try_load_signing_key_from_seed(seed_text)
+        .unwrap_or_else(|err| panic!("invalid signing seed hex: {err}"))
+}
+
+pub fn try_derive_pubkey_hex_from_seed(seed_text: &str) -> Result<String, String> {
+    let keypair = try_load_signing_key_from_seed(seed_text)?;
+    Ok(format!("0x{}", hex::encode(keypair.public.to_bytes())))
 }
 
 pub fn derive_pubkey_hex_from_seed(seed_text: &str) -> String {
-    let keypair = load_signing_key_from_seed(seed_text);
-    format!("0x{}", hex::encode(keypair.public.to_bytes()))
+    try_derive_pubkey_hex_from_seed(seed_text)
+        .unwrap_or_else(|err| panic!("invalid signing seed hex: {err}"))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RotationSignatureMode {
+    Raw,
+    BytesWrapped,
+}
+
+fn rotation_signature_mode(message: &str) -> RotationSignatureMode {
+    // Reserved for forward compatibility: server currently emits `sigfmt=raw-v1`.
+    if message.contains("|sigfmt=bytes-wrap-v1") {
+        RotationSignatureMode::BytesWrapped
+    } else {
+        RotationSignatureMode::Raw
+    }
 }
 
 pub fn verify_rotation_signature(pubkey: &str, message: &str, signature: &str) -> bool {
@@ -149,16 +175,17 @@ pub fn verify_rotation_signature(pubkey: &str, message: &str, signature: &str) -
         Err(_) => return false,
     };
     let ctx = signing_context(b"substrate");
-    if verifying_key
-        .verify(ctx.bytes(message.as_bytes()), &sig)
-        .is_ok()
-    {
-        return true;
+    match rotation_signature_mode(message) {
+        RotationSignatureMode::Raw => verifying_key
+            .verify(ctx.bytes(message.as_bytes()), &sig)
+            .is_ok(),
+        RotationSignatureMode::BytesWrapped => {
+            let wrapped = format!("<Bytes>{}</Bytes>", message);
+            verifying_key
+                .verify(ctx.bytes(wrapped.as_bytes()), &sig)
+                .is_ok()
+        }
     }
-    let wrapped = format!("<Bytes>{}</Bytes>", message);
-    verifying_key
-        .verify(ctx.bytes(wrapped.as_bytes()), &sig)
-        .is_ok()
 }
 
 fn parse_sr25519_pubkey_bytes(value: &str) -> Option<[u8; 32]> {
@@ -187,20 +214,18 @@ fn normalize_hex(value: &str) -> &str {
         .unwrap_or(value.trim())
 }
 
-fn decode_seed_to_32(raw: &str) -> [u8; 32] {
-    let trimmed = raw.trim();
-    if trimmed.len() == 64 {
-        if let Ok(bytes) = Vec::from_hex(trimmed) {
-            let mut out = [0_u8; 32];
-            out.copy_from_slice(&bytes[..32]);
-            return out;
-        }
+fn decode_seed_to_32(raw: &str) -> Result<[u8; 32], String> {
+    let trimmed = normalize_hex(raw);
+    if trimmed.len() != 64 || !trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("seed must be exactly 64 hex characters".to_string());
     }
-
-    let digest = blake3::hash(trimmed.as_bytes());
+    let bytes = Vec::from_hex(trimmed).map_err(|_| "seed contains invalid hex".to_string())?;
+    if bytes.len() != 32 {
+        return Err("seed must decode to 32 bytes".to_string());
+    }
     let mut out = [0_u8; 32];
-    out.copy_from_slice(digest.as_bytes());
-    out
+    out.copy_from_slice(&bytes);
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -252,5 +277,27 @@ mod tests {
             })
             .expect_err("new backup must not clash with existing key");
         assert_eq!(err, RotateMainError::NewBackupPubkeyConflict);
+    }
+
+    #[test]
+    fn rotate_main_compares_pubkeys_case_insensitively() {
+        let state = ChainKeyringState::new(
+            "0xMAIN".to_string(),
+            "0xAbCd".to_string(),
+            "0xBEEF".to_string(),
+        );
+        let result = state
+            .rotate_main(RotateMainRequest {
+                initiator_pubkey: "0xabcd".to_string(),
+                new_backup_pubkey: "0x1234".to_string(),
+            })
+            .expect("case-insensitive initiator should rotate");
+        assert_eq!(result.state.main_pubkey, "0xAbCd");
+    }
+
+    #[test]
+    fn weak_non_hex_seed_is_rejected() {
+        assert!(try_load_signing_key_from_seed("password123").is_err());
+        assert!(try_derive_pubkey_hex_from_seed("test-seed").is_err());
     }
 }

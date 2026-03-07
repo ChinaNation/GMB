@@ -40,3 +40,10 @@
   - `operate` 仅负责“管理员操作业务”。
   - 区块链接口业务在 `backend/src/chain`。
   - SFID 生成业务在 `backend/src/sfid/admin.rs` 与 `backend/src/sfid/mod.rs`。
+
+## 5. 关键一致性约束
+
+- `admin_bind_confirm` 在创建 `RewardStateRecord(Pending)` 时采用“先 DB 后内存”顺序：
+  - 先调用 `persist_reward_state_db(..., None)` 持久化；
+  - DB 成功后才写入 `store.reward_state_by_pubkey`。
+- 若奖励状态持久化失败（含未生效），接口返回 `1502 reward state persistence failed`，不保留仅内存成功的中间状态。
