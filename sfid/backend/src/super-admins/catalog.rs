@@ -6,6 +6,7 @@ use axum::{
 };
 use chrono::Utc;
 
+use crate::business::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
 use crate::*;
 
 pub(crate) async fn list_super_admins(
@@ -65,7 +66,17 @@ pub(crate) async fn replace_super_admin(
     }
 
     let province_name = province.trim().to_string();
-    let new_pubkey = input.admin_pubkey.trim().to_string();
+    if crate::sfid::province::province_code_by_name(province_name.as_str()).is_none() {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "province not found in code table",
+        );
+    }
+    let new_pubkey = match normalize_admin_pubkey(input.admin_pubkey.as_str()) {
+        Some(v) => v,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "admin_pubkey format invalid"),
+    };
     let mut store = match store_write_or_500(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -74,7 +85,14 @@ pub(crate) async fn replace_super_admin(
     let old_pubkey = store
         .super_admin_province_by_pubkey
         .iter()
-        .find(|(_, p)| *p == &province_name)
+        .find(|(pubkey, p)| {
+            *p == &province_name
+                && store
+                    .admin_users_by_pubkey
+                    .get(pubkey.as_str())
+                    .map(|user| user.role == AdminRole::SuperAdmin)
+                    .unwrap_or(false)
+        })
         .map(|(k, _)| k.clone());
     let Some(old_pubkey) = old_pubkey else {
         return api_error(
@@ -83,7 +101,7 @@ pub(crate) async fn replace_super_admin(
             "province super admin not found",
         );
     };
-    if old_pubkey == new_pubkey {
+    if same_admin_pubkey(old_pubkey.as_str(), new_pubkey.as_str()) {
         let Some(existing) = store.admin_users_by_pubkey.get(&old_pubkey) else {
             return api_error(StatusCode::NOT_FOUND, 1004, "super admin not found");
         };
@@ -101,7 +119,13 @@ pub(crate) async fn replace_super_admin(
         })
         .into_response();
     }
-    if store.admin_users_by_pubkey.contains_key(&new_pubkey) {
+    let new_pubkey_exists = store.admin_users_by_pubkey.keys().any(|existing| {
+        if same_admin_pubkey(existing.as_str(), old_pubkey.as_str()) {
+            return false;
+        }
+        same_admin_pubkey(existing.as_str(), new_pubkey.as_str())
+    });
+    if new_pubkey_exists {
         return api_error(
             StatusCode::CONFLICT,
             1005,
@@ -119,6 +143,8 @@ pub(crate) async fn replace_super_admin(
         );
     }
 
+    let preserved_status = old_user.status.clone();
+    let replaced_at = Utc::now();
     store.admin_users_by_pubkey.remove(&old_pubkey);
     store.admin_users_by_pubkey.insert(
         new_pubkey.clone(),
@@ -127,19 +153,25 @@ pub(crate) async fn replace_super_admin(
             admin_pubkey: new_pubkey.clone(),
             admin_name: old_user.admin_name,
             role: AdminRole::SuperAdmin,
-            status: AdminStatus::Active,
-            built_in: true,
-            created_by: "SYSTEM".to_string(),
-            created_at: Utc::now(),
+            status: preserved_status.clone(),
+            built_in: old_user.built_in,
+            created_by: old_user.created_by,
+            created_at: old_user.created_at,
+            updated_at: Some(replaced_at),
         },
     );
     store.super_admin_province_by_pubkey.remove(&old_pubkey);
     store
         .super_admin_province_by_pubkey
         .insert(new_pubkey.clone(), province_name.clone());
+    store.admin_sessions.retain(|_, session| {
+        !same_admin_pubkey(session.admin_pubkey.as_str(), old_pubkey.as_str())
+    });
 
     for operator in store.admin_users_by_pubkey.values_mut() {
-        if operator.role == AdminRole::OperatorAdmin && operator.created_by == old_pubkey {
+        if operator.role == AdminRole::OperatorAdmin
+            && same_admin_pubkey(operator.created_by.as_str(), old_pubkey.as_str())
+        {
             operator.created_by = new_pubkey.clone();
         }
     }
@@ -166,9 +198,9 @@ pub(crate) async fn replace_super_admin(
             id: old_user.id,
             province: province_name,
             admin_pubkey: new_pubkey,
-            status: AdminStatus::Active,
-            built_in: true,
-            created_at: Utc::now(),
+            status: preserved_status,
+            built_in: old_user.built_in,
+            created_at: old_user.created_at,
         },
     })
     .into_response()

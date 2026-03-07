@@ -50,3 +50,11 @@
   - `business`（查询/审计/作用域）
   - `login`（认证）
   - `key-admins` / `super-admins` / `operator-admins`（角色业务）
+
+## 5. 链路字段同步（2026-03）
+
+- `BindingRecord` 新增 `runtime_bind_*` 字段族（`sfid_code_hash/nonce/signature/key_id/key_version/alg/signer_pubkey`），用于持久化 Runtime 绑定凭证与签发者元信息。
+- `BindingRecord.sfid_signature` 继续保留旧 JSON 绑定证明签名语义；`bind_result.signature` 返回 Runtime 凭证签名，二者不可混用。
+- `VoteVerifyInput.proposal_id` 改为必填 `u64`，已移除废弃 `challenge` 字段。
+- `ChainVotersCountOutput` 统一以 `eligible_total` 为主统计字段，`as_of` 与统计快照同源生成；保留 `snapshot_signature` 兼容字段并推荐使用 `snapshot_attestation.signature_hex`。
+- 涉及新增字段均使用 `#[serde(default)]` 兼容历史持久化数据反序列化。

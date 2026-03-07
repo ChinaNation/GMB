@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:wuminapp_mobile/pages/profile_page.dart';
-import 'package:wuminapp_mobile/trade/trade.dart';
+import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
+import 'package:wuminapp_mobile/user/user.dart';
 
 void main() {
   runApp(const WuminApp());
@@ -38,7 +38,7 @@ class _AppShellState extends State<AppShell> {
     HomePage(),
     VotingPage(),
     MessagePage(),
-    TradePage(),
+    OnchainTradePage(),
     ProfilePage(),
   ];
 

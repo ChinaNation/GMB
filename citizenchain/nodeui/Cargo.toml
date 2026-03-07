@@ -1,6 +1,6 @@
 [workspace]                                  # 公民储备委员会软件工作空间
 members = [
-    "src-tauri",                            # Tauri 桌面壳
+    "backend",                              # Tauri 桌面壳
 ]
 resolver = "2"
 

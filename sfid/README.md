@@ -187,11 +187,13 @@ curl http://127.0.0.1:8899/api/v1/health
 
 ## 区块链自动接口（无管理员参与）
 - `GET /api/v1/chain/voters/count`：查询当前可投票公民数（仅统计 `NORMAL` 且绑定有效用户）。
+- `GET /api/v1/chain/voters/count`：返回 `as_of` 与 `eligible_total` 同一统计快照时间点。
 - `POST /api/v1/chain/binding/validate`：校验档案号-公钥绑定是否有效，并返回是否具备投票资格。
 - `POST /api/v1/chain/reward/ack`：区块链回执绑定奖励处理结果（成功/失败）。
 - `GET /api/v1/chain/reward/state`：查询某公钥绑定奖励状态机当前状态。
 - `POST /api/v1/bind/request`：提交公钥绑定申请（支持回调字段，见下）。
-- `GET /api/v1/bind/result`：查询某公钥绑定结果。
+- `GET /api/v1/bind/result`：查询某公钥绑定结果；绑定成功后返回持久化 Runtime 凭证，重复查询不会生成新 `nonce`。
+- `GET /api/v1/bind/result`：`signature` 为 Runtime 凭证签名，`sfid_signature` 为历史兼容字段（旧 JSON 绑定证明签名）。
 - `POST /api/v1/vote/verify`：查询公钥当前投票资格（`NORMAL` 可投票，`ABNORMAL` 不可投票）。
 - 接口鉴权：仅允许区块链调用方访问，请求必须携带：
   - `x-chain-token`
@@ -200,6 +202,7 @@ curl http://127.0.0.1:8899/api/v1/health
   - `x-chain-timestamp`（Unix 秒，默认 5 分钟内有效）
   - `x-chain-signature`（必填）
 - 防重放与幂等：同一路由下重复 `nonce` 或重复 `request-id` 会被拒绝。
+- 绑定凭证刷新规则：当前 signer 公钥或 `key_id/key_version/alg` 变化后，后端会自动重签发并覆盖旧 Runtime 绑定凭证。
 - 链签名原文（换行拼接）：
   - `route=<route_key>`
   - `request_id=<x-chain-request-id>`

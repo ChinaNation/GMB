@@ -8,6 +8,23 @@ use axum::{
 };
 use chrono::Duration;
 use schnorrkel::signing_context;
+use std::collections::HashSet;
+
+fn hex_seed(byte: u8) -> String {
+    format!("{byte:02x}").repeat(32)
+}
+
+fn rotate_commit_message(challenge_text: &str, new_backup_pubkey: &str) -> String {
+    let trimmed = new_backup_pubkey.trim();
+    let no_prefix = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed);
+    format!(
+        "{challenge_text}|phase=commit|new_backup=0x{}",
+        no_prefix.to_ascii_lowercase()
+    )
+}
 
 fn build_test_state() -> AppState {
     std::env::set_var("SFID_CHAIN_TOKEN", "test-chain-token");
@@ -17,16 +34,20 @@ fn build_test_state() -> AppState {
     );
     std::env::set_var("SFID_PUBLIC_SEARCH_TOKEN", "test-public-search-token");
     std::env::set_var("SFID_RUNTIME_META_KEY", "test-runtime-meta-key");
-    let main_seed = "sfid-dev-master-seed-v1".to_string();
+    let main_seed = hex_seed(0x11);
     let main_key = key_admins::chain_keyring::load_signing_key_from_seed(main_seed.as_str());
     let public_key_hex = format!("0x{}", hex::encode(main_key.public.to_bytes()));
     let mut known_key_seeds = HashMap::new();
-    known_key_seeds.insert(public_key_hex.clone(), main_seed.clone());
+    known_key_seeds.insert(
+        public_key_hex.clone(),
+        SensitiveSeed::from(main_seed.clone()),
+    );
     let state = AppState {
         store: StoreHandle::in_memory(),
-        signing_seed_hex: Arc::new(RwLock::new(main_seed)),
+        signing_seed_hex: Arc::new(RwLock::new(SensitiveSeed::from(main_seed))),
         known_key_seeds: Arc::new(RwLock::new(known_key_seeds)),
         request_limits: Arc::new(Mutex::new(HashMap::new())),
+        cpms_register_inflight: Arc::new(Mutex::new(HashSet::new())),
         key_id: "sfid-master-v1".to_string(),
         key_version: "v1".to_string(),
         key_alg: "sr25519".to_string(),
@@ -67,20 +88,22 @@ fn sign_rotation_challenge(seed_hex: &str, message: &str) -> String {
 
 fn setup_rotation_test_state() -> (AppState, HeaderMap, String, String) {
     let state = build_test_state();
-    let main_seed = "sfid-test-main-seed";
-    let backup_a_seed = "sfid-test-backup-a-seed";
-    let backup_b_seed = "sfid-test-backup-b-seed";
-    let new_backup_seed = "sfid-test-backup-c-seed";
-    let main_pubkey = key_admins::chain_keyring::derive_pubkey_hex_from_seed(main_seed);
-    let backup_a_pubkey = key_admins::chain_keyring::derive_pubkey_hex_from_seed(backup_a_seed);
-    let backup_b_pubkey = key_admins::chain_keyring::derive_pubkey_hex_from_seed(backup_b_seed);
+    let main_seed = hex_seed(0x21);
+    let backup_a_seed = hex_seed(0x22);
+    let backup_b_seed = hex_seed(0x23);
+    let new_backup_seed = hex_seed(0x24);
+    let main_pubkey = key_admins::chain_keyring::derive_pubkey_hex_from_seed(main_seed.as_str());
+    let backup_a_pubkey =
+        key_admins::chain_keyring::derive_pubkey_hex_from_seed(backup_a_seed.as_str());
+    let backup_b_pubkey =
+        key_admins::chain_keyring::derive_pubkey_hex_from_seed(backup_b_seed.as_str());
 
     {
         let mut seed_guard = state
             .signing_seed_hex
             .write()
             .expect("signing seed write lock poisoned");
-        *seed_guard = main_seed.to_string();
+        *seed_guard = SensitiveSeed::from(main_seed.clone());
     }
     {
         let mut pubkey_guard = state
@@ -94,12 +117,18 @@ fn setup_rotation_test_state() -> (AppState, HeaderMap, String, String) {
             .known_key_seeds
             .write()
             .expect("known seeds write lock poisoned");
-        known.insert(main_pubkey.clone(), main_seed.to_string());
-        known.insert(backup_a_pubkey.clone(), backup_a_seed.to_string());
-        known.insert(backup_b_pubkey.clone(), backup_b_seed.to_string());
+        known.insert(main_pubkey.clone(), SensitiveSeed::from(main_seed.clone()));
         known.insert(
-            key_admins::chain_keyring::derive_pubkey_hex_from_seed(new_backup_seed),
-            new_backup_seed.to_string(),
+            backup_a_pubkey.clone(),
+            SensitiveSeed::from(backup_a_seed.clone()),
+        );
+        known.insert(
+            backup_b_pubkey.clone(),
+            SensitiveSeed::from(backup_b_seed.clone()),
+        );
+        known.insert(
+            key_admins::chain_keyring::derive_pubkey_hex_from_seed(new_backup_seed.as_str()),
+            SensitiveSeed::from(new_backup_seed.clone()),
         );
     }
     {
@@ -127,12 +156,7 @@ fn setup_rotation_test_state() -> (AppState, HeaderMap, String, String) {
         "authorization",
         HeaderValue::from_str("Bearer tok-rotate").expect("header value"),
     );
-    (
-        state,
-        headers,
-        backup_a_seed.to_string(),
-        new_backup_seed.to_string(),
-    )
+    (state, headers, backup_a_seed, new_backup_seed)
 }
 
 #[tokio::test]
@@ -182,7 +206,7 @@ async fn keyring_rotate_commit_requires_prior_verify() {
 }
 
 #[tokio::test]
-async fn keyring_rotate_commit_reports_chain_submit_failure_without_blocking_local_rotation() {
+async fn keyring_rotate_commit_reports_chain_submit_failure_and_keeps_local_state_unchanged() {
     let previous_rpc_url = std::env::var("SFID_CHAIN_RPC_URL").ok();
     std::env::remove_var("SFID_CHAIN_RPC_URL");
     let (state, headers, backup_a_seed, new_backup_seed) = setup_rotation_test_state();
@@ -207,14 +231,14 @@ async fn keyring_rotate_commit_reports_chain_submit_failure_without_blocking_loc
         .as_str()
         .expect("challenge_text")
         .to_string();
-    let signature = sign_rotation_challenge(backup_a_seed.as_str(), challenge_text.as_str());
+    let verify_signature = sign_rotation_challenge(backup_a_seed.as_str(), challenge_text.as_str());
 
     let verify_resp = key_admins::admin_chain_keyring_rotate_verify(
         State(state.clone()),
         headers.clone(),
         Json(KeyringRotateVerifyInput {
             challenge_id: challenge_id.clone(),
-            signature: signature.clone(),
+            signature: verify_signature,
         }),
     )
     .await
@@ -225,13 +249,15 @@ async fn keyring_rotate_commit_reports_chain_submit_failure_without_blocking_loc
         key_admins::chain_keyring::derive_pubkey_hex_from_seed(new_backup_seed.as_str());
     let backup_a_pubkey =
         key_admins::chain_keyring::derive_pubkey_hex_from_seed(backup_a_seed.as_str());
+    let commit_message = rotate_commit_message(challenge_text.as_str(), new_backup_pubkey.as_str());
+    let commit_signature = sign_rotation_challenge(backup_a_seed.as_str(), commit_message.as_str());
     let commit_resp = key_admins::admin_chain_keyring_rotate_commit(
-        State(state),
+        State(state.clone()),
         headers,
         Json(KeyringRotateCommitInput {
             challenge_id,
-            signature,
-            new_backup_pubkey,
+            signature: commit_signature,
+            new_backup_pubkey: new_backup_pubkey.clone(),
         }),
     )
     .await
@@ -244,9 +270,27 @@ async fn keyring_rotate_commit_reports_chain_submit_failure_without_blocking_loc
     assert_eq!(commit_resp.status(), StatusCode::OK);
     let body = parse_json(commit_resp).await;
     assert_eq!(body["data"]["chain_submit_ok"].as_bool(), Some(false));
+    assert!(body["data"]["block_number"].is_null());
     assert_eq!(
         body["data"]["main_pubkey"].as_str(),
+        body["data"]["old_main_pubkey"].as_str()
+    );
+    assert_ne!(
+        body["data"]["main_pubkey"].as_str(),
         Some(backup_a_pubkey.as_str())
+    );
+    let persisted_main = {
+        let store = state.store.read().expect("store read lock poisoned");
+        store
+            .chain_keyring_state
+            .as_ref()
+            .expect("keyring state")
+            .main_pubkey
+            .clone()
+    };
+    assert_eq!(
+        body["data"]["main_pubkey"].as_str(),
+        Some(persisted_main.as_str())
     );
 }
 
@@ -296,6 +340,65 @@ async fn keyring_rotate_verify_rejects_expired_challenge() {
     assert_eq!(verify_resp.status(), StatusCode::UNAUTHORIZED);
     let body = parse_json(verify_resp).await;
     assert_eq!(body["message"].as_str(), Some("rotation challenge expired"));
+}
+
+#[tokio::test]
+async fn keyring_rotate_commit_rejects_reused_verify_signature() {
+    let (state, headers, backup_a_seed, new_backup_seed) = setup_rotation_test_state();
+    let challenge_resp = key_admins::admin_chain_keyring_rotate_challenge(
+        State(state.clone()),
+        headers.clone(),
+        Json(KeyringRotateChallengeInput {
+            initiator_pubkey: key_admins::chain_keyring::derive_pubkey_hex_from_seed(
+                backup_a_seed.as_str(),
+            ),
+        }),
+    )
+    .await
+    .into_response();
+    assert_eq!(challenge_resp.status(), StatusCode::OK);
+    let challenge_json = parse_json(challenge_resp).await;
+    let challenge_id = challenge_json["data"]["challenge_id"]
+        .as_str()
+        .expect("challenge_id")
+        .to_string();
+    let challenge_text = challenge_json["data"]["challenge_text"]
+        .as_str()
+        .expect("challenge_text")
+        .to_string();
+
+    let verify_signature = sign_rotation_challenge(backup_a_seed.as_str(), challenge_text.as_str());
+    let verify_resp = key_admins::admin_chain_keyring_rotate_verify(
+        State(state.clone()),
+        headers.clone(),
+        Json(KeyringRotateVerifyInput {
+            challenge_id: challenge_id.clone(),
+            signature: verify_signature.clone(),
+        }),
+    )
+    .await
+    .into_response();
+    assert_eq!(verify_resp.status(), StatusCode::OK);
+
+    let commit_resp = key_admins::admin_chain_keyring_rotate_commit(
+        State(state),
+        headers,
+        Json(KeyringRotateCommitInput {
+            challenge_id,
+            signature: verify_signature,
+            new_backup_pubkey: key_admins::chain_keyring::derive_pubkey_hex_from_seed(
+                new_backup_seed.as_str(),
+            ),
+        }),
+    )
+    .await
+    .into_response();
+    assert_eq!(commit_resp.status(), StatusCode::UNAUTHORIZED);
+    let body = parse_json(commit_resp).await;
+    assert_eq!(
+        body["message"].as_str(),
+        Some("rotation signature verify failed")
+    );
 }
 
 #[tokio::test]
@@ -388,6 +491,7 @@ async fn qr_login_super_admin_keeps_write_permission() {
                 built_in: false,
                 created_by: "TEST".to_string(),
                 created_at: Utc::now(),
+                updated_at: None,
             },
         );
     }
@@ -476,6 +580,7 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 built_in: false,
                 created_by: "TEST".to_string(),
                 created_at: Utc::now(),
+                updated_at: None,
             },
         );
         store.admin_users_by_pubkey.insert(
@@ -489,6 +594,7 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 built_in: false,
                 created_by: "TEST".to_string(),
                 created_at: Utc::now(),
+                updated_at: None,
             },
         );
     }
@@ -546,6 +652,7 @@ fn require_super_or_operator_or_key_admin_should_allow_expected_roles() {
                 built_in: false,
                 created_by: super_pubkey.clone(),
                 created_at: Utc::now(),
+                updated_at: None,
             },
         );
         store.admin_sessions.insert(
@@ -633,6 +740,21 @@ fn parse_sr25519_pubkey_bytes_rejects_non_hex_pubkey() {
 }
 
 #[test]
+fn normalize_account_pubkey_requires_32_byte_hex() {
+    let raw = "AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899";
+    assert_eq!(
+        normalize_account_pubkey(raw),
+        Some("0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899".to_string())
+    );
+    assert_eq!(
+        normalize_account_pubkey(format!("0x{raw}").as_str()),
+        Some("0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899".to_string())
+    );
+    assert!(normalize_account_pubkey("5D4Y9fP2U8NDDw7X9W7N6wA6ZwZP3oYfgho2dQ4q8W35bLoA").is_none());
+    assert!(normalize_account_pubkey("hello_world").is_none());
+}
+
+#[test]
 fn pending_scope_requires_province_when_admin_is_scoped() {
     let pending = PendingRequest {
         seq: 1,
@@ -668,6 +790,9 @@ fn cpms_site_scope_must_match_admin_province() {
         created_at: Utc::now(),
         updated_by: None,
         updated_at: None,
+        chain_register_tx_hash: None,
+        chain_register_block_number: None,
+        chain_register_at: None,
     };
     assert!(in_scope_cpms_site(&site, Some("贵州省")));
     assert!(!in_scope_cpms_site(&site, Some("中枢省")));
@@ -750,4 +875,223 @@ fn chain_request_rejects_duplicate_nonce() {
         HeaderValue::from_str(sig2.as_str()).expect("header value"),
     );
     assert!(require_chain_request(&mut store, &second_headers, "vote_verify", "fp-2").is_err());
+}
+
+#[tokio::test]
+async fn chain_bind_result_reuses_persisted_runtime_credential() {
+    std::env::set_var("SFID_CHAIN_GENESIS_HASH", format!("0x{}", "11".repeat(32)));
+    let state = build_test_state();
+    let seed = hex_seed(0x41);
+    let account_pubkey = key_admins::chain_keyring::derive_pubkey_hex_from_seed(seed.as_str());
+    {
+        let mut store = state.store.write().expect("store write lock poisoned");
+        store.bindings_by_pubkey.insert(
+            account_pubkey.clone(),
+            BindingRecord {
+                seq: 1,
+                account_pubkey: account_pubkey.clone(),
+                archive_index: "520102199001011234".to_string(),
+                birth_date: None,
+                citizen_status: CitizenStatus::Normal,
+                sfid_code: "SFID-TEST-0001".to_string(),
+                sfid_signature: "legacy-signature".to_string(),
+                runtime_bind_sfid_code_hash: None,
+                runtime_bind_nonce: None,
+                runtime_bind_signature: None,
+                runtime_bind_key_id: None,
+                runtime_bind_key_version: None,
+                runtime_bind_alg: None,
+                runtime_bind_signer_pubkey: None,
+                bound_at: Utc::now(),
+                bound_by: "test".to_string(),
+                admin_province: None,
+                client_request_id: None,
+            },
+        );
+    }
+
+    let query = BindResultQuery {
+        account_pubkey: account_pubkey.clone(),
+    };
+    let fingerprint = request_fingerprint(&query);
+    let ts = Utc::now().timestamp();
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "x-chain-token",
+        HeaderValue::from_static("test-chain-token"),
+    );
+    headers.insert("x-chain-request-id", HeaderValue::from_static("req-bind-1"));
+    headers.insert("x-chain-nonce", HeaderValue::from_static("nonce-bind-1"));
+    headers.insert(
+        "x-chain-timestamp",
+        HeaderValue::from_str(ts.to_string().as_str()).expect("header value"),
+    );
+    let payload = chain_signature_payload("bind_result", "req-bind-1", "nonce-bind-1", ts, &fingerprint);
+    let signature = chain_signature_hex("test-chain-signing-secret-at-least-32", payload.as_str());
+    headers.insert(
+        "x-chain-signature",
+        HeaderValue::from_str(signature.as_str()).expect("header value"),
+    );
+    let resp1 = chain::binding::get_bind_result(
+        State(state.clone()),
+        headers,
+        Query(BindResultQuery {
+            account_pubkey: account_pubkey.clone(),
+        }),
+    )
+    .await
+    .into_response();
+    assert_eq!(resp1.status(), StatusCode::OK);
+    let body1 = parse_json(resp1).await;
+    let nonce_1 = body1["data"]["nonce"]
+        .as_str()
+        .expect("nonce")
+        .to_string();
+    let signature_1 = body1["data"]["signature"]
+        .as_str()
+        .expect("signature")
+        .to_string();
+
+    let ts2 = Utc::now().timestamp();
+    let mut headers2 = HeaderMap::new();
+    headers2.insert(
+        "x-chain-token",
+        HeaderValue::from_static("test-chain-token"),
+    );
+    headers2.insert("x-chain-request-id", HeaderValue::from_static("req-bind-2"));
+    headers2.insert("x-chain-nonce", HeaderValue::from_static("nonce-bind-2"));
+    headers2.insert(
+        "x-chain-timestamp",
+        HeaderValue::from_str(ts2.to_string().as_str()).expect("header value"),
+    );
+    let payload2 =
+        chain_signature_payload("bind_result", "req-bind-2", "nonce-bind-2", ts2, &fingerprint);
+    let signature2 = chain_signature_hex("test-chain-signing-secret-at-least-32", payload2.as_str());
+    headers2.insert(
+        "x-chain-signature",
+        HeaderValue::from_str(signature2.as_str()).expect("header value"),
+    );
+    let resp2 = chain::binding::get_bind_result(
+        State(state.clone()),
+        headers2,
+        Query(BindResultQuery {
+            account_pubkey: account_pubkey.clone(),
+        }),
+    )
+    .await
+    .into_response();
+    assert_eq!(resp2.status(), StatusCode::OK);
+    let body2 = parse_json(resp2).await;
+    let nonce_2 = body2["data"]["nonce"]
+        .as_str()
+        .expect("nonce")
+        .to_string();
+    let signature_2 = body2["data"]["signature"]
+        .as_str()
+        .expect("signature")
+        .to_string();
+
+    assert_eq!(nonce_1, nonce_2);
+    assert_eq!(signature_1, signature_2);
+
+    let store = state.store.read().expect("store read lock poisoned");
+    let binding = store
+        .bindings_by_pubkey
+        .get(&account_pubkey)
+        .expect("binding exists");
+    assert_eq!(binding.runtime_bind_nonce.as_deref(), Some(nonce_1.as_str()));
+    assert_eq!(
+        binding.runtime_bind_signature.as_deref(),
+        Some(signature_1.as_str())
+    );
+}
+
+#[test]
+fn sync_key_admin_users_keeps_monotonic_ids() {
+    let state = build_test_state();
+    let replacement_seed = hex_seed(0x77);
+    let replacement_pubkey =
+        key_admins::chain_keyring::derive_pubkey_hex_from_seed(replacement_seed.as_str());
+    let old_max_id;
+    {
+        let mut store = state.store.write().expect("store write lock poisoned");
+        old_max_id = store
+            .admin_users_by_pubkey
+            .values()
+            .map(|u| u.id)
+            .max()
+            .expect("at least one admin user");
+        store.next_admin_user_id = old_max_id + 1;
+
+        let mut keyring = store
+            .chain_keyring_state
+            .as_ref()
+            .cloned()
+            .expect("keyring exists");
+        let removed_pubkey = keyring.backup_b_pubkey.clone();
+        store.admin_users_by_pubkey.remove(&removed_pubkey);
+        keyring.backup_b_pubkey = replacement_pubkey.clone();
+        store.chain_keyring_state = Some(keyring);
+        key_admins::sync_key_admin_users(&mut store);
+
+        let inserted = store
+            .admin_users_by_pubkey
+            .get(&replacement_pubkey)
+            .expect("replacement key admin inserted");
+        assert_eq!(inserted.id, old_max_id + 1);
+        assert_eq!(store.next_admin_user_id, old_max_id + 2);
+    }
+}
+
+#[test]
+fn reconcile_main_signer_with_keyring_repairs_runtime_mismatch() {
+    let (state, _, _, _) = setup_rotation_test_state();
+    let keyring_main_pubkey = {
+        let store = state.store.read().expect("store read lock poisoned");
+        store
+            .chain_keyring_state
+            .as_ref()
+            .expect("keyring exists")
+            .main_pubkey
+            .clone()
+    };
+
+    {
+        let mut pubkey_guard = state
+            .public_key_hex
+            .write()
+            .expect("public key write lock poisoned");
+        *pubkey_guard = "0xdeadbeef".to_string();
+    }
+    let repaired =
+        key_admins::reconcile_main_signer_with_keyring(&state).expect("reconcile should succeed");
+    assert!(repaired);
+    let active = state
+        .public_key_hex
+        .read()
+        .expect("public key read lock poisoned")
+        .clone();
+    assert_eq!(
+        active.to_ascii_lowercase(),
+        keyring_main_pubkey.to_ascii_lowercase()
+    );
+}
+
+#[test]
+fn sensitive_seed_debug_remains_redacted() {
+    let raw_seed = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    let seed = SensitiveSeed::from(raw_seed);
+    assert_eq!(format!("{seed:?}"), "SensitiveSeed(***)");
+
+    let mut known = HashMap::new();
+    known.insert("0xabc".to_string(), seed.clone());
+    let meta = PersistedRuntimeMeta {
+        version: 1,
+        signing_seed_hex: seed,
+        known_key_seeds: known,
+        public_key_hex: "0xpub".to_string(),
+    };
+    let debug_text = format!("{meta:?}");
+    assert!(!debug_text.contains(raw_seed));
+    assert!(debug_text.contains("known_key_seeds_count"));
 }

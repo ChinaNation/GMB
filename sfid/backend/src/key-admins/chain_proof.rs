@@ -38,16 +38,17 @@ pub fn make_signature_envelope<T: Serialize>(
     key_alg: &str,
     signing_key: &Sr25519Keypair,
     payload: &T,
-) -> SignatureEnvelope {
-    let payload_text = serde_json::to_string(payload).expect("serialize payload");
+) -> Result<SignatureEnvelope, String> {
+    let payload_text =
+        serde_json::to_string(payload).map_err(|err| format!("serialize payload failed: {err}"))?;
     let ctx = signing_context(b"substrate");
     let signature = signing_key.sign(ctx.bytes(payload_text.as_bytes()));
 
-    SignatureEnvelope {
+    Ok(SignatureEnvelope {
         key_id: key_id.to_string(),
         key_version: key_version.to_string(),
         alg: key_alg.to_string(),
         payload: payload_text,
         signature_hex: hex::encode(signature.to_bytes()),
-    }
+    })
 }

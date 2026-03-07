@@ -23,7 +23,9 @@ login/
 │   ├── login_models.dart
 │   └── login_exception.dart
 ├── pages/
-│   └── qr_scan_page.dart
+│   ├── qr_scan_page.dart
+│   ├── settings_page.dart
+│   └── login_whitelist_page.dart
 ├── services/
 │   ├── login_replay_guard.dart
 │   ├── login_whitelist_policy.dart

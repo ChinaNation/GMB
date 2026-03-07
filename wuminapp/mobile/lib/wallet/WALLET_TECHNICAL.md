@@ -25,10 +25,6 @@ wallet/
 ├── capabilities/
 │   ├── api_client.dart
 │   ├── sign_service.dart
-│   ├── onchain_trade_models.dart
-│   ├── onchain_trade_repository.dart
-│   ├── onchain_trade_gateway.dart
-│   ├── onchain_trade_service.dart
 │   ├── sfid_binding_service.dart
 │   ├── attestation_service.dart
 │   └── wallet_type_service.dart
@@ -61,8 +57,6 @@ wallet/
 - `sign_service.dart`
   - 登录挑战解析与 `sr25519` 签名
   - 白名单校验、防重放校验
-- `onchain_trade_*`
-  - 交易模型、仓储、网关、编排
 - `api_client.dart`
   - 钱包相关后端接口统一入口
 - `wallet_type_service.dart`
@@ -99,7 +93,7 @@ wallet/
 2. 钱包模块读取当前钱包助记词
 3. `sr25519` 签名并回传回执 payload
 
-### 4.4 链上交易签名
+### 4.4 链上交易签名（由 trade/onchain 调用）
 
 1. 请求后端 `tx/prepare`
 2. 用当前钱包本地签 signer payload
@@ -166,8 +160,6 @@ wallet/
   - `createWallet / importWallet / deleteWallet / setActiveWallet / getLatestWalletSecret`
 - `SignService`
   - `parseChallenge / buildReceiptPayloadForChallenge`
-- `OnchainTradeService`
-  - `submitTransfer / refreshPendingRecords / listRecentRecords`
 - `UserIdentificationService`
   - `confirmBeforeSign`
 

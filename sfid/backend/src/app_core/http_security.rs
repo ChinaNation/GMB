@@ -476,12 +476,14 @@ pub(crate) fn chain_signature_hex(secret: &str, payload: &str) -> String {
 }
 
 pub(crate) fn constant_time_eq_hex(a: &str, b: &str) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff = 0_u8;
-    for (left, right) in a.bytes().zip(b.bytes()) {
-        diff |= left ^ right;
+    let left = a.as_bytes();
+    let right = b.as_bytes();
+    let max_len = left.len().max(right.len());
+    let mut diff = left.len() ^ right.len();
+    for idx in 0..max_len {
+        let lb = left.get(idx).copied().unwrap_or(0);
+        let rb = right.get(idx).copied().unwrap_or(0);
+        diff |= usize::from(lb ^ rb);
     }
     diff == 0
 }
@@ -529,21 +531,33 @@ pub(crate) fn cleanup_chain_auth_tracking(store: &mut Store, now: DateTime<Utc>)
         .retain(|_, seen_at| *seen_at > now - Duration::hours(24));
 }
 
-pub(crate) fn require_chain_request(
-    store: &mut Store,
+fn chain_auth_cleanup_interval_seconds() -> i64 {
+    std::env::var("SFID_CHAIN_AUTH_CLEANUP_INTERVAL_SECONDS")
+        .ok()
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(60)
+}
+
+pub(crate) fn maybe_cleanup_chain_auth_tracking(store: &mut Store, now: DateTime<Utc>) {
+    let interval = Duration::seconds(chain_auth_cleanup_interval_seconds());
+    let should_cleanup = store
+        .chain_auth_last_cleanup_at
+        .map(|last| now - last >= interval)
+        .unwrap_or(true);
+    if should_cleanup {
+        cleanup_chain_auth_tracking(store, now);
+        store.chain_auth_last_cleanup_at = Some(now);
+    }
+}
+
+pub(crate) fn parse_chain_request_auth(
     headers: &HeaderMap,
     route_key: &str,
     fingerprint: &str,
 ) -> Result<ChainRequestAuth, axum::response::Response> {
-    store.metrics.chain_request_total += 1;
-    if let Err(resp) = require_chain_auth(headers) {
-        store.metrics.chain_auth_failures += 1;
-        store.metrics.chain_request_failed_total += 1;
-        return Err(resp);
-    }
+    require_chain_auth(headers)?;
     let Some(request_id) = chain_header_value(headers, "x-chain-request-id") else {
-        store.metrics.chain_auth_failures += 1;
-        store.metrics.chain_request_failed_total += 1;
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1011,
@@ -551,8 +565,6 @@ pub(crate) fn require_chain_request(
         ));
     };
     let Some(nonce) = chain_header_value(headers, "x-chain-nonce") else {
-        store.metrics.chain_auth_failures += 1;
-        store.metrics.chain_request_failed_total += 1;
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1012,
@@ -560,8 +572,6 @@ pub(crate) fn require_chain_request(
         ));
     };
     let Some(ts_text) = chain_header_value(headers, "x-chain-timestamp") else {
-        store.metrics.chain_auth_failures += 1;
-        store.metrics.chain_request_failed_total += 1;
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1013,
@@ -569,8 +579,6 @@ pub(crate) fn require_chain_request(
         ));
     };
     let Ok(ts) = ts_text.parse::<i64>() else {
-        store.metrics.chain_auth_failures += 1;
-        store.metrics.chain_request_failed_total += 1;
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1014,
@@ -579,34 +587,40 @@ pub(crate) fn require_chain_request(
     };
     let now = Utc::now();
     if (now.timestamp() - ts).abs() > 300 {
-        store.metrics.chain_auth_failures += 1;
-        store.metrics.chain_request_failed_total += 1;
         return Err(api_error(
             StatusCode::UNAUTHORIZED,
             1015,
             "chain request timestamp expired",
         ));
     }
-    if let Err(resp) =
-        require_chain_signature(headers, route_key, &request_id, &nonce, ts, fingerprint)
-    {
-        store.metrics.chain_auth_failures += 1;
-        store.metrics.chain_request_failed_total += 1;
-        return Err(resp);
-    }
+    require_chain_signature(headers, route_key, &request_id, &nonce, ts, fingerprint)?;
 
-    cleanup_chain_auth_tracking(store, now);
-    let nonce_key = format!("{route_key}:{nonce}");
+    Ok(ChainRequestAuth {
+        request_id,
+        nonce,
+        timestamp: ts,
+    })
+}
+
+pub(crate) fn track_chain_request(
+    store: &mut Store,
+    route_key: &str,
+    auth: &ChainRequestAuth,
+    fingerprint: &str,
+) -> Result<(), axum::response::Response> {
+    let now = Utc::now();
+    maybe_cleanup_chain_auth_tracking(store, now);
+    let nonce_key = format!("{route_key}:{}", auth.nonce);
     if store.chain_nonce_seen.contains_key(&nonce_key) {
         store.metrics.chain_replay_rejects += 1;
         store.metrics.chain_request_failed_total += 1;
         return Err(api_error(
             StatusCode::CONFLICT,
             1016,
-            "duplicate chain nonce",
+            "duplicate chain nonce (memory)",
         ));
     }
-    let request_key = format!("{route_key}:{request_id}");
+    let request_key = format!("{route_key}:{}", auth.request_id);
     if let Some(existing) = store.chain_requests_by_key.get(&request_key) {
         store.metrics.chain_replay_rejects += 1;
         store.metrics.chain_request_failed_total += 1;
@@ -614,13 +628,13 @@ pub(crate) fn require_chain_request(
             return Err(api_error(
                 StatusCode::CONFLICT,
                 1017,
-                "duplicate chain request",
+                "duplicate chain request (memory)",
             ));
         }
         return Err(api_error(
             StatusCode::CONFLICT,
             1018,
-            "chain request id conflict",
+            "chain request id conflict (memory)",
         ));
     }
 
@@ -635,18 +649,45 @@ pub(crate) fn require_chain_request(
         request_key,
         ChainRequestReceipt {
             route_key: route_key.to_string(),
-            request_id: request_id.clone(),
-            nonce: nonce.clone(),
+            request_id: auth.request_id.clone(),
+            nonce: auth.nonce.clone(),
             fingerprint: fingerprint.to_string(),
             received_at: now,
         },
         bounded_cache_limit("SFID_CHAIN_REQUEST_CACHE_MAX", 50_000),
     );
-    Ok(ChainRequestAuth {
-        request_id,
-        nonce,
-        timestamp: ts,
-    })
+    Ok(())
+}
+
+pub(crate) fn rollback_chain_request_tracking(
+    store: &mut Store,
+    route_key: &str,
+    auth: &ChainRequestAuth,
+) {
+    let nonce_key = format!("{route_key}:{}", auth.nonce);
+    store.chain_nonce_seen.remove(&nonce_key);
+    let request_key = format!("{route_key}:{}", auth.request_id);
+    store.chain_requests_by_key.remove(&request_key);
+}
+
+#[cfg(test)]
+pub(crate) fn require_chain_request(
+    store: &mut Store,
+    headers: &HeaderMap,
+    route_key: &str,
+    fingerprint: &str,
+) -> Result<ChainRequestAuth, axum::response::Response> {
+    store.metrics.chain_request_total += 1;
+    let auth = match parse_chain_request_auth(headers, route_key, fingerprint) {
+        Ok(v) => v,
+        Err(resp) => {
+            store.metrics.chain_auth_failures += 1;
+            store.metrics.chain_request_failed_total += 1;
+            return Err(resp);
+        }
+    };
+    track_chain_request(store, route_key, &auth, fingerprint)?;
+    Ok(auth)
 }
 
 pub(crate) fn record_chain_latency(store: &mut Store, started_at: DateTime<Utc>) {

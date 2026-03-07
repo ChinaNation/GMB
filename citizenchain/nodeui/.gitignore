@@ -3,8 +3,8 @@ dist
 target
 .vite
 .DS_Store
-src-tauri/binaries
-src-tauri/gen/schemas
+backend/binaries
+backend/gen/schemas
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts

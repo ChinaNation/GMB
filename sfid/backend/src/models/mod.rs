@@ -1,26 +1,67 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt;
+use zeroize::Zeroize;
 
 use crate::key_admins::chain_keyring::ChainKeyringState;
 use crate::key_admins::chain_proof::SignatureEnvelope;
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(transparent)]
+pub(crate) struct SensitiveSeed(String);
+
+impl SensitiveSeed {
+    pub(crate) fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    /// Exposes the raw seed text for cryptographic operations only.
+    /// Never use this in logs, panic messages, or formatted errors.
+    #[must_use = "secret material should only be exposed to crypto code paths"]
+    pub(crate) fn expose_secret(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl From<String> for SensitiveSeed {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<&str> for SensitiveSeed {
+    fn from(value: &str) -> Self {
+        Self::new(value.to_string())
+    }
+}
+
+impl Drop for SensitiveSeed {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl fmt::Debug for SensitiveSeed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SensitiveSeed(***)")
+    }
+}
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Store {
     pub(crate) next_seq: u64,
     pub(crate) next_audit_seq: u64,
+    pub(crate) next_admin_user_id: u64,
     pub(crate) pending_by_pubkey: HashMap<String, PendingRequest>,
     pub(crate) bindings_by_pubkey: HashMap<String, BindingRecord>,
     pub(crate) pubkey_by_archive_index: HashMap<String, String>,
     pub(crate) admin_users_by_pubkey: HashMap<String, AdminUser>,
     pub(crate) super_admin_province_by_pubkey: HashMap<String, String>,
-    #[serde(skip)]
     pub(crate) login_challenges: HashMap<String, LoginChallenge>,
-    #[serde(skip)]
     pub(crate) qr_login_results: HashMap<String, QrLoginResultRecord>,
-    #[serde(skip)]
     pub(crate) admin_sessions: HashMap<String, AdminSession>,
     pub(crate) cpms_site_keys: HashMap<String, CpmsSiteKeys>,
     pub(crate) consumed_cpms_register_tokens: HashMap<String, DateTime<Utc>>,
@@ -33,18 +74,31 @@ pub(crate) struct Store {
     pub(crate) audit_logs: Vec<AuditLogEntry>,
     pub(crate) chain_requests_by_key: HashMap<String, ChainRequestReceipt>,
     pub(crate) chain_nonce_seen: HashMap<String, DateTime<Utc>>,
+    pub(crate) chain_auth_last_cleanup_at: Option<DateTime<Utc>>,
+    pub(crate) pending_bind_last_cleanup_at: Option<DateTime<Utc>>,
     pub(crate) bind_callback_jobs: Vec<BindCallbackJob>,
     pub(crate) reward_state_by_pubkey: HashMap<String, RewardStateRecord>,
     pub(crate) vote_verify_cache: HashMap<String, VoteVerifyCacheEntry>,
     pub(crate) metrics: ServiceMetrics,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct PersistedRuntimeMeta {
     pub(crate) version: u32,
-    pub(crate) signing_seed_hex: String,
-    pub(crate) known_key_seeds: HashMap<String, String>,
+    pub(crate) signing_seed_hex: SensitiveSeed,
+    pub(crate) known_key_seeds: HashMap<String, SensitiveSeed>,
     pub(crate) public_key_hex: String,
+}
+
+impl fmt::Debug for PersistedRuntimeMeta {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PersistedRuntimeMeta")
+            .field("version", &self.version)
+            .field("signing_seed_hex", &self.signing_seed_hex)
+            .field("known_key_seeds_count", &self.known_key_seeds.len())
+            .field("public_key_hex", &self.public_key_hex)
+            .finish()
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -97,6 +151,8 @@ pub(crate) struct AdminUser {
     pub(crate) built_in: bool,
     pub(crate) created_by: String,
     pub(crate) created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub(crate) updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,6 +176,12 @@ pub(crate) struct CpmsSiteKeys {
     pub(crate) updated_by: Option<String>,
     #[serde(default)]
     pub(crate) updated_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub(crate) chain_register_tx_hash: Option<String>,
+    #[serde(default)]
+    pub(crate) chain_register_block_number: Option<u64>,
+    #[serde(default)]
+    pub(crate) chain_register_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,6 +226,20 @@ pub(crate) struct BindingRecord {
     pub(crate) citizen_status: CitizenStatus,
     pub(crate) sfid_code: String,
     pub(crate) sfid_signature: String,
+    #[serde(default)]
+    pub(crate) runtime_bind_sfid_code_hash: Option<String>,
+    #[serde(default)]
+    pub(crate) runtime_bind_nonce: Option<String>,
+    #[serde(default)]
+    pub(crate) runtime_bind_signature: Option<String>,
+    #[serde(default)]
+    pub(crate) runtime_bind_key_id: Option<String>,
+    #[serde(default)]
+    pub(crate) runtime_bind_key_version: Option<String>,
+    #[serde(default)]
+    pub(crate) runtime_bind_alg: Option<String>,
+    #[serde(default)]
+    pub(crate) runtime_bind_signer_pubkey: Option<String>,
     pub(crate) bound_at: DateTime<Utc>,
     pub(crate) bound_by: String,
     pub(crate) admin_province: Option<String>,
@@ -439,6 +515,14 @@ pub(crate) struct OperatorRow {
 }
 
 #[derive(Serialize)]
+pub(crate) struct OperatorListOutput {
+    pub(crate) total: usize,
+    pub(crate) limit: usize,
+    pub(crate) offset: usize,
+    pub(crate) rows: Vec<OperatorRow>,
+}
+
+#[derive(Serialize)]
 pub(crate) struct SuperAdminRow {
     pub(crate) id: u64,
     pub(crate) province: String,
@@ -457,6 +541,12 @@ pub(crate) struct CreateOperatorInput {
 #[derive(Deserialize)]
 pub(crate) struct ReplaceSuperAdminInput {
     pub(crate) admin_pubkey: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ListQuery {
+    pub(crate) limit: Option<usize>,
+    pub(crate) offset: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -492,6 +582,33 @@ pub(crate) struct UpdateCpmsKeysInput {
 #[derive(Deserialize)]
 pub(crate) struct UpdateCpmsSiteStatusInput {
     pub(crate) reason: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct CpmsKeysListOutput {
+    pub(crate) total: usize,
+    pub(crate) limit: usize,
+    pub(crate) offset: usize,
+    pub(crate) rows: Vec<CpmsSiteKeysListRow>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct CpmsSiteKeysListRow {
+    pub(crate) site_sfid: String,
+    pub(crate) pubkey_1: String,
+    pub(crate) pubkey_2: String,
+    pub(crate) pubkey_3: String,
+    pub(crate) status: CpmsSiteStatus,
+    pub(crate) version: u64,
+    pub(crate) last_register_issued_at: i64,
+    pub(crate) admin_province: String,
+    pub(crate) created_by: String,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) updated_by: Option<String>,
+    pub(crate) updated_at: Option<DateTime<Utc>>,
+    pub(crate) chain_register_tx_hash: Option<String>,
+    pub(crate) chain_register_block_number: Option<u64>,
+    pub(crate) chain_register_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Deserialize)]
@@ -564,6 +681,8 @@ pub(crate) struct CpmsRegisterScanOutput {
     pub(crate) site_sfid: String,
     pub(crate) status: &'static str,
     pub(crate) message: &'static str,
+    pub(crate) chain_register_tx_hash: String,
+    pub(crate) chain_register_block_number: u64,
 }
 
 #[derive(Serialize)]
@@ -594,6 +713,13 @@ pub(crate) struct BindResultOutput {
     pub(crate) account_pubkey: String,
     pub(crate) is_bound: bool,
     pub(crate) sfid_code: Option<String>,
+    pub(crate) sfid_code_hash: Option<String>,
+    pub(crate) nonce: Option<String>,
+    pub(crate) signature: Option<String>,
+    pub(crate) key_id: Option<String>,
+    pub(crate) key_version: Option<String>,
+    pub(crate) alg: Option<String>,
+    /// Deprecated: use `signature`.
     pub(crate) sfid_signature: Option<String>,
     pub(crate) message: String,
 }
@@ -601,8 +727,7 @@ pub(crate) struct BindResultOutput {
 #[derive(Serialize, Deserialize)]
 pub(crate) struct VoteVerifyInput {
     pub(crate) account_pubkey: String,
-    pub(crate) proposal_id: Option<u64>,
-    pub(crate) challenge: Option<String>,
+    pub(crate) proposal_id: u64,
 }
 
 #[derive(Serialize)]
@@ -611,14 +736,31 @@ pub(crate) struct VoteVerifyOutput {
     pub(crate) is_bound: bool,
     pub(crate) has_vote_eligibility: bool,
     pub(crate) sfid_code: Option<String>,
-    pub(crate) vote_token: Option<SignatureEnvelope>,
+    pub(crate) sfid_hash: Option<String>,
+    pub(crate) proposal_id: Option<u64>,
+    pub(crate) vote_nonce: Option<String>,
+    pub(crate) signature: Option<String>,
+    pub(crate) key_id: Option<String>,
+    pub(crate) key_version: Option<String>,
+    pub(crate) alg: Option<String>,
     pub(crate) message: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct ChainVotersCountQuery {
+    pub(crate) account_pubkey: Option<String>,
+    pub(crate) who: Option<String>,
 }
 
 #[derive(Serialize)]
 pub(crate) struct ChainVotersCountOutput {
-    pub(crate) total_voters: usize,
+    pub(crate) eligible_total: u64,
     pub(crate) as_of: i64,
+    pub(crate) who: String,
+    pub(crate) snapshot_nonce: String,
+    /// Deprecated: use `snapshot_attestation.signature_hex` instead.
+    pub(crate) snapshot_signature: String,
+    pub(crate) snapshot_attestation: SignatureEnvelope,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -742,6 +884,7 @@ pub(crate) struct KeyringRotateCommitOutput {
     pub(crate) old_main_pubkey: String,
     pub(crate) promoted_slot: String,
     pub(crate) chain_tx_hash: String,
+    pub(crate) block_number: Option<u64>,
     pub(crate) chain_submit_ok: bool,
     pub(crate) chain_submit_error: Option<String>,
     pub(crate) version: u64,
@@ -760,19 +903,6 @@ pub(crate) struct BindingPayload {
     pub(crate) archive_index: String,
     pub(crate) sfid_code: String,
     pub(crate) issued_at: i64,
-}
-
-#[derive(Serialize)]
-pub(crate) struct VotePayload {
-    pub(crate) kind: &'static str,
-    pub(crate) version: &'static str,
-    pub(crate) account_pubkey: String,
-    pub(crate) sfid_code: String,
-    pub(crate) proposal_id: Option<u64>,
-    pub(crate) challenge: String,
-    pub(crate) iat: i64,
-    pub(crate) exp: i64,
-    pub(crate) jti: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

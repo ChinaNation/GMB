@@ -34,7 +34,7 @@
 1. 机构 SFID 登记（多签创建前置）：`super-admins` 模块（`sfid_id` 对应内部 `site_sfid`）。
 2. 公民身份绑定凭证：`chain` 模块（`/api/v1/bind/result`）。
 3. 公民投票凭证：`chain` 模块（`/api/v1/vote/verify`）。
-4. 联合投票人口快照：`chain` 模块（当前 `eligible_total` 可对齐，`snapshot_nonce/snapshot_signature` 待扩展）。
+4. 联合投票人口快照：`chain` 模块（按 Runtime payload 输出 `eligible_total + snapshot_nonce + snapshot_signature`，`who` 必入签名）。
 5. SFID 验签主备账户管理：`key-admins` 模块（一主两备与轮换）。
 
 ## 4. 管理员模型与登录机制
@@ -155,6 +155,7 @@
 - `PostgreSQL`
 - `Redis`（可选，用于限流和缓存）
 - 运行态持久化：`DATABASE_URL` 指向 PostgreSQL；后端通过 `runtime_misc`、`runtime_meta` 持久化运行态数据，管理员与密钥槽位使用结构化表持久化（见 8.1）。
+- 签名密钥缓存：运行时签名 keypair 缓存命中时不重复解码 seed，缓存中的 seed 文本使用 `SensitiveSeed` 存储并在释放时清零。
 - 旧文件态与旧整包表状态说明：
 1. 不再使用 `backend/data/runtime_state.json`。
 2. 不再使用 `runtime_store`（已由迁移脚本下线并拆分）。
@@ -206,12 +207,12 @@
 2. 更换主公钥只能由两把备用公钥之一发起。
 3. 发起轮换时必须提交一把新公钥替换被提升的备用槽位。
 4. 被用于发起的旧备用提升为新主公钥，旧主公钥退出活动集，结果始终保持“一主两备”。
-- 轮换接口流程（当前实现）：
+- 轮换接口流程（Runtime 对齐口径）：
 1. 密钥管理员（且必须为当前备用公钥）调用 `rotate/challenge` 生成一次性挑战原文。
 2. 指定备用公钥对应私钥对挑战原文签名。
 3. 调用 `rotate/verify` 校验签名确认为备用密钥签名。
-4. 调用 `rotate/commit` 提交 `challenge_id + signature + new_backup_pubkey` 完成本地替换，并由后端直连区块链 JSON-RPC 提交新主公钥（不等待链上最终确认）。
-5. 区块链提交配置：`SFID_CHAIN_RPC_URL`（必填）、`SFID_CHAIN_RPC_METHOD`（默认 `sfid_set_main_pubkey`）、`SFID_CHAIN_RPC_TOKEN`（可选）。
+4. 调用 `rotate/commit` 提交 `challenge_id + signature + new_backup_pubkey`，并由后端调用链上标准 extrinsic（如 `rotate_sfid_keys`）执行轮换。
+5. 提交后必须回写 `chain_tx_hash` 与 `block_number`，用于对账与审计。
 - 前端可视化流程（当前实现）：
 1. 密钥管理员在“密钥管理”页面输入 `initiator_pubkey` 生成轮换二维码。
 2. 备用私钥钱包扫码二维码并签名。
@@ -308,11 +309,13 @@
 - `GET /api/v1/admin/cpms-keys`：查询机构列表（仅超级管理员，返回本省机构）。
 
 ### 9.4 区块链接口（自动）
-- `GET /api/v1/chain/voters/count`：返回当前可投票公民数量。
+- `GET /api/v1/chain/voters/count?account_pubkey=<who>`：返回 `eligible_total`、`snapshot_nonce`、`snapshot_signature`（过渡期兼容 `snapshot_attestation`）；签名 payload 必须包含 `who(account)`，且 `as_of` 与 `eligible_total` 同一统计快照生成。
 - `POST /api/v1/chain/binding/validate`：校验档案号与公钥绑定是否有效。
 - `POST /api/v1/chain/reward/ack`：区块链回执绑定奖励处理结果（`SUCCESS/FAILED`）。
 - `GET /api/v1/chain/reward/state`：查询绑定奖励状态机。
-- `GET /api/v1/bind/result`：查询某公钥绑定结果。
+- `GET /api/v1/bind/result`：查询某公钥绑定结果；绑定成功后返回持久化 Runtime 凭证（`sfid_code_hash/nonce/signature/key_*`），同一公钥重复查询不会生成新 `nonce`。
+- `GET /api/v1/bind/result`：`signature` 为 Runtime 凭证签名，`sfid_signature` 为历史兼容字段（旧 JSON 绑定证明签名）。
+- `POST /api/v1/vote/verify`：`proposal_id` 必填，输出投票验签凭证字段对齐 Runtime（`sfid_hash/proposal_id/vote_nonce/signature`）。
 - 鉴权要求：仅接受区块链调用方请求，请求头必须携带：
   - `x-chain-token`
   - `x-chain-request-id`
@@ -332,6 +335,7 @@
   - 数据库：`chain_idempotency_requests(route_key, request_id|nonce)` 双唯一约束。
 - 投票资格规则：以 CPMS 二维码状态为准（SFID 记录并反馈），`ABNORMAL` 状态不可投票。
 - `/api/v1/vote/verify` 使用 5 秒短缓存（按 `account_pubkey + proposal_id`），状态变更/绑定变更会即时失效缓存。
+- 绑定凭证刷新规则：若当前 signer 公钥或 `key_id/key_version/alg` 与已持久化 Runtime 凭证不一致，会自动重签发并覆盖持久化凭证。
 
 ### 9.8 CPMS 状态变更扫码接口（人工）
 - `POST /api/v1/admin/cpms-status/scan`：超级管理员/操作管理员扫描 CPMS 状态变更二维码并更新用户状态。

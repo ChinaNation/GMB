@@ -1,5 +1,14 @@
 # SFID Code Auth Technical Notes
 
+## 0. Runtime 对齐基线（冻结）
+1. 以链上 Runtime 为唯一验签真值。
+2. 功能 1/2/3 的摘要算法统一为 `blake2_256(scale_encode(payload))`，签名算法统一为 `sr25519`。
+3. Runtime 绑定点（代码锚点）：
+   - 绑定：`runtime/src/configs/mod.rs:676`
+   - 投票：`runtime/src/configs/mod.rs:720`
+   - 人口快照：`runtime/src/configs/mod.rs:780`
+4. 绑定 nonce 防重放按 `hash(nonce)` 消费（代码锚点：`otherpallet/sfid-code-auth/src/lib.rs:294`）。
+
 ## 1. 模块定位
 `sfid-code-auth` 是一个 FRAME pallet，负责三件核心事：
 - SFID 与链上账户的一对一绑定/解绑。
@@ -147,56 +156,55 @@ weight：
 
 ### 7.1 绑定凭证域
 `RuntimeSfidVerifier` 的 payload：
-- domain: `GMB_SFID_BIND_V1`
-- chain: `block_hash(0)`（链域隔离）
-- fields: `account`, `sfid_code_hash`, `nonce`
+- payload: `("GMB_SFID_BIND_V1", genesis_hash, who, sfid_code_hash, nonce)`
+- `genesis_hash = block_hash(0)`（链域隔离）
 - message: `blake2_256(scale_encode(payload))`
 - algorithm: `sr25519`
 
 ### 7.2 公民投票凭证域
 `RuntimeSfidVoteVerifier` 的 payload：
-- domain: `GMB_SFID_VOTE_V1`
-- chain: `block_hash(0)`
-- fields: `account`, `sfid_hash`, `proposal_id`, `nonce`
+- payload: `("GMB_SFID_VOTE_V1", genesis_hash, who, sfid_hash, proposal_id, vote_nonce)`
+- `genesis_hash = block_hash(0)`（链域隔离）
 - message: `blake2_256(scale_encode(payload))`
 - algorithm: `sr25519`
 
 ### 7.3 人口快照凭证域（同一信任根）
 该逻辑位于 `voting-engine-system` 的 snapshot verifier：
-- domain: `GMB_SFID_POPULATION_V1`
-- chain: `block_hash(0)`
-- fields: `who`, `eligible_total`, `nonce`
+- payload: `("GMB_SFID_POPULATION_V1", genesis_hash, who, eligible_total, snapshot_nonce)`
+- `genesis_hash = block_hash(0)`（链域隔离）
 - message: `blake2_256(scale_encode(payload))`
 - algorithm: `sr25519`
 
 说明：
 - 7.3 不在 `sfid-code-auth` pallet 内，但使用同一 SFID 主验签公钥体系。
+- `who(account)` 必须参与签名；`voters/count` 不能只签 `eligible_total`。
 
 ---
 
 ## 8. SFID 系统对区块链提供的数据（按 5 大功能）
-以下是当前实现下，区块链侧需要 SFID 系统提供或配合的 5 类数据/能力。
+以下是 Runtime 对齐口径下，区块链侧需要 SFID 系统提供或配合的 5 类数据/能力。
 
 ### 功能 1：SFID 绑定
 需要提供：
-1. `sfid_code`（明文，仅用于本次上链，链上最终只存 hash）
-2. `credential.sfid_code_hash`
-3. `credential.nonce`（一次性）
-4. `credential.signature`（绑定域签名）
+1. 固定签名域：`("GMB_SFID_BIND_V1", genesis_hash, who, sfid_code_hash, nonce)`。
+2. 链上消费字段：`sfid_code_hash`、`nonce`、`signature`。
+3. `nonce` 一次性；链上按 `hash(nonce)` 去重。
+4. SFID 可保留扩展运维字段（如 `key_id`、`key_version`、`alg`），但不改变链上验签字段。
+5. 链上交易仍需提交 `sfid_code`，并由 Runtime 校验 `hash(sfid_code) == sfid_code_hash`。
 
 ### 功能 2：公民投票凭证校验
 需要提供：
-1. `sfid`（投票人 SFID）
-2. `proposal_id`
-3. `vote_nonce`（一次性）
-4. `vote_signature`（投票域签名）
+1. 固定签名域：`("GMB_SFID_VOTE_V1", genesis_hash, who, sfid_hash, proposal_id, vote_nonce)`。
+2. SFID 输出字段：`sfid_hash`、`proposal_id`、`vote_nonce`、`signature`。
+3. 防重放键：`(proposal_id, sfid_hash, hash(vote_nonce))`。
+4. `vote_nonce` 每次新生成，不复用。
 
 ### 功能 3：人口快照签名
 需要提供：
-1. `eligible_total`
-2. `snapshot_nonce`（一次性）
-3. `snapshot_signature`（快照域签名）
-4. 提交者账户 `who`（由治理发起者签名交易，进入 payload）
+1. 固定签名域：`("GMB_SFID_POPULATION_V1", genesis_hash, who, eligible_total, snapshot_nonce)`。
+2. SFID 输出字段：`eligible_total`、`snapshot_nonce`、`snapshot_signature`。
+3. 为兼容旧客户端，可临时并行返回 `snapshot_attestation`，并标注 `snapshot_signature` 为过渡期保留字段。
+4. 提交者账户 `who`（治理发起者链上账户）必须进入签名 payload。
 
 ### 功能 4：机构 SFID 登记（多签模块）
 需要提供：
@@ -210,8 +218,9 @@ weight：
 ### 功能 5：SFID 验签密钥运维（主备轮换）
 需要提供：
 1. 创世阶段三把账户（主 + 备1 + 备2）
-2. 轮换时由备用账户发起 `rotate_sfid_keys`
+2. 轮换时由备用账户发起 `rotate_sfid_keys`（链上标准 extrinsic）
 3. 新补位备用账户 `new_backup`
+4. 策略：先上链 backup，再提升为 main，再补位新 backup，全程记录审计事件与版本号。
 
 ---
 

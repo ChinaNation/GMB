@@ -5,8 +5,10 @@ use axum::{
     Json,
 };
 use chrono::Utc;
+use tracing::warn;
 use uuid::Uuid;
 
+use crate::chain::runtime_align::build_bind_credential;
 use crate::*;
 
 pub(crate) async fn admin_bind_scan(
@@ -224,7 +226,16 @@ pub(crate) async fn admin_bind_confirm(
             sfid_code: existing.sfid_code.clone(),
             issued_at: existing.bound_at.timestamp(),
         };
-        let proof = make_signature_envelope(&state, &payload);
+        let proof = match make_signature_envelope(&state, &payload) {
+            Ok(v) => v,
+            Err(_) => {
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    1004,
+                    "failed to sign binding proof",
+                )
+            }
+        };
         return Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
@@ -269,7 +280,41 @@ pub(crate) async fn admin_bind_confirm(
         sfid_code: sfid_code.clone(),
         issued_at: bound_at.timestamp(),
     };
-    let proof = make_signature_envelope(&state, &binding_payload);
+    let proof = match make_signature_envelope(&state, &binding_payload) {
+        Ok(v) => v,
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "failed to sign binding proof",
+            )
+        }
+    };
+    let runtime_bind_credential = match build_bind_credential(
+        &state,
+        input.account_pubkey.as_str(),
+        sfid_code.as_str(),
+        Uuid::new_v4().to_string(),
+    ) {
+        Ok(v) => v,
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "failed to sign runtime bind credential",
+            )
+        }
+    };
+    let runtime_bind_signer_pubkey = match state.public_key_hex.read() {
+        Ok(v) => v.clone(),
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "active signer read lock poisoned",
+            )
+        }
+    };
     let bound_by = admin_ctx.admin_pubkey.clone();
     let client_request_id = pending_request
         .as_ref()
@@ -286,6 +331,13 @@ pub(crate) async fn admin_bind_confirm(
         citizen_status,
         sfid_code: sfid_code.clone(),
         sfid_signature: proof.signature_hex.clone(),
+        runtime_bind_sfid_code_hash: Some(runtime_bind_credential.sfid_code_hash),
+        runtime_bind_nonce: Some(runtime_bind_credential.nonce),
+        runtime_bind_signature: Some(runtime_bind_credential.signature),
+        runtime_bind_key_id: Some(runtime_bind_credential.meta.key_id),
+        runtime_bind_key_version: Some(runtime_bind_credential.meta.key_version),
+        runtime_bind_alg: Some(runtime_bind_credential.meta.alg),
+        runtime_bind_signer_pubkey: Some(runtime_bind_signer_pubkey),
         bound_at,
         bound_by,
         admin_province: admin_ctx.admin_province.clone(),
@@ -322,7 +374,16 @@ pub(crate) async fn admin_bind_confirm(
         bound_at: bound_at.timestamp(),
         proof: proof.clone(),
         client_request_id: client_request_id.clone(),
-        callback_attestation: make_signature_envelope(&state, &callback_signable),
+        callback_attestation: match make_signature_envelope(&state, &callback_signable) {
+            Ok(v) => v,
+            Err(_) => {
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    1004,
+                    "failed to sign callback attestation",
+                )
+            }
+        },
     };
     let reward = RewardStateRecord {
         account_pubkey: input.account_pubkey.clone(),
@@ -337,10 +398,38 @@ pub(crate) async fn admin_bind_confirm(
         updated_at: Utc::now(),
         created_at: Utc::now(),
     };
-    store
-        .reward_state_by_pubkey
-        .insert(input.account_pubkey.clone(), reward.clone());
-    persist_reward_state_db(&state, &reward);
+    match persist_reward_state_db(&state, &reward, None) {
+        Ok(true) => {
+            store
+                .reward_state_by_pubkey
+                .insert(input.account_pubkey.clone(), reward.clone());
+        }
+        Ok(false) => {
+            warn!(
+                account_pubkey = input.account_pubkey,
+                callback_id = reward.callback_id,
+                "pending reward state persistence was not applied"
+            );
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1502,
+                "reward state persistence failed",
+            );
+        }
+        Err(err) => {
+            warn!(
+                error = %err,
+                account_pubkey = input.account_pubkey,
+                callback_id = reward.callback_id,
+                "failed to persist pending reward state after bind confirm"
+            );
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1502,
+                "reward state persistence failed",
+            );
+        }
+    }
     invalidate_vote_cache_for_pubkey(&mut store, &input.account_pubkey);
     enqueue_bind_callback_job(&mut store, callback_url, callback_payload);
     append_audit_log(

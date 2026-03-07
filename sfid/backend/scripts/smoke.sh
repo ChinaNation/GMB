@@ -174,7 +174,7 @@ json_post "$BASE_URL/api/v1/admin/bind/confirm" "$CONFIRM_REQ" "${admin_headers[
 
 echo
 echo "6) chain vote verify should be eligible (NORMAL)"
-VERIFY_REQ="$(jq -cn --arg p "$PUBKEY" '{account_pubkey:$p}')"
+VERIFY_REQ="$(jq -cn --arg p "$PUBKEY" '{account_pubkey:$p,proposal_id:1}')"
 VERIFY_NORMAL="$(chain_post "$BASE_URL/api/v1/vote/verify" "$VERIFY_REQ")"
 echo "$VERIFY_NORMAL" | jq .
 NORMAL_ELIGIBLE="$(echo "$VERIFY_NORMAL" | jq -r '.data.has_vote_eligibility')"
@@ -205,11 +205,11 @@ fi
 
 echo
 echo "9) chain voters count should be returned"
-VOTERS_COUNT="$(chain_get "$BASE_URL/api/v1/chain/voters/count")"
+VOTERS_COUNT="$(chain_get "$BASE_URL/api/v1/chain/voters/count?account_pubkey=$PUBKEY")"
 echo "$VOTERS_COUNT" | jq .
-TOTAL_VOTERS="$(echo "$VOTERS_COUNT" | jq -r '.data.total_voters')"
-if [[ "$TOTAL_VOTERS" == "null" ]]; then
-  echo "expected total_voters in chain voters count response" >&2
+ELIGIBLE_TOTAL="$(echo "$VOTERS_COUNT" | jq -r '.data.eligible_total')"
+if [[ "$ELIGIBLE_TOTAL" == "null" ]]; then
+  echo "expected eligible_total in chain voters count response" >&2
   exit 1
 fi
 
