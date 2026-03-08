@@ -21,19 +21,19 @@ jobs:
             target: aarch64-apple-darwin
             sidecar_name: citizenchain-node-aarch64-apple-darwin
             plain_name: citizenchain-node
-            bundles: dmg
+            bundles: app
           - platform: windows-x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
             sidecar_name: citizenchain-node-x86_64-pc-windows-msvc.exe
             plain_name: citizenchain-node.exe
-            bundles: msi,nsis
+            bundles: msi
           - platform: linux-x64
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             sidecar_name: citizenchain-node-x86_64-unknown-linux-gnu
             plain_name: citizenchain-node
-            bundles: deb,appimage
+            bundles: deb
 
     steps:
       - name: Checkout
@@ -47,7 +47,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "25.2.1"
           cache: npm
           cache-dependency-path: citizenchain/nodeui/frontend/package-lock.json
 
@@ -62,11 +62,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            clang \
+            llvm \
+            llvm-dev \
+            libclang-dev \
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
+
+      - name: Configure libclang env (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
 
       - name: Build blockchain node binary
         run: cargo build --manifest-path citizenchain/node/Cargo.toml --release --target ${{ matrix.target }}
@@ -103,6 +115,20 @@ jobs:
 
       - name: Build installer bundles
         run: npm --prefix citizenchain/nodeui/frontend run tauri:build -- --bundles ${{ matrix.bundles }}
+
+      - name: Build DMG from .app (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="citizenchain/nodeui/target/release/bundle/macos/citizenchain.app"
+          DMG_DIR="citizenchain/nodeui/target/release/bundle/dmg"
+          STAGE_DIR="$(mktemp -d)"
+          DMG_PATH="$DMG_DIR/citizenchain-${{ matrix.platform }}.dmg"
+          mkdir -p "$DMG_DIR"
+          cp -R "$APP_PATH" "$STAGE_DIR/"
+          hdiutil create -volname "citizenchain" -srcfolder "$STAGE_DIR" -ov -format UDZO "$DMG_PATH"
+          rm -rf "$STAGE_DIR"
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
