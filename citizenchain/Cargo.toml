@@ -15,6 +15,7 @@ members = [
     "issuance/resolution-issuance-iss",      # 发行-决议发行执行模块 pallet
     "issuance/shengbank-stake-interest",     # 发行-省储行质押利息模块 pallet
     "otherpallet/sfid-code-auth",            # 其他-SFID 绑定与资格校验模块 pallet
+    "otherpallet/pow-difficulty-module",     # 其他-PoW 动态难度调整模块 pallet
 
     "transaction/offchain-transaction-pos",  # 交易-链下交易手续费模块 pallet
     "transaction/onchain-transaction-pow",   # 交易-链上交易手续费模块 pallet
