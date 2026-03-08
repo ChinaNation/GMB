@@ -26,6 +26,7 @@
 // Substrate and Polkadot dependencies
 use codec::Decode;
 use codec::Encode;
+use duoqian_transaction_pow::{DuoqianReservedAddressChecker as _, ProtectedSourceChecker as _};
 use frame_support::{
     derive_impl,
     dispatch::DispatchResult,
@@ -43,6 +44,7 @@ use frame_support::{
     PalletId,
 };
 use frame_system::limits::{BlockLength, BlockWeights};
+use onchain_transaction_fee::NrcAccountProvider as _;
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use sp_core::{sr25519, Void};
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
@@ -51,8 +53,6 @@ use sp_runtime::{
     MultiSigner, Perbill,
 };
 use sp_version::RuntimeVersion;
-use duoqian_transaction_pow::{DuoqianReservedAddressChecker as _, ProtectedSourceChecker as _};
-use onchain_transaction_fee::NrcAccountProvider as _;
 
 // Local module imports
 use super::{
@@ -121,9 +121,9 @@ impl Contains<RuntimeCall> for RuntimeCallFilter {
                 !is_keyless_multi_address(who)
             }
             // force_adjust_total_issuance 直接影响全局发行量；统一在 BaseCallFilter 禁用外部入口。
-            RuntimeCall::Balances(pallet_balances::Call::force_adjust_total_issuance { .. }) => {
-                false
-            }
+            RuntimeCall::Balances(pallet_balances::Call::force_adjust_total_issuance {
+                ..
+            }) => false,
             _ => true,
         }
     }
@@ -308,7 +308,8 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
                 },
             ) => {
                 // 中文注释：仅做轻量金额提取，避免在交易池验证阶段执行完整预检造成 DoS 面放大。
-                if !batch.is_empty() && OffchainTransactionFee::fee_account_of(*institution).is_ok() {
+                if !batch.is_empty() && OffchainTransactionFee::fee_account_of(*institution).is_ok()
+                {
                     let sum = batch.iter().fold(0u128, |acc: u128, item| {
                         acc.saturating_add(item.offchain_fee_amount)
                     });
@@ -998,7 +999,6 @@ impl voting_engine_system::JointVoteResultCallback for RuntimeJointVoteResultCal
 
 impl voting_engine_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type MaxSfidLength = ConstU32<64>;
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type SfidEligibility = RuntimeSfidEligibility;
@@ -1532,7 +1532,6 @@ mod tests {
                 new_free: 1,
             });
         assert!(!RuntimeCallFilter::contains(&blocked_force_set_balance));
-
     }
 
     #[test]
@@ -1732,14 +1731,13 @@ mod tests {
             sfid_code_auth::pallet::SfidMainAccount::<Runtime>::put(sfid_main);
 
             let who = AccountId::new([41u8; 32]);
-            let sfid = b"sfid-wrap";
-            let sfid_hash = <Runtime as frame_system::Config>::Hashing::hash(sfid);
+            let sfid_hash = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-wrap");
             sfid_code_auth::pallet::SfidToAccount::<Runtime>::insert(sfid_hash, who.clone());
             sfid_code_auth::pallet::AccountToSfid::<Runtime>::insert(who.clone(), sfid_hash);
 
-            assert!(RuntimeSfidEligibility::is_eligible(sfid, &who));
+            assert!(RuntimeSfidEligibility::is_eligible(&sfid_hash, &who));
             assert!(!RuntimeSfidEligibility::is_eligible(
-                sfid,
+                &sfid_hash,
                 &AccountId::new([42u8; 32])
             ));
 
@@ -1768,10 +1766,10 @@ mod tests {
                 &signature_bounded
             ));
             assert!(RuntimeSfidEligibility::verify_and_consume_vote_credential(
-                sfid, &who, 88, nonce, &signature
+                &sfid_hash, &who, 88, nonce, &signature
             ));
             assert!(!RuntimeSfidEligibility::verify_and_consume_vote_credential(
-                sfid, &who, 88, nonce, &signature
+                &sfid_hash, &who, 88, nonce, &signature
             ));
         });
     }
@@ -1821,24 +1819,24 @@ impl voting_engine_system::InternalAdminProvider<AccountId> for RuntimeInternalA
 
 pub struct RuntimeSfidEligibility;
 
-impl voting_engine_system::SfidEligibility<AccountId> for RuntimeSfidEligibility {
-    fn is_eligible(sfid: &[u8], who: &AccountId) -> bool {
-        <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<AccountId>>::is_eligible(sfid, who)
+impl voting_engine_system::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
+    fn is_eligible(sfid_hash: &Hash, who: &AccountId) -> bool {
+        <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<
+            AccountId,
+            Hash,
+        >>::is_eligible(sfid_hash, who)
     }
 
     fn verify_and_consume_vote_credential(
-        sfid: &[u8],
+        sfid_hash: &Hash,
         who: &AccountId,
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
     ) -> bool {
-        <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<AccountId>>::verify_and_consume_vote_credential(
-            sfid,
-            who,
-            proposal_id,
-            nonce,
-            signature,
-        )
+        <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<
+            AccountId,
+            Hash,
+        >>::verify_and_consume_vote_credential(sfid_hash, who, proposal_id, nonce, signature)
     }
 }
