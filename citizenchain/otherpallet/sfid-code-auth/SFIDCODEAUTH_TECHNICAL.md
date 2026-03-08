@@ -132,15 +132,15 @@ weight：
 ---
 
 ## 6. 投票资格接口（内部接口）
-本模块实现 `SfidEligibilityProvider<AccountId>`，供投票模块调用。
+本模块实现 `SfidEligibilityProvider<AccountId, Hash>`，供投票模块调用。
 
-### 6.1 `is_eligible(sfid, who)`
-- 计算 `sfid_hash`，检查其是否绑定到 `who`。
+### 6.1 `is_eligible(sfid_hash, who)`
+- 直接使用 `sfid_hash` 检查其是否绑定到 `who`。
 
-### 6.2 `verify_and_consume_vote_credential(sfid, who, proposal_id, nonce, signature)`
+### 6.2 `verify_and_consume_vote_credential(sfid_hash, who, proposal_id, nonce, signature)`
 逻辑：
 1. `nonce` / `signature` 非空。
-2. `sfid` 必须已绑定到 `who`。
+2. `sfid_hash` 必须已绑定到 `who`。
 3. `(proposal_id, sfid_hash, nonce_hash)` 未被使用。
 4. `nonce` / `signature` 长度必须可转为对应 `BoundedVec`。
 5. `T::SfidVoteVerifier::verify_vote(...)` 必须通过。

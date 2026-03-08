@@ -12,9 +12,9 @@ use frame_support::{
     dispatch::DispatchResult,
     weights::{constants::RocksDbWeight, Weight},
 };
-use sp_std::marker::PhantomData;
 use scale_info::TypeInfo;
 use sp_runtime::DispatchError;
+use sp_std::marker::PhantomData;
 
 pub type InstitutionPalletId = [u8; 48];
 
@@ -166,15 +166,12 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         #[pallet::constant]
-        type MaxSfidLength: Get<u32>;
-
-        #[pallet::constant]
         type MaxVoteNonceLength: Get<u32>;
 
         #[pallet::constant]
         type MaxVoteSignatureLength: Get<u32>;
 
-        type SfidEligibility: SfidEligibility<Self::AccountId>;
+        type SfidEligibility: SfidEligibility<Self::AccountId, Self::Hash>;
         type PopulationSnapshotVerifier: PopulationSnapshotVerifier<
             Self::AccountId,
             VoteNonceOf<Self>,
@@ -252,7 +249,6 @@ pub mod pallet {
         }
     }
 
-    pub type SfidOf<T> = BoundedVec<u8, <T as Config>::MaxSfidLength>;
     pub type VoteNonceOf<T> = BoundedVec<u8, <T as Config>::MaxVoteNonceLength>;
     pub type VoteSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxVoteSignatureLength>;
 
@@ -365,7 +361,6 @@ pub mod pallet {
         AlreadyVoted,
         SfidNotEligible,
         InvalidSfidVoteCredential,
-        EmptySfid,
         CitizenEligibleTotalNotSet,
         InvalidPopulationSnapshot,
         ProposalAlreadyFinalized,
@@ -430,13 +425,13 @@ pub mod pallet {
         pub fn citizen_vote(
             origin: OriginFor<T>,
             proposal_id: u64,
-            sfid: SfidOf<T>,
+            sfid_hash: T::Hash,
             nonce: VoteNonceOf<T>,
             signature: VoteSignatureOf<T>,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_citizen_vote(who, proposal_id, sfid, nonce, signature, approve)
+            Self::do_citizen_vote(who, proposal_id, sfid_hash, nonce, signature, approve)
         }
 
         #[pallet::call_index(5)]
@@ -498,12 +493,13 @@ pub mod pallet {
         }
 
         pub(crate) fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
-            let kind = Proposals::<T>::try_mutate(proposal_id, |maybe| -> Result<u8, DispatchError> {
-                let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
-                let kind = proposal.kind;
-                proposal.status = status;
-                Ok(kind)
-            })?;
+            let kind =
+                Proposals::<T>::try_mutate(proposal_id, |maybe| -> Result<u8, DispatchError> {
+                    let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
+                    let kind = proposal.kind;
+                    proposal.status = status;
+                    Ok(kind)
+                })?;
 
             Self::deposit_event(Event::<T>::ProposalFinalized {
                 proposal_id,
@@ -611,7 +607,8 @@ mod benchmarking {
     }
 
     fn nrc_institution() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("NRC institution id should decode")
+        reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
+            .expect("NRC institution id should decode")
     }
 
     #[benchmarks]
@@ -664,13 +661,8 @@ mod benchmarking {
 
             #[block]
             {
-                pallet::Pallet::<T>::do_submit_joint_institution_vote(
-                    who,
-                    1u64,
-                    institution,
-                    true,
-                )
-                .expect("joint vote should succeed");
+                pallet::Pallet::<T>::do_submit_joint_institution_vote(who, 1u64, institution, true)
+                    .expect("joint vote should succeed");
             }
         }
 
@@ -694,21 +686,22 @@ mod benchmarking {
                 },
             );
             pallet::CitizenTallies::<T>::insert(proposal_id, VoteCountU64 { yes: 0, no: 0 });
-            let sfid: pallet::SfidOf<T> = b"bench-sfid".to_vec().try_into().expect("sfid should fit");
-            let nonce: pallet::VoteNonceOf<T> =
-                b"bench-nonce".to_vec().try_into().expect("nonce should fit");
+            let sfid_hash = T::Hashing::hash(b"bench-sfid");
+            let nonce: pallet::VoteNonceOf<T> = b"bench-nonce"
+                .to_vec()
+                .try_into()
+                .expect("nonce should fit");
             let signature: pallet::VoteSignatureOf<T> = b"bench-signature"
                 .to_vec()
                 .try_into()
                 .expect("signature should fit");
-            let sfid_hash = T::Hashing::hash(sfid.as_slice());
 
             #[block]
             {
                 pallet::Pallet::<T>::do_citizen_vote(
                     who,
                     proposal_id,
-                    sfid,
+                    sfid_hash,
                     nonce,
                     signature,
                     true,
@@ -716,7 +709,10 @@ mod benchmarking {
                 .expect("citizen vote should succeed");
             }
 
-            assert!(pallet::CitizenVotesBySfid::<T>::contains_key(proposal_id, sfid_hash));
+            assert!(pallet::CitizenVotesBySfid::<T>::contains_key(
+                proposal_id,
+                sfid_hash
+            ));
             assert_eq!(pallet::CitizenTallies::<T>::get(proposal_id).yes, 1u64);
         }
 
@@ -810,7 +806,7 @@ mod tests {
     use primitives::china::china_ch::{
         shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
     };
-    use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+    use sp_runtime::{traits::Hash, traits::IdentityLookup, AccountId32, BuildStorage};
 
     type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -847,7 +843,6 @@ mod tests {
 
     impl Config for Test {
         type RuntimeEvent = RuntimeEvent;
-        type MaxSfidLength = ConstU32<64>;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
         type SfidEligibility = TestSfidEligibility;
@@ -880,22 +875,25 @@ mod tests {
         }
     }
 
-    impl SfidEligibility<AccountId32> for TestSfidEligibility {
-        fn is_eligible(sfid: &[u8], who: &AccountId32) -> bool {
-            sfid == b"sfid-ok" && who == &nrc_admin(0)
+    impl SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash> for TestSfidEligibility {
+        fn is_eligible(
+            sfid_hash: &<Test as frame_system::Config>::Hash,
+            who: &AccountId32,
+        ) -> bool {
+            *sfid_hash == sfid_hash_ok() && who == &nrc_admin(0)
         }
 
         fn verify_and_consume_vote_credential(
-            sfid: &[u8],
+            sfid_hash: &<Test as frame_system::Config>::Hash,
             who: &AccountId32,
             proposal_id: u64,
             nonce: &[u8],
             signature: &[u8],
         ) -> bool {
-            if !Self::is_eligible(sfid, who) || signature != b"vote-ok" || nonce.is_empty() {
+            if !Self::is_eligible(sfid_hash, who) || signature != b"vote-ok" || nonce.is_empty() {
                 return false;
             }
-            let key = (proposal_id, sfid.to_vec(), nonce.to_vec());
+            let key = (proposal_id, sfid_hash.encode(), nonce.to_vec());
             USED_VOTE_NONCES.with(|set| {
                 let mut set = set.borrow_mut();
                 if set.contains(&key) {
@@ -982,8 +980,8 @@ mod tests {
         AccountId32::new(CHINA_CH[0].admins[index])
     }
 
-    fn sfid_ok() -> pallet::SfidOf<Test> {
-        b"sfid-ok".to_vec().try_into().expect("sfid should fit")
+    fn sfid_hash_ok() -> <Test as frame_system::Config>::Hash {
+        <Test as frame_system::Config>::Hashing::hash(b"sfid-ok")
     }
 
     fn vote_nonce(input: &str) -> pallet::VoteNonceOf<Test> {
@@ -1300,7 +1298,7 @@ mod tests {
                 VotingEngineSystem::citizen_vote(
                     RuntimeOrigin::signed(nrc_admin(0)),
                     0,
-                    sfid_ok(),
+                    sfid_hash_ok(),
                     vote_nonce("n-1"),
                     vote_sig_bad(),
                     true
@@ -1311,7 +1309,7 @@ mod tests {
             assert_ok!(VotingEngineSystem::citizen_vote(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 0,
-                sfid_ok(),
+                sfid_hash_ok(),
                 vote_nonce("n-2"),
                 vote_sig_ok(),
                 true
@@ -1328,7 +1326,7 @@ mod tests {
             assert_ok!(VotingEngineSystem::citizen_vote(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 0,
-                sfid_ok(),
+                sfid_hash_ok(),
                 vote_nonce("n-1"),
                 vote_sig_ok(),
                 true
@@ -1338,7 +1336,7 @@ mod tests {
                 VotingEngineSystem::citizen_vote(
                     RuntimeOrigin::signed(nrc_admin(0)),
                     0,
-                    sfid_ok(),
+                    sfid_hash_ok(),
                     vote_nonce("n-2"),
                     vote_sig_ok(),
                     false
@@ -1357,7 +1355,7 @@ mod tests {
             assert_ok!(VotingEngineSystem::citizen_vote(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 0,
-                sfid_ok(),
+                sfid_hash_ok(),
                 vote_nonce("same"),
                 vote_sig_ok(),
                 true
@@ -1366,7 +1364,7 @@ mod tests {
             assert_ok!(VotingEngineSystem::citizen_vote(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 1,
-                sfid_ok(),
+                sfid_hash_ok(),
                 vote_nonce("same"),
                 vote_sig_ok(),
                 true
@@ -1383,7 +1381,7 @@ mod tests {
                 VotingEngineSystem::citizen_vote(
                     RuntimeOrigin::signed(nrc_admin(0)),
                     0,
-                    sfid_ok(),
+                    sfid_hash_ok(),
                     vote_nonce("x-1"),
                     vote_sig_ok(),
                     true
@@ -1414,23 +1412,20 @@ mod tests {
     }
 
     #[test]
-    fn citizen_vote_rejects_empty_sfid_and_ineligible_account() {
+    fn citizen_vote_rejects_ineligible_hash_and_ineligible_account() {
         new_test_ext().execute_with(|| {
             insert_citizen_proposal(0, 10, 100);
 
-            let empty_sfid: pallet::SfidOf<Test> = Vec::<u8>::new()
-                .try_into()
-                .expect("empty sfid should fit bounds");
             assert_noop!(
                 VotingEngineSystem::citizen_vote(
                     RuntimeOrigin::signed(nrc_admin(0)),
                     0,
-                    empty_sfid,
-                    vote_nonce("n-empty"),
+                    <Test as frame_system::Config>::Hashing::hash(b"sfid-other"),
+                    vote_nonce("n-ineligible-hash"),
                     vote_sig_ok(),
                     true
                 ),
-                pallet::Error::<Test>::EmptySfid
+                pallet::Error::<Test>::SfidNotEligible
             );
 
             let outsider = AccountId32::new([7u8; 32]);
@@ -1438,7 +1433,7 @@ mod tests {
                 VotingEngineSystem::citizen_vote(
                     RuntimeOrigin::signed(outsider),
                     0,
-                    sfid_ok(),
+                    sfid_hash_ok(),
                     vote_nonce("n-ineligible"),
                     vote_sig_ok(),
                     true
@@ -1466,7 +1461,7 @@ mod tests {
                 VotingEngineSystem::citizen_vote(
                     RuntimeOrigin::signed(nrc_admin(0)),
                     0,
-                    sfid_ok(),
+                    sfid_hash_ok(),
                     vote_nonce("joint-stage"),
                     vote_sig_ok(),
                     true
@@ -1485,7 +1480,7 @@ mod tests {
             assert_ok!(VotingEngineSystem::citizen_vote(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 0,
-                sfid_ok(),
+                sfid_hash_ok(),
                 vote_nonce("immediate-pass"),
                 vote_sig_ok(),
                 true

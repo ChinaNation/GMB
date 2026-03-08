@@ -1,17 +1,15 @@
 #![allow(dead_code)]
 
-use frame_support::{ensure, pallet_prelude::DispatchResult};
-use sp_runtime::traits::Hash;
-
 use crate::{
-    pallet::{CitizenTallies, CitizenVotesBySfid, Config, Error, Event, Pallet, SfidOf},
+    pallet::{CitizenTallies, CitizenVotesBySfid, Config, Error, Event, Pallet},
     PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STATUS_PASSED,
 };
+use frame_support::{ensure, pallet_prelude::DispatchResult};
 
-pub trait SfidEligibility<AccountId> {
-    fn is_eligible(sfid: &[u8], who: &AccountId) -> bool;
+pub trait SfidEligibility<AccountId, Hash> {
+    fn is_eligible(sfid_hash: &Hash, who: &AccountId) -> bool;
     fn verify_and_consume_vote_credential(
-        sfid: &[u8],
+        sfid_hash: &Hash,
         who: &AccountId,
         proposal_id: u64,
         nonce: &[u8],
@@ -19,13 +17,13 @@ pub trait SfidEligibility<AccountId> {
     ) -> bool;
 }
 
-impl<AccountId> SfidEligibility<AccountId> for () {
-    fn is_eligible(_sfid: &[u8], _who: &AccountId) -> bool {
+impl<AccountId, Hash> SfidEligibility<AccountId, Hash> for () {
+    fn is_eligible(_sfid_hash: &Hash, _who: &AccountId) -> bool {
         false
     }
 
     fn verify_and_consume_vote_credential(
-        _sfid: &[u8],
+        _sfid_hash: &Hash,
         _who: &AccountId,
         _proposal_id: u64,
         _nonce: &[u8],
@@ -47,7 +45,7 @@ impl<T: Config> Pallet<T> {
     pub(crate) fn do_citizen_vote(
         who: T::AccountId,
         proposal_id: u64,
-        sfid: SfidOf<T>,
+        sfid_hash: T::Hash,
         nonce: crate::pallet::VoteNonceOf<T>,
         signature: crate::pallet::VoteSignatureOf<T>,
         approve: bool,
@@ -66,20 +64,18 @@ impl<T: Config> Pallet<T> {
             proposal.citizen_eligible_total > 0,
             Error::<T>::CitizenEligibleTotalNotSet
         );
-        ensure!(!sfid.is_empty(), Error::<T>::EmptySfid);
         ensure!(
-            T::SfidEligibility::is_eligible(sfid.as_slice(), &who),
+            T::SfidEligibility::is_eligible(&sfid_hash, &who),
             Error::<T>::SfidNotEligible
         );
 
-        let sfid_hash = T::Hashing::hash(sfid.as_slice());
         ensure!(
             !CitizenVotesBySfid::<T>::contains_key(proposal_id, sfid_hash),
             Error::<T>::AlreadyVoted
         );
         ensure!(
             T::SfidEligibility::verify_and_consume_vote_credential(
-                sfid.as_slice(),
+                &sfid_hash,
                 &who,
                 proposal_id,
                 nonce.as_slice(),

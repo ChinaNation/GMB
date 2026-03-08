@@ -43,9 +43,11 @@
 4. 超时路径走 `do_finalize_joint_timeout`。
 
 ### 3.3 公民投票
-1. `do_citizen_vote` 校验阶段、资格、凭证、去重后计票。
-2. 赞成票超过 50%（严格大于）则通过。
-3. 超时路径走 `do_finalize_citizen_timeout`。
+1. `citizen_vote` 入口参数为：`(proposal_id, sfid_hash, nonce, signature, approve)`。
+2. `do_citizen_vote` 校验阶段、资格、凭证、去重后计票。
+3. 公民投票链路仅接收 `sfid_hash`，Runtime 不再接收/处理 SFID 明文字段。
+4. 赞成票超过 50%（严格大于）则通过。
+5. 超时路径走 `do_finalize_citizen_timeout`。
 
 ## 4. 状态终结与回调
 统一通过 `set_status_and_emit` 完成终结：

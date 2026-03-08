@@ -121,7 +121,6 @@ fn build_vote_output(
     account_pubkey: String,
     is_bound: bool,
     has_vote_eligibility: bool,
-    sfid_code: Option<String>,
     proposal_id: u64,
     credential: Option<RuntimeVoteCredential>,
 ) -> VoteVerifyOutput {
@@ -143,7 +142,6 @@ fn build_vote_output(
         account_pubkey,
         is_bound,
         has_vote_eligibility,
-        sfid_code,
         sfid_hash,
         proposal_id,
         vote_nonce,
@@ -264,7 +262,6 @@ pub(crate) async fn verify_vote_eligibility(
                 account_pubkey.clone(),
                 latest_live.is_bound,
                 latest_live.has_vote_eligibility,
-                latest_live.sfid_code.clone(),
                 proposal_id,
                 vote_credential,
             );

@@ -735,7 +735,6 @@ pub(crate) struct VoteVerifyOutput {
     pub(crate) account_pubkey: String,
     pub(crate) is_bound: bool,
     pub(crate) has_vote_eligibility: bool,
-    pub(crate) sfid_code: Option<String>,
     pub(crate) sfid_hash: Option<String>,
     pub(crate) proposal_id: Option<u64>,
     pub(crate) vote_nonce: Option<String>,
