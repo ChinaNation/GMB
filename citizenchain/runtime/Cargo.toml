@@ -64,6 +64,7 @@ shengbank-stake-interest = { path = "../issuance/shengbank-stake-interest", defa
 fullnode-pow-reward = { path = "../issuance/fullnode-pow-reward", default-features = false }
 citizen-lightnode-issuance = { path = "../issuance/citizen-lightnode-issuance", default-features = false }
 sfid-code-auth = { path = "../otherpallet/sfid-code-auth", default-features = false }
+pow-difficulty-module = { path = "../otherpallet/pow-difficulty-module", default-features = false }
 onchain-transaction-fee = { path = "../transaction/onchain-transaction-pow", default-features = false }
 offchain-transaction-fee = { path = "../transaction/offchain-transaction-pos", default-features = false }
 duoqian-transaction-pow = { path = "../transaction/duoqian-transaction-pow", default-features = false }
@@ -96,6 +97,7 @@ std = [
 	"fullnode-pow-reward/std",
 	"citizen-lightnode-issuance/std",
 	"sfid-code-auth/std",
+	"pow-difficulty-module/std",
 	"onchain-transaction-fee/std",
 	"offchain-transaction-fee/std",
 	"duoqian-transaction-pow/std",
@@ -141,6 +143,7 @@ runtime-benchmarks = [
 	"fullnode-pow-reward/runtime-benchmarks",
 	"citizen-lightnode-issuance/runtime-benchmarks",
 	"sfid-code-auth/runtime-benchmarks",
+	"pow-difficulty-module/runtime-benchmarks",
 	"onchain-transaction-fee/runtime-benchmarks",
 	"offchain-transaction-fee/runtime-benchmarks",
 	"duoqian-transaction-pow/runtime-benchmarks",
@@ -166,6 +169,7 @@ try-runtime = [
 	"fullnode-pow-reward/try-runtime",
 	"citizen-lightnode-issuance/try-runtime",
 	"sfid-code-auth/try-runtime",
+	"pow-difficulty-module/try-runtime",
 	"onchain-transaction-fee/try-runtime",
 	"offchain-transaction-fee/try-runtime",
 	"duoqian-transaction-pow/try-runtime",

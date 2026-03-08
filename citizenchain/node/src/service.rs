@@ -4,6 +4,7 @@ use codec::{Decode, Encode};
 use futures::FutureExt;
 use gmb_runtime::{self, apis::RuntimeApi, opaque::Block};
 use sc_client_api::{Backend, BlockBackend};
+use pow_difficulty_module::PowDifficultyApi;
 use sc_consensus_pow::{MiningHandle, PowAlgorithm, PowBlockImport};
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_service::WarpSyncConfig;
@@ -55,32 +56,37 @@ pub type Service = sc_service::PartialComponents<
 // PoW 作者密钥类型：纯 PoW 链使用独立 key type，避免与 Aura 语义混用。
 const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
 const POWR_MINER_SURI_ENV: &str = "POWR_MINER_SURI";
-const POW_DIFFICULTY: u64 = primitives::pow_const::POW_INITIAL_DIFFICULTY;
 const POW_MINING_TIMEOUT_SECS: u64 = 10;
 const POW_PROPOSAL_BUILD_SECS: u64 = 2;
 const GRANDPA_JUSTIFICATION_PERIOD: u32 = 64;
 
 #[derive(Clone)]
 struct SimplePow {
-    difficulty: U256,
+    /// 持有 client 引用，用于通过 Runtime API 读取链上最新难度值。
+    client: Arc<FullClient>,
 }
 
 impl SimplePow {
-    fn new(_client: Arc<FullClient>) -> Self {
-        Self {
-            difficulty: U256::from(POW_DIFFICULTY),
-        }
+    fn new(client: Arc<FullClient>) -> Self {
+        Self { client }
     }
 }
 
 impl PowAlgorithm<Block> for SimplePow {
     type Difficulty = U256;
 
+    /// 从链上读取当前 PoW 难度。
+    /// 若 Runtime API 调用失败（如节点启动初期），回退到 POW_INITIAL_DIFFICULTY 初始值。
     fn difficulty(
         &self,
-        _parent: <Block as BlockT>::Hash,
+        parent: <Block as BlockT>::Hash,
     ) -> Result<Self::Difficulty, sc_consensus_pow::Error<Block>> {
-        Ok(self.difficulty)
+        let difficulty = self
+            .client
+            .runtime_api()
+            .current_pow_difficulty(parent)
+            .unwrap_or(primitives::pow_const::POW_INITIAL_DIFFICULTY);
+        Ok(U256::from(difficulty))
     }
 
     fn verify(
