@@ -1013,6 +1013,10 @@ impl voting_engine_system::Config for Runtime {
     type InternalAdminProvider = RuntimeInternalAdminProvider;
 }
 
+impl pow_difficulty_module::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

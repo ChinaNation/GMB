@@ -332,6 +332,10 @@ mod runtime {
     // 多签交易模块：duoqian_address 创建/注销与半数签名校验
     #[runtime::pallet_index(17)]
     pub type DuoqianTransactionPow = duoqian_transaction_pow;
+
+    // PoW 动态难度调整模块：每 600 块根据实际出块速度自动调整挖矿难度
+    #[runtime::pallet_index(18)]
+    pub type PowDifficulty = pow_difficulty_module;
 }
 
 #[cfg(test)]
