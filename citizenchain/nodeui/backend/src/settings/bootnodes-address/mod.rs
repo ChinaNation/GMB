@@ -1,11 +1,11 @@
 use crate::{
     home::home_node,
-    settings::{grandpa_address, security},
+    settings::{address_utils::decode_hex_32_strict, grandpa_address, security},
     validation::normalize_node_key,
 };
 use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf, thread, time::Duration};
+use std::{fs, io::ErrorKind, path::PathBuf, thread, time::Duration};
 use tauri::AppHandle;
 use zeroize::Zeroizing;
 
@@ -39,10 +39,11 @@ fn bootnode_meta_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn load_bootnode_meta(app: &AppHandle) -> Result<Option<StoredBootnodeMeta>, String> {
     let path = bootnode_meta_path(app)?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let raw = fs::read_to_string(path).map_err(|e| format!("read bootnode meta failed: {e}"))?;
+    let raw = match fs::read_to_string(path) {
+        Ok(v) => v,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("read bootnode meta failed: {e}")),
+    };
     let record: StoredBootnodeMeta =
         serde_json::from_str(&raw).map_err(|e| format!("parse bootnode meta failed: {e}"))?;
     Ok(Some(record))
@@ -91,20 +92,9 @@ fn is_genesis_bootnode_peer_id(peer_id: &str) -> Result<bool, String> {
         .any(|node| node.peer_id == peer_id))
 }
 
-fn decode_hex_32(input: &str) -> Result<[u8; 32], String> {
-    if input.len() != 64 {
-        return Err("node-key 长度无效，必须是 64 位十六进制字符串".to_string());
-    }
-    let mut out = [0u8; 32];
-    for (i, chunk) in input.as_bytes().chunks_exact(2).enumerate() {
-        let part = std::str::from_utf8(chunk).map_err(|_| "node-key 格式无效".to_string())?;
-        out[i] = u8::from_str_radix(part, 16).map_err(|_| "node-key 格式无效".to_string())?;
-    }
-    Ok(out)
-}
-
 fn peer_id_from_node_key_hex(node_key_hex: &str) -> Result<String, String> {
-    let secret_bytes = decode_hex_32(node_key_hex)?;
+    let secret_bytes =
+        decode_hex_32_strict(node_key_hex).map_err(|_| "node-key 格式无效".to_string())?;
     let secret = libp2p_identity::secp256k1::SecretKey::try_from_bytes(secret_bytes)
         .map_err(|_| "无效 node-key，无法生成 secp256k1 私钥".to_string())?;
     let keypair = libp2p_identity::secp256k1::Keypair::from(secret);
@@ -120,8 +110,8 @@ pub(crate) fn load_bootnode_node_key(
     let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_BOOTNODE)? else {
         return Ok(None);
     };
-    let key = Zeroizing::new(security::decrypt_secret_value(&enveloped, unlock_password)?);
-    Ok(Some(key.to_string()))
+    let key = security::decrypt_secret_value(&enveloped, unlock_password)?;
+    Ok(Some(key))
 }
 
 pub(crate) fn verify_bootnode_secret_unlock(unlock_password: &str) -> Result<(), String> {
@@ -133,7 +123,7 @@ pub(crate) fn verify_bootnode_secret_unlock(unlock_password: &str) -> Result<(),
 
 fn wait_peer_id_applied(app: &AppHandle, expected_peer_id: &str) -> Result<(), String> {
     for _ in 0..20 {
-        if let Ok(identity) = home_node::get_node_identity(app.clone()) {
+        if let Ok(identity) = home_node::get_node_identity_blocking(app.clone()) {
             if identity.peer_id.as_deref() == Some(expected_peer_id) {
                 return Ok(());
             }
@@ -176,6 +166,7 @@ pub fn set_bootnode_key(
     node_key: String,
     unlock_password: String,
 ) -> Result<BootnodeKey, String> {
+    let _ = security::append_audit_log(&app, "set_bootnode_key", "attempt");
     let unlock = security::ensure_unlock_password(&unlock_password)?;
     security::verify_device_login_password(unlock)?;
     let normalized = normalize_node_key(&node_key)?;
@@ -194,10 +185,19 @@ pub fn set_bootnode_key(
 
     // 若节点当前在运行，保存新私钥后立即重启以应用新的 p2p 身份。
     if home_node::current_status(&app)?.running {
-        let _ = home_node::stop_node(app.clone())?;
-        let _ = home_node::start_node(app.clone(), unlock.to_string())?;
-        wait_peer_id_applied(&app, &derived_peer_id)?;
+        if let Err(err) = (|| -> Result<(), String> {
+            let _ = home_node::stop_node_blocking(app.clone())?;
+            let _ = home_node::start_node_blocking(app.clone(), unlock.to_string())?;
+            wait_peer_id_applied(&app, &derived_peer_id)?;
+            Ok(())
+        })() {
+            let _ = security::append_audit_log(&app, "set_bootnode_key", "saved_restart_failed");
+            return Err(format!(
+                "引导节点私钥已保存，但节点重启失败：{err}。新密钥将在下次成功启动节点时自动生效。"
+            ));
+        }
     }
+    let _ = security::append_audit_log(&app, "set_bootnode_key", "success");
 
     Ok(BootnodeKey {
         node_key: None,

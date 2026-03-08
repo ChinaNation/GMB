@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api';
 import { ChainSection } from './components/ChainSection';
 import { IdentitySection } from './components/IdentitySection';
@@ -19,6 +19,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
   const [showStartUnlockDialog, setShowStartUnlockDialog] = useState(false);
   const [startUnlockPassword, setStartUnlockPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const refreshInFlightRef = useRef(false);
 
   const loadHome = useCallback(async (silent: boolean) => {
     const [s, c, i] = await Promise.allSettled([
@@ -65,16 +66,29 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
     });
   }, []);
 
-  useEffect(() => {
-    void loadHome(false).catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  const runLoadHome = useCallback(async (silent: boolean) => {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+    try {
+      await loadHome(silent);
+    } finally {
+      refreshInFlightRef.current = false;
+    }
   }, [loadHome]);
 
   useEffect(() => {
+    void runLoadHome(false).catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, [runLoadHome]);
+
+  useEffect(() => {
     const timer = globalThis.setInterval(() => {
-      void loadHome(true).catch(() => undefined);
+      if (starting || stopping || refreshInFlightRef.current) {
+        return;
+      }
+      void runLoadHome(true).catch(() => undefined);
     }, 3000);
     return () => globalThis.clearInterval(timer);
-  }, [loadHome]);
+  }, [runLoadHome, starting, stopping]);
 
   useEffect(() => {
     onNodeActionBusyChange?.(starting || stopping);
@@ -98,7 +112,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
     try {
       const next = await api.startNode(unlockPassword);
       setStatus(next);
-      await loadHome(false);
+      await runLoadHome(false);
       setStartUnlockPassword('');
       setShowStartUnlockDialog(false);
     } catch (e) {
@@ -106,7 +120,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
     } finally {
       setStarting(false);
     }
-  }, [loadHome, starting, stopping]);
+  }, [runLoadHome, starting, stopping]);
 
   const onStop = useCallback(async () => {
     if (starting || stopping) return;
@@ -115,13 +129,13 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
     try {
       const next = await api.stopNode();
       setStatus(next);
-      await loadHome(false);
+      await runLoadHome(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setStopping(false);
     }
-  }, [loadHome, starting, stopping]);
+  }, [runLoadHome, starting, stopping]);
 
   const closeStartUnlockDialog = useCallback(() => {
     if (starting || stopping) return;

@@ -1,8 +1,15 @@
-use crate::{settings::security, validation::normalize_wallet_address};
+use crate::{
+    settings::{
+        address_utils::{decode_hex_32_with_optional_0x, decode_ss58_prefix},
+        security,
+    },
+    validation::normalize_wallet_address,
+};
 use blake2::{Blake2b512, Digest};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::{
+    io::ErrorKind,
     fs,
     hash::Hasher,
     path::{Path, PathBuf},
@@ -24,6 +31,7 @@ const DEFAULT_CHAIN_WS_URL: &str = "ws://127.0.0.1:9944";
 const DEFAULT_CHAIN_ID: &str = "citizenchain";
 const LEGACY_MINER_SURI_FILENAME: &str = "miner-suri.txt";
 const KEYCHAIN_ACCOUNT_MINER_SURI: &str = "powr-miner-suri";
+const REWARD_BIND_TIMEOUT_SECS: u64 = 45;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,10 +60,11 @@ fn legacy_miner_suri_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 pub(crate) fn load_reward_wallet(app: &AppHandle) -> Result<Option<String>, String> {
     let path = reward_wallet_path(app)?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let raw = fs::read_to_string(path).map_err(|e| format!("read reward wallet failed: {e}"))?;
+    let raw = match fs::read_to_string(path) {
+        Ok(v) => v,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("read reward wallet failed: {e}")),
+    };
     let stored: StoredWallet =
         serde_json::from_str(&raw).map_err(|e| format!("parse reward wallet failed: {e}"))?;
     let address = stored.address.trim().to_string();
@@ -75,11 +84,11 @@ fn save_reward_wallet(app: &AppHandle, address: &str) -> Result<(), String> {
 }
 
 fn load_legacy_miner_suri_file(path: &Path) -> Result<Option<String>, String> {
-    if !path.exists() {
-        return Ok(None);
-    }
-    let raw =
-        fs::read_to_string(path).map_err(|e| format!("read legacy miner suri failed: {e}"))?;
+    let raw = match fs::read_to_string(path) {
+        Ok(v) => v,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("read legacy miner suri failed: {e}")),
+    };
     let suri = raw.trim().to_string();
     if suri.is_empty() {
         return Ok(None);
@@ -87,11 +96,21 @@ fn load_legacy_miner_suri_file(path: &Path) -> Result<Option<String>, String> {
     Ok(Some(suri))
 }
 
-fn parse_keystore_secret(raw: &str) -> String {
-    if let Ok(parsed) = serde_json::from_str::<String>(raw) {
-        return parsed.trim().to_string();
+fn parse_keystore_secret(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(String::new());
     }
-    raw.trim().trim_matches('"').to_string()
+    if trimmed.starts_with('"')
+        || trimmed.starts_with('{')
+        || trimmed.starts_with('[')
+        || trimmed.starts_with('\'')
+    {
+        let parsed = serde_json::from_str::<String>(trimmed)
+            .map_err(|e| format!("powr keystore secret 格式无效: {e}"))?;
+        return Ok(parsed.trim().to_string());
+    }
+    Ok(trimmed.to_string())
 }
 
 fn collect_powr_keystore_files(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
@@ -105,7 +124,18 @@ fn collect_powr_keystore_files(app: &AppHandle) -> Result<Vec<PathBuf>, String> 
         fs::read_dir(chains_root).map_err(|e| format!("read chains dir failed: {e}"))?;
     for chain_dir in chain_dirs {
         let chain_dir = chain_dir.map_err(|e| format!("read chain dir entry failed: {e}"))?;
+        let file_type = chain_dir
+            .file_type()
+            .map_err(|e| format!("read chain dir file type failed: {e}"))?;
+        if file_type.is_symlink() || !file_type.is_dir() {
+            continue;
+        }
         let keystore_dir = chain_dir.path().join("keystore");
+        if let Ok(meta) = fs::symlink_metadata(&keystore_dir) {
+            if meta.file_type().is_symlink() {
+                continue;
+            }
+        }
         if !keystore_dir.is_dir() {
             continue;
         }
@@ -113,6 +143,12 @@ fn collect_powr_keystore_files(app: &AppHandle) -> Result<Vec<PathBuf>, String> 
             .map_err(|e| format!("read keystore dir failed ({}): {e}", keystore_dir.display()))?;
         for entry in entries {
             let entry = entry.map_err(|e| format!("read keystore file entry failed: {e}"))?;
+            let file_type = entry
+                .file_type()
+                .map_err(|e| format!("read keystore file type failed: {e}"))?;
+            if file_type.is_symlink() {
+                continue;
+            }
             let path = entry.path();
             if !path.is_file() {
                 continue;
@@ -159,10 +195,19 @@ fn keystore_dirs_for_powr(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
             fs::read_dir(&chains_root).map_err(|e| format!("read chains dir failed: {e}"))?;
         for entry in entries {
             let entry = entry.map_err(|e| format!("read chain dir entry failed: {e}"))?;
-            if !entry.path().is_dir() {
+            let file_type = entry
+                .file_type()
+                .map_err(|e| format!("read chain dir file type failed: {e}"))?;
+            if file_type.is_symlink() || !file_type.is_dir() {
                 continue;
             }
-            dirs.push(entry.path().join("keystore"));
+            let candidate = entry.path().join("keystore");
+            if let Ok(meta) = fs::symlink_metadata(&candidate) {
+                if meta.file_type().is_symlink() {
+                    continue;
+                }
+            }
+            dirs.push(candidate);
         }
     }
 
@@ -224,7 +269,7 @@ fn load_powr_suri_from_keystore(app: &AppHandle) -> Result<Option<String>, Strin
     for path in files {
         let raw = fs::read_to_string(&path)
             .map_err(|e| format!("read powr keystore file failed ({}): {e}", path.display()))?;
-        let suri = parse_keystore_secret(&raw);
+        let suri = parse_keystore_secret(&raw)?;
         if !suri.is_empty() {
             return Ok(Some(suri));
         }
@@ -236,7 +281,7 @@ fn load_miner_suri_secure(unlock_password: &str) -> Result<Option<String>, Strin
     let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_MINER_SURI)? else {
         return Ok(None);
     };
-    let suri = Zeroizing::new(security::decrypt_secret_value(&enveloped, unlock_password)?);
+    let suri = security::decrypt_secret_value(&enveloped, unlock_password)?;
     let normalized = suri.trim().to_string();
     if normalized.is_empty() {
         return Ok(None);
@@ -255,11 +300,10 @@ fn save_miner_suri_secure(suri: &str, unlock_password: &str) -> Result<(), Strin
 
 fn migrate_legacy_miner_suri_file(app: &AppHandle, unlock_password: &str) -> Result<(), String> {
     let legacy_path = legacy_miner_suri_path(app)?;
-    if !legacy_path.exists() {
+    let legacy = load_legacy_miner_suri_file(&legacy_path)?;
+    if legacy.is_none() {
         return Ok(());
     }
-
-    let legacy = load_legacy_miner_suri_file(&legacy_path)?;
     let has_secure = security::secure_store_get(KEYCHAIN_ACCOUNT_MINER_SURI)?.is_some();
     if !has_secure {
         if let Some(suri) = legacy {
@@ -267,46 +311,12 @@ fn migrate_legacy_miner_suri_file(app: &AppHandle, unlock_password: &str) -> Res
         }
     }
 
-    fs::remove_file(&legacy_path)
-        .map_err(|e| format!("remove legacy miner suri file failed: {e}"))?;
-    Ok(())
-}
-
-fn decode_hex_32(input: &str) -> Result<[u8; 32], String> {
-    let mut value = input.trim().to_string();
-    if let Some(stripped) = value.strip_prefix("0x") {
-        value = stripped.to_string();
-    }
-    if value.len() != 64 || !value.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("hex 地址格式无效，应为 0x + 64 位十六进制".to_string());
-    }
-    let mut out = [0u8; 32];
-    for (i, chunk) in value.as_bytes().chunks_exact(2).enumerate() {
-        let part = std::str::from_utf8(chunk).map_err(|_| "hex 地址格式无效".to_string())?;
-        out[i] = u8::from_str_radix(part, 16).map_err(|_| "hex 地址格式无效".to_string())?;
-    }
-    Ok(out)
-}
-
-fn decode_ss58_prefix(data: &[u8]) -> Result<(u16, usize), String> {
-    if data.is_empty() {
-        return Err("SS58 地址为空".to_string());
-    }
-    let first = data[0];
-    match first {
-        0..=63 => Ok((first as u16, 1)),
-        64..=127 => {
-            if data.len() < 2 {
-                return Err("SS58 地址格式无效".to_string());
-            }
-            let second = data[1];
-            let prefix = (((first & 0x3f) as u16) << 2)
-                | ((second as u16) >> 6)
-                | (((second & 0x3f) as u16) << 8);
-            Ok((prefix, 2))
+    if let Err(e) = fs::remove_file(&legacy_path) {
+        if e.kind() != ErrorKind::NotFound {
+            return Err(format!("remove legacy miner suri file failed: {e}"));
         }
-        _ => Err("SS58 地址格式无效".to_string()),
     }
+    Ok(())
 }
 
 fn decode_ss58_account_id(address: &str) -> Result<[u8; 32], String> {
@@ -341,7 +351,7 @@ fn decode_ss58_account_id(address: &str) -> Result<[u8; 32], String> {
 
 fn account_id_from_address(address: &str) -> Result<[u8; 32], String> {
     if address.starts_with("0x") {
-        return decode_hex_32(address);
+        return decode_hex_32_with_optional_0x(address);
     }
     decode_ss58_account_id(address)
 }
@@ -494,7 +504,14 @@ pub(crate) fn sync_saved_reward_wallet_binding(
     app: &AppHandle,
     unlock_password: &str,
 ) -> Result<(), String> {
-    tauri::async_runtime::block_on(sync_saved_reward_wallet_inner(app, unlock_password))
+    tauri::async_runtime::block_on(async {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(REWARD_BIND_TIMEOUT_SECS),
+            sync_saved_reward_wallet_inner(app, unlock_password),
+        )
+        .await
+        .map_err(|_| "链上奖励地址同步超时，请稍后重试".to_string())?
+    })
 }
 
 #[tauri::command]
@@ -505,11 +522,12 @@ pub fn get_reward_wallet(app: AppHandle) -> Result<RewardWallet, String> {
 }
 
 #[tauri::command]
-pub fn set_reward_wallet(
+pub async fn set_reward_wallet(
     app: AppHandle,
     address: String,
     unlock_password: String,
 ) -> Result<RewardWallet, String> {
+    let _ = security::append_audit_log(&app, "set_reward_wallet", "attempt");
     let unlock = security::ensure_unlock_password(&unlock_password)?;
     security::verify_device_login_password(unlock)?;
     let normalized = normalize_wallet_address(&address)?;
@@ -517,9 +535,24 @@ pub fn set_reward_wallet(
     save_reward_wallet(&app, &normalized)?;
     ensure_powr_keystore_key(&app, unlock)?;
 
-    if let Err(err) = sync_saved_reward_wallet_binding(&app, unlock) {
+    let sync_result = tokio::time::timeout(
+        std::time::Duration::from_secs(REWARD_BIND_TIMEOUT_SECS),
+        sync_saved_reward_wallet_inner(&app, unlock),
+    )
+    .await;
+    let sync_result = match sync_result {
+        Ok(v) => v,
+        Err(_) => {
+            let _ =
+                security::append_audit_log(&app, "set_reward_wallet", "saved_chain_bind_timeout");
+            return Err("地址已保存，但链上绑定超时，请稍后重试".to_string());
+        }
+    };
+    if let Err(err) = sync_result {
+        let _ = security::append_audit_log(&app, "set_reward_wallet", "saved_chain_bind_failed");
         return Err(format!("地址已保存，但链上绑定失败：{err}"));
     }
+    let _ = security::append_audit_log(&app, "set_reward_wallet", "success");
 
     Ok(RewardWallet {
         address: Some(normalized),

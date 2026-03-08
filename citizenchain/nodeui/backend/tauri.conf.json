@@ -26,6 +26,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": ["binaries/citizenchain-node"]
+    "externalBin": ["binaries/citizenchain-node"],
+    "resources": ["binaries/citizenchain-node.sha256"]
   }
 }

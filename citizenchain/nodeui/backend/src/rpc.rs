@@ -6,7 +6,7 @@ use std::{
 };
 
 const RPC_HTTP_URL: &str = "http://127.0.0.1:9944/";
-const RPC_CONNECT_TIMEOUT_MS: u64 = 600;
+const RPC_CONNECT_TIMEOUT_MS: u64 = 2500;
 
 static RPC_HTTP_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
 static RPC_HTTP_CLIENT_INIT_LOCK: Mutex<()> = Mutex::new(());
