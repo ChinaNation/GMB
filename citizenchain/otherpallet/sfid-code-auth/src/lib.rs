@@ -3,9 +3,9 @@
 pub use pallet::*;
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+use frame_support::weights::Weight;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
-use frame_support::weights::Weight;
 
 #[derive(
     Clone,
@@ -73,10 +73,10 @@ pub trait OnSfidBoundWeight {
 impl OnSfidBoundWeight for () {}
 
 /// 中文注释：给投票模块使用的统一资格接口。
-pub trait SfidEligibilityProvider<AccountId> {
-    fn is_eligible(sfid: &[u8], who: &AccountId) -> bool;
+pub trait SfidEligibilityProvider<AccountId, Hash> {
+    fn is_eligible(sfid_hash: &Hash, who: &AccountId) -> bool;
     fn verify_and_consume_vote_credential(
-        sfid: &[u8],
+        sfid_hash: &Hash,
         who: &AccountId,
         proposal_id: u64,
         nonce: &[u8],
@@ -349,8 +349,7 @@ pub mod pallet {
         #[pallet::weight(T::DbWeight::get().reads_writes(3, 3))]
         pub fn rotate_sfid_keys(origin: OriginFor<T>, new_backup: T::AccountId) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            let main =
-                SfidMainAccount::<T>::get().ok_or(Error::<T>::UnauthorizedSfidOperator)?;
+            let main = SfidMainAccount::<T>::get().ok_or(Error::<T>::UnauthorizedSfidOperator)?;
             let backup_1 =
                 SfidBackupAccount1::<T>::get().ok_or(Error::<T>::UnauthorizedSfidOperator)?;
             let backup_2 =
@@ -389,7 +388,7 @@ pub mod pallet {
             AccountToSfid::<T>::contains_key(who)
         }
 
-        pub fn is_sfid_bound_to(sfid_hash: T::Hash, who: &T::AccountId) -> bool {
+        pub fn is_sfid_bound_to(sfid_hash: &T::Hash, who: &T::AccountId) -> bool {
             SfidToAccount::<T>::get(sfid_hash)
                 .map(|owner| owner == *who)
                 .unwrap_or(false)
@@ -408,14 +407,13 @@ pub mod pallet {
         }
     }
 
-    impl<T: Config> crate::SfidEligibilityProvider<T::AccountId> for Pallet<T> {
-        fn is_eligible(sfid: &[u8], who: &T::AccountId) -> bool {
-            let sfid_hash = T::Hashing::hash(sfid);
+    impl<T: Config> crate::SfidEligibilityProvider<T::AccountId, T::Hash> for Pallet<T> {
+        fn is_eligible(sfid_hash: &T::Hash, who: &T::AccountId) -> bool {
             Self::is_sfid_bound_to(sfid_hash, who)
         }
 
         fn verify_and_consume_vote_credential(
-            sfid: &[u8],
+            sfid_hash: &T::Hash,
             who: &T::AccountId,
             proposal_id: u64,
             nonce: &[u8],
@@ -425,13 +423,12 @@ pub mod pallet {
                 return false;
             }
 
-            let sfid_hash = T::Hashing::hash(sfid);
             if !Self::is_sfid_bound_to(sfid_hash, who) {
                 return false;
             }
 
             let nonce_hash = T::Hashing::hash(nonce);
-            let vote_nonce_key = (proposal_id, sfid_hash, nonce_hash);
+            let vote_nonce_key = (proposal_id, sfid_hash.clone(), nonce_hash);
             if UsedVoteNonce::<T>::get(vote_nonce_key) {
                 return false;
             }
@@ -447,7 +444,7 @@ pub mod pallet {
 
             if !T::SfidVoteVerifier::verify_vote(
                 who,
-                sfid_hash,
+                sfid_hash.clone(),
                 proposal_id,
                 &nonce_bounded,
                 &signature_bounded,
@@ -653,34 +650,38 @@ mod tests {
                 sfid("sfid-vote"),
                 credential("sfid-vote", "bind-n", "bind-ok")
             ));
+            let sfid_hash = <Test as frame_system::Config>::Hashing::hash(b"sfid-vote");
 
-            assert!(
-                <Pallet<Test> as SfidEligibilityProvider<u64>>::verify_and_consume_vote_credential(
-                    b"sfid-vote",
-                    &1,
-                    100,
-                    b"vote-nonce",
-                    b"vote-ok"
-                )
-            );
-            assert!(
-                !<Pallet<Test> as SfidEligibilityProvider<u64>>::verify_and_consume_vote_credential(
-                    b"sfid-vote",
-                    &1,
-                    100,
-                    b"vote-nonce",
-                    b"vote-ok"
-                )
-            );
-            assert!(
-                <Pallet<Test> as SfidEligibilityProvider<u64>>::verify_and_consume_vote_credential(
-                    b"sfid-vote",
-                    &1,
-                    101,
-                    b"vote-nonce",
-                    b"vote-ok"
-                )
-            );
+            assert!(<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &sfid_hash,
+                &1,
+                100,
+                b"vote-nonce",
+                b"vote-ok"
+            ));
+            assert!(!<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &sfid_hash,
+                &1,
+                100,
+                b"vote-nonce",
+                b"vote-ok"
+            ));
+            assert!(<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &sfid_hash,
+                &1,
+                101,
+                b"vote-nonce",
+                b"vote-ok"
+            ));
         });
     }
 
@@ -787,7 +788,10 @@ mod tests {
     #[test]
     fn unbind_requires_bound_and_decreases_count() {
         new_test_ext().execute_with(|| {
-            assert_noop!(SfidCodeAuth::unbind_sfid(RuntimeOrigin::signed(1)), Error::<Test>::NotBound);
+            assert_noop!(
+                SfidCodeAuth::unbind_sfid(RuntimeOrigin::signed(1)),
+                Error::<Test>::NotBound
+            );
 
             assert_ok!(SfidCodeAuth::bind_sfid(
                 RuntimeOrigin::signed(1),
@@ -835,29 +839,40 @@ mod tests {
                 sfid("sfid-v"),
                 credential("sfid-v", "bind-n", "bind-ok")
             ));
-            assert!(<Pallet<Test> as SfidEligibilityProvider<u64>>::is_eligible(b"sfid-v", &1));
-            assert!(!<Pallet<Test> as SfidEligibilityProvider<u64>>::is_eligible(b"sfid-v", &2));
+            let sfid_hash = <Test as frame_system::Config>::Hashing::hash(b"sfid-v");
+            assert!(<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::is_eligible(&sfid_hash, &1));
+            assert!(!<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::is_eligible(&sfid_hash, &2));
 
-            assert!(
-                !<Pallet<Test> as SfidEligibilityProvider<u64>>::verify_and_consume_vote_credential(
-                    b"sfid-v", &1, 1, b"", b"vote-ok"
-                )
-            );
-            assert!(
-                !<Pallet<Test> as SfidEligibilityProvider<u64>>::verify_and_consume_vote_credential(
-                    b"sfid-v", &1, 1, b"nonce", b""
-                )
-            );
-            assert!(
-                !<Pallet<Test> as SfidEligibilityProvider<u64>>::verify_and_consume_vote_credential(
-                    b"sfid-v", &2, 1, b"nonce", b"vote-ok"
-                )
-            );
-            assert!(
-                !<Pallet<Test> as SfidEligibilityProvider<u64>>::verify_and_consume_vote_credential(
-                    b"sfid-v", &1, 1, b"nonce", b"bad"
-                )
-            );
+            assert!(!<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &sfid_hash, &1, 1, b"", b"vote-ok"
+            ));
+            assert!(!<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &sfid_hash, &1, 1, b"nonce", b""
+            ));
+            assert!(!<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &sfid_hash, &2, 1, b"nonce", b"vote-ok"
+            ));
+            assert!(!<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &sfid_hash, &1, 1, b"nonce", b"bad"
+            ));
         });
     }
 
@@ -867,5 +882,4 @@ mod tests {
             assert!(SfidCodeAuth::current_sfid_verify_pubkey().is_none());
         });
     }
-
 }

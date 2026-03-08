@@ -29,6 +29,7 @@
    - 同一 `account_pubkey` 在已绑定状态下返回同一份持久化凭证（不重复签发新 `nonce`）。
 3. `POST /api/v1/vote/verify`
    - `proposal_id` 必填；返回：`sfid_hash`、`proposal_id`、`vote_nonce`、`signature`（并可附带 `key_id/key_version/alg`）。
+   - 隐私约束：不返回 `sfid_code` 明文。
 4. `GET /api/v1/chain/voters/count?account_pubkey=<who>`
    - `who(account)` 必填（兼容别名 `who`），返回：`eligible_total`、`snapshot_nonce`、`snapshot_signature`（兼容 `snapshot_attestation`）。
 5. `POST /api/v1/chain/binding/validate`

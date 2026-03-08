@@ -571,13 +571,18 @@ mod tests {
     }
 
     pub struct TestSfidEligibility;
-    impl voting_engine_system::SfidEligibility<AccountId32> for TestSfidEligibility {
-        fn is_eligible(_sfid: &[u8], _who: &AccountId32) -> bool {
+    impl voting_engine_system::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
+        for TestSfidEligibility
+    {
+        fn is_eligible(
+            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _who: &AccountId32,
+        ) -> bool {
             true
         }
 
         fn verify_and_consume_vote_credential(
-            _sfid: &[u8],
+            _sfid_hash: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
             _proposal_id: u64,
             _nonce: &[u8],
@@ -638,7 +643,6 @@ mod tests {
 
     impl voting_engine_system::Config for Test {
         type RuntimeEvent = RuntimeEvent;
-        type MaxSfidLength = ConstU32<64>;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
         type SfidEligibility = TestSfidEligibility;
