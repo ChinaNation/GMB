@@ -180,7 +180,10 @@ pub(crate) async fn verify_vote_eligibility(
     };
     input.account_pubkey = account_pubkey.clone();
     let proposal_id = input.proposal_id;
-    let fingerprint = request_fingerprint(&input);
+    let fingerprint = match request_fingerprint(&input) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     let chain_auth = match prepare_chain_request(&state, &headers, "vote_verify", &fingerprint) {
         Ok(v) => v,
         Err(resp) => return resp,

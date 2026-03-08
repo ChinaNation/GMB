@@ -46,11 +46,14 @@ pub(crate) async fn chain_voters_count(
     };
     let request_id_for_fingerprint =
         chain_header_value(&headers, "x-chain-request-id").unwrap_or_default();
-    let fingerprint = request_fingerprint(&ChainVotersCountFingerprint {
+    let fingerprint = match request_fingerprint(&ChainVotersCountFingerprint {
         route: "chain_voters_count",
         request_id: request_id_for_fingerprint.as_str(),
         who: who.as_str(),
-    });
+    }) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     let chain_auth =
         match prepare_chain_request(&state, &headers, "chain_voters_count", &fingerprint) {
             Ok(v) => v,

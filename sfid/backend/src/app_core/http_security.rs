@@ -567,9 +567,15 @@ pub(crate) fn require_chain_signature(
     Ok(())
 }
 
-pub(crate) fn request_fingerprint<T: Serialize>(input: &T) -> String {
-    let payload = serde_json::to_vec(input).unwrap_or_default();
-    hex::encode(blake3::hash(&payload).as_bytes())
+pub(crate) fn request_fingerprint<T: Serialize>(input: &T) -> Result<String, Response> {
+    let payload = serde_json::to_vec(input).map_err(|_| {
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "fingerprint serialization failed",
+        )
+    })?;
+    Ok(hex::encode(blake3::hash(&payload).as_bytes()))
 }
 
 pub(crate) fn cleanup_chain_auth_tracking(store: &mut Store, now: DateTime<Utc>) {

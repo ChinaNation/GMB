@@ -918,7 +918,7 @@ async fn chain_bind_result_reuses_persisted_runtime_credential() {
     let query = BindResultQuery {
         account_pubkey: account_pubkey.clone(),
     };
-    let fingerprint = request_fingerprint(&query);
+    let fingerprint = request_fingerprint(&query).expect("fingerprint should not fail in tests");
     let ts = Utc::now().timestamp();
     let mut headers = HeaderMap::new();
     headers.insert(
