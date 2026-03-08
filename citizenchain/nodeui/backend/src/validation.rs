@@ -94,7 +94,7 @@ pub fn normalize_node_name(input: &str) -> Result<String, String> {
     if value.is_empty() {
         return Err("节点名称不能为空".to_string());
     }
-    if value.len() > 64 {
+    if value.chars().count() > 64 {
         return Err("节点名称不能超过 64 个字符".to_string());
     }
     if value.chars().any(|c| c.is_control()) {

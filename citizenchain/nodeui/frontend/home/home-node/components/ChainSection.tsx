@@ -6,11 +6,27 @@ type Props = {
 };
 
 export function ChainSection({ chain, nodeRunning }: Props) {
+  const status = (() => {
+    if (!nodeRunning) return '暂停同步';
+    if (chain.syncing === true) return '同步中';
+    if (chain.syncing === false) {
+      if (chain.blockHeight != null && chain.finalizedHeight != null) {
+        return chain.blockHeight - chain.finalizedHeight <= 1 ? '已同步' : '同步中';
+      }
+      return '已同步';
+    }
+    if (chain.blockHeight != null && chain.finalizedHeight != null) {
+      return chain.blockHeight - chain.finalizedHeight <= 1 ? '已同步' : '同步中';
+    }
+    return '同步中';
+  })();
+
   return (
     <section className="section">
       <h2>区块</h2>
       <p>当前高度: {chain.blockHeight ?? '-'}</p>
-      <p>区块状态: {nodeRunning ? '同步中' : '暂停同步'}</p>
+      <p>最终确认高度: {chain.finalizedHeight ?? '-'}</p>
+      <p>区块状态: {status}</p>
     </section>
   );
 }

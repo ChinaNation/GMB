@@ -2,48 +2,45 @@
 
 ## 1. 项目定位
 
-`wuminapp` 是移动端优先的轻节点应用，目录分为两部分：
-
-- `mobile/`：Flutter 客户端（iOS/Android）
-- `backend/`：Rust/Axum 服务端（链交互聚合 + 状态持久化）
+`wuminapp` 当前为单仓 Flutter 客户端项目（iOS/Android），不再内置独立后端目录。
 
 边界说明：
 
 - 区块链 Runtime/共识逻辑不在本仓库实现（由 `citizenchain` 提供）
-- `wuminapp` 负责钱包、登录签名、链上交易入口、绑定请求与管理目录拉取
+- SFID 与链交互由外部服务系统承载
+- `wuminapp` 负责端上钱包、登录签名、链上交易入口、绑定指令发起、状态展示
 
 ## 2. 当前技术栈
 
-- Mobile：Flutter + Dart
-- Backend：Rust + Axum + sqlx + PostgreSQL
-- 链交互：
-  - 后端交易提交流程：`subxt`（`ws://...`）
-  - 后端余额/管理员目录读取：JSON-RPC（`http://...`）
+- App：Flutter + Dart
 - 手机机密存储：`flutter_secure_storage`（Keychain/Keystore）
 - 手机业务存储：Isar
+- 外部接口：HTTP API（由 SFID/网关系统提供）
 
 ## 3. 当前目录结构
 
 ```text
 wuminapp/
-├── backend/
-│   ├── db/migrations/
-│   └── src/
-│       ├── routes/
-│       ├── services/
-│       └── models/
-├── mobile/
-│   ├── lib/
-│   │   ├── main.dart
-│   │   ├── login/
-│   │   ├── user/
-│   │   ├── wallet/
-│   │   ├── trade/
-│   └── test/
+├── android/
+├── ios/
+├── assets/
+├── lib/
+│   ├── main.dart
+│   ├── Isar/
+│   ├── login/
+│   ├── user/
+│   ├── wallet/
+│   └── trade/
+├── test/
 └── WUMINAPP_TECHNICAL.md
 ```
 
-## 4. Mobile 当前实现
+说明：
+
+- 原 `mobile/` 内容已上移到项目根目录
+- 原 `backend/` 已移除
+
+## 4. App 当前实现
 
 ### 4.1 主导航
 
@@ -70,7 +67,7 @@ wuminapp/
 
 ### 4.4 钱包与签名
 
-钱包能力收口在 `mobile/lib/wallet/`：
+钱包能力收口在 `lib/wallet/`：
 
 - `core/`：钱包生命周期、Isar、机密 key 规范、生物识别守卫
 - `capabilities/`：登录签名、链上交易编排、余额/API、管理员目录、绑定、证明态
@@ -87,7 +84,7 @@ wuminapp/
 
 ### 4.5 登录模块
 
-登录模块在 `mobile/lib/login/`，负责：
+登录模块在 `lib/login/`，负责：
 
 - 扫码识别挑战码
 - 协议校验
@@ -140,39 +137,11 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
   - `user.profile.nickname`
   - `user.profile.avatar_path`
 
-## 6. Backend 当前实现
+## 6. 外部 API 对接（当前）
 
-### 6.1 启动前置
+App 通过 `ApiClient` 访问外部服务，当前已使用接口：
 
-必须提供：
-
-- `WUMINAPP_API_TOKEN`
-- `WUMINAPP_DATABASE_URL`
-
-启动时行为：
-
-1. 连接 PostgreSQL
-2. 自动执行 `db/migrations`
-3. 启动 Axum（默认 `0.0.0.0:8787`）
-
-### 6.2 认证与 CORS
-
-- 除健康检查外，接口要求 API Token
-- 支持头：
-  - `Authorization: Bearer <token>`
-  - `x-api-token: <token>`
-- Token 比较为常量时间比较
-- CORS 通过 `WUMINAPP_CORS_ALLOWED_ORIGINS` 配置
-
-### 6.3 已实现 API
-
-公开接口：
-
-- `GET /`
 - `GET /api/v1/health`
-
-鉴权接口：
-
 - `GET /api/v1/wallet/balance`
 - `POST /api/v1/tx/prepare`
 - `POST /api/v1/tx/submit`
@@ -180,56 +149,33 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 - `POST /api/v1/chain/bind/request`
 - `GET /api/v1/admins/catalog`
 
-### 6.4 PostgreSQL 表（当前 migration）
-
-- `tx_prepared`
-- `tx_runtime`
-- `chain_bind_requests`
-
-说明：
-
-- `tx_runtime` 已持久化，后端重启后状态不丢
-- `tx_prepared` 入库但 `PartialTransaction` 仍在进程内，重启后需重新 prepare
-
 ## 7. 安全基线（当前）
 
-- 私钥/助记词不落 Isar 与 Postgres
+- 私钥/助记词不落 Isar 与远端服务
 - 登录与交易签名前有设备侧身份确认能力（可开关）
 - 登录白名单配置有本地 HMAC 完整性保护
-- API 统一 token 鉴权
-- 交易状态与绑定请求落库，支持审计追踪基础字段
+- 绑定请求与交易状态依赖外部服务返回
 
 ## 8. 已知限制
 
 - 登录防重放当前仍在 `SharedPreferences`，尚未切到 Isar 的 `LoginReplayEntity`
 - `SfidBindingService` 状态仍在 `SharedPreferences`（`sfid.bind.*`）
-- `tx_prepared` 的可提交态依赖进程内对象，重启后需重新发起 prepare
+- 链下交易模块仍为占位
 
 ## 9. 本地开发
 
-### 9.1 Backend
-
 ```bash
 cd /Users/rhett/GMB/wuminapp
-export WUMINAPP_API_TOKEN='wuminapp-dev-token-001'
-export WUMINAPP_DATABASE_URL='postgres://wuminapp:wuminapp_dev_pwd@127.0.0.1:5440/wuminapp_dev'
-cargo run -p wuminapp-backend
-```
-
-### 9.2 Mobile
-
-```bash
-cd /Users/rhett/GMB/wuminapp/mobile
 flutter pub get
 flutter run \
-  --dart-define=WUMINAPP_API_BASE_URL=http://127.0.0.1:8787 \
-  --dart-define=WUMINAPP_API_TOKEN=wuminapp-dev-token-001
+  --dart-define=WUMINAPP_API_BASE_URL=http://<外部服务地址> \
+  --dart-define=WUMINAPP_API_TOKEN=<token>
 ```
 
-真机调试时 `WUMINAPP_API_BASE_URL` 需改为局域网 IP，不可用 `127.0.0.1`。
+真机调试时 `WUMINAPP_API_BASE_URL` 需为手机可达地址，不可用 `127.0.0.1`。
 
 ## 10. 关联模块文档
 
-- 登录模块：`mobile/lib/login/LOGIN_TECHNICAL.md`
-- 用户模块：`mobile/lib/user/USER_TECHNICAL.md`
-- 钱包模块：`mobile/lib/wallet/WALLET_TECHNICAL.md`
+- 登录模块：`lib/login/LOGIN_TECHNICAL.md`
+- 用户模块：`lib/user/USER_TECHNICAL.md`
+- 钱包模块：`lib/wallet/WALLET_TECHNICAL.md`

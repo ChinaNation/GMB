@@ -56,9 +56,14 @@
 
 ## 7. RPC 健壮性
 
-- 使用 connect/read/write timeout。
-- 响应读取上限 4MB。
-- 检查 HTTP 状态行必须为 200。
+- RPC 通过共享模块 `nodeui/backend/src/rpc.rs` 发起（`rpc::rpc_post`），与 Network Overview 复用同一连接池实现。
+- 共享 RPC 客户端使用 `OnceLock<Client>` + 初始化互斥锁：
+  - 首次成功后复用连接池；
+  - 初始化失败不会缓存错误，后续调用会重试；
+  - 初始化互斥保证并发下只会有一个线程执行初始化。
+- 使用 connect + request timeout。
+- 响应读取上限 4MB（含 Content-Length 预检查与流式读取限流）。
+- 检查 HTTP 状态码必须为 200。
 - JSON-RPC `error` 字段统一转错误。
 
 ## 8. 资源采样优化

@@ -7,14 +7,13 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    fs::OpenOptions,
     io::{Read, Write},
     net::TcpStream,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Mutex,
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 use tauri::{AppHandle, Manager};
 
@@ -23,7 +22,6 @@ const EXPECTED_SS58_PREFIX: u64 = 2027;
 
 pub struct RuntimeState {
     pub local_node: Option<Child>,
-    pub node_key_file: Option<PathBuf>,
 }
 
 pub struct AppState(pub Mutex<RuntimeState>);
@@ -40,6 +38,8 @@ pub struct NodeStatus {
 #[serde(rename_all = "camelCase")]
 pub struct ChainStatus {
     pub block_height: Option<u64>,
+    pub finalized_height: Option<u64>,
+    pub syncing: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -65,91 +65,6 @@ fn node_name_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(security::app_data_dir(app)?.join("node-name.json"))
 }
 
-fn node_key_runtime_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let path = security::app_data_dir(app)?.join("runtime-secrets");
-    fs::create_dir_all(&path).map_err(|e| format!("create runtime secrets dir failed: {e}"))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o700))
-            .map_err(|e| format!("set runtime secrets dir permission failed: {e}"))?;
-    }
-    Ok(path)
-}
-
-fn cleanup_stale_runtime_secret_files(app: &AppHandle) -> Result<(), String> {
-    let dir = node_key_runtime_dir(app)?;
-    let entries =
-        fs::read_dir(&dir).map_err(|e| format!("read runtime secrets dir failed: {e}"))?;
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("read runtime secrets entry failed: {e}"))?;
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
-            continue;
-        };
-        if name.starts_with("node-key-") && name.ends_with(".tmp") {
-            fs::remove_file(&path).map_err(|e| {
-                format!(
-                    "remove stale node-key file failed ({}): {e}",
-                    path.display()
-                )
-            })?;
-        }
-    }
-    Ok(())
-}
-
-fn write_node_key_runtime_file(app: &AppHandle, node_key: &str) -> Result<PathBuf, String> {
-    let dir = node_key_runtime_dir(app)?;
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| format!("get system time failed: {e}"))?
-        .as_nanos();
-    let pid = std::process::id();
-
-    for seq in 0u32..32 {
-        let path = dir.join(format!("node-key-{pid}-{ts}-{seq}.tmp"));
-        #[cfg(unix)]
-        let file = {
-            use std::os::unix::fs::OpenOptionsExt;
-            OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .mode(0o600)
-                .open(&path)
-        };
-        #[cfg(not(unix))]
-        let file = OpenOptions::new().write(true).create_new(true).open(&path);
-
-        match file {
-            Ok(mut f) => {
-                f.write_all(node_key.as_bytes())
-                    .and_then(|_| f.write_all(b"\n"))
-                    .map_err(|e| format!("write node-key runtime file failed: {e}"))?;
-                return Ok(path);
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(format!("create node-key runtime file failed: {e}")),
-        }
-    }
-
-    Err("create node-key runtime file failed: exhausted retries".to_string())
-}
-
-fn cleanup_node_key_runtime_file(path: Option<PathBuf>) {
-    if let Some(path) = path {
-        let _ = fs::remove_file(path);
-    }
-}
-
-fn cleanup_node_key_runtime_file_in_state(state: &mut RuntimeState) {
-    let path = state.node_key_file.take();
-    cleanup_node_key_runtime_file(path);
-}
-
 fn role_from_peer_id(peer_id: Option<&str>) -> String {
     if let Some(pid) = peer_id {
         if let Ok(Some(name)) = bootnodes_address::find_genesis_bootnode_name_by_peer_id(pid) {
@@ -164,7 +79,6 @@ fn refresh_managed_process(state: &mut RuntimeState) -> (bool, Option<u32>) {
         match child.try_wait() {
             Ok(Some(_)) | Err(_) => {
                 state.local_node = None;
-                cleanup_node_key_runtime_file_in_state(state);
                 (false, None)
             }
             Ok(None) => (true, Some(child.id())),
@@ -491,7 +405,10 @@ fn trusted_node_process_pids_on_rpc_port(app: &AppHandle) -> Result<Vec<u32>, St
 
 #[cfg(unix)]
 fn pid_alive(pid: u32) -> bool {
-    let rc = unsafe { libc::kill(pid as i32, 0) };
+    let Some(raw_pid) = u32_to_pid_t(pid) else {
+        return false;
+    };
+    let rc = unsafe { libc::kill(raw_pid, 0) };
     if rc == 0 {
         return true;
     }
@@ -506,10 +423,17 @@ fn pid_alive(_pid: u32) -> bool {
     false
 }
 
+#[cfg(unix)]
+fn u32_to_pid_t(pid: u32) -> Option<libc::pid_t> {
+    i32::try_from(pid).ok().map(|v| v as libc::pid_t)
+}
+
 fn terminate_pid(pid: u32) {
     #[cfg(unix)]
     unsafe {
-        let _ = libc::kill(pid as i32, libc::SIGTERM);
+        if let Some(raw_pid) = u32_to_pid_t(pid) {
+            let _ = libc::kill(raw_pid, libc::SIGTERM);
+        }
     }
 
     for _ in 0..20 {
@@ -521,7 +445,9 @@ fn terminate_pid(pid: u32) {
 
     #[cfg(unix)]
     unsafe {
-        let _ = libc::kill(pid as i32, libc::SIGKILL);
+        if let Some(raw_pid) = u32_to_pid_t(pid) {
+            let _ = libc::kill(raw_pid, libc::SIGKILL);
+        }
     }
 }
 
@@ -536,15 +462,15 @@ fn spawn_node(
     app: &AppHandle,
     node_bin: &Path,
     unlock_password: &str,
-) -> Result<(Child, Option<PathBuf>), String> {
+) -> Result<Child, String> {
     let base_path = node_data_dir(app)?;
     let bootnode_key = bootnodes_address::load_bootnode_node_key(app, unlock_password)?;
     let enable_grandpa_validator =
         grandpa_address::prepare_grandpa_for_start(app, unlock_password)?;
     let node_name = load_node_name(app)?;
-    let mut node_key_runtime_file: Option<PathBuf> = None;
 
     let mut cmd = Command::new(node_bin);
+    fee_address::ensure_powr_keystore_key(app, unlock_password)?;
     cmd.arg("--base-path")
         .arg(base_path)
         .arg("--rpc-port")
@@ -552,15 +478,9 @@ fn spawn_node(
         .arg("--no-prometheus")
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    cmd.env(
-        "POWR_MINER_SURI",
-        fee_address::ensure_miner_suri(app, unlock_password)?,
-    );
 
     if let Some(node_key) = bootnode_key {
-        let key_file = write_node_key_runtime_file(app, &node_key)?;
-        cmd.arg("--node-key-file").arg(&key_file);
-        node_key_runtime_file = Some(key_file);
+        cmd.arg("--node-key").arg(node_key);
     }
     if let Some(name) = node_name {
         cmd.arg("--name").arg(name);
@@ -580,28 +500,20 @@ fn spawn_node(
         }
     }
 
-    match cmd.spawn() {
-        Ok(child) => Ok((child, node_key_runtime_file)),
-        Err(e) => {
-            cleanup_node_key_runtime_file(node_key_runtime_file);
-            Err(format!(
-                "spawn node failed from {}: {e}",
-                node_bin.display()
-            ))
-        }
-    }
+    cmd.spawn()
+        .map_err(|e| format!("spawn node failed from {}: {e}", node_bin.display()))
 }
 
 fn terminate_child(child: &mut Child) {
     #[cfg(unix)]
     unsafe {
-        let pid = child.id() as i32;
-        if pid > 0 {
-            let _ = libc::kill(-pid, libc::SIGTERM);
+        if let Some(pid) = u32_to_pid_t(child.id()) {
+            if pid > 0 {
+                let _ = libc::kill(-pid, libc::SIGTERM);
+            }
         }
     }
 
-    let _ = child.kill();
     for _ in 0..20 {
         match child.try_wait() {
             Ok(Some(_)) => return,
@@ -609,8 +521,51 @@ fn terminate_child(child: &mut Child) {
             Err(_) => return,
         }
     }
+
+    #[cfg(unix)]
+    unsafe {
+        if let Some(pid) = u32_to_pid_t(child.id()) {
+            if pid > 0 {
+                let _ = libc::kill(-pid, libc::SIGKILL);
+            }
+        }
+    }
+
     let _ = child.kill();
     let _ = child.try_wait();
+}
+
+fn find_crlf(bytes: &[u8]) -> Option<usize> {
+    bytes.windows(2).position(|w| w == b"\r\n")
+}
+
+fn decode_chunked_http_body(mut body: &[u8]) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    loop {
+        let line_end = find_crlf(body).ok_or_else(|| "chunked 响应缺少长度行".to_string())?;
+        let size_line = std::str::from_utf8(&body[..line_end])
+            .map_err(|_| "chunked 长度行不是 UTF-8".to_string())?;
+        let size_hex = size_line
+            .split(';')
+            .next()
+            .map(str::trim)
+            .unwrap_or_default();
+        let chunk_size = usize::from_str_radix(size_hex, 16)
+            .map_err(|_| format!("chunked 长度无效: {size_line}"))?;
+        body = &body[line_end + 2..];
+        if chunk_size == 0 {
+            break;
+        }
+        if body.len() < chunk_size + 2 {
+            return Err("chunked 响应体截断".to_string());
+        }
+        out.extend_from_slice(&body[..chunk_size]);
+        if &body[chunk_size..chunk_size + 2] != b"\r\n" {
+            return Err("chunked 响应块缺少结尾 CRLF".to_string());
+        }
+        body = &body[chunk_size + 2..];
+    }
+    Ok(out)
 }
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
@@ -661,7 +616,17 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
         return Err(format!("RPC HTTP 状态异常: {status_line}"));
     }
 
-    let json: Value = serde_json::from_str(body).map_err(|e| format!("RPC JSON 解析失败: {e}"))?;
+    let body_bytes = if header
+        .to_ascii_lowercase()
+        .contains("transfer-encoding: chunked")
+    {
+        decode_chunked_http_body(body.as_bytes())?
+    } else {
+        body.as_bytes().to_vec()
+    };
+
+    let json: Value =
+        serde_json::from_slice(&body_bytes).map_err(|e| format!("RPC JSON 解析失败: {e}"))?;
     if let Some(err) = json.get("error") {
         return Err(format!("RPC 返回错误: {err}"));
     }
@@ -698,24 +663,59 @@ fn hex_to_u64(hex: &str) -> Option<u64> {
     u64::from_str_radix(trimmed, 16).ok()
 }
 
+fn header_block_height(header: &Value) -> Option<u64> {
+    header
+        .get("number")
+        .and_then(Value::as_str)
+        .and_then(hex_to_u64)
+}
+
+fn finalized_block_height() -> Option<u64> {
+    let hash = rpc_post("chain_getFinalizedHead", Value::Array(vec![]))
+        .ok()?
+        .as_str()?
+        .to_string();
+    let header = rpc_post("chain_getHeader", Value::Array(vec![Value::String(hash)])).ok()?;
+    header_block_height(&header)
+}
+
+fn syncing_flag() -> Option<bool> {
+    let health = rpc_post("system_health", Value::Array(vec![])).ok()?;
+    if let Some(v) = health.get("isSyncing") {
+        if let Some(b) = v.as_bool() {
+            return Some(b);
+        }
+        if let Some(s) = v.as_str() {
+            let lowered = s.trim().to_ascii_lowercase();
+            if lowered == "true" {
+                return Some(true);
+            }
+            if lowered == "false" {
+                return Some(false);
+            }
+        }
+    }
+    None
+}
+
 pub(crate) fn cleanup_on_exit(app: &AppHandle) {
     if let Ok(mut state) = app.state::<AppState>().0.lock() {
         if let Some(mut child) = state.local_node.take() {
             terminate_child(&mut child);
         }
-        cleanup_node_key_runtime_file_in_state(&mut state);
     }
     let _ = terminate_trusted_listener_nodes(app);
 }
 
 pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
-    let app_state = app.state::<AppState>();
-    let mut state = app_state
-        .0
-        .lock()
-        .map_err(|_| "acquire process state failed".to_string())?;
-
-    let (managed_running, managed_pid) = refresh_managed_process(&mut state);
+    let (managed_running, managed_pid) = {
+        let app_state = app.state::<AppState>();
+        let mut state = app_state
+            .0
+            .lock()
+            .map_err(|_| "acquire process state failed".to_string())?;
+        refresh_managed_process(&mut state)
+    };
     if managed_running {
         return Ok(NodeStatus {
             running: true,
@@ -755,7 +755,6 @@ pub fn get_node_status(app: AppHandle) -> Result<NodeStatus, String> {
 pub fn start_node(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
     let unlock_password = security::ensure_unlock_password(&unlock_password)?.to_string();
     verify_start_unlock_password(&unlock_password)?;
-    cleanup_stale_runtime_secret_files(&app)?;
     let node_bin = find_node_bin()?;
 
     {
@@ -767,21 +766,22 @@ pub fn start_node(app: AppHandle, unlock_password: String) -> Result<NodeStatus,
         if let Some(mut child) = state.local_node.take() {
             terminate_child(&mut child);
         }
-        cleanup_node_key_runtime_file_in_state(&mut state);
     }
 
     terminate_trusted_listener_nodes(&app)?;
     thread::sleep(Duration::from_millis(250));
 
-    let (child, node_key_runtime_file) = spawn_node(&app, &node_bin, &unlock_password)?;
+    let mut child = spawn_node(&app, &node_bin, &unlock_password)?;
     {
         let app_state = app.state::<AppState>();
-        let mut state = app_state
-            .0
-            .lock()
-            .map_err(|_| "acquire process state failed".to_string())?;
+        let mut state = match app_state.0.lock() {
+            Ok(state) => state,
+            Err(_) => {
+                terminate_child(&mut child);
+                return Err("acquire process state failed".to_string());
+            }
+        };
         state.local_node = Some(child);
-        state.node_key_file = node_key_runtime_file;
     }
 
     thread::sleep(Duration::from_millis(800));
@@ -803,7 +803,6 @@ pub fn stop_node(app: AppHandle) -> Result<NodeStatus, String> {
         if let Some(mut child) = state.local_node.take() {
             terminate_child(&mut child);
         }
-        cleanup_node_key_runtime_file_in_state(&mut state);
     }
 
     terminate_trusted_listener_nodes(&app)?;
@@ -820,14 +819,20 @@ pub fn stop_node(app: AppHandle) -> Result<NodeStatus, String> {
 }
 
 #[tauri::command]
-pub fn set_node_name(app: AppHandle, node_name: String) -> Result<NodeIdentity, String> {
+pub fn set_node_name(
+    app: AppHandle,
+    node_name: String,
+    unlock_password: String,
+) -> Result<NodeIdentity, String> {
+    let unlock = security::ensure_unlock_password(&unlock_password)?;
+    security::verify_device_login_password(unlock)?;
     let normalized = normalize_node_name(&node_name)?;
     let raw = serde_json::to_string_pretty(&StoredNodeName {
         node_name: normalized.clone(),
     })
     .map_err(|e| format!("encode node-name failed: {e}"))?;
 
-    fs::write(node_name_path(&app)?, format!("{raw}\n"))
+    security::write_text_atomic(&node_name_path(&app)?, &format!("{raw}\n"))
         .map_err(|e| format!("write node-name failed: {e}"))?;
 
     let peer_id = rpc_post("system_localPeerId", Value::Array(vec![]))
@@ -844,16 +849,18 @@ pub fn set_node_name(app: AppHandle, node_name: String) -> Result<NodeIdentity, 
 
 #[tauri::command]
 pub fn get_chain_status(_app: AppHandle) -> Result<ChainStatus, String> {
-    let header = match rpc_post("chain_getHeader", Value::Array(vec![])) {
-        Ok(v) => v,
-        Err(_) => return Ok(ChainStatus { block_height: None }),
-    };
-    let block_height = header
-        .get("number")
-        .and_then(Value::as_str)
-        .and_then(hex_to_u64);
+    let block_height = rpc_post("chain_getHeader", Value::Array(vec![]))
+        .ok()
+        .as_ref()
+        .and_then(header_block_height);
+    let finalized_height = finalized_block_height();
+    let syncing = syncing_flag();
 
-    Ok(ChainStatus { block_height })
+    Ok(ChainStatus {
+        block_height,
+        finalized_height,
+        syncing,
+    })
 }
 
 #[tauri::command]

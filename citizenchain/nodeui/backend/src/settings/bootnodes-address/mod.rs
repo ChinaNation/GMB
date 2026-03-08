@@ -7,6 +7,7 @@ use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, thread, time::Duration};
 use tauri::AppHandle;
+use zeroize::Zeroizing;
 
 const KEYCHAIN_ACCOUNT_BOOTNODE: &str = "bootnode-node-key";
 
@@ -119,13 +120,13 @@ pub(crate) fn load_bootnode_node_key(
     let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_BOOTNODE)? else {
         return Ok(None);
     };
-    let key = security::decrypt_secret_value(&enveloped, unlock_password)?;
-    Ok(Some(key))
+    let key = Zeroizing::new(security::decrypt_secret_value(&enveloped, unlock_password)?);
+    Ok(Some(key.to_string()))
 }
 
 pub(crate) fn verify_bootnode_secret_unlock(unlock_password: &str) -> Result<(), String> {
     if let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_BOOTNODE)? {
-        let _ = security::decrypt_secret_value(&enveloped, unlock_password)?;
+        let _key = Zeroizing::new(security::decrypt_secret_value(&enveloped, unlock_password)?);
     }
     Ok(())
 }
@@ -186,6 +187,7 @@ pub fn set_bootnode_key(
     }
     let institution_name = find_genesis_bootnode_name_by_peer_id(&derived_peer_id)?;
 
+    let normalized = Zeroizing::new(normalized);
     let encrypted = security::encrypt_secret_value(&normalized, unlock)?;
     security::secure_store_set(KEYCHAIN_ACCOUNT_BOOTNODE, &encrypted)?;
     save_bootnode_meta(&app, &derived_peer_id, institution_name.clone())?;

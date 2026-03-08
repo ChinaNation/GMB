@@ -1,10 +1,8 @@
-[workspace]                                  # 轻节点 App 工作空间
-members = [
-    "backend",                              # 后端服务
-]
+[workspace]
+members = []
 resolver = "2"
 
-[workspace.package]                          # 工作空间统一元信息
+[workspace.package]
 edition = "2021"
 version = "0.0.1"
 authors = ["voyager_rhett <chinanation@icloud.com>"]
