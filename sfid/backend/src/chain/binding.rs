@@ -100,7 +100,10 @@ pub(crate) async fn create_bind_request(
         }
     }
 
-    let fingerprint = request_fingerprint(&input);
+    let fingerprint = match request_fingerprint(&input) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     let chain_auth = match prepare_chain_request(&state, &headers, "bind_request", &fingerprint) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -199,7 +202,10 @@ pub(crate) async fn get_bind_result(
         }
     };
 
-    let fingerprint = request_fingerprint(&query);
+    let fingerprint = match request_fingerprint(&query) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     let chain_auth = match prepare_chain_request(&state, &headers, "bind_result", &fingerprint) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -368,7 +374,10 @@ pub(crate) async fn chain_binding_validate(
             "archive_no and account_pubkey are required",
         );
     }
-    let fingerprint = request_fingerprint(&input);
+    let fingerprint = match request_fingerprint(&input) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     let chain_auth =
         match prepare_chain_request(&state, &headers, "chain_binding_validate", &fingerprint) {
             Ok(v) => v,
@@ -433,7 +442,10 @@ pub(crate) async fn chain_reward_ack(
             "account_pubkey and callback_id are required",
         );
     }
-    let fingerprint = request_fingerprint(&input);
+    let fingerprint = match request_fingerprint(&input) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     let chain_auth = match prepare_chain_request(&state, &headers, "chain_reward_ack", &fingerprint)
     {
         Ok(v) => v,
@@ -563,7 +575,10 @@ pub(crate) async fn chain_reward_state(
         return api_error(StatusCode::BAD_REQUEST, 1001, "account_pubkey is invalid");
     };
     query.account_pubkey = account_pubkey;
-    let fingerprint = request_fingerprint(&query);
+    let fingerprint = match request_fingerprint(&query) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     let chain_auth =
         match prepare_chain_request(&state, &headers, "chain_reward_state", &fingerprint) {
             Ok(v) => v,
