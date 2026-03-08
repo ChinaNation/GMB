@@ -148,9 +148,12 @@ pub mod pallet {
     }
 
     #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
+    where
+        BlockNumberFor<T>: Into<u32>,
+    {
         fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-            let block_number: u32 = n.saturated_into::<u32>();
+            let block_number: u32 = n.into();
             if block_number >= FULLNODE_REWARD_START_BLOCK
                 && block_number <= FULLNODE_REWARD_END_BLOCK
             {
@@ -164,7 +167,7 @@ pub mod pallet {
 
         fn on_finalize(n: BlockNumberFor<T>) {
             // 制度前提：本链区块高度使用 u32 表示
-            let block_number: u32 = n.saturated_into::<u32>();
+            let block_number: u32 = n.into();
 
             // 是否处于全节点 PoW 奖励区间 [1, 9,999,999]
             if block_number < FULLNODE_REWARD_START_BLOCK
@@ -224,7 +227,7 @@ mod tests {
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
     use std::{cell::RefCell, thread_local};
 
-    type Block = frame_system::mocking::MockBlock<Test>;
+    type Block = frame_system::mocking::MockBlockU32<Test>;
     type Balance = u128;
 
     thread_local! {
@@ -344,7 +347,7 @@ mod tests {
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
 
             // 起始边界块 1 应发放奖励
-            <FullnodePowReward as Hooks<u64>>::on_finalize(1);
+            <FullnodePowReward as Hooks<u32>>::on_finalize(1);
             assert_eq!(Balances::free_balance(wallet.clone()), primitives::pow_const::FULLNODE_BLOCK_REWARD);
 
             let has_event = System::events().iter().any(|r| {
@@ -364,7 +367,7 @@ mod tests {
             let wallet = account(44);
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
 
-            <FullnodePowReward as Hooks<u64>>::on_finalize(1);
+            <FullnodePowReward as Hooks<u32>>::on_finalize(1);
             assert_eq!(Balances::free_balance(wallet), 0);
         });
     }
@@ -381,7 +384,7 @@ mod tests {
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
 
             // 区块 0 不发放
-            <FullnodePowReward as Hooks<u64>>::on_finalize(0);
+            <FullnodePowReward as Hooks<u32>>::on_finalize(0);
             assert_eq!(Balances::free_balance(wallet.clone()), 0);
             let has_event_block_0 = System::events().iter().any(|r| {
                 matches!(
@@ -392,7 +395,7 @@ mod tests {
             assert!(!has_event_block_0);
 
             // 超出结束高度不发放
-            <FullnodePowReward as Hooks<u64>>::on_finalize(
+            <FullnodePowReward as Hooks<u32>>::on_finalize(
                 (primitives::pow_const::FULLNODE_REWARD_END_BLOCK + 1).into(),
             );
             assert_eq!(Balances::free_balance(wallet), 0);
@@ -410,8 +413,8 @@ mod tests {
             ));
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
 
-            let end = primitives::pow_const::FULLNODE_REWARD_END_BLOCK as u64;
-            <FullnodePowReward as Hooks<u64>>::on_finalize(end);
+            let end = primitives::pow_const::FULLNODE_REWARD_END_BLOCK;
+            <FullnodePowReward as Hooks<u32>>::on_finalize(end);
 
             assert_eq!(
                 Balances::free_balance(wallet.clone()),
@@ -439,9 +442,9 @@ mod tests {
             ));
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
 
-            <FullnodePowReward as Hooks<u64>>::on_finalize(1);
-            <FullnodePowReward as Hooks<u64>>::on_finalize(2);
-            <FullnodePowReward as Hooks<u64>>::on_finalize(3);
+            <FullnodePowReward as Hooks<u32>>::on_finalize(1);
+            <FullnodePowReward as Hooks<u32>>::on_finalize(2);
+            <FullnodePowReward as Hooks<u32>>::on_finalize(3);
 
             assert_eq!(
                 Balances::free_balance(wallet),
@@ -455,7 +458,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = None);
 
-            <FullnodePowReward as Hooks<u64>>::on_finalize(1);
+            <FullnodePowReward as Hooks<u32>>::on_finalize(1);
 
             let has_event = System::events().iter().any(|r| {
                 matches!(
@@ -473,7 +476,7 @@ mod tests {
             let miner = account(101);
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
 
-            <FullnodePowReward as Hooks<u64>>::on_finalize(1);
+            <FullnodePowReward as Hooks<u32>>::on_finalize(1);
 
             let has_event = System::events().iter().any(|r| {
                 matches!(
@@ -544,7 +547,7 @@ mod tests {
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
 
             // 第 1 块奖励 -> wallet1
-            <FullnodePowReward as Hooks<u64>>::on_finalize(1);
+            <FullnodePowReward as Hooks<u32>>::on_finalize(1);
             assert_eq!(
                 Balances::free_balance(wallet1.clone()),
                 primitives::pow_const::FULLNODE_BLOCK_REWARD
@@ -557,7 +560,7 @@ mod tests {
             ));
 
             // 第 2 块奖励 -> wallet2，wallet1 不再增长
-            <FullnodePowReward as Hooks<u64>>::on_finalize(2);
+            <FullnodePowReward as Hooks<u32>>::on_finalize(2);
             assert_eq!(
                 Balances::free_balance(wallet1),
                 primitives::pow_const::FULLNODE_BLOCK_REWARD
@@ -572,15 +575,14 @@ mod tests {
     #[test]
     fn on_initialize_declares_weight_only_within_reward_range() {
         new_test_ext().execute_with(|| {
-            let w0 = <FullnodePowReward as Hooks<u64>>::on_initialize(0);
+            let w0 = <FullnodePowReward as Hooks<u32>>::on_initialize(0);
             assert_eq!(w0, Weight::zero());
 
-            let w1 = <FullnodePowReward as Hooks<u64>>::on_initialize(1);
+            let w1 = <FullnodePowReward as Hooks<u32>>::on_initialize(1);
             assert_ne!(w1, Weight::zero());
 
-            let w_after = <FullnodePowReward as Hooks<u64>>::on_initialize(
-                (primitives::pow_const::FULLNODE_REWARD_END_BLOCK + 1) as u64,
-            );
+            let w_after =
+                <FullnodePowReward as Hooks<u32>>::on_initialize(primitives::pow_const::FULLNODE_REWARD_END_BLOCK + 1);
             assert_eq!(w_after, Weight::zero());
         });
     }

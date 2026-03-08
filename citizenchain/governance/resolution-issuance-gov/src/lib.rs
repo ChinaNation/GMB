@@ -591,6 +591,9 @@ pub mod pallet {
                     proposal.status = ProposalStatus::Passed;
                     Proposals::<T>::insert(proposal_id, &proposal);
                     let joint_vote_id = Self::cleanup_vote_mapping(proposal_id);
+                    if let Some(vote_id) = joint_vote_id {
+                        T::JointVoteEngine::cleanup_joint_proposal(vote_id);
+                    }
                     RetryCount::<T>::remove(proposal_id);
                     Self::decrement_voting_proposal_count()?;
                     Self::deposit_event(Event::<T>::JointVoteFinalized {
@@ -607,6 +610,9 @@ pub mod pallet {
                     proposal.status = ProposalStatus::ExecutionFailed;
                     Proposals::<T>::insert(proposal_id, &proposal);
                     let joint_vote_id = Self::cleanup_vote_mapping(proposal_id);
+                    if let Some(vote_id) = joint_vote_id {
+                        T::JointVoteEngine::cleanup_joint_proposal(vote_id);
+                    }
                     Self::decrement_voting_proposal_count()?;
                     Self::deposit_event(Event::<T>::JointVoteFinalized {
                         proposal_id,
@@ -620,6 +626,9 @@ pub mod pallet {
                 proposal.status = ProposalStatus::Rejected;
                 Proposals::<T>::insert(proposal_id, &proposal);
                 let joint_vote_id = Self::cleanup_vote_mapping(proposal_id);
+                if let Some(vote_id) = joint_vote_id {
+                    T::JointVoteEngine::cleanup_joint_proposal(vote_id);
+                }
                 Self::decrement_voting_proposal_count()?;
                 Self::deposit_event(Event::<T>::JointVoteFinalized {
                     proposal_id,

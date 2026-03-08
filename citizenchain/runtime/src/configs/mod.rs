@@ -44,6 +44,7 @@ use frame_support::{
     PalletId,
 };
 use frame_system::limits::{BlockLength, BlockWeights};
+use frame_system::pallet_prelude::BlockNumberFor;
 use onchain_transaction_fee::NrcAccountProvider as _;
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use sp_core::{sr25519, Void};
@@ -655,6 +656,7 @@ impl
         Hash,
         sfid_code_auth::pallet::NonceOf<Runtime>,
         sfid_code_auth::pallet::SignatureOf<Runtime>,
+        BlockNumberFor<Runtime>,
     > for RuntimeSfidVerifier
 {
     fn verify(
@@ -675,11 +677,12 @@ impl
         let signature = sr25519::Signature::from_raw(sig_raw);
 
         let payload = (
-            b"GMB_SFID_BIND_V1",
+            b"GMB_SFID_BIND_V2",
             frame_system::Pallet::<Runtime>::block_hash(0),
             account,
             credential.sfid_code_hash,
             credential.nonce.as_slice(),
+            credential.expires_at,
         );
         let msg = blake2_256(&payload.encode());
 
@@ -718,7 +721,7 @@ impl
         let signature = sr25519::Signature::from_raw(sig_raw);
 
         let payload = (
-            b"GMB_SFID_VOTE_V1",
+            b"GMB_SFID_VOTE_V2",
             frame_system::Pallet::<Runtime>::block_hash(0),
             account,
             sfid_hash,
@@ -737,6 +740,9 @@ impl sfid_code_auth::Config for Runtime {
     type MaxCredentialNonceLength = ConstU32<64>;
     // 中文注释：SFID 绑定与投票验签统一使用 64 字节原始 sr25519 签名。
     type MaxCredentialSignatureLength = ConstU32<64>;
+    type MaxBindCredentialLifetimeBlocks = ConstU32<7_200>;
+    type MaxCredentialNonceCleanupPerBlock = ConstU32<2_048>;
+    type MaxCredentialNoncesPerExpiryBlock = ConstU32<200_000>;
     type SfidVerifier = RuntimeSfidVerifier;
     type SfidVoteVerifier = RuntimeSfidVoteVerifier;
     type OnSfidBound = CitizenLightnodeIssuance;
@@ -779,7 +785,7 @@ impl
             let signature = sr25519::Signature::from_raw(sig_raw);
 
             let payload = (
-                b"GMB_SFID_POPULATION_V1",
+                b"GMB_SFID_POPULATION_V2",
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 who,
                 eligible_total,
@@ -1076,6 +1082,14 @@ mod tests {
                 joint_vote_id,
                 proposal_id,
             );
+            resolution_issuance_gov::pallet::VotingProposalCount::<Runtime>::put(1u32);
+            let sfid_hash = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-sfid");
+            let nonce_hash = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-nonce");
+            sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::insert(
+                joint_vote_id,
+                (sfid_hash, nonce_hash),
+                true,
+            );
 
             assert_ok!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(
                 joint_vote_id,
@@ -1096,6 +1110,10 @@ mod tests {
                 resolution_issuance_gov::pallet::JointVoteToGov::<Runtime>::get(joint_vote_id)
                     .is_none()
             );
+            assert!(!sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::get(
+                joint_vote_id,
+                (sfid_hash, nonce_hash)
+            ));
 
             assert!(
                 resolution_issuance_iss::pallet::Executed::<Runtime>::get(proposal_id).is_some()
@@ -1639,12 +1657,14 @@ mod tests {
             let sfid_hash = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-verify");
             let bind_nonce: sfid_code_auth::pallet::NonceOf<Runtime> =
                 b"bind-nonce".to_vec().try_into().expect("nonce should fit");
+            let bind_expires_at: BlockNumberFor<Runtime> = 120u32;
             let bind_payload = (
-                b"GMB_SFID_BIND_V1",
+                b"GMB_SFID_BIND_V2",
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 &account,
                 sfid_hash,
                 bind_nonce.as_slice(),
+                bind_expires_at,
             );
             let bind_msg = blake2_256(&bind_payload.encode());
             let bind_sig = pair.sign(&bind_msg);
@@ -1656,6 +1676,7 @@ mod tests {
             let bind_credential = sfid_code_auth::BindCredential {
                 sfid_code_hash: sfid_hash,
                 nonce: bind_nonce.clone(),
+                expires_at: bind_expires_at,
                 signature: bind_signature,
             };
             assert!(RuntimeSfidVerifier::verify(&account, &bind_credential));
@@ -1665,6 +1686,7 @@ mod tests {
             let bad_bind_credential = sfid_code_auth::BindCredential {
                 sfid_code_hash: sfid_hash,
                 nonce: bind_nonce,
+                expires_at: bind_expires_at,
                 signature: bad_bind_signature,
             };
             assert!(!RuntimeSfidVerifier::verify(&account, &bad_bind_credential));
@@ -1674,7 +1696,7 @@ mod tests {
             let vote_signature: sfid_code_auth::pallet::SignatureOf<Runtime> = pair
                 .sign(&blake2_256(
                     &(
-                        b"GMB_SFID_VOTE_V1",
+                        b"GMB_SFID_VOTE_V2",
                         frame_system::Pallet::<Runtime>::block_hash(0),
                         &account,
                         sfid_hash,
@@ -1700,7 +1722,7 @@ mod tests {
             let pop_signature: voting_engine_system::pallet::VoteSignatureOf<Runtime> = pair
                 .sign(&blake2_256(
                     &(
-                        b"GMB_SFID_POPULATION_V1",
+                        b"GMB_SFID_POPULATION_V2",
                         frame_system::Pallet::<Runtime>::block_hash(0),
                         &account,
                         123u64,
@@ -1744,7 +1766,7 @@ mod tests {
             let nonce = b"wrap-nonce";
             let vote_msg = blake2_256(
                 &(
-                    b"GMB_SFID_VOTE_V1",
+                    b"GMB_SFID_VOTE_V2",
                     frame_system::Pallet::<Runtime>::block_hash(0),
                     &who,
                     sfid_hash,
@@ -1838,5 +1860,12 @@ impl voting_engine_system::SfidEligibility<AccountId, Hash> for RuntimeSfidEligi
             AccountId,
             Hash,
         >>::verify_and_consume_vote_credential(sfid_hash, who, proposal_id, nonce, signature)
+    }
+
+    fn cleanup_vote_credentials(proposal_id: u64) {
+        <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<
+            AccountId,
+            Hash,
+        >>::cleanup_vote_credentials(proposal_id)
     }
 }

@@ -46,7 +46,9 @@ fn build_test_state() -> AppState {
         store: StoreHandle::in_memory(),
         signing_seed_hex: Arc::new(RwLock::new(SensitiveSeed::from(main_seed))),
         known_key_seeds: Arc::new(RwLock::new(known_key_seeds)),
-        request_limits: Arc::new(Mutex::new(HashMap::new())),
+        rate_limit_redis: Arc::new(
+            redis::Client::open("redis://127.0.0.1/").expect("test redis url should be valid"),
+        ),
         cpms_register_inflight: Arc::new(Mutex::new(HashSet::new())),
         key_id: "sfid-master-v1".to_string(),
         key_version: "v1".to_string(),
@@ -880,6 +882,8 @@ fn chain_request_rejects_duplicate_nonce() {
 #[tokio::test]
 async fn chain_bind_result_reuses_persisted_runtime_credential() {
     std::env::set_var("SFID_CHAIN_GENESIS_HASH", format!("0x{}", "11".repeat(32)));
+    let prev_block_override = std::env::var("SFID_CHAIN_CURRENT_BLOCK_OVERRIDE").ok();
+    std::env::set_var("SFID_CHAIN_CURRENT_BLOCK_OVERRIDE", "100");
     let state = build_test_state();
     let seed = hex_seed(0x41);
     let account_pubkey = key_admins::chain_keyring::derive_pubkey_hex_from_seed(seed.as_str());
@@ -897,6 +901,7 @@ async fn chain_bind_result_reuses_persisted_runtime_credential() {
                 sfid_signature: "legacy-signature".to_string(),
                 runtime_bind_sfid_code_hash: None,
                 runtime_bind_nonce: None,
+                runtime_bind_expires_at_block: None,
                 runtime_bind_signature: None,
                 runtime_bind_key_id: None,
                 runtime_bind_key_version: None,
@@ -926,7 +931,13 @@ async fn chain_bind_result_reuses_persisted_runtime_credential() {
         "x-chain-timestamp",
         HeaderValue::from_str(ts.to_string().as_str()).expect("header value"),
     );
-    let payload = chain_signature_payload("bind_result", "req-bind-1", "nonce-bind-1", ts, &fingerprint);
+    let payload = chain_signature_payload(
+        "bind_result",
+        "req-bind-1",
+        "nonce-bind-1",
+        ts,
+        &fingerprint,
+    );
     let signature = chain_signature_hex("test-chain-signing-secret-at-least-32", payload.as_str());
     headers.insert(
         "x-chain-signature",
@@ -943,10 +954,10 @@ async fn chain_bind_result_reuses_persisted_runtime_credential() {
     .into_response();
     assert_eq!(resp1.status(), StatusCode::OK);
     let body1 = parse_json(resp1).await;
-    let nonce_1 = body1["data"]["nonce"]
-        .as_str()
-        .expect("nonce")
-        .to_string();
+    let nonce_1 = body1["data"]["nonce"].as_str().expect("nonce").to_string();
+    let expires_1 = body1["data"]["expires_at_block"]
+        .as_u64()
+        .expect("expires_at_block");
     let signature_1 = body1["data"]["signature"]
         .as_str()
         .expect("signature")
@@ -964,9 +975,15 @@ async fn chain_bind_result_reuses_persisted_runtime_credential() {
         "x-chain-timestamp",
         HeaderValue::from_str(ts2.to_string().as_str()).expect("header value"),
     );
-    let payload2 =
-        chain_signature_payload("bind_result", "req-bind-2", "nonce-bind-2", ts2, &fingerprint);
-    let signature2 = chain_signature_hex("test-chain-signing-secret-at-least-32", payload2.as_str());
+    let payload2 = chain_signature_payload(
+        "bind_result",
+        "req-bind-2",
+        "nonce-bind-2",
+        ts2,
+        &fingerprint,
+    );
+    let signature2 =
+        chain_signature_hex("test-chain-signing-secret-at-least-32", payload2.as_str());
     headers2.insert(
         "x-chain-signature",
         HeaderValue::from_str(signature2.as_str()).expect("header value"),
@@ -982,16 +999,17 @@ async fn chain_bind_result_reuses_persisted_runtime_credential() {
     .into_response();
     assert_eq!(resp2.status(), StatusCode::OK);
     let body2 = parse_json(resp2).await;
-    let nonce_2 = body2["data"]["nonce"]
-        .as_str()
-        .expect("nonce")
-        .to_string();
+    let nonce_2 = body2["data"]["nonce"].as_str().expect("nonce").to_string();
+    let expires_2 = body2["data"]["expires_at_block"]
+        .as_u64()
+        .expect("expires_at_block");
     let signature_2 = body2["data"]["signature"]
         .as_str()
         .expect("signature")
         .to_string();
 
     assert_eq!(nonce_1, nonce_2);
+    assert_eq!(expires_1, expires_2);
     assert_eq!(signature_1, signature_2);
 
     let store = state.store.read().expect("store read lock poisoned");
@@ -999,11 +1017,24 @@ async fn chain_bind_result_reuses_persisted_runtime_credential() {
         .bindings_by_pubkey
         .get(&account_pubkey)
         .expect("binding exists");
-    assert_eq!(binding.runtime_bind_nonce.as_deref(), Some(nonce_1.as_str()));
+    assert_eq!(
+        binding.runtime_bind_nonce.as_deref(),
+        Some(nonce_1.as_str())
+    );
+    assert_eq!(
+        binding.runtime_bind_expires_at_block,
+        Some(expires_1 as u32)
+    );
     assert_eq!(
         binding.runtime_bind_signature.as_deref(),
         Some(signature_1.as_str())
     );
+
+    if let Some(v) = prev_block_override {
+        std::env::set_var("SFID_CHAIN_CURRENT_BLOCK_OVERRIDE", v);
+    } else {
+        std::env::remove_var("SFID_CHAIN_CURRENT_BLOCK_OVERRIDE");
+    }
 }
 
 #[test]

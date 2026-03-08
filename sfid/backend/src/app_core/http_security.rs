@@ -6,6 +6,7 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Duration, Utc};
+use redis::Script;
 use reqwest::Url;
 use serde::Serialize;
 use std::{
@@ -14,11 +15,66 @@ use std::{
 };
 use tower_http::cors::{Any, CorsLayer};
 use tracing::warn;
+use uuid::Uuid;
 
 use crate::key_admins::chain_proof::build_public_key_output;
 use crate::*;
 
 static TRUSTED_PROXY_IPS: OnceLock<Vec<IpAddr>> = OnceLock::new();
+static RATE_LIMIT_SCRIPT: OnceLock<Script> = OnceLock::new();
+const RATE_LIMIT_WINDOW_MS: i64 = 60_000;
+
+fn rate_limit_script() -> &'static Script {
+    RATE_LIMIT_SCRIPT.get_or_init(|| {
+        Script::new(
+            r#"
+local now_ms = tonumber(ARGV[1])
+local window_ms = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local member = ARGV[4]
+
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now_ms - window_ms)
+local count = redis.call('ZCARD', KEYS[1])
+if count >= limit then
+  redis.call('PEXPIRE', KEYS[1], window_ms)
+  return 0
+end
+redis.call('ZADD', KEYS[1], now_ms, member)
+redis.call('PEXPIRE', KEYS[1], window_ms)
+return 1
+"#,
+        )
+    })
+}
+
+async fn consume_rate_limit_slot_redis(
+    state: &AppState,
+    actor: &str,
+    limit_per_min: usize,
+    now_ms: i64,
+) -> Result<bool, String> {
+    if limit_per_min == 0 {
+        return Ok(false);
+    }
+    let actor_hash = blake3::hash(actor.as_bytes()).to_hex().to_string();
+    let key = format!("sfid:rate_limit:{actor_hash}");
+    let member = format!("{now_ms}:{}", Uuid::new_v4().simple());
+    let mut conn = state
+        .rate_limit_redis
+        .get_multiplexed_tokio_connection()
+        .await
+        .map_err(|e| format!("redis connection failed: {e}"))?;
+    let allowed: i32 = rate_limit_script()
+        .key(key)
+        .arg(now_ms)
+        .arg(RATE_LIMIT_WINDOW_MS)
+        .arg(limit_per_min as i64)
+        .arg(member)
+        .invoke_async(&mut conn)
+        .await
+        .map_err(|e| format!("redis rate-limit eval failed: {e}"))?;
+    Ok(allowed == 1)
+}
 
 pub(crate) async fn global_rate_limit_middleware(
     State(state): State<AppState>,
@@ -33,11 +89,12 @@ pub(crate) async fn global_rate_limit_middleware(
     let actor = actor_ip_from_request(&request)
         .filter(|v| !v.trim().is_empty())
         .unwrap_or_else(|| "unknown".to_string());
-
-    {
-        let mut limits = match state.request_limits.lock() {
+    let now_ms = now.timestamp_millis();
+    let allowed =
+        match consume_rate_limit_slot_redis(&state, actor.as_str(), limit_per_min, now_ms).await {
             Ok(v) => v,
-            Err(_) => {
+            Err(err) => {
+                warn!(error = %err, actor = %actor, "rate limiter unavailable");
                 return api_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     1004,
@@ -45,15 +102,8 @@ pub(crate) async fn global_rate_limit_middleware(
                 );
             }
         };
-        let bucket = limits.entry(actor.clone()).or_default();
-        bucket.retain(|seen_at| *seen_at > now - Duration::minutes(1));
-        if bucket.len() >= limit_per_min {
-            return api_error(StatusCode::TOO_MANY_REQUESTS, 1029, "rate limit exceeded");
-        }
-        bucket.push(now);
-        if limits.len() > 10_000 {
-            limits.retain(|_, seen| !seen.is_empty());
-        }
+    if !allowed {
+        return api_error(StatusCode::TOO_MANY_REQUESTS, 1029, "rate limit exceeded");
     }
 
     next.run(request).await

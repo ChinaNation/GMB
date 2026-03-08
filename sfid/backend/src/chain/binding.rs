@@ -8,13 +8,17 @@ use chrono::{Duration, Utc};
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::chain::runtime_align::{build_bind_credential, RuntimeBindCredential};
+use crate::chain::runtime_align::{
+    build_bind_credential, compute_bind_credential_expiry_block, current_chain_block_number,
+    RuntimeBindCredential,
+};
 use crate::*;
 
 fn has_persisted_runtime_bind_credential(
     binding: &BindingRecord,
     state: &AppState,
     active_signer_pubkey: &str,
+    current_block: u32,
 ) -> bool {
     let has_value = |v: &Option<String>| v.as_deref().map(|s| !s.is_empty()).unwrap_or(false);
     let has_expected = |v: &Option<String>, expected: &str| {
@@ -22,16 +26,21 @@ fn has_persisted_runtime_bind_credential(
             .map(|s| !s.is_empty() && s == expected)
             .unwrap_or(false)
     };
+    let has_unexpired = binding
+        .runtime_bind_expires_at_block
+        .map(|expires_at| expires_at >= current_block)
+        .unwrap_or(false);
     has_value(&binding.runtime_bind_sfid_code_hash)
         && has_value(&binding.runtime_bind_nonce)
+        && has_unexpired
         && has_value(&binding.runtime_bind_signature)
         && has_expected(&binding.runtime_bind_key_id, state.key_id.as_str())
-        && has_expected(&binding.runtime_bind_key_version, state.key_version.as_str())
-        && has_expected(&binding.runtime_bind_alg, state.key_alg.as_str())
         && has_expected(
-            &binding.runtime_bind_signer_pubkey,
-            active_signer_pubkey,
+            &binding.runtime_bind_key_version,
+            state.key_version.as_str(),
         )
+        && has_expected(&binding.runtime_bind_alg, state.key_alg.as_str())
+        && has_expected(&binding.runtime_bind_signer_pubkey, active_signer_pubkey)
 }
 
 fn apply_runtime_bind_credential(
@@ -41,6 +50,7 @@ fn apply_runtime_bind_credential(
 ) {
     binding.runtime_bind_sfid_code_hash = Some(credential.sfid_code_hash);
     binding.runtime_bind_nonce = Some(credential.nonce);
+    binding.runtime_bind_expires_at_block = Some(credential.expires_at_block);
     binding.runtime_bind_signature = Some(credential.signature);
     binding.runtime_bind_key_id = Some(credential.meta.key_id);
     binding.runtime_bind_key_version = Some(credential.meta.key_version);
@@ -58,6 +68,7 @@ fn bind_result_not_bound(account_pubkey: String) -> axum::response::Response {
             sfid_code: None,
             sfid_code_hash: None,
             nonce: None,
+            expires_at_block: None,
             signature: None,
             key_id: None,
             key_version: None,
@@ -169,6 +180,14 @@ pub(crate) async fn get_bind_result(
         return api_error(StatusCode::BAD_REQUEST, 1001, "account_pubkey is invalid");
     };
     query.account_pubkey = account_pubkey;
+    let current_block = match current_chain_block_number().await {
+        Ok(v) => v,
+        Err(err) => {
+            let detail = format!("resolve chain block failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
+        }
+    };
+    let bind_credential_expires_at = compute_bind_credential_expiry_block(current_block);
     let active_signer_pubkey = match state.public_key_hex.read() {
         Ok(v) => v.clone(),
         Err(_) => {
@@ -214,6 +233,7 @@ pub(crate) async fn get_bind_result(
                 v,
                 &state,
                 active_signer_pubkey.as_str(),
+                current_block,
             )
         })
         .unwrap_or(false)
@@ -226,6 +246,7 @@ pub(crate) async fn get_bind_result(
                 .map(|v| v.sfid_code.as_str())
                 .unwrap_or_default(),
             Uuid::new_v4().to_string(),
+            bind_credential_expires_at,
         ) {
             Ok(v) => v,
             Err(message) => {
@@ -242,12 +263,9 @@ pub(crate) async fn get_bind_result(
                 existing,
                 &state,
                 active_signer_pubkey.as_str(),
+                current_block,
             ) {
-                apply_runtime_bind_credential(
-                    existing,
-                    generated,
-                    active_signer_pubkey.as_str(),
-                );
+                apply_runtime_bind_credential(existing, generated, active_signer_pubkey.as_str());
             }
             Some(existing.clone())
         } else {
@@ -261,22 +279,53 @@ pub(crate) async fn get_bind_result(
 
     let binding = binding.expect("checked is_some above");
     let Some(sfid_code_hash) = binding.runtime_bind_sfid_code_hash else {
-        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "bind credential missing");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "bind credential missing",
+        );
     };
     let Some(nonce) = binding.runtime_bind_nonce else {
-        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "bind credential missing");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "bind credential missing",
+        );
+    };
+    let Some(expires_at_block) = binding.runtime_bind_expires_at_block else {
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "bind credential missing",
+        );
     };
     let Some(signature) = binding.runtime_bind_signature else {
-        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "bind credential missing");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "bind credential missing",
+        );
     };
     let Some(key_id) = binding.runtime_bind_key_id else {
-        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "bind credential missing");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "bind credential missing",
+        );
     };
     let Some(key_version) = binding.runtime_bind_key_version else {
-        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "bind credential missing");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "bind credential missing",
+        );
     };
     let Some(alg) = binding.runtime_bind_alg else {
-        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "bind credential missing");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "bind credential missing",
+        );
     };
 
     Json(ApiResponse {
@@ -288,6 +337,7 @@ pub(crate) async fn get_bind_result(
             sfid_code: Some(binding.sfid_code),
             sfid_code_hash: Some(sfid_code_hash),
             nonce: Some(nonce),
+            expires_at_block: Some(expires_at_block),
             signature: Some(signature.clone()),
             key_id: Some(key_id),
             key_version: Some(key_version),
