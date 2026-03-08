@@ -322,7 +322,18 @@ select option:checked {
   color: #991b1b;
 }
 
-.mining-income-grid {
+.warning {
+  margin-top: 16px;
+  padding: 10px;
+  white-space: pre-wrap;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  color: #92400e;
+}
+
+.mining-income-grid,
+.network-overview-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(260px, 1fr));
   gap: 10px;
@@ -423,14 +434,14 @@ select option:checked {
   font-size: 14px;
 }
 
-.whitepaper-section {
+.other-tab-section {
   margin-top: 0;
   padding-top: 0;
   border-top: none;
   min-height: calc(100vh - 180px);
 }
 
-.whitepaper-iframe {
+.other-tab-iframe {
   width: 100%;
   min-height: calc(100vh - 180px);
   border: 0;

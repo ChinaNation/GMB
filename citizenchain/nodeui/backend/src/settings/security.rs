@@ -15,6 +15,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Manager};
+use zeroize::{Zeroize, Zeroizing};
 
 const KEYCHAIN_SERVICE: &str = "org.chinanation.citizenchain.desktop";
 const SECRET_FORMAT_VERSION: u8 = 1;
@@ -408,15 +409,18 @@ fn derive_key_from_password(password: &str, salt: &[u8; 16]) -> [u8; 32] {
 
 pub(crate) fn encrypt_secret_value(secret: &str, password: &str) -> Result<String, String> {
     let unlock = ensure_unlock_password(password)?;
+    let unlock_guard = Zeroizing::new(unlock.to_string());
+    let secret_guard = Zeroizing::new(secret.to_string());
     let mut salt = [0u8; 16];
     let mut nonce = [0u8; 12];
     rand::thread_rng().fill_bytes(&mut salt);
     rand::thread_rng().fill_bytes(&mut nonce);
-    let key = derive_key_from_password(unlock, &salt);
+    let mut key = derive_key_from_password(&unlock_guard, &salt);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("创建加密器失败: {e}"))?;
     let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce), secret.as_bytes())
+        .encrypt(Nonce::from_slice(&nonce), secret_guard.as_bytes())
         .map_err(|_| "私钥加密失败".to_string())?;
+    key.zeroize();
     let envelope = EncryptedSecretEnvelope {
         version: SECRET_FORMAT_VERSION,
         salt_b64: BASE64.encode(salt),
@@ -428,6 +432,7 @@ pub(crate) fn encrypt_secret_value(secret: &str, password: &str) -> Result<Strin
 
 pub(crate) fn decrypt_secret_value(enveloped: &str, password: &str) -> Result<String, String> {
     let unlock = ensure_unlock_password(password)?;
+    let unlock_guard = Zeroizing::new(unlock.to_string());
     let envelope: EncryptedSecretEnvelope =
         serde_json::from_str(enveloped).map_err(|e| format!("解析密文数据失败: {e}"))?;
     if envelope.version != SECRET_FORMAT_VERSION {
@@ -449,10 +454,13 @@ pub(crate) fn decrypt_secret_value(enveloped: &str, password: &str) -> Result<St
 
     let mut salt_arr = [0u8; 16];
     salt_arr.copy_from_slice(&salt);
-    let key = derive_key_from_password(unlock, &salt_arr);
+    let mut key = derive_key_from_password(&unlock_guard, &salt_arr);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("创建解密器失败: {e}"))?;
-    let plain = cipher
+    let mut plain = cipher
         .decrypt(Nonce::from_slice(&nonce), cipher_bytes.as_ref())
         .map_err(|_| "解锁密码错误或密文已损坏".to_string())?;
-    String::from_utf8(plain).map_err(|_| "私钥内容格式无效".to_string())
+    key.zeroize();
+    let decoded = String::from_utf8(plain.clone()).map_err(|_| "私钥内容格式无效".to_string());
+    plain.zeroize();
+    decoded
 }

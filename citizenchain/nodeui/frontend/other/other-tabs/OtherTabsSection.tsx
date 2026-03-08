@@ -50,16 +50,18 @@ export function OtherTabsSection({ activeKey }: Props) {
   }
 
   return (
-    <section className="section whitepaper-section" key={tab.key}>
+    <section className="section other-tab-section" key={tab.key}>
       <h2>{tab.title}</h2>
-      {tab.contentType === 'iframe' && tab.url ? (
+      {tab.contentType === 'iframe' ? (
         <iframe
-          className="whitepaper-iframe"
+          className="other-tab-iframe"
           src={tab.url}
           title={tab.title}
+          sandbox="allow-scripts allow-same-origin"
+          referrerPolicy="no-referrer"
         />
       ) : (
-        <p>{tab.text ?? '暂无内容'}</p>
+        <p>{tab.text}</p>
       )}
     </section>
   );

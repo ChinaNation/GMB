@@ -15,6 +15,7 @@
 
 - 管理首页节点生命周期（启动、停止、状态查询）。
 - 管理节点身份信息（节点名称、PeerId、角色）。
+- 节点名称修改与其他敏感设置统一，要求设备开机密码校验。
 - 提供链高度查询。
 - 负责节点启动链路中的安全与一致性控制：
   - 节点二进制路径白名单与 SHA-256 完整性校验。
@@ -28,7 +29,7 @@
   - `RuntimeState.node_key_file`: 当前会话写入的临时 node-key 文件路径。
 - 对外状态：
   - `NodeStatus { running, state, pid }`
-  - `ChainStatus { block_height }`
+  - `ChainStatus { block_height, finalized_height, syncing }`
   - `NodeIdentity { node_name, peer_id, role }`
 
 ## 4. 启动流程（`start_node`）
@@ -43,7 +44,7 @@
 6. 终止“可信旧节点进程”（见第 6 节）。
 7. 启动新节点：
    - 固定 `--rpc-port 9944`
-   - 注入 `POWR_MINER_SURI`
+   - 启动前将 `powr` 密钥同步到本地 keystore（不再注入明文 `POWR_MINER_SURI`）
    - 若配置 bootnode key，通过 `--node-key-file` 传入临时文件
    - 若存在 GRANDPA 私钥，追加 `--validator`
 8. 启动后补齐奖励地址链上绑定，并校验 GRANDPA 生效。
@@ -51,7 +52,9 @@
 
 ## 5. 停止流程（`stop_node`）
 
-1. 终止托管子进程并清理当前会话临时 node-key 文件。
+1. 终止托管子进程并清理当前会话临时 node-key 文件：
+   - Unix 下先向进程组发送 `SIGTERM`，最多等待 2 秒（20 * 100ms）用于优雅退出。
+   - 若超时仍未退出，再发送 `SIGKILL` 强制回收。
 2. 终止“可信旧节点进程”（见第 6 节）。
 3. 重新获取状态：
    - 若仍为运行中，直接返回错误：`停止失败：节点仍在运行（pid=...）`。
@@ -62,7 +65,10 @@
 ### 6.1 托管进程
 
 - 优先处理 `RuntimeState.local_node`（本会话直接拉起的进程）。
-- Unix 下先发进程组 `SIGTERM`，必要时再 `kill`。
+- 终止策略与“可信旧进程”保持一致：
+  - Unix 下先发进程组 `SIGTERM`。
+  - 轮询 `try_wait` 最多 2 秒，给节点优雅收敛窗口。
+  - 超时后再发进程组 `SIGKILL`，并调用 `child.kill()` 兜底。
 
 ### 6.2 可信旧进程
 
@@ -97,6 +103,7 @@
   - connect/read/write timeout
   - 响应最大读取上限（4MB）
   - HTTP 状态行检查（必须 200）
+  - 支持 `Transfer-Encoding: chunked` 解码
   - JSON-RPC `error` 字段显式报错
 
 ## 9. 安全控制点

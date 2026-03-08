@@ -25,8 +25,11 @@ pbkdf2 = "0.12"
 sha2 = "0.10"
 rand = "0.8"
 base64 = "0.22"
+primitives = { path = "../../../primitives" }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 subxt = { version = "0.43.1", default-features = false, features = ["jsonrpsee", "native"] }
 subxt-signer = { version = "0.43.0", default-features = false, features = ["sr25519", "subxt"] }
+zeroize = "1"
 
 [features]
 default = ["custom-protocol"]

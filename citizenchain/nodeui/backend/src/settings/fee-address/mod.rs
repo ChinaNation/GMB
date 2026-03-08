@@ -16,10 +16,12 @@ use subxt::{
 use subxt_signer::{sr25519::Keypair as Sr25519Keypair, SecretUri};
 use tauri::AppHandle;
 use twox_hash::XxHash64;
+use zeroize::Zeroizing;
 
 const SS58_PREFIX: u16 = 2027;
 const POWR_KEY_TYPE_HEX_PREFIX: &str = "706f7772";
 const DEFAULT_CHAIN_WS_URL: &str = "ws://127.0.0.1:9944";
+const DEFAULT_CHAIN_ID: &str = "citizenchain";
 const LEGACY_MINER_SURI_FILENAME: &str = "miner-suri.txt";
 const KEYCHAIN_ACCOUNT_MINER_SURI: &str = "powr-miner-suri";
 
@@ -127,6 +129,96 @@ fn collect_powr_keystore_files(app: &AppHandle) -> Result<Vec<PathBuf>, String> 
     Ok(files)
 }
 
+fn miner_account_hex_from_keystore_filename(name: &str) -> Option<String> {
+    let hex = name.strip_prefix(POWR_KEY_TYPE_HEX_PREFIX)?;
+    if hex.len() != 64 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(format!("0x{}", hex.to_ascii_lowercase()))
+}
+
+pub(crate) fn local_powr_miner_account_hex(app: &AppHandle) -> Result<Option<String>, String> {
+    for path in collect_powr_keystore_files(app)? {
+        let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
+            continue;
+        };
+        if let Some(account_hex) = miner_account_hex_from_keystore_filename(name) {
+            return Ok(Some(account_hex));
+        }
+    }
+    Ok(None)
+}
+
+fn keystore_dirs_for_powr(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
+    let chains_root = node_data_dir(app)?.join("chains");
+    fs::create_dir_all(&chains_root).map_err(|e| format!("create chains dir failed: {e}"))?;
+
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    if chains_root.exists() {
+        let entries =
+            fs::read_dir(&chains_root).map_err(|e| format!("read chains dir failed: {e}"))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("read chain dir entry failed: {e}"))?;
+            if !entry.path().is_dir() {
+                continue;
+            }
+            dirs.push(entry.path().join("keystore"));
+        }
+    }
+
+    dirs.push(chains_root.join(DEFAULT_CHAIN_ID).join("keystore"));
+    dirs.sort();
+    dirs.dedup();
+    for dir in &dirs {
+        fs::create_dir_all(dir)
+            .map_err(|e| format!("create powr keystore dir failed ({}): {e}", dir.display()))?;
+    }
+    Ok(dirs)
+}
+
+fn powr_keystore_filename(pubkey_hex: &str) -> String {
+    format!("{POWR_KEY_TYPE_HEX_PREFIX}{pubkey_hex}")
+}
+
+fn powr_pubkey_hex_from_suri(suri: &str) -> Result<String, String> {
+    let secret_uri = SecretUri::from_str(suri).map_err(|e| format!("矿工签名密钥解析失败: {e}"))?;
+    let signer =
+        Sr25519Keypair::from_uri(&secret_uri).map_err(|e| format!("矿工签名密钥加载失败: {e}"))?;
+    Ok(hex::encode(signer.public_key().0))
+}
+
+fn write_powr_key_to_keystore(app: &AppHandle, suri: &str, pubkey_hex: &str) -> Result<(), String> {
+    let normalized = suri.trim();
+    let encoded = serde_json::to_string(normalized)
+        .map_err(|e| format!("encode powr keystore secret failed: {e}"))?;
+    let content = format!("{encoded}\n");
+    let filename = powr_keystore_filename(pubkey_hex);
+    for dir in keystore_dirs_for_powr(app)? {
+        let path = dir.join(&filename);
+        security::write_secret_text_atomic(&path, &content)
+            .map_err(|e| format!("write powr keystore file failed ({}): {e}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn remove_other_powr_keys(app: &AppHandle, keep_filename: &str) -> Result<(), String> {
+    for path in collect_powr_keystore_files(app)? {
+        let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
+            continue;
+        };
+        if name == keep_filename {
+            continue;
+        }
+        fs::remove_file(&path).map_err(|e| {
+            format!(
+                "remove stale powr keystore file failed ({}): {e}",
+                path.display()
+            )
+        })?;
+    }
+    Ok(())
+}
+
 fn load_powr_suri_from_keystore(app: &AppHandle) -> Result<Option<String>, String> {
     let files = collect_powr_keystore_files(app)?;
     for path in files {
@@ -144,7 +236,7 @@ fn load_miner_suri_secure(unlock_password: &str) -> Result<Option<String>, Strin
     let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_MINER_SURI)? else {
         return Ok(None);
     };
-    let suri = security::decrypt_secret_value(&enveloped, unlock_password)?;
+    let suri = Zeroizing::new(security::decrypt_secret_value(&enveloped, unlock_password)?);
     let normalized = suri.trim().to_string();
     if normalized.is_empty() {
         return Ok(None);
@@ -315,6 +407,18 @@ pub(crate) fn ensure_miner_suri(app: &AppHandle, unlock_password: &str) -> Resul
     Ok(suri)
 }
 
+pub(crate) fn ensure_powr_keystore_key(
+    app: &AppHandle,
+    unlock_password: &str,
+) -> Result<(), String> {
+    let suri = Zeroizing::new(ensure_miner_suri(app, unlock_password)?);
+    let pubkey_hex = powr_pubkey_hex_from_suri(&suri)?;
+    write_powr_key_to_keystore(app, &suri, &pubkey_hex)?;
+    let keep_filename = powr_keystore_filename(&pubkey_hex);
+    remove_other_powr_keys(app, &keep_filename)?;
+    Ok(())
+}
+
 async fn sync_saved_reward_wallet_inner(
     app: &AppHandle,
     unlock_password: &str,
@@ -324,7 +428,7 @@ async fn sync_saved_reward_wallet_inner(
     };
     let normalized = normalize_wallet_address(&saved_address)?;
     let target_wallet = account_id_from_address(&normalized)?;
-    let miner_suri = ensure_miner_suri(app, unlock_password)?;
+    let miner_suri = Zeroizing::new(ensure_miner_suri(app, unlock_password)?);
 
     let secret_uri =
         SecretUri::from_str(&miner_suri).map_err(|e| format!("矿工签名密钥解析失败: {e}"))?;
@@ -411,7 +515,7 @@ pub fn set_reward_wallet(
     let normalized = normalize_wallet_address(&address)?;
 
     save_reward_wallet(&app, &normalized)?;
-    let _ = ensure_miner_suri(&app, unlock)?;
+    ensure_powr_keystore_key(&app, unlock)?;
 
     if let Err(err) = sync_saved_reward_wallet_binding(&app, unlock) {
         return Err(format!("地址已保存，但链上绑定失败：{err}"));
