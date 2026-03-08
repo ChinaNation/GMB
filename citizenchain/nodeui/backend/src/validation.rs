@@ -1,29 +1,9 @@
 // 地址与 node-key 的最小校验逻辑。
+use crate::settings::address_utils::decode_ss58_prefix;
 use blake2::{Blake2b512, Digest};
 
 const SS58_PREFIX: u16 = 2027;
 const SS58_PRE: &[u8] = b"SS58PRE";
-
-fn decode_ss58_prefix(data: &[u8]) -> Result<(u16, usize), String> {
-    if data.is_empty() {
-        return Err("SS58 地址为空".to_string());
-    }
-    let first = data[0];
-    match first {
-        0..=63 => Ok((first as u16, 1)),
-        64..=127 => {
-            if data.len() < 2 {
-                return Err("SS58 地址格式无效".to_string());
-            }
-            let second = data[1];
-            let prefix = (((first & 0x3f) as u16) << 2)
-                | ((second as u16) >> 6)
-                | (((second & 0x3f) as u16) << 8);
-            Ok((prefix, 2))
-        }
-        _ => Err("SS58 地址格式无效".to_string()),
-    }
-}
 
 fn validate_ss58_address(input: &str) -> Result<(), String> {
     let data = bs58::decode(input)

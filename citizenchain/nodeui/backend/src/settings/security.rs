@@ -9,9 +9,12 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::{
+    collections::{HashMap, VecDeque},
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
+    thread,
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Manager};
@@ -19,7 +22,18 @@ use zeroize::{Zeroize, Zeroizing};
 
 const KEYCHAIN_SERVICE: &str = "org.chinanation.citizenchain.desktop";
 const SECRET_FORMAT_VERSION: u8 = 1;
-const PBKDF2_ROUNDS: u32 = 210_000;
+const PBKDF2_ROUNDS: u32 = 390_000;
+const AUTH_FAIL_WINDOW_SECS: u64 = 300;
+const AUTH_MAX_FAILURES_IN_WINDOW: usize = 5;
+const AUTH_BACKOFF_MS: u64 = 800;
+const AUTH_BACKOFF_MAX_MS: u64 = 5000;
+
+#[derive(Default)]
+struct AuthRateLimitState {
+    recent_failures: VecDeque<u64>,
+}
+
+static AUTH_RATE_LIMIT: OnceLock<Mutex<HashMap<String, AuthRateLimitState>>> = OnceLock::new();
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -61,11 +75,15 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8], secret_mode: bool) -> Result<()
         .duration_since(UNIX_EPOCH)
         .map(|v| v.as_nanos())
         .unwrap_or(0);
+    let random_suffix = rand::thread_rng().next_u64();
     let file_name = path
         .file_name()
         .and_then(|v| v.to_str())
         .unwrap_or("atomic-data");
-    let temp_path = parent.join(format!(".{file_name}.tmp-{}-{stamp}", std::process::id()));
+    let temp_path = parent.join(format!(
+        ".{file_name}.tmp-{}-{stamp}-{random_suffix}",
+        std::process::id()
+    ));
 
     let mut file = OpenOptions::new()
         .create_new(true)
@@ -91,11 +109,12 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8], secret_mode: bool) -> Result<()
     drop(file);
 
     #[cfg(target_os = "windows")]
-    if path.exists() {
-        fs::remove_file(path)
-            .map_err(|e| format!("replace target file failed ({}): {e}", path.display()))?;
+    if let Err(e) = replace_file_windows(&temp_path, path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(e);
     }
 
+    #[cfg(not(target_os = "windows"))]
     if let Err(e) = fs::rename(&temp_path, path) {
         let _ = fs::remove_file(&temp_path);
         return Err(format!(
@@ -105,6 +124,134 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8], secret_mode: bool) -> Result<()
         ));
     }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn replace_file_windows(from: &Path, to: &Path) -> Result<(), String> {
+    use std::{ffi::OsStr, iter::once, os::windows::ffi::OsStrExt};
+
+    const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
+    const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
+
+    #[link(name = "Kernel32")]
+    unsafe extern "system" {
+        fn MoveFileExW(
+            lp_existing_file_name: *const u16,
+            lp_new_file_name: *const u16,
+            dw_flags: u32,
+        ) -> i32;
+    }
+
+    fn wide_null(input: &OsStr) -> Vec<u16> {
+        input.encode_wide().chain(once(0)).collect()
+    }
+
+    let from_w = wide_null(from.as_os_str());
+    let to_w = wide_null(to.as_os_str());
+    let ok = unsafe {
+        MoveFileExW(
+            from_w.as_ptr(),
+            to_w.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if ok == 0 {
+        return Err(format!(
+            "replace target file failed ({} -> {}): {}",
+            from.display(),
+            to.display(),
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(())
+}
+
+fn validate_system_username(user: &str) -> Result<&str, String> {
+    let trimmed = user.trim();
+    if trimmed.is_empty() {
+        return Err("系统用户名为空".to_string());
+    }
+    if trimmed.chars().any(|c| c.is_control()) {
+        return Err("系统用户名包含控制字符".to_string());
+    }
+    Ok(trimmed)
+}
+
+fn now_unix_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|v| v.as_secs())
+        .unwrap_or(0)
+}
+
+fn enforce_auth_rate_limit(account: &str) -> Result<(), String> {
+    let map = AUTH_RATE_LIMIT.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = map
+        .lock()
+        .map_err(|_| "设备密码限速器状态异常".to_string())?;
+    let state = guard.entry(account.to_string()).or_default();
+    let now = now_unix_secs();
+    while state
+        .recent_failures
+        .front()
+        .is_some_and(|ts| now.saturating_sub(*ts) > AUTH_FAIL_WINDOW_SECS)
+    {
+        let _ = state.recent_failures.pop_front();
+    }
+    if state.recent_failures.len() >= AUTH_MAX_FAILURES_IN_WINDOW {
+        return Err("设备密码尝试次数过多，请稍后再试".to_string());
+    }
+    Ok(())
+}
+
+fn record_auth_attempt(account: &str, success: bool) {
+    let map = AUTH_RATE_LIMIT.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut sleep_delay_ms: u64 = 0;
+    let Ok(mut guard) = map.lock() else {
+        return;
+    };
+    let state = guard.entry(account.to_string()).or_default();
+    let now = now_unix_secs();
+    while state
+        .recent_failures
+        .front()
+        .is_some_and(|ts| now.saturating_sub(*ts) > AUTH_FAIL_WINDOW_SECS)
+    {
+        let _ = state.recent_failures.pop_front();
+    }
+    if success {
+        state.recent_failures.clear();
+        return;
+    }
+    state.recent_failures.push_back(now);
+    let over = state
+        .recent_failures
+        .len()
+        .saturating_sub(AUTH_MAX_FAILURES_IN_WINDOW.saturating_sub(1));
+    if over > 0 {
+        let mut delay = AUTH_BACKOFF_MS.saturating_mul(over as u64);
+        if delay > AUTH_BACKOFF_MAX_MS {
+            delay = AUTH_BACKOFF_MAX_MS;
+        }
+        sleep_delay_ms = delay;
+    }
+    drop(guard);
+    if sleep_delay_ms > 0 {
+        thread::sleep(std::time::Duration::from_millis(sleep_delay_ms));
+    }
+}
+
+pub(crate) fn append_audit_log(app: &AppHandle, action: &str, status: &str) -> Result<(), String> {
+    let path = app_data_dir(app)?.join("security-audit.log");
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| format!("open audit log failed ({}): {e}", path.display()))?;
+    let ts = now_unix_secs();
+    let line = format!("{ts}\taction={action}\tstatus={status}\n");
+    file.write_all(line.as_bytes())
+        .map_err(|e| format!("write audit log failed ({}): {e}", path.display()))
 }
 
 fn secure_store_entry(account: &str) -> Result<Entry, String> {
@@ -144,13 +291,17 @@ pub(crate) fn ensure_unlock_password(password: &str) -> Result<&str, String> {
 #[cfg(target_os = "macos")]
 pub(crate) fn verify_device_login_password(password: &str) -> Result<(), String> {
     let user = std::env::var("USER").map_err(|e| format!("读取系统用户失败: {e}"))?;
+    let user = validate_system_username(&user)?;
+    enforce_auth_rate_limit(user)?;
     let output = std::process::Command::new("dscl")
-        .args(["/Search", "-authonly", &user, password])
+        .args(["/Search", "-authonly", user, password])
         .output()
         .map_err(|e| format!("校验设备密码失败: {e}"))?;
     if output.status.success() {
+        record_auth_attempt(user, true);
         return Ok(());
     }
+    record_auth_attempt(user, false);
     Err("设备开机密码错误".to_string())
 }
 
@@ -221,6 +372,10 @@ mod linux_password_auth {
         for idx in 0..filled {
             let response = responses.add(idx);
             if !(*response).resp.is_null() {
+                let len = libc::strlen((*response).resp);
+                if len > 0 {
+                    ptr::write_bytes((*response).resp as *mut u8, 0, len);
+                }
                 libc::free((*response).resp as *mut c_void);
                 (*response).resp = ptr::null_mut();
             }
@@ -275,12 +430,17 @@ mod linux_password_auth {
 
     pub(super) fn verify_with_pam(password: &str) -> Result<(), String> {
         let user = std::env::var("USER").map_err(|e| format!("读取系统用户失败: {e}"))?;
+        let user = super::validate_system_username(&user)?;
+        super::enforce_auth_rate_limit(user)?;
         let user_c = CString::new(user).map_err(|_| "系统用户名包含非法字符".to_string())?;
-        let pass_c = CString::new(password).map_err(|_| "密码包含非法字符".to_string())?;
+        let mut pass_raw = CString::new(password)
+            .map_err(|_| "密码包含非法字符".to_string())?
+            .into_bytes_with_nul();
         let mut conv = PamConv {
             conv: Some(conversation),
-            appdata_ptr: pass_c.as_ptr() as *mut c_void,
+            appdata_ptr: pass_raw.as_ptr() as *mut c_void,
         };
+        let mut success = false;
 
         for service in ["login", "system-auth", "common-auth"] {
             let service_c = CString::new(service).map_err(|_| "PAM 服务名非法".to_string())?;
@@ -310,11 +470,18 @@ mod linux_password_auth {
                 pam_end(handle, acct_status);
             }
             if acct_status == PAM_SUCCESS {
-                return Ok(());
+                success = true;
+                break;
             }
         }
 
-        Err("设备开机密码错误".to_string())
+        pass_raw.zeroize();
+        super::record_auth_attempt(user_c.to_string_lossy().as_ref(), success);
+        if success {
+            Ok(())
+        } else {
+            Err("设备开机密码错误".to_string())
+        }
     }
 }
 
@@ -351,6 +518,8 @@ pub(crate) fn verify_device_login_password(password: &str) -> Result<(), String>
     }
 
     let username = std::env::var("USERNAME").map_err(|e| format!("读取系统用户失败: {e}"))?;
+    let username = validate_system_username(&username)?;
+    enforce_auth_rate_limit(&username)?;
     let domain = std::env::var("USERDOMAIN").unwrap_or_else(|_| ".".to_string());
     let username_w = wide_null(&username);
     let domain_w = wide_null(&domain);
@@ -368,6 +537,7 @@ pub(crate) fn verify_device_login_password(password: &str) -> Result<(), String>
         )
     };
     if ok != 0 {
+        record_auth_attempt(&username, true);
         unsafe {
             let _ = CloseHandle(token);
         }
@@ -387,12 +557,14 @@ pub(crate) fn verify_device_login_password(password: &str) -> Result<(), String>
         )
     };
     if ok_fallback != 0 {
+        record_auth_attempt(&username, true);
         unsafe {
             let _ = CloseHandle(token_fallback);
         }
         return Ok(());
     }
 
+    record_auth_attempt(&username, false);
     Err("设备开机密码错误".to_string())
 }
 
@@ -460,7 +632,11 @@ pub(crate) fn decrypt_secret_value(enveloped: &str, password: &str) -> Result<St
         .decrypt(Nonce::from_slice(&nonce), cipher_bytes.as_ref())
         .map_err(|_| "解锁密码错误或密文已损坏".to_string())?;
     key.zeroize();
-    let decoded = String::from_utf8(plain.clone()).map_err(|_| "私钥内容格式无效".to_string());
+    let decoded = String::from_utf8(std::mem::take(&mut plain)).map_err(|e| {
+        let mut bytes = e.into_bytes();
+        bytes.zeroize();
+        "私钥内容格式无效".to_string()
+    });
     plain.zeroize();
     decoded
 }

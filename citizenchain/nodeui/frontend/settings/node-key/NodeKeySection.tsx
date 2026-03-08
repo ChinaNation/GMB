@@ -23,7 +23,8 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [saving, setSaving] = useState(false);
   const [savingGrandpa, setSavingGrandpa] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [bootnodeError, setBootnodeError] = useState<string | null>(null);
+  const [grandpaError, setGrandpaError] = useState<string | null>(null);
 
   useEffect(() => {
     setInput(nodeKey.nodeKey ?? '');
@@ -66,10 +67,11 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
           disabled={disabled || saving}
           onClick={() => {
             if (!input.trim()) {
-              setError('请输入区块链引导节点私钥');
+              setBootnodeError('请输入区块链引导节点私钥');
               return;
             }
-            setError(null);
+            setBootnodeError(null);
+            setGrandpaError(null);
             setPendingAction('bootnode');
             setUnlockPassword('');
             setShowPasswordModal(true);
@@ -96,10 +98,11 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
           disabled={disabled || savingGrandpa}
           onClick={() => {
             if (!grandpaInput.trim()) {
-              setError('请输入确定性投票节点私钥');
+              setGrandpaError('请输入确定性投票节点私钥');
               return;
             }
-            setError(null);
+            setGrandpaError(null);
+            setBootnodeError(null);
             setPendingAction('grandpa');
             setUnlockPassword('');
             setShowPasswordModal(true);
@@ -108,7 +111,8 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
           {savingGrandpa ? '上传中...' : '上传私钥'}
         </button>
       </div>
-      {error ? <p className="section-inline-error">{error}</p> : null}
+      {bootnodeError ? <p className="section-inline-error">{bootnodeError}</p> : null}
+      {grandpaError ? <p className="section-inline-error">{grandpaError}</p> : null}
 
       {showPasswordModal ? (
         <div
@@ -136,7 +140,11 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
                 onClick={async () => {
                   const password = unlockPassword.trim();
                   if (!password) {
-                    setError('请输入设备开机密码');
+                    if (pendingAction === 'grandpa') {
+                      setGrandpaError('请输入设备开机密码');
+                    } else {
+                      setBootnodeError('请输入设备开机密码');
+                    }
                     return;
                   }
 
@@ -154,9 +162,9 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
                       setShowPasswordModal(false);
                       setPendingAction(null);
                       setUnlockPassword('');
-                      setError(null);
+                      setBootnodeError(null);
                     } catch (e) {
-                      setError(e instanceof Error ? e.message : String(e));
+                      setBootnodeError(e instanceof Error ? e.message : String(e));
                     } finally {
                       setSaving(false);
                     }
@@ -172,16 +180,16 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
                       setShowPasswordModal(false);
                       setPendingAction(null);
                       setUnlockPassword('');
-                      setError(null);
+                      setGrandpaError(null);
                     } catch (e) {
-                      setError(e instanceof Error ? e.message : String(e));
+                      setGrandpaError(e instanceof Error ? e.message : String(e));
                     } finally {
                       setSavingGrandpa(false);
                     }
                     return;
                   }
 
-                  setError('未选择上传类型，请重新点击上传按钮');
+                  setBootnodeError('未选择上传类型，请重新点击上传按钮');
                 }}
                 disabled={saving || savingGrandpa || disabled}
               >
