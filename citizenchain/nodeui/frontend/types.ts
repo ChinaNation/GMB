@@ -30,6 +30,8 @@ export type BootnodeOption = {
 // 链高度与同步状态
 export type ChainStatus = {
   blockHeight: number | null;
+  finalizedHeight: number | null;
+  syncing: boolean | null;
 };
 
 // 节点身份信息
@@ -79,13 +81,21 @@ export type NetworkOverview = {
   warning: string | null;
 };
 
-export type OtherTabItem = {
+type OtherIframeTabItem = {
   key: string;
   title: string;
-  contentType: string;
-  url: string | null;
-  text: string | null;
+  contentType: 'iframe';
+  url: string;
 };
+
+type OtherTextTabItem = {
+  key: string;
+  title: string;
+  contentType: 'text';
+  text: string;
+};
+
+export type OtherTabItem = OtherIframeTabItem | OtherTextTabItem;
 
 export type OtherTabsPayload = {
   tabs: OtherTabItem[];

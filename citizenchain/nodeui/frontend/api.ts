@@ -34,7 +34,8 @@ export const api = {
 
   getChainStatus: () => invoke<ChainStatus>('get_chain_status'),
   getNodeIdentity: () => invoke<NodeIdentity>('get_node_identity'),
-  setNodeName: (nodeName: string) => invoke<NodeIdentity>('set_node_name', { nodeName }),
+  setNodeName: (nodeName: string, unlockPassword: string) =>
+    invoke<NodeIdentity>('set_node_name', { nodeName, unlockPassword }),
   getMiningDashboard: () => invoke<MiningDashboard>('get_mining_dashboard'),
   getNetworkOverview: () => invoke<NetworkOverview>('get_network_overview'),
   getOtherTabsContent: () => invoke<OtherTabsPayload>('get_other_tabs_content'),

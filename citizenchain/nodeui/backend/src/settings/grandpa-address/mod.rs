@@ -11,6 +11,7 @@ use std::{
     time::Duration,
 };
 use tauri::AppHandle;
+use zeroize::Zeroizing;
 
 const KEYCHAIN_ACCOUNT_GRANDPA: &str = "grandpa-key";
 const GRANDPA_KEY_TYPE_HEX_PREFIX: &str = "6772616e";
@@ -313,13 +314,13 @@ fn load_saved_grandpa_private_hex(unlock_password: &str) -> Result<Option<String
     let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_GRANDPA)? else {
         return Ok(None);
     };
-    let key = security::decrypt_secret_value(&enveloped, unlock_password)?;
-    Ok(Some(key))
+    let key = Zeroizing::new(security::decrypt_secret_value(&enveloped, unlock_password)?);
+    Ok(Some(key.to_string()))
 }
 
 pub(crate) fn verify_grandpa_secret_unlock(unlock_password: &str) -> Result<(), String> {
     if let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_GRANDPA)? {
-        let _ = security::decrypt_secret_value(&enveloped, unlock_password)?;
+        let _key = Zeroizing::new(security::decrypt_secret_value(&enveloped, unlock_password)?);
     }
     Ok(())
 }
@@ -391,6 +392,7 @@ pub fn set_grandpa_key(
     let institution_name = institution_name_by_grandpa_pubkey(&pubkey)?
         .ok_or_else(|| format!("私钥与任何机构 GRANDPA 公钥不匹配（推导公钥: 0x{pubkey}）"))?;
 
+    let normalized = Zeroizing::new(normalized);
     let encrypted = security::encrypt_secret_value(&normalized, unlock)?;
     security::secure_store_set(KEYCHAIN_ACCOUNT_GRANDPA, &encrypted)?;
     save_grandpa_meta(&app, Some(institution_name.clone()))?;

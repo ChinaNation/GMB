@@ -145,7 +145,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
                     try {
                       const next = await api.setBootnodeKey(input.trim(), password);
                       if (next.institutionName) {
-                        await api.setNodeName(next.institutionName);
+                        await api.setNodeName(next.institutionName, password);
                       }
                       onUpdated(next);
                       onApplied();

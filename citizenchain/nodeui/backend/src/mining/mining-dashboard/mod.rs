@@ -1,12 +1,15 @@
-use crate::{home::home_node, settings::security};
-use serde::Serialize;
+use crate::{
+    home::home_node,
+    rpc,
+    settings::{fee_address, security},
+};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::hash::Hasher;
 use std::{
+    cmp,
     collections::{HashMap, VecDeque},
     fs,
-    io::{Read, Write},
-    net::TcpStream,
     path::PathBuf,
     process::Command,
     sync::{Mutex, OnceLock},
@@ -14,13 +17,18 @@ use std::{
 };
 use tauri::AppHandle;
 
-const RPC_ADDR: &str = "127.0.0.1:9944";
 const EXPECTED_SS58_PREFIX: u64 = 2027;
 const RECENT_RECORD_LIMIT: usize = 20;
+const MAX_BLOCKS_PER_REFRESH: u64 = 100;
 const DAY_MS: u64 = 86_400_000;
-const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 const RESOURCE_CACHE_TTL_MS: u64 = 5_000;
+const NODE_DATA_SIZE_CACHE_TTL_MS: u64 = 60_000;
 const INCOME_DAY_KEEP: u64 = 400;
+const MINING_CACHE_VERSION: u32 = 1;
+const MINING_CACHE_FILENAME: &str = "mining-dashboard-cache.json";
+const CACHE_PERSIST_MIN_INTERVAL_MS: u64 = 60_000;
+const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,7 +67,7 @@ pub struct MiningDashboard {
     pub warning: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct CachedBlockRecord {
     block_height: u64,
     timestamp_ms: Option<u64>,
@@ -68,9 +76,12 @@ struct CachedBlockRecord {
     author: String,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
 struct MiningComputationCache {
+    cache_version: u32,
     chain_genesis_hash: Option<String>,
+    tracked_miner_account: Option<String>,
     last_processed_height: u64,
     last_processed_hash: Option<String>,
     total_fee_fen: u128,
@@ -79,16 +90,43 @@ struct MiningComputationCache {
     recent_records: VecDeque<CachedBlockRecord>,
 }
 
+impl Default for MiningComputationCache {
+    fn default() -> Self {
+        Self {
+            cache_version: MINING_CACHE_VERSION,
+            chain_genesis_hash: None,
+            tracked_miner_account: None,
+            last_processed_height: 0,
+            last_processed_hash: None,
+            total_fee_fen: 0,
+            total_reward_fen: 0,
+            income_by_utc_day: HashMap::new(),
+            recent_records: VecDeque::new(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct ResourceUsageSample {
     sampled_at_ms: u64,
     usage: ResourceUsage,
 }
 
+#[derive(Clone, Debug)]
+struct NodeDataSizeSample {
+    sampled_at_ms: u64,
+    data_dir: String,
+    size_mb: Option<u64>,
+}
+
 #[derive(Clone, Debug, Default)]
 struct RefreshStats {
     fee_query_failures: u64,
     timestamp_query_failures: u64,
+    processed_blocks: u64,
+    pending_blocks: u64,
+    local_miner_missing: bool,
+    persist_failed: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -105,6 +143,13 @@ struct ProcessedBlock {
 
 static MINING_CACHE: OnceLock<Mutex<MiningComputationCache>> = OnceLock::new();
 static RESOURCE_USAGE_CACHE: OnceLock<Mutex<Option<ResourceUsageSample>>> = OnceLock::new();
+static MINING_REFRESHING: OnceLock<Mutex<bool>> = OnceLock::new();
+static MINING_CACHE_LOADED: OnceLock<Mutex<bool>> = OnceLock::new();
+static EXPECTED_RPC_NODE_VERIFIED: OnceLock<()> = OnceLock::new();
+static CHAIN_GENESIS_HASH_CACHE: OnceLock<String> = OnceLock::new();
+static TIMESTAMP_NOW_STORAGE_KEY_CACHE: OnceLock<String> = OnceLock::new();
+static LAST_CACHE_PERSIST_AT_MS: OnceLock<Mutex<u64>> = OnceLock::new();
+static NODE_DATA_SIZE_CACHE: OnceLock<Mutex<Option<NodeDataSizeSample>>> = OnceLock::new();
 
 fn mining_cache() -> &'static Mutex<MiningComputationCache> {
     MINING_CACHE.get_or_init(|| Mutex::new(MiningComputationCache::default()))
@@ -112,6 +157,105 @@ fn mining_cache() -> &'static Mutex<MiningComputationCache> {
 
 fn resource_usage_cache() -> &'static Mutex<Option<ResourceUsageSample>> {
     RESOURCE_USAGE_CACHE.get_or_init(|| Mutex::new(None))
+}
+
+fn node_data_size_cache() -> &'static Mutex<Option<NodeDataSizeSample>> {
+    NODE_DATA_SIZE_CACHE.get_or_init(|| Mutex::new(None))
+}
+
+fn mining_refreshing_flag() -> &'static Mutex<bool> {
+    MINING_REFRESHING.get_or_init(|| Mutex::new(false))
+}
+
+fn mining_cache_loaded_flag() -> &'static Mutex<bool> {
+    MINING_CACHE_LOADED.get_or_init(|| Mutex::new(false))
+}
+
+fn last_cache_persist_at_ms() -> &'static Mutex<u64> {
+    LAST_CACHE_PERSIST_AT_MS.get_or_init(|| Mutex::new(0))
+}
+
+fn mining_cache_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(security::app_data_dir(app)?.join(MINING_CACHE_FILENAME))
+}
+
+fn persist_mining_cache(app: &AppHandle, cache: &MiningComputationCache) -> Result<(), String> {
+    let payload =
+        serde_json::to_string(cache).map_err(|e| format!("encode mining cache failed: {e}"))?;
+    let path = mining_cache_path(app)?;
+    security::write_text_atomic(&path, &format!("{payload}\n"))
+        .map_err(|e| format!("write mining cache failed ({}): {e}", path.display()))
+}
+
+fn commit_working_cache(
+    app: &AppHandle,
+    working: &MiningComputationCache,
+    cache_changed: bool,
+    force_persist: bool,
+    pending_blocks: u64,
+) -> bool {
+    if !cache_changed {
+        return false;
+    }
+    {
+        let mut cache = mining_cache().lock().unwrap_or_else(|e| e.into_inner());
+        *cache = working.clone();
+    }
+
+    let now_ms = unix_now_ms().unwrap_or(0);
+    let should_persist = {
+        let mut last = last_cache_persist_at_ms()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let due = force_persist
+            || pending_blocks == 0
+            || now_ms.saturating_sub(*last) >= CACHE_PERSIST_MIN_INTERVAL_MS;
+        if due {
+            *last = now_ms;
+        }
+        due
+    };
+
+    if should_persist {
+        return persist_mining_cache(app, working).is_err();
+    }
+    false
+}
+
+fn maybe_load_mining_cache(app: &AppHandle) -> Result<Option<MiningComputationCache>, String> {
+    let path = mining_cache_path(app)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(&path)
+        .map_err(|e| format!("read mining cache failed ({}): {e}", path.display()))?;
+    let cache: MiningComputationCache = serde_json::from_str(&raw)
+        .map_err(|e| format!("parse mining cache failed ({}): {e}", path.display()))?;
+    if cache.cache_version != MINING_CACHE_VERSION {
+        return Err(format!(
+            "mining cache version mismatch: expected={}, got={}",
+            MINING_CACHE_VERSION, cache.cache_version
+        ));
+    }
+    Ok(Some(cache))
+}
+
+fn ensure_mining_cache_loaded(app: &AppHandle) {
+    let mut loaded = mining_cache_loaded_flag()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if *loaded {
+        return;
+    }
+    match maybe_load_mining_cache(app) {
+        Ok(Some(cache)) => {
+            let mut guard = mining_cache().lock().unwrap_or_else(|e| e.into_inner());
+            *guard = cache;
+        }
+        Ok(None) => {}
+        Err(err) => eprintln!("load mining cache skipped: {err}"),
+    }
+    *loaded = true;
 }
 
 fn node_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -133,62 +277,10 @@ fn utc_day(ms: u64) -> u64 {
 }
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": method,
-        "params": params,
-    })
-    .to_string();
-
-    let req = format!(
-        "POST / HTTP/1.1\r\nHost: {RPC_ADDR}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        payload.len(),
-        payload
-    );
-
-    let addr = RPC_ADDR
-        .parse()
-        .map_err(|e| format!("parse RPC socket address failed: {e}"))?;
-    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(600))
-        .map_err(|e| format!("RPC 连接失败: {e}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(3)))
-        .map_err(|e| format!("set RPC read timeout failed: {e}"))?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(3)))
-        .map_err(|e| format!("set RPC write timeout failed: {e}"))?;
-
-    stream
-        .write_all(req.as_bytes())
-        .map_err(|e| format!("RPC 写入失败: {e}"))?;
-
-    let mut response = String::new();
-    stream
-        .take(MAX_RPC_RESPONSE_BYTES)
-        .read_to_string(&mut response)
-        .map_err(|e| format!("RPC 读取失败: {e}"))?;
-
-    let Some((header, body)) = response.split_once("\r\n\r\n") else {
-        return Err("RPC 响应格式错误：缺少 header/body 分隔符".to_string());
-    };
-    let status_line = header
-        .lines()
-        .next()
-        .ok_or_else(|| "RPC 响应格式错误：缺少状态行".to_string())?;
-    if !status_line.contains(" 200 ") {
-        return Err(format!("RPC HTTP 状态异常: {status_line}"));
-    }
-
-    let json: Value = serde_json::from_str(body).map_err(|e| format!("RPC JSON 解析失败: {e}"))?;
-    if let Some(err) = json.get("error") {
-        return Err(format!("RPC 返回错误: {err}"));
-    }
-
-    Ok(json.get("result").cloned().unwrap_or(Value::Null))
+    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
 }
 
-fn ensure_expected_rpc_node() -> Result<(), String> {
+fn ensure_expected_rpc_node_uncached() -> Result<(), String> {
     let properties = rpc_post("system_properties", Value::Array(vec![]))?;
     let ss58 = properties
         .get("ss58Format")
@@ -215,7 +307,16 @@ fn ensure_expected_rpc_node() -> Result<(), String> {
     Ok(())
 }
 
-fn chain_genesis_hash() -> Result<String, String> {
+fn ensure_expected_rpc_node() -> Result<(), String> {
+    if EXPECTED_RPC_NODE_VERIFIED.get().is_some() {
+        return Ok(());
+    }
+    ensure_expected_rpc_node_uncached()?;
+    let _ = EXPECTED_RPC_NODE_VERIFIED.set(());
+    Ok(())
+}
+
+fn chain_genesis_hash_uncached() -> Result<String, String> {
     rpc_post(
         "chain_getBlockHash",
         Value::Array(vec![Value::String("0x0".to_string())]),
@@ -223,6 +324,15 @@ fn chain_genesis_hash() -> Result<String, String> {
     .as_str()
     .map(|s| s.to_string())
     .ok_or_else(|| "chain_getBlockHash(0) 返回格式无效".to_string())
+}
+
+fn chain_genesis_hash() -> Result<String, String> {
+    if let Some(hash) = CHAIN_GENESIS_HASH_CACHE.get() {
+        return Ok(hash.clone());
+    }
+    let hash = chain_genesis_hash_uncached()?;
+    let _ = CHAIN_GENESIS_HASH_CACHE.set(hash.clone());
+    Ok(hash)
 }
 
 fn best_block_height() -> Result<u64, String> {
@@ -304,10 +414,14 @@ fn twox_128(input: &[u8]) -> [u8; 16] {
 }
 
 fn timestamp_now_storage_key() -> String {
-    let mut key = Vec::with_capacity(32);
-    key.extend_from_slice(&twox_128(b"Timestamp"));
-    key.extend_from_slice(&twox_128(b"Now"));
-    format!("0x{}", hex::encode(key))
+    TIMESTAMP_NOW_STORAGE_KEY_CACHE
+        .get_or_init(|| {
+            let mut key = Vec::with_capacity(32);
+            key.extend_from_slice(&twox_128(b"Timestamp"));
+            key.extend_from_slice(&twox_128(b"Now"));
+            format!("0x{}", hex::encode(key))
+        })
+        .clone()
 }
 
 fn format_2_decimals_fen(amount_fen: u128) -> String {
@@ -317,8 +431,10 @@ fn format_2_decimals_fen(amount_fen: u128) -> String {
 }
 
 fn block_reward_fen_by_height(height: u64) -> u128 {
-    if (1..=9_999_999).contains(&height) {
-        999_900
+    let start = u64::from(primitives::pow_const::FULLNODE_REWARD_START_BLOCK);
+    let end = u64::from(primitives::pow_const::FULLNODE_REWARD_END_BLOCK);
+    if (start..=end).contains(&height) {
+        primitives::pow_const::FULLNODE_BLOCK_REWARD
     } else {
         0
     }
@@ -362,7 +478,9 @@ fn author_from_pow_digest_logs(logs: &[Value]) -> Option<String> {
         let Some(s) = log.as_str() else {
             continue;
         };
-        let bytes = hex_to_bytes(s)?;
+        let Some(bytes) = hex_to_bytes(s) else {
+            continue;
+        };
         if bytes.len() < 6 {
             continue;
         }
@@ -387,7 +505,7 @@ fn block_fee_fen(block_hash: &str, extrinsics: &[Value]) -> (u128, u32) {
     let mut total_fee: u128 = 0;
     let mut failures: u32 = 0;
 
-    for xt in extrinsics {
+    for xt in extrinsics.iter().skip(1) {
         let Some(xt_hex) = xt.as_str() else {
             failures = failures.saturating_add(1);
             continue;
@@ -456,9 +574,14 @@ fn process_block(height: u64, ts_key: &str) -> Result<ProcessedBlock, String> {
     })
 }
 
-fn reset_cache_for_chain(cache: &mut MiningComputationCache, chain_hash: String) {
+fn reset_cache_for_chain(
+    cache: &mut MiningComputationCache,
+    chain_hash: String,
+    local_miner_account: Option<&str>,
+) {
     *cache = MiningComputationCache::default();
     cache.chain_genesis_hash = Some(chain_hash);
+    cache.tracked_miner_account = local_miner_account.map(|v| v.to_ascii_lowercase());
 }
 
 fn prune_old_income_days(cache: &mut MiningComputationCache, today_utc: u64) {
@@ -466,74 +589,165 @@ fn prune_old_income_days(cache: &mut MiningComputationCache, today_utc: u64) {
     cache.income_by_utc_day.retain(|day, _| *day >= min_day);
 }
 
-fn refresh_cache(best_height: u64, today_utc: u64) -> Result<RefreshStats, String> {
+fn refresh_cache(
+    app: &AppHandle,
+    best_height: u64,
+    today_utc: u64,
+    local_miner_account: Option<&str>,
+) -> Result<RefreshStats, String> {
     let mut working = {
-        let cache = mining_cache()
-            .lock()
-            .map_err(|_| "acquire mining cache failed".to_string())?;
+        let cache = mining_cache().lock().unwrap_or_else(|e| e.into_inner());
         cache.clone()
     };
+    let normalized_local_miner = local_miner_account.map(|v| v.to_ascii_lowercase());
+    let local_miner = normalized_local_miner.as_deref();
+    let mut stats = RefreshStats {
+        local_miner_missing: local_miner.is_none(),
+        ..RefreshStats::default()
+    };
+    let mut cache_changed = false;
 
     let chain_hash = chain_genesis_hash()?;
     if working.chain_genesis_hash.as_deref() != Some(chain_hash.as_str()) {
-        reset_cache_for_chain(&mut working, chain_hash.clone());
+        reset_cache_for_chain(&mut working, chain_hash.clone(), local_miner);
+        cache_changed = true;
+    }
+
+    if working.tracked_miner_account.as_deref() != local_miner {
+        reset_cache_for_chain(&mut working, chain_hash.clone(), local_miner);
+        cache_changed = true;
     }
 
     if working.last_processed_height > best_height {
-        reset_cache_for_chain(&mut working, chain_hash.clone());
+        reset_cache_for_chain(&mut working, chain_hash.clone(), local_miner);
+        cache_changed = true;
     }
 
     if working.last_processed_height > 0 {
-        let current_last_hash = block_hash_by_height(working.last_processed_height)?;
+        let current_last_hash = match block_hash_by_height(working.last_processed_height) {
+            Ok(v) => v,
+            Err(err) => {
+                let _ = commit_working_cache(app, &working, cache_changed, true, 0);
+                return Err(err);
+            }
+        };
         if working.last_processed_hash.as_deref() != Some(current_last_hash.as_str()) {
-            reset_cache_for_chain(&mut working, chain_hash.clone());
+            reset_cache_for_chain(&mut working, chain_hash.clone(), local_miner);
+            cache_changed = true;
         }
     }
 
     let ts_key = timestamp_now_storage_key();
-    let mut stats = RefreshStats::default();
+    let target_height = cmp::min(
+        best_height,
+        working
+            .last_processed_height
+            .saturating_add(MAX_BLOCKS_PER_REFRESH),
+    );
+    let start_height = working.last_processed_height.saturating_add(1);
 
-    for n in (working.last_processed_height + 1)..=best_height {
-        let block = process_block(n, &ts_key)?;
-        working.total_fee_fen = working.total_fee_fen.saturating_add(block.fee_fen);
-        working.total_reward_fen = working.total_reward_fen.saturating_add(block.reward_fen);
+    if start_height <= target_height {
+        for n in start_height..=target_height {
+            let block = match process_block(n, &ts_key) {
+                Ok(v) => v,
+                Err(err) => {
+                    prune_old_income_days(&mut working, today_utc);
+                    let _ = commit_working_cache(app, &working, cache_changed, true, 0);
+                    return Err(format!("处理区块 {n} 失败：{err}"));
+                }
+            };
+            let is_local_author = local_miner
+                .map(|local| block.author.eq_ignore_ascii_case(local))
+                .unwrap_or(false);
 
-        if let Some(ms) = block.timestamp_ms {
-            let day = utc_day(ms);
-            let income = block.fee_fen.saturating_add(block.reward_fen);
-            let entry = working.income_by_utc_day.entry(day).or_insert(0);
-            *entry = entry.saturating_add(income);
+            if is_local_author {
+                working.total_fee_fen = working.total_fee_fen.saturating_add(block.fee_fen);
+                working.total_reward_fen =
+                    working.total_reward_fen.saturating_add(block.reward_fen);
+
+                if let Some(ms) = block.timestamp_ms {
+                    let day = utc_day(ms);
+                    let income = block.fee_fen.saturating_add(block.reward_fen);
+                    let entry = working.income_by_utc_day.entry(day).or_insert(0);
+                    *entry = entry.saturating_add(income);
+                }
+
+                working.recent_records.push_front(CachedBlockRecord {
+                    block_height: block.height,
+                    timestamp_ms: block.timestamp_ms,
+                    fee_fen: block.fee_fen,
+                    block_reward_fen: block.reward_fen,
+                    author: block.author.clone(),
+                });
+                while working.recent_records.len() > RECENT_RECORD_LIMIT {
+                    let _ = working.recent_records.pop_back();
+                }
+            }
+
+            stats.fee_query_failures = stats
+                .fee_query_failures
+                .saturating_add(block.fee_query_failures as u64);
+            if block.timestamp_query_failed {
+                stats.timestamp_query_failures = stats.timestamp_query_failures.saturating_add(1);
+            }
+            stats.processed_blocks = stats.processed_blocks.saturating_add(1);
+            cache_changed = true;
+
+            working.last_processed_height = block.height;
+            working.last_processed_hash = Some(block.hash);
         }
-
-        stats.fee_query_failures = stats
-            .fee_query_failures
-            .saturating_add(block.fee_query_failures as u64);
-        if block.timestamp_query_failed {
-            stats.timestamp_query_failures = stats.timestamp_query_failures.saturating_add(1);
-        }
-
-        working.recent_records.push_front(CachedBlockRecord {
-            block_height: block.height,
-            timestamp_ms: block.timestamp_ms,
-            fee_fen: block.fee_fen,
-            block_reward_fen: block.reward_fen,
-            author: block.author,
-        });
-        while working.recent_records.len() > RECENT_RECORD_LIMIT {
-            let _ = working.recent_records.pop_back();
-        }
-
-        working.last_processed_height = block.height;
-        working.last_processed_hash = Some(block.hash);
     }
 
+    stats.pending_blocks = best_height.saturating_sub(target_height);
     prune_old_income_days(&mut working, today_utc);
 
-    let mut cache = mining_cache()
-        .lock()
-        .map_err(|_| "acquire mining cache failed".to_string())?;
-    *cache = working;
+    if commit_working_cache(app, &working, cache_changed, false, stats.pending_blocks) {
+        stats.persist_failed = true;
+    }
     Ok(stats)
+}
+
+fn merge_warnings(items: Vec<String>) -> Option<String> {
+    let merged: Vec<String> = items
+        .into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if merged.is_empty() {
+        None
+    } else {
+        Some(merged.join("；"))
+    }
+}
+
+fn warning_from_stats(stats: &RefreshStats) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    if stats.fee_query_failures > 0 {
+        parts.push(format!("{} 笔交易手续费估算失败", stats.fee_query_failures));
+    }
+    if stats.timestamp_query_failures > 0 {
+        parts.push(format!(
+            "{} 个区块时间戳读取失败",
+            stats.timestamp_query_failures
+        ));
+    }
+    if stats.pending_blocks > 0 {
+        parts.push(format!(
+            "区块追赶中，剩余 {} 个区块将在后续刷新中继续统计",
+            stats.pending_blocks
+        ));
+    }
+    if stats.local_miner_missing {
+        parts.push("未识别本节点矿工账号，收益仅在识别后开始统计".to_string());
+    }
+    if stats.persist_failed {
+        parts.push("本地缓存落盘失败，重启后可能需要重新追赶统计".to_string());
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(format!("统计数据部分不完整：{}", parts.join("；")))
+    }
 }
 
 fn dashboard_from_cache(
@@ -588,22 +802,54 @@ fn empty_dashboard(resources: ResourceUsage, warning: Option<String>) -> MiningD
     }
 }
 
-fn warning_from_stats(stats: &RefreshStats) -> Option<String> {
-    let mut parts: Vec<String> = Vec::new();
-    if stats.fee_query_failures > 0 {
-        parts.push(format!("{} 笔交易手续费估算失败", stats.fee_query_failures));
+fn collect_node_data_size_mb(data_dir: &PathBuf) -> Option<u64> {
+    let out = Command::new("du")
+        .args(["-sk", &data_dir.display().to_string()])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
     }
-    if stats.timestamp_query_failures > 0 {
-        parts.push(format!(
-            "{} 个区块时间戳读取失败",
-            stats.timestamp_query_failures
-        ));
+    let line = String::from_utf8_lossy(&out.stdout);
+    line.split_whitespace()
+        .next()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(|kb| kb.saturating_add(1023) / 1024)
+}
+
+fn node_data_size_mb_with_cache(data_dir: &PathBuf) -> Option<u64> {
+    let now_ms = unix_now_ms().unwrap_or(0);
+    let data_dir_s = data_dir.display().to_string();
+    {
+        let guard = node_data_size_cache()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some(sample) = guard.as_ref() {
+            if sample.data_dir == data_dir_s
+                && now_ms.saturating_sub(sample.sampled_at_ms) <= NODE_DATA_SIZE_CACHE_TTL_MS
+            {
+                return sample.size_mb;
+            }
+        }
     }
-    if parts.is_empty() {
-        None
-    } else {
-        Some(format!("统计数据部分不完整：{}", parts.join("；")))
+
+    let size_mb = collect_node_data_size_mb(data_dir);
+    let mut guard = node_data_size_cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if let Some(sample) = guard.as_ref() {
+        if sample.data_dir == data_dir_s
+            && now_ms.saturating_sub(sample.sampled_at_ms) <= NODE_DATA_SIZE_CACHE_TTL_MS
+        {
+            return sample.size_mb;
+        }
     }
+    *guard = Some(NodeDataSizeSample {
+        sampled_at_ms: now_ms,
+        data_dir: data_dir_s,
+        size_mb,
+    });
+    size_mb
 }
 
 fn collect_resource_usage(app: &AppHandle) -> ResourceUsage {
@@ -633,74 +879,8 @@ fn collect_resource_usage(app: &AppHandle) -> ResourceUsage {
         }
     }
 
-    if cpu_percent.is_none() || memory_mb.is_none() {
-        #[cfg(target_os = "macos")]
-        {
-            if let Ok(out) = Command::new("top").args(["-l", "1", "-n", "0"]).output() {
-                if out.status.success() {
-                    let text = String::from_utf8_lossy(&out.stdout);
-                    for line in text.lines() {
-                        if cpu_percent.is_none() && line.contains("CPU usage:") {
-                            if let Some(idle_idx) = line.find("% idle") {
-                                let prefix = &line[..idle_idx];
-                                let token = prefix
-                                    .split_whitespace()
-                                    .last()
-                                    .unwrap_or("")
-                                    .trim_end_matches('%');
-                                if let Ok(idle) = token.parse::<f64>() {
-                                    cpu_percent = Some((100.0 - idle).max(0.0));
-                                }
-                            }
-                        }
-                        if memory_mb.is_none()
-                            && line.contains("PhysMem:")
-                            && line.contains(" used")
-                        {
-                            let used_token = line
-                                .split("PhysMem:")
-                                .nth(1)
-                                .map(str::trim)
-                                .and_then(|s| s.split_whitespace().next())
-                                .unwrap_or("");
-                            if !used_token.is_empty() {
-                                let (num_str, unit) =
-                                    used_token.split_at(used_token.len().saturating_sub(1));
-                                if let Ok(n) = num_str.parse::<f64>() {
-                                    memory_mb = match unit {
-                                        "T" => Some((n * 1024.0 * 1024.0).round() as u64),
-                                        "G" => Some((n * 1024.0).round() as u64),
-                                        "M" => Some(n.round() as u64),
-                                        "K" => Some((n / 1024.0).round() as u64),
-                                        _ => None,
-                                    };
-                                }
-                            }
-                        }
-                        if cpu_percent.is_some() && memory_mb.is_some() {
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     if let Ok(data_dir) = node_data_dir(app) {
-        if let Ok(out) = Command::new("du")
-            .args(["-sk", &data_dir.display().to_string()])
-            .output()
-        {
-            if out.status.success() {
-                let line = String::from_utf8_lossy(&out.stdout);
-                if let Some(first) = line.split_whitespace().next() {
-                    node_data_size_mb = first
-                        .parse::<u64>()
-                        .ok()
-                        .map(|kb| kb.saturating_add(1023) / 1024);
-                }
-            }
-        }
+        node_data_size_mb = node_data_size_mb_with_cache(&data_dir);
 
         if let Ok(out) = Command::new("df")
             .args(["-k", &data_dir.display().to_string()])
@@ -733,26 +913,58 @@ fn collect_resource_usage(app: &AppHandle) -> ResourceUsage {
 fn resource_usage(app: &AppHandle) -> ResourceUsage {
     let now_ms = unix_now_ms().unwrap_or(0);
     let cache = resource_usage_cache();
-    if let Ok(mut guard) = cache.lock() {
+    {
+        let guard = cache.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(sample) = guard.as_ref() {
             if now_ms.saturating_sub(sample.sampled_at_ms) <= RESOURCE_CACHE_TTL_MS {
                 return sample.usage.clone();
             }
         }
-        let usage = collect_resource_usage(app);
-        *guard = Some(ResourceUsageSample {
-            sampled_at_ms: now_ms,
-            usage: usage.clone(),
-        });
-        return usage;
     }
-    collect_resource_usage(app)
+
+    let usage = collect_resource_usage(app);
+    let mut guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(sample) = guard.as_ref() {
+        if now_ms.saturating_sub(sample.sampled_at_ms) <= RESOURCE_CACHE_TTL_MS {
+            return sample.usage.clone();
+        }
+    }
+    *guard = Some(ResourceUsageSample {
+        sampled_at_ms: now_ms,
+        usage: usage.clone(),
+    });
+    usage
+}
+
+fn try_begin_refresh() -> bool {
+    let mut refreshing = mining_refreshing_flag()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if *refreshing {
+        false
+    } else {
+        *refreshing = true;
+        true
+    }
+}
+
+struct RefreshInFlightGuard;
+
+impl Drop for RefreshInFlightGuard {
+    fn drop(&mut self) {
+        let mut refreshing = mining_refreshing_flag()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *refreshing = false;
+    }
 }
 
 #[tauri::command]
 pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
+    ensure_mining_cache_loaded(&app);
     let resources = resource_usage(&app);
     let today_utc = utc_day(unix_now_ms().unwrap_or(0));
+    let mut warnings: Vec<String> = Vec::new();
 
     if let Err(err) = ensure_expected_rpc_node() {
         let warning = format!("挖矿统计不可用：{err}");
@@ -769,30 +981,51 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
         }
     };
 
-    let warning_from_refresh = match refresh_cache(best_height, today_utc) {
-        Ok(stats) => warning_from_stats(&stats),
+    let local_miner_account = match fee_address::local_powr_miner_account_hex(&app) {
+        Ok(v) => v,
         Err(err) => {
-            let warning = format!("刷新挖矿统计失败，返回最近缓存：{err}");
-            eprintln!("{warning}");
-            let cache = mining_cache()
-                .lock()
-                .map_err(|_| "acquire mining cache failed".to_string())?;
-            return Ok(dashboard_from_cache(
-                &cache,
-                resources,
-                Some(warning),
-                today_utc,
-            ));
+            warnings.push(format!("读取本节点矿工账号失败：{err}"));
+            None
         }
     };
 
-    let cache = mining_cache()
-        .lock()
-        .map_err(|_| "acquire mining cache failed".to_string())?;
+    if !try_begin_refresh() {
+        warnings.push("挖矿统计刷新进行中，返回最近缓存".to_string());
+        let cache = mining_cache().lock().unwrap_or_else(|e| e.into_inner());
+        return Ok(dashboard_from_cache(
+            &cache,
+            resources,
+            merge_warnings(warnings),
+            today_utc,
+        ));
+    }
+    let _refresh_guard = RefreshInFlightGuard;
+
+    let warning_from_refresh =
+        match refresh_cache(&app, best_height, today_utc, local_miner_account.as_deref()) {
+            Ok(stats) => warning_from_stats(&stats),
+            Err(err) => {
+                let warning = format!("刷新挖矿统计失败，返回最近缓存：{err}");
+                eprintln!("{warning}");
+                warnings.push(warning);
+                let cache = mining_cache().lock().unwrap_or_else(|e| e.into_inner());
+                return Ok(dashboard_from_cache(
+                    &cache,
+                    resources,
+                    merge_warnings(warnings),
+                    today_utc,
+                ));
+            }
+        };
+    if let Some(w) = warning_from_refresh {
+        warnings.push(w);
+    }
+
+    let cache = mining_cache().lock().unwrap_or_else(|e| e.into_inner());
     Ok(dashboard_from_cache(
         &cache,
         resources,
-        warning_from_refresh,
+        merge_warnings(warnings),
         today_utc,
     ))
 }
