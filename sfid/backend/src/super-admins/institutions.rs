@@ -1096,12 +1096,9 @@ async fn submit_register_sfid_institution_extrinsic(
         .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
     let tx_hash = format!("0x{}", hex::encode(extrinsic.hash().as_ref()));
 
-    let submitted = extrinsic
-        .submit_and_watch()
-        .await
-        .map_err(|e| {
-            format!("register_sfid_institution submit failed: submit_and_watch failed: {e}")
-        })?;
+    let submitted = extrinsic.submit_and_watch().await.map_err(|e| {
+        format!("register_sfid_institution submit failed: submit_and_watch failed: {e}")
+    })?;
     let in_block = tokio::time::timeout(
         std::time::Duration::from_secs(120),
         submitted.wait_for_finalized(),
@@ -1110,7 +1107,9 @@ async fn submit_register_sfid_institution_extrinsic(
     .map_err(|_| {
         "register_sfid_institution submit failed: timed out waiting for finalization".to_string()
     })?
-    .map_err(|e| format!("register_sfid_institution submit failed: wait_for_finalized failed: {e}"))?;
+    .map_err(|e| {
+        format!("register_sfid_institution submit failed: wait_for_finalized failed: {e}")
+    })?;
     in_block
         .wait_for_success()
         .await

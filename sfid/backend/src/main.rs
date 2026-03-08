@@ -8,6 +8,7 @@ use axum::{
 use blake3;
 use chrono::{DateTime, NaiveDate, Utc};
 use postgres::config::Host;
+use redis::Client as RedisClient;
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
@@ -51,7 +52,7 @@ struct AppState {
     store: StoreHandle,
     signing_seed_hex: Arc<RwLock<SensitiveSeed>>,
     known_key_seeds: Arc<RwLock<HashMap<String, SensitiveSeed>>>,
-    request_limits: Arc<Mutex<HashMap<String, Vec<DateTime<Utc>>>>>,
+    rate_limit_redis: Arc<RedisClient>,
     cpms_register_inflight: Arc<Mutex<HashSet<String>>>,
     key_id: String,
     key_version: String,
@@ -611,6 +612,9 @@ fn main() {
     let _ = required_env("SFID_CHAIN_SIGNING_SECRET");
     let _ = required_env("SFID_PUBLIC_SEARCH_TOKEN");
     let _ = required_env("SFID_RUNTIME_META_KEY");
+    let redis_url = required_env("SFID_REDIS_URL");
+    let redis_client = RedisClient::open(redis_url.as_str())
+        .unwrap_or_else(|e| panic!("invalid SFID_REDIS_URL: {e}"));
 
     let main_seed = SensitiveSeed::from(required_env("SFID_SIGNING_SEED_HEX"));
     let main_key = key_admins::chain_keyring::load_signing_key_from_seed(main_seed.expose_secret());
@@ -636,7 +640,7 @@ fn main() {
         store,
         signing_seed_hex: Arc::new(RwLock::new(main_seed)),
         known_key_seeds: Arc::new(RwLock::new(known_key_seeds)),
-        request_limits: Arc::new(Mutex::new(HashMap::new())),
+        rate_limit_redis: Arc::new(redis_client),
         cpms_register_inflight: Arc::new(Mutex::new(HashSet::new())),
         key_id: required_env("SFID_KEY_ID"),
         key_version: "v1".to_string(),

@@ -5,13 +5,15 @@ use blake2::{
 use parity_scale_codec::Encode;
 use schnorrkel::{signing_context, Keypair as Sr25519Keypair};
 use std::sync::{Arc, OnceLock, RwLock};
+use subxt::{OnlineClient, PolkadotConfig};
 
 use crate::*;
 
-const BIND_DOMAIN: [u8; 16] = *b"GMB_SFID_BIND_V1";
-const VOTE_DOMAIN: [u8; 16] = *b"GMB_SFID_VOTE_V1";
-pub(crate) const POPULATION_DOMAIN_STR: &str = "GMB_SFID_POPULATION_V1";
-const POPULATION_DOMAIN: [u8; 22] = *b"GMB_SFID_POPULATION_V1";
+const BIND_DOMAIN: [u8; 16] = *b"GMB_SFID_BIND_V2";
+const VOTE_DOMAIN: [u8; 16] = *b"GMB_SFID_VOTE_V2";
+pub(crate) const POPULATION_DOMAIN_STR: &str = "GMB_SFID_POPULATION_V2";
+const POPULATION_DOMAIN: [u8; 22] = *b"GMB_SFID_POPULATION_V2";
+const DEFAULT_BIND_CREDENTIAL_LIFETIME_BLOCKS: u32 = 7_200;
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
 static SIGNING_KEY_CACHE: OnceLock<RwLock<Option<CachedSigningKey>>> = OnceLock::new();
 
@@ -31,6 +33,7 @@ pub(crate) struct RuntimeSignatureMeta {
 pub(crate) struct RuntimeBindCredential {
     pub(crate) sfid_code_hash: String,
     pub(crate) nonce: String,
+    pub(crate) expires_at_block: u32,
     pub(crate) signature: String,
     pub(crate) meta: RuntimeSignatureMeta,
 }
@@ -60,6 +63,7 @@ pub(crate) fn build_bind_credential(
     account_pubkey: &str,
     sfid_code: &str,
     nonce: String,
+    expires_at_block: u32,
 ) -> Result<RuntimeBindCredential, String> {
     if nonce.trim().is_empty() {
         return Err("bind nonce is required".to_string());
@@ -73,15 +77,54 @@ pub(crate) fn build_bind_credential(
         who,
         sfid_code_hash,
         nonce.as_bytes(),
+        expires_at_block,
     );
     let payload_digest = blake2_256(&payload.encode());
     let signature = sign_runtime_digest(state, &payload_digest)?;
     Ok(RuntimeBindCredential {
         sfid_code_hash: hex::encode(sfid_code_hash),
         nonce,
+        expires_at_block,
         signature,
         meta: runtime_signature_meta(state),
     })
+}
+
+pub(crate) fn bind_credential_lifetime_blocks() -> u32 {
+    std::env::var("SFID_BIND_CREDENTIAL_LIFETIME_BLOCKS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u32>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(DEFAULT_BIND_CREDENTIAL_LIFETIME_BLOCKS)
+}
+
+pub(crate) fn compute_bind_credential_expiry_block(current_block: u32) -> u32 {
+    current_block.saturating_add(bind_credential_lifetime_blocks())
+}
+
+pub(crate) async fn current_chain_block_number() -> Result<u32, String> {
+    if let Some(override_value) = std::env::var("SFID_CHAIN_CURRENT_BLOCK_OVERRIDE")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u32>().ok())
+    {
+        return Ok(override_value);
+    }
+
+    let ws_url = resolve_chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_url(ws_url)
+        .await
+        .map_err(|e| format!("connect chain ws failed: {e}"))?;
+    let latest = client
+        .blocks()
+        .at_latest()
+        .await
+        .map_err(|e| format!("query latest block failed: {e}"))?;
+    let parsed = latest
+        .number()
+        .to_string()
+        .parse::<u64>()
+        .map_err(|e| format!("parse latest block number failed: {e}"))?;
+    u32::try_from(parsed).map_err(|_| "latest block number exceeds u32".to_string())
 }
 
 pub(crate) fn build_vote_credential(
@@ -155,6 +198,24 @@ fn runtime_signature_meta(state: &AppState) -> RuntimeSignatureMeta {
     }
 }
 
+fn normalize_chain_ws_url(input: &str) -> String {
+    if let Some(rest) = input.strip_prefix("http://") {
+        return format!("ws://{rest}");
+    }
+    if let Some(rest) = input.strip_prefix("https://") {
+        return format!("wss://{rest}");
+    }
+    input.to_string()
+}
+
+fn resolve_chain_ws_url() -> Result<String, String> {
+    let ws_url = std::env::var("SFID_CHAIN_WS_URL")
+        .ok()
+        .or_else(|| std::env::var("SFID_CHAIN_RPC_URL").ok())
+        .ok_or_else(|| "SFID_CHAIN_RPC_URL or SFID_CHAIN_WS_URL not configured".to_string())?;
+    Ok(normalize_chain_ws_url(ws_url.as_str()))
+}
+
 fn normalize_and_parse_account_id32(account_pubkey: &str) -> Result<(String, [u8; 32]), String> {
     let normalized = normalize_account_pubkey(account_pubkey)
         .ok_or_else(|| "account_pubkey is invalid".to_string())?;
@@ -170,8 +231,7 @@ fn resolve_chain_genesis_hash() -> Result<[u8; 32], String> {
     let raw = std::env::var("SFID_CHAIN_GENESIS_HASH")
         .map_err(|_| "SFID_CHAIN_GENESIS_HASH must be configured".to_string())?;
     let parsed = parse_hex_hash32(raw.as_str())
-        .map_err(|_| "SFID_CHAIN_GENESIS_HASH must be 32-byte hex".to_string())
-    ?;
+        .map_err(|_| "SFID_CHAIN_GENESIS_HASH must be 32-byte hex".to_string())?;
     let _ = CHAIN_GENESIS_HASH.set(parsed);
     Ok(CHAIN_GENESIS_HASH.get().copied().unwrap_or(parsed))
 }

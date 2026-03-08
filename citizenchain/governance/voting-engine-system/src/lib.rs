@@ -560,6 +560,7 @@ impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
             clear_citizen.maybe_cursor.is_none(),
             "citizen votes were not fully cleared"
         );
+        T::SfidEligibility::cleanup_vote_credentials(proposal_id);
     }
 }
 
@@ -903,6 +904,12 @@ mod tests {
                     true
                 }
             })
+        }
+
+        fn cleanup_vote_credentials(proposal_id: u64) {
+            USED_VOTE_NONCES.with(|set| {
+                set.borrow_mut().retain(|(pid, _, _)| *pid != proposal_id);
+            });
         }
     }
 

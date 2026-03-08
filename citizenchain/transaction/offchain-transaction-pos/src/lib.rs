@@ -86,7 +86,8 @@ fn round_div(numerator: u128, denominator: u128) -> Option<u128> {
     }
     let quotient = numerator / denominator;
     let remainder = numerator % denominator;
-    let should_round_up = remainder >= (denominator.saturating_add(1) / 2);
+    let half_up_threshold = (denominator / 2).saturating_add(denominator % 2);
+    let should_round_up = remainder >= half_up_threshold;
     if should_round_up {
         Some(quotient.saturating_add(1))
     } else {
@@ -94,14 +95,17 @@ fn round_div(numerator: u128, denominator: u128) -> Option<u128> {
     }
 }
 
-fn calc_offchain_fee_fen(amount_fen: u128, rate_bp: u32) -> u128 {
-    let by_rate = match amount_fen.checked_mul(rate_bp as u128) {
-        Some(numerator) => {
-            round_div(numerator, BP_DENOMINATOR).expect("BP_DENOMINATOR must be non-zero; qed")
-        }
-        None => u128::MAX,
-    };
-    by_rate.max(OFFCHAIN_MIN_FEE_FEN)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FeeCalcError {
+    AmountOverflow,
+}
+
+fn calc_offchain_fee_fen(amount_fen: u128, rate_bp: u32) -> Result<u128, FeeCalcError> {
+    let numerator = amount_fen
+        .checked_mul(rate_bp as u128)
+        .ok_or(FeeCalcError::AmountOverflow)?;
+    let by_rate = round_div(numerator, BP_DENOMINATOR).expect("BP_DENOMINATOR must be non-zero; qed");
+    Ok(by_rate.max(OFFCHAIN_MIN_FEE_FEN))
 }
 
 /// 链下批次签名验证器（由 runtime 对接验证算法）。
@@ -2446,11 +2450,8 @@ pub mod pallet {
                 if verify_fee {
                     let transfer_u128: u128 = item.transfer_amount.saturated_into();
                     let fee_u128: u128 = item.offchain_fee_amount.saturated_into();
-                    ensure!(
-                        transfer_u128 <= u128::MAX / rate_bp as u128,
-                        Error::<T>::TransferAmountTooLarge
-                    );
-                    let expected_fee = calc_offchain_fee_fen(transfer_u128, rate_bp);
+                    let expected_fee = calc_offchain_fee_fen(transfer_u128, rate_bp)
+                        .map_err(|_| Error::<T>::TransferAmountTooLarge)?;
                     ensure!(fee_u128 == expected_fee, Error::<T>::InvalidFeeAmount);
                     fee_sum_u128 = fee_sum_u128.saturating_add(fee_u128);
                 }
@@ -3182,10 +3183,18 @@ mod tests {
 
     #[test]
     fn calc_fee_round_and_min_work() {
-        assert_eq!(calc_offchain_fee_fen(100, 1), 1); // 1.00 *0.01%=0.01 => 1分
-        assert_eq!(calc_offchain_fee_fen(150, 1), 1); // 1.50 *0.01%=0.015 => 1分（四舍五入）
-        assert_eq!(calc_offchain_fee_fen(151, 1), 1); // 0.0151分 => 1分
-        assert_eq!(calc_offchain_fee_fen(1, 1), 1); // 最低1分
+        assert_eq!(calc_offchain_fee_fen(100, 1), Ok(1)); // 1.00 *0.01%=0.01 => 1分
+        assert_eq!(calc_offchain_fee_fen(150, 1), Ok(1)); // 1.50 *0.01%=0.015 => 1分（四舍五入）
+        assert_eq!(calc_offchain_fee_fen(151, 1), Ok(1)); // 0.0151分 => 1分
+        assert_eq!(calc_offchain_fee_fen(1, 1), Ok(1)); // 最低1分
+    }
+
+    #[test]
+    fn calc_fee_overflow_returns_err() {
+        assert_eq!(
+            calc_offchain_fee_fen(u128::MAX, OFFCHAIN_RATE_BP_MAX),
+            Err(FeeCalcError::AmountOverflow)
+        );
     }
 
     #[test]

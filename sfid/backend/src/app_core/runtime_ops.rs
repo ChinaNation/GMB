@@ -481,6 +481,7 @@ pub(crate) fn seed_demo_record(state: &AppState) {
                     sfid_signature: proof.signature_hex,
                     runtime_bind_sfid_code_hash: None,
                     runtime_bind_nonce: None,
+                    runtime_bind_expires_at_block: None,
                     runtime_bind_signature: None,
                     runtime_bind_key_id: None,
                     runtime_bind_key_version: None,

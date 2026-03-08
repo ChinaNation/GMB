@@ -43,7 +43,7 @@ Runtime 配置与验签桥接：
 ## 3. 核心类型与存储
 
 ### 3.1 核心类型
-- `BindCredential { sfid_code_hash, nonce, signature }`
+- `BindCredential { sfid_code_hash, nonce, expires_at, signature }`
 - `SfidOf<T> = BoundedVec<u8, MaxSfidLength>`
 - `NonceOf<T> = BoundedVec<u8, MaxCredentialNonceLength>`
 - `SignatureOf<T> = BoundedVec<u8, MaxCredentialSignatureLength>`
@@ -55,8 +55,10 @@ Runtime 配置与验签桥接：
   - 账户到 SFID 哈希的反向映射。
 - `BoundCount<u64>`
   - 当前已绑定账户数量（可作为公民投票基数参考）。
-- `UsedCredentialNonce<Hash -> bool>`
-  - 绑定凭证 nonce 防重放（按 `hash(nonce)` 记账）。
+- `UsedCredentialNonce<Hash -> expires_at_block>`
+  - 绑定凭证 nonce 防重放（按 `hash(nonce)` 记账，记录过期区块）。
+- `CredentialNoncesByExpiry<block -> Vec<nonce_hash>>`
+  - 按过期区块索引 nonce，供 `on_initialize` 做到期清理。
 - `UsedVoteNonce<(proposal_id, sfid_hash, nonce_hash) -> bool>`
   - 投票凭证防重放（提案 + 身份 + nonce 三维度）。
 - `SfidMainAccount<Option<AccountId>>`
@@ -92,20 +94,22 @@ Runtime 配置与验签桥接：
 3. `credential.nonce` 非空。
 4. `hash(sfid_code)` 必须等于 `credential.sfid_code_hash`。
 5. `UsedCredentialNonce[hash(nonce)]` 不得已使用。
-6. `T::SfidVerifier::verify(&who, &credential)` 必须通过。
-7. 若 `sfid_hash` 已绑定他人，拒绝。
-8. 若 `sfid_hash` 已绑定当前账户，拒绝（`SameSfidAlreadyBound`）。
+6. `credential.expires_at >= now`，且不得超过 `MaxBindCredentialLifetimeBlocks`。
+7. `T::SfidVerifier::verify(&who, &credential)` 必须通过。
+8. 若 `sfid_hash` 已绑定他人，拒绝。
+9. 若 `sfid_hash` 已绑定当前账户，拒绝（`SameSfidAlreadyBound`）。
 
 状态变更：
 1. 若账户之前已绑旧 SFID：移除旧正向映射（允许换绑）。
 2. 若账户此前未绑定：`BoundCount += 1`。
 3. 写入新双向映射。
-4. 标记 `UsedCredentialNonce` 已使用。
-5. 触发 `OnSfidBound` 回调。
-6. 发事件 `SfidBound { who, sfid_hash, credential_nonce_hash }`。
+4. 标记 `UsedCredentialNonce` 已使用并记录 `expires_at`。
+5. 写入 `CredentialNoncesByExpiry[expires_at]`。
+6. 触发 `OnSfidBound` 回调。
+7. 发事件 `SfidBound { who, sfid_hash, credential_nonce_hash }`。
 
 weight：
-- `DbWeight.reads_writes(6, 6) + OnSfidBound::on_sfid_bound_weight()`
+- `DbWeight.reads_writes(7, 7) + OnSfidBound::on_sfid_bound_weight()`
 
 ### 5.2 `unbind_sfid(origin)`（call index = 1）
 校验：
@@ -156,21 +160,21 @@ weight：
 
 ### 7.1 绑定凭证域
 `RuntimeSfidVerifier` 的 payload：
-- payload: `("GMB_SFID_BIND_V1", genesis_hash, who, sfid_code_hash, nonce)`
+- payload: `("GMB_SFID_BIND_V2", genesis_hash, who, sfid_code_hash, nonce, expires_at_block)`
 - `genesis_hash = block_hash(0)`（链域隔离）
 - message: `blake2_256(scale_encode(payload))`
 - algorithm: `sr25519`
 
 ### 7.2 公民投票凭证域
 `RuntimeSfidVoteVerifier` 的 payload：
-- payload: `("GMB_SFID_VOTE_V1", genesis_hash, who, sfid_hash, proposal_id, vote_nonce)`
+- payload: `("GMB_SFID_VOTE_V2", genesis_hash, who, sfid_hash, proposal_id, vote_nonce)`
 - `genesis_hash = block_hash(0)`（链域隔离）
 - message: `blake2_256(scale_encode(payload))`
 - algorithm: `sr25519`
 
 ### 7.3 人口快照凭证域（同一信任根）
 该逻辑位于 `voting-engine-system` 的 snapshot verifier：
-- payload: `("GMB_SFID_POPULATION_V1", genesis_hash, who, eligible_total, snapshot_nonce)`
+- payload: `("GMB_SFID_POPULATION_V2", genesis_hash, who, eligible_total, snapshot_nonce)`
 - `genesis_hash = block_hash(0)`（链域隔离）
 - message: `blake2_256(scale_encode(payload))`
 - algorithm: `sr25519`
@@ -186,22 +190,22 @@ weight：
 
 ### 功能 1：SFID 绑定
 需要提供：
-1. 固定签名域：`("GMB_SFID_BIND_V1", genesis_hash, who, sfid_code_hash, nonce)`。
-2. 链上消费字段：`sfid_code_hash`、`nonce`、`signature`。
-3. `nonce` 一次性；链上按 `hash(nonce)` 去重。
+1. 固定签名域：`("GMB_SFID_BIND_V2", genesis_hash, who, sfid_code_hash, nonce, expires_at_block)`。
+2. 链上消费字段：`sfid_code_hash`、`nonce`、`expires_at_block`、`signature`。
+3. `nonce` 一次性；链上按 `hash(nonce)` 去重，到期后链上自动清理。
 4. SFID 可保留扩展运维字段（如 `key_id`、`key_version`、`alg`），但不改变链上验签字段。
 5. 链上交易仍需提交 `sfid_code`，并由 Runtime 校验 `hash(sfid_code) == sfid_code_hash`。
 
 ### 功能 2：公民投票凭证校验
 需要提供：
-1. 固定签名域：`("GMB_SFID_VOTE_V1", genesis_hash, who, sfid_hash, proposal_id, vote_nonce)`。
+1. 固定签名域：`("GMB_SFID_VOTE_V2", genesis_hash, who, sfid_hash, proposal_id, vote_nonce)`。
 2. SFID 输出字段：`sfid_hash`、`proposal_id`、`vote_nonce`、`signature`。
 3. 防重放键：`(proposal_id, sfid_hash, hash(vote_nonce))`。
 4. `vote_nonce` 每次新生成，不复用。
 
 ### 功能 3：人口快照签名
 需要提供：
-1. 固定签名域：`("GMB_SFID_POPULATION_V1", genesis_hash, who, eligible_total, snapshot_nonce)`。
+1. 固定签名域：`("GMB_SFID_POPULATION_V2", genesis_hash, who, eligible_total, snapshot_nonce)`。
 2. SFID 输出字段：`eligible_total`、`snapshot_nonce`、`snapshot_signature`。
 3. 为兼容旧客户端，可临时并行返回 `snapshot_attestation`，并标注 `snapshot_signature` 为过渡期保留字段。
 4. 提交者账户 `who`（治理发起者链上账户）必须进入签名 payload。

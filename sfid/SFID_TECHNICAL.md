@@ -313,7 +313,7 @@
 - `POST /api/v1/chain/binding/validate`：校验档案号与公钥绑定是否有效。
 - `POST /api/v1/chain/reward/ack`：区块链回执绑定奖励处理结果（`SUCCESS/FAILED`）。
 - `GET /api/v1/chain/reward/state`：查询绑定奖励状态机。
-- `GET /api/v1/bind/result`：查询某公钥绑定结果；绑定成功后返回持久化 Runtime 凭证（`sfid_code_hash/nonce/signature/key_*`），同一公钥重复查询不会生成新 `nonce`。
+- `GET /api/v1/bind/result`：查询某公钥绑定结果；绑定成功后返回持久化 Runtime 凭证（`sfid_code_hash/nonce/expires_at_block/signature/key_*`），同一公钥在凭证有效期内重复查询不会生成新 `nonce`。
 - `GET /api/v1/bind/result`：`signature` 为 Runtime 凭证签名，`sfid_signature` 为历史兼容字段（旧 JSON 绑定证明签名）。
 - `POST /api/v1/vote/verify`：`proposal_id` 必填，输出投票验签凭证字段对齐 Runtime（`sfid_hash/proposal_id/vote_nonce/signature`），不返回 `sfid_code` 明文。
 - 鉴权要求：仅接受区块链调用方请求，请求头必须携带：

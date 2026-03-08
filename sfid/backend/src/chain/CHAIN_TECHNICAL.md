@@ -24,9 +24,9 @@
 ## 3. API 矩阵（模块内）
 1. `POST /api/v1/bind/request`
 2. `GET /api/v1/bind/result`
-   - 绑定成功时返回：`sfid_code_hash`、`nonce`、`signature`（并可附带 `key_id/key_version/alg`）。
+   - 绑定成功时返回：`sfid_code_hash`、`nonce`、`expires_at_block`、`signature`（并可附带 `key_id/key_version/alg`）。
    - `sfid_signature` 为历史兼容字段，保持返回旧语义绑定证明签名（JSON payload 签名），不等同于 Runtime `signature`。
-   - 同一 `account_pubkey` 在已绑定状态下返回同一份持久化凭证（不重复签发新 `nonce`）。
+   - 同一 `account_pubkey` 在已绑定状态下，若凭证未过期则返回同一份持久化凭证；过期后自动重签发新凭证。
 3. `POST /api/v1/vote/verify`
    - `proposal_id` 必填；返回：`sfid_hash`、`proposal_id`、`vote_nonce`、`signature`（并可附带 `key_id/key_version/alg`）。
    - 隐私约束：不返回 `sfid_code` 明文。
@@ -40,24 +40,24 @@
 ## 4. 功能 1/2/3 对齐契约（Runtime 口径）
 
 ### 4.1 功能 1：SFID 绑定验签
-1. 固定 payload：`("GMB_SFID_BIND_V1", genesis_hash, who, sfid_code_hash, nonce)`。
+1. 固定 payload：`("GMB_SFID_BIND_V2", genesis_hash, who, sfid_code_hash, nonce, expires_at_block)`。
 2. `genesis_hash` 对应 Runtime `block_hash(0)`。
-3. SFID 对链输出字段（链上消费）：`sfid_code_hash`、`nonce`、`signature`。
+3. SFID 对链输出字段（链上消费）：`sfid_code_hash`、`nonce`、`expires_at_block`、`signature`。
 4. 链上交易参数保持：`bind_sfid(who, sfid_code, credential)`；其中 Runtime 负责校验 `hash(sfid_code) == sfid_code_hash`。
-5. `nonce` 必须一次性，链上按 `hash(nonce)` 去重。
+5. `nonce` 必须一次性，链上按 `hash(nonce)` 去重并在过期后自动清理。
 6. SFID 在绑定确认时生成并持久化运行时绑定凭证，`bind_result` 仅回传已持久化凭证，避免重复查询产生不同 `nonce`。
 7. 若当前 signer 公钥或 `key_id/key_version/alg` 与已持久化凭证不一致，SFID 必须重新签发 Runtime 绑定凭证并覆盖旧值。
 8. SFID 可返回扩展运维字段（`key_id`、`key_version`、`alg`），但不得改变链上验签字段。
 9. `bind_result.signature` 为 Runtime 凭证签名；`bind_result.sfid_signature` 为历史兼容字段，保持旧 JSON 绑定证明语义。
 
 ### 4.2 功能 2：投票凭证验签与防重放
-1. 固定 payload：`("GMB_SFID_VOTE_V1", genesis_hash, who, sfid_hash, proposal_id, vote_nonce)`。
+1. 固定 payload：`("GMB_SFID_VOTE_V2", genesis_hash, who, sfid_hash, proposal_id, vote_nonce)`。
 2. SFID 对链输出字段：`sfid_hash`、`proposal_id`、`vote_nonce`、`signature`。
 3. 链上防重放键固定为：`(proposal_id, sfid_hash, hash(vote_nonce))`。
 4. `vote_nonce` 每次新生成，严禁复用。
 
 ### 4.3 功能 3：人口快照签名
-1. 固定 payload：`("GMB_SFID_POPULATION_V1", genesis_hash, who, eligible_total, snapshot_nonce)`。
+1. 固定 payload：`("GMB_SFID_POPULATION_V2", genesis_hash, who, eligible_total, snapshot_nonce)`。
 2. `voters/count` 必须接收 `who(account)` 并进入签名 payload，不能仅对 `eligible_total` 签名。
 3. SFID 对链输出字段：`eligible_total`、`snapshot_nonce`、`snapshot_signature`。
 4. 兼容口径：可临时并行返回 `snapshot_attestation`（含 `key_id/key_version/alg/payload/signature_hex`），并在文档中标注 `snapshot_signature` 为过渡期保留字段。

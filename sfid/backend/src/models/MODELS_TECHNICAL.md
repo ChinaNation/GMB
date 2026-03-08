@@ -53,7 +53,7 @@
 
 ## 5. 链路字段同步（2026-03）
 
-- `BindingRecord` 新增 `runtime_bind_*` 字段族（`sfid_code_hash/nonce/signature/key_id/key_version/alg/signer_pubkey`），用于持久化 Runtime 绑定凭证与签发者元信息。
+- `BindingRecord` 新增 `runtime_bind_*` 字段族（`sfid_code_hash/nonce/expires_at_block/signature/key_id/key_version/alg/signer_pubkey`），用于持久化 Runtime 绑定凭证与签发者元信息。
 - `BindingRecord.sfid_signature` 继续保留旧 JSON 绑定证明签名语义；`bind_result.signature` 返回 Runtime 凭证签名，二者不可混用。
 - `VoteVerifyInput.proposal_id` 改为必填 `u64`，已移除废弃 `challenge` 字段。
 - `VoteVerifyOutput` 仅返回投票凭证字段（`sfid_hash/proposal_id/vote_nonce/signature/key_*`），不再返回 `sfid_code` 明文。
