@@ -3703,6 +3703,7 @@ dependencies = [
  "subxt-signer",
  "tauri",
  "tauri-build",
+ "tokio",
  "twox-hash 2.1.2",
  "zeroize",
 ]

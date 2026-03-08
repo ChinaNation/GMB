@@ -1,11 +1,13 @@
-use crate::{home::home_node, settings::security, validation::normalize_grandpa_key};
+use crate::{
+    home::home_node, rpc, settings::address_utils::decode_hex_32_strict, settings::security,
+    validation::normalize_grandpa_key,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::HashSet,
     fs,
-    io::{Read, Write},
-    net::TcpStream,
+    io::ErrorKind,
     path::PathBuf,
     thread,
     time::Duration,
@@ -16,8 +18,9 @@ use zeroize::Zeroizing;
 const KEYCHAIN_ACCOUNT_GRANDPA: &str = "grandpa-key";
 const GRANDPA_KEY_TYPE_HEX_PREFIX: &str = "6772616e";
 const DEFAULT_CHAIN_ID: &str = "citizenchain";
-const LOCAL_RPC_ADDR: &str = "127.0.0.1:9944";
 const INSTITUTION_CATALOG_SRC: &str = include_str!("../institution-catalog.json");
+const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -96,10 +99,11 @@ fn grandpa_meta_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn load_grandpa_meta(app: &AppHandle) -> Result<Option<StoredGrandpaMeta>, String> {
     let path = grandpa_meta_path(app)?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let raw = fs::read_to_string(path).map_err(|e| format!("read grandpa meta failed: {e}"))?;
+    let raw = match fs::read_to_string(path) {
+        Ok(v) => v,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("read grandpa meta failed: {e}")),
+    };
     let record: StoredGrandpaMeta =
         serde_json::from_str(&raw).map_err(|e| format!("parse grandpa meta failed: {e}"))?;
     Ok(Some(record))
@@ -128,10 +132,19 @@ fn keystore_dirs_for_grandpa(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
             fs::read_dir(&chains_root).map_err(|e| format!("read chains dir failed: {e}"))?;
         for entry in entries {
             let entry = entry.map_err(|e| format!("read chain dir entry failed: {e}"))?;
-            if !entry.path().is_dir() {
+            let file_type = entry
+                .file_type()
+                .map_err(|e| format!("read chain dir file type failed: {e}"))?;
+            if file_type.is_symlink() || !file_type.is_dir() {
                 continue;
             }
-            dirs.push(entry.path().join("keystore"));
+            let candidate = entry.path().join("keystore");
+            if let Ok(meta) = fs::symlink_metadata(&candidate) {
+                if meta.file_type().is_symlink() {
+                    continue;
+                }
+            }
+            dirs.push(candidate);
         }
     }
 
@@ -206,78 +219,16 @@ fn institution_name_by_grandpa_pubkey(pubkey_hex: &str) -> Result<Option<String>
         .map(|(name, _)| name))
 }
 
-fn decode_hex_32(input: &str) -> Result<[u8; 32], String> {
-    if input.len() != 64 {
-        return Err("node-key 长度无效，必须是 64 位十六进制字符串".to_string());
-    }
-    let mut out = [0u8; 32];
-    for (i, chunk) in input.as_bytes().chunks_exact(2).enumerate() {
-        let part = std::str::from_utf8(chunk).map_err(|_| "node-key 格式无效".to_string())?;
-        out[i] = u8::from_str_radix(part, 16).map_err(|_| "node-key 格式无效".to_string())?;
-    }
-    Ok(out)
-}
-
 fn grandpa_pubkey_from_private_hex(key_hex: &str) -> Result<String, String> {
-    let secret = decode_hex_32(key_hex)?;
+    let secret =
+        decode_hex_32_strict(key_hex).map_err(|_| "GRANDPA 私钥格式无效，应为 64 位十六进制".to_string())?;
     let signing = ed25519_dalek::SigningKey::from_bytes(&secret);
     let verify = signing.verifying_key();
     Ok(hex::encode(verify.to_bytes()))
 }
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": method,
-        "params": params,
-    })
-    .to_string();
-
-    let req = format!(
-        "POST / HTTP/1.1\r\nHost: {LOCAL_RPC_ADDR}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        payload.len(),
-        payload
-    );
-
-    let addr = LOCAL_RPC_ADDR
-        .parse()
-        .map_err(|e| format!("parse RPC socket address failed: {e}"))?;
-    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(600))
-        .map_err(|e| format!("RPC 连接失败: {e}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(3)))
-        .map_err(|e| format!("set RPC read timeout failed: {e}"))?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(3)))
-        .map_err(|e| format!("set RPC write timeout failed: {e}"))?;
-    stream
-        .write_all(req.as_bytes())
-        .map_err(|e| format!("RPC 写入失败: {e}"))?;
-
-    let mut response = String::new();
-    stream
-        .take(4 * 1024 * 1024)
-        .read_to_string(&mut response)
-        .map_err(|e| format!("RPC 读取失败: {e}"))?;
-
-    let Some((header, body)) = response.split_once("\r\n\r\n") else {
-        return Err("RPC 响应格式错误：缺少 header/body 分隔符".to_string());
-    };
-    let status_line = header
-        .lines()
-        .next()
-        .ok_or_else(|| "RPC 响应格式错误：缺少状态行".to_string())?;
-    if !status_line.contains(" 200 ") {
-        return Err(format!("RPC HTTP 状态异常: {status_line}"));
-    }
-
-    let json: Value = serde_json::from_str(body).map_err(|e| format!("RPC JSON 解析失败: {e}"))?;
-    if let Some(err) = json.get("error") {
-        return Err(format!("RPC 返回错误: {err}"));
-    }
-
-    Ok(json.get("result").cloned().unwrap_or(Value::Null))
+    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
 }
 
 fn node_roles() -> Result<Vec<String>, String> {
@@ -314,8 +265,8 @@ fn load_saved_grandpa_private_hex(unlock_password: &str) -> Result<Option<String
     let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_GRANDPA)? else {
         return Ok(None);
     };
-    let key = Zeroizing::new(security::decrypt_secret_value(&enveloped, unlock_password)?);
-    Ok(Some(key.to_string()))
+    let key = security::decrypt_secret_value(&enveloped, unlock_password)?;
+    Ok(Some(key))
 }
 
 pub(crate) fn verify_grandpa_secret_unlock(unlock_password: &str) -> Result<(), String> {
@@ -385,6 +336,7 @@ pub fn set_grandpa_key(
     key: String,
     unlock_password: String,
 ) -> Result<GrandpaKey, String> {
+    let _ = security::append_audit_log(&app, "set_grandpa_key", "attempt");
     let unlock = security::ensure_unlock_password(&unlock_password)?;
     security::verify_device_login_password(unlock)?;
     let normalized = normalize_grandpa_key(&key)?;
@@ -400,10 +352,19 @@ pub fn set_grandpa_key(
 
     // 若节点当前在运行，保存后立即重启以 authority 模式加载并参与投票。
     if home_node::current_status(&app)?.running {
-        let _ = home_node::stop_node(app.clone())?;
-        let _ = home_node::start_node(app.clone(), unlock.to_string())?;
-        verify_grandpa_after_start(&app, unlock)?;
+        if let Err(err) = (|| -> Result<(), String> {
+            let _ = home_node::stop_node_blocking(app.clone())?;
+            let _ = home_node::start_node_blocking(app.clone(), unlock.to_string())?;
+            verify_grandpa_after_start(&app, unlock)?;
+            Ok(())
+        })() {
+            let _ = security::append_audit_log(&app, "set_grandpa_key", "saved_restart_failed");
+            return Err(format!(
+                "GRANDPA 私钥已保存，但节点重启或校验失败：{err}。新密钥将在下次成功启动节点时自动生效。"
+            ));
+        }
     }
+    let _ = security::append_audit_log(&app, "set_grandpa_key", "success");
 
     Ok(GrandpaKey {
         key: None,

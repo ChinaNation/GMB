@@ -1,4 +1,5 @@
 use crate::{
+    rpc,
     settings::{bootnodes_address, fee_address, grandpa_address, security},
     validation::normalize_node_name,
 };
@@ -7,8 +8,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::{Read, Write},
-    net::TcpStream,
+    io::Read,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Mutex,
@@ -17,8 +17,11 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 
-const RPC_ADDR: &str = "127.0.0.1:9944";
 const EXPECTED_SS58_PREFIX: u64 = 2027;
+const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
+const RPC_RETRY_COUNT: usize = 3;
+const NODE_BIN_BASENAME: &str = "citizenchain-node";
 
 pub struct RuntimeState {
     pub local_node: Option<Child>,
@@ -92,21 +95,87 @@ fn node_bin_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries")
 }
 
-fn node_bin_path() -> PathBuf {
-    node_bin_dir().join("citizenchain-node")
+fn node_bin_filename_candidates() -> Vec<String> {
+    let mut names = vec![NODE_BIN_BASENAME.to_string()];
+
+    #[cfg(target_os = "macos")]
+    {
+        if cfg!(target_arch = "aarch64") {
+            names.push(format!("{NODE_BIN_BASENAME}-aarch64-apple-darwin"));
+        }
+        if cfg!(target_arch = "x86_64") {
+            names.push(format!("{NODE_BIN_BASENAME}-x86_64-apple-darwin"));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if cfg!(target_arch = "x86_64") {
+            names.push(format!("{NODE_BIN_BASENAME}-x86_64-unknown-linux-gnu"));
+        }
+        if cfg!(target_arch = "aarch64") {
+            names.push(format!("{NODE_BIN_BASENAME}-aarch64-unknown-linux-gnu"));
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        names.push(format!("{NODE_BIN_BASENAME}.exe"));
+        if cfg!(target_arch = "x86_64") {
+            names.push(format!("{NODE_BIN_BASENAME}-x86_64-pc-windows-msvc.exe"));
+        }
+        if cfg!(target_arch = "aarch64") {
+            names.push(format!("{NODE_BIN_BASENAME}-aarch64-pc-windows-msvc.exe"));
+        }
+    }
+
+    names
 }
 
-fn node_bin_hash_path(node_bin: &Path) -> Result<PathBuf, String> {
+fn node_bin_candidate_paths(app: &AppHandle) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = vec![node_bin_dir()];
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        dirs.push(resource_dir);
+    }
+
+    let mut paths = Vec::new();
+    for dir in dirs {
+        for name in node_bin_filename_candidates() {
+            let path = dir.join(&name);
+            if !paths.contains(&path) {
+                paths.push(path);
+            }
+        }
+    }
+    paths
+}
+
+fn node_bin_hash_candidates(node_bin: &Path) -> Result<Vec<PathBuf>, String> {
     let file_name = node_bin
         .file_name()
         .and_then(|v| v.to_str())
-        .ok_or_else(|| {
-            format!(
-                "resolve node binary filename failed ({})",
-                node_bin.display()
-            )
-        })?;
-    Ok(node_bin.with_file_name(format!("{file_name}.sha256")))
+        .ok_or_else(|| format!("resolve node binary filename failed ({})", node_bin.display()))?;
+    let mut paths = vec![node_bin.with_file_name(format!("{file_name}.sha256"))];
+    if file_name != NODE_BIN_BASENAME {
+        paths.push(node_bin.with_file_name(format!("{NODE_BIN_BASENAME}.sha256")));
+    }
+    Ok(paths)
+}
+
+fn trusted_node_bin_dirs(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
+    let mut dirs = Vec::new();
+    if let Ok(node_dir) = node_bin_dir().canonicalize() {
+        dirs.push(node_dir);
+    }
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        if let Ok(canonical_resource_dir) = resource_dir.canonicalize() {
+            dirs.push(canonical_resource_dir);
+        }
+    }
+    if dirs.is_empty() {
+        return Err("resolve trusted node binary dirs failed".to_string());
+    }
+    Ok(dirs)
 }
 
 fn parse_sha256_hex(raw: &str) -> Result<String, String> {
@@ -138,20 +207,22 @@ fn file_sha256_hex(path: &Path) -> Result<String, String> {
 }
 
 fn verify_node_bin_integrity(node_bin: &Path) -> Result<(), String> {
-    let hash_path = node_bin_hash_path(node_bin)?;
-    if !hash_path.is_file() {
-        return Err(format!(
-            "node binary hash file missing: {}",
-            hash_path.display()
-        ));
-    }
+    let hash_paths = node_bin_hash_candidates(node_bin)?;
+    let hash_path = hash_paths
+        .iter()
+        .find(|path| path.is_file())
+        .cloned()
+        .ok_or_else(|| {
+            let expected_list = hash_paths
+                .iter()
+                .map(|v| v.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("node binary hash file missing: [{expected_list}]")
+        })?;
 
-    let expected_raw = fs::read_to_string(&hash_path).map_err(|e| {
-        format!(
-            "read node binary hash failed ({}): {e}",
-            hash_path.display()
-        )
-    })?;
+    let expected_raw = fs::read_to_string(&hash_path)
+        .map_err(|e| format!("read node binary hash failed ({}): {e}", hash_path.display()))?;
     let expected = parse_sha256_hex(&expected_raw)?;
     let actual = file_sha256_hex(node_bin)?;
     if actual != expected {
@@ -164,21 +235,29 @@ fn verify_node_bin_integrity(node_bin: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn find_node_bin() -> Result<PathBuf, String> {
-    let node_bin = node_bin_path();
-    if !node_bin.is_file() {
-        return Err(format!("node binary not found: {}", node_bin.display()));
-    }
+fn find_node_bin(app: &AppHandle) -> Result<PathBuf, String> {
+    let candidates = node_bin_candidate_paths(app);
+    let trusted_dirs = trusted_node_bin_dirs(app)?;
+    let existing = candidates
+        .into_iter()
+        .find(|path| path.is_file())
+        .ok_or_else(|| {
+            format!(
+                "node binary not found. searched: {}",
+                node_bin_candidate_paths(app)
+                    .iter()
+                    .map(|v| v.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
 
-    let canonical_bin = node_bin
+    let canonical_bin = existing
         .canonicalize()
         .map_err(|e| format!("canonicalize node binary failed: {e}"))?;
-    let canonical_dir = node_bin_dir()
-        .canonicalize()
-        .map_err(|e| format!("canonicalize node binary dir failed: {e}"))?;
-    if !canonical_bin.starts_with(&canonical_dir) {
+    if !trusted_dirs.iter().any(|dir| canonical_bin.starts_with(dir)) {
         return Err(format!(
-            "node binary is outside trusted dir: {}",
+            "node binary is outside trusted dirs: {}",
             canonical_bin.display()
         ));
     }
@@ -535,103 +614,20 @@ fn terminate_child(child: &mut Child) {
     let _ = child.try_wait();
 }
 
-fn find_crlf(bytes: &[u8]) -> Option<usize> {
-    bytes.windows(2).position(|w| w == b"\r\n")
-}
-
-fn decode_chunked_http_body(mut body: &[u8]) -> Result<Vec<u8>, String> {
-    let mut out = Vec::new();
-    loop {
-        let line_end = find_crlf(body).ok_or_else(|| "chunked 响应缺少长度行".to_string())?;
-        let size_line = std::str::from_utf8(&body[..line_end])
-            .map_err(|_| "chunked 长度行不是 UTF-8".to_string())?;
-        let size_hex = size_line
-            .split(';')
-            .next()
-            .map(str::trim)
-            .unwrap_or_default();
-        let chunk_size = usize::from_str_radix(size_hex, 16)
-            .map_err(|_| format!("chunked 长度无效: {size_line}"))?;
-        body = &body[line_end + 2..];
-        if chunk_size == 0 {
-            break;
-        }
-        if body.len() < chunk_size + 2 {
-            return Err("chunked 响应体截断".to_string());
-        }
-        out.extend_from_slice(&body[..chunk_size]);
-        if &body[chunk_size..chunk_size + 2] != b"\r\n" {
-            return Err("chunked 响应块缺少结尾 CRLF".to_string());
-        }
-        body = &body[chunk_size + 2..];
-    }
-    Ok(out)
-}
-
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": method,
-        "params": params,
-    })
-    .to_string();
-
-    let req = format!(
-        "POST / HTTP/1.1\r\nHost: {RPC_ADDR}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        payload.len(),
-        payload
-    );
-
-    let addr = RPC_ADDR
-        .parse()
-        .map_err(|e| format!("parse RPC socket address failed: {e}"))?;
-    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(600))
-        .map_err(|e| format!("RPC 连接失败: {e}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(3)))
-        .map_err(|e| format!("set RPC read timeout failed: {e}"))?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(3)))
-        .map_err(|e| format!("set RPC write timeout failed: {e}"))?;
-
-    stream
-        .write_all(req.as_bytes())
-        .map_err(|e| format!("RPC 写入失败: {e}"))?;
-
-    let mut response = String::new();
-    stream
-        .take(4 * 1024 * 1024)
-        .read_to_string(&mut response)
-        .map_err(|e| format!("RPC 读取失败: {e}"))?;
-
-    let Some((header, body)) = response.split_once("\r\n\r\n") else {
-        return Err("RPC 响应格式错误：缺少 header/body 分隔符".to_string());
-    };
-    let status_line = header
-        .lines()
-        .next()
-        .ok_or_else(|| "RPC 响应格式错误：缺少状态行".to_string())?;
-    if !status_line.contains(" 200 ") {
-        return Err(format!("RPC HTTP 状态异常: {status_line}"));
+    let mut last_err = String::new();
+    for attempt in 0..RPC_RETRY_COUNT {
+        match rpc::rpc_post(method, params.clone(), RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES) {
+            Ok(v) => return Ok(v),
+            Err(err) => {
+                last_err = err;
+                if attempt + 1 < RPC_RETRY_COUNT {
+                    thread::sleep(Duration::from_millis(250));
+                }
+            }
+        }
     }
-
-    let body_bytes = if header
-        .to_ascii_lowercase()
-        .contains("transfer-encoding: chunked")
-    {
-        decode_chunked_http_body(body.as_bytes())?
-    } else {
-        body.as_bytes().to_vec()
-    };
-
-    let json: Value =
-        serde_json::from_slice(&body_bytes).map_err(|e| format!("RPC JSON 解析失败: {e}"))?;
-    if let Some(err) = json.get("error") {
-        return Err(format!("RPC 返回错误: {err}"));
-    }
-
-    Ok(json.get("result").cloned().unwrap_or(Value::Null))
+    Err(last_err)
 }
 
 fn is_expected_rpc_node() -> bool {
@@ -746,16 +742,23 @@ pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
     })
 }
 
-#[tauri::command]
-pub fn get_node_status(app: AppHandle) -> Result<NodeStatus, String> {
+async fn join_blocking_task<T>(
+    task: &'static str,
+    result: tauri::async_runtime::JoinHandle<Result<T, String>>,
+) -> Result<T, String> {
+    result
+        .await
+        .map_err(|e| format!("{task} join failed: {e}"))?
+}
+
+fn get_node_status_sync(app: AppHandle) -> Result<NodeStatus, String> {
     current_status(&app)
 }
 
-#[tauri::command]
-pub fn start_node(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
+fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
     let unlock_password = security::ensure_unlock_password(&unlock_password)?.to_string();
     verify_start_unlock_password(&unlock_password)?;
-    let node_bin = find_node_bin()?;
+    let node_bin = find_node_bin(&app)?;
 
     {
         let app_state = app.state::<AppState>();
@@ -792,8 +795,7 @@ pub fn start_node(app: AppHandle, unlock_password: String) -> Result<NodeStatus,
     current_status(&app)
 }
 
-#[tauri::command]
-pub fn stop_node(app: AppHandle) -> Result<NodeStatus, String> {
+fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
     {
         let app_state = app.state::<AppState>();
         let mut state = app_state
@@ -816,6 +818,33 @@ pub fn stop_node(app: AppHandle) -> Result<NodeStatus, String> {
         return Err(format!("停止失败：节点仍在运行（pid={pid_text}）"));
     }
     Ok(status)
+}
+
+#[tauri::command]
+pub async fn get_node_status(app: AppHandle) -> Result<NodeStatus, String> {
+    join_blocking_task(
+        "get_node_status",
+        tauri::async_runtime::spawn_blocking(move || get_node_status_sync(app)),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn start_node(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
+    join_blocking_task(
+        "start_node",
+        tauri::async_runtime::spawn_blocking(move || start_node_sync(app, unlock_password)),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn stop_node(app: AppHandle) -> Result<NodeStatus, String> {
+    join_blocking_task(
+        "stop_node",
+        tauri::async_runtime::spawn_blocking(move || stop_node_sync(app)),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -847,8 +876,15 @@ pub fn set_node_name(
     })
 }
 
-#[tauri::command]
-pub fn get_chain_status(_app: AppHandle) -> Result<ChainStatus, String> {
+fn get_chain_status_sync(app: AppHandle) -> Result<ChainStatus, String> {
+    if !current_status(&app)?.running {
+        return Ok(ChainStatus {
+            block_height: None,
+            finalized_height: None,
+            syncing: None,
+        });
+    }
+
     let block_height = rpc_post("chain_getHeader", Value::Array(vec![]))
         .ok()
         .as_ref()
@@ -863,12 +899,19 @@ pub fn get_chain_status(_app: AppHandle) -> Result<ChainStatus, String> {
     })
 }
 
-#[tauri::command]
-pub fn get_node_identity(app: AppHandle) -> Result<NodeIdentity, String> {
+fn get_node_identity_sync(app: AppHandle) -> Result<NodeIdentity, String> {
+    let configured_node_name = load_node_name(&app)?;
+    if !current_status(&app)?.running {
+        return Ok(NodeIdentity {
+            node_name: configured_node_name,
+            peer_id: None,
+            role: Some("全节点".to_string()),
+        });
+    }
+
     let rpc_node_name = rpc_post("system_name", Value::Array(vec![]))
         .ok()
         .and_then(|v| v.as_str().map(|s| s.to_string()));
-    let configured_node_name = load_node_name(&app)?;
     let node_name = configured_node_name.or(rpc_node_name);
 
     let local_peer_id = rpc_post("system_localPeerId", Value::Array(vec![]))
@@ -881,4 +924,34 @@ pub fn get_node_identity(app: AppHandle) -> Result<NodeIdentity, String> {
         peer_id: local_peer_id,
         role: Some(role),
     })
+}
+
+pub(crate) fn get_node_identity_blocking(app: AppHandle) -> Result<NodeIdentity, String> {
+    get_node_identity_sync(app)
+}
+
+pub(crate) fn start_node_blocking(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
+    start_node_sync(app, unlock_password)
+}
+
+pub(crate) fn stop_node_blocking(app: AppHandle) -> Result<NodeStatus, String> {
+    stop_node_sync(app)
+}
+
+#[tauri::command]
+pub async fn get_chain_status(app: AppHandle) -> Result<ChainStatus, String> {
+    join_blocking_task(
+        "get_chain_status",
+        tauri::async_runtime::spawn_blocking(move || get_chain_status_sync(app)),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn get_node_identity(app: AppHandle) -> Result<NodeIdentity, String> {
+    join_blocking_task(
+        "get_node_identity",
+        tauri::async_runtime::spawn_blocking(move || get_node_identity_sync(app)),
+    )
+    .await
 }
