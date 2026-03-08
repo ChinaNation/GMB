@@ -1,7 +1,22 @@
 //! 全节点铸块与发行常量=pow_const.rs
 
-/// PoW 初始难度（固定难度算法）。
+/// PoW 初始难度（创世难度，链启动后由动态难度调整算法自动维护）。
 pub const POW_INITIAL_DIFFICULTY: u64 = 1_000_000;
+
+/// 难度调整周期（每隔多少块调整一次难度）。
+/// 600 块 × 6 分钟 = 60 小时调整一次，兼顾响应速度与稳定性。
+pub const DIFFICULTY_ADJUSTMENT_INTERVAL: u32 = 600;
+
+/// 单次调整最大倍率上限（防止难度暴涨）：新难度不超过旧难度的 4 倍。
+pub const DIFFICULTY_MAX_ADJUST_FACTOR: u64 = 4;
+
+/// 单次调整最小倍率下限（防止难度暴跌）：新难度不低于旧难度的 1/4。
+pub const DIFFICULTY_MIN_ADJUST_FACTOR: u64 = 4;
+
+/// 目标调整窗口总时长（毫秒）= 调整间隔块数 × 目标出块时间。
+/// 用于难度调整公式的分母基准值。
+pub const DIFFICULTY_TARGET_WINDOW_MS: u64 =
+    DIFFICULTY_ADJUSTMENT_INTERVAL as u64 * MILLISECS_PER_BLOCK;
 
 /// 一、全节点铸块，每个区块奖励金额（单位：分）
 pub const FULLNODE_BLOCK_REWARD: u128 = 999_900; // 每个区块奖励：9999.00 元 = 999_900 分
