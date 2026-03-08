@@ -215,6 +215,7 @@ pub mod pallet {
                 Proposals::<T>::insert(proposal_id, &proposal);
                 if let Some(joint_vote_id) = GovToJointVote::<T>::take(proposal_id) {
                     JointVoteToGov::<T>::remove(joint_vote_id);
+                    T::JointVoteEngine::cleanup_joint_proposal(joint_vote_id);
                 }
 
                 Self::deposit_event(Event::<T>::JointVoteFinalized {
@@ -242,6 +243,7 @@ pub mod pallet {
                 Proposals::<T>::insert(proposal_id, &proposal);
                 if let Some(joint_vote_id) = GovToJointVote::<T>::take(proposal_id) {
                     JointVoteToGov::<T>::remove(joint_vote_id);
+                    T::JointVoteEngine::cleanup_joint_proposal(joint_vote_id);
                 }
 
                 Self::deposit_event(Event::<T>::JointVoteFinalized {

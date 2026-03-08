@@ -18,18 +18,27 @@ use sp_runtime::RuntimeDebug;
     TypeInfo,
     MaxEncodedLen,
 )]
-pub struct BindCredential<Hash, Nonce, Signature> {
+pub struct BindCredential<Hash, Nonce, Signature, BlockNumber> {
     pub sfid_code_hash: Hash,
     pub nonce: Nonce,
+    pub expires_at: BlockNumber,
     pub signature: Signature,
 }
 
-pub trait SfidVerifier<AccountId, Hash, Nonce, Signature> {
-    fn verify(account: &AccountId, credential: &BindCredential<Hash, Nonce, Signature>) -> bool;
+pub trait SfidVerifier<AccountId, Hash, Nonce, Signature, BlockNumber> {
+    fn verify(
+        account: &AccountId,
+        credential: &BindCredential<Hash, Nonce, Signature, BlockNumber>,
+    ) -> bool;
 }
 
-impl<AccountId, Hash, Nonce, Signature> SfidVerifier<AccountId, Hash, Nonce, Signature> for () {
-    fn verify(_account: &AccountId, _credential: &BindCredential<Hash, Nonce, Signature>) -> bool {
+impl<AccountId, Hash, Nonce, Signature, BlockNumber>
+    SfidVerifier<AccountId, Hash, Nonce, Signature, BlockNumber> for ()
+{
+    fn verify(
+        _account: &AccountId,
+        _credential: &BindCredential<Hash, Nonce, Signature, BlockNumber>,
+    ) -> bool {
         false
     }
 }
@@ -82,20 +91,27 @@ pub trait SfidEligibilityProvider<AccountId, Hash> {
         nonce: &[u8],
         signature: &[u8],
     ) -> bool;
-}
 
+    /// 清理某个提案维度下的投票凭证防重放状态。
+    fn cleanup_vote_credentials(_proposal_id: u64) {}
+}
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
     use frame_support::{pallet_prelude::*, Blake2_128Concat};
     use frame_system::pallet_prelude::*;
-    use sp_runtime::traits::Hash;
+    use sp_runtime::traits::{Hash, Saturating};
+    use sp_std::vec::Vec;
 
     pub type SfidOf<T> = BoundedVec<u8, <T as Config>::MaxSfidLength>;
     pub type NonceOf<T> = BoundedVec<u8, <T as Config>::MaxCredentialNonceLength>;
     pub type SignatureOf<T> = BoundedVec<u8, <T as Config>::MaxCredentialSignatureLength>;
-    pub type CredentialOf<T> =
-        BindCredential<<T as frame_system::Config>::Hash, NonceOf<T>, SignatureOf<T>>;
+    pub type CredentialOf<T> = BindCredential<
+        <T as frame_system::Config>::Hash,
+        NonceOf<T>,
+        SignatureOf<T>,
+        BlockNumberFor<T>,
+    >;
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -111,12 +127,22 @@ pub mod pallet {
         #[pallet::constant]
         type MaxCredentialSignatureLength: Get<u32>;
 
+        #[pallet::constant]
+        type MaxBindCredentialLifetimeBlocks: Get<BlockNumberFor<Self>>;
+
+        #[pallet::constant]
+        type MaxCredentialNonceCleanupPerBlock: Get<u32>;
+
+        #[pallet::constant]
+        type MaxCredentialNoncesPerExpiryBlock: Get<u32>;
+
         /// 中文注释：SFID 系统签名校验器（外部接口桥接点）。
         type SfidVerifier: SfidVerifier<
             Self::AccountId,
             Self::Hash,
             NonceOf<Self>,
             SignatureOf<Self>,
+            BlockNumberFor<Self>,
         >;
         /// 中文注释：公民投票实时验签器。
         type SfidVoteVerifier: SfidVoteVerifier<
@@ -148,17 +174,35 @@ pub mod pallet {
     #[pallet::getter(fn bound_count)]
     pub type BoundCount<T> = StorageValue<_, u64, ValueQuery>;
 
-    /// 中文注释：已使用凭证 nonce（哈希）防重放。
+    /// 中文注释：已使用凭证 nonce（哈希）防重放，value 为该凭证过期区块。
     #[pallet::storage]
     #[pallet::getter(fn used_credential_nonce)]
     pub type UsedCredentialNonce<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
+        StorageMap<_, Blake2_128Concat, T::Hash, BlockNumberFor<T>, OptionQuery>;
+
+    /// 中文注释：按凭证过期区块索引 nonce 哈希，供按块清理。
+    #[pallet::storage]
+    #[pallet::getter(fn credential_nonces_by_expiry)]
+    pub type CredentialNoncesByExpiry<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        BlockNumberFor<T>,
+        BoundedVec<T::Hash, T::MaxCredentialNoncesPerExpiryBlock>,
+        ValueQuery,
+    >;
 
     /// 中文注释：公民投票验签 nonce（哈希）防重放（提案+身份+nonce 三元维度）。
     #[pallet::storage]
     #[pallet::getter(fn used_vote_nonce)]
-    pub type UsedVoteNonce<T: Config> =
-        StorageMap<_, Blake2_128Concat, (u64, T::Hash, T::Hash), bool, ValueQuery>;
+    pub type UsedVoteNonce<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        Blake2_128Concat,
+        (T::Hash, T::Hash),
+        bool,
+        ValueQuery,
+    >;
 
     /// 中文注释：SFID 当前主账户（用于 SFID 码验签）。
     #[pallet::storage]
@@ -250,10 +294,48 @@ pub mod pallet {
         },
     }
 
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+            let max_cleanup = T::MaxCredentialNonceCleanupPerBlock::get() as usize;
+            if max_cleanup == 0 {
+                return Weight::zero();
+            }
+
+            let db_weight = T::DbWeight::get();
+            let mut weight = db_weight.reads_writes(1, 1);
+            let mut nonce_hashes: Vec<T::Hash> =
+                CredentialNoncesByExpiry::<T>::take(n).into_inner();
+            if nonce_hashes.is_empty() {
+                return weight;
+            }
+
+            let remove_count = core::cmp::min(max_cleanup, nonce_hashes.len());
+            for nonce_hash in nonce_hashes.drain(..remove_count) {
+                UsedCredentialNonce::<T>::remove(nonce_hash);
+            }
+            weight = weight.saturating_add(db_weight.writes(remove_count as u64));
+
+            if !nonce_hashes.is_empty() {
+                let remaining: BoundedVec<T::Hash, T::MaxCredentialNoncesPerExpiryBlock> =
+                    nonce_hashes
+                        .try_into()
+                        .expect("remaining nonce hashes should stay within bound");
+                CredentialNoncesByExpiry::<T>::insert(n, remaining);
+                weight = weight.saturating_add(db_weight.writes(1));
+            }
+
+            weight
+        }
+    }
+
     #[pallet::error]
     pub enum Error<T> {
         EmptySfid,
         EmptyCredentialNonce,
+        CredentialExpired,
+        CredentialExpiryTooFar,
+        CredentialNonceExpiryBucketFull,
         InvalidCredentialSfidCodeHash,
         CredentialAlreadyUsed,
         InvalidSfidCredentialSignature,
@@ -270,7 +352,7 @@ pub mod pallet {
         #[pallet::call_index(0)]
         #[pallet::weight(
             T::DbWeight::get()
-                .reads_writes(6, 6)
+                .reads_writes(7, 7)
                 .saturating_add(T::OnSfidBound::on_sfid_bound_weight())
         )]
         pub fn bind_sfid(
@@ -291,9 +373,17 @@ pub mod pallet {
                 Error::<T>::InvalidCredentialSfidCodeHash
             );
 
+            let now = <frame_system::Pallet<T>>::block_number();
+            ensure!(credential.expires_at >= now, Error::<T>::CredentialExpired);
+            let max_expires_at = now.saturating_add(T::MaxBindCredentialLifetimeBlocks::get());
+            ensure!(
+                credential.expires_at <= max_expires_at,
+                Error::<T>::CredentialExpiryTooFar
+            );
+
             let nonce_hash = T::Hashing::hash(credential.nonce.as_slice());
             ensure!(
-                !UsedCredentialNonce::<T>::get(nonce_hash),
+                !UsedCredentialNonce::<T>::contains_key(nonce_hash),
                 Error::<T>::CredentialAlreadyUsed
             );
 
@@ -316,9 +406,18 @@ pub mod pallet {
                 BoundCount::<T>::mutate(|v| *v = v.saturating_add(1));
             }
 
+            CredentialNoncesByExpiry::<T>::try_mutate(
+                credential.expires_at,
+                |nonces_by_expiry| -> Result<(), Error<T>> {
+                    nonces_by_expiry
+                        .try_push(nonce_hash)
+                        .map_err(|_| Error::<T>::CredentialNonceExpiryBucketFull)?;
+                    Ok(())
+                },
+            )?;
             SfidToAccount::<T>::insert(sfid_hash, &who);
             AccountToSfid::<T>::insert(&who, sfid_hash);
-            UsedCredentialNonce::<T>::insert(nonce_hash, true);
+            UsedCredentialNonce::<T>::insert(nonce_hash, credential.expires_at);
 
             T::OnSfidBound::on_sfid_bound(&who, sfid_hash);
 
@@ -428,8 +527,8 @@ pub mod pallet {
             }
 
             let nonce_hash = T::Hashing::hash(nonce);
-            let vote_nonce_key = (proposal_id, sfid_hash.clone(), nonce_hash);
-            if UsedVoteNonce::<T>::get(vote_nonce_key) {
+            let vote_nonce_key = (sfid_hash.clone(), nonce_hash);
+            if UsedVoteNonce::<T>::get(proposal_id, vote_nonce_key.clone()) {
                 return false;
             }
 
@@ -452,8 +551,16 @@ pub mod pallet {
                 return false;
             }
 
-            UsedVoteNonce::<T>::insert(vote_nonce_key, true);
+            UsedVoteNonce::<T>::insert(proposal_id, vote_nonce_key, true);
             true
+        }
+
+        fn cleanup_vote_credentials(proposal_id: u64) {
+            let clear_result = UsedVoteNonce::<T>::clear_prefix(proposal_id, u32::MAX, None);
+            debug_assert!(
+                clear_result.maybe_cursor.is_none(),
+                "vote nonces were not fully cleared"
+            );
         }
     }
 }
@@ -461,8 +568,9 @@ pub mod pallet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types};
+    use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types, traits::Hooks};
     use frame_system as system;
+    use frame_system::pallet_prelude::BlockNumberFor;
     use sp_runtime::traits::Hash;
     use sp_runtime::{traits::IdentityLookup, BuildStorage};
 
@@ -499,8 +607,14 @@ mod tests {
     }
 
     pub struct TestSfidVerifier;
-    impl SfidVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, SignatureOf<Test>>
-        for TestSfidVerifier
+    impl
+        SfidVerifier<
+            u64,
+            <Test as frame_system::Config>::Hash,
+            NonceOf<Test>,
+            SignatureOf<Test>,
+            BlockNumberFor<Test>,
+        > for TestSfidVerifier
     {
         fn verify(_account: &u64, credential: &CredentialOf<Test>) -> bool {
             credential.signature.as_slice() == b"bind-ok"
@@ -531,6 +645,9 @@ mod tests {
         pub const MaxSfidLength: u32 = 64;
         pub const MaxCredentialNonceLength: u32 = 64;
         pub const MaxCredentialSignatureLength: u32 = 64;
+        pub const MaxBindCredentialLifetimeBlocks: u64 = 100;
+        pub const MaxCredentialNonceCleanupPerBlock: u32 = 64;
+        pub const MaxCredentialNoncesPerExpiryBlock: u32 = 1024;
     }
 
     impl Config for Test {
@@ -538,6 +655,9 @@ mod tests {
         type MaxSfidLength = MaxSfidLength;
         type MaxCredentialNonceLength = MaxCredentialNonceLength;
         type MaxCredentialSignatureLength = MaxCredentialSignatureLength;
+        type MaxBindCredentialLifetimeBlocks = MaxBindCredentialLifetimeBlocks;
+        type MaxCredentialNonceCleanupPerBlock = MaxCredentialNonceCleanupPerBlock;
+        type MaxCredentialNoncesPerExpiryBlock = MaxCredentialNoncesPerExpiryBlock;
         type SfidVerifier = TestSfidVerifier;
         type SfidVoteVerifier = TestSfidVoteVerifier;
         type OnSfidBound = ();
@@ -583,12 +703,23 @@ mod tests {
             .expect("signature should fit")
     }
 
-    fn credential(sfid_plain: &str, nonce_plain: &str, sig_plain: &str) -> CredentialOf<Test> {
+    fn credential_with_expiry(
+        sfid_plain: &str,
+        nonce_plain: &str,
+        sig_plain: &str,
+        expires_at: BlockNumberFor<Test>,
+    ) -> CredentialOf<Test> {
         BindCredential {
             sfid_code_hash: <Test as frame_system::Config>::Hashing::hash(sfid_plain.as_bytes()),
             nonce: nonce(nonce_plain),
+            expires_at,
             signature: signature(sig_plain),
         }
+    }
+
+    fn credential(sfid_plain: &str, nonce_plain: &str, sig_plain: &str) -> CredentialOf<Test> {
+        let expires_at = System::block_number().saturating_add(10);
+        credential_with_expiry(sfid_plain, nonce_plain, sig_plain, expires_at)
     }
 
     #[test]
@@ -682,6 +813,21 @@ mod tests {
                 b"vote-nonce",
                 b"vote-ok"
             ));
+
+            <Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::cleanup_vote_credentials(100);
+            assert!(<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &sfid_hash,
+                &1,
+                100,
+                b"vote-nonce",
+                b"vote-ok"
+            ));
         });
     }
 
@@ -714,6 +860,7 @@ mod tests {
             let empty_nonce_cred = BindCredential {
                 sfid_code_hash: <Test as frame_system::Config>::Hashing::hash(b"sfid-a"),
                 nonce: Vec::<u8>::new().try_into().expect("bounded"),
+                expires_at: System::block_number().saturating_add(10),
                 signature: signature("bind-ok"),
             };
             assert_noop!(
@@ -738,6 +885,64 @@ mod tests {
                 ),
                 Error::<Test>::InvalidSfidCredentialSignature
             );
+        });
+    }
+
+    #[test]
+    fn expired_bind_credential_is_rejected() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                SfidCodeAuth::bind_sfid(
+                    RuntimeOrigin::signed(1),
+                    sfid("sfid-expired"),
+                    credential_with_expiry(
+                        "sfid-expired",
+                        "nonce-expired",
+                        "bind-ok",
+                        System::block_number().saturating_sub(1)
+                    )
+                ),
+                Error::<Test>::CredentialExpired
+            );
+        });
+    }
+
+    #[test]
+    fn bind_credential_with_too_far_expiry_is_rejected() {
+        new_test_ext().execute_with(|| {
+            let expires_at = System::block_number()
+                .saturating_add(MaxBindCredentialLifetimeBlocks::get())
+                .saturating_add(1);
+            assert_noop!(
+                SfidCodeAuth::bind_sfid(
+                    RuntimeOrigin::signed(1),
+                    sfid("sfid-far"),
+                    credential_with_expiry("sfid-far", "nonce-far", "bind-ok", expires_at)
+                ),
+                Error::<Test>::CredentialExpiryTooFar
+            );
+        });
+    }
+
+    #[test]
+    fn used_bind_nonce_is_cleaned_when_expired() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(SfidCodeAuth::bind_sfid(
+                RuntimeOrigin::signed(1),
+                sfid("sfid-cleanup-a"),
+                credential_with_expiry("sfid-cleanup-a", "same-nonce", "bind-ok", 5)
+            ));
+            let nonce_hash = <Test as frame_system::Config>::Hashing::hash(b"same-nonce");
+            assert!(UsedCredentialNonce::<Test>::contains_key(nonce_hash));
+
+            <Pallet<Test> as Hooks<BlockNumberFor<Test>>>::on_initialize(5);
+            assert!(!UsedCredentialNonce::<Test>::contains_key(nonce_hash));
+
+            assert_ok!(SfidCodeAuth::bind_sfid(
+                RuntimeOrigin::signed(2),
+                sfid("sfid-cleanup-b"),
+                credential_with_expiry("sfid-cleanup-b", "same-nonce", "bind-ok", 8)
+            ));
         });
     }
 

@@ -231,6 +231,8 @@ pub(crate) struct BindingRecord {
     #[serde(default)]
     pub(crate) runtime_bind_nonce: Option<String>,
     #[serde(default)]
+    pub(crate) runtime_bind_expires_at_block: Option<u32>,
+    #[serde(default)]
     pub(crate) runtime_bind_signature: Option<String>,
     #[serde(default)]
     pub(crate) runtime_bind_key_id: Option<String>,
@@ -715,6 +717,7 @@ pub(crate) struct BindResultOutput {
     pub(crate) sfid_code: Option<String>,
     pub(crate) sfid_code_hash: Option<String>,
     pub(crate) nonce: Option<String>,
+    pub(crate) expires_at_block: Option<u32>,
     pub(crate) signature: Option<String>,
     pub(crate) key_id: Option<String>,
     pub(crate) key_version: Option<String>,

@@ -15,6 +15,9 @@ pub trait SfidEligibility<AccountId, Hash> {
         nonce: &[u8],
         signature: &[u8],
     ) -> bool;
+
+    /// 清理某个联合/公民提案对应的投票凭证防重放状态。
+    fn cleanup_vote_credentials(_proposal_id: u64) {}
 }
 
 impl<AccountId, Hash> SfidEligibility<AccountId, Hash> for () {

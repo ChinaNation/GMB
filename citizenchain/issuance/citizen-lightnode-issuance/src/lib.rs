@@ -17,6 +17,12 @@ pub mod pallet {
         CITIZEN_LIGHTNODE_ONE_TIME_ONLY,
     };
 
+    // 中文注释：链上规则强制“一次性奖励”，禁止通过配置关闭该约束。
+    const _: () = assert!(
+        CITIZEN_LIGHTNODE_ONE_TIME_ONLY,
+        "CITIZEN_LIGHTNODE_ONE_TIME_ONLY must be true"
+    );
+
     pub type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 

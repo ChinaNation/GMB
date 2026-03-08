@@ -397,6 +397,7 @@ pub mod pallet {
             ProposalActions::<T>::remove(proposal_id);
             ProposalCreatedAt::<T>::remove(proposal_id);
             Self::remove_active_proposal_if_matches(action.institution, proposal_id);
+            T::InternalVoteEngine::cleanup_internal_proposal(proposal_id);
 
             Self::deposit_event(Event::<T>::StaleProposalCancelled {
                 proposal_id,
@@ -435,6 +436,7 @@ pub mod pallet {
                 }
                 // 清理悬挂索引，避免历史脏数据阻塞新提案。
                 ActiveProposalByInstitution::<T>::remove(institution);
+                T::InternalVoteEngine::cleanup_internal_proposal(existing_id);
             }
             Ok(())
         }
@@ -500,6 +502,7 @@ pub mod pallet {
             ProposalActions::<T>::remove(proposal_id);
             ProposalCreatedAt::<T>::remove(proposal_id);
             Self::remove_active_proposal_if_matches(action.institution, proposal_id);
+            T::InternalVoteEngine::cleanup_internal_proposal(proposal_id);
 
             Self::deposit_event(Event::<T>::AdminReplaced {
                 proposal_id,
