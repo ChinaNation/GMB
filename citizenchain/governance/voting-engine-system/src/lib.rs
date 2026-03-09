@@ -342,9 +342,6 @@ pub mod pallet {
             sfid_hash: T::Hash,
             approve: bool,
         },
-        JointVoteCallbackFailed {
-            proposal_id: u64,
-        },
     }
 
     #[pallet::error]
@@ -507,14 +504,10 @@ pub mod pallet {
             });
 
             if kind == PROPOSAL_KIND_JOINT && status != STATUS_VOTING {
-                if T::JointVoteResultCallback::on_joint_vote_finalized(
+                T::JointVoteResultCallback::on_joint_vote_finalized(
                     proposal_id,
                     status == STATUS_PASSED,
-                )
-                .is_err()
-                {
-                    Self::deposit_event(Event::<T>::JointVoteCallbackFailed { proposal_id });
-                }
+                )?;
             }
             Ok(())
         }
