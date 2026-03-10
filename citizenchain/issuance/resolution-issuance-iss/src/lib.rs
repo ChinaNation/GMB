@@ -3,11 +3,13 @@
 extern crate alloc;
 
 pub use pallet::*;
+pub mod weights;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
 
 use alloc::vec::Vec;
 use frame_support::dispatch::DispatchResult;
 use frame_support::pallet_prelude::StorageVersion;
-use frame_support::weights::{constants::RocksDbWeight, Weight};
 use sp_runtime::DispatchError;
 
 pub trait ResolutionIssuanceExecutor<AccountId, Amount> {
@@ -32,40 +34,12 @@ impl<AccountId, Amount> ResolutionIssuanceExecutor<AccountId, Amount> for () {
     }
 }
 
-pub trait WeightInfo {
-    fn execute_resolution_issuance(reason_len: u32, allocation_count: u32) -> Weight;
-    fn clear_executed() -> Weight;
-    fn set_paused() -> Weight;
-}
-
-impl WeightInfo for () {
-    fn execute_resolution_issuance(reason_len: u32, allocation_count: u32) -> Weight {
-        let reason_len = reason_len as u64;
-        let allocation_count = allocation_count as u64;
-        Weight::from_parts(120_000_000, 4_096)
-            .saturating_add(Weight::from_parts(20_000_000, 256).saturating_mul(allocation_count))
-            .saturating_add(Weight::from_parts(40_000, 1).saturating_mul(reason_len))
-            .saturating_add(
-                RocksDbWeight::get().reads_writes(4 + allocation_count, 5 + allocation_count),
-            )
-    }
-
-    fn clear_executed() -> Weight {
-        Weight::from_parts(10_000_000, 128)
-            .saturating_add(RocksDbWeight::get().reads_writes(1, 2))
-    }
-
-    fn set_paused() -> Weight {
-        Weight::from_parts(5_000_000, 64)
-            .saturating_add(RocksDbWeight::get().reads_writes(1, 2))
-    }
-}
-
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use crate::weights::WeightInfo;
     use frame_support::{
         pallet_prelude::*,
         storage::with_storage_layer,
@@ -123,7 +97,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxSingleIssuance: Get<BalanceOf<Self>>;
 
-        type WeightInfo: WeightInfo;
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
     #[pallet::pallet]

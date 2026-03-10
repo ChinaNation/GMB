@@ -24,6 +24,8 @@
 ### 2.2 关键存储
 - `NextProposalId`：全局提案 ID 自增计数器（`u64`）
 - `Proposals`：提案主表
+- `ProposalsByExpiry`：按阶段截止区块索引提案（用于自动超时结算）
+- `PendingExpiryBucket`：自动结算游标（上块未处理完的过期桶）
 - `InternalVotesByAccount` / `InternalTallies`
 - `JointVotesByInstitution` / `JointTallies`
 - `CitizenVotesBySfid` / `CitizenTallies`
@@ -33,21 +35,30 @@
 ### 3.1 内部提案
 1. 通过 `do_create_internal_proposal` 创建提案，阶段为 `STAGE_INTERNAL`。
 2. `do_internal_vote` 由机构管理员投票，按组织阈值判定是否通过。
-3. 达阈值时调用 `set_status_and_emit` 终结。
-4. 超时路径走 `do_finalize_internal_timeout`。
+3. 达阈值时立即 `Passed`（`set_status_and_emit`）。
+4. 未达阈值且到期后，在 `on_initialize` 自动走 `do_finalize_internal_timeout`，直接 `Rejected`。
 
 ### 3.2 联合提案
 1. 通过 `do_create_joint_proposal` 创建提案，阶段为 `STAGE_JOINT`。
 2. `do_submit_joint_institution_vote` 校验机构多签地址后计票。
-3. 联合全票通过则直接终结；否则在达到总票权后进入 `STAGE_CITIZEN`。
-4. 超时路径走 `do_finalize_joint_timeout`。
+3. 联合全票通过则立即 `Passed`。
+4. 联合未全票但已收齐总票权时，立即进入 `STAGE_CITIZEN`。
+5. 联合阶段到期后，`on_initialize` 自动走 `do_finalize_joint_timeout`：
+   - 全票：`Passed`
+   - 非全票：自动进入 `STAGE_CITIZEN`
 
 ### 3.3 公民投票
 1. `citizen_vote` 入口参数为：`(proposal_id, sfid_hash, nonce, signature, approve)`。
 2. `do_citizen_vote` 校验阶段、资格、凭证、去重后计票。
 3. 公民投票链路仅接收 `sfid_hash`，Runtime 不再接收/处理 SFID 明文字段。
-4. 赞成票超过 50%（严格大于）则通过。
-5. 超时路径走 `do_finalize_citizen_timeout`。
+4. 赞成票超过 50%（严格大于）时立即 `Passed`。
+5. 未达阈值且到期后，`on_initialize` 自动走 `do_finalize_citizen_timeout`，按阈值判定 `Passed/Rejected`（未达阈值即 `Rejected`）。
+
+### 3.4 自动超时结算
+1. 新建提案或联合转公民时，将提案写入 `ProposalsByExpiry(end + 1)`（`end` 为最后可投票区块）。
+2. 每个区块 `on_initialize` 优先处理 `PendingExpiryBucket`，再处理当前区块到期桶。
+3. 单块最多处理 `MaxAutoFinalizePerBlock` 个到期提案；超出部分回写原桶并记录游标，下块继续。
+4. 过期桶里的“历史索引项”（例如联合提前转公民后留下的旧 end）会在自动结算时按当前 `proposal.end/status` 判定并跳过。
 
 ## 4. 状态终结与回调
 统一通过 `set_status_and_emit` 完成终结：
@@ -55,8 +66,7 @@
 2. 发送 `ProposalFinalized` 事件
 3. 对联合提案触发 `JointVoteResultCallback`
 
-### 4.1 回调容错策略
-联合回调失败不会回滚投票引擎状态，只记录 `JointVoteCallbackFailed` 事件，避免“外部 pallet 异常导致提案永远卡死”的问题。
+`finalize_proposal` extrinsic 仍保留，作为手动补偿入口（例如诊断/运维场景），但正常超时路径由 `on_initialize` 自动结算。
 
 ## 5. 已修复的关键风险
 ### 5.1 Proposal ID 溢出
@@ -92,6 +102,7 @@
 
 ### 6.2 finalize 动态退费
 `finalize_proposal` 返回 `DispatchResultWithPostInfo`，按实际阶段路径返回实际 weight，避免按最坏路径统一收费。
+自动超时结算由 `on_initialize` 承担，单块处理量受 `MaxAutoFinalizePerBlock` 限制。
 
 ## 7. Benchmark 设计
 启用 `runtime-benchmarks` 后提供 6 个基准入口，对应上面的 6 个 weight 函数。

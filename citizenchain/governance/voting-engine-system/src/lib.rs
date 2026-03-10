@@ -159,6 +159,8 @@ pub mod pallet {
     use super::*;
     use frame_support::{pallet_prelude::*, Blake2_128Concat};
     use frame_system::pallet_prelude::*;
+    use sp_runtime::traits::{One, Saturating};
+    use sp_std::vec::Vec;
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -170,6 +172,10 @@ pub mod pallet {
 
         #[pallet::constant]
         type MaxVoteSignatureLength: Get<u32>;
+
+        /// 每个区块自动处理的“到期提案”上限，避免 on_initialize 无界增长。
+        #[pallet::constant]
+        type MaxAutoFinalizePerBlock: Get<u32>;
 
         type SfidEligibility: SfidEligibility<Self::AccountId, Self::Hash>;
         type PopulationSnapshotVerifier: PopulationSnapshotVerifier<
@@ -263,6 +269,18 @@ pub mod pallet {
     #[pallet::getter(fn proposals)]
     pub type Proposals<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, Proposal<BlockNumberFor<T>>, OptionQuery>;
+
+    /// 以“阶段截止区块”索引提案，用于 on_initialize 自动超时结算。
+    #[pallet::storage]
+    #[pallet::unbounded]
+    #[pallet::getter(fn proposals_by_expiry)]
+    pub type ProposalsByExpiry<T: Config> =
+        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Vec<u64>, ValueQuery>;
+
+    /// 自动结算游标：记录上个区块未处理完的过期桶。
+    #[pallet::storage]
+    #[pallet::getter(fn pending_expiry_bucket)]
+    pub type PendingExpiryBucket<T: Config> = StorageValue<_, BlockNumberFor<T>, OptionQuery>;
 
     #[pallet::storage]
     pub type InternalVotesByAccount<T: Config> = StorageDoubleMap<
@@ -365,6 +383,51 @@ pub mod pallet {
         AccountIdEncodingMismatch,
     }
 
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+            let max_auto_finalize = T::MaxAutoFinalizePerBlock::get() as usize;
+            if max_auto_finalize == 0 {
+                return Weight::zero();
+            }
+
+            let db_weight = T::DbWeight::get();
+            let mut weight = db_weight.reads(1);
+            let mut budget = max_auto_finalize;
+            let pending = PendingExpiryBucket::<T>::get();
+
+            if let Some(expiry) = pending {
+                if expiry <= n {
+                    let (processed, has_remaining, processed_weight) =
+                        Self::auto_finalize_expiry_bucket(expiry, n, budget);
+                    weight = weight.saturating_add(processed_weight);
+                    budget = budget.saturating_sub(processed);
+                    if has_remaining {
+                        PendingExpiryBucket::<T>::put(expiry);
+                        weight = weight.saturating_add(db_weight.writes(1));
+                        return weight;
+                    }
+                    PendingExpiryBucket::<T>::kill();
+                    weight = weight.saturating_add(db_weight.writes(1));
+                }
+            }
+
+            if budget == 0 {
+                return weight;
+            }
+
+            let (_processed, has_remaining, processed_weight) =
+                Self::auto_finalize_expiry_bucket(n, n, budget);
+            weight = weight.saturating_add(processed_weight);
+            if has_remaining {
+                PendingExpiryBucket::<T>::put(n);
+                weight = weight.saturating_add(db_weight.writes(1));
+            }
+
+            weight
+        }
+    }
+
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
@@ -465,6 +528,57 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        pub(crate) fn schedule_proposal_expiry(proposal_id: u64, end: BlockNumberFor<T>) {
+            // end 表示“最后一个仍可投票区块”，因此超时结算应在 end+1 触发。
+            let expiry = end.saturating_add(One::one());
+            ProposalsByExpiry::<T>::mutate(expiry, |ids| ids.push(proposal_id));
+        }
+
+        fn auto_finalize_expiry_bucket(
+            expiry: BlockNumberFor<T>,
+            now: BlockNumberFor<T>,
+            max_count: usize,
+        ) -> (usize, bool, Weight) {
+            let db_weight = T::DbWeight::get();
+            let mut weight = db_weight.reads_writes(1, 1);
+            let mut proposal_ids = ProposalsByExpiry::<T>::take(expiry);
+            if proposal_ids.is_empty() {
+                return (0, false, weight);
+            }
+
+            let process_count = core::cmp::min(max_count, proposal_ids.len());
+            for proposal_id in proposal_ids.drain(..process_count) {
+                weight = weight.saturating_add(db_weight.reads(1));
+                let Some(proposal) = Proposals::<T>::get(proposal_id) else {
+                    continue;
+                };
+                if proposal.status != STATUS_VOTING || proposal.end >= now {
+                    continue;
+                }
+
+                let _ = match proposal.stage {
+                    STAGE_INTERNAL => Self::do_finalize_internal_timeout(&proposal, proposal_id),
+                    STAGE_JOINT => Self::do_finalize_joint_timeout(&proposal, proposal_id),
+                    STAGE_CITIZEN => Self::do_finalize_citizen_timeout(&proposal, proposal_id),
+                    _ => Ok(()),
+                };
+            }
+
+            let has_remaining = !proposal_ids.is_empty();
+            if has_remaining {
+                ProposalsByExpiry::<T>::insert(expiry, proposal_ids);
+                weight = weight.saturating_add(db_weight.writes(1));
+            }
+
+            let per_finalize_weight = SubstrateWeight::<T>::finalize_proposal_internal()
+                .max(SubstrateWeight::<T>::finalize_proposal_joint())
+                .max(SubstrateWeight::<T>::finalize_proposal_citizen());
+            let finalize_weight = per_finalize_weight.saturating_mul(process_count as u64);
+            weight = weight.saturating_add(finalize_weight);
+
+            (process_count, has_remaining, weight)
+        }
+
         pub(crate) fn allocate_proposal_id() -> Result<u64, DispatchError> {
             let id = NextProposalId::<T>::get();
             let next = id.checked_add(1).ok_or(Error::<T>::ProposalIdOverflow)?;
@@ -792,7 +906,7 @@ mod tests {
     use core::cell::RefCell;
     use std::collections::BTreeSet;
 
-    use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
+    use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32, traits::Hooks};
     use frame_system as system;
     use primitives::china::china_cb::{
         shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
@@ -839,6 +953,7 @@ mod tests {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
+        type MaxAutoFinalizePerBlock = ConstU32<64>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
@@ -1159,6 +1274,37 @@ mod tests {
     }
 
     #[test]
+    fn internal_vote_timeout_is_auto_rejected_on_initialize() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(VotingEngineSystem::create_internal_proposal(
+                RuntimeOrigin::signed(prc_admin(0)),
+                internal_vote::ORG_PRC,
+                prc_pid(),
+            ));
+
+            let proposal = VotingEngineSystem::proposals(0).expect("proposal exists");
+            System::set_block_number(proposal.end);
+            <VotingEngineSystem as Hooks<u64>>::on_initialize(proposal.end);
+            assert_eq!(
+                VotingEngineSystem::proposals(0)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_VOTING
+            );
+
+            let next = proposal.end + 1;
+            System::set_block_number(next);
+            <VotingEngineSystem as Hooks<u64>>::on_initialize(next);
+            assert_eq!(
+                VotingEngineSystem::proposals(0)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_REJECTED
+            );
+        });
+    }
+
+    #[test]
     fn joint_proposal_must_be_created_by_nrc_admin() {
         new_test_ext().execute_with(|| {
             // 中文注释：外部 extrinsic 入口已禁用，统一要求事项模块通过 trait 创建联合投票提案。
@@ -1402,6 +1548,24 @@ mod tests {
                 RuntimeOrigin::signed(nrc_admin(0)),
                 0
             ));
+            assert_eq!(
+                Proposals::<Test>::get(0)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_REJECTED
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_timeout_is_auto_rejected_on_initialize() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 5);
+            VotingEngineSystem::schedule_proposal_expiry(0, 5);
+            CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
+
+            System::set_block_number(6);
+            <VotingEngineSystem as Hooks<u64>>::on_initialize(6);
             assert_eq!(
                 Proposals::<Test>::get(0)
                     .expect("proposal should exist")
@@ -1672,6 +1836,43 @@ mod tests {
     }
 
     #[test]
+    fn joint_vote_timeout_auto_moves_to_citizen_on_initialize() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    88,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+            );
+
+            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
+                RuntimeOrigin::signed(nrc_multisig()),
+                0,
+                nrc_pid(),
+                true
+            ));
+
+            let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
+            let expired_at = proposal.end + 1;
+            System::set_block_number(expired_at);
+            <VotingEngineSystem as Hooks<u64>>::on_initialize(expired_at);
+
+            let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
+            assert_eq!(proposal.stage, STAGE_CITIZEN);
+            assert_eq!(proposal.status, STATUS_VOTING);
+            assert_eq!(proposal.start, expired_at);
+            assert_eq!(
+                proposal.end,
+                expired_at + primitives::count_const::VOTING_DURATION_BLOCKS as u64
+            );
+        });
+    }
+
+    #[test]
     fn joint_vote_timeout_with_unanimous_tally_passes() {
         new_test_ext().execute_with(|| {
             let nonce = snapshot_nonce_ok();
@@ -1702,6 +1903,37 @@ mod tests {
             let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
             assert_eq!(proposal.status, STATUS_PASSED);
             assert_eq!(proposal.stage, STAGE_JOINT);
+        });
+    }
+
+    #[test]
+    fn auto_finalize_uses_pending_cursor_when_expiry_bucket_exceeds_per_block_limit() {
+        new_test_ext().execute_with(|| {
+            let end = 5u64;
+            let expiry = end + 1;
+            let total = 70u64;
+            for proposal_id in 0..total {
+                insert_citizen_proposal(proposal_id, 10, end);
+                VotingEngineSystem::schedule_proposal_expiry(proposal_id, end);
+            }
+
+            System::set_block_number(6);
+            <VotingEngineSystem as Hooks<u64>>::on_initialize(6);
+            assert_eq!(ProposalsByExpiry::<Test>::get(expiry).len(), 6);
+            assert_eq!(PendingExpiryBucket::<Test>::get(), Some(expiry));
+
+            System::set_block_number(7);
+            <VotingEngineSystem as Hooks<u64>>::on_initialize(7);
+            assert!(ProposalsByExpiry::<Test>::get(expiry).is_empty());
+            assert!(PendingExpiryBucket::<Test>::get().is_none());
+            for proposal_id in 0..total {
+                assert_eq!(
+                    Proposals::<Test>::get(proposal_id)
+                        .expect("proposal should exist")
+                        .status,
+                    STATUS_REJECTED
+                );
+            }
         });
     }
 }

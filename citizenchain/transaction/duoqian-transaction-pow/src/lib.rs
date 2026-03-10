@@ -1,13 +1,15 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
+pub mod weights;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
     ensure,
     pallet_prelude::*,
     traits::{Currency, ExistenceRequirement, ReservableCurrency},
-    weights::Weight,
     BoundedVec,
 };
 use frame_system::pallet_prelude::*;
@@ -76,34 +78,6 @@ impl<AccountId> SfidRegistryOperator<AccountId> for () {
     }
 }
 
-pub trait WeightInfo {
-    fn register_sfid_institution() -> Weight;
-    fn create_duoqian(admin_count: u32, approval_count: u32) -> Weight;
-    fn close_duoqian(admin_count: u32, approval_count: u32) -> Weight;
-}
-
-impl WeightInfo for () {
-    fn register_sfid_institution() -> Weight {
-        Weight::from_parts(40_000_000, 1_024)
-    }
-
-    fn create_duoqian(admin_count: u32, approval_count: u32) -> Weight {
-        Weight::from_parts(120_000_000, 4_096).saturating_add(
-            Weight::from_parts(8_000_000, 128).saturating_mul(admin_count as u64),
-        ).saturating_add(
-            Weight::from_parts(25_000_000, 256).saturating_mul(approval_count as u64),
-        )
-    }
-
-    fn close_duoqian(admin_count: u32, approval_count: u32) -> Weight {
-        Weight::from_parts(95_000_000, 3_072).saturating_add(
-            Weight::from_parts(8_000_000, 128).saturating_mul(admin_count as u64),
-        ).saturating_add(
-            Weight::from_parts(25_000_000, 256).saturating_mul(approval_count as u64),
-        )
-    }
-}
-
 #[derive(
     Encode,
     Decode,
@@ -158,6 +132,7 @@ pub struct RegisteredInstitution<SfidId> {
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use crate::weights::WeightInfo;
     const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
     #[pallet::config]
@@ -188,7 +163,7 @@ pub mod pallet {
         #[pallet::constant]
         type MinCloseBalance: Get<BalanceOf<Self>>;
 
-        type WeightInfo: WeightInfo;
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
     pub type AdminApprovalOf<T> =

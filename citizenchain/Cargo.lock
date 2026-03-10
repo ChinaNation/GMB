@@ -40,6 +40,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 name = "admins-origin-gov"
 version = "0.0.1"
 dependencies = [
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "parity-scale-codec",
@@ -2531,6 +2532,7 @@ name = "duoqian-transaction-pow"
 version = "0.0.1"
 dependencies = [
  "blake3",
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "pallet-balances",
@@ -3366,6 +3368,7 @@ dependencies = [
 name = "fullnode-pow-reward"
 version = "0.0.1"
 dependencies = [
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "pallet-balances",
@@ -6254,6 +6257,7 @@ dependencies = [
 name = "offchain-transaction-fee"
 version = "0.0.1"
 dependencies = [
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "log",
@@ -8175,6 +8179,7 @@ dependencies = [
 name = "resolution-issuance-iss"
 version = "0.0.1"
 dependencies = [
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "pallet-balances",
@@ -9992,6 +9997,7 @@ dependencies = [
 name = "sfid-code-auth"
 version = "0.0.1"
 dependencies = [
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "parity-scale-codec",
@@ -10060,6 +10066,7 @@ dependencies = [
 name = "shengbank-stake-interest"
 version = "0.0.1"
 dependencies = [
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "log",

@@ -1,6 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
+pub mod weights;
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
@@ -104,7 +107,8 @@ fn calc_offchain_fee_fen(amount_fen: u128, rate_bp: u32) -> Result<u128, FeeCalc
     let numerator = amount_fen
         .checked_mul(rate_bp as u128)
         .ok_or(FeeCalcError::AmountOverflow)?;
-    let by_rate = round_div(numerator, BP_DENOMINATOR).expect("BP_DENOMINATOR must be non-zero; qed");
+    let by_rate =
+        round_div(numerator, BP_DENOMINATOR).expect("BP_DENOMINATOR must be non-zero; qed");
     Ok(by_rate.max(OFFCHAIN_MIN_FEE_FEN))
 }
 
@@ -172,35 +176,10 @@ pub struct RelaySubmittersProposalAction<BoundedSubmitters> {
     pub submitters: BoundedSubmitters,
 }
 
-pub trait WeightInfo {
-    fn submit_offchain_batch(items: u32) -> Weight;
-    fn enqueue_offchain_batch(items: u32) -> Weight;
-    fn process_queued_batch(items: u32) -> Weight;
-}
-
-impl WeightInfo for () {
-    fn submit_offchain_batch(items: u32) -> Weight {
-        let items = items as u64;
-        frame_support::weights::constants::RocksDbWeight::get()
-            .reads_writes(9 + items.saturating_mul(7), 8 + items.saturating_mul(7))
-    }
-
-    fn enqueue_offchain_batch(items: u32) -> Weight {
-        let items = items as u64;
-        frame_support::weights::constants::RocksDbWeight::get()
-            .reads_writes(9 + items.saturating_mul(6), 4 + items.saturating_mul(2))
-    }
-
-    fn process_queued_batch(items: u32) -> Weight {
-        let items = items as u64;
-        frame_support::weights::constants::RocksDbWeight::get()
-            .reads_writes(8 + items.saturating_mul(7), 4 + items.saturating_mul(7))
-    }
-}
-
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use crate::weights::WeightInfo;
     use voting_engine_system::InternalAdminProvider;
 
     #[pallet::config]
@@ -227,7 +206,7 @@ pub mod pallet {
 
         type OffchainBatchVerifier: OffchainBatchVerifier;
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
-        type WeightInfo: WeightInfo;
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
     pub type VerifyKeyOf<T> = BoundedVec<u8, <T as Config>::MaxVerifyKeyLen>;
@@ -3101,6 +3080,7 @@ mod tests {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
+        type MaxAutoFinalizePerBlock = ConstU32<64>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();

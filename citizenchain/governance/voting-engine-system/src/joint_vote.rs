@@ -60,11 +60,7 @@ fn is_nrc_admin<T: Config>(who: &T::AccountId) -> bool {
         let Some(nrc) = nrc_pallet_id_bytes() else {
             return false;
         };
-        if T::InternalAdminProvider::is_internal_admin(
-            crate::internal_vote::ORG_NRC,
-            nrc,
-            who,
-        ) {
+        if T::InternalAdminProvider::is_internal_admin(crate::internal_vote::ORG_NRC, nrc, who) {
             return true;
         }
         let who_bytes = who.encode();
@@ -188,6 +184,7 @@ impl<T: Config> Pallet<T> {
         };
 
         Proposals::<T>::insert(id, proposal);
+        Self::schedule_proposal_expiry(id, end);
         Self::deposit_event(Event::<T>::ProposalCreated {
             proposal_id: id,
             kind: PROPOSAL_KIND_JOINT,
@@ -292,15 +289,18 @@ impl<T: Config> Pallet<T> {
     fn advance_joint_to_citizen(proposal_id: u64) -> DispatchResult {
         let now = <frame_system::Pallet<T>>::block_number();
         let citizen_end = now.saturating_add(Self::citizen_stage_duration());
-        let eligible_total =
-            Proposals::<T>::try_mutate(proposal_id, |maybe| -> Result<u64, sp_runtime::DispatchError> {
-            let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
-            let eligible_total = proposal.citizen_eligible_total;
-            proposal.stage = crate::STAGE_CITIZEN;
-            proposal.start = now;
-            proposal.end = citizen_end;
-            Ok(eligible_total)
-        })?;
+        let eligible_total = Proposals::<T>::try_mutate(
+            proposal_id,
+            |maybe| -> Result<u64, sp_runtime::DispatchError> {
+                let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
+                let eligible_total = proposal.citizen_eligible_total;
+                proposal.stage = crate::STAGE_CITIZEN;
+                proposal.start = now;
+                proposal.end = citizen_end;
+                Ok(eligible_total)
+            },
+        )?;
+        Self::schedule_proposal_expiry(proposal_id, citizen_end);
 
         Self::deposit_event(Event::<T>::ProposalAdvancedToCitizen {
             proposal_id,

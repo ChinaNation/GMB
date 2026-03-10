@@ -139,7 +139,8 @@ Runtime 配置：
   - 非 `STATUS_REJECTED`：仍视为活跃并阻塞新提案。
 
 注意：
-- 若投票提案已超时但尚未在投票引擎 finalize，状态仍可能是 `STATUS_VOTING`，此时仍会阻塞；可先调用投票引擎 `finalize_proposal` 使其终结。
+- 投票引擎已在 `on_initialize` 自动处理超时提案，通常无需人工 finalize。
+- `finalize_proposal` 仍可作为手动补偿入口（诊断/运维场景）。
 
 ---
 
@@ -235,7 +236,7 @@ Runtime 配置：
 - 提案具备过期清理通道。
 
 当前现实中的运维要求：
-- 对超时未 finalize 的内部投票，需及时调用投票引擎 finalize 以尽快解锁机构提案通道。
+- 常规场景依赖投票引擎自动超时结算即可；仅在异常排障时使用 `finalize_proposal` 手动补偿。
 
 ---
 

@@ -415,6 +415,7 @@ impl onchain_transaction_fee::CallFeePayer<AccountId, RuntimeCall> for RuntimeFe
 impl shengbank_stake_interest::Config for Runtime {
     type Currency = Balances;
     type BlocksPerYear = ConstU64<{ primitives::pow_const::BLOCKS_PER_YEAR }>;
+    type WeightInfo = shengbank_stake_interest::weights::SubstrateWeight<Runtime>;
 }
 
 /// PoW 作者解析器：
@@ -442,6 +443,7 @@ impl FindAuthor<AccountId> for PowDigestAuthor {
 impl fullnode_pow_reward::Config for Runtime {
     type Currency = Balances;
     type FindAuthor = PowDigestAuthor;
+    type WeightInfo = fullnode_pow_reward::weights::SubstrateWeight<Runtime>;
 }
 
 impl offchain_transaction_fee::Config for Runtime {
@@ -454,7 +456,7 @@ impl offchain_transaction_fee::Config for Runtime {
     type InternalVoteEngine = VotingEngineSystem;
     type OffchainBatchVerifier = RuntimeOffchainBatchVerifier;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
-    type WeightInfo = ();
+    type WeightInfo = offchain_transaction_fee::weights::SubstrateWeight<Runtime>;
 }
 
 pub struct RuntimeDuoqianAdminAuth;
@@ -620,7 +622,7 @@ impl duoqian_transaction_pow::Config for Runtime {
     type MaxSfidIdLength = ConstU32<96>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<111>;
-    type WeightInfo = ();
+    type WeightInfo = duoqian_transaction_pow::weights::SubstrateWeight<Runtime>;
 }
 
 pub struct RuntimeOffchainBatchVerifier;
@@ -746,6 +748,7 @@ impl sfid_code_auth::Config for Runtime {
     type SfidVerifier = RuntimeSfidVerifier;
     type SfidVoteVerifier = RuntimeSfidVoteVerifier;
     type OnSfidBound = CitizenLightnodeIssuance;
+    type WeightInfo = sfid_code_auth::weights::SubstrateWeight<Runtime>;
 }
 
 pub struct RuntimePopulationSnapshotVerifier;
@@ -831,6 +834,7 @@ impl admins_origin_gov::Config for Runtime {
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type StaleProposalLifetime = AdminReplacementStaleProposalLifetime;
     type InternalVoteEngine = VotingEngineSystem;
+    type WeightInfo = admins_origin_gov::weights::SubstrateWeight<Runtime>;
 }
 
 impl resolution_destro_gov::Config for Runtime {
@@ -838,7 +842,7 @@ impl resolution_destro_gov::Config for Runtime {
     type Currency = Balances;
     type StaleProposalLifetime = AdminReplacementStaleProposalLifetime;
     type InternalVoteEngine = VotingEngineSystem;
-    type WeightInfo = resolution_destro_gov::SubstrateWeight<Runtime>;
+    type WeightInfo = resolution_destro_gov::weights::SubstrateWeight<Runtime>;
 }
 
 impl finality_key_gov::Config for Runtime {
@@ -846,7 +850,7 @@ impl finality_key_gov::Config for Runtime {
     type StaleProposalLifetime = FinalityKeyStaleProposalLifetime;
     type GrandpaChangeDelay = GrandpaAuthoritySetChangeDelay;
     type InternalVoteEngine = VotingEngineSystem;
-    type WeightInfo = finality_key_gov::SubstrateWeight<Runtime>;
+    type WeightInfo = finality_key_gov::weights::SubstrateWeight<Runtime>;
 }
 
 /// 禁用特权原点：始终拒绝任何 Origin，确保不存在可被调用的特权入口。
@@ -933,7 +937,7 @@ impl resolution_issuance_iss::Config for Runtime {
     type MaxAllocations = ResolutionIssuanceMaxAllocations;
     type MaxTotalIssuance = ResolutionIssuanceMaxTotalIssuance;
     type MaxSingleIssuance = ResolutionIssuanceMaxSingleIssuance;
-    type WeightInfo = ();
+    type WeightInfo = resolution_issuance_iss::weights::SubstrateWeight<Runtime>;
 }
 
 impl resolution_issuance_gov::Config for Runtime {
@@ -944,7 +948,7 @@ impl resolution_issuance_gov::Config for Runtime {
     type JointVoteFinalizeOrigin = EnsureJointVoteFinalizeOrigin;
     type IssuanceExecutor = ResolutionIssuanceIss;
     type IssuanceWeightInfo = ();
-    type WeightInfo = resolution_issuance_gov::SubstrateWeight<Runtime>;
+    type WeightInfo = resolution_issuance_gov::weights::SubstrateWeight<Runtime>;
     type JointVoteEngine = VotingEngineSystem;
     type MaxReasonLen = ResolutionIssuanceMaxReasonLen;
     type MaxAllocations = ResolutionIssuanceMaxAllocations;
@@ -1007,6 +1011,7 @@ impl voting_engine_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
+    type MaxAutoFinalizePerBlock = ConstU32<2_048>;
     type SfidEligibility = RuntimeSfidEligibility;
     type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;

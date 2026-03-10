@@ -6,7 +6,7 @@ use frame_support::{
     ensure,
     pallet_prelude::*,
     traits::{GetStorageVersion, StorageVersion},
-    weights::{constants::RocksDbWeight, Weight},
+    weights::Weight,
     Blake2_128Concat, Twox64Concat,
 };
 use frame_system::pallet_prelude::*;
@@ -22,6 +22,9 @@ use voting_engine_system::{
 };
 
 pub use pallet::*;
+pub mod weights;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
 
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
@@ -60,53 +63,9 @@ fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use crate::weights::WeightInfo;
     use sp_std::vec::Vec;
     use voting_engine_system::{InternalAdminProvider, InternalVoteEngine};
-
-    pub trait WeightInfo {
-        fn propose_replace_finality_key() -> Weight;
-        fn vote_replace_finality_key() -> Weight;
-        fn execute_replace_finality_key() -> Weight;
-        fn cancel_stale_replace_finality_key() -> Weight;
-        fn cancel_failed_replace_finality_key() -> Weight;
-    }
-
-    pub struct SubstrateWeight<T>(sp_std::marker::PhantomData<T>);
-    impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-        fn propose_replace_finality_key() -> Weight {
-            T::DbWeight::get().reads_writes(10, 10)
-        }
-        fn vote_replace_finality_key() -> Weight {
-            T::DbWeight::get().reads_writes(16, 14)
-        }
-        fn execute_replace_finality_key() -> Weight {
-            T::DbWeight::get().reads_writes(14, 12)
-        }
-        fn cancel_stale_replace_finality_key() -> Weight {
-            T::DbWeight::get().reads_writes(8, 8)
-        }
-        fn cancel_failed_replace_finality_key() -> Weight {
-            T::DbWeight::get().reads_writes(12, 10)
-        }
-    }
-
-    impl WeightInfo for () {
-        fn propose_replace_finality_key() -> Weight {
-            RocksDbWeight::get().reads_writes(10, 10)
-        }
-        fn vote_replace_finality_key() -> Weight {
-            RocksDbWeight::get().reads_writes(16, 14)
-        }
-        fn execute_replace_finality_key() -> Weight {
-            RocksDbWeight::get().reads_writes(14, 12)
-        }
-        fn cancel_stale_replace_finality_key() -> Weight {
-            RocksDbWeight::get().reads_writes(8, 8)
-        }
-        fn cancel_failed_replace_finality_key() -> Weight {
-            RocksDbWeight::get().reads_writes(12, 10)
-        }
-    }
 
     #[pallet::config]
     pub trait Config: frame_system::Config + voting_engine_system::Config + pallet_grandpa::Config {
@@ -122,7 +81,7 @@ pub mod pallet {
         /// 中文注释：内部投票引擎（返回真实 proposal_id，避免猜测 next_proposal_id）。
         type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
 
-        type WeightInfo: WeightInfo;
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
     #[pallet::pallet]
