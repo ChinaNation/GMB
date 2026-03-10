@@ -8,12 +8,12 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::Read,
+    io::{ErrorKind, Read},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Mutex,
     thread,
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Manager};
 
@@ -22,9 +22,13 @@ const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 const RPC_RETRY_COUNT: usize = 3;
 const NODE_BIN_BASENAME: &str = "citizenchain-node";
+const RUNTIME_SECRETS_DIR_NAME: &str = "runtime-secrets";
+const NODE_KEY_TEMP_PREFIX: &str = "node-key-";
+const NODE_KEY_TEMP_SUFFIX: &str = ".tmp";
 
 pub struct RuntimeState {
     pub local_node: Option<Child>,
+    pub node_key_file: Option<PathBuf>,
 }
 
 pub struct AppState(pub Mutex<RuntimeState>);
@@ -64,6 +68,85 @@ fn node_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data)
 }
 
+fn runtime_secrets_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let secrets = security::app_data_dir(app)?.join(RUNTIME_SECRETS_DIR_NAME);
+    fs::create_dir_all(&secrets).map_err(|e| format!("create runtime secrets dir failed: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&secrets, fs::Permissions::from_mode(0o700))
+            .map_err(|e| format!("set runtime secrets dir permission failed: {e}"))?;
+    }
+    Ok(secrets)
+}
+
+fn remove_node_key_file(path: &Path) -> Result<(), String> {
+    match fs::remove_file(path) {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!(
+            "remove node-key temp file failed ({}): {e}",
+            path.display()
+        )),
+    }
+}
+
+fn clear_runtime_node_key_file(state: &mut RuntimeState) {
+    if let Some(path) = state.node_key_file.take() {
+        if let Err(err) = remove_node_key_file(&path) {
+            eprintln!("{err}");
+        }
+    }
+}
+
+fn cleanup_stale_node_key_temp_files(app: &AppHandle) -> Result<(), String> {
+    let secrets_dir = runtime_secrets_dir(app)?;
+    let entries = fs::read_dir(&secrets_dir).map_err(|e| {
+        format!(
+            "read runtime secrets dir failed ({}): {e}",
+            secrets_dir.display()
+        )
+    })?;
+    for entry in entries {
+        let Ok(entry) = entry else {
+            continue;
+        };
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
+            continue;
+        };
+        if name.starts_with(NODE_KEY_TEMP_PREFIX) && name.ends_with(NODE_KEY_TEMP_SUFFIX) {
+            if let Err(err) = remove_node_key_file(&path) {
+                eprintln!("{err}");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_node_key_temp_file(app: &AppHandle, node_key: &str) -> Result<PathBuf, String> {
+    let secrets_dir = runtime_secrets_dir(app)?;
+    let pid = std::process::id();
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|v| v.as_nanos())
+        .unwrap_or(0);
+    for seq in 0..8u8 {
+        let path = secrets_dir.join(format!(
+            "{NODE_KEY_TEMP_PREFIX}{pid}-{stamp}-{seq}{NODE_KEY_TEMP_SUFFIX}"
+        ));
+        if path.exists() {
+            continue;
+        }
+        security::write_secret_text_atomic(&path, node_key)?;
+        return Ok(path);
+    }
+    Err("create node-key temp file failed: exhausted retries".to_string())
+}
+
 fn node_name_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(security::app_data_dir(app)?.join("node-name.json"))
 }
@@ -82,6 +165,7 @@ fn refresh_managed_process(state: &mut RuntimeState) -> (bool, Option<u32>) {
         match child.try_wait() {
             Ok(Some(_)) | Err(_) => {
                 state.local_node = None;
+                clear_runtime_node_key_file(state);
                 (false, None)
             }
             Ok(None) => (true, Some(child.id())),
@@ -154,7 +238,12 @@ fn node_bin_hash_candidates(node_bin: &Path) -> Result<Vec<PathBuf>, String> {
     let file_name = node_bin
         .file_name()
         .and_then(|v| v.to_str())
-        .ok_or_else(|| format!("resolve node binary filename failed ({})", node_bin.display()))?;
+        .ok_or_else(|| {
+            format!(
+                "resolve node binary filename failed ({})",
+                node_bin.display()
+            )
+        })?;
     let mut paths = vec![node_bin.with_file_name(format!("{file_name}.sha256"))];
     if file_name != NODE_BIN_BASENAME {
         paths.push(node_bin.with_file_name(format!("{NODE_BIN_BASENAME}.sha256")));
@@ -221,8 +310,12 @@ fn verify_node_bin_integrity(node_bin: &Path) -> Result<(), String> {
             format!("node binary hash file missing: [{expected_list}]")
         })?;
 
-    let expected_raw = fs::read_to_string(&hash_path)
-        .map_err(|e| format!("read node binary hash failed ({}): {e}", hash_path.display()))?;
+    let expected_raw = fs::read_to_string(&hash_path).map_err(|e| {
+        format!(
+            "read node binary hash failed ({}): {e}",
+            hash_path.display()
+        )
+    })?;
     let expected = parse_sha256_hex(&expected_raw)?;
     let actual = file_sha256_hex(node_bin)?;
     if actual != expected {
@@ -255,7 +348,10 @@ fn find_node_bin(app: &AppHandle) -> Result<PathBuf, String> {
     let canonical_bin = existing
         .canonicalize()
         .map_err(|e| format!("canonicalize node binary failed: {e}"))?;
-    if !trusted_dirs.iter().any(|dir| canonical_bin.starts_with(dir)) {
+    if !trusted_dirs
+        .iter()
+        .any(|dir| canonical_bin.starts_with(dir))
+    {
         return Err(format!(
             "node binary is outside trusted dirs: {}",
             canonical_bin.display()
@@ -541,7 +637,7 @@ fn spawn_node(
     app: &AppHandle,
     node_bin: &Path,
     unlock_password: &str,
-) -> Result<Child, String> {
+) -> Result<(Child, Option<PathBuf>), String> {
     let base_path = node_data_dir(app)?;
     let bootnode_key = bootnodes_address::load_bootnode_node_key(app, unlock_password)?;
     let enable_grandpa_validator =
@@ -558,8 +654,11 @@ fn spawn_node(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
+    let mut node_key_file: Option<PathBuf> = None;
     if let Some(node_key) = bootnode_key {
-        cmd.arg("--node-key").arg(node_key);
+        let temp_file = write_node_key_temp_file(app, &node_key)?;
+        cmd.arg("--node-key-file").arg(&temp_file);
+        node_key_file = Some(temp_file);
     }
     if let Some(name) = node_name {
         cmd.arg("--name").arg(name);
@@ -579,8 +678,18 @@ fn spawn_node(
         }
     }
 
-    cmd.spawn()
-        .map_err(|e| format!("spawn node failed from {}: {e}", node_bin.display()))
+    match cmd.spawn() {
+        Ok(child) => Ok((child, node_key_file)),
+        Err(e) => {
+            if let Some(path) = node_key_file.as_ref() {
+                let _ = remove_node_key_file(path);
+            }
+            Err(format!(
+                "spawn node failed from {}: {e}",
+                node_bin.display()
+            ))
+        }
+    }
 }
 
 fn terminate_child(child: &mut Child) {
@@ -617,7 +726,12 @@ fn terminate_child(child: &mut Child) {
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     let mut last_err = String::new();
     for attempt in 0..RPC_RETRY_COUNT {
-        match rpc::rpc_post(method, params.clone(), RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES) {
+        match rpc::rpc_post(
+            method,
+            params.clone(),
+            RPC_REQUEST_TIMEOUT,
+            MAX_RPC_RESPONSE_BYTES,
+        ) {
             Ok(v) => return Ok(v),
             Err(err) => {
                 last_err = err;
@@ -699,8 +813,12 @@ pub(crate) fn cleanup_on_exit(app: &AppHandle) {
         if let Some(mut child) = state.local_node.take() {
             terminate_child(&mut child);
         }
+        clear_runtime_node_key_file(&mut state);
     }
     let _ = terminate_trusted_listener_nodes(app);
+    if let Err(err) = cleanup_stale_node_key_temp_files(app) {
+        eprintln!("cleanup stale node-key temp files on exit failed: {err}");
+    }
 }
 
 pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
@@ -769,22 +887,28 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
         if let Some(mut child) = state.local_node.take() {
             terminate_child(&mut child);
         }
+        clear_runtime_node_key_file(&mut state);
     }
 
     terminate_trusted_listener_nodes(&app)?;
+    cleanup_stale_node_key_temp_files(&app)?;
     thread::sleep(Duration::from_millis(250));
 
-    let mut child = spawn_node(&app, &node_bin, &unlock_password)?;
+    let (mut child, node_key_file) = spawn_node(&app, &node_bin, &unlock_password)?;
     {
         let app_state = app.state::<AppState>();
         let mut state = match app_state.0.lock() {
             Ok(state) => state,
             Err(_) => {
                 terminate_child(&mut child);
+                if let Some(path) = node_key_file.as_ref() {
+                    let _ = remove_node_key_file(path);
+                }
                 return Err("acquire process state failed".to_string());
             }
         };
         state.local_node = Some(child);
+        state.node_key_file = node_key_file;
     }
 
     thread::sleep(Duration::from_millis(800));
@@ -805,9 +929,11 @@ fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
         if let Some(mut child) = state.local_node.take() {
             terminate_child(&mut child);
         }
+        clear_runtime_node_key_file(&mut state);
     }
 
     terminate_trusted_listener_nodes(&app)?;
+    cleanup_stale_node_key_temp_files(&app)?;
     thread::sleep(Duration::from_millis(250));
     let status = current_status(&app)?;
     if status.running {
@@ -930,7 +1056,10 @@ pub(crate) fn get_node_identity_blocking(app: AppHandle) -> Result<NodeIdentity,
     get_node_identity_sync(app)
 }
 
-pub(crate) fn start_node_blocking(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
+pub(crate) fn start_node_blocking(
+    app: AppHandle,
+    unlock_password: String,
+) -> Result<NodeStatus, String> {
     start_node_sync(app, unlock_password)
 }
 

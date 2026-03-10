@@ -4,14 +4,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{
-    collections::HashSet,
-    fs,
-    io::ErrorKind,
-    path::PathBuf,
-    thread,
-    time::Duration,
-};
+use std::{collections::HashSet, fs, io::ErrorKind, path::PathBuf, thread, time::Duration};
 use tauri::AppHandle;
 use zeroize::Zeroizing;
 
@@ -220,8 +213,8 @@ fn institution_name_by_grandpa_pubkey(pubkey_hex: &str) -> Result<Option<String>
 }
 
 fn grandpa_pubkey_from_private_hex(key_hex: &str) -> Result<String, String> {
-    let secret =
-        decode_hex_32_strict(key_hex).map_err(|_| "GRANDPA 私钥格式无效，应为 64 位十六进制".to_string())?;
+    let secret = decode_hex_32_strict(key_hex)
+        .map_err(|_| "GRANDPA 私钥格式无效，应为 64 位十六进制".to_string())?;
     let signing = ed25519_dalek::SigningKey::from_bytes(&secret);
     let verify = signing.verifying_key();
     Ok(hex::encode(verify.to_bytes()))
