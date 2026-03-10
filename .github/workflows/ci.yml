@@ -4,8 +4,14 @@ name: CI
 on:
   push:
     branches: [main]
+    paths:
+      - ".github/workflows/ci.yml"
+      - "citizenchain/**"
   pull_request:
     branches: [main]
+    paths:
+      - ".github/workflows/ci.yml"
+      - "citizenchain/**"
 
 # 防止同一分支重复运行，新的推送会取消旧的运行
 concurrency:
@@ -34,15 +40,18 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "citizenchain"
+          workspaces: |
+            citizenchain -> target
 
       - name: 编译检查（不含 benchmark）
+        working-directory: citizenchain
         run: cargo check --release
 
   # ── 第 2 步：单元测试 ──
   test:
     name: 单元测试
     runs-on: ubuntu-latest
-    needs: check  # 编译通过后才跑测试
+    needs: check # 编译通过后才跑测试
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
@@ -56,8 +65,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "citizenchain"
+          workspaces: |
+            citizenchain -> target
 
       - name: 运行所有测试
+        working-directory: citizenchain
         run: cargo test --release
 
   # ── 第 3 步：生产 WASM 安全检查 ──
@@ -78,11 +90,15 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "citizenchain"
+          workspaces: |
+            citizenchain -> target
 
       - name: 构建生产 WASM
+        working-directory: citizenchain
         run: cargo build --release -p gmb-runtime
 
       - name: 检查 WASM 不含 benchmark feature
+        working-directory: citizenchain
         run: |
           WASM_FILE=$(find target/release/wbuild -name "*.wasm" | head -1)
           if [ -z "$WASM_FILE" ]; then

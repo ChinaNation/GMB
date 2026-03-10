@@ -9,9 +9,9 @@ use blake2::{Blake2b512, Digest};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::{
-    io::ErrorKind,
     fs,
     hash::Hasher,
+    io::ErrorKind,
     path::{Path, PathBuf},
     str::FromStr,
 };
