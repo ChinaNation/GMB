@@ -69,7 +69,7 @@ jobs:
 
       - name: 跑全部 pallet benchmark 并写回权重文件
         working-directory: citizenchain
-        run: ./scripts/run-benchmarks.sh --steps 50 --repeat 20
+        run: ./scripts/run-benchmarks.sh --chain mainnet --steps 50 --repeat 20
 
       - name: 自动提交并推送 weights.rs 更新
         working-directory: citizenchain
