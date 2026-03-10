@@ -242,6 +242,10 @@
       padding-bottom: 0.28em;
     }
 
+    .markdown-body h1.constitution-main-title {
+      text-align: center;
+    }
+
     .markdown-body h2 {
       font-size: clamp(22px, 2.8vw, 30px);
       border-left: 6px solid #8cc0e8;
@@ -591,6 +595,17 @@
       }
     }
 
+    function centerConstitutionBodyTitle(rootEl) {
+      const headings = rootEl.querySelectorAll("h1");
+      headings.forEach((heading) => {
+        const compact = (heading.textContent || "").replace(/\s+/g, "");
+        const normalized = compact.replace(/[<>《》]/g, "");
+        if (normalized === "公民宪法") {
+          heading.classList.add("constitution-main-title");
+        }
+      });
+    }
+
     function inferTocLevel(text, fallbackLevel) {
       if (/^\d+\.\d+\.\d+/.test(text)) return 3;
       if (/^\d+\.\d+/.test(text)) return 2;
@@ -889,6 +904,7 @@
         stripInlineToc(contentEl);
         stripHorizontalRules(contentEl);
         stripSeparatorBetweenTitleAndChapter(contentEl);
+        centerConstitutionBodyTitle(contentEl);
         buildToc();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
