@@ -25,10 +25,12 @@ const NODE_BIN_BASENAME: &str = "citizenchain-node";
 const RUNTIME_SECRETS_DIR_NAME: &str = "runtime-secrets";
 const NODE_KEY_TEMP_PREFIX: &str = "node-key-";
 const NODE_KEY_TEMP_SUFFIX: &str = ".tmp";
+const NODE_BIN_STAGE_PREFIX: &str = "node-bin-";
 
 pub struct RuntimeState {
     pub local_node: Option<Child>,
     pub node_key_file: Option<PathBuf>,
+    pub node_bin_file: Option<PathBuf>,
 }
 
 pub struct AppState(pub Mutex<RuntimeState>);
@@ -147,6 +149,56 @@ fn write_node_key_temp_file(app: &AppHandle, node_key: &str) -> Result<PathBuf, 
     Err("create node-key temp file failed: exhausted retries".to_string())
 }
 
+fn remove_staged_node_bin_file(path: &Path) -> Result<(), String> {
+    match fs::remove_file(path) {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!(
+            "remove staged node binary failed ({}): {e}",
+            path.display()
+        )),
+    }
+}
+
+fn clear_runtime_node_bin_file(state: &mut RuntimeState) {
+    if let Some(path) = state.node_bin_file.take() {
+        if let Err(err) = remove_staged_node_bin_file(&path) {
+            eprintln!("{err}");
+        }
+    }
+}
+
+fn cleanup_stale_staged_node_bins(app: &AppHandle, keep: Option<&Path>) -> Result<(), String> {
+    let secrets_dir = runtime_secrets_dir(app)?;
+    let entries = fs::read_dir(&secrets_dir).map_err(|e| {
+        format!(
+            "read runtime secrets dir failed ({}): {e}",
+            secrets_dir.display()
+        )
+    })?;
+    for entry in entries {
+        let Ok(entry) = entry else {
+            continue;
+        };
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if keep.is_some_and(|p| p == path.as_path()) {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
+            continue;
+        };
+        if name.starts_with(NODE_BIN_STAGE_PREFIX) {
+            if let Err(err) = remove_staged_node_bin_file(&path) {
+                eprintln!("{err}");
+            }
+        }
+    }
+    Ok(())
+}
+
 fn node_name_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(security::app_data_dir(app)?.join("node-name.json"))
 }
@@ -166,6 +218,7 @@ fn refresh_managed_process(state: &mut RuntimeState) -> (bool, Option<u32>) {
             Ok(Some(_)) | Err(_) => {
                 state.local_node = None;
                 clear_runtime_node_key_file(state);
+                clear_runtime_node_bin_file(state);
                 (false, None)
             }
             Ok(None) => (true, Some(child.id())),
@@ -295,9 +348,9 @@ fn file_sha256_hex(path: &Path) -> Result<String, String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-fn verify_node_bin_integrity(node_bin: &Path) -> Result<(), String> {
+fn resolve_node_bin_hash_path(node_bin: &Path) -> Result<PathBuf, String> {
     let hash_paths = node_bin_hash_candidates(node_bin)?;
-    let hash_path = hash_paths
+    hash_paths
         .iter()
         .find(|path| path.is_file())
         .cloned()
@@ -308,8 +361,34 @@ fn verify_node_bin_integrity(node_bin: &Path) -> Result<(), String> {
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("node binary hash file missing: [{expected_list}]")
-        })?;
+        })
+}
 
+fn staged_node_bin_path(app: &AppHandle, source_bin: &Path) -> Result<PathBuf, String> {
+    let secrets_dir = runtime_secrets_dir(app)?;
+    let pid = std::process::id();
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|v| v.as_nanos())
+        .unwrap_or(0);
+    let ext = source_bin
+        .extension()
+        .and_then(|v| v.to_str())
+        .filter(|v| !v.is_empty())
+        .map(|v| format!(".{v}"))
+        .unwrap_or_default();
+    for seq in 0..8u8 {
+        let path = secrets_dir.join(format!("{NODE_BIN_STAGE_PREFIX}{pid}-{stamp}-{seq}{ext}"));
+        if !path.exists() {
+            return Ok(path);
+        }
+    }
+    Err("create staged node binary path failed: exhausted retries".to_string())
+}
+
+fn stage_verified_node_bin(app: &AppHandle) -> Result<PathBuf, String> {
+    let source_bin = find_node_bin_source(app)?;
+    let hash_path = resolve_node_bin_hash_path(&source_bin)?;
     let expected_raw = fs::read_to_string(&hash_path).map_err(|e| {
         format!(
             "read node binary hash failed ({}): {e}",
@@ -317,18 +396,52 @@ fn verify_node_bin_integrity(node_bin: &Path) -> Result<(), String> {
         )
     })?;
     let expected = parse_sha256_hex(&expected_raw)?;
-    let actual = file_sha256_hex(node_bin)?;
-    if actual != expected {
+    let staged_bin = staged_node_bin_path(app, &source_bin)?;
+    if let Err(e) = fs::copy(&source_bin, &staged_bin) {
+        let _ = remove_staged_node_bin_file(&staged_bin);
         return Err(format!(
-            "node binary sha256 mismatch (bin={}, hash_file={})",
-            node_bin.display(),
-            hash_path.display()
+            "copy staged node binary failed ({} -> {}): {e}",
+            source_bin.display(),
+            staged_bin.display()
         ));
     }
-    Ok(())
+    if let Err(e) = fs::set_permissions(
+        &staged_bin,
+        fs::metadata(&source_bin)
+            .map_err(|err| {
+                format!(
+                    "read source node binary metadata failed ({}): {err}",
+                    source_bin.display()
+                )
+            })?
+            .permissions(),
+    ) {
+        let _ = remove_staged_node_bin_file(&staged_bin);
+        return Err(format!(
+            "set staged node binary permissions failed ({}): {e}",
+            staged_bin.display()
+        ));
+    }
+    let actual = match file_sha256_hex(&staged_bin) {
+        Ok(v) => v,
+        Err(err) => {
+            let _ = remove_staged_node_bin_file(&staged_bin);
+            return Err(err);
+        }
+    };
+    if actual != expected {
+        let _ = remove_staged_node_bin_file(&staged_bin);
+        return Err(format!(
+            "staged node binary sha256 mismatch (bin={}, hash_file={}, staged={})",
+            source_bin.display(),
+            hash_path.display(),
+            staged_bin.display()
+        ));
+    }
+    Ok(staged_bin)
 }
 
-fn find_node_bin(app: &AppHandle) -> Result<PathBuf, String> {
+fn find_node_bin_source(app: &AppHandle) -> Result<PathBuf, String> {
     let candidates = node_bin_candidate_paths(app);
     let trusted_dirs = trusted_node_bin_dirs(app)?;
     let existing = candidates
@@ -357,8 +470,6 @@ fn find_node_bin(app: &AppHandle) -> Result<PathBuf, String> {
             canonical_bin.display()
         ));
     }
-
-    verify_node_bin_integrity(&canonical_bin)?;
     Ok(canonical_bin)
 }
 
@@ -814,8 +925,12 @@ pub(crate) fn cleanup_on_exit(app: &AppHandle) {
             terminate_child(&mut child);
         }
         clear_runtime_node_key_file(&mut state);
+        clear_runtime_node_bin_file(&mut state);
     }
     let _ = terminate_trusted_listener_nodes(app);
+    if let Err(err) = cleanup_stale_staged_node_bins(app, None) {
+        eprintln!("cleanup stale staged node bins on exit failed: {err}");
+    }
     if let Err(err) = cleanup_stale_node_key_temp_files(app) {
         eprintln!("cleanup stale node-key temp files on exit failed: {err}");
     }
@@ -876,7 +991,7 @@ fn get_node_status_sync(app: AppHandle) -> Result<NodeStatus, String> {
 fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
     let unlock_password = security::ensure_unlock_password(&unlock_password)?.to_string();
     verify_start_unlock_password(&unlock_password)?;
-    let node_bin = find_node_bin(&app)?;
+    let node_bin = stage_verified_node_bin(&app)?;
 
     {
         let app_state = app.state::<AppState>();
@@ -888,13 +1003,21 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
             terminate_child(&mut child);
         }
         clear_runtime_node_key_file(&mut state);
+        clear_runtime_node_bin_file(&mut state);
     }
 
     terminate_trusted_listener_nodes(&app)?;
+    cleanup_stale_staged_node_bins(&app, Some(node_bin.as_path()))?;
     cleanup_stale_node_key_temp_files(&app)?;
     thread::sleep(Duration::from_millis(250));
 
-    let (mut child, node_key_file) = spawn_node(&app, &node_bin, &unlock_password)?;
+    let (mut child, node_key_file) = match spawn_node(&app, &node_bin, &unlock_password) {
+        Ok(v) => v,
+        Err(err) => {
+            let _ = remove_staged_node_bin_file(&node_bin);
+            return Err(err);
+        }
+    };
     {
         let app_state = app.state::<AppState>();
         let mut state = match app_state.0.lock() {
@@ -904,11 +1027,13 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
                 if let Some(path) = node_key_file.as_ref() {
                     let _ = remove_node_key_file(path);
                 }
+                let _ = remove_staged_node_bin_file(&node_bin);
                 return Err("acquire process state failed".to_string());
             }
         };
         state.local_node = Some(child);
         state.node_key_file = node_key_file;
+        state.node_bin_file = Some(node_bin);
     }
 
     thread::sleep(Duration::from_millis(800));
@@ -930,9 +1055,11 @@ fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
             terminate_child(&mut child);
         }
         clear_runtime_node_key_file(&mut state);
+        clear_runtime_node_bin_file(&mut state);
     }
 
     terminate_trusted_listener_nodes(&app)?;
+    cleanup_stale_staged_node_bins(&app, None)?;
     cleanup_stale_node_key_temp_files(&app)?;
     thread::sleep(Duration::from_millis(250));
     let status = current_status(&app)?;
