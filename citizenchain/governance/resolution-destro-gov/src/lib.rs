@@ -1,7 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::marker::PhantomData;
-
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{ensure, pallet_prelude::*, traits::Currency, Blake2_128Concat};
 use frame_system::pallet_prelude::*;
@@ -18,68 +16,12 @@ use voting_engine_system::{
 };
 
 pub use pallet::*;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
+pub mod weights;
 
 type BalanceOf<T> =
     <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
-
-/// Weight functions needed for `resolution-destro-gov`.
-pub trait WeightInfo {
-    fn propose_destroy() -> Weight;
-    fn vote_destroy() -> Weight;
-    fn execute_destroy() -> Weight;
-    fn cancel_stale_destroy() -> Weight;
-}
-
-/// Default weights for `resolution-destro-gov` using runtime DbWeight.
-pub struct SubstrateWeight<T>(PhantomData<T>);
-impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-    fn propose_destroy() -> Weight {
-        Weight::from_parts(80_000_000, 4_096)
-            .saturating_add(T::DbWeight::get().reads_writes(8_u64, 8_u64))
-    }
-
-    fn vote_destroy() -> Weight {
-        // Worst-case path includes reaching PASS threshold and attempting auto execution.
-        Weight::from_parts(220_000_000, 12_288)
-            .saturating_add(T::DbWeight::get().reads_writes(14_u64, 12_u64))
-    }
-
-    fn execute_destroy() -> Weight {
-        Weight::from_parts(140_000_000, 8_192)
-            .saturating_add(T::DbWeight::get().reads_writes(9_u64, 8_u64))
-    }
-
-    fn cancel_stale_destroy() -> Weight {
-        Weight::from_parts(70_000_000, 4_096)
-            .saturating_add(T::DbWeight::get().reads_writes(6_u64, 6_u64))
-    }
-}
-
-impl WeightInfo for () {
-    fn propose_destroy() -> Weight {
-        Weight::from_parts(80_000_000, 4_096).saturating_add(
-            frame_support::weights::constants::RocksDbWeight::get().reads_writes(8_u64, 8_u64),
-        )
-    }
-
-    fn vote_destroy() -> Weight {
-        Weight::from_parts(220_000_000, 12_288).saturating_add(
-            frame_support::weights::constants::RocksDbWeight::get().reads_writes(14_u64, 12_u64),
-        )
-    }
-
-    fn execute_destroy() -> Weight {
-        Weight::from_parts(140_000_000, 8_192).saturating_add(
-            frame_support::weights::constants::RocksDbWeight::get().reads_writes(9_u64, 8_u64),
-        )
-    }
-
-    fn cancel_stale_destroy() -> Weight {
-        Weight::from_parts(70_000_000, 4_096).saturating_add(
-            frame_support::weights::constants::RocksDbWeight::get().reads_writes(6_u64, 6_u64),
-        )
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct DestroyAction<Balance> {
@@ -137,6 +79,7 @@ fn institution_pallet_address(institution: InstitutionPalletId) -> Option<[u8; 3
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use crate::weights::WeightInfo;
     use voting_engine_system::InternalAdminProvider;
     use voting_engine_system::InternalVoteEngine;
 
@@ -155,7 +98,7 @@ pub mod pallet {
         type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
 
         /// 该 pallet 的可配置权重实现。
-        type WeightInfo: WeightInfo;
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
     #[pallet::pallet]
@@ -495,146 +438,6 @@ pub mod pallet {
     }
 }
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking {
-    use super::*;
-
-    use codec::Decode;
-    use frame_benchmarking::v2::*;
-    use frame_support::traits::Currency;
-    use frame_system::RawOrigin;
-    use sp_runtime::traits::{SaturatedConversion, Saturating};
-    use voting_engine_system::InternalVoteEngine;
-
-    use crate::Pallet as ResolutionDestroGov;
-
-    fn decode_account<T: pallet::Config>(raw: [u8; 32]) -> T::AccountId {
-        T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
-    }
-
-    fn prc_institution() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINA_CB[1].shenfen_id).expect("PRC institution should be valid")
-    }
-
-    fn prc_admin<T: pallet::Config>(index: usize) -> T::AccountId {
-        decode_account::<T>(CHINA_CB[1].admins[index])
-    }
-
-    fn institution_account<T: pallet::Config>(institution: InstitutionPalletId) -> T::AccountId {
-        let raw =
-            institution_pallet_address(institution).expect("institution account should exist");
-        decode_account::<T>(raw)
-    }
-
-    #[benchmarks]
-    mod benchmarks {
-        use super::*;
-
-        #[benchmark]
-        fn propose_destroy() {
-            let institution = prc_institution();
-            let proposer = prc_admin::<T>(0);
-            let amount: BalanceOf<T> = 100u128.saturated_into();
-
-            #[extrinsic_call]
-            propose_destroy(
-                RawOrigin::Signed(proposer.clone()),
-                ORG_PRC,
-                institution,
-                amount,
-            );
-
-            assert_eq!(ActiveProposalByInstitution::<T>::get(institution), Some(0));
-            assert!(ProposalActions::<T>::contains_key(0));
-        }
-
-        #[benchmark]
-        fn vote_destroy() {
-            let institution = prc_institution();
-            let proposer = prc_admin::<T>(0);
-            let final_voter = prc_admin::<T>(5);
-            let amount: BalanceOf<T> = 100u128.saturated_into();
-            let top_up: BalanceOf<T> = 1_000_000u128.saturated_into();
-
-            assert!(ResolutionDestroGov::<T>::propose_destroy(
-                RawOrigin::Signed(proposer).into(),
-                ORG_PRC,
-                institution,
-                amount,
-            )
-            .is_ok());
-
-            let institution_account = institution_account::<T>(institution);
-            let _ = T::Currency::deposit_creating(&institution_account, top_up);
-
-            for i in 0..5 {
-                let voter = prc_admin::<T>(i);
-                assert!(T::InternalVoteEngine::cast_internal_vote(voter, 0, true).is_ok());
-            }
-
-            #[extrinsic_call]
-            vote_destroy(RawOrigin::Signed(final_voter), 0, true);
-
-            assert!(!ProposalActions::<T>::contains_key(0));
-        }
-
-        #[benchmark]
-        fn execute_destroy() {
-            let institution = prc_institution();
-            let proposer = prc_admin::<T>(0);
-            let caller = prc_admin::<T>(6);
-            let amount: BalanceOf<T> = 100u128.saturated_into();
-            let top_up: BalanceOf<T> = 1_000_000u128.saturated_into();
-
-            assert!(ResolutionDestroGov::<T>::propose_destroy(
-                RawOrigin::Signed(proposer).into(),
-                ORG_PRC,
-                institution,
-                amount,
-            )
-            .is_ok());
-
-            let institution_account = institution_account::<T>(institution);
-            let _ = T::Currency::deposit_creating(&institution_account, top_up);
-
-            for i in 0..6 {
-                let voter = prc_admin::<T>(i);
-                assert!(T::InternalVoteEngine::cast_internal_vote(voter, 0, true).is_ok());
-            }
-
-            #[extrinsic_call]
-            execute_destroy(RawOrigin::Signed(caller), 0);
-
-            assert!(!ProposalActions::<T>::contains_key(0));
-        }
-
-        #[benchmark]
-        fn cancel_stale_destroy() {
-            let institution = prc_institution();
-            let proposer = prc_admin::<T>(0);
-            let caller = prc_admin::<T>(1);
-            let amount: BalanceOf<T> = 100u128.saturated_into();
-
-            assert!(ResolutionDestroGov::<T>::propose_destroy(
-                RawOrigin::Signed(proposer).into(),
-                ORG_PRC,
-                institution,
-                amount,
-            )
-            .is_ok());
-
-            let one: BlockNumberFor<T> = 1u32.saturated_into();
-            let stale_block = T::StaleProposalLifetime::get().saturating_add(one);
-            frame_system::Pallet::<T>::set_block_number(stale_block);
-
-            #[extrinsic_call]
-            cancel_stale_destroy(RawOrigin::Signed(caller), 0);
-
-            assert!(!ProposalActions::<T>::contains_key(0));
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -774,6 +577,7 @@ mod tests {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
+        type MaxAutoFinalizePerBlock = ConstU32<64>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();

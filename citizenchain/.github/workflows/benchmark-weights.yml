@@ -1,0 +1,103 @@
+name: Benchmark Weights
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "**"
+    paths:
+      - ".github/workflows/benchmark-weights.yml"
+      - "scripts/run-benchmarks.sh"
+      - "runtime/**"
+      - "node/**"
+      - "governance/**"
+      - "issuance/**"
+      - "transaction/**"
+      - "otherpallet/**"
+      - "primitives/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    if: github.actor != 'github-actions[bot]'
+    name: 自动跑全部 benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: 安装额外 wasm target（兼容新版 runtime 构建）
+        run: rustup target add wasm32v1-none
+
+      - name: 缓存依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenchain-benchmarks"
+
+      - name: 跑全部 pallet benchmark 并写回权重文件
+        run: ./scripts/run-benchmarks.sh --steps 50 --repeat 20
+
+      - name: 自动提交并推送 weights.rs 更新
+        run: |
+          set -euo pipefail
+
+          changed=0
+          for f in \
+            issuance/shengbank-stake-interest/src/weights.rs \
+            issuance/fullnode-pow-reward/src/weights.rs \
+            otherpallet/sfid-code-auth/src/weights.rs \
+            governance/resolution-destro-gov/src/weights.rs \
+            governance/finality-key-gov/src/weights.rs \
+            issuance/resolution-issuance-iss/src/weights.rs \
+            transaction/duoqian-transaction-pow/src/weights.rs \
+            governance/admins-origin-gov/src/weights.rs \
+            governance/resolution-issuance-gov/src/weights.rs \
+            transaction/offchain-transaction-pos/src/weights.rs; do
+            if ! git diff --quiet -- "$f"; then
+              changed=1
+              break
+            fi
+          done
+
+          if [[ "$changed" -eq 0 ]]; then
+            echo "weights.rs 无变化，跳过提交。"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            issuance/shengbank-stake-interest/src/weights.rs \
+            issuance/fullnode-pow-reward/src/weights.rs \
+            otherpallet/sfid-code-auth/src/weights.rs \
+            governance/resolution-destro-gov/src/weights.rs \
+            governance/finality-key-gov/src/weights.rs \
+            issuance/resolution-issuance-iss/src/weights.rs \
+            transaction/duoqian-transaction-pow/src/weights.rs \
+            governance/admins-origin-gov/src/weights.rs \
+            governance/resolution-issuance-gov/src/weights.rs \
+            transaction/offchain-transaction-pos/src/weights.rs
+
+          git commit -m "chore(weights): auto-update benchmark outputs [skip ci]"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

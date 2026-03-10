@@ -32,10 +32,16 @@
 //!                                上述内容不得修改//!
 //! ============================================================================
 
+pub mod weights;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
+
 pub use pallet::*;
+pub use weights::WeightInfo;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use crate::weights::WeightInfo;
     use frame_support::{
         pallet_prelude::*,
         traits::{Currency, FindAuthor},
@@ -57,6 +63,9 @@ pub mod pallet {
 
         /// PoW 区块作者查找接口（来自 Substrate 共识层）
         type FindAuthor: FindAuthor<Self::AccountId>;
+
+        /// 权重信息（由 benchmark 自动生成或手动估算）
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
     #[pallet::pallet]
@@ -116,7 +125,7 @@ pub mod pallet {
         /// 注意：当前不做“是否真实矿工”的额外校验。若未来 runtime 引入矿工注册表/白名单，
         /// 建议在此处增加资格检查以降低无效绑定造成的状态膨胀风险。
         #[pallet::call_index(0)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
+        #[pallet::weight(T::WeightInfo::bind_reward_wallet())]
         pub fn bind_reward_wallet(origin: OriginFor<T>, wallet: T::AccountId) -> DispatchResult {
             let miner = ensure_signed(origin)?;
             ensure!(
@@ -131,7 +140,7 @@ pub mod pallet {
 
         /// 允许矿工身份账户主动重绑奖励钱包（无需治理权限）。
         #[pallet::call_index(1)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
+        #[pallet::weight(T::WeightInfo::rebind_reward_wallet())]
         pub fn rebind_reward_wallet(
             origin: OriginFor<T>,
             new_wallet: T::AccountId,
@@ -300,6 +309,7 @@ mod tests {
     impl Config for Test {
         type Currency = Balances;
         type FindAuthor = MockFindAuthor;
+        type WeightInfo = ();
     }
 
     fn new_test_ext() -> sp_io::TestExternalities {

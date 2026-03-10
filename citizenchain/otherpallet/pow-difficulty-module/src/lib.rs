@@ -29,7 +29,7 @@ sp_api::decl_runtime_apis! {
 
 #[frame_support::pallet]
 pub mod pallet {
-    use frame_support::pallet_prelude::*;
+    use frame_support::{pallet_prelude::*, traits::Time};
     use frame_system::pallet_prelude::*;
     use primitives::pow_const::{
         DIFFICULTY_ADJUSTMENT_INTERVAL, DIFFICULTY_MAX_ADJUST_FACTOR, DIFFICULTY_MIN_ADJUST_FACTOR,
