@@ -15,9 +15,10 @@ fn rpc_http_client() -> Result<&'static reqwest::blocking::Client, String> {
     if let Some(client) = RPC_HTTP_CLIENT.get() {
         return Ok(client);
     }
-    let _guard = RPC_HTTP_CLIENT_INIT_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let _guard = RPC_HTTP_CLIENT_INIT_LOCK.lock().unwrap_or_else(|err| {
+        eprintln!("RPC_HTTP_CLIENT_INIT_LOCK poisoned; continuing with recovered lock");
+        err.into_inner()
+    });
     if let Some(client) = RPC_HTTP_CLIENT.get() {
         return Ok(client);
     }

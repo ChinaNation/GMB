@@ -290,14 +290,33 @@ pub(crate) fn ensure_unlock_password(password: &str) -> Result<&str, String> {
 
 #[cfg(target_os = "macos")]
 pub(crate) fn verify_device_login_password(password: &str) -> Result<(), String> {
+    use std::process::Stdio;
+
     let user = std::env::var("USER").map_err(|e| format!("读取系统用户失败: {e}"))?;
     let user = validate_system_username(&user)?;
     enforce_auth_rate_limit(user)?;
-    let output = std::process::Command::new("dscl")
-        .args(["/Search", "-authonly", user, password])
-        .output()
+    let mut child = std::process::Command::new("dscl")
+        .args(["/Search", "-authonly", user])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
         .map_err(|e| format!("校验设备密码失败: {e}"))?;
-    if output.status.success() {
+    let mut pass_line = Zeroizing::new(String::with_capacity(password.len() + 1));
+    pass_line.push_str(password);
+    pass_line.push('\n');
+    {
+        let stdin = child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| "校验设备密码失败: 无法获取认证输入通道".to_string())?;
+        stdin
+            .write_all(pass_line.as_bytes())
+            .map_err(|e| format!("校验设备密码失败: {e}"))?;
+    }
+    let status = child.wait().map_err(|e| format!("校验设备密码失败: {e}"))?;
+
+    if status.success() {
         record_auth_attempt(user, true);
         return Ok(());
     }

@@ -12,7 +12,7 @@ use std::{
     fs,
     path::PathBuf,
     process::Command,
-    sync::{Mutex, OnceLock},
+    sync::{Mutex, MutexGuard, OnceLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::AppHandle;
@@ -175,6 +175,18 @@ fn last_cache_persist_at_ms() -> &'static Mutex<u64> {
     LAST_CACHE_PERSIST_AT_MS.get_or_init(|| Mutex::new(0))
 }
 
+fn lock_or_reset<'a, T: Default>(mutex: &'a Mutex<T>, name: &str) -> MutexGuard<'a, T> {
+    match mutex.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("{name} mutex poisoned; reset to default value");
+            let mut guard = err.into_inner();
+            *guard = T::default();
+            guard
+        }
+    }
+}
+
 fn mining_cache_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(security::app_data_dir(app)?.join(MINING_CACHE_FILENAME))
 }
@@ -198,15 +210,13 @@ fn commit_working_cache(
         return false;
     }
     {
-        let mut cache = mining_cache().lock().unwrap_or_else(|e| e.into_inner());
+        let mut cache = lock_or_reset(mining_cache(), "MINING_CACHE");
         *cache = working.clone();
     }
 
     let now_ms = unix_now_ms().unwrap_or(0);
     let should_persist = {
-        let mut last = last_cache_persist_at_ms()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut last = lock_or_reset(last_cache_persist_at_ms(), "LAST_CACHE_PERSIST_AT_MS");
         let due = force_persist
             || pending_blocks == 0
             || now_ms.saturating_sub(*last) >= CACHE_PERSIST_MIN_INTERVAL_MS;
@@ -241,15 +251,13 @@ fn maybe_load_mining_cache(app: &AppHandle) -> Result<Option<MiningComputationCa
 }
 
 fn ensure_mining_cache_loaded(app: &AppHandle) {
-    let mut loaded = mining_cache_loaded_flag()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut loaded = lock_or_reset(mining_cache_loaded_flag(), "MINING_CACHE_LOADED");
     if *loaded {
         return;
     }
     match maybe_load_mining_cache(app) {
         Ok(Some(cache)) => {
-            let mut guard = mining_cache().lock().unwrap_or_else(|e| e.into_inner());
+            let mut guard = lock_or_reset(mining_cache(), "MINING_CACHE");
             *guard = cache;
         }
         Ok(None) => {}
@@ -596,7 +604,7 @@ fn refresh_cache(
     local_miner_account: Option<&str>,
 ) -> Result<RefreshStats, String> {
     let mut working = {
-        let cache = mining_cache().lock().unwrap_or_else(|e| e.into_inner());
+        let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
         cache.clone()
     };
     let normalized_local_miner = local_miner_account.map(|v| v.to_ascii_lowercase());
@@ -821,9 +829,7 @@ fn node_data_size_mb_with_cache(data_dir: &PathBuf) -> Option<u64> {
     let now_ms = unix_now_ms().unwrap_or(0);
     let data_dir_s = data_dir.display().to_string();
     {
-        let guard = node_data_size_cache()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let guard = lock_or_reset(node_data_size_cache(), "NODE_DATA_SIZE_CACHE");
         if let Some(sample) = guard.as_ref() {
             if sample.data_dir == data_dir_s
                 && now_ms.saturating_sub(sample.sampled_at_ms) <= NODE_DATA_SIZE_CACHE_TTL_MS
@@ -834,9 +840,7 @@ fn node_data_size_mb_with_cache(data_dir: &PathBuf) -> Option<u64> {
     }
 
     let size_mb = collect_node_data_size_mb(data_dir);
-    let mut guard = node_data_size_cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut guard = lock_or_reset(node_data_size_cache(), "NODE_DATA_SIZE_CACHE");
     if let Some(sample) = guard.as_ref() {
         if sample.data_dir == data_dir_s
             && now_ms.saturating_sub(sample.sampled_at_ms) <= NODE_DATA_SIZE_CACHE_TTL_MS
@@ -914,7 +918,7 @@ fn resource_usage(app: &AppHandle) -> ResourceUsage {
     let now_ms = unix_now_ms().unwrap_or(0);
     let cache = resource_usage_cache();
     {
-        let guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = lock_or_reset(cache, "RESOURCE_USAGE_CACHE");
         if let Some(sample) = guard.as_ref() {
             if now_ms.saturating_sub(sample.sampled_at_ms) <= RESOURCE_CACHE_TTL_MS {
                 return sample.usage.clone();
@@ -923,7 +927,7 @@ fn resource_usage(app: &AppHandle) -> ResourceUsage {
     }
 
     let usage = collect_resource_usage(app);
-    let mut guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+    let mut guard = lock_or_reset(cache, "RESOURCE_USAGE_CACHE");
     if let Some(sample) = guard.as_ref() {
         if now_ms.saturating_sub(sample.sampled_at_ms) <= RESOURCE_CACHE_TTL_MS {
             return sample.usage.clone();
@@ -937,9 +941,7 @@ fn resource_usage(app: &AppHandle) -> ResourceUsage {
 }
 
 fn try_begin_refresh() -> bool {
-    let mut refreshing = mining_refreshing_flag()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut refreshing = lock_or_reset(mining_refreshing_flag(), "MINING_REFRESHING");
     if *refreshing {
         false
     } else {
@@ -952,9 +954,7 @@ struct RefreshInFlightGuard;
 
 impl Drop for RefreshInFlightGuard {
     fn drop(&mut self) {
-        let mut refreshing = mining_refreshing_flag()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut refreshing = lock_or_reset(mining_refreshing_flag(), "MINING_REFRESHING");
         *refreshing = false;
     }
 }
@@ -991,7 +991,7 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
 
     if !try_begin_refresh() {
         warnings.push("挖矿统计刷新进行中，返回最近缓存".to_string());
-        let cache = mining_cache().lock().unwrap_or_else(|e| e.into_inner());
+        let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
         return Ok(dashboard_from_cache(
             &cache,
             resources,
@@ -1008,7 +1008,7 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
                 let warning = format!("刷新挖矿统计失败，返回最近缓存：{err}");
                 eprintln!("{warning}");
                 warnings.push(warning);
-                let cache = mining_cache().lock().unwrap_or_else(|e| e.into_inner());
+                let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
                 return Ok(dashboard_from_cache(
                     &cache,
                     resources,
@@ -1021,7 +1021,7 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
         warnings.push(w);
     }
 
-    let cache = mining_cache().lock().unwrap_or_else(|e| e.into_inner());
+    let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
     Ok(dashboard_from_cache(
         &cache,
         resources,
