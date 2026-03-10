@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 const WHITEPAPER_URL: &str = "https://chinanation.github.io/GMB/GMB_README.html";
-const CONSTITUTION_URL: &str = "https://chinanation.github.io/GMB/FRC_README.html";
+const CONSTITUTION_URL: &str = "https://chinanation.github.io/GMB/FRC_README.html?v=20260310-1";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase", tag = "contentType")]

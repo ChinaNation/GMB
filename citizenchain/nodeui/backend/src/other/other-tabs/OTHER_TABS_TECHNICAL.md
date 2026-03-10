@@ -25,5 +25,5 @@
 ## 4. 当前内容来源
 
 - 白皮书：`https://chinanation.github.io/GMB/GMB_README.html`
-- 公民治理宪法：`https://chinanation.github.io/GMB/FRC_README.html`
+- 公民治理宪法：`https://chinanation.github.io/GMB/FRC_README.html?v=20260310-1`
 - 公民党：占位文本（待接入）

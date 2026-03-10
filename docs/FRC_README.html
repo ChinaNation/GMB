@@ -576,9 +576,10 @@
 
     function stripSeparatorBetweenTitleAndChapter(rootEl) {
       const normalize = (value) => (value || "").replace(/\s+/g, "");
+      const isChapterText = (value) => /第[一二三四五六七八九十百千万零〇两0-9]+章/.test(normalize(value));
       const title = rootEl.querySelector("h1");
-      const firstChapter = Array.from(rootEl.querySelectorAll("h2")).find((el) =>
-        normalize(el.textContent).startsWith("第一章")
+      const firstChapter = Array.from(rootEl.querySelectorAll("h1, h2, h3")).find((el) =>
+        isChapterText(el.textContent)
       );
       if (!title || !firstChapter) return;
 
@@ -611,7 +612,7 @@
     function normalizeConstitutionHeadingText(value) {
       return (value || "")
         .replace(/\s+/g, "")
-        .replace(/[《》<>]/g, "");
+        .replace(/[《》<>「」『』【】\[\]()]/g, "");
     }
 
     function centerConstitutionBodyTitle(rootEl) {
@@ -625,19 +626,20 @@
     }
 
     function centerConstitutionChapterTitles(rootEl) {
-      const chapterPrefixes = [
-        "第一章",
-        "第二章",
-        "第三章",
-        "第四章",
-        "第五章",
-        "第六章",
-        "第七章"
-      ];
-      rootEl.querySelectorAll("h1, h2").forEach((heading) => {
+      const chapterPattern = /第[一二三四五六七八九十百千万零〇两0-9]+章/;
+      rootEl.querySelectorAll("h1, h2, h3").forEach((heading) => {
         const normalized = normalizeConstitutionHeadingText(heading.textContent);
-        if (chapterPrefixes.some((prefix) => normalized.startsWith(prefix))) {
+        if (chapterPattern.test(normalized)) {
           heading.classList.add("constitution-chapter-title");
+          heading.style.textAlign = "center";
+          heading.style.borderLeft = "0";
+          heading.style.paddingLeft = "0";
+          heading.style.borderBottom = "0";
+          heading.style.paddingBottom = "0";
+          heading.style.fontFamily = "\"Noto Sans SC\", \"PingFang SC\", sans-serif";
+          heading.style.fontSize = "clamp(22px, 2.8vw, 30px)";
+          heading.style.fontWeight = "700";
+          heading.style.marginTop = "1.6em";
         }
       });
     }
