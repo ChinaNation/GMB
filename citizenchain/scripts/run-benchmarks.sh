@@ -11,7 +11,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NODE_BIN="$ROOT_DIR/target/release/node"
 
-CHAIN="${CHAIN:-dev}"
+CHAIN="${CHAIN:-mainnet}"
 STEPS="${STEPS:-50}"
 REPEAT="${REPEAT:-20}"
 HEAP_PAGES="${HEAP_PAGES:-4096}"
@@ -44,7 +44,7 @@ Options:
   --check                运行后检查 weights.rs 是否产生变更；有变更则返回非 0。
   --dry-run              仅打印将要执行的命令，不实际执行。
   --no-build             跳过 cargo build（要求本地已有 target/release/node）。
-  --chain <name>         benchmark chain，默认 dev。
+  --chain <name>         benchmark chain，默认 mainnet。
   --steps <N>            benchmark steps，默认 50。
   --repeat <N>           benchmark repeat，默认 20。
   --heap-pages <N>       wasm heap pages，默认 4096。

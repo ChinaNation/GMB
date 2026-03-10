@@ -266,6 +266,12 @@
       margin-top: 1.6em;
     }
 
+    .markdown-body h1.constitution-section-title,
+    .markdown-body h2.constitution-section-title,
+    .markdown-body h3.constitution-section-title {
+      font-size: clamp(20px, 2.4vw, 26px);
+    }
+
     .markdown-body h3 {
       font-size: 20px;
     }
@@ -644,6 +650,17 @@
       });
     }
 
+    function shrinkConstitutionSectionTitles(rootEl) {
+      const sectionPattern = /第[一二三四五六七八九十百千万零〇两0-9]+节/;
+      rootEl.querySelectorAll("h1, h2, h3").forEach((heading) => {
+        const normalized = normalizeConstitutionHeadingText(heading.textContent);
+        if (sectionPattern.test(normalized)) {
+          heading.classList.add("constitution-section-title");
+          heading.style.fontSize = "clamp(20px, 2.4vw, 26px)";
+        }
+      });
+    }
+
     function inferTocLevel(text, fallbackLevel) {
       if (/^\d+\.\d+\.\d+/.test(text)) return 3;
       if (/^\d+\.\d+/.test(text)) return 2;
@@ -944,6 +961,7 @@
         stripSeparatorBetweenTitleAndChapter(contentEl);
         centerConstitutionBodyTitle(contentEl);
         centerConstitutionChapterTitles(contentEl);
+        shrinkConstitutionSectionTitles(contentEl);
         buildToc();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
