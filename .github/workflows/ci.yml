@@ -36,6 +36,16 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      - name: 安装 LLVM/Clang 依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm llvm-dev clang libclang-dev
+
+      - name: 配置 libclang 环境变量
+        run: |
+          echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
+
       - name: 缓存依赖（加速后续构建）
         uses: Swatinem/rust-cache@v2
         with:
@@ -61,6 +71,16 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      - name: 安装 LLVM/Clang 依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm llvm-dev clang libclang-dev
+
+      - name: 配置 libclang 环境变量
+        run: |
+          echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
+
       - name: 缓存依赖
         uses: Swatinem/rust-cache@v2
         with:
@@ -85,6 +105,16 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+
+      - name: 安装 LLVM/Clang 依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm llvm-dev clang libclang-dev
+
+      - name: 配置 libclang 环境变量
+        run: |
+          echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
 
       - name: 缓存依赖
         uses: Swatinem/rust-cache@v2
