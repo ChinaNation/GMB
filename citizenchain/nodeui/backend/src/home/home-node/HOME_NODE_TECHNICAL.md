@@ -19,6 +19,7 @@
 - 提供链高度查询。
 - 负责节点启动链路中的安全与一致性控制：
   - 节点二进制路径白名单与 SHA-256 完整性校验。
+  - 校验通过后二进制落地为 `runtime-secrets/node-bin-*` 临时副本并从副本启动（降低 TOCTOU 风险）。
   - 运行时 node-key 临时文件最小权限写入与清理。
   - 节点进程识别、终止与停止后状态强校验。
 
@@ -27,6 +28,7 @@
 - 运行时状态：
   - `RuntimeState.local_node`: 当前 UI 会话托管的子进程。
   - `RuntimeState.node_key_file`: 当前会话写入的临时 node-key 文件路径。
+  - `RuntimeState.node_bin_file`: 当前会话写入的临时 node 二进制副本路径。
 - 对外状态：
   - `NodeStatus { running, state, pid }`
   - `ChainStatus { block_height, finalized_height, syncing }`
@@ -35,20 +37,22 @@
 ## 4. 启动流程（`start_node`）
 
 1. 校验开机密码与敏感密钥解锁能力。
-2. 清理 `runtime-secrets` 中历史残留 `node-key-*.tmp`。
+2. 清理 `runtime-secrets` 中历史残留临时文件（`node-key-*.tmp`、`node-bin-*`）。
 3. 从受信目录 `backend/binaries/citizenchain-node` 定位二进制。
 4. 校验二进制 SHA-256：
    - 读取 `backend/binaries/citizenchain-node.sha256`
    - 与实际文件哈希比较，不一致则拒绝启动。
-5. 停止托管子进程并清理当前会话临时 node-key 文件。
-6. 终止“可信旧节点进程”（见第 6 节）。
-7. 启动新节点：
+5. 将校验通过的二进制复制到 `runtime-secrets/node-bin-*`，并对副本再次哈希比对。
+6. 停止托管子进程并清理当前会话临时文件（node-key + node-bin）。
+7. 终止“可信旧节点进程”（见第 6 节）。
+8. 启动新节点：
    - 固定 `--rpc-port 9944`
    - 启动前将 `powr` 密钥同步到本地 keystore（不再注入明文 `POWR_MINER_SURI`）
    - 若配置 bootnode key，通过 `--node-key-file` 传入临时文件
    - 若存在 GRANDPA 私钥，追加 `--validator`
-8. 启动后补齐奖励地址链上绑定，并校验 GRANDPA 生效。
-9. 返回最新状态。
+   - 节点二进制执行路径使用 `runtime-secrets/node-bin-*` 副本
+9. 启动后补齐奖励地址链上绑定，并校验 GRANDPA 生效。
+10. 返回最新状态。
 
 ## 5. 停止流程（`stop_node`）
 
@@ -110,7 +114,7 @@
 
 - `runtime-secrets` 目录强制权限（Unix `0700`）。
 - node-key 临时文件强制权限（Unix `0600`）。
-- 启动前清理历史 node-key 临时文件，减少异常退出残留风险。
+- 启动/停止/退出均清理 node-key 与 node-bin 临时文件，减少异常退出残留风险。
 - 节点二进制固定受信目录 + 哈希校验，降低可执行文件被替换风险。
 
 ## 10. 依赖关系
