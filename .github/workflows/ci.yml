@@ -58,6 +58,11 @@ jobs:
         working-directory: citizenchain
         run: cargo check --release
 
+      - name: Clippy 基线检查（非阻断）
+        working-directory: citizenchain
+        continue-on-error: true
+        run: cargo clippy --workspace --all-targets --all-features
+
   # ── 第 2 步：单元测试 ──
   test:
     name: 单元测试

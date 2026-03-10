@@ -82,11 +82,8 @@ default = ["std"]
 std = ["gmb-runtime/std"]
 # Dependencies that are only required if runtime benchmarking should be build.
 runtime-benchmarks = [
-    "frame-system/runtime-benchmarks",
-	"pallet-transaction-payment/runtime-benchmarks",
-	"sc-service/runtime-benchmarks",
+    "frame-benchmarking-cli/runtime-benchmarks",
 	"gmb-runtime/runtime-benchmarks",
-	"sp-runtime/runtime-benchmarks",
 ]
 # Enable features that allow the runtime to be tried and debugged. Name might be subject to change
 # in the near future.

@@ -168,7 +168,7 @@ pub fn set_bootnode_key(
 ) -> Result<BootnodeKey, String> {
     let _ = security::append_audit_log(&app, "set_bootnode_key", "attempt");
     let unlock = security::ensure_unlock_password(&unlock_password)?;
-    security::verify_device_login_password(unlock)?;
+    security::verify_device_login_password(&app, unlock)?;
     let normalized = normalize_node_key(&node_key)?;
     let derived_peer_id = peer_id_from_node_key_hex(&normalized)?;
     if !is_genesis_bootnode_peer_id(&derived_peer_id)? {

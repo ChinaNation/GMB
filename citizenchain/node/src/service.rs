@@ -10,6 +10,7 @@ use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_service::WarpSyncConfig;
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
+use sp_api::ProvideRuntimeApi;
 use sp_consensus::NoNetwork;
 use sp_core::{
     crypto::KeyTypeId,

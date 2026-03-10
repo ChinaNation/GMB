@@ -20,6 +20,7 @@
 - 负责节点启动链路中的安全与一致性控制：
   - 节点二进制路径白名单与 SHA-256 完整性校验。
   - 校验通过后二进制落地为 `runtime-secrets/node-bin-*` 临时副本并从副本启动（降低 TOCTOU 风险）。
+  - 节点启停动作写入 `security-audit.log`（attempt/success/failed）。
   - 运行时 node-key 临时文件最小权限写入与清理。
   - 节点进程识别、终止与停止后状态强校验。
 

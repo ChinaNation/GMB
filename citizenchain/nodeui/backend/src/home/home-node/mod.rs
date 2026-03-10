@@ -473,9 +473,9 @@ fn find_node_bin_source(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(canonical_bin)
 }
 
-fn verify_start_unlock_password(unlock_password: &str) -> Result<(), String> {
+fn verify_start_unlock_password(app: &AppHandle, unlock_password: &str) -> Result<(), String> {
     let unlock = security::ensure_unlock_password(unlock_password)?;
-    security::verify_device_login_password(unlock)?;
+    security::verify_device_login_password(app, unlock)?;
     bootnodes_address::verify_bootnode_secret_unlock(unlock)?;
     grandpa_address::verify_grandpa_secret_unlock(unlock)?;
     Ok(())
@@ -989,88 +989,106 @@ fn get_node_status_sync(app: AppHandle) -> Result<NodeStatus, String> {
 }
 
 fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
-    let unlock_password = security::ensure_unlock_password(&unlock_password)?.to_string();
-    verify_start_unlock_password(&unlock_password)?;
-    let node_bin = stage_verified_node_bin(&app)?;
+    let _ = security::append_audit_log(&app, "start_node", "attempt");
+    let result = (|| -> Result<NodeStatus, String> {
+        let unlock_password = security::ensure_unlock_password(&unlock_password)?.to_string();
+        verify_start_unlock_password(&app, &unlock_password)?;
+        let node_bin = stage_verified_node_bin(&app)?;
 
-    {
-        let app_state = app.state::<AppState>();
-        let mut state = app_state
-            .0
-            .lock()
-            .map_err(|_| "acquire process state failed".to_string())?;
-        if let Some(mut child) = state.local_node.take() {
-            terminate_child(&mut child);
-        }
-        clear_runtime_node_key_file(&mut state);
-        clear_runtime_node_bin_file(&mut state);
-    }
-
-    terminate_trusted_listener_nodes(&app)?;
-    cleanup_stale_staged_node_bins(&app, Some(node_bin.as_path()))?;
-    cleanup_stale_node_key_temp_files(&app)?;
-    thread::sleep(Duration::from_millis(250));
-
-    let (mut child, node_key_file) = match spawn_node(&app, &node_bin, &unlock_password) {
-        Ok(v) => v,
-        Err(err) => {
-            let _ = remove_staged_node_bin_file(&node_bin);
-            return Err(err);
-        }
-    };
-    {
-        let app_state = app.state::<AppState>();
-        let mut state = match app_state.0.lock() {
-            Ok(state) => state,
-            Err(_) => {
+        {
+            let app_state = app.state::<AppState>();
+            let mut state = app_state
+                .0
+                .lock()
+                .map_err(|_| "acquire process state failed".to_string())?;
+            if let Some(mut child) = state.local_node.take() {
                 terminate_child(&mut child);
-                if let Some(path) = node_key_file.as_ref() {
-                    let _ = remove_node_key_file(path);
-                }
+            }
+            clear_runtime_node_key_file(&mut state);
+            clear_runtime_node_bin_file(&mut state);
+        }
+
+        terminate_trusted_listener_nodes(&app)?;
+        cleanup_stale_staged_node_bins(&app, Some(node_bin.as_path()))?;
+        cleanup_stale_node_key_temp_files(&app)?;
+        thread::sleep(Duration::from_millis(250));
+
+        let (mut child, node_key_file) = match spawn_node(&app, &node_bin, &unlock_password) {
+            Ok(v) => v,
+            Err(err) => {
                 let _ = remove_staged_node_bin_file(&node_bin);
-                return Err("acquire process state failed".to_string());
+                return Err(err);
             }
         };
-        state.local_node = Some(child);
-        state.node_key_file = node_key_file;
-        state.node_bin_file = Some(node_bin);
-    }
+        {
+            let app_state = app.state::<AppState>();
+            let mut state = match app_state.0.lock() {
+                Ok(state) => state,
+                Err(_) => {
+                    terminate_child(&mut child);
+                    if let Some(path) = node_key_file.as_ref() {
+                        let _ = remove_node_key_file(path);
+                    }
+                    let _ = remove_staged_node_bin_file(&node_bin);
+                    return Err("acquire process state failed".to_string());
+                }
+            };
+            state.local_node = Some(child);
+            state.node_key_file = node_key_file;
+            state.node_bin_file = Some(node_bin);
+        }
 
-    thread::sleep(Duration::from_millis(800));
-    if let Err(err) = fee_address::sync_saved_reward_wallet_binding(&app, &unlock_password) {
-        eprintln!("sync reward wallet binding skipped: {err}");
-    }
-    grandpa_address::verify_grandpa_after_start(&app, &unlock_password)?;
-    current_status(&app)
+        thread::sleep(Duration::from_millis(800));
+        if let Err(err) = fee_address::sync_saved_reward_wallet_binding(&app, &unlock_password) {
+            eprintln!("sync reward wallet binding skipped: {err}");
+        }
+        grandpa_address::verify_grandpa_after_start(&app, &unlock_password)?;
+        current_status(&app)
+    })();
+    let _ = security::append_audit_log(
+        &app,
+        "start_node",
+        if result.is_ok() { "success" } else { "failed" },
+    );
+    result
 }
 
 fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
-    {
-        let app_state = app.state::<AppState>();
-        let mut state = app_state
-            .0
-            .lock()
-            .map_err(|_| "acquire process state failed".to_string())?;
-        if let Some(mut child) = state.local_node.take() {
-            terminate_child(&mut child);
+    let _ = security::append_audit_log(&app, "stop_node", "attempt");
+    let result = (|| -> Result<NodeStatus, String> {
+        {
+            let app_state = app.state::<AppState>();
+            let mut state = app_state
+                .0
+                .lock()
+                .map_err(|_| "acquire process state failed".to_string())?;
+            if let Some(mut child) = state.local_node.take() {
+                terminate_child(&mut child);
+            }
+            clear_runtime_node_key_file(&mut state);
+            clear_runtime_node_bin_file(&mut state);
         }
-        clear_runtime_node_key_file(&mut state);
-        clear_runtime_node_bin_file(&mut state);
-    }
 
-    terminate_trusted_listener_nodes(&app)?;
-    cleanup_stale_staged_node_bins(&app, None)?;
-    cleanup_stale_node_key_temp_files(&app)?;
-    thread::sleep(Duration::from_millis(250));
-    let status = current_status(&app)?;
-    if status.running {
-        let pid_text = status
-            .pid
-            .map(|p| p.to_string())
-            .unwrap_or_else(|| "unknown".to_string());
-        return Err(format!("停止失败：节点仍在运行（pid={pid_text}）"));
-    }
-    Ok(status)
+        terminate_trusted_listener_nodes(&app)?;
+        cleanup_stale_staged_node_bins(&app, None)?;
+        cleanup_stale_node_key_temp_files(&app)?;
+        thread::sleep(Duration::from_millis(250));
+        let status = current_status(&app)?;
+        if status.running {
+            let pid_text = status
+                .pid
+                .map(|p| p.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            return Err(format!("停止失败：节点仍在运行（pid={pid_text}）"));
+        }
+        Ok(status)
+    })();
+    let _ = security::append_audit_log(
+        &app,
+        "stop_node",
+        if result.is_ok() { "success" } else { "failed" },
+    );
+    result
 }
 
 #[tauri::command]
@@ -1107,7 +1125,7 @@ pub fn set_node_name(
     unlock_password: String,
 ) -> Result<NodeIdentity, String> {
     let unlock = security::ensure_unlock_password(&unlock_password)?;
-    security::verify_device_login_password(unlock)?;
+    security::verify_device_login_password(&app, unlock)?;
     let normalized = normalize_node_name(&node_name)?;
     let raw = serde_json::to_string_pretty(&StoredNodeName {
         node_name: normalized.clone(),

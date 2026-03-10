@@ -11,7 +11,7 @@ use sha2::Sha256;
 use std::{
     collections::{HashMap, VecDeque},
     fs::{self, OpenOptions},
-    io::Write,
+    io::{ErrorKind, Write},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
     thread,
@@ -27,13 +27,26 @@ const AUTH_FAIL_WINDOW_SECS: u64 = 300;
 const AUTH_MAX_FAILURES_IN_WINDOW: usize = 5;
 const AUTH_BACKOFF_MS: u64 = 800;
 const AUTH_BACKOFF_MAX_MS: u64 = 5000;
+const AUTH_RATE_LIMIT_FILE_NAME: &str = "auth-rate-limit.json";
+const AUDIT_LOG_FILE_NAME: &str = "security-audit.log";
+const AUDIT_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
+const AUDIT_LOG_MAX_BACKUPS: usize = 5;
 
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct AuthRateLimitState {
     recent_failures: VecDeque<u64>,
 }
 
-static AUTH_RATE_LIMIT: OnceLock<Mutex<HashMap<String, AuthRateLimitState>>> = OnceLock::new();
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct AuthRateLimitStore {
+    #[serde(default)]
+    accounts: HashMap<String, AuthRateLimitState>,
+}
+
+static AUTH_RATE_LIMIT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static AUDIT_LOG_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -184,13 +197,41 @@ fn now_unix_secs() -> u64 {
         .unwrap_or(0)
 }
 
-fn enforce_auth_rate_limit(account: &str) -> Result<(), String> {
-    let map = AUTH_RATE_LIMIT.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut guard = map
-        .lock()
-        .map_err(|_| "设备密码限速器状态异常".to_string())?;
-    let state = guard.entry(account.to_string()).or_default();
-    let now = now_unix_secs();
+fn auth_rate_limit_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join(AUTH_RATE_LIMIT_FILE_NAME))
+}
+
+fn load_auth_rate_limit_store(path: &Path) -> Result<AuthRateLimitStore, String> {
+    let raw = match fs::read_to_string(path) {
+        Ok(v) => v,
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(AuthRateLimitStore::default()),
+        Err(err) => {
+            return Err(format!(
+                "read auth rate limit store failed ({}): {err}",
+                path.display()
+            ));
+        }
+    };
+    serde_json::from_str::<AuthRateLimitStore>(&raw).map_err(|err| {
+        format!(
+            "parse auth rate limit store failed ({}): {err}",
+            path.display()
+        )
+    })
+}
+
+fn save_auth_rate_limit_store(path: &Path, store: &AuthRateLimitStore) -> Result<(), String> {
+    let raw = serde_json::to_string(store)
+        .map_err(|err| format!("encode auth rate limit store failed: {err}"))?;
+    write_text_atomic(path, &format!("{raw}\n"))
+}
+
+fn compact_auth_rate_limit_state(
+    store: &mut AuthRateLimitStore,
+    account: &str,
+    now: u64,
+) -> Option<usize> {
+    let state = store.accounts.get_mut(account)?;
     while state
         .recent_failures
         .front()
@@ -198,51 +239,146 @@ fn enforce_auth_rate_limit(account: &str) -> Result<(), String> {
     {
         let _ = state.recent_failures.pop_front();
     }
-    if state.recent_failures.len() >= AUTH_MAX_FAILURES_IN_WINDOW {
+    let len = state.recent_failures.len();
+    if len == 0 {
+        let _ = store.accounts.remove(account);
+        return Some(0);
+    }
+    Some(len)
+}
+
+fn enforce_auth_rate_limit(app: &AppHandle, account: &str) -> Result<(), String> {
+    let lock = AUTH_RATE_LIMIT_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock
+        .lock()
+        .map_err(|_| "设备密码限速器状态异常".to_string())?;
+    let path = auth_rate_limit_path(app)?;
+    let mut store = load_auth_rate_limit_store(&path)?;
+    let now = now_unix_secs();
+    let before = store
+        .accounts
+        .get(account)
+        .map(|state| state.recent_failures.len())
+        .unwrap_or(0);
+    let count = compact_auth_rate_limit_state(&mut store, account, now).unwrap_or(0);
+    if count != before {
+        save_auth_rate_limit_store(&path, &store)?;
+    }
+    if count >= AUTH_MAX_FAILURES_IN_WINDOW {
         return Err("设备密码尝试次数过多，请稍后再试".to_string());
     }
     Ok(())
 }
 
-fn record_auth_attempt(account: &str, success: bool) {
-    let map = AUTH_RATE_LIMIT.get_or_init(|| Mutex::new(HashMap::new()));
+fn record_auth_attempt(app: &AppHandle, account: &str, success: bool) -> Result<(), String> {
+    let lock = AUTH_RATE_LIMIT_LOCK.get_or_init(|| Mutex::new(()));
+    let guard = lock
+        .lock()
+        .map_err(|_| "设备密码限速器状态异常".to_string())?;
+    let path = auth_rate_limit_path(app)?;
+    let mut store = load_auth_rate_limit_store(&path)?;
     let mut sleep_delay_ms: u64 = 0;
-    let Ok(mut guard) = map.lock() else {
-        return;
-    };
-    let state = guard.entry(account.to_string()).or_default();
     let now = now_unix_secs();
-    while state
-        .recent_failures
-        .front()
-        .is_some_and(|ts| now.saturating_sub(*ts) > AUTH_FAIL_WINDOW_SECS)
-    {
-        let _ = state.recent_failures.pop_front();
-    }
+    let _ = compact_auth_rate_limit_state(&mut store, account, now);
+    let state = store.accounts.entry(account.to_string()).or_default();
     if success {
         state.recent_failures.clear();
-        return;
-    }
-    state.recent_failures.push_back(now);
-    let over = state
-        .recent_failures
-        .len()
-        .saturating_sub(AUTH_MAX_FAILURES_IN_WINDOW.saturating_sub(1));
-    if over > 0 {
-        let mut delay = AUTH_BACKOFF_MS.saturating_mul(over as u64);
-        if delay > AUTH_BACKOFF_MAX_MS {
-            delay = AUTH_BACKOFF_MAX_MS;
+    } else {
+        state.recent_failures.push_back(now);
+        let over = state
+            .recent_failures
+            .len()
+            .saturating_sub(AUTH_MAX_FAILURES_IN_WINDOW.saturating_sub(1));
+        if over > 0 {
+            let mut delay = AUTH_BACKOFF_MS.saturating_mul(over as u64);
+            if delay > AUTH_BACKOFF_MAX_MS {
+                delay = AUTH_BACKOFF_MAX_MS;
+            }
+            sleep_delay_ms = delay;
         }
-        sleep_delay_ms = delay;
     }
+    if state.recent_failures.is_empty() {
+        let _ = store.accounts.remove(account);
+    }
+    save_auth_rate_limit_store(&path, &store)?;
     drop(guard);
     if sleep_delay_ms > 0 {
         thread::sleep(std::time::Duration::from_millis(sleep_delay_ms));
     }
+    Ok(())
+}
+
+fn audit_log_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join(AUDIT_LOG_FILE_NAME))
+}
+
+fn audit_log_backup_path(path: &Path, index: usize) -> PathBuf {
+    let mut backup = path.as_os_str().to_os_string();
+    backup.push(format!(".{index}"));
+    PathBuf::from(backup)
+}
+
+fn rotate_audit_log_if_needed(path: &Path) -> Result<(), String> {
+    let size = match fs::metadata(path) {
+        Ok(meta) => meta.len(),
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(err) => {
+            return Err(format!(
+                "read audit log metadata failed ({}): {err}",
+                path.display()
+            ));
+        }
+    };
+    if size < AUDIT_LOG_MAX_BYTES {
+        return Ok(());
+    }
+
+    let oldest = audit_log_backup_path(path, AUDIT_LOG_MAX_BACKUPS);
+    match fs::remove_file(&oldest) {
+        Ok(_) => {}
+        Err(err) if err.kind() == ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(format!(
+                "remove oldest audit log backup failed ({}): {err}",
+                oldest.display()
+            ));
+        }
+    }
+
+    for idx in (1..AUDIT_LOG_MAX_BACKUPS).rev() {
+        let src = audit_log_backup_path(path, idx);
+        let dst = audit_log_backup_path(path, idx + 1);
+        match fs::rename(&src, &dst) {
+            Ok(_) => {}
+            Err(err) if err.kind() == ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(format!(
+                    "rotate audit log backup failed ({} -> {}): {err}",
+                    src.display(),
+                    dst.display()
+                ));
+            }
+        }
+    }
+
+    let first = audit_log_backup_path(path, 1);
+    fs::rename(path, &first).map_err(|err| {
+        format!(
+            "rotate current audit log failed ({} -> {}): {err}",
+            path.display(),
+            first.display()
+        )
+    })?;
+    Ok(())
 }
 
 pub(crate) fn append_audit_log(app: &AppHandle, action: &str, status: &str) -> Result<(), String> {
-    let path = app_data_dir(app)?.join("security-audit.log");
+    let path = audit_log_path(app)?;
+    let lock = AUDIT_LOG_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock
+        .lock()
+        .map_err(|_| "audit log state poisoned".to_string())?;
+    rotate_audit_log_if_needed(&path)?;
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -289,12 +425,12 @@ pub(crate) fn ensure_unlock_password(password: &str) -> Result<&str, String> {
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn verify_device_login_password(password: &str) -> Result<(), String> {
+pub(crate) fn verify_device_login_password(app: &AppHandle, password: &str) -> Result<(), String> {
     use std::process::Stdio;
 
     let user = std::env::var("USER").map_err(|e| format!("读取系统用户失败: {e}"))?;
     let user = validate_system_username(&user)?;
-    enforce_auth_rate_limit(user)?;
+    enforce_auth_rate_limit(app, user)?;
     let mut child = std::process::Command::new("dscl")
         .args(["/Search", "-authonly", user])
         .stdin(Stdio::piped())
@@ -317,16 +453,16 @@ pub(crate) fn verify_device_login_password(password: &str) -> Result<(), String>
     let status = child.wait().map_err(|e| format!("校验设备密码失败: {e}"))?;
 
     if status.success() {
-        record_auth_attempt(user, true);
+        record_auth_attempt(app, user, true)?;
         return Ok(());
     }
-    record_auth_attempt(user, false);
+    record_auth_attempt(app, user, false)?;
     Err("设备开机密码错误".to_string())
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn verify_device_login_password(password: &str) -> Result<(), String> {
-    linux_password_auth::verify_with_pam(password)
+pub(crate) fn verify_device_login_password(app: &AppHandle, password: &str) -> Result<(), String> {
+    linux_password_auth::verify_with_pam(app, password)
 }
 
 #[cfg(target_os = "linux")]
@@ -447,10 +583,10 @@ mod linux_password_auth {
         PAM_SUCCESS
     }
 
-    pub(super) fn verify_with_pam(password: &str) -> Result<(), String> {
+    pub(super) fn verify_with_pam(app: &super::AppHandle, password: &str) -> Result<(), String> {
         let user = std::env::var("USER").map_err(|e| format!("读取系统用户失败: {e}"))?;
         let user = super::validate_system_username(&user)?;
-        super::enforce_auth_rate_limit(user)?;
+        super::enforce_auth_rate_limit(app, user)?;
         let user_c = CString::new(user).map_err(|_| "系统用户名包含非法字符".to_string())?;
         let mut pass_raw = CString::new(password)
             .map_err(|_| "密码包含非法字符".to_string())?
@@ -495,7 +631,7 @@ mod linux_password_auth {
         }
 
         pass_raw.zeroize();
-        super::record_auth_attempt(user_c.to_string_lossy().as_ref(), success);
+        super::record_auth_attempt(app, user_c.to_string_lossy().as_ref(), success)?;
         if success {
             Ok(())
         } else {
@@ -505,7 +641,7 @@ mod linux_password_auth {
 }
 
 #[cfg(target_os = "windows")]
-pub(crate) fn verify_device_login_password(password: &str) -> Result<(), String> {
+pub(crate) fn verify_device_login_password(app: &AppHandle, password: &str) -> Result<(), String> {
     use std::{ffi::OsStr, iter::once, os::windows::ffi::OsStrExt};
 
     type Handle = isize;
@@ -538,7 +674,7 @@ pub(crate) fn verify_device_login_password(password: &str) -> Result<(), String>
 
     let username = std::env::var("USERNAME").map_err(|e| format!("读取系统用户失败: {e}"))?;
     let username = validate_system_username(&username)?;
-    enforce_auth_rate_limit(&username)?;
+    enforce_auth_rate_limit(app, &username)?;
     let domain = std::env::var("USERDOMAIN").unwrap_or_else(|_| ".".to_string());
     let username_w = wide_null(&username);
     let domain_w = wide_null(&domain);
@@ -556,7 +692,7 @@ pub(crate) fn verify_device_login_password(password: &str) -> Result<(), String>
         )
     };
     if ok != 0 {
-        record_auth_attempt(&username, true);
+        record_auth_attempt(app, &username, true)?;
         unsafe {
             let _ = CloseHandle(token);
         }
@@ -576,19 +712,22 @@ pub(crate) fn verify_device_login_password(password: &str) -> Result<(), String>
         )
     };
     if ok_fallback != 0 {
-        record_auth_attempt(&username, true);
+        record_auth_attempt(app, &username, true)?;
         unsafe {
             let _ = CloseHandle(token_fallback);
         }
         return Ok(());
     }
 
-    record_auth_attempt(&username, false);
+    record_auth_attempt(app, &username, false)?;
     Err("设备开机密码错误".to_string())
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-pub(crate) fn verify_device_login_password(_password: &str) -> Result<(), String> {
+pub(crate) fn verify_device_login_password(
+    _app: &AppHandle,
+    _password: &str,
+) -> Result<(), String> {
     Err("当前操作系统暂不支持设备开机密码校验".to_string())
 }
 

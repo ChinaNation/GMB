@@ -529,7 +529,7 @@ pub async fn set_reward_wallet(
 ) -> Result<RewardWallet, String> {
     let _ = security::append_audit_log(&app, "set_reward_wallet", "attempt");
     let unlock = security::ensure_unlock_password(&unlock_password)?;
-    security::verify_device_login_password(unlock)?;
+    security::verify_device_login_password(&app, unlock)?;
     let normalized = normalize_wallet_address(&address)?;
 
     save_reward_wallet(&app, &normalized)?;
