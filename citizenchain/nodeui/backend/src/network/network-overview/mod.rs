@@ -103,9 +103,10 @@ struct KnownPeersMergeResult {
 }
 
 fn merge_known_peers(app: &AppHandle, observed_peer_ids: &[String]) -> KnownPeersMergeResult {
-    let _guard = KNOWN_PEERS_IO_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let _guard = KNOWN_PEERS_IO_LOCK.lock().unwrap_or_else(|err| {
+        eprintln!("KNOWN_PEERS_IO_LOCK poisoned; continuing with recovered lock");
+        err.into_inner()
+    });
     let mut warnings: Vec<String> = Vec::new();
 
     let mut merged_peer_ids = match load_known_peers(app) {
