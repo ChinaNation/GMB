@@ -9,8 +9,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::{
-    ensure, pallet_prelude::*, traits::StorageVersion, weights::Weight, Blake2_128Concat,
-    Twox64Concat,
+    ensure, pallet_prelude::*, traits::StorageVersion, Blake2_128Concat, Twox64Concat,
 };
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
@@ -27,6 +26,9 @@ use voting_engine_system::{
 };
 
 pub use pallet::*;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
+pub mod weights;
 
 #[derive(
     Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
@@ -97,6 +99,7 @@ fn expected_admin_count(org: u8) -> Option<u32> {
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use crate::weights::WeightInfo;
     use voting_engine_system::InternalVoteEngine;
 
     #[pallet::config]
@@ -114,6 +117,9 @@ pub mod pallet {
 
         /// 中文注释：内部投票引擎（返回真实 proposal_id，避免外部猜测 next_proposal_id）。
         type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
+
+        /// 该 pallet 的可配置权重实现。
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
     #[pallet::pallet]
@@ -270,10 +276,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
-        #[pallet::weight(
-            Weight::from_parts(80_000_000, 4_096)
-                .saturating_add(T::DbWeight::get().reads_writes(8, 8))
-        )]
+        #[pallet::weight(T::WeightInfo::propose_admin_replacement())]
         pub fn propose_admin_replacement(
             origin: OriginFor<T>,
             org: u8,
@@ -325,10 +328,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(1)]
-        #[pallet::weight(
-            Weight::from_parts(200_000_000, 8_192)
-                .saturating_add(T::DbWeight::get().reads_writes(12, 10))
-        )]
+        #[pallet::weight(T::WeightInfo::vote_admin_replacement())]
         pub fn vote_admin_replacement(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -369,20 +369,14 @@ pub mod pallet {
         }
 
         #[pallet::call_index(2)]
-        #[pallet::weight(
-            Weight::from_parts(120_000_000, 4_096)
-                .saturating_add(T::DbWeight::get().reads_writes(8, 7))
-        )]
+        #[pallet::weight(T::WeightInfo::execute_admin_replacement())]
         pub fn execute_admin_replacement(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let _ = ensure_signed(origin)?;
             Self::try_execute_replacement(proposal_id)
         }
 
         #[pallet::call_index(3)]
-        #[pallet::weight(
-            Weight::from_parts(60_000_000, 4_096)
-                .saturating_add(T::DbWeight::get().reads_writes(4, 4))
-        )]
+        #[pallet::weight(T::WeightInfo::cancel_stale_proposal())]
         pub fn cancel_stale_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let _ = ensure_signed(origin)?;
             let action =
@@ -648,6 +642,7 @@ mod tests {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
+        type MaxAutoFinalizePerBlock = ConstU32<64>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
@@ -659,6 +654,7 @@ mod tests {
         type MaxAdminsPerInstitution = ConstU32<32>;
         type StaleProposalLifetime = ConstU64<100>;
         type InternalVoteEngine = voting_engine_system::Pallet<Test>;
+        type WeightInfo = ();
     }
 
     fn new_test_ext() -> sp_io::TestExternalities {

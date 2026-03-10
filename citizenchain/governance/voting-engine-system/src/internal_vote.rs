@@ -45,7 +45,9 @@ fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
 fn is_valid_internal_institution(org: u8, institution: InstitutionPalletId) -> bool {
     match org {
         // 国储会只有一个机构
-        ORG_NRC => nrc_pallet_id_bytes().map(|nrc| institution == nrc).unwrap_or(false),
+        ORG_NRC => nrc_pallet_id_bytes()
+            .map(|nrc| institution == nrc)
+            .unwrap_or(false),
         // 省储会从 CHINA_CB 中排除国储会
         ORG_PRC => CHINA_CB
             .iter()
@@ -138,6 +140,7 @@ impl<T: Config> Pallet<T> {
         };
 
         Proposals::<T>::insert(id, proposal);
+        Self::schedule_proposal_expiry(id, end);
         Self::deposit_event(Event::<T>::ProposalCreated {
             proposal_id: id,
             kind: PROPOSAL_KIND_INTERNAL,

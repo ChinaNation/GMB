@@ -1,6 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
+pub mod weights;
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::weights::Weight;
@@ -98,6 +101,7 @@ pub trait SfidEligibilityProvider<AccountId, Hash> {
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use crate::weights::WeightInfo;
     use frame_support::{pallet_prelude::*, Blake2_128Concat};
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::{Hash, Saturating};
@@ -154,6 +158,9 @@ pub mod pallet {
 
         /// 中文注释：绑定后回调到发行模块发放认证奖励。
         type OnSfidBound: OnSfidBound<Self::AccountId, Self::Hash> + OnSfidBoundWeight;
+
+        /// 权重信息：由 runtime 注入实际 benchmark 结果。
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
     #[pallet::pallet]
@@ -190,6 +197,12 @@ pub mod pallet {
         BoundedVec<T::Hash, T::MaxCredentialNoncesPerExpiryBlock>,
         ValueQuery,
     >;
+
+    /// 中文注释：过期 nonce 清理游标，记录“上个区块未清完”的过期桶。
+    #[pallet::storage]
+    #[pallet::getter(fn pending_credential_nonce_cleanup_expiry)]
+    pub type PendingCredentialNonceCleanupExpiry<T: Config> =
+        StorageValue<_, BlockNumberFor<T>, OptionQuery>;
 
     /// 中文注释：公民投票验签 nonce（哈希）防重放（提案+身份+nonce 三元维度）。
     #[pallet::storage]
@@ -303,25 +316,36 @@ pub mod pallet {
             }
 
             let db_weight = T::DbWeight::get();
-            let mut weight = db_weight.reads_writes(1, 1);
-            let mut nonce_hashes: Vec<T::Hash> =
-                CredentialNoncesByExpiry::<T>::take(n).into_inner();
-            if nonce_hashes.is_empty() {
+            let mut weight = db_weight.reads(1);
+            let mut cleanup_budget = max_cleanup;
+            let pending_expiry = PendingCredentialNonceCleanupExpiry::<T>::get();
+
+            if let Some(expiry) = pending_expiry {
+                if expiry <= n {
+                    let (removed, has_remaining, cleanup_weight) =
+                        Self::cleanup_credential_nonce_bucket(expiry, cleanup_budget);
+                    weight = weight.saturating_add(cleanup_weight);
+                    cleanup_budget = cleanup_budget.saturating_sub(removed);
+                    if has_remaining {
+                        PendingCredentialNonceCleanupExpiry::<T>::put(expiry);
+                        weight = weight.saturating_add(db_weight.writes(1));
+                        return weight;
+                    }
+
+                    PendingCredentialNonceCleanupExpiry::<T>::kill();
+                    weight = weight.saturating_add(db_weight.writes(1));
+                }
+            }
+
+            if cleanup_budget == 0 || pending_expiry == Some(n) {
                 return weight;
             }
 
-            let remove_count = core::cmp::min(max_cleanup, nonce_hashes.len());
-            for nonce_hash in nonce_hashes.drain(..remove_count) {
-                UsedCredentialNonce::<T>::remove(nonce_hash);
-            }
-            weight = weight.saturating_add(db_weight.writes(remove_count as u64));
-
-            if !nonce_hashes.is_empty() {
-                let remaining: BoundedVec<T::Hash, T::MaxCredentialNoncesPerExpiryBlock> =
-                    nonce_hashes
-                        .try_into()
-                        .expect("remaining nonce hashes should stay within bound");
-                CredentialNoncesByExpiry::<T>::insert(n, remaining);
+            let (_removed, has_remaining, cleanup_weight) =
+                Self::cleanup_credential_nonce_bucket(n, cleanup_budget);
+            weight = weight.saturating_add(cleanup_weight);
+            if has_remaining {
+                PendingCredentialNonceCleanupExpiry::<T>::put(n);
                 weight = weight.saturating_add(db_weight.writes(1));
             }
 
@@ -351,8 +375,7 @@ pub mod pallet {
         /// 中文注释：使用 SFID 系统签发的一次性凭证绑定钱包。
         #[pallet::call_index(0)]
         #[pallet::weight(
-            T::DbWeight::get()
-                .reads_writes(7, 7)
+            T::WeightInfo::bind_sfid()
                 .saturating_add(T::OnSfidBound::on_sfid_bound_weight())
         )]
         pub fn bind_sfid(
@@ -430,7 +453,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(1)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(2, 2))]
+        #[pallet::weight(T::WeightInfo::unbind_sfid())]
         pub fn unbind_sfid(origin: OriginFor<T>) -> DispatchResult {
             let who = ensure_signed(origin)?;
             let sfid_hash = AccountToSfid::<T>::get(&who).ok_or(Error::<T>::NotBound)?;
@@ -445,7 +468,7 @@ pub mod pallet {
 
         /// 中文注释：仅备用账户可发起轮换；发起者升级为主账户，并提交一个新备用账户补位。
         #[pallet::call_index(2)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(3, 3))]
+        #[pallet::weight(T::WeightInfo::rotate_sfid_keys())]
         pub fn rotate_sfid_keys(origin: OriginFor<T>, new_backup: T::AccountId) -> DispatchResult {
             let who = ensure_signed(origin)?;
             let main = SfidMainAccount::<T>::get().ok_or(Error::<T>::UnauthorizedSfidOperator)?;
@@ -483,6 +506,37 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        fn cleanup_credential_nonce_bucket(
+            expiry: BlockNumberFor<T>,
+            max_cleanup: usize,
+        ) -> (usize, bool, Weight) {
+            let db_weight = T::DbWeight::get();
+            let mut weight = db_weight.reads_writes(1, 1);
+            let mut nonce_hashes: Vec<T::Hash> =
+                CredentialNoncesByExpiry::<T>::take(expiry).into_inner();
+            if nonce_hashes.is_empty() {
+                return (0, false, weight);
+            }
+
+            let remove_count = core::cmp::min(max_cleanup, nonce_hashes.len());
+            for nonce_hash in nonce_hashes.drain(..remove_count) {
+                UsedCredentialNonce::<T>::remove(nonce_hash);
+            }
+            weight = weight.saturating_add(db_weight.writes(remove_count as u64));
+
+            let has_remaining = !nonce_hashes.is_empty();
+            if has_remaining {
+                let remaining: BoundedVec<T::Hash, T::MaxCredentialNoncesPerExpiryBlock> =
+                    nonce_hashes
+                        .try_into()
+                        .expect("remaining nonce hashes should stay within bound");
+                CredentialNoncesByExpiry::<T>::insert(expiry, remaining);
+                weight = weight.saturating_add(db_weight.writes(1));
+            }
+
+            (remove_count, has_remaining, weight)
+        }
+
         pub fn is_bound(who: &T::AccountId) -> bool {
             AccountToSfid::<T>::contains_key(who)
         }
@@ -661,6 +715,7 @@ mod tests {
         type SfidVerifier = TestSfidVerifier;
         type SfidVoteVerifier = TestSfidVoteVerifier;
         type OnSfidBound = ();
+        type WeightInfo = ();
     }
 
     fn new_test_ext() -> sp_io::TestExternalities {
@@ -720,6 +775,41 @@ mod tests {
     fn credential(sfid_plain: &str, nonce_plain: &str, sig_plain: &str) -> CredentialOf<Test> {
         let expires_at = System::block_number().saturating_add(10);
         credential_with_expiry(sfid_plain, nonce_plain, sig_plain, expires_at)
+    }
+
+    fn bind_many_with_expiry(
+        account_start: u64,
+        count: usize,
+        label: &str,
+        expires_at: BlockNumberFor<Test>,
+    ) -> Vec<<Test as frame_system::Config>::Hash> {
+        let mut nonce_hashes = Vec::with_capacity(count);
+        for i in 0..count {
+            let account = account_start.saturating_add(i as u64);
+            let sfid_plain = format!("{label}-sfid-{i}");
+            let nonce_plain = format!("{label}-nonce-{i}");
+            assert_ok!(SfidCodeAuth::bind_sfid(
+                RuntimeOrigin::signed(account),
+                sfid(sfid_plain.as_str()),
+                credential_with_expiry(
+                    sfid_plain.as_str(),
+                    nonce_plain.as_str(),
+                    "bind-ok",
+                    expires_at
+                )
+            ));
+            nonce_hashes.push(<Test as frame_system::Config>::Hashing::hash(
+                nonce_plain.as_bytes(),
+            ));
+        }
+        nonce_hashes
+    }
+
+    fn count_used_nonce_hashes(nonce_hashes: &[<Test as frame_system::Config>::Hash]) -> usize {
+        nonce_hashes
+            .iter()
+            .filter(|nonce_hash| UsedCredentialNonce::<Test>::contains_key(nonce_hash))
+            .count()
     }
 
     #[test]
@@ -943,6 +1033,78 @@ mod tests {
                 sfid("sfid-cleanup-b"),
                 credential_with_expiry("sfid-cleanup-b", "same-nonce", "bind-ok", 8)
             ));
+        });
+    }
+
+    #[test]
+    fn cleanup_cursor_continues_expired_bucket_across_blocks() {
+        new_test_ext().execute_with(|| {
+            let expires_at = 5;
+            let max_cleanup = MaxCredentialNonceCleanupPerBlock::get() as usize;
+            let total = max_cleanup.saturating_add(5);
+            let nonce_hashes = bind_many_with_expiry(100, total, "cursor", expires_at);
+
+            assert_eq!(
+                CredentialNoncesByExpiry::<Test>::get(expires_at).len(),
+                total
+            );
+            assert_eq!(count_used_nonce_hashes(&nonce_hashes), total);
+
+            <Pallet<Test> as Hooks<BlockNumberFor<Test>>>::on_initialize(expires_at);
+            assert_eq!(
+                CredentialNoncesByExpiry::<Test>::get(expires_at).len(),
+                total - max_cleanup
+            );
+            assert_eq!(
+                PendingCredentialNonceCleanupExpiry::<Test>::get(),
+                Some(expires_at)
+            );
+            assert_eq!(count_used_nonce_hashes(&nonce_hashes), total - max_cleanup);
+
+            <Pallet<Test> as Hooks<BlockNumberFor<Test>>>::on_initialize(expires_at + 1);
+            assert!(CredentialNoncesByExpiry::<Test>::get(expires_at).is_empty());
+            assert!(PendingCredentialNonceCleanupExpiry::<Test>::get().is_none());
+            assert_eq!(count_used_nonce_hashes(&nonce_hashes), 0);
+        });
+    }
+
+    #[test]
+    fn cleanup_cursor_clears_pending_then_current_expiry_when_budget_remains() {
+        new_test_ext().execute_with(|| {
+            let max_cleanup = MaxCredentialNonceCleanupPerBlock::get() as usize;
+            let pending_expiry = 5;
+            let current_expiry = 6;
+
+            let pending_hashes = bind_many_with_expiry(
+                1_000,
+                max_cleanup.saturating_add(1),
+                "pending",
+                pending_expiry,
+            );
+            let current_hashes = bind_many_with_expiry(10_000, 3, "current", current_expiry);
+
+            <Pallet<Test> as Hooks<BlockNumberFor<Test>>>::on_initialize(pending_expiry);
+            assert_eq!(
+                CredentialNoncesByExpiry::<Test>::get(pending_expiry).len(),
+                1
+            );
+            assert_eq!(
+                PendingCredentialNonceCleanupExpiry::<Test>::get(),
+                Some(pending_expiry)
+            );
+            assert_eq!(
+                CredentialNoncesByExpiry::<Test>::get(current_expiry).len(),
+                3
+            );
+            assert_eq!(count_used_nonce_hashes(&pending_hashes), 1);
+            assert_eq!(count_used_nonce_hashes(&current_hashes), 3);
+
+            <Pallet<Test> as Hooks<BlockNumberFor<Test>>>::on_initialize(current_expiry);
+            assert!(CredentialNoncesByExpiry::<Test>::get(pending_expiry).is_empty());
+            assert!(CredentialNoncesByExpiry::<Test>::get(current_expiry).is_empty());
+            assert!(PendingCredentialNonceCleanupExpiry::<Test>::get().is_none());
+            assert_eq!(count_used_nonce_hashes(&pending_hashes), 0);
+            assert_eq!(count_used_nonce_hashes(&current_hashes), 0);
         });
     }
 

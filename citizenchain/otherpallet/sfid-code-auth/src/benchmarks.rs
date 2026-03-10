@@ -1,0 +1,74 @@
+// SFID 绑定与资格校验模块 Benchmark 定义。
+
+#![cfg(feature = "runtime-benchmarks")]
+
+use frame_benchmarking::v2::*;
+use frame_system::RawOrigin;
+use sp_runtime::traits::{Hash, Saturating};
+use crate::{
+    AccountToSfid, BindCredential, BoundCount, Call, Config, NonceOf, Pallet, SfidBackupAccount1,
+    SfidBackupAccount2, SfidMainAccount, SfidOf, SfidToAccount, SignatureOf,
+};
+
+#[benchmarks]
+mod benchmarks {
+    use super::*;
+
+    #[benchmark]
+    fn bind_sfid() {
+        let caller: T::AccountId = frame_benchmarking::account("caller", 0, 0);
+
+        let sfid_bytes = b"benchmark-sfid-code".to_vec();
+        let sfid_code: SfidOf<T> = sfid_bytes.try_into().expect("sfid should fit");
+        let sfid_hash = T::Hashing::hash(sfid_code.as_slice());
+
+        let nonce_bytes = b"benchmark-nonce".to_vec();
+        let nonce: NonceOf<T> = nonce_bytes.try_into().expect("nonce should fit");
+
+        let sig_bytes = b"benchmark-sig".to_vec();
+        let signature: SignatureOf<T> = sig_bytes.try_into().expect("sig should fit");
+
+        let now = frame_system::Pallet::<T>::block_number();
+        let expires_at = now.saturating_add(10u32.into());
+
+        let credential = BindCredential {
+            sfid_code_hash: sfid_hash,
+            nonce,
+            expires_at,
+            signature,
+        };
+
+        #[extrinsic_call]
+        bind_sfid(RawOrigin::Signed(caller), sfid_code, credential);
+    }
+
+    #[benchmark]
+    fn unbind_sfid() {
+        let caller: T::AccountId = frame_benchmarking::account("caller", 0, 0);
+        let sfid_hash = T::Hashing::hash(b"bench-sfid");
+
+        SfidToAccount::<T>::insert(sfid_hash, &caller);
+        AccountToSfid::<T>::insert(&caller, sfid_hash);
+        BoundCount::<T>::put(1u64);
+
+        #[extrinsic_call]
+        unbind_sfid(RawOrigin::Signed(caller));
+    }
+
+    #[benchmark]
+    fn rotate_sfid_keys() {
+        let backup1: T::AccountId = frame_benchmarking::account("backup1", 0, 0);
+        let backup2: T::AccountId = frame_benchmarking::account("backup2", 1, 0);
+        let main_key: T::AccountId = frame_benchmarking::account("main", 2, 0);
+        let new_backup: T::AccountId = frame_benchmarking::account("new_backup", 3, 0);
+
+        SfidMainAccount::<T>::put(&main_key);
+        SfidBackupAccount1::<T>::put(&backup1);
+        SfidBackupAccount2::<T>::put(&backup2);
+
+        #[extrinsic_call]
+        rotate_sfid_keys(RawOrigin::Signed(backup1), new_backup);
+    }
+
+    impl_benchmark_test_suite!(Pallet, crate::tests::new_test_ext(), crate::tests::Test);
+}

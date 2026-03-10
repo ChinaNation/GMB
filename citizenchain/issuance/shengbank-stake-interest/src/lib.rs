@@ -1,11 +1,17 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod weights;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
+
 pub use pallet::*;
+pub use weights::WeightInfo;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use crate::weights::WeightInfo;
     use codec::Decode;
-    use frame_support::{ensure, pallet_prelude::*, traits::Currency, Blake2_128Concat};
+    use frame_support::{ensure, pallet_prelude::*, traits::Currency};
     use frame_system::{ensure_root, pallet_prelude::*};
     use sp_runtime::traits::{SaturatedConversion, Saturating, Zero};
     use sp_std::prelude::*;
@@ -32,6 +38,9 @@ pub mod pallet {
         /// 一年对应的区块数（由 runtime 注入）
         #[pallet::constant]
         type BlocksPerYear: Get<u64>;
+
+        /// 权重信息（由 benchmark 自动生成或手动估算）
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
     pub type BalanceOf<T> =
@@ -43,14 +52,8 @@ pub mod pallet {
     #[pallet::getter(fn last_settled_year)]
     pub type LastSettledYear<T> = StorageValue<_, u32, ValueQuery>;
 
-    /// 省储行账户覆盖映射：允许治理在不升级 runtime 的前提下更换收款账户。
-    #[pallet::storage]
-    pub type ShengBankAccountOverrides<T: Config> =
-        StorageMap<_, Blake2_128Concat, [u8; 48], T::AccountId, OptionQuery>;
-
     // ===== Pallet =====
     #[pallet::pallet]
-    #[pallet::without_storage_info]
     pub struct Pallet<T>(_);
 
     // ===== 事件（审计核心）=====
@@ -93,18 +96,12 @@ pub mod pallet {
         /// 由 Root 强制推进年度（跳过故障年度）。
         ShengBankYearForceAdvanced { year: u32 },
 
-        /// 省储行收款账户覆盖已更新。
-        ShengBankAccountOverrideSet { pallet_id: [u8; 48] },
-
-        /// 省储行收款账户覆盖已清除。
-        ShengBankAccountOverrideCleared { pallet_id: [u8; 48] },
     }
 
     #[pallet::error]
     pub enum Error<T> {
         InvalidOperationCount,
         InvalidYear,
-        UnknownShengBankId,
     }
 
     // ===== Hooks =====
@@ -147,19 +144,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// Root 手动补结算指定年数（用于故障恢复或快速追平）。
         #[pallet::call_index(0)]
-        #[pallet::weight(
-            T::DbWeight::get()
-                .reads_writes(
-                    1 + (*max_years as u64) * (1 + CHINA_CH.len() as u64 * 3),
-                    1 + (*max_years as u64) * (2 + CHINA_CH.len() as u64 * 3),
-                )
-                .saturating_add(Weight::from_parts(
-                    (*max_years as u64)
-                        .saturating_mul(CHINA_CH.len() as u64)
-                        .saturating_mul(SETTLEMENT_CPU_OP_WEIGHT),
-                    0
-                ))
-        )]
+        #[pallet::weight(T::WeightInfo::force_settle_years(*max_years))]
         pub fn force_settle_years(
             origin: OriginFor<T>,
             max_years: u32,
@@ -189,7 +174,7 @@ pub mod pallet {
 
         /// Root 强制推进到指定年度（跳过无法修复的失败年度）。
         #[pallet::call_index(1)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
+        #[pallet::weight(T::WeightInfo::force_advance_year())]
         pub fn force_advance_year(origin: OriginFor<T>, year: u32) -> DispatchResult {
             ensure_root(origin)?;
             let current = Self::last_settled_year();
@@ -202,54 +187,16 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Root 设置省储行收款账户覆盖值。
-        #[pallet::call_index(2)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
-        pub fn set_shengbank_account_override(
-            origin: OriginFor<T>,
-            pallet_id: [u8; 48],
-            account: T::AccountId,
-        ) -> DispatchResult {
-            ensure_root(origin)?;
-            ensure!(Self::is_known_shengbank_id(pallet_id), Error::<T>::UnknownShengBankId);
-            ShengBankAccountOverrides::<T>::insert(pallet_id, account);
-            Self::deposit_event(Event::<T>::ShengBankAccountOverrideSet { pallet_id });
-            Ok(())
-        }
-
-        /// Root 清除省储行收款账户覆盖值。
-        #[pallet::call_index(3)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
-        pub fn clear_shengbank_account_override(
-            origin: OriginFor<T>,
-            pallet_id: [u8; 48],
-        ) -> DispatchResult {
-            ensure_root(origin)?;
-            ensure!(Self::is_known_shengbank_id(pallet_id), Error::<T>::UnknownShengBankId);
-            ShengBankAccountOverrides::<T>::remove(pallet_id);
-            Self::deposit_event(Event::<T>::ShengBankAccountOverrideCleared { pallet_id });
-            Ok(())
-        }
     }
 
     // ===== 核心逻辑 =====
     impl<T: Config> Pallet<T> {
-        fn is_known_shengbank_id(pallet_id: [u8; 48]) -> bool {
-            CHINA_CH.iter().any(|bank| {
-                shenfen_id_to_fixed48(bank.shenfen_id)
-                    .map(|id| id == pallet_id)
-                    .unwrap_or(false)
-            })
-        }
-
+        /// 解析省储行收款地址：只能是 CHINA_CH 中硬编码的该省多签地址，不可覆盖。
         fn resolve_bank_account(
             year: u32,
             bank: &primitives::china::china_ch::ChinaCh,
             pallet_id: [u8; 48],
         ) -> Option<T::AccountId> {
-            if let Some(override_account) = ShengBankAccountOverrides::<T>::get(pallet_id) {
-                return Some(override_account);
-            }
             match T::AccountId::decode(&mut &bank.duoqian_address[..]) {
                 Ok(a) => Some(a),
                 Err(_) => {
@@ -340,14 +287,13 @@ pub mod pallet {
             SHENGBANK_INITIAL_INTEREST_BP.saturating_sub(decay)
         }
 
-        /// 核心铸造逻辑（只针对固定省储行地址，支持链上覆盖地址）。
+        /// 核心铸造逻辑（只针对固定省储行多签地址，不可覆盖）。
         fn mint_interest_for_year(year: u32) -> (u64, u64, u32, u32) {
-            // 中文注释：保守估算每家省储行读：
-            // - 覆盖映射读取
+            // 保守估算每家省储行读：
             // - 账户余额读取
             // - 总发行量读取
             // - 账户存在性相关读取
-            let reads = CHINA_CH.len() as u64 * 4;
+            let reads = CHINA_CH.len() as u64 * 3;
             let mut writes = 0u64;
             let mut success_count = 0u32;
             let total_count = CHINA_CH.len() as u32;
@@ -508,6 +454,7 @@ mod tests {
     impl Config for Test {
         type Currency = Balances;
         type BlocksPerYear = BlocksPerYearForTest;
+        type WeightInfo = ();
     }
 
     fn set_blocks_per_year(v: u64) {
@@ -642,49 +589,14 @@ mod tests {
     }
 
     #[test]
-    fn root_can_override_shengbank_account() {
+    fn interest_always_goes_to_hardcoded_multisig_address() {
         new_test_ext().execute_with(|| {
-            let bank = &primitives::china::china_ch::CHINA_CH[0];
-            let pallet_id =
-                primitives::china::china_ch::shenfen_id_to_fixed48(bank.shenfen_id).expect("id");
-            let replacement = AccountId32::new([42u8; 32]);
-            assert_ok!(ShengBankStakeInterest::set_shengbank_account_override(
-                RuntimeOrigin::root(),
-                pallet_id,
-                replacement.clone()
-            ));
-
             run_to_block(10);
-            let expected = bank.stake_amount * 100u128 / 10_000u128;
-            assert_eq!(Balances::free_balance(replacement), expected);
-        });
-    }
-
-    #[test]
-    fn root_can_clear_override_and_restore_default_account() {
-        new_test_ext().execute_with(|| {
-            let bank = &primitives::china::china_ch::CHINA_CH[0];
-            let pallet_id =
-                primitives::china::china_ch::shenfen_id_to_fixed48(bank.shenfen_id).expect("id");
-            let replacement = AccountId32::new([42u8; 32]);
-            let original = shengbank_account(0);
-
-            assert_ok!(ShengBankStakeInterest::set_shengbank_account_override(
-                RuntimeOrigin::root(),
-                pallet_id,
-                replacement.clone()
-            ));
-            run_to_block(10); // year 1 minted to replacement
-            assert_ok!(ShengBankStakeInterest::clear_shengbank_account_override(
-                RuntimeOrigin::root(),
-                pallet_id
-            ));
-            run_to_block(20); // year 2 should go to original
-
-            let year1 = bank.stake_amount * 100u128 / 10_000u128;
-            let year2 = bank.stake_amount * 99u128 / 10_000u128;
-            assert_eq!(Balances::free_balance(replacement), year1);
-            assert_eq!(Balances::free_balance(original), year2);
+            // 利息只能发到 CHINA_CH 中硬编码的省储行多签地址
+            let first_bank = &primitives::china::china_ch::CHINA_CH[0];
+            let account = shengbank_account(0);
+            let expected = first_bank.stake_amount * 100u128 / 10_000u128;
+            assert_eq!(Balances::free_balance(account), expected);
         });
     }
 
@@ -718,28 +630,13 @@ mod tests {
     fn non_root_calls_are_rejected() {
         new_test_ext().execute_with(|| {
             let caller = RuntimeOrigin::signed(AccountId32::new([1u8; 32]));
-            let bank = &primitives::china::china_ch::CHINA_CH[0];
-            let pallet_id =
-                primitives::china::china_ch::shenfen_id_to_fixed48(bank.shenfen_id).expect("id");
 
             assert_noop!(
                 ShengBankStakeInterest::force_settle_years(caller.clone(), 1),
                 sp_runtime::DispatchError::BadOrigin
             );
             assert_noop!(
-                ShengBankStakeInterest::force_advance_year(caller.clone(), 1),
-                sp_runtime::DispatchError::BadOrigin
-            );
-            assert_noop!(
-                ShengBankStakeInterest::set_shengbank_account_override(
-                    caller.clone(),
-                    pallet_id,
-                    AccountId32::new([9u8; 32])
-                ),
-                sp_runtime::DispatchError::BadOrigin
-            );
-            assert_noop!(
-                ShengBankStakeInterest::clear_shengbank_account_override(caller, pallet_id),
+                ShengBankStakeInterest::force_advance_year(caller, 1),
                 sp_runtime::DispatchError::BadOrigin
             );
         });

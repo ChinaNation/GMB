@@ -32,8 +32,8 @@ repository = "https://github.com/ChinaNation/GMB"
 homepage = "https://github.com/ChinaNation/GMB"
 license = "MIT"
 
-[workspace.lints.rust]                                      # 统一 Rust lint 规则（当前先宽松）
-unsafe_code = "allow"
+[workspace.lints.rust]                                      # 统一 Rust lint 规则
+unsafe_code = "warn"
 
 [workspace.lints.clippy]                                    # 统一 Clippy lint 规则（当前先宽松）
 all = "allow"
