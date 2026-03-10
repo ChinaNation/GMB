@@ -25,6 +25,7 @@ fn main() {
     tauri::Builder::default()
         .manage(AppState(Mutex::new(RuntimeState {
             local_node: None,
+            node_key_file: None,
         })))
         .invoke_handler(tauri::generate_handler![
             get_node_status,
