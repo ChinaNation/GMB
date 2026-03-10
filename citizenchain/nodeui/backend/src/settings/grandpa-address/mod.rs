@@ -331,7 +331,7 @@ pub fn set_grandpa_key(
 ) -> Result<GrandpaKey, String> {
     let _ = security::append_audit_log(&app, "set_grandpa_key", "attempt");
     let unlock = security::ensure_unlock_password(&unlock_password)?;
-    security::verify_device_login_password(unlock)?;
+    security::verify_device_login_password(&app, unlock)?;
     let normalized = normalize_grandpa_key(&key)?;
     let pubkey = grandpa_pubkey_from_private_hex(&normalized)?;
     let institution_name = institution_name_by_grandpa_pubkey(&pubkey)?
