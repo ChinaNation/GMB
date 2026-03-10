@@ -35,8 +35,12 @@ license = "MIT"
 [workspace.lints.rust]                                      # 统一 Rust lint 规则
 unsafe_code = "warn"
 
-[workspace.lints.clippy]                                    # 统一 Clippy lint 规则（当前先宽松）
-all = "allow"
+[workspace.lints.clippy]                                    # 统一 Clippy lint 规则（阶段1：先收紧到 warn）
+all = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+dbg_macro = "warn"
+todo = "warn"
 
 [workspace.dependencies]
 # 本地

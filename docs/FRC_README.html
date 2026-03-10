@@ -253,6 +253,12 @@
       margin-top: 1.6em;
     }
 
+    .markdown-body h2.constitution-chapter-title {
+      text-align: center;
+      border-left: 0;
+      padding-left: 0;
+    }
+
     .markdown-body h3 {
       font-size: 20px;
     }
@@ -596,12 +602,26 @@
     }
 
     function centerConstitutionBodyTitle(rootEl) {
-      const headings = rootEl.querySelectorAll("h1");
-      headings.forEach((heading) => {
-        const compact = (heading.textContent || "").replace(/\s+/g, "");
-        const normalized = compact.replace(/[<>《》]/g, "");
-        if (normalized === "公民宪法") {
-          heading.classList.add("constitution-main-title");
+      const heading = rootEl.querySelector("h1");
+      if (heading) {
+        heading.classList.add("constitution-main-title");
+      }
+    }
+
+    function centerConstitutionChapterTitles(rootEl) {
+      const chapterTitles = new Set([
+        "第一章总则",
+        "第二章政府",
+        "第三章立法院",
+        "第四章司法院",
+        "第五章监察院",
+        "第六章教委会",
+        "第七章储委会"
+      ]);
+      rootEl.querySelectorAll("h2").forEach((heading) => {
+        const normalized = (heading.textContent || "").replace(/\s+/g, "");
+        if (chapterTitles.has(normalized)) {
+          heading.classList.add("constitution-chapter-title");
         }
       });
     }
@@ -905,6 +925,7 @@
         stripHorizontalRules(contentEl);
         stripSeparatorBetweenTitleAndChapter(contentEl);
         centerConstitutionBodyTitle(contentEl);
+        centerConstitutionChapterTitles(contentEl);
         buildToc();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

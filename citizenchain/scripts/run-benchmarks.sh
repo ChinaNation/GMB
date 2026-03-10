@@ -128,7 +128,7 @@ fi
 
 if [[ "$BUILD_NODE" -eq 1 ]]; then
   log "构建 benchmark 节点二进制（node, release, runtime-benchmarks）"
-  cargo build -p node --release --features runtime-benchmarks
+  cargo build -p node --release --features runtime-benchmarks --locked
 fi
 
 if [[ "$DRY_RUN" -eq 0 && ! -x "$NODE_BIN" ]]; then
