@@ -25,8 +25,11 @@ pub trait DuoqianAdminAuth<AccountId> {
     type PublicKey: Parameter + Member + MaxEncodedLen + Ord + Clone;
     type Signature: Parameter + Member + MaxEncodedLen + Clone;
 
+    /// 校验公钥格式是否合法，避免把无效字节串写进管理员列表。
     fn is_valid_public_key(public_key: &Self::PublicKey) -> bool;
+    /// 将管理员公钥映射到本链账户，用于校验“提交者本人必须是管理员之一”。
     fn public_key_to_account(public_key: &Self::PublicKey) -> Option<AccountId>;
+    /// 校验管理员对指定 payload 的签名是否有效。
     fn verify_signature(
         public_key: &Self::PublicKey,
         payload: &[u8],
@@ -329,6 +332,8 @@ pub mod pallet {
             sfid_id: SfidIdOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+            // 中文注释：链域哈希既参与地址派生，也参与后续 create/close 的签名域隔离，
+            // 因此机构登记前必须先确保它已经被初始化。
             Self::ensure_chain_domain_hash_initialized()?;
             ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
             ensure!(
@@ -352,6 +357,12 @@ pub mod pallet {
             ensure!(
                 T::AddressValidator::is_valid(&duoqian_address),
                 Error::<T>::InvalidAddress
+            );
+            // 中文注释：受保护地址未来不能作为 close 的资金转出源，
+            // 因此必须在登记阶段就提前阻断，避免后续创建后形成“可进不可出”的死锁地址。
+            ensure!(
+                !T::ProtectedSourceChecker::is_protected(&duoqian_address),
+                Error::<T>::ProtectedSource
             );
 
             SfidRegisteredAddress::<T>::insert(&sfid_id, &duoqian_address);
@@ -428,6 +439,12 @@ pub mod pallet {
                 T::AddressValidator::is_valid(&duoqian_address),
                 Error::<T>::InvalidAddress
             );
+            // 中文注释：与 close_duoqian 的源地址保护规则保持一致。
+            // 如果派生地址本身属于制度保护地址，则本次创建必须直接失败。
+            ensure!(
+                !T::ProtectedSourceChecker::is_protected(&duoqian_address),
+                Error::<T>::ProtectedSource
+            );
             ensure!(
                 !DuoqianAccounts::<T>::contains_key(&duoqian_address),
                 Error::<T>::AddressAlreadyExists
@@ -469,6 +486,8 @@ pub mod pallet {
             let signed = Self::count_valid_signatures(&duoqian_admins, &approvals, &payload)?;
             ensure!(signed >= threshold, Error::<T>::InsufficientSignatures);
 
+            // 中文注释：先完成资金转入，再写入多签配置。
+            // 这样如果转账失败，整笔交易直接回滚，不会留下“已建配置但未入金”的半初始化状态。
             T::Currency::transfer(
                 &who,
                 &duoqian_address,
@@ -618,6 +637,8 @@ pub mod pallet {
             if ChainDomainHash::<T>::get().is_some() {
                 return Ok(());
             }
+            // 中文注释：链域哈希固定取 genesis hash 并持久化，只允许初始化一次。
+            // 这样地址派生和签名域都会稳定绑定到当前链，而不是随区块高度变化。
             let genesis_hash = frame_system::Pallet::<T>::block_hash(BlockNumberFor::<T>::zero());
             ensure!(
                 genesis_hash != T::Hash::default(),
@@ -640,6 +661,8 @@ pub mod pallet {
         pub fn derive_duoqian_address_from_sfid_id(
             sfid_id: &[u8],
         ) -> Result<T::AccountId, DispatchError> {
+            // 中文注释：地址派生必须包含固定版本前缀和链域哈希，
+            // 否则不同链、不同规则版本之间可能出现同一 sfid_id 派生到同一地址的冲突。
             let mut input = b"DUOQIAN_SFID_V1".to_vec();
             input.extend_from_slice(Self::signature_domain_hash_value()?.encode().as_slice());
             input.extend_from_slice(sfid_id);
@@ -673,6 +696,8 @@ pub mod pallet {
             let mut approved_signers = BTreeSet::new();
 
             for approval in approvals.iter() {
+                // 中文注释：approval 中每一条都必须来自管理员集合，
+                // 否则外部签名者不能通过“凑数量”参与多签授权。
                 ensure!(
                     admin_set.contains(&approval.public_key),
                     Error::<T>::PermissionDenied
@@ -1875,6 +1900,61 @@ mod tests {
                     approvals
                 ),
                 Error::<Test>::AddressReserved
+            );
+        });
+    }
+
+    #[test]
+    fn create_duoqian_rejects_registered_protected_address() {
+        new_test_ext().execute_with(|| {
+            let p1 = pair(1);
+            let p2 = pair(2);
+            let sfid: SfidIdOf<Test> = b"GFR-LN001-CB0C-protected-20260222"
+                .to_vec()
+                .try_into()
+                .expect("sfid id should fit");
+            let duoqian = AccountId32::new([0xCC; 32]);
+            SfidRegisteredAddress::<Test>::insert(&sfid, &duoqian);
+            AddressRegisteredSfid::<Test>::insert(
+                &duoqian,
+                RegisteredInstitution {
+                    sfid_id: sfid.clone(),
+                    nonce: 0,
+                },
+            );
+
+            let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
+            let approvals = approvals_vec(vec![
+                AdminApproval {
+                    public_key: public_of(&p1),
+                    signature: sign(&p1, &payload),
+                },
+                AdminApproval {
+                    public_key: public_of(&p2),
+                    signature: sign(&p2, &payload),
+                },
+            ]);
+
+            assert_noop!(
+                call_create(
+                    RuntimeOrigin::signed(account_of(&p1)),
+                    sfid,
+                    2,
+                    admins,
+                    2,
+                    111,
+                    approvals
+                ),
+                Error::<Test>::ProtectedSource
             );
         });
     }

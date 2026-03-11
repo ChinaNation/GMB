@@ -107,6 +107,7 @@ fn calc_offchain_fee_fen(amount_fen: u128, rate_bp: u32) -> Result<u128, FeeCalc
     let numerator = amount_fen
         .checked_mul(rate_bp as u128)
         .ok_or(FeeCalcError::AmountOverflow)?;
+    // 中文注释：费率计算先按 bp 换算，再做四舍五入到“分”，最后再套最低手续费保护。
     let by_rate =
         round_div(numerator, BP_DENOMINATOR).expect("BP_DENOMINATOR must be non-zero; qed");
     Ok(by_rate.max(OFFCHAIN_MIN_FEE_FEN))
@@ -1204,7 +1205,12 @@ pub mod pallet {
                 queued.last_attempt_at = Some(now);
                 queued.last_error = Some(QueuedBatchLastError::Cancelled);
                 let current_seq = LastBatchSeq::<T>::get(queued.institution);
-                if queued.batch_seq > current_seq {
+                let expected_seq = current_seq
+                    .checked_add(1)
+                    .ok_or(Error::<T>::CounterOverflow)?;
+                // 中文注释：只有“当前队头批次”在因换钥失效而取消时，才允许推进执行序号。
+                // 否则如果直接把 LastBatchSeq 跳到更大的 batch_seq，会把前面的待处理批次整体跳过。
+                if queued.batch_seq == expected_seq {
                     LastBatchSeq::<T>::insert(queued.institution, queued.batch_seq);
                 }
                 for item in queued.batch.iter() {
@@ -2189,6 +2195,8 @@ pub mod pallet {
             let verify_key =
                 Self::verify_key_for(institution).ok_or(Error::<T>::VerifyKeyMissing)?;
             if verify_signature {
+                // 中文注释：直接提交和入队路径必须用“当前生效密钥”验签；
+                // 出队重试则依赖入队时验签结果 + verify_key_epoch_snapshot 保护，不再重复验签。
                 let message = Self::batch_signing_message(institution, batch_seq, batch);
                 ensure!(
                     T::OffchainBatchVerifier::verify(
@@ -2203,6 +2211,7 @@ pub mod pallet {
             let now = frame_system::Pallet::<T>::block_number();
             let last = LastPackBlock::<T>::get(institution);
             let (by_count, by_time) = Self::pack_trigger_reason(last, now, batch.len() as u64);
+            // 中文注释：链下批次必须满足“按笔数触发”或“按时间触发”其一，避免碎片化频繁上链。
             ensure!(by_count || by_time, Error::<T>::PackThresholdNotReached);
             let t2 = institution_t2_code(institution).ok_or(Error::<T>::InvalidInstitution)?;
             let _ = Self::validate_batch_items(batch, institution, t2, rate_bp, verify_fee, false)?;
@@ -2225,6 +2234,8 @@ pub mod pallet {
             let mut total_transfer_u128: u128 = 0;
             let mut total_fee_u128: u128 = 0;
             for item in batch.iter() {
+                // 中文注释：单条批次项按“主金额到账 + 链下手续费入 fee_account”两笔转账执行，
+                // 任意一步失败都会被外围 with_transaction 回滚，避免批次半成功。
                 T::Currency::transfer(
                     &item.payer,
                     &item.recipient,
@@ -2246,6 +2257,7 @@ pub mod pallet {
                 let log_id = NextProcessedTxLogId::<T>::get();
                 let next_log_id = log_id.checked_add(1).ok_or(Error::<T>::CounterOverflow)?;
                 NextProcessedTxLogId::<T>::put(next_log_id);
+                // 中文注释：为 processed tx 追加顺序日志，供 on_idle 做有界清理，避免全表扫描。
                 ProcessedTxLog::<T>::insert(log_id, (t2, item.tx_id, now));
             }
 
@@ -2398,6 +2410,8 @@ pub mod pallet {
             Self::ensure_no_duplicate_tx_ids(batch)?;
             let mut fee_sum_u128: u128 = 0;
             for item in batch.iter() {
+                // 中文注释：tx_id 既不能命中已处理窗口，也不能与当前待处理队列中的项重复，
+                // 这样 direct path 和 enqueue path 都能共享同一套防重放语义。
                 ensure!(
                     !Self::is_processed_offchain_tx_active(t2, item.tx_id),
                     Error::<T>::TxAlreadyProcessed
@@ -2427,6 +2441,7 @@ pub mod pallet {
                     Error::<T>::RecipientClearingInstitutionMismatch
                 );
                 if verify_fee {
+                    // 中文注释：链下手续费必须和链上制度费率严格一致，不能由中继账户随意填写。
                     let transfer_u128: u128 = item.transfer_amount.saturated_into();
                     let fee_u128: u128 = item.offchain_fee_amount.saturated_into();
                     let expected_fee = calc_offchain_fee_fen(transfer_u128, rate_bp)
@@ -2497,6 +2512,8 @@ pub mod pallet {
                 QueuedBatchStatus::Pending => {
                     let elapsed: u64 = now.saturating_sub(queued.enqueued_at).saturated_into();
                     if elapsed >= QUEUED_BATCH_RETENTION_BLOCKS {
+                        // 中文注释：过期 pending 批次只有在它正好处于队头时才允许推进序号；
+                        // 否则会破坏机构内批次必须按 seq 线性推进的约束。
                         let current_seq = LastBatchSeq::<T>::get(queued.institution);
                         let expected_seq = current_seq.saturating_add(1);
                         if queued.batch_seq == expected_seq {
@@ -2867,6 +2884,7 @@ pub mod pallet {
                 reads = reads.saturating_add(1);
                 if let Some(pending) = PendingVerifyKeys::<T>::get(institution) {
                     if now >= pending.activate_at {
+                        // 中文注释：普通换钥只在这里统一切换，保证纪元递增、状态复位和事件发出始终同一时刻发生。
                         reads = reads.saturating_add(1);
                         let epoch = VerifyKeyEpoch::<T>::get(institution);
                         let Some(next_epoch) = epoch.checked_add(1) else {
@@ -2923,6 +2941,8 @@ pub mod pallet {
             }
 
             if remaining_weight.all_gte(consumed.saturating_add(queued_peek_budget)) {
+                // 中文注释：queued batch 清理先做轻量 peek，再根据当前游标处对象估算更精确的预算，
+                // 这样 on_idle 不会因为一次重清理把剩余权重吃空。
                 consumed = consumed.saturating_add(queued_peek_budget);
                 if let Some((reads, writes)) = Self::queued_prune_budget_hint(now) {
                     let queued_budget = db.reads_writes(reads, writes);
@@ -2988,7 +3008,7 @@ mod tests {
         pub type VotingEngineSystem = voting_engine_system;
 
         #[runtime::pallet_index(3)]
-        pub type OffchainTransactionFee = super;
+        pub type OffchainTransactionPos = super;
     }
 
     #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -3121,7 +3141,7 @@ mod tests {
     }
 
     fn prb_fee_account() -> AccountId32 {
-        OffchainTransactionFee::fee_account_of(prb_institution()).expect("prb fee account")
+        OffchainTransactionPos::fee_account_of(prb_institution()).expect("prb fee account")
     }
 
     fn prb_t2() -> [u8; 2] {
@@ -3189,31 +3209,31 @@ mod tests {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
 
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 5
             ));
 
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
 
-            assert_eq!(OffchainTransactionFee::rate_bp_of(institution), 5);
+            assert_eq!(OffchainTransactionPos::rate_bp_of(institution), 5);
 
             let key: VerifyKeyOf<Test> = b"new-verify-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionFee::propose_verify_key(
+            assert_ok!(OffchainTransactionPos::propose_verify_key(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 key.clone()
             ));
 
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_verify_key(
+                assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
                     1,
                     true
@@ -3221,7 +3241,7 @@ mod tests {
             }
 
             assert_eq!(
-                OffchainTransactionFee::verify_key_of(institution),
+                OffchainTransactionPos::verify_key_of(institution),
                 Some(key)
             );
         });
@@ -3234,7 +3254,7 @@ mod tests {
             let non_admin = AccountId32::new([9u8; 32]);
 
             assert_noop!(
-                OffchainTransactionFee::propose_institution_rate(
+                OffchainTransactionPos::propose_institution_rate(
                     RuntimeOrigin::signed(non_admin.clone()),
                     institution,
                     3
@@ -3243,7 +3263,7 @@ mod tests {
             );
 
             assert_noop!(
-                OffchainTransactionFee::submit_offchain_batch(
+                OffchainTransactionPos::submit_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     1,
@@ -3269,13 +3289,13 @@ mod tests {
             let institution = prb_institution();
 
             // 先通过内部投票把费率设为1bp（0.01%），便于构造样例。
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
@@ -3302,17 +3322,17 @@ mod tests {
                 offchain_fee_amount: 1,
             };
             let batch: BatchOf<Test> = vec![item1.clone(), item2.clone()].try_into().expect("fit");
-            let fee_account = OffchainTransactionFee::fee_account_of(institution).expect("fee");
+            let fee_account = OffchainTransactionPos::fee_account_of(institution).expect("fee");
             let fee_before = Balances::free_balance(&fee_account);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient1),
                 institution
             ));
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient2),
                 institution
             ));
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -3320,14 +3340,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
 
             // 首次允许按时间阈值提交。
-            assert_ok!(OffchainTransactionFee::submit_offchain_batch(
+            assert_ok!(OffchainTransactionPos::submit_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -3346,7 +3366,7 @@ mod tests {
             System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64);
             let replay: BatchOf<Test> = vec![item1].try_into().expect("fit");
             assert_noop!(
-                OffchainTransactionFee::submit_offchain_batch(
+                OffchainTransactionPos::submit_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     2,
@@ -3362,19 +3382,19 @@ mod tests {
     fn enqueue_rejects_already_processed_tx_id() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -3382,14 +3402,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -3404,7 +3424,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::submit_offchain_batch(
+            assert_ok!(OffchainTransactionPos::submit_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -3423,7 +3443,7 @@ mod tests {
             .try_into()
             .expect("fit");
             assert_noop!(
-                OffchainTransactionFee::enqueue_offchain_batch(
+                OffchainTransactionPos::enqueue_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     2,
@@ -3439,19 +3459,19 @@ mod tests {
     fn enqueue_rejects_tx_id_already_in_pending_queue() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -3459,14 +3479,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -3480,7 +3500,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -3497,7 +3517,7 @@ mod tests {
             .try_into()
             .expect("fit");
             assert_noop!(
-                OffchainTransactionFee::enqueue_offchain_batch(
+                OffchainTransactionPos::enqueue_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     2,
@@ -3513,19 +3533,19 @@ mod tests {
     fn prune_processed_tx_removes_expired_entry() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -3533,14 +3553,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -3555,7 +3575,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::submit_offchain_batch(
+            assert_ok!(OffchainTransactionPos::submit_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -3564,7 +3584,7 @@ mod tests {
             ));
             let t2 = prb_t2();
             System::set_block_number(System::block_number() + PROCESSED_TX_RETENTION_BLOCKS as u64);
-            assert_ok!(OffchainTransactionFee::prune_processed_tx(
+            assert_ok!(OffchainTransactionPos::prune_processed_tx(
                 RuntimeOrigin::signed(relay_account()),
                 t2,
                 tx_id
@@ -3577,19 +3597,19 @@ mod tests {
     fn submit_rejects_zero_or_self_transfer() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -3597,14 +3617,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -3620,7 +3640,7 @@ mod tests {
             .try_into()
             .expect("fit");
             assert_noop!(
-                OffchainTransactionFee::submit_offchain_batch(
+                OffchainTransactionPos::submit_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     1,
@@ -3641,7 +3661,7 @@ mod tests {
             .try_into()
             .expect("fit");
             assert_noop!(
-                OffchainTransactionFee::submit_offchain_batch(
+                OffchainTransactionPos::submit_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     1,
@@ -3660,7 +3680,7 @@ mod tests {
             let key: VerifyKeyOf<Test> = b"boot-default-key".to_vec().try_into().expect("fit");
 
             assert_noop!(
-                OffchainTransactionFee::init_verify_key(
+                OffchainTransactionPos::init_verify_key(
                     RuntimeOrigin::signed(prb_admin(0)),
                     institution,
                     key.clone()
@@ -3668,18 +3688,18 @@ mod tests {
                 Error::<Test>::UnauthorizedSubmitter
             );
 
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 key.clone()
             ));
             assert_eq!(
-                OffchainTransactionFee::verify_key_of(institution),
+                OffchainTransactionPos::verify_key_of(institution),
                 Some(key.clone())
             );
 
             assert_noop!(
-                OffchainTransactionFee::init_verify_key(
+                OffchainTransactionPos::init_verify_key(
                     RuntimeOrigin::signed(prb_account()),
                     institution,
                     key
@@ -3695,7 +3715,7 @@ mod tests {
             let institution = prb_institution();
             let empty: VerifyKeyOf<Test> = vec![].try_into().expect("fit");
             assert_noop!(
-                OffchainTransactionFee::propose_verify_key(
+                OffchainTransactionPos::propose_verify_key(
                     RuntimeOrigin::signed(prb_admin(0)),
                     institution,
                     empty
@@ -3712,7 +3732,7 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
@@ -3722,20 +3742,20 @@ mod tests {
                 vec![new_relay.clone(), prb_admin(2), prb_admin(3)]
                     .try_into()
                     .expect("fit");
-            assert_ok!(OffchainTransactionFee::propose_relay_submitters(
+            assert_ok!(OffchainTransactionPos::propose_relay_submitters(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 new_set.clone()
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_relay_submitters(
+                assert_ok!(OffchainTransactionPos::vote_relay_submitters(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
             assert_eq!(
-                OffchainTransactionFee::relay_submitters_of(institution),
+                OffchainTransactionPos::relay_submitters_of(institution),
                 Some(new_set)
             );
         });
@@ -3745,7 +3765,7 @@ mod tests {
     fn prune_expired_proposal_action_removes_rejected_action() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 5
@@ -3753,7 +3773,7 @@ mod tests {
             let proposal = voting_engine_system::Pallet::<Test>::proposals(0).expect("proposal");
             System::set_block_number(proposal.end.saturating_add(1));
             assert!(RateProposalActions::<Test>::contains_key(0));
-            assert_ok!(OffchainTransactionFee::prune_expired_proposal_action(
+            assert_ok!(OffchainTransactionPos::prune_expired_proposal_action(
                 RuntimeOrigin::signed(relay_account()),
                 0
             ));
@@ -3768,37 +3788,37 @@ mod tests {
             let old_key: VerifyKeyOf<Test> = b"old-key".to_vec().try_into().expect("fit");
             let new_key: VerifyKeyOf<Test> = b"new-key".to_vec().try_into().expect("fit");
 
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 old_key.clone(),
             ));
             assert_eq!(
-                OffchainTransactionFee::verify_key_for(institution),
+                OffchainTransactionPos::verify_key_for(institution),
                 Some(old_key.clone())
             );
 
-            assert_ok!(OffchainTransactionFee::propose_verify_key(
+            assert_ok!(OffchainTransactionPos::propose_verify_key(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 new_key.clone(),
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_verify_key(
+                assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
 
-            let status = OffchainTransactionFee::rotation_status_of(institution)
+            let status = OffchainTransactionPos::rotation_status_of(institution)
                 .expect("rotation status should exist");
             assert!(matches!(status.stage, VerifyKeyRotationStage::Scheduled));
             assert!(status.activate_at.is_some());
 
             // 生效前仍用旧密钥。
             assert_eq!(
-                OffchainTransactionFee::verify_key_for(institution),
+                OffchainTransactionPos::verify_key_for(institution),
                 Some(old_key.clone())
             );
 
@@ -3806,12 +3826,12 @@ mod tests {
             System::set_block_number(
                 System::block_number() + VERIFY_KEY_ROTATION_DELAY_BLOCKS as u64,
             );
-            OffchainTransactionFee::on_initialize(System::block_number());
+            OffchainTransactionPos::on_initialize(System::block_number());
             assert_eq!(
-                OffchainTransactionFee::verify_key_for(institution),
+                OffchainTransactionPos::verify_key_for(institution),
                 Some(new_key)
             );
-            let status = OffchainTransactionFee::rotation_status_of(institution)
+            let status = OffchainTransactionPos::rotation_status_of(institution)
                 .expect("rotation status should exist");
             assert!(matches!(status.stage, VerifyKeyRotationStage::Idle));
             assert!(status.activate_at.is_none());
@@ -3822,19 +3842,19 @@ mod tests {
     fn sweep_to_main_requires_internal_vote_and_keeps_reserve() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            let fee_account = OffchainTransactionFee::fee_account_of(institution).expect("fee");
+            let fee_account = OffchainTransactionPos::fee_account_of(institution).expect("fee");
             let main_account = prb_account();
             let fee_before = Balances::free_balance(&fee_account);
             let _ = Balances::deposit_creating(&fee_account, 300_000u128);
             let main_before = Balances::free_balance(&main_account);
 
-            assert_ok!(OffchainTransactionFee::propose_sweep_to_main(
+            assert_ok!(OffchainTransactionPos::propose_sweep_to_main(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 100_000
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_sweep_to_main(
+                assert_ok!(OffchainTransactionPos::vote_sweep_to_main(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
@@ -3845,7 +3865,7 @@ mod tests {
             assert_eq!(Balances::free_balance(&fee_account), fee_before + 200_000);
             let mut last_reserve_left = None;
             for evt in System::events().iter().rev() {
-                if let RuntimeEvent::OffchainTransactionFee(Event::<Test>::SweepToMainExecuted {
+                if let RuntimeEvent::OffchainTransactionPos(Event::<Test>::SweepToMainExecuted {
                     reserve_left,
                     ..
                 }) = &evt.event
@@ -3859,19 +3879,19 @@ mod tests {
                 Some(Balances::free_balance(&fee_account))
             );
 
-            assert_ok!(OffchainTransactionFee::propose_sweep_to_main(
+            assert_ok!(OffchainTransactionPos::propose_sweep_to_main(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 100_000
             ));
             for i in 0..5 {
-                assert_ok!(OffchainTransactionFee::vote_sweep_to_main(
+                assert_ok!(OffchainTransactionPos::vote_sweep_to_main(
                     RuntimeOrigin::signed(prb_admin(i)),
                     1,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::vote_sweep_to_main(
+            assert_ok!(OffchainTransactionPos::vote_sweep_to_main(
                 RuntimeOrigin::signed(prb_admin(5)),
                 1,
                 true
@@ -3879,7 +3899,7 @@ mod tests {
             assert_eq!(Balances::free_balance(&fee_account), fee_before + 200_000);
             let mut has_failed_event = false;
             for evt in System::events().iter().rev() {
-                if let RuntimeEvent::OffchainTransactionFee(
+                if let RuntimeEvent::OffchainTransactionPos(
                     Event::<Test>::InternalProposalExecutionFailed { proposal_id },
                 ) = &evt.event
                 {
@@ -3898,7 +3918,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
             assert_noop!(
-                OffchainTransactionFee::propose_sweep_to_main(
+                OffchainTransactionPos::propose_sweep_to_main(
                     RuntimeOrigin::signed(prb_admin(0)),
                     institution,
                     0,
@@ -3912,19 +3932,19 @@ mod tests {
     fn enqueue_offchain_batch_requires_next_seq() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -3932,7 +3952,7 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
@@ -3940,7 +3960,7 @@ mod tests {
 
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -3957,7 +3977,7 @@ mod tests {
             .expect("fit");
 
             assert_noop!(
-                OffchainTransactionFee::enqueue_offchain_batch(
+                OffchainTransactionPos::enqueue_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     2,
@@ -3967,7 +3987,7 @@ mod tests {
                 Error::<Test>::InvalidBatchSeq
             );
 
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -3985,7 +4005,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 2,
@@ -3993,12 +4013,12 @@ mod tests {
                 b"ok".to_vec().try_into().expect("fit"),
             ));
             assert_eq!(
-                OffchainTransactionFee::next_enqueue_batch_seq_of(institution),
+                OffchainTransactionPos::next_enqueue_batch_seq_of(institution),
                 3
             );
 
             assert_noop!(
-                OffchainTransactionFee::enqueue_offchain_batch(
+                OffchainTransactionPos::enqueue_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     2,
@@ -4014,19 +4034,19 @@ mod tests {
     fn submit_offchain_batch_rejects_when_queue_backlog_exists() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -4034,7 +4054,7 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
@@ -4042,7 +4062,7 @@ mod tests {
 
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -4059,7 +4079,7 @@ mod tests {
             .try_into()
             .expect("fit");
 
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -4068,7 +4088,7 @@ mod tests {
             ));
 
             assert_noop!(
-                OffchainTransactionFee::submit_offchain_batch(
+                OffchainTransactionPos::submit_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     1,
@@ -4079,7 +4099,7 @@ mod tests {
             );
 
             System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64);
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 0
             ));
@@ -4095,7 +4115,7 @@ mod tests {
             .try_into()
             .expect("fit");
             System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64);
-            assert_ok!(OffchainTransactionFee::submit_offchain_batch(
+            assert_ok!(OffchainTransactionPos::submit_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 2,
@@ -4117,7 +4137,7 @@ mod tests {
                 offchain_fee_amount: 1,
             };
             let batch: BatchOf<Test> = vec![item].try_into().expect("fit");
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -4125,14 +4145,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
 
             assert_noop!(
-                OffchainTransactionFee::submit_offchain_batch(
+                OffchainTransactionPos::submit_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     1,
@@ -4148,19 +4168,19 @@ mod tests {
     fn failed_submit_does_not_consume_seq_or_mark_processed_and_can_retry() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -4168,7 +4188,7 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
@@ -4186,12 +4206,12 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
 
-            let failed = OffchainTransactionFee::submit_offchain_batch(
+            let failed = OffchainTransactionPos::submit_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -4204,19 +4224,19 @@ mod tests {
                     TokenError::FundsUnavailable
                 ))
             ));
-            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 0);
+            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 0);
             assert!(!ProcessedOffchainTx::<Test>::get(prb_t2(), tx_id));
 
             // 补足余额后，同一批次序号可重提并成功。
             let _ = Balances::deposit_creating(&payer, 20_000);
-            assert_ok!(OffchainTransactionFee::submit_offchain_batch(
+            assert_ok!(OffchainTransactionPos::submit_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
                 batch,
                 b"ok".to_vec().try_into().expect("fit"),
             ));
-            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 1);
+            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 1);
             assert!(ProcessedOffchainTx::<Test>::get(prb_t2(), tx_id));
         });
     }
@@ -4229,17 +4249,17 @@ mod tests {
             let inst_2 =
                 shengbank_pallet_id_to_bytes(CHINA_CH[1].shenfen_id).expect("valid institution");
 
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 inst_1
             ));
             assert_eq!(
-                OffchainTransactionFee::recipient_clearing_institution(recipient.clone()),
+                OffchainTransactionPos::recipient_clearing_institution(recipient.clone()),
                 Some(inst_1)
             );
 
             assert_noop!(
-                OffchainTransactionFee::bind_clearing_institution(
+                OffchainTransactionPos::bind_clearing_institution(
                     RuntimeOrigin::signed(recipient.clone()),
                     inst_2
                 ),
@@ -4249,12 +4269,12 @@ mod tests {
             System::set_block_number(
                 System::block_number() + CLEARING_INSTITUTION_SWITCH_INTERVAL_BLOCKS,
             );
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 inst_2
             ));
             assert_eq!(
-                OffchainTransactionFee::recipient_clearing_institution(recipient),
+                OffchainTransactionPos::recipient_clearing_institution(recipient),
                 Some(inst_2)
             );
         });
@@ -4264,19 +4284,19 @@ mod tests {
     fn submit_batch_rejects_when_recipient_not_bound_or_mismatched() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -4284,7 +4304,7 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
@@ -4301,7 +4321,7 @@ mod tests {
             .try_into()
             .expect("fit");
             assert_noop!(
-                OffchainTransactionFee::submit_offchain_batch(
+                OffchainTransactionPos::submit_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     1,
@@ -4313,7 +4333,7 @@ mod tests {
 
             let other_inst =
                 shengbank_pallet_id_to_bytes(CHINA_CH[1].shenfen_id).expect("valid institution");
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 other_inst
             ));
@@ -4327,7 +4347,7 @@ mod tests {
             .try_into()
             .expect("fit");
             assert_noop!(
-                OffchainTransactionFee::submit_offchain_batch(
+                OffchainTransactionPos::submit_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     1,
@@ -4343,19 +4363,19 @@ mod tests {
     fn queued_batch_persists_on_failure_and_retries_until_success() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -4363,7 +4383,7 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
@@ -4371,7 +4391,7 @@ mod tests {
 
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -4387,38 +4407,38 @@ mod tests {
             .try_into()
             .expect("fit");
 
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
                 batch,
                 b"ok".to_vec().try_into().expect("fit"),
             ));
-            assert_eq!(OffchainTransactionFee::next_queued_batch_id(), 1);
+            assert_eq!(OffchainTransactionPos::next_queued_batch_id(), 1);
 
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 0
             ));
-            let queued = OffchainTransactionFee::queued_batch_by_id(0).expect("queued");
+            let queued = OffchainTransactionPos::queued_batch_by_id(0).expect("queued");
             assert!(matches!(queued.status, QueuedBatchStatus::Pending));
             assert_eq!(queued.retry_count, 1);
             assert_eq!(
                 queued.last_error,
                 Some(QueuedBatchLastError::ExecutionFailed)
             );
-            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 0);
+            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 0);
             assert!(!ProcessedOffchainTx::<Test>::get(prb_t2(), tx_id));
 
             let _ = Balances::deposit_creating(&payer, 20_000);
             System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64);
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 0
             ));
-            let queued = OffchainTransactionFee::queued_batch_by_id(0).expect("queued");
+            let queued = OffchainTransactionPos::queued_batch_by_id(0).expect("queued");
             assert!(matches!(queued.status, QueuedBatchStatus::Processed));
-            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 1);
+            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 1);
             assert!(ProcessedOffchainTx::<Test>::get(prb_t2(), tx_id));
         });
     }
@@ -4427,19 +4447,19 @@ mod tests {
     fn stress_queued_batches_many_rounds_should_keep_monotonic_seq() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -4447,7 +4467,7 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
@@ -4455,7 +4475,7 @@ mod tests {
 
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -4473,7 +4493,7 @@ mod tests {
                 .try_into()
                 .expect("fit");
 
-                assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+                assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     i + 1,
@@ -4481,17 +4501,17 @@ mod tests {
                     b"ok".to_vec().try_into().expect("fit"),
                 ));
                 System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64);
-                assert_ok!(OffchainTransactionFee::process_queued_batch(
+                assert_ok!(OffchainTransactionPos::process_queued_batch(
                     RuntimeOrigin::signed(relay_account()),
                     i
                 ));
             }
 
             assert_eq!(
-                OffchainTransactionFee::last_batch_seq_of(institution),
+                OffchainTransactionPos::last_batch_seq_of(institution),
                 rounds
             );
-            let last = OffchainTransactionFee::queued_batch_by_id(rounds - 1).expect("queued");
+            let last = OffchainTransactionPos::queued_batch_by_id(rounds - 1).expect("queued");
             assert!(matches!(last.status, QueuedBatchStatus::Processed));
         });
     }
@@ -4500,19 +4520,19 @@ mod tests {
     fn process_queued_batch_rejects_unauthorized_submitter_without_mutating_retry() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -4520,14 +4540,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -4542,7 +4562,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -4552,10 +4572,10 @@ mod tests {
 
             let outsider = AccountId32::new([99u8; 32]);
             assert_noop!(
-                OffchainTransactionFee::process_queued_batch(RuntimeOrigin::signed(outsider), 0),
+                OffchainTransactionPos::process_queued_batch(RuntimeOrigin::signed(outsider), 0),
                 Error::<Test>::RelaySubmitterNotAllowed
             );
-            let queued = OffchainTransactionFee::queued_batch_by_id(0).expect("queued");
+            let queued = OffchainTransactionPos::queued_batch_by_id(0).expect("queued");
             assert_eq!(queued.retry_count, 0);
             assert!(queued.last_error.is_none());
             assert!(matches!(queued.status, QueuedBatchStatus::Pending));
@@ -4566,19 +4586,19 @@ mod tests {
     fn process_queued_batch_records_precheck_failed_and_keeps_pending() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -4586,7 +4606,7 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
@@ -4594,7 +4614,7 @@ mod tests {
 
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -4610,14 +4630,14 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
                 batch1,
                 b"ok".to_vec().try_into().expect("fit"),
             ));
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 0
             ));
@@ -4632,7 +4652,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 2,
@@ -4647,11 +4667,11 @@ mod tests {
                 }
             });
             System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64 + 1);
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 1
             ));
-            let queued = OffchainTransactionFee::queued_batch_by_id(1).expect("queued");
+            let queued = OffchainTransactionPos::queued_batch_by_id(1).expect("queued");
             assert!(matches!(queued.status, QueuedBatchStatus::Pending));
             assert_eq!(queued.retry_count, 1);
             assert_eq!(
@@ -4665,19 +4685,19 @@ mod tests {
     fn process_queued_batch_marks_failed_after_max_retry() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -4685,14 +4705,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -4707,7 +4727,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -4721,11 +4741,11 @@ mod tests {
                     inner.batch[0].transfer_amount = 0;
                 }
             });
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 0
             ));
-            let queued = OffchainTransactionFee::queued_batch_by_id(0).expect("queued");
+            let queued = OffchainTransactionPos::queued_batch_by_id(0).expect("queued");
             assert!(matches!(queued.status, QueuedBatchStatus::Failed));
             assert_eq!(queued.retry_count, MAX_QUEUE_RETRY_COUNT);
             assert_eq!(
@@ -4739,19 +4759,19 @@ mod tests {
     fn skip_failed_batch_unblocks_waiting_sequence() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -4759,7 +4779,7 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
@@ -4767,7 +4787,7 @@ mod tests {
 
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -4782,7 +4802,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -4800,7 +4820,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 2,
@@ -4815,46 +4835,46 @@ mod tests {
                     inner.batch[0].transfer_amount = 0;
                 }
             });
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 0
             ));
             assert!(matches!(
-                OffchainTransactionFee::queued_batch_by_id(0)
+                OffchainTransactionPos::queued_batch_by_id(0)
                     .expect("queued")
                     .status,
                 QueuedBatchStatus::Failed
             ));
-            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 0);
+            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 0);
 
             // seq=2 会被阻塞。
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 1
             ));
-            let blocked = OffchainTransactionFee::queued_batch_by_id(1).expect("queued");
+            let blocked = OffchainTransactionPos::queued_batch_by_id(1).expect("queued");
             assert_eq!(
                 blocked.last_error,
                 Some(QueuedBatchLastError::WaitingForPriorBatch)
             );
 
             // 管理员跳过失败批次后，seq=2 可继续执行。
-            assert_ok!(OffchainTransactionFee::skip_failed_batch(
+            assert_ok!(OffchainTransactionPos::skip_failed_batch(
                 RuntimeOrigin::signed(prb_admin(0)),
                 0
             ));
-            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 1);
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 1);
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 1
             ));
             assert!(matches!(
-                OffchainTransactionFee::queued_batch_by_id(1)
+                OffchainTransactionPos::queued_batch_by_id(1)
                     .expect("queued")
                     .status,
                 QueuedBatchStatus::Processed
             ));
-            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 2);
+            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 2);
         });
     }
 
@@ -4862,19 +4882,19 @@ mod tests {
     fn cancel_queued_batch_requires_head_seq() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -4882,7 +4902,7 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
@@ -4890,7 +4910,7 @@ mod tests {
 
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -4906,7 +4926,7 @@ mod tests {
                 }]
                 .try_into()
                 .expect("fit");
-                assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+                assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     seq,
@@ -4916,7 +4936,7 @@ mod tests {
             }
 
             assert_noop!(
-                OffchainTransactionFee::cancel_queued_batch(RuntimeOrigin::signed(prb_admin(0)), 1),
+                OffchainTransactionPos::cancel_queued_batch(RuntimeOrigin::signed(prb_admin(0)), 1),
                 Error::<Test>::InvalidBatchSeq
             );
         });
@@ -4927,43 +4947,43 @@ mod tests {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
             let old_key: VerifyKeyOf<Test> = b"default-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 old_key
             ));
             let pending: VerifyKeyOf<Test> = b"pending-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionFee::propose_verify_key(
+            assert_ok!(OffchainTransactionPos::propose_verify_key(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 pending
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_verify_key(
+                assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert!(OffchainTransactionFee::pending_verify_key_of(institution).is_some());
+            assert!(OffchainTransactionPos::pending_verify_key_of(institution).is_some());
 
             let emergency_key: VerifyKeyOf<Test> =
                 b"emergency-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionFee::emergency_rotate_verify_key(
+            assert_ok!(OffchainTransactionPos::emergency_rotate_verify_key(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 emergency_key.clone(),
             ));
-            assert_ok!(OffchainTransactionFee::emergency_rotate_verify_key(
+            assert_ok!(OffchainTransactionPos::emergency_rotate_verify_key(
                 RuntimeOrigin::signed(prb_admin(1)),
                 institution,
                 emergency_key.clone()
             ));
             assert_eq!(
-                OffchainTransactionFee::verify_key_of(institution).expect("key"),
+                OffchainTransactionPos::verify_key_of(institution).expect("key"),
                 emergency_key
             );
-            assert!(OffchainTransactionFee::pending_verify_key_of(institution).is_none());
+            assert!(OffchainTransactionPos::pending_verify_key_of(institution).is_none());
         });
     }
 
@@ -4972,20 +4992,20 @@ mod tests {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
             let old_key: VerifyKeyOf<Test> = b"default-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 old_key.clone()
             ));
             let emergency_key: VerifyKeyOf<Test> =
                 b"emergency-key-single".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionFee::emergency_rotate_verify_key(
+            assert_ok!(OffchainTransactionPos::emergency_rotate_verify_key(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 emergency_key.clone(),
             ));
             assert_eq!(
-                OffchainTransactionFee::verify_key_of(institution).expect("key"),
+                OffchainTransactionPos::verify_key_of(institution).expect("key"),
                 old_key
             );
             let key_hash = sp_io::hashing::blake2_256(emergency_key.as_slice());
@@ -5000,7 +5020,7 @@ mod tests {
     fn cancel_emergency_rotation_approval_updates_remaining_count() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -5008,7 +5028,7 @@ mod tests {
             let emergency_key: VerifyKeyOf<Test> =
                 b"emergency-key-cancel".to_vec().try_into().expect("fit");
             let key_hash = sp_io::hashing::blake2_256(emergency_key.as_slice());
-            assert_ok!(OffchainTransactionFee::emergency_rotate_verify_key(
+            assert_ok!(OffchainTransactionPos::emergency_rotate_verify_key(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 emergency_key,
@@ -5017,7 +5037,7 @@ mod tests {
                 EmergencyVerifyKeyApprovals::<Test>::get(institution, key_hash).len(),
                 1
             );
-            assert_ok!(OffchainTransactionFee::cancel_emergency_rotation_approval(
+            assert_ok!(OffchainTransactionPos::cancel_emergency_rotation_approval(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 key_hash
@@ -5034,13 +5054,13 @@ mod tests {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
             let sweep_amount: Balance = 5_000;
-            assert_ok!(OffchainTransactionFee::propose_sweep_to_main(
+            assert_ok!(OffchainTransactionPos::propose_sweep_to_main(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 sweep_amount
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_sweep_to_main(
+                assert_ok!(OffchainTransactionPos::vote_sweep_to_main(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
@@ -5049,14 +5069,14 @@ mod tests {
             // 首次自动执行因保底金不足失败。
             assert!(SweepProposalActions::<Test>::contains_key(0));
             assert_noop!(
-                OffchainTransactionFee::retry_execute_proposal(
+                OffchainTransactionPos::retry_execute_proposal(
                     RuntimeOrigin::signed(prb_admin(0)),
                     0
                 ),
                 Error::<Test>::InsufficientFeeReserve
             );
             let _ = Balances::deposit_creating(&prb_fee_account(), 200_000);
-            assert_ok!(OffchainTransactionFee::retry_execute_proposal(
+            assert_ok!(OffchainTransactionPos::retry_execute_proposal(
                 RuntimeOrigin::signed(prb_admin(0)),
                 0
             ));
@@ -5068,19 +5088,19 @@ mod tests {
     fn on_idle_prunes_stale_pending_queued_batch() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -5088,14 +5108,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -5110,7 +5130,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -5119,9 +5139,9 @@ mod tests {
             ));
             System::set_block_number(System::block_number() + QUEUED_BATCH_RETENTION_BLOCKS + 1);
             let full_weight = Weight::from_parts(u64::MAX, u64::MAX);
-            let _ = OffchainTransactionFee::on_idle(System::block_number(), full_weight);
-            assert!(OffchainTransactionFee::queued_batch_by_id(0).is_none());
-            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 1);
+            let _ = OffchainTransactionPos::on_idle(System::block_number(), full_weight);
+            assert!(OffchainTransactionPos::queued_batch_by_id(0).is_none());
+            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 1);
         });
     }
 
@@ -5129,19 +5149,19 @@ mod tests {
     fn prune_queued_batch_pending_advances_last_batch_seq() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -5149,14 +5169,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -5171,7 +5191,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -5180,12 +5200,12 @@ mod tests {
             ));
 
             System::set_block_number(System::block_number() + QUEUED_BATCH_RETENTION_BLOCKS + 1);
-            assert_ok!(OffchainTransactionFee::prune_queued_batch(
+            assert_ok!(OffchainTransactionPos::prune_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 0
             ));
-            assert!(OffchainTransactionFee::queued_batch_by_id(0).is_none());
-            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 1);
+            assert!(OffchainTransactionPos::queued_batch_by_id(0).is_none());
+            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 1);
         });
     }
 
@@ -5193,19 +5213,19 @@ mod tests {
     fn on_initialize_rotation_increments_epoch_and_cleans_index() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
             ));
             let next_key: VerifyKeyOf<Test> = b"next-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionFee::propose_verify_key(
+            assert_ok!(OffchainTransactionPos::propose_verify_key(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 next_key.clone()
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_verify_key(
+                assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
@@ -5214,33 +5234,33 @@ mod tests {
             let pending = PendingVerifyKeys::<Test>::get(institution).expect("pending");
             assert_eq!(VerifyKeyEpoch::<Test>::get(institution), 1);
             System::set_block_number(pending.activate_at);
-            OffchainTransactionFee::on_initialize(System::block_number());
+            OffchainTransactionPos::on_initialize(System::block_number());
             assert_eq!(
-                OffchainTransactionFee::verify_key_of(institution).expect("key"),
+                OffchainTransactionPos::verify_key_of(institution).expect("key"),
                 next_key
             );
             assert_eq!(VerifyKeyEpoch::<Test>::get(institution), 2);
-            assert!(OffchainTransactionFee::pending_rotation_institutions().is_empty());
+            assert!(OffchainTransactionPos::pending_rotation_institutions().is_empty());
         });
     }
 
     #[test]
-    fn cancel_stale_queued_batches_cancels_contiguous_head_batches() {
+    fn process_queued_batch_key_rotation_invalidation_only_advances_head_sequence() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -5248,14 +5268,109 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
+                RuntimeOrigin::signed(prb_account()),
+                institution,
+                relays
+            ));
+            let recipient = AccountId32::new([3u8; 32]);
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
+                RuntimeOrigin::signed(recipient.clone()),
+                institution
+            ));
+
+            for (seq, seed) in [
+                (1u64, b"epoch-head".as_slice()),
+                (2u64, b"epoch-tail".as_slice()),
+            ] {
+                let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
+                    tx_id: <Test as frame_system::Config>::Hashing::hash(seed),
+                    payer: AccountId32::new([1u8; 32]),
+                    recipient: recipient.clone(),
+                    transfer_amount: 100,
+                    offchain_fee_amount: 1,
+                }]
+                .try_into()
+                .expect("fit");
+                assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
+                    RuntimeOrigin::signed(relay_account()),
+                    institution,
+                    seq,
+                    batch,
+                    b"ok".to_vec().try_into().expect("fit")
+                ));
+            }
+
+            let next_key: VerifyKeyOf<Test> = b"rotated-key".to_vec().try_into().expect("fit");
+            assert_ok!(OffchainTransactionPos::propose_verify_key(
+                RuntimeOrigin::signed(prb_admin(0)),
+                institution,
+                next_key
+            ));
+            for i in 0..6 {
+                assert_ok!(OffchainTransactionPos::vote_verify_key(
+                    RuntimeOrigin::signed(prb_admin(i)),
+                    1,
+                    true
+                ));
+            }
+            let pending = PendingVerifyKeys::<Test>::get(institution).expect("pending");
+            System::set_block_number(pending.activate_at);
+            OffchainTransactionPos::on_initialize(System::block_number());
+
+            // 先处理非队头批次：应仅将其标记为 Cancelled，不能跳过 seq=1。
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
+                RuntimeOrigin::signed(relay_account()),
+                1
+            ));
+            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 0);
+            assert!(matches!(
+                OffchainTransactionPos::queued_batch_by_id(1)
+                    .expect("queued-1")
+                    .status,
+                QueuedBatchStatus::Cancelled
+            ));
+            assert!(matches!(
+                OffchainTransactionPos::queued_batch_by_id(0)
+                    .expect("queued-0")
+                    .status,
+                QueuedBatchStatus::Pending
+            ));
+        });
+    }
+
+    #[test]
+    fn cancel_stale_queued_batches_cancels_contiguous_head_batches() {
+        new_test_ext().execute_with(|| {
+            let institution = prb_institution();
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
+                RuntimeOrigin::signed(prb_admin(0)),
+                institution,
+                1
+            ));
+            for i in 0..6 {
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
+                    RuntimeOrigin::signed(prb_admin(i)),
+                    0,
+                    true
+                ));
+            }
+            assert_ok!(OffchainTransactionPos::init_verify_key(
+                RuntimeOrigin::signed(prb_account()),
+                institution,
+                b"default-key".to_vec().try_into().expect("fit")
+            ));
+            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
+                .try_into()
+                .expect("fit");
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -5271,7 +5386,7 @@ mod tests {
                 }]
                 .try_into()
                 .expect("fit");
-                assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+                assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     seq,
@@ -5281,24 +5396,24 @@ mod tests {
             }
 
             System::set_block_number(System::block_number() + QUEUED_BATCH_RETENTION_BLOCKS + 1);
-            assert_ok!(OffchainTransactionFee::cancel_stale_queued_batches(
+            assert_ok!(OffchainTransactionPos::cancel_stale_queued_batches(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 2
             ));
             assert!(matches!(
-                OffchainTransactionFee::queued_batch_by_id(0)
+                OffchainTransactionPos::queued_batch_by_id(0)
                     .expect("q0")
                     .status,
                 QueuedBatchStatus::Cancelled
             ));
             assert!(matches!(
-                OffchainTransactionFee::queued_batch_by_id(1)
+                OffchainTransactionPos::queued_batch_by_id(1)
                     .expect("q1")
                     .status,
                 QueuedBatchStatus::Cancelled
             ));
-            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 2);
+            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 2);
         });
     }
 
@@ -5306,19 +5421,19 @@ mod tests {
     fn queued_batch_is_invalidated_after_emergency_key_rotation() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -5326,14 +5441,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -5348,7 +5463,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -5358,27 +5473,27 @@ mod tests {
 
             let emergency_key: VerifyKeyOf<Test> =
                 b"emergency-key-2".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionFee::emergency_rotate_verify_key(
+            assert_ok!(OffchainTransactionPos::emergency_rotate_verify_key(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 emergency_key.clone(),
             ));
-            assert_ok!(OffchainTransactionFee::emergency_rotate_verify_key(
+            assert_ok!(OffchainTransactionPos::emergency_rotate_verify_key(
                 RuntimeOrigin::signed(prb_admin(1)),
                 institution,
                 emergency_key,
             ));
 
             let payer_before = Balances::free_balance(&payer);
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 0
             ));
-            let queued = OffchainTransactionFee::queued_batch_by_id(0).expect("queued");
+            let queued = OffchainTransactionPos::queued_batch_by_id(0).expect("queued");
             assert!(matches!(queued.status, QueuedBatchStatus::Cancelled));
             assert_eq!(queued.last_error, Some(QueuedBatchLastError::Cancelled));
             assert_eq!(Balances::free_balance(&payer), payer_before);
-            assert_eq!(OffchainTransactionFee::last_batch_seq_of(institution), 1);
+            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 1);
         });
     }
 
@@ -5386,42 +5501,42 @@ mod tests {
     fn verify_key_rotation_does_not_overwrite_existing_pending() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
             ));
 
             let key_a: VerifyKeyOf<Test> = b"pending-a".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionFee::propose_verify_key(
+            assert_ok!(OffchainTransactionPos::propose_verify_key(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 key_a.clone()
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_verify_key(
+                assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            let pending_a = OffchainTransactionFee::pending_verify_key_of(institution).expect("a");
+            let pending_a = OffchainTransactionPos::pending_verify_key_of(institution).expect("a");
             assert_eq!(pending_a.key, key_a);
 
             let key_b: VerifyKeyOf<Test> = b"pending-b".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionFee::propose_verify_key(
+            assert_ok!(OffchainTransactionPos::propose_verify_key(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 key_b
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_verify_key(
+                assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
                     1,
                     true
                 ));
             }
-            let pending_after = OffchainTransactionFee::pending_verify_key_of(institution)
+            let pending_after = OffchainTransactionPos::pending_verify_key_of(institution)
                 .expect("pending still exists");
             assert_eq!(pending_after.key, key_a);
         });
@@ -5431,19 +5546,19 @@ mod tests {
     fn submit_rejects_duplicate_tx_id_in_same_batch() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -5451,14 +5566,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -5483,7 +5598,7 @@ mod tests {
             .try_into()
             .expect("fit");
             assert_noop!(
-                OffchainTransactionFee::submit_offchain_batch(
+                OffchainTransactionPos::submit_offchain_batch(
                     RuntimeOrigin::signed(relay_account()),
                     institution,
                     1,
@@ -5502,7 +5617,7 @@ mod tests {
             let t2 = prb_t2();
             ProcessedOffchainTx::<Test>::insert(t2, tx_id, true);
             ProcessedOffchainTxAt::<Test>::remove(t2, tx_id);
-            assert_ok!(OffchainTransactionFee::prune_processed_tx(
+            assert_ok!(OffchainTransactionPos::prune_processed_tx(
                 RuntimeOrigin::signed(relay_account()),
                 t2,
                 tx_id
@@ -5515,19 +5630,19 @@ mod tests {
     fn process_queued_batch_pack_threshold_not_reached_does_not_consume_retry() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -5535,14 +5650,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -5558,14 +5673,14 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
                 batch1,
                 b"ok".to_vec().try_into().expect("fit"),
             ));
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 0
             ));
@@ -5580,7 +5695,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 2,
@@ -5588,11 +5703,11 @@ mod tests {
                 b"ok".to_vec().try_into().expect("fit"),
             ));
 
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 1
             ));
-            let queued = OffchainTransactionFee::queued_batch_by_id(1).expect("queued");
+            let queued = OffchainTransactionPos::queued_batch_by_id(1).expect("queued");
             assert!(matches!(queued.status, QueuedBatchStatus::Pending));
             assert_eq!(queued.retry_count, 0);
             assert_eq!(
@@ -5606,19 +5721,19 @@ mod tests {
     fn process_queued_batch_rejects_missing_config_without_mutating_retry() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -5626,14 +5741,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -5649,7 +5764,7 @@ mod tests {
             }]
             .try_into()
             .expect("fit");
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
@@ -5659,13 +5774,13 @@ mod tests {
 
             VerifyKeys::<Test>::remove(institution);
             assert_noop!(
-                OffchainTransactionFee::process_queued_batch(
+                OffchainTransactionPos::process_queued_batch(
                     RuntimeOrigin::signed(relay_account()),
                     0
                 ),
                 Error::<Test>::VerifyKeyMissing
             );
-            let queued = OffchainTransactionFee::queued_batch_by_id(0).expect("queued");
+            let queued = OffchainTransactionPos::queued_batch_by_id(0).expect("queued");
             assert_eq!(queued.retry_count, 0);
             assert!(queued.last_error.is_none());
             assert!(matches!(queued.status, QueuedBatchStatus::Pending));
@@ -5676,19 +5791,19 @@ mod tests {
     fn process_queued_batch_waiting_for_prior_batch_is_observable_without_retry() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionFee::propose_institution_rate(
+            assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 1
             ));
             for i in 0..6 {
-                assert_ok!(OffchainTransactionFee::vote_institution_rate(
+                assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
                     0,
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionFee::init_verify_key(
+            assert_ok!(OffchainTransactionPos::init_verify_key(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 b"default-key".to_vec().try_into().expect("fit")
@@ -5696,14 +5811,14 @@ mod tests {
             let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
                 .try_into()
                 .expect("fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
+            assert_ok!(OffchainTransactionPos::init_relay_submitters(
                 RuntimeOrigin::signed(prb_account()),
                 institution,
                 relays
             ));
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
+            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
@@ -5730,14 +5845,14 @@ mod tests {
             .try_into()
             .expect("fit");
 
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 1,
                 batch1,
                 b"ok".to_vec().try_into().expect("fit"),
             ));
-            assert_ok!(OffchainTransactionFee::enqueue_offchain_batch(
+            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
                 RuntimeOrigin::signed(relay_account()),
                 institution,
                 2,
@@ -5746,11 +5861,11 @@ mod tests {
             ));
 
             // 先处理 seq=2，触发 InvalidBatchSeq，应记录 WaitingForPriorBatch 且不增加 retry。
-            assert_ok!(OffchainTransactionFee::process_queued_batch(
+            assert_ok!(OffchainTransactionPos::process_queued_batch(
                 RuntimeOrigin::signed(relay_account()),
                 1
             ));
-            let queued = OffchainTransactionFee::queued_batch_by_id(1).expect("queued");
+            let queued = OffchainTransactionPos::queued_batch_by_id(1).expect("queued");
             assert!(matches!(queued.status, QueuedBatchStatus::Pending));
             assert_eq!(queued.retry_count, 0);
             assert_eq!(

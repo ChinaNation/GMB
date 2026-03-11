@@ -281,10 +281,6 @@ mod runtime {
     #[runtime::pallet_index(15)]
     pub type Grandpa = pallet_grandpa;
 
-    // 链下交易手续费与清算上链模块
-    #[runtime::pallet_index(4)]
-    pub type OffchainTransactionFee = offchain_transaction_fee;
-
     // 省储行质押利息模块：按年度给固定省储行账户发放质押利息
     #[runtime::pallet_index(5)]
     pub type ShengBankStakeInterest = shengbank_stake_interest;

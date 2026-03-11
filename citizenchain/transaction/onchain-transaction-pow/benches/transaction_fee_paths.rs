@@ -10,7 +10,7 @@ use frame_support::{
     weights::ConstantMultiplier,
 };
 use frame_system as system;
-use onchain_transaction_fee::{
+use onchain_transaction_pow::{
     AmountExtractResult, CallAmount, NrcAccountProvider, PowOnchainChargeAdapter,
     PowOnchainFeeRouter,
 };

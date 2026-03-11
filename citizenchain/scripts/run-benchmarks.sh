@@ -41,9 +41,8 @@ declare -a TARGETS=(
   "pallet:grandpa_key_gov:governance/grandpa-key-gov/src/weights.rs"
   "pallet:runtime_root_upgrade:governance/runtime-root-upgrade/src/weights.rs"
   "pallet:resolution_destro_gov:governance/resolution-destro-gov/src/weights.rs"
-  "pallet:offchain_transaction_fee:transaction/offchain-transaction-pos/src/weights.rs"
   "pallet:duoqian_transaction_pow:transaction/duoqian-transaction-pow/src/weights.rs"
-  "utility:onchain_transaction_fee:transaction/onchain-transaction-pow/benches/transaction_fee_paths.rs"
+  "utility:onchain_transaction_pow:transaction/onchain-transaction-pow/benches/transaction_fee_paths.rs"
 )
 
 usage() {
@@ -202,7 +201,7 @@ for target in "${TARGETS[@]}"; do
   elif [[ "$kind" == "utility" ]]; then
     cmd=(
       cargo bench
-      -p onchain-transaction-fee
+      -p onchain-transaction-pow
       --bench transaction_fee_paths
       --
       --warm-up-time 1

@@ -54,6 +54,8 @@ pub enum AmountExtractResult<Balance> {
 
 /// 统一抽象：由 Runtime 提供“交易金额提取器”。
 pub trait CallAmount<AccountId, Call, Balance> {
+    /// 从具体交易中抽取“制度定义的交易金额”。
+    /// 这里故意不和 weight fee/length fee 绑定，避免 runtime 规则被默认手续费模型覆盖。
     fn amount(who: &AccountId, call: &Call) -> AmountExtractResult<Balance>;
 }
 
@@ -61,6 +63,8 @@ pub trait CallAmount<AccountId, Call, Balance> {
 /// - None：沿用默认交易提交者扣费
 /// - Some(account)：从指定账户扣费
 pub trait CallFeePayer<AccountId, Call> {
+    /// 返回代付账户；若为 None，则仍由交易提交者本人扣费。
+    /// 该扩展点只负责“选择谁付款”，不改变手续费金额计算规则。
     fn fee_payer(who: &AccountId, call: &Call) -> Option<AccountId>;
 }
 
@@ -72,6 +76,8 @@ impl<AccountId, Call> CallFeePayer<AccountId, Call> for () {
 
 /// 统一抽象：由 Runtime 注入国储会收款账户来源。
 pub trait NrcAccountProvider<AccountId> {
+    /// 提供国储会收款账户。
+    /// 返回 None 时，NRC 份额按安全退化策略直接销毁。
     fn nrc_account() -> Option<AccountId>;
 }
 
@@ -113,6 +119,8 @@ where
         _fee_with_tip: Self::Balance,
         tip: Self::Balance,
     ) -> Result<Self::LiquidityInfo, TransactionValidityError> {
+        // 中文注释：这里完全忽略 pallet-transaction-payment 传入的 _fee_with_tip，
+        // 改为执行本模块自定义的“按业务金额收费”规则。
         let fee_with_tip =
             custom_fee_with_tip::<T, Currency, AmountExtractor>(who, call, dispatch_info, tip)?;
         if fee_with_tip.is_zero() {
@@ -120,6 +128,7 @@ where
         }
         let payer = FeePayerExtractor::fee_payer(who, call).unwrap_or_else(|| who.clone());
 
+        // 中文注释：扣费使用 Exact，避免“只扣到一部分也继续执行”。
         let credit = Currency::withdraw(
             &payer,
             fee_with_tip,
@@ -129,6 +138,8 @@ where
         )
         .map_err(|_| InvalidTransaction::Payment)?;
 
+        // 中文注释：tip 会单独拆出来，但后续仍和基础费一起交给 Router，
+        // 这样可以保留 tip 语义，同时复用统一分账路径。
         let (tip_credit, inclusion_fee) = credit.split(tip);
         Ok(Some((inclusion_fee, tip_credit)))
     }
@@ -140,6 +151,8 @@ where
         _fee_with_tip: Self::Balance,
         tip: Self::Balance,
     ) -> Result<(), TransactionValidityError> {
+        // 中文注释：预检查与正式扣费保持同一套金额计算逻辑，
+        // 否则容易出现“预检查能过、正式扣费失败”的行为偏差。
         let fee_with_tip =
             custom_fee_with_tip::<T, Currency, AmountExtractor>(who, call, dispatch_info, tip)?;
         if fee_with_tip.is_zero() {
@@ -214,6 +227,8 @@ where
             return;
         }
 
+        // 中文注释：先切出全节点份额，再把剩余部分在 NRC 和黑洞之间二次切分，
+        // 可以避免三项分账时因为整数除法带来更复杂的舍入误差。
         let (fullnode_credit, remainder) = amount.ration(
             fullnode_percent,
             total_percent.saturating_sub(fullnode_percent),
@@ -252,6 +267,8 @@ where
 
         // 中文注释：国储会分成发到 CHINA_CB[0] 对应交易地址；解析失败则自动销毁。
         if let Some(nrc_account) = NrcProvider::nrc_account() {
+            // 中文注释：resolve 失败通常意味着目标账户状态不满足入账条件，
+            // 此时继续保留 credit 比误转更危险，因此直接销毁。
             if let Err(remaining) = Currency::resolve(&nrc_account, nrc_credit) {
                 log::warn!(
                     target: "runtime::onchain_transaction_pow",
@@ -289,9 +306,11 @@ where
         AmountExtractResult::NoAmount => return Ok(tip),
         AmountExtractResult::Unknown => return Err(InvalidTransaction::Call.into()),
     };
+    // 中文注释：统一先转成 u128 做费率计算，避免不同 Balance 类型下重复实现乘法与舍入逻辑。
     let amount_u128: u128 = amount.saturated_into();
     let by_rate: u128 = mul_perbill_round(amount_u128, primitives::core_const::ONCHAIN_FEE_RATE);
     let min_fee: u128 = primitives::core_const::ONCHAIN_MIN_FEE; // 0.1元=10分
+                                                                 // 中文注释：业务制度要求“按比例收费，但永远不少于最低费”。
     let base_fee: <Currency as Inspect<T::AccountId>>::Balance =
         by_rate.max(min_fee).saturated_into();
     Ok(base_fee.saturating_add(tip))
@@ -301,6 +320,8 @@ fn mul_perbill_round(amount: u128, rate: sp_runtime::Perbill) -> u128 {
     // 中文注释：链上精度为“分”，这里做四舍五入到分。
     const PERBILL_DENOMINATOR: u128 = 1_000_000_000;
     let parts: u128 = rate.deconstruct() as u128;
+    // 中文注释：采用 half-up（+0.5 后整除）而不是直接截断，
+    // 这样更符合面向金额场景的直觉，也避免系统性向下偏差。
     amount
         .saturating_mul(parts)
         .saturating_add(PERBILL_DENOMINATOR / 2)

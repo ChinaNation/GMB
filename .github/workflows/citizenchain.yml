@@ -80,22 +80,16 @@ jobs:
           echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
           echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
 
-      - name: Build blockchain node binary
-        run: cargo build --manifest-path citizenchain/node/Cargo.toml --release --target ${{ matrix.target }}
-
       - name: Prepare bundled node binary (Unix)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           set -euo pipefail
-          BIN_DIR="citizenchain/nodeui/backend/binaries"
-          SRC="citizenchain/target/${{ matrix.target }}/release/node"
-          SIDE="$BIN_DIR/${{ matrix.sidecar_name }}"
-          PLAIN="$BIN_DIR/${{ matrix.plain_name }}"
-          cp "$SRC" "$SIDE"
-          cp "$SRC" "$PLAIN"
-          chmod +x "$SIDE" "$PLAIN"
-          shasum -a 256 "$PLAIN" | awk '{print $1}' > "$BIN_DIR/citizenchain-node.sha256"
+          ./.github/scripts/prepare-nodeui-sidecar.sh "${{ matrix.target }}"
+
+      - name: Build blockchain node binary (Windows)
+        if: runner.os == 'Windows'
+        run: cargo build --manifest-path citizenchain/node/Cargo.toml --release --target ${{ matrix.target }}
 
       - name: Prepare bundled node binary (Windows)
         if: runner.os == 'Windows'
@@ -121,14 +115,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APP_PATH="citizenchain/nodeui/target/release/bundle/macos/citizenchain.app"
-          DMG_DIR="citizenchain/nodeui/target/release/bundle/dmg"
-          STAGE_DIR="$(mktemp -d)"
-          DMG_PATH="$DMG_DIR/citizenchain-${{ matrix.platform }}.dmg"
-          mkdir -p "$DMG_DIR"
-          cp -R "$APP_PATH" "$STAGE_DIR/"
-          hdiutil create -volname "citizenchain" -srcfolder "$STAGE_DIR" -ov -format UDZO "$DMG_PATH"
-          rm -rf "$STAGE_DIR"
+          ./.github/scripts/create-macos-dmg.sh \
+            "citizenchain/nodeui/target/release/bundle/macos/citizenchain.app" \
+            "citizenchain/nodeui/target/release/bundle/dmg/citizenchain-${{ matrix.platform }}.dmg" \
+            "citizenchain"
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4

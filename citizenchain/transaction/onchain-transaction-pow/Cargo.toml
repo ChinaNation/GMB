@@ -1,5 +1,5 @@
 [package]
-name = "onchain-transaction-fee"  # 链上交易手续费模块
+name = "onchain-transaction-pow"  # 链上 PoW 交易手续费模块
 edition.workspace = true   # 默认 Rust 版本
 version.workspace = true   # 版本号
 authors.workspace = true   # 作者

@@ -29,7 +29,6 @@ frame_benchmarking::define_benchmarks!(
     [frame_system_extensions, SystemExtensionsBench::<Runtime>]
     [pallet_balances, Balances]
     [pallet_timestamp, Timestamp]
-    [offchain_transaction_fee, OffchainTransactionFee]
     [shengbank_stake_interest, ShengBankStakeInterest]
     [fullnode_pow_reward, FullnodePowReward]
     [citizen_lightnode_issuance, CitizenLightnodeIssuance]

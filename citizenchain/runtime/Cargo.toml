@@ -65,8 +65,7 @@ fullnode-pow-reward = { path = "../issuance/fullnode-pow-reward", default-featur
 citizen-lightnode-issuance = { path = "../issuance/citizen-lightnode-issuance", default-features = false }
 sfid-code-auth = { path = "../otherpallet/sfid-code-auth", default-features = false }
 pow-difficulty-module = { path = "../otherpallet/pow-difficulty-module", default-features = false }
-onchain-transaction-fee = { path = "../transaction/onchain-transaction-pow", default-features = false }
-offchain-transaction-fee = { path = "../transaction/offchain-transaction-pos", default-features = false }
+onchain-transaction-pow = { path = "../transaction/onchain-transaction-pow", default-features = false }
 duoqian-transaction-pow = { path = "../transaction/duoqian-transaction-pow", default-features = false }
 resolution-issuance-iss = { path = "../issuance/resolution-issuance-iss", default-features = false }
 resolution-issuance-gov = { path = "../governance/resolution-issuance-gov", default-features = false }
@@ -98,8 +97,7 @@ std = [
 	"citizen-lightnode-issuance/std",
 	"sfid-code-auth/std",
 	"pow-difficulty-module/std",
-	"onchain-transaction-fee/std",
-	"offchain-transaction-fee/std",
+	"onchain-transaction-pow/std",
 	"duoqian-transaction-pow/std",
 	"resolution-issuance-iss/std",
 	"resolution-issuance-gov/std",
@@ -144,8 +142,7 @@ runtime-benchmarks = [
 	"citizen-lightnode-issuance/runtime-benchmarks",
 	"sfid-code-auth/runtime-benchmarks",
 	"pow-difficulty-module/runtime-benchmarks",
-	"onchain-transaction-fee/runtime-benchmarks",
-	"offchain-transaction-fee/runtime-benchmarks",
+	"onchain-transaction-pow/runtime-benchmarks",
 	"duoqian-transaction-pow/runtime-benchmarks",
 	"resolution-issuance-iss/runtime-benchmarks",
 	"resolution-issuance-gov/runtime-benchmarks",
@@ -170,8 +167,7 @@ try-runtime = [
 	"citizen-lightnode-issuance/try-runtime",
 	"sfid-code-auth/try-runtime",
 	"pow-difficulty-module/try-runtime",
-	"onchain-transaction-fee/try-runtime",
-	"offchain-transaction-fee/try-runtime",
+	"onchain-transaction-pow/try-runtime",
 	"duoqian-transaction-pow/try-runtime",
 	"resolution-issuance-iss/try-runtime",
 	"resolution-issuance-gov/try-runtime",
