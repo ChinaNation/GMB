@@ -27,7 +27,9 @@ wuminapp/
 ├── lib/
 │   ├── main.dart
 │   ├── Isar/
+│   ├── governance/
 │   ├── login/
+│   ├── signer/
 │   ├── user/
 │   ├── wallet/
 │   └── trade/
@@ -58,6 +60,7 @@ wuminapp/
   - 国储会 1
   - 省储会 43
   - 省储行 43
+- 提案/投票链上交互仍在治理模块开发阶段（规范已落文档）
 
 ### 4.3 金融页
 
@@ -70,17 +73,22 @@ wuminapp/
 钱包能力收口在 `lib/wallet/`：
 
 - `core/`：钱包生命周期、Isar、机密 key 规范、生物识别守卫
-- `capabilities/`：登录签名、链上交易编排、余额/API、管理员目录、绑定、证明态
+- `capabilities/`：登录签名编排、余额/API、管理员目录、绑定、证明态
 - `ui/`：钱包页面
 
-签名算法：`sr25519`。
+签名能力收口在 `lib/signer/`：
 
-签名前守卫：`UserIdentificationService.confirmBeforeSign()`。
+- `local_signer.dart`：手机本机签名（助记词在手机）
+- `qr_signer.dart`：扫码签名协议（私钥在外部设备）
+
+签名算法：`sr25519`。
 
 调用点：
 
 - 登录扫码签名前
 - 链上交易签名前
+
+签名前守卫：`UserIdentificationService.confirmBeforeSign()`。
 
 ### 4.5 登录模块
 
@@ -101,6 +109,16 @@ wuminapp/
 ```text
 WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 ```
+
+### 4.6 双签名模式（技术方案）
+
+- 模式 A：本机签名
+  - 私钥/助记词仅保存在手机 secure storage
+  - 交易和登录均由 `LocalSigner` 在手机完成签名
+- 模式 B：扫码签名
+  - 手机不保存私钥，仅保存钱包地址/公钥
+  - 手机生成待签名请求二维码，外部设备签名后返回签名回执二维码
+  - 协议由 `QrSigner` 统一编解码与校验（`WUMINAPP_QR_SIGN_V1`）
 
 ## 5. 手机端三层存储（当前）
 
@@ -149,6 +167,31 @@ App 通过 `ApiClient` 访问外部服务，当前已使用接口：
 - `POST /api/v1/chain/bind/request`
 - `GET /api/v1/admins/catalog`
 
+### 6.1 区块链能力矩阵（转账 / 提案 / 投票）
+
+| 能力 | 链上入口 | 手机端模块 | 签名域 | 当前状态 |
+| --- | --- | --- | --- | --- |
+| 转账 | 链上转账 extrinsic（由外部网关 prepare/submit 封装） | `lib/trade/onchain` | `onchain_tx` | 已上线（本机签名主链路） |
+| 提案 | 业务治理 pallet `propose_*` | `lib/governance`（规范已定） | `onchain_tx`（交易签名）+ SFID 快照签名字段 | 待开发 |
+| 投票 | 业务治理 `vote_*` / 投票引擎 `submit_joint_institution_vote` / `citizen_vote` | `lib/governance`（规范已定） | `onchain_tx`（交易签名）+ SFID 投票凭证签名字段 | 待开发 |
+
+### 6.2 区块链字段与格式标准（总则）
+
+- 地址：SS58 字符串（当前链 `ss58 = 2027`）。
+- 机构 ID：链上 `[u8; 48]`，App 统一使用 `0x` + 96 hex 表达。
+- 签名算法：统一 `sr25519`。
+- `nonce/signature`：治理场景均使用字节向量（运行时上限当前为 64 字节）。
+- 提案状态：`voting/passed/rejected`（内部执行失败状态由业务 pallet 事件单独体现）。
+- 投票引擎外部禁用项：
+  - `create_joint_proposal`（外部调用禁止）
+  - `internal_vote`（外部调用禁止）
+  - 必须通过业务治理 pallet 发起。
+
+详细字段与流程见：
+
+- `lib/trade/onchain/ONCHAIN_TECHNICAL.md`（转账）
+- `lib/governance/GOVERNANCE_TECHNICAL.md`（提案/投票）
+
 ## 7. 安全基线（当前）
 
 - 私钥/助记词不落 Isar 与远端服务
@@ -161,6 +204,7 @@ App 通过 `ApiClient` 访问外部服务，当前已使用接口：
 - 登录防重放当前仍在 `SharedPreferences`，尚未切到 Isar 的 `LoginReplayEntity`
 - `SfidBindingService` 状态仍在 `SharedPreferences`（`sfid.bind.*`）
 - 链下交易模块仍为占位
+- 扫码签名当前已完成协议层实现，业务 UI 仍以本机签名为主
 
 ## 9. 本地开发
 
@@ -177,5 +221,8 @@ flutter run \
 ## 10. 关联模块文档
 
 - 登录模块：`lib/login/LOGIN_TECHNICAL.md`
+- 签名模块：`lib/signer/SIGNER_TECHNICAL.md`
+- 治理模块：`lib/governance/GOVERNANCE_TECHNICAL.md`
 - 用户模块：`lib/user/USER_TECHNICAL.md`
 - 钱包模块：`lib/wallet/WALLET_TECHNICAL.md`
+- 链上交易模块：`lib/trade/onchain/ONCHAIN_TECHNICAL.md`

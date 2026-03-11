@@ -1,11 +1,10 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:wuminapp_mobile/login/models/login_models.dart';
 import 'package:wuminapp_mobile/login/models/login_exception.dart';
 import 'package:wuminapp_mobile/login/services/login_replay_guard.dart';
 import 'package:wuminapp_mobile/login/services/login_whitelist_policy.dart';
+import 'package:wuminapp_mobile/signer/local_signer.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 class SignService {
@@ -13,9 +12,11 @@ class SignService {
     WalletManager? walletManager,
     LoginReplayGuard? replayGuard,
     LoginWhitelistPolicy? whitelistPolicy,
+    LocalSigner? localSigner,
   })  : _walletManager = walletManager ?? WalletManager(),
         _replayGuard = replayGuard ?? LoginReplayGuard(),
-        _whitelistPolicy = whitelistPolicy ?? LoginWhitelistPolicy();
+        _whitelistPolicy = whitelistPolicy ?? LoginWhitelistPolicy(),
+        _localSigner = localSigner ?? LocalSigner();
 
   static const String protocol = 'WUMINAPP_LOGIN_V1';
   static const int challengeTtlSeconds = 90;
@@ -31,6 +32,7 @@ class SignService {
   final WalletManager _walletManager;
   final LoginReplayGuard _replayGuard;
   final LoginWhitelistPolicy _whitelistPolicy;
+  final LocalSigner _localSigner;
 
   WuminLoginChallenge parseChallenge(String raw) {
     final text = raw.trim();
@@ -147,29 +149,30 @@ class SignService {
     }
 
     final wallet = walletSecret.profile;
-    final mnemonic = walletSecret.mnemonic;
-    final pair = await Keyring.sr25519.fromMnemonic(mnemonic);
-    pair.ss58Format = wallet.ss58;
-
-    final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
-    if (localPubkeyHex.toLowerCase() != wallet.pubkeyHex.toLowerCase()) {
-      throw const LoginException(
-        LoginErrorCode.walletMismatch,
-        '本地签名密钥与当前钱包不一致，请重新导入钱包',
-      );
-    }
-
     final signMessage = _buildSignMessage(challenge);
-    final message = Uint8List.fromList(utf8.encode(signMessage));
-    final signature = pair.sign(message);
+    late LocalSignResult signed;
+    try {
+      signed = await _localSigner.signUtf8(
+        walletSecret: walletSecret,
+        message: signMessage,
+      );
+    } on LocalSignerException catch (e) {
+      if (e.code == LocalSignerErrorCode.walletMismatch) {
+        throw const LoginException(
+          LoginErrorCode.walletMismatch,
+          '本地签名密钥与当前钱包不一致，请重新导入钱包',
+        );
+      }
+      throw LoginException(LoginErrorCode.invalidField, e.message);
+    }
 
     final receipt = WuminLoginReceipt(
       proto: protocol,
       requestId: challenge.requestId,
       account: wallet.address,
-      pubkey: '0x${wallet.pubkeyHex}',
-      sigAlg: 'sr25519',
-      signature: '0x${_toHex(signature.toList(growable: false))}',
+      pubkey: signed.pubkeyHex,
+      sigAlg: signed.sigAlg,
+      signature: signed.signatureHex,
       signedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
     await _replayGuard.consume(
@@ -247,15 +250,4 @@ class SignService {
   }
 
   int _nowEpochSeconds() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
-
-  String _toHex(List<int> bytes) {
-    const chars = '0123456789abcdef';
-    final buf = StringBuffer();
-    for (final b in bytes) {
-      buf
-        ..write(chars[(b >> 4) & 0x0f])
-        ..write(chars[b & 0x0f]);
-    }
-    return buf.toString();
-  }
 }

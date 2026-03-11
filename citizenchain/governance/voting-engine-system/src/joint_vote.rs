@@ -93,6 +93,7 @@ fn is_institution_multisig_account(institution: InstitutionPalletId, who: &[u8; 
 }
 
 pub fn institution_info(id: InstitutionPalletId) -> Option<u32> {
+    // 中文注释：联合投票按机构类型折算票权，这里只负责把 institution 映射成固定权重。
     if let Some(nrc) = nrc_pallet_id_bytes() {
         if id == nrc {
             return Some(NRC_JOINT_VOTE_WEIGHT);
@@ -120,6 +121,7 @@ pub fn institution_info(id: InstitutionPalletId) -> Option<u32> {
 }
 
 pub fn is_joint_unanimous(yes_weight: u32) -> bool {
+    // 中文注释：联合投票采用“票权全同意即通过”，不是简单人数多数制。
     yes_weight >= JOINT_VOTE_PASS_THRESHOLD
 }
 
@@ -170,6 +172,7 @@ impl<T: Config> Pallet<T> {
         UsedPopulationSnapshotNonce::<T>::insert(snapshot_nonce_hash, true);
 
         let now = <frame_system::Pallet<T>>::block_number();
+        // 中文注释：联合提案创建时就锁定公民投票分母与人口快照，后续阶段切换不再改写。
         let end = now.saturating_add(Self::joint_stage_duration());
 
         let proposal = Proposal {
@@ -294,6 +297,7 @@ impl<T: Config> Pallet<T> {
             |maybe| -> Result<u64, sp_runtime::DispatchError> {
                 let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
                 let eligible_total = proposal.citizen_eligible_total;
+                // 中文注释：这里只切换阶段窗口，不重算 eligible_total，保证联合阶段锁定的分母继续生效。
                 proposal.stage = crate::STAGE_CITIZEN;
                 proposal.start = now;
                 proposal.end = citizen_end;

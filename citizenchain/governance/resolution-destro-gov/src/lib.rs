@@ -127,6 +127,8 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn proposal_passed_at)]
+    /// 中文注释：记录提案首次进入 Passed 的时间点；
+    /// 用于“已通过但暂未执行”的 stale 窗口锚定，避免直接沿用 created_at。
     pub type ProposalPassedAt<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, BlockNumberFor<T>, OptionQuery>;
 
@@ -289,6 +291,8 @@ pub mod pallet {
         #[pallet::call_index(2)]
         #[pallet::weight(T::WeightInfo::execute_destroy())]
         pub fn execute_destroy(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
+            // 中文注释：这里保留公开触发入口，任何签名账户都可以推动“已获批准”的销毁落地，
+            // 不要求再次拿到管理员身份，避免因管理员离线导致通过提案迟迟无法执行。
             let _ = ensure_signed(origin)?;
             Self::try_execute_destroy(proposal_id)
         }
@@ -297,6 +301,8 @@ pub mod pallet {
         #[pallet::call_index(3)]
         #[pallet::weight(T::WeightInfo::cancel_stale_destroy())]
         pub fn cancel_stale_destroy(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
+            // 中文注释：stale 清理同样设计为公开触发，只要提案已经超过治理窗口，
+            // 任意签名账户都可以帮助系统回收阻塞状态，避免同机构长期无法再发起新提案。
             let _ = ensure_signed(origin)?;
             let action =
                 ProposalActions::<T>::get(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
@@ -355,6 +361,8 @@ pub mod pallet {
                         }
                         if proposal.status == STATUS_PASSED {
                             let now = frame_system::Pallet::<T>::block_number();
+                            // 中文注释：已通过但未执行的提案，优先以 passed_at 作为 stale 窗口起点；
+                            // 若历史脏数据缺失 passed_at，则回退到 created_at，保证仍可恢复解阻塞。
                             let anchor = ProposalPassedAt::<T>::get(existing_id)
                                 .or_else(|| ProposalCreatedAt::<T>::get(existing_id));
                             let still_active = anchor
@@ -384,6 +392,8 @@ pub mod pallet {
         }
 
         fn cleanup_inactive_proposal(institution: InstitutionPalletId, proposal_id: u64) {
+            // 中文注释：业务侧动作、时间戳、机构活跃索引与投票引擎提案必须一起清理，
+            // 否则同机构后续新提案可能被陈旧状态卡住。
             ProposalActions::<T>::remove(proposal_id);
             ProposalCreatedAt::<T>::remove(proposal_id);
             ProposalPassedAt::<T>::remove(proposal_id);
@@ -415,6 +425,7 @@ pub mod pallet {
 
             let free = T::Currency::free_balance(&institution_account);
             let ed = T::Currency::minimum_balance();
+            // 中文注释：销毁前必须预留 ED，确保机构账户不会因一次销毁被直接 reap。
             let required = action
                 .amount
                 .checked_add(&ed)

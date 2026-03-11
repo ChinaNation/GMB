@@ -39,3 +39,6 @@ flutter:
     - assets/icons/copy.svg
     - assets/icons/arrow-right-left.svg
     - assets/icons/file-user.svg
+    - assets/icons/message-square-text.svg
+    - assets/icons/scale.svg
+    - assets/icons/contact-round.svg

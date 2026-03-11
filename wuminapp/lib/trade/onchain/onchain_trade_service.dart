@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:polkadart_keyring/polkadart_keyring.dart';
+import 'package:wuminapp_mobile/signer/local_signer.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_gateway.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_repository.dart';
@@ -11,13 +11,16 @@ class OnchainTradeService {
     WalletManager? walletManager,
     OnchainTradeRepository? repository,
     OnchainTradeGateway? gateway,
+    LocalSigner? localSigner,
   })  : _walletManager = walletManager ?? WalletManager(),
         _repository = repository ?? LocalOnchainTradeRepository(),
-        _gateway = gateway ?? HttpOnchainTradeGateway();
+        _gateway = gateway ?? HttpOnchainTradeGateway(),
+        _localSigner = localSigner ?? LocalSigner();
 
   final WalletManager _walletManager;
   final OnchainTradeRepository _repository;
   final OnchainTradeGateway _gateway;
+  final LocalSigner _localSigner;
 
   Future<WalletProfile?> getCurrentWallet() {
     return _walletManager.getWallet();
@@ -42,15 +45,6 @@ class OnchainTradeService {
     }
 
     final wallet = walletSecret.profile;
-    final pair = await Keyring.sr25519.fromMnemonic(walletSecret.mnemonic);
-    pair.ss58Format = wallet.ss58;
-    final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
-    if (localPubkeyHex.toLowerCase() != wallet.pubkeyHex.toLowerCase()) {
-      throw const OnchainTradeException(
-        OnchainTradeErrorCode.walletMismatch,
-        '钱包密钥与地址不匹配，请重新导入钱包',
-      );
-    }
 
     OnchainPrepareResult prepared;
     try {
@@ -78,11 +72,28 @@ class OnchainTradeService {
       );
     }
 
-    final signature = pair.sign(Uint8List.fromList(signerPayloadBytes));
+    late LocalSignResult signed;
+    try {
+      signed = await _localSigner.signBytes(
+        walletSecret: walletSecret,
+        payload: Uint8List.fromList(signerPayloadBytes),
+      );
+    } on LocalSignerException catch (e) {
+      if (e.code == LocalSignerErrorCode.walletMismatch) {
+        throw const OnchainTradeException(
+          OnchainTradeErrorCode.walletMismatch,
+          '钱包密钥与地址不匹配，请重新导入钱包',
+        );
+      }
+      throw OnchainTradeException(
+        OnchainTradeErrorCode.broadcastFailed,
+        e.message,
+      );
+    }
     final signedTransfer = OnchainSignedPreparedTransfer(
       preparedId: prepared.preparedId,
-      pubkeyHex: '0x${wallet.pubkeyHex}',
-      signatureHex: '0x${_toHex(signature.toList(growable: false))}',
+      pubkeyHex: signed.pubkeyHex,
+      signatureHex: signed.signatureHex,
     );
 
     OnchainSubmitResult submitResult;
@@ -145,17 +156,6 @@ class OnchainTradeService {
       }
     }
     return listRecentRecords();
-  }
-
-  String _toHex(List<int> bytes) {
-    const chars = '0123456789abcdef';
-    final buf = StringBuffer();
-    for (final b in bytes) {
-      buf
-        ..write(chars[(b >> 4) & 0x0f])
-        ..write(chars[b & 0x0f]);
-    }
-    return buf.toString();
   }
 
   List<int> _hexToBytes(String input) {

@@ -28,7 +28,7 @@ declare -a TARGETS=(
   "fullnode_pow_reward:issuance/fullnode-pow-reward/src/weights.rs"
   "sfid_code_auth:otherpallet/sfid-code-auth/src/weights.rs"
   "resolution_destro_gov:governance/resolution-destro-gov/src/weights.rs"
-  "finality_key_gov:governance/finality-key-gov/src/weights.rs"
+  "grandpa_key_gov:governance/grandpa-key-gov/src/weights.rs"
   "resolution_issuance_iss:issuance/resolution-issuance-iss/src/weights.rs"
   "duoqian_transaction_pow:transaction/duoqian-transaction-pow/src/weights.rs"
   "admins_origin_gov:governance/admins-origin-gov/src/weights.rs"

@@ -19,7 +19,7 @@
 
 pub use pallet::*;
 
-/// PoW 难度 Runtime API：节点层 SimplePow::difficulty() 通过此接口读取链上实时难度。
+// PoW 难度 Runtime API：节点层 SimplePow::difficulty() 通过此接口读取链上实时难度。
 sp_api::decl_runtime_apis! {
     pub trait PowDifficultyApi {
         /// 返回当前链上 PoW 挖矿难度值。
@@ -43,17 +43,16 @@ pub mod pallet {
     /// Pallet 配置：需要 frame_system 与 pallet_timestamp 作为超特征，
     /// 以便通过 pallet_timestamp::Pallet::<T>::now() 读取当前块时间戳。
     #[pallet::config]
-    pub trait Config: frame_system::Config + pallet_timestamp::Config {
-        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-    }
+    pub trait Config:
+        frame_system::Config<RuntimeEvent: From<Event<Self>>> + pallet_timestamp::Config
+    {}
 
     // ─── Storage ──────────────────────────────────────────────────────────────
 
     /// 当前 PoW 挖矿难度值。创世时为 POW_INITIAL_DIFFICULTY，此后由调整算法自动维护。
     #[pallet::storage]
     #[pallet::getter(fn current_difficulty)]
-    pub type CurrentDifficulty<T> =
-        StorageValue<_, u64, ValueQuery, DefaultInitialDifficulty>;
+    pub type CurrentDifficulty<T> = StorageValue<_, u64, ValueQuery, DefaultInitialDifficulty>;
 
     /// 难度初始默认值（ValueQuery 的 OnEmpty 实现）。
     pub struct DefaultInitialDifficulty;
@@ -101,7 +100,11 @@ pub mod pallet {
 
             let interval = DIFFICULTY_ADJUSTMENT_INTERVAL;
 
-            if block_num > 0 && block_num % interval == 0 {
+            // 以 block 1 的时间戳作为首窗口起点，则首个有效窗口应在 block (interval + 1)
+            // 触发调整，确保窗口跨度恰好覆盖 interval 个区块间隔。
+            let is_adjustment_block = block_num > 1 && (block_num - 1) % interval == 0;
+
+            if is_adjustment_block {
                 // ── 调整块：计算新难度 ────────────────────────────────────────
                 if let Some(start_ms) = WindowStartMs::<T>::get() {
                     let actual_window_ms = now_ms.saturating_sub(start_ms).max(1);
@@ -118,7 +121,8 @@ pub mod pallet {
                     // 单次调整幅度限制：[old/4, old×4]
                     let max_diff = old_difficulty.saturating_mul(DIFFICULTY_MAX_ADJUST_FACTOR);
                     let min_diff = (old_difficulty / DIFFICULTY_MIN_ADJUST_FACTOR).max(1);
-                    let new_difficulty = (new_diff_u128 as u64).clamp(min_diff, max_diff);
+                    let new_diff = new_diff_u128.saturated_into::<u64>();
+                    let new_difficulty = new_diff.clamp(min_diff, max_diff);
 
                     CurrentDifficulty::<T>::put(new_difficulty);
 
@@ -130,8 +134,8 @@ pub mod pallet {
                         target_window_ms,
                     });
                 }
-                // 重置窗口：下一块的 on_finalize 会重新记录新窗口起始时间戳
-                WindowStartMs::<T>::kill();
+                // 以当前调整块时间戳作为下一窗口起点，避免少算 1 个区块间隔。
+                WindowStartMs::<T>::put(now_ms);
             } else {
                 // ── 非调整块：若窗口起始未记录，以当前块时间戳为起点 ──────────
                 if WindowStartMs::<T>::get().is_none() {
@@ -139,5 +143,172 @@ pub mod pallet {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use frame_support::{
+        derive_impl,
+        traits::{Hooks, Time},
+    };
+    use frame_system as system;
+    use primitives::pow_const::{
+        DIFFICULTY_ADJUSTMENT_INTERVAL, DIFFICULTY_MAX_ADJUST_FACTOR, DIFFICULTY_MIN_ADJUST_FACTOR,
+        DIFFICULTY_TARGET_WINDOW_MS, MILLISECS_PER_BLOCK, POW_INITIAL_DIFFICULTY,
+    };
+    use sp_runtime::{traits::IdentityLookup, BuildStorage};
+
+    type Block = frame_system::mocking::MockBlock<Test>;
+    const FIRST_ADJUST_BLOCK: u64 = DIFFICULTY_ADJUSTMENT_INTERVAL as u64 + 1;
+    const SECOND_ADJUST_BLOCK: u64 = FIRST_ADJUST_BLOCK + DIFFICULTY_ADJUSTMENT_INTERVAL as u64;
+
+    #[frame_support::runtime]
+    mod runtime {
+        #[runtime::runtime]
+        #[runtime::derive(
+            RuntimeCall,
+            RuntimeEvent,
+            RuntimeError,
+            RuntimeOrigin,
+            RuntimeTask,
+            RuntimeViewFunction
+        )]
+        pub struct Test;
+
+        #[runtime::pallet_index(0)]
+        pub type System = frame_system;
+        #[runtime::pallet_index(1)]
+        pub type Timestamp = pallet_timestamp;
+        #[runtime::pallet_index(2)]
+        pub type PowDifficulty = super;
+    }
+
+    #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
+    impl system::Config for Test {
+        type Block = Block;
+        type AccountId = u64;
+        type Lookup = IdentityLookup<Self::AccountId>;
+    }
+
+    impl pallet_timestamp::Config for Test {
+        type Moment = u64;
+        type OnTimestampSet = ();
+        type MinimumPeriod = frame_support::traits::ConstU64<1>;
+        type WeightInfo = ();
+    }
+
+    impl Config for Test {}
+
+    fn new_test_ext() -> sp_io::TestExternalities {
+        let storage = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
+            .expect("frame system genesis storage should build");
+        sp_io::TestExternalities::new(storage)
+    }
+
+    fn run_blocks(count: u32, block_time_ms: u64) {
+        for _ in 0..count {
+            let block = System::block_number() + 1;
+            let now_ms = Timestamp::now().saturating_add(block_time_ms);
+            System::set_block_number(block);
+            Timestamp::set_timestamp(now_ms);
+            PowDifficulty::on_finalize(block);
+        }
+    }
+
+    fn difficulty_adjusted_events() -> Vec<Event<Test>> {
+        System::events()
+            .into_iter()
+            .filter_map(|r| match r.event {
+                RuntimeEvent::PowDifficulty(event) => Some(event),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn first_adjustment_happens_at_interval_plus_one_and_window_is_exact() {
+        new_test_ext().execute_with(|| {
+            run_blocks(DIFFICULTY_ADJUSTMENT_INTERVAL, MILLISECS_PER_BLOCK);
+            assert_eq!(PowDifficulty::current_difficulty(), POW_INITIAL_DIFFICULTY);
+            assert!(difficulty_adjusted_events().is_empty());
+
+            run_blocks(1, MILLISECS_PER_BLOCK);
+            assert_eq!(PowDifficulty::current_difficulty(), POW_INITIAL_DIFFICULTY);
+
+            System::assert_last_event(RuntimeEvent::PowDifficulty(Event::DifficultyAdjusted {
+                block: FIRST_ADJUST_BLOCK,
+                old_difficulty: POW_INITIAL_DIFFICULTY,
+                new_difficulty: POW_INITIAL_DIFFICULTY,
+                actual_window_ms: DIFFICULTY_TARGET_WINDOW_MS,
+                target_window_ms: DIFFICULTY_TARGET_WINDOW_MS,
+            }));
+
+            assert_eq!(WindowStartMs::<Test>::get(), Some(Timestamp::now()));
+        });
+    }
+
+    #[test]
+    fn raises_difficulty_when_blocks_are_too_fast() {
+        new_test_ext().execute_with(|| {
+            run_blocks(DIFFICULTY_ADJUSTMENT_INTERVAL + 1, MILLISECS_PER_BLOCK / 2);
+            assert_eq!(
+                PowDifficulty::current_difficulty(),
+                POW_INITIAL_DIFFICULTY * 2
+            );
+        });
+    }
+
+    #[test]
+    fn lowers_difficulty_when_blocks_are_too_slow() {
+        new_test_ext().execute_with(|| {
+            run_blocks(DIFFICULTY_ADJUSTMENT_INTERVAL + 1, MILLISECS_PER_BLOCK * 2);
+            assert_eq!(
+                PowDifficulty::current_difficulty(),
+                POW_INITIAL_DIFFICULTY / 2
+            );
+        });
+    }
+
+    #[test]
+    fn clamps_to_adjustment_bounds() {
+        new_test_ext().execute_with(|| {
+            let old = 100u64;
+            CurrentDifficulty::<Test>::put(old);
+            WindowStartMs::<Test>::put(999);
+            System::set_block_number(FIRST_ADJUST_BLOCK);
+            Timestamp::set_timestamp(1_000);
+            PowDifficulty::on_finalize(FIRST_ADJUST_BLOCK);
+            assert_eq!(
+                PowDifficulty::current_difficulty(),
+                old * DIFFICULTY_MAX_ADJUST_FACTOR
+            );
+
+            CurrentDifficulty::<Test>::put(old);
+            WindowStartMs::<Test>::put(0);
+            System::set_block_number(SECOND_ADJUST_BLOCK);
+            Timestamp::set_timestamp(1_000_000_000);
+            PowDifficulty::on_finalize(SECOND_ADJUST_BLOCK);
+            assert_eq!(
+                PowDifficulty::current_difficulty(),
+                old / DIFFICULTY_MIN_ADJUST_FACTOR
+            );
+        });
+    }
+
+    #[test]
+    fn saturating_cast_prevents_u128_to_u64_wraparound() {
+        new_test_ext().execute_with(|| {
+            CurrentDifficulty::<Test>::put(u64::MAX - 1);
+            WindowStartMs::<Test>::put(999);
+            System::set_block_number(FIRST_ADJUST_BLOCK);
+            Timestamp::set_timestamp(1_000);
+
+            PowDifficulty::on_finalize(FIRST_ADJUST_BLOCK);
+
+            assert_eq!(PowDifficulty::current_difficulty(), u64::MAX);
+        });
     }
 }
