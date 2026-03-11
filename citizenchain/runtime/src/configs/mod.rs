@@ -45,7 +45,7 @@ use frame_support::{
 };
 use frame_system::limits::{BlockLength, BlockWeights};
 use frame_system::pallet_prelude::BlockNumberFor;
-use onchain_transaction_fee::NrcAccountProvider as _;
+use onchain_transaction_pow::NrcAccountProvider as _;
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use sp_core::{sr25519, Void};
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
@@ -58,10 +58,10 @@ use sp_version::RuntimeVersion;
 // Local module imports
 use super::{
     AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance, Hash,
-    Nonce, OffchainTransactionFee, PalletInfo, ResolutionIssuanceGov, ResolutionIssuanceIss,
-    Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin,
-    RuntimeRootUpgrade, RuntimeTask, System, VotingEngineSystem, BLOCK_HASH_COUNT,
-    EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    Nonce, PalletInfo, ResolutionIssuanceGov, ResolutionIssuanceIss, Runtime, RuntimeCall,
+    RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeRootUpgrade,
+    RuntimeTask, System, VotingEngineSystem, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION,
+    VERSION,
 };
 
 const NORMAL_DISPATCH_RATIO: Perbill =
@@ -216,9 +216,9 @@ parameter_types! {
 
 impl pallet_transaction_payment::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type OnChargeTransaction = onchain_transaction_fee::PowOnchainChargeAdapter<
+    type OnChargeTransaction = onchain_transaction_pow::PowOnchainChargeAdapter<
         Balances,
-        onchain_transaction_fee::PowOnchainFeeRouter<
+        onchain_transaction_pow::PowOnchainFeeRouter<
             Runtime,
             Balances,
             PowDigestAuthor,
@@ -236,7 +236,7 @@ impl pallet_transaction_payment::Config for Runtime {
 
 pub struct RuntimeNrcAccountProvider;
 
-impl onchain_transaction_fee::NrcAccountProvider<AccountId> for RuntimeNrcAccountProvider {
+impl onchain_transaction_pow::NrcAccountProvider<AccountId> for RuntimeNrcAccountProvider {
     fn nrc_account() -> Option<AccountId> {
         Some(AccountId::new(
             primitives::china::china_cb::CHINA_CB[0].duoqian_address,
@@ -260,33 +260,33 @@ impl OnUnbalanced<Credit<AccountId, Balances>> for RuntimeDustHandler {
 
 pub struct PowTxAmountExtractor;
 
-impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for PowTxAmountExtractor {
+impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for PowTxAmountExtractor {
     fn amount(
         who: &AccountId,
         call: &RuntimeCall,
-    ) -> onchain_transaction_fee::AmountExtractResult<Balance> {
+    ) -> onchain_transaction_pow::AmountExtractResult<Balance> {
         match call {
             RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
                 value, ..
-            }) => onchain_transaction_fee::AmountExtractResult::Amount(*value),
+            }) => onchain_transaction_pow::AmountExtractResult::Amount(*value),
             RuntimeCall::Balances(pallet_balances::Call::transfer_keep_alive { value, .. }) => {
-                onchain_transaction_fee::AmountExtractResult::Amount(*value)
+                onchain_transaction_pow::AmountExtractResult::Amount(*value)
             }
             RuntimeCall::Balances(pallet_balances::Call::force_transfer { value, .. }) => {
-                onchain_transaction_fee::AmountExtractResult::Amount(*value)
+                onchain_transaction_pow::AmountExtractResult::Amount(*value)
             }
             RuntimeCall::Balances(pallet_balances::Call::force_unreserve { amount, .. }) => {
-                onchain_transaction_fee::AmountExtractResult::Amount(*amount)
+                onchain_transaction_pow::AmountExtractResult::Amount(*amount)
             }
             RuntimeCall::Balances(pallet_balances::Call::force_set_balance {
                 new_free, ..
-            }) => onchain_transaction_fee::AmountExtractResult::Amount(*new_free),
+            }) => onchain_transaction_pow::AmountExtractResult::Amount(*new_free),
             RuntimeCall::Balances(pallet_balances::Call::force_adjust_total_issuance {
                 delta,
                 ..
-            }) => onchain_transaction_fee::AmountExtractResult::Amount(*delta),
+            }) => onchain_transaction_pow::AmountExtractResult::Amount(*delta),
             RuntimeCall::Balances(pallet_balances::Call::burn { value, .. }) => {
-                onchain_transaction_fee::AmountExtractResult::Amount(*value)
+                onchain_transaction_pow::AmountExtractResult::Amount(*value)
             }
             RuntimeCall::Balances(pallet_balances::Call::transfer_all { keep_alive, .. }) => {
                 let preservation = if *keep_alive {
@@ -299,109 +299,65 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
                     preservation,
                     Fortitude::Polite,
                 );
-                onchain_transaction_fee::AmountExtractResult::Amount(value)
-            }
-            RuntimeCall::OffchainTransactionFee(
-                offchain_transaction_fee::pallet::Call::submit_offchain_batch {
-                    institution,
-                    batch,
-                    ..
-                },
-            ) => {
-                // 中文注释：仅做轻量金额提取，避免在交易池验证阶段执行完整预检造成 DoS 面放大。
-                if !batch.is_empty() && OffchainTransactionFee::fee_account_of(*institution).is_ok()
-                {
-                    let sum = batch.iter().fold(0u128, |acc: u128, item| {
-                        acc.saturating_add(item.offchain_fee_amount)
-                    });
-                    onchain_transaction_fee::AmountExtractResult::Amount(sum)
-                } else {
-                    onchain_transaction_fee::AmountExtractResult::Unknown
-                }
-            }
-            RuntimeCall::OffchainTransactionFee(
-                offchain_transaction_fee::pallet::Call::process_queued_batch { queue_id },
-            ) => {
-                if let Ok(sum) =
-                    OffchainTransactionFee::precheck_process_queued_batch(who, *queue_id)
-                {
-                    onchain_transaction_fee::AmountExtractResult::Amount(sum)
-                } else {
-                    onchain_transaction_fee::AmountExtractResult::Unknown
-                }
+                onchain_transaction_pow::AmountExtractResult::Amount(value)
             }
             RuntimeCall::DuoqianTransactionPow(
                 duoqian_transaction_pow::pallet::Call::create_duoqian { amount, .. },
-            ) => onchain_transaction_fee::AmountExtractResult::Amount(*amount),
+            ) => onchain_transaction_pow::AmountExtractResult::Amount(*amount),
             RuntimeCall::DuoqianTransactionPow(
                 duoqian_transaction_pow::pallet::Call::close_duoqian {
                     duoqian_address, ..
                 },
-            ) => onchain_transaction_fee::AmountExtractResult::Amount(Balances::free_balance(
+            ) => onchain_transaction_pow::AmountExtractResult::Amount(Balances::free_balance(
                 duoqian_address,
             )),
             // 中文注释：以下调用类型明确属于“无金额交易”，放行且不计算手续费。
-            RuntimeCall::System(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
-            RuntimeCall::Timestamp(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
-            RuntimeCall::OffchainTransactionFee(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
-            }
+            RuntimeCall::System(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
+            RuntimeCall::Timestamp(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
             RuntimeCall::FullnodePowReward(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::NoAmount
             }
             RuntimeCall::ShengBankStakeInterest(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::NoAmount
             }
             RuntimeCall::ResolutionIssuanceIss(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::NoAmount
             }
             RuntimeCall::ResolutionIssuanceGov(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::NoAmount
             }
             RuntimeCall::VotingEngineSystem(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::NoAmount
             }
-            RuntimeCall::SfidCodeAuth(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+            RuntimeCall::SfidCodeAuth(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
             RuntimeCall::CitizenLightnodeIssuance(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::NoAmount
             }
             RuntimeCall::AdminsOriginGov(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::NoAmount
             }
             RuntimeCall::RuntimeRootUpgrade(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::NoAmount
             }
             RuntimeCall::ResolutionDestroGov(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::NoAmount
             }
-            RuntimeCall::GrandpaKeyGov(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
+            RuntimeCall::GrandpaKeyGov(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
             RuntimeCall::DuoqianTransactionPow(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::NoAmount
             }
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免“有金额但漏提取”。
-            RuntimeCall::Balances(_) => onchain_transaction_fee::AmountExtractResult::Unknown,
-            _ => onchain_transaction_fee::AmountExtractResult::Unknown,
+            RuntimeCall::Balances(_) => onchain_transaction_pow::AmountExtractResult::Unknown,
+            _ => onchain_transaction_pow::AmountExtractResult::Unknown,
         }
     }
 }
 
 pub struct RuntimeFeePayerExtractor;
 
-impl onchain_transaction_fee::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
+impl onchain_transaction_pow::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
     fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
         match call {
-            RuntimeCall::OffchainTransactionFee(
-                offchain_transaction_fee::pallet::Call::submit_offchain_batch {
-                    institution, ..
-                },
-            ) => {
-                // 中文注释：链下批次上链手续费永远由本机构 fee_pallet_address 承担。
-                // 提交账户只负责提交，不承担手续费。
-                OffchainTransactionFee::fee_account_of(*institution).ok()
-            }
-            RuntimeCall::OffchainTransactionFee(
-                offchain_transaction_fee::pallet::Call::process_queued_batch { queue_id },
-            ) => OffchainTransactionFee::fee_payer_for_queued_batch(*queue_id).ok(),
             _ => None,
         }
     }
@@ -442,19 +398,6 @@ impl fullnode_pow_reward::Config for Runtime {
     type Currency = Balances;
     type FindAuthor = PowDigestAuthor;
     type WeightInfo = fullnode_pow_reward::weights::SubstrateWeight<Runtime>;
-}
-
-impl offchain_transaction_fee::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type Currency = Balances;
-    type MaxVerifyKeyLen = ConstU32<256>;
-    type MaxBatchSize = ConstU32<1000>;
-    type MaxBatchSignatureLength = ConstU32<64>;
-    type MaxRelaySubmitters = ConstU32<8>;
-    type InternalVoteEngine = VotingEngineSystem;
-    type OffchainBatchVerifier = RuntimeOffchainBatchVerifier;
-    type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
-    type WeightInfo = offchain_transaction_fee::weights::SubstrateWeight<Runtime>;
 }
 
 pub struct RuntimeDuoqianAdminAuth;
@@ -539,12 +482,6 @@ pub struct RuntimeSfidRegistryOperator;
 
 pub struct RuntimeProtectedSourceChecker;
 
-impl offchain_transaction_fee::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
-    fn is_protected(address: &AccountId) -> bool {
-        is_keyless_account(address)
-    }
-}
-
 impl duoqian_transaction_pow::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
     fn is_protected(address: &AccountId) -> bool {
         is_keyless_account(address)
@@ -621,26 +558,6 @@ impl duoqian_transaction_pow::Config for Runtime {
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<111>;
     type WeightInfo = duoqian_transaction_pow::weights::SubstrateWeight<Runtime>;
-}
-
-pub struct RuntimeOffchainBatchVerifier;
-
-impl offchain_transaction_fee::OffchainBatchVerifier for RuntimeOffchainBatchVerifier {
-    fn verify(verify_key: &[u8], message: &[u8], signature: &[u8]) -> bool {
-        if verify_key.len() != 32 || signature.len() != 64 {
-            return false;
-        }
-
-        let mut pk_raw = [0u8; 32];
-        pk_raw.copy_from_slice(verify_key);
-        let public = sr25519::Public::from_raw(pk_raw);
-
-        let mut sig_raw = [0u8; 64];
-        sig_raw.copy_from_slice(signature);
-        let sig = sr25519::Signature::from_raw(sig_raw);
-
-        sr25519_verify(&sig, message, &public)
-    }
 }
 
 fn current_sfid_verify_public() -> Option<sr25519::Public> {
@@ -1028,12 +945,10 @@ impl pow_difficulty_module::Config for Runtime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::OffchainTransactionFee;
     use crate::ResolutionDestroGov;
     use duoqian_transaction_pow::DuoqianReservedAddressChecker;
     use frame_support::assert_ok;
     use frame_support::traits::Currency;
-    use offchain_transaction_fee::OffchainBatchVerifier;
     use primitives::china::china_cb::{
         shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
     };
@@ -1176,112 +1091,6 @@ mod tests {
     }
 
     #[test]
-    fn offchain_batch_submitter_is_institution_and_fee_base_is_batch_offchain_fee_sum() {
-        new_test_ext().execute_with(|| {
-            let institution = primitives::china::china_ch::shenfen_id_to_fixed48(
-                primitives::china::china_ch::CHINA_CH[0].shenfen_id,
-            )
-            .expect("institution id should be valid");
-            let institution_account =
-                AccountId::new(primitives::china::china_ch::CHINA_CH[0].duoqian_address);
-            let payer = AccountId::new([7u8; 32]);
-            let recipient = AccountId::new([8u8; 32]);
-
-            let _ = Balances::deposit_creating(&institution_account, 1_000);
-            let _ = Balances::deposit_creating(&payer, 10_000);
-            let _ = Balances::deposit_creating(&recipient, 1);
-            assert_ok!(OffchainTransactionFee::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution,
-            ));
-
-            let tx_id = <Runtime as frame_system::Config>::Hashing::hash(b"rt-offchain-batch-1");
-            let item =
-                offchain_transaction_fee::pallet::OffchainBatchItem::<AccountId, Balance, Hash> {
-                    tx_id,
-                    payer: payer.clone(),
-                    recipient: recipient.clone(),
-                    transfer_amount: 1_000,
-                    offchain_fee_amount: 1,
-                };
-            let batch: offchain_transaction_fee::pallet::BatchOf<Runtime> =
-                vec![item].try_into().expect("batch should fit");
-            let fee_account = OffchainTransactionFee::fee_account_of(institution).expect("fee");
-            let relay = AccountId::new([42u8; 32]);
-            let _ = Balances::deposit_creating(&relay, 1_000);
-            let (pair, _) = sr25519::Pair::generate();
-            let verify_key: offchain_transaction_fee::pallet::VerifyKeyOf<Runtime> = pair
-                .public()
-                .0
-                .to_vec()
-                .try_into()
-                .expect("verify key should fit");
-            assert_ok!(OffchainTransactionFee::init_verify_key(
-                RuntimeOrigin::signed(institution_account.clone()),
-                institution,
-                verify_key,
-            ));
-            let submitters: offchain_transaction_fee::pallet::RelaySubmittersOf<Runtime> =
-                vec![relay.clone(), institution_account.clone(), payer.clone()]
-                    .try_into()
-                    .expect("submitters should fit");
-            assert_ok!(OffchainTransactionFee::init_relay_submitters(
-                RuntimeOrigin::signed(institution_account.clone()),
-                institution,
-                submitters,
-            ));
-            let batch_sig_raw = pair
-                .sign(&blake2_256(
-                    &(b"GMB_OFFCHAIN_BATCH_V1", institution, 1u64, &batch).encode(),
-                ))
-                .0
-                .to_vec();
-            let batch_signature: offchain_transaction_fee::pallet::BatchSignatureOf<Runtime> =
-                batch_sig_raw.try_into().expect("signature should fit");
-
-            let call = RuntimeCall::OffchainTransactionFee(
-                offchain_transaction_fee::pallet::Call::submit_offchain_batch {
-                    institution,
-                    batch_seq: 1,
-                    batch: batch.clone(),
-                    batch_signature: batch_signature.clone(),
-                },
-            );
-            let extracted = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
-                AccountId,
-                RuntimeCall,
-                Balance,
-            >>::amount(&institution_account, &call);
-            match extracted {
-                onchain_transaction_fee::AmountExtractResult::Amount(v) => assert_eq!(v, 1),
-                _ => panic!("expected amount extract result"),
-            }
-
-            let before_payer = Balances::free_balance(&payer);
-            let before_recipient = Balances::free_balance(&recipient);
-            let before_institution = Balances::free_balance(&institution_account);
-            let _ = Balances::deposit_creating(&fee_account, 1_000);
-            let before_fee = Balances::free_balance(&fee_account);
-
-            assert_ok!(OffchainTransactionFee::submit_offchain_batch(
-                RuntimeOrigin::signed(relay.clone()),
-                institution,
-                1,
-                batch,
-                batch_signature,
-            ));
-
-            assert_eq!(Balances::free_balance(&payer), before_payer - 1_001);
-            assert_eq!(Balances::free_balance(&recipient), before_recipient + 1_000);
-            assert_eq!(
-                Balances::free_balance(&institution_account),
-                before_institution
-            );
-            assert_eq!(Balances::free_balance(&fee_account), before_fee + 1);
-        });
-    }
-
-    #[test]
     fn pow_tx_amount_extractor_covers_noamount_amount_and_unknown_paths() {
         new_test_ext().execute_with(|| {
             let who = AccountId::new([1u8; 32]);
@@ -1290,14 +1099,14 @@ mod tests {
             let system_call = RuntimeCall::System(frame_system::Call::remark {
                 remark: b"x".to_vec(),
             });
-            let no_amount = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
+            let no_amount = <PowTxAmountExtractor as onchain_transaction_pow::CallAmount<
                 AccountId,
                 RuntimeCall,
                 Balance,
             >>::amount(&who, &system_call);
             assert!(matches!(
                 no_amount,
-                onchain_transaction_fee::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::NoAmount
             ));
 
             let transfer_call =
@@ -1305,46 +1114,15 @@ mod tests {
                     dest: sp_runtime::MultiAddress::Id(recipient),
                     value: 123,
                 });
-            let amount = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
+            let amount = <PowTxAmountExtractor as onchain_transaction_pow::CallAmount<
                 AccountId,
                 RuntimeCall,
                 Balance,
             >>::amount(&who, &transfer_call);
             match amount {
-                onchain_transaction_fee::AmountExtractResult::Amount(v) => assert_eq!(v, 123),
+                onchain_transaction_pow::AmountExtractResult::Amount(v) => assert_eq!(v, 123),
                 _ => panic!("expected amount path"),
             }
-
-            let item =
-                offchain_transaction_fee::pallet::OffchainBatchItem::<AccountId, Balance, Hash> {
-                    tx_id: <Runtime as frame_system::Config>::Hashing::hash(b"rt-unknown-1"),
-                    payer: who.clone(),
-                    recipient: AccountId::new([3u8; 32]),
-                    transfer_amount: 10,
-                    offchain_fee_amount: 1,
-                };
-            let batch: offchain_transaction_fee::pallet::BatchOf<Runtime> =
-                vec![item].try_into().expect("batch should fit");
-            let bad_sig: offchain_transaction_fee::pallet::BatchSignatureOf<Runtime> =
-                vec![1u8; 64].try_into().expect("signature should fit");
-            let offchain_call = RuntimeCall::OffchainTransactionFee(
-                offchain_transaction_fee::pallet::Call::submit_offchain_batch {
-                    institution: primitives::china::china_ch::shenfen_id_to_fixed48("badid000")
-                        .expect("test shenfen_id should map"),
-                    batch_seq: 1,
-                    batch,
-                    batch_signature: bad_sig,
-                },
-            );
-            let unknown = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
-                AccountId,
-                RuntimeCall,
-                Balance,
-            >>::amount(&who, &offchain_call);
-            assert!(matches!(
-                unknown,
-                onchain_transaction_fee::AmountExtractResult::Unknown
-            ));
         });
     }
 
@@ -1397,13 +1175,13 @@ mod tests {
                     approvals,
                 },
             );
-            let create_amount = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
+            let create_amount = <PowTxAmountExtractor as onchain_transaction_pow::CallAmount<
                 AccountId,
                 RuntimeCall,
                 Balance,
             >>::amount(&who, &create_call);
             match create_amount {
-                onchain_transaction_fee::AmountExtractResult::Amount(v) => assert_eq!(v, 1_000),
+                onchain_transaction_pow::AmountExtractResult::Amount(v) => assert_eq!(v, 1_000),
                 _ => panic!("expected create amount"),
             }
 
@@ -1434,65 +1212,15 @@ mod tests {
                     approvals: close_approvals,
                 },
             );
-            let close_amount = <PowTxAmountExtractor as onchain_transaction_fee::CallAmount<
+            let close_amount = <PowTxAmountExtractor as onchain_transaction_pow::CallAmount<
                 AccountId,
                 RuntimeCall,
                 Balance,
             >>::amount(&who, &close_call);
             match close_amount {
-                onchain_transaction_fee::AmountExtractResult::Amount(v) => assert_eq!(v, 777),
+                onchain_transaction_pow::AmountExtractResult::Amount(v) => assert_eq!(v, 777),
                 _ => panic!("expected close amount"),
             }
-        });
-    }
-
-    #[test]
-    fn runtime_fee_payer_extractor_routes_offchain_fee_to_fee_account() {
-        new_test_ext().execute_with(|| {
-            let who = AccountId::new([9u8; 32]);
-            let institution = primitives::china::china_ch::shenfen_id_to_fixed48(
-                primitives::china::china_ch::CHINA_CH[0].shenfen_id,
-            )
-            .expect("institution id should be valid");
-            let fee_account =
-                OffchainTransactionFee::fee_account_of(institution).expect("fee account");
-
-            let dummy_item =
-                offchain_transaction_fee::pallet::OffchainBatchItem::<AccountId, Balance, Hash> {
-                    tx_id: <Runtime as frame_system::Config>::Hashing::hash(b"rt-fee-payer-1"),
-                    payer: who.clone(),
-                    recipient: AccountId::new([10u8; 32]),
-                    transfer_amount: 1,
-                    offchain_fee_amount: 1,
-                };
-            let batch: offchain_transaction_fee::pallet::BatchOf<Runtime> =
-                vec![dummy_item].try_into().expect("batch should fit");
-            let sig: offchain_transaction_fee::pallet::BatchSignatureOf<Runtime> =
-                vec![0u8; 64].try_into().expect("sig should fit");
-            let offchain_call = RuntimeCall::OffchainTransactionFee(
-                offchain_transaction_fee::pallet::Call::submit_offchain_batch {
-                    institution,
-                    batch_seq: 1,
-                    batch,
-                    batch_signature: sig,
-                },
-            );
-            assert_eq!(
-                <RuntimeFeePayerExtractor as onchain_transaction_fee::CallFeePayer<
-                    AccountId,
-                    RuntimeCall,
-                >>::fee_payer(&who, &offchain_call),
-                Some(fee_account)
-            );
-
-            let system_call = RuntimeCall::System(frame_system::Call::remark { remark: vec![] });
-            assert_eq!(
-                <RuntimeFeePayerExtractor as onchain_transaction_fee::CallFeePayer<
-                    AccountId,
-                    RuntimeCall,
-                >>::fee_payer(&who, &system_call),
-                None
-            );
         });
     }
 
@@ -1565,7 +1293,7 @@ mod tests {
     }
 
     #[test]
-    fn pow_digest_author_and_offchain_batch_verifier_work() {
+    fn pow_digest_author_finds_pow_engine_author() {
         let author = AccountId::new([21u8; 32]);
         let encoded = author.encode();
         let digests: Vec<(sp_runtime::ConsensusEngineId, &[u8])> = vec![
@@ -1574,25 +1302,6 @@ mod tests {
         ];
         let found = PowDigestAuthor::find_author(digests);
         assert_eq!(found, Some(author));
-
-        let (pair, _) = sr25519::Pair::generate();
-        let msg = b"batch-message";
-        let sig = pair.sign(msg);
-        assert!(RuntimeOffchainBatchVerifier::verify(
-            &pair.public().0,
-            msg,
-            &sig.0
-        ));
-        assert!(!RuntimeOffchainBatchVerifier::verify(
-            &pair.public().0[..31],
-            msg,
-            &sig.0
-        ));
-        assert!(!RuntimeOffchainBatchVerifier::verify(
-            &pair.public().0,
-            msg,
-            &sig.0[..63]
-        ));
     }
 
     #[test]

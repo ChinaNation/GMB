@@ -15,6 +15,7 @@ mod benchmarks {
 
     #[benchmark]
     fn on_initialize_adjustment() {
+        // 中文注释：模拟真正的“结算块”路径，覆盖一次完整的难度计算和窗口推进。
         let n: frame_system::pallet_prelude::BlockNumberFor<T> =
             (DIFFICULTY_ADJUSTMENT_INTERVAL + 1).saturated_into();
         frame_system::Pallet::<T>::set_block_number(n);
@@ -38,6 +39,7 @@ mod benchmarks {
 
     #[benchmark]
     fn on_initialize_start_window() {
+        // 中文注释：模拟链刚启动或窗口状态丢失后，首个有时间戳区块建立窗口起点。
         let n: frame_system::pallet_prelude::BlockNumberFor<T> = 1u32.saturated_into();
         frame_system::Pallet::<T>::set_block_number(n);
         WindowStartMs::<T>::kill();
@@ -54,6 +56,7 @@ mod benchmarks {
 
     #[benchmark]
     fn on_initialize_idle() {
+        // 中文注释：普通区块不触发调整，也不重建窗口，只验证空转路径预算。
         let n: frame_system::pallet_prelude::BlockNumberFor<T> = 2u32.saturated_into();
         frame_system::Pallet::<T>::set_block_number(n);
         WindowStartMs::<T>::put(1_000u64);

@@ -37,12 +37,22 @@ use serde_json::{json, Value};
 #[cfg(feature = "std")]
 use sp_core::crypto::{Ss58AddressFormat, Ss58Codec};
 #[cfg(feature = "std")]
+use sp_core::ByteArray;
+#[cfg(feature = "std")]
 use sp_genesis_builder::{self};
 
 #[cfg(feature = "std")]
 fn account_to_genesis_ss58(account: &AccountId) -> String {
     // 创世配置地址使用链统一 SS58 前缀（2027）。
     account.to_ss58check_with_version(Ss58AddressFormat::custom(SS58_FORMAT))
+}
+
+#[cfg(feature = "std")]
+fn grandpa_key_hex_to_genesis_ss58(hex_key: &str) -> String {
+    let bytes = hex::decode(hex_key).expect("grandpa key hex must decode");
+    let authority = sp_consensus_grandpa::AuthorityId::from_slice(&bytes)
+        .expect("grandpa authority id must decode from 32 bytes");
+    authority.to_ss58check_with_version(Ss58AddressFormat::custom(SS58_FORMAT))
 }
 
 #[cfg(feature = "std")]
@@ -173,25 +183,44 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
     // 中文注释：最终性公钥从本文件固定清单读取，不依赖 CHINA_CB 动态映射。
     let grandpa_authorities_json: Vec<Value> = GRANDPA_AUTHORITY_KEYS_HEX
         .iter()
-        .map(|hex_key| json!([format!("0x{hex_key}"), 1]))
+        .map(|hex_key| json!([grandpa_key_hex_to_genesis_ss58(hex_key), 1]))
         .collect();
 
-    json!({
-        "balances": {
+    let mut genesis = serde_json::to_value(crate::RuntimeGenesisConfig::default())
+        .expect("default runtime genesis config should serialize");
+
+    let root = genesis
+        .as_object_mut()
+        .expect("runtime genesis config should serialize to a JSON object");
+
+    root.insert(
+        "balances".into(),
+        json!({
             "balances": balances_json,
-        },
-        "grandpa": {
+        }),
+    );
+    root.insert(
+        "grandpa".into(),
+        json!({
             "authorities": grandpa_authorities_json,
-        },
-        "sfidCodeAuth": {
+        }),
+    );
+    root.insert(
+        "sfidCodeAuth".into(),
+        json!({
             "sfidMainAccount": account_to_genesis_ss58(&sfid_main),
             "sfidBackupAccount1": account_to_genesis_ss58(&sfid_backup_1),
             "sfidBackupAccount2": account_to_genesis_ss58(&sfid_backup_2),
-        },
-        "resolutionIssuanceGov": {
+        }),
+    );
+    root.insert(
+        "resolutionIssuanceGov".into(),
+        json!({
             "allowedRecipients": issuance_allowed_recipients_json,
-        },
-    })
+        }),
+    );
+
+    genesis
 }
 
 /// Return the development genesis config.
@@ -237,6 +266,7 @@ pub fn preset_names() -> Vec<PresetId> {
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use super::*;
+    use crate::RuntimeGenesisConfig;
     use ed25519_dalek::VerifyingKey;
     use primitives::china::china_cb::CHINA_CB;
     use std::collections::BTreeSet;
@@ -360,5 +390,97 @@ mod tests {
             VerifyingKey::from_bytes(&node.grandpa_key)
                 .expect("CHINA_CB.grandpa_key must be valid ed25519 point");
         }
+    }
+
+    #[test]
+    fn mainnet_genesis_json_deserializes_into_runtime_genesis_config() {
+        let patch = mainnet_config_genesis();
+        let parsed: Result<RuntimeGenesisConfig, _> = serde_json::from_value(patch);
+        assert!(
+            parsed.is_ok(),
+            "runtime genesis json should deserialize: {:?}",
+            parsed.err()
+        );
+    }
+
+    #[test]
+    fn mainnet_genesis_account_strings_deserialize_individually() {
+        let patch = mainnet_config_genesis();
+
+        for entry in patch["balances"]["balances"]
+            .as_array()
+            .expect("balances should be an array")
+        {
+            let account = entry[0].clone();
+            let parsed: Result<AccountId, _> = serde_json::from_value(account.clone());
+            assert!(
+                parsed.is_ok(),
+                "balance account should deserialize: value={account:?} err={:?}",
+                parsed.err()
+            );
+        }
+
+        for account in patch["resolutionIssuanceGov"]["allowedRecipients"]
+            .as_array()
+            .expect("allowedRecipients should be an array")
+        {
+            let parsed: Result<AccountId, _> = serde_json::from_value(account.clone());
+            assert!(
+                parsed.is_ok(),
+                "allowed recipient should deserialize: value={account:?} err={:?}",
+                parsed.err()
+            );
+        }
+
+        for field in [
+            "sfidMainAccount",
+            "sfidBackupAccount1",
+            "sfidBackupAccount2",
+        ] {
+            let account = patch["sfidCodeAuth"][field].clone();
+            let parsed: Result<AccountId, _> = serde_json::from_value(account.clone());
+            assert!(
+                parsed.is_ok(),
+                "sfid account should deserialize: field={field} value={account:?} err={:?}",
+                parsed.err()
+            );
+        }
+    }
+
+    #[test]
+    fn mainnet_genesis_top_level_sections_deserialize_individually() {
+        let patch = mainnet_config_genesis();
+
+        let balances: Result<pallet_balances::GenesisConfig<crate::Runtime>, _> =
+            serde_json::from_value(patch["balances"].clone());
+        assert!(
+            balances.is_ok(),
+            "balances should deserialize: {:?}",
+            balances.err()
+        );
+
+        let grandpa: Result<pallet_grandpa::GenesisConfig<crate::Runtime>, _> =
+            serde_json::from_value(patch["grandpa"].clone());
+        assert!(
+            grandpa.is_ok(),
+            "grandpa should deserialize: {:?}",
+            grandpa.err()
+        );
+
+        let resolution_issuance: Result<resolution_issuance_gov::GenesisConfig<crate::Runtime>, _> =
+            serde_json::from_value(patch["resolutionIssuanceGov"].clone());
+        assert!(
+            resolution_issuance.is_ok(),
+            "resolutionIssuanceGov should deserialize: {:?}",
+            resolution_issuance.err()
+        );
+
+        let sfid: Result<sfid_code_auth::GenesisConfig<crate::Runtime>, _> =
+            serde_json::from_value(patch["sfidCodeAuth"].clone());
+        assert!(
+            sfid.is_ok(),
+            "sfidCodeAuth should deserialize: {:?}",
+            sfid.err()
+        );
     }
 }

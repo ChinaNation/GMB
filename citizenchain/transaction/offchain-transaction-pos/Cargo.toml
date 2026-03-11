@@ -1,5 +1,5 @@
 [package]
-name = "offchain-transaction-fee"  # 链下交易手续费模块
+name = "offchain-transaction-pos"  # 链下 POS 交易清算模块
 edition.workspace = true   # 默认 Rust 版本
 version.workspace = true   # 版本号
 authors.workspace = true   # 作者

@@ -24,6 +24,8 @@ mod benchmarks {
     fn register_sfid_institution() {
         let operator: T::AccountId = frame_benchmarking::account("operator", 0, 0);
         let sfid_id: SfidIdOf<T> = BoundedVec::default();
+        // 中文注释：benchmark 只需要确保链域已初始化，
+        // 这样可以稳定覆盖 extrinsic 入口的基础读写路径。
         ChainDomainHash::<T>::put(T::Hashing::hash(b"duoqian-benchmark-domain"));
 
         #[block]
@@ -49,6 +51,8 @@ mod benchmarks {
 
         #[block]
         {
+            // 中文注释：当前 benchmark 采用最小失败样本，
+            // 目的是让 runtime benchmark 管线能稳定覆盖 create 入口而不依赖复杂签名构造。
             let call = Call::<T>::create_duoqian {
                 sfid_id: sfid_id.clone(),
                 admin_count: 1,
@@ -74,6 +78,7 @@ mod benchmarks {
 
         #[block]
         {
+            // 中文注释：这里同样走最小失败路径，只验证 close extrinsic 的调度入口可被 benchmark 调起。
             let call = Call::<T>::close_duoqian {
                 duoqian_address: duoqian_address.clone(),
                 beneficiary: duoqian_address.clone(),

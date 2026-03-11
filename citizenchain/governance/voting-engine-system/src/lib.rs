@@ -579,6 +579,9 @@ pub mod pallet {
                         // 才允许投票引擎把提案标记为最终状态。
                         return TransactionOutcome::Rollback(Err(err));
                     }
+                    // 中文注释：联合/公民提案一旦进入终态，就自动释放该提案维度下
+                    // 的 SFID 投票防重放状态，避免 UsedVoteNonce 随历史提案持续膨胀。
+                    T::SfidEligibility::cleanup_vote_credentials(proposal_id);
                 }
 
                 TransactionOutcome::Commit(Ok(()))
@@ -911,6 +914,28 @@ mod tests {
 
     fn set_joint_callback_should_fail(should_fail: bool) {
         JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = should_fail);
+    }
+
+    fn mark_vote_nonce_used(
+        proposal_id: u64,
+        sfid_hash: <Test as frame_system::Config>::Hash,
+        nonce: &str,
+    ) {
+        USED_VOTE_NONCES.with(|set| {
+            set.borrow_mut()
+                .insert((proposal_id, sfid_hash.encode(), nonce.as_bytes().to_vec()));
+        });
+    }
+
+    fn has_used_vote_nonce(
+        proposal_id: u64,
+        sfid_hash: <Test as frame_system::Config>::Hash,
+        nonce: &str,
+    ) -> bool {
+        USED_VOTE_NONCES.with(|set| {
+            set.borrow()
+                .contains(&(proposal_id, sfid_hash.encode(), nonce.as_bytes().to_vec()))
+        })
     }
 
     fn create_internal_proposal_via_engine(
@@ -1372,6 +1397,35 @@ mod tests {
     }
 
     #[test]
+    fn citizen_timeout_auto_cleanup_used_vote_nonce_on_initialize() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 5);
+            VotingEngineSystem::schedule_proposal_expiry(0, 5);
+
+            assert_ok!(VotingEngineSystem::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                sfid_hash_ok(),
+                vote_nonce("timeout-cleanup"),
+                vote_sig_ok(),
+                true
+            ));
+            assert!(has_used_vote_nonce(0, sfid_hash_ok(), "timeout-cleanup"));
+
+            System::set_block_number(6);
+            <VotingEngineSystem as Hooks<u64>>::on_initialize(6);
+
+            assert_eq!(
+                Proposals::<Test>::get(0)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_REJECTED
+            );
+            assert!(!has_used_vote_nonce(0, sfid_hash_ok(), "timeout-cleanup"));
+        });
+    }
+
+    #[test]
     fn citizen_vote_rejects_ineligible_hash_and_ineligible_account() {
         new_test_ext().execute_with(|| {
             insert_citizen_proposal(0, 10, 100);
@@ -1448,6 +1502,27 @@ mod tests {
 
             let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
             assert_eq!(proposal.status, STATUS_PASSED);
+        });
+    }
+
+    #[test]
+    fn citizen_vote_immediate_pass_auto_cleans_used_vote_nonce() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+            CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
+
+            assert_ok!(VotingEngineSystem::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                sfid_hash_ok(),
+                vote_nonce("immediate-cleanup"),
+                vote_sig_ok(),
+                true
+            ));
+
+            let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
+            assert_eq!(proposal.status, STATUS_PASSED);
+            assert!(!has_used_vote_nonce(0, sfid_hash_ok(), "immediate-cleanup"));
         });
     }
 
@@ -1722,6 +1797,24 @@ mod tests {
             let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
             assert_eq!(proposal.status, STATUS_VOTING);
             assert_eq!(proposal.stage, STAGE_JOINT);
+        });
+    }
+
+    #[test]
+    fn joint_vote_callback_failure_does_not_cleanup_vote_credentials() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+            mark_vote_nonce_used(0, sfid_hash_ok(), "keep-on-fail");
+            set_joint_callback_should_fail(true);
+
+            assert!(VotingEngineSystem::set_status_and_emit(0, STATUS_PASSED).is_err());
+            assert_eq!(
+                Proposals::<Test>::get(0)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_VOTING
+            );
+            assert!(has_used_vote_nonce(0, sfid_hash_ok(), "keep-on-fail"));
         });
     }
 

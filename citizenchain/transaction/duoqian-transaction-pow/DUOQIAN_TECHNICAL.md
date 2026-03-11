@@ -3,6 +3,49 @@
 模块：`duoqian-transaction-pow`  
 范围：SFID 先登记、后创建/注销的多签账户流程（当前实现）
 
+## 0. 功能需求
+
+### 0.1 核心职责
+- 提供机构多签地址的链上登记、创建、注销三类能力。
+- 强制采用“SFID 先登记，再创建多签账户”的流程，不允许前端手填多签地址。
+- 对创建和注销操作执行管理员多签校验，并要求提交者本人属于管理员集合。
+
+### 0.2 地址与域隔离需求
+- `duoqian_address` 必须由链上按 `BLAKE3("DUOQIAN_SFID_V1" || chain_domain_hash || sfid_id)` 派生。
+- `chain_domain_hash` 必须固定绑定本链 genesis hash，并持久化复用，不能随区块变化。
+- 派生地址必须通过地址合法性校验，且不能落入制度保留地址或受保护地址集合。
+
+### 0.3 创建流程需求
+- `create_duoqian` 必须只接受已登记的 `sfid_id`，并从登记映射中解析目标地址。
+- 管理员数量必须 `>= 2`，且 `duoqian_admins.len() == admin_count`。
+- 阈值必须满足 `ceil(admin_count / 2) <= threshold <= admin_count`，同时最小不少于 2。
+- 管理员公钥必须逐个校验格式，且不能重复。
+- 创建金额必须 `>= MinCreateAmount`。
+- 发起人必须是管理员之一，且有效管理员签名数必须 `>= threshold`。
+- 创建成功后必须完成入金、写入多签配置并递增机构 nonce。
+
+### 0.4 注销流程需求
+- `close_duoqian` 必须只作用于已存在的多签账户。
+- 提交者必须是该多签账户管理员之一，且有效管理员签名数必须 `>= threshold`。
+- 多签账户余额必须同时满足 `free_balance >= MinCloseBalance` 和 `free_balance >= min_balance`。
+- 多签账户存在保留余额时必须拒绝注销。
+- `beneficiary` 不能等于多签地址自身，且不能是保留地址、非法地址或受保护地址。
+- 注销成功后必须全额转出余额、删除多签配置并递增机构 nonce。
+
+### 0.5 防重放与签名需求
+- 创建和注销必须共用同一个机构 nonce。
+- 签名 payload 必须绑定：操作类型版本、链域哈希、nonce、过期高度、提交者 `who` 以及关键业务参数。
+- `expires_at` 过期后必须拒绝交易，旧签名在 nonce 变化后必须无法重放。
+
+### 0.6 存储与制度边界
+- 链上必须维护 `sfid_id -> duoqian_address` 和 `duoqian_address -> { sfid_id, nonce }` 双向映射。
+- 按当前制度，SFID 登记映射不在本模块内解绑；注销多签账户只删除多签配置，不删除 SFID 登记。
+- 模块只负责机构多签交易制度与安全校验，不负责 SFID 系统外部的解绑、迁移与前端协同流程。
+
+### 0.7 可观测性与性能需求
+- 创建和注销事件必须记录关键账户、管理员规模和金额，便于审计追踪。
+- 模块必须提供 benchmark 入口与权重接口，供 runtime 后续收敛到自动生成权重。
+
 ## 1. 目标
 
 1. SFID 系统先在链上登记 `sfid_id`。
@@ -41,7 +84,7 @@
 1. `sfid_id` 非空。
 2. 调用者是 SFID 授权操作员。
 3. `sfid_id` 未登记。
-4. 派生地址未登记、非保留地址、地址格式合法。
+4. 派生地址未登记、非保留地址、非受保护地址、地址格式合法。
 
 执行：
 1. 写入双向映射。
@@ -58,7 +101,7 @@
 5. `threshold` 满足 `ceil(admin_count/2) <= threshold <= admin_count`（且最小至少 2）。
 6. `amount >= MinCreateAmount`。
 7. `sfid_id` 已登记，且反向映射一致。
-8. `duoqian_address` 未被创建为 `DuoqianAccounts`。
+8. `duoqian_address` 非保留地址、非受保护地址，且未被创建为 `DuoqianAccounts`。
 9. 调用者必须是管理员之一。
 10. `nonce < u64::MAX`（提前失败，避免签名验证浪费）。
 11. 签名通过且有效管理员签名数 `>= threshold`。
