@@ -37,6 +37,7 @@ impl<AccountId, Hash> SfidEligibility<AccountId, Hash> for () {
 }
 
 pub fn is_citizen_vote_passed(yes_votes: u64, eligible_total: u64) -> bool {
+    // 中文注释：公民投票必须严格“大于 50%”才算通过，恰好一半不通过。
     if eligible_total == 0 {
         return false;
     }
@@ -76,6 +77,7 @@ impl<T: Config> Pallet<T> {
             !CitizenVotesBySfid::<T>::contains_key(proposal_id, sfid_hash),
             Error::<T>::AlreadyVoted
         );
+        // 中文注释：资格校验只证明“这个人能投”，这里还要消费一次性投票凭证来阻止离线重放。
         ensure!(
             T::SfidEligibility::verify_and_consume_vote_credential(
                 &sfid_hash,
@@ -118,6 +120,7 @@ impl<T: Config> Pallet<T> {
         proposal: &crate::Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
         proposal_id: u64,
     ) -> DispatchResult {
+        // 中文注释：公民投票超时后只看最终 yes 是否严格过半，不存在“弃权自动通过”。
         ensure!(
             proposal.stage == STAGE_CITIZEN,
             Error::<T>::InvalidProposalStage

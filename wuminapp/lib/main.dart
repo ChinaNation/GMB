@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
 import 'package:wuminapp_mobile/user/user.dart';
 
@@ -31,11 +32,11 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
+  static const Color _navSelectedColor = Color(0xFF007A74);
+  static const Color _navUnselectedColor = Color(0xFF111111);
   int _currentIndex = 0;
 
   final List<Widget> _pages = const [
-    HomePage(),
     VotingPage(),
     MessagePage(),
     OnchainTradePage(),
@@ -51,19 +52,19 @@ class _AppShellState extends State<AppShell> {
           indicatorColor: const Color(0xFFD7E9E1),
           iconTheme: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.selected)) {
-              return const IconThemeData(color: _inkGreen);
+              return const IconThemeData(color: _navSelectedColor);
             }
-            return const IconThemeData(color: Colors.black54);
+            return const IconThemeData(color: _navUnselectedColor);
           }),
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.selected)) {
               return const TextStyle(
-                color: _inkGreen,
+                color: _navSelectedColor,
                 fontWeight: FontWeight.w700,
                 height: 0.9,
               );
             }
-            return const TextStyle(color: Colors.black54, height: 0.9);
+            return const TextStyle(color: _navUnselectedColor, height: 0.9);
           }),
         ),
         child: NavigationBar(
@@ -74,15 +75,52 @@ class _AppShellState extends State<AppShell> {
               _currentIndex = index;
             });
           },
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.home_outlined), label: '广场'),
+          destinations: [
+            const NavigationDestination(
+                icon: Icon(Icons.how_to_vote_outlined), label: '公民'),
             NavigationDestination(
-                icon: Icon(Icons.how_to_vote_outlined), label: '治理'),
+              icon: SvgPicture.asset(
+                'assets/icons/message-square-text.svg',
+                width: 22,
+                height: 22,
+                colorFilter: const ColorFilter.mode(
+                  _navUnselectedColor,
+                  BlendMode.srcIn,
+                ),
+              ),
+              selectedIcon: SvgPicture.asset(
+                'assets/icons/message-square-text.svg',
+                width: 22,
+                height: 22,
+                colorFilter: const ColorFilter.mode(
+                  _navSelectedColor,
+                  BlendMode.srcIn,
+                ),
+              ),
+              label: '消息',
+            ),
             NavigationDestination(
-                icon: Icon(Icons.message_outlined), label: '消息'),
-            NavigationDestination(
-                icon: Icon(Icons.travel_explore_outlined), label: '金融'),
-            NavigationDestination(
+              icon: SvgPicture.asset(
+                'assets/icons/scale.svg',
+                width: 22,
+                height: 22,
+                colorFilter: const ColorFilter.mode(
+                  _navUnselectedColor,
+                  BlendMode.srcIn,
+                ),
+              ),
+              selectedIcon: SvgPicture.asset(
+                'assets/icons/scale.svg',
+                width: 22,
+                height: 22,
+                colorFilter: const ColorFilter.mode(
+                  _navSelectedColor,
+                  BlendMode.srcIn,
+                ),
+              ),
+              label: '金融',
+            ),
+            const NavigationDestination(
                 icon: Icon(Icons.person_outline), label: '我的'),
           ],
         ),
@@ -282,7 +320,11 @@ class MessagePage extends StatelessWidget {
               children: [
                 IconButton(
                   onPressed: () {},
-                  icon: const Icon(Icons.person_outline),
+                  icon: SvgPicture.asset(
+                    'assets/icons/contact-round.svg',
+                    width: 20,
+                    height: 20,
+                  ),
                 ),
                 Expanded(
                   child: Center(

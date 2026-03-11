@@ -1,5 +1,39 @@
 # Voting Engine System 技术文档
 
+## 0. 功能需求
+### 0.1 统一投票引擎能力
+`voting-engine-system` 必须作为治理基础设施，统一承载内部投票、联合机构投票、公民投票三类流程，并向上层事项模块暴露稳定 trait 能力：
+- `InternalVoteEngine`：创建内部提案、代理内部投票、清理内部提案
+- `JointVoteEngine`：创建联合提案、清理联合/公民投票状态
+- `JointVoteResultCallback`：联合提案终局后把结果回传给具体治理模块
+
+### 0.2 内部投票功能需求
+- 内部提案只能由业务治理模块通过 `InternalVoteEngine` trait 创建，不能直接通过外部 extrinsic 创建。
+- 仅允许合法机构管理员为本机构创建内部提案。
+- 仅允许同机构管理员参与内部投票，禁止跨机构投票。
+- 按机构类型（NRC/PRC/PRB）使用不同通过阈值。
+- 达阈值时立即通过；到期未达阈值时自动否决。
+
+### 0.3 联合投票功能需求
+- 仅允许国储会管理员创建联合提案。
+- 创建提案时必须一次性锁定公民投票总分母及人口快照凭证。
+- 每个机构只能由自己的多签地址提交本机构内部投票结果。
+- 联合阶段全票通过时立即通过；未全票但已收齐全部机构票权时转入公民投票。
+- 联合阶段超时后，若未全票通过，必须自动进入公民投票阶段。
+
+### 0.4 公民投票功能需求
+- 仅允许具备资格的 SFID 哈希参与公民投票。
+- 每个 `proposal_id + sfid_hash` 只能投一次，且投票凭证必须防重放。
+- 公民投票只接收 SFID 哈希，不接收链上明文 SFID。
+- 赞成票必须“严格大于 50%”才算通过；到期后按同一规则结算。
+
+### 0.5 状态机与安全需求
+- 提案 ID 必须单调递增且不可溢出覆盖旧提案。
+- 自动超时结算必须受单块上限约束，避免 `on_initialize` 无界增长。
+- 联合投票终结时，投票引擎状态变更与业务模块回调必须保持原子一致。
+- 自动结算若遇到回调失败，必须保留重试索引，不能让提案卡在 `Voting` 且丢失后续处理入口。
+- 所有清理入口必须能释放对应提案的计票状态，避免存储长期累积。
+
 ## 1. 模块定位
 `voting-engine-system` 是治理投票引擎基础模块，统一承载三类治理投票流程：
 - 内部投票（`INTERNAL`）
@@ -59,12 +93,14 @@
 2. 每个区块 `on_initialize` 优先处理 `PendingExpiryBucket`，再处理当前区块到期桶。
 3. 单块最多处理 `MaxAutoFinalizePerBlock` 个到期提案；超出部分回写原桶并记录游标，下块继续。
 4. 过期桶里的“历史索引项”（例如联合提前转公民后留下的旧 end）会在自动结算时按当前 `proposal.end/status` 判定并跳过。
+5. 若自动结算时下游回调失败，提案会重新写回过期桶，等待后续区块继续重试。
 
 ## 4. 状态终结与回调
 统一通过 `set_status_and_emit` 完成终结：
 1. 原子更新 `Proposals.status`
 2. 发送 `ProposalFinalized` 事件
 3. 对联合提案触发 `JointVoteResultCallback`
+4. 若联合回调失败，则整个终结动作回滚，不留下“投票引擎已终结、业务模块未消费”的不一致状态
 
 `finalize_proposal` extrinsic 仍保留，作为手动补偿入口（例如诊断/运维场景），但正常超时路径由 `on_initialize` 自动结算。
 
@@ -90,6 +126,16 @@
 - `JointTallies` + `JointVotesByInstitution`
 - `CitizenTallies` + `CitizenVotesBySfid`
 
+### 5.6 联合回调一致性
+`set_status_and_emit` 现已使用存储事务包裹：
+- 若 `JointVoteResultCallback` 返回错误，则回滚 `Proposal.status` 与 `ProposalFinalized` 事件。
+- 避免联合提案在业务模块拒绝/异常时被错误标记为已通过或已否决。
+
+### 5.7 自动结算失败重试
+`auto_finalize_expiry_bucket` 现会把终结失败的提案重新写回 `ProposalsByExpiry`：
+- 避免 `on_initialize` 取出过期桶后因为回调失败直接“吞掉重试入口”。
+- 下一块会通过 `PendingExpiryBucket` 继续重试，直到回调成功或人工介入。
+
 ## 6. Weight 与计费
 ### 6.1 WeightInfo
 模块定义 `WeightInfo`：
@@ -111,7 +157,8 @@
 ## 8. 运行与集成注意事项
 1. `JointVoteResultCallback` 应保证可恢复、可重放，不依赖脆弱临时映射。
 2. 上层治理模块在消费联合终结结果后应调用 `cleanup_joint_proposal`，避免状态无限增长。
-3. 对生产链建议定期回归 benchmark，避免手工权重与实际执行漂移。
+3. `create_internal_proposal` / `create_joint_proposal` / `internal_vote` 外部 extrinsic 已禁用，统一要求业务模块通过 trait 接入，避免生成无业务映射的悬空提案或绕过上层副作用。
+4. 对生产链建议定期回归 benchmark，避免手工权重与实际执行漂移。
 
 ## 9. 文件索引
 - 入口与存储定义：`src/lib.rs`

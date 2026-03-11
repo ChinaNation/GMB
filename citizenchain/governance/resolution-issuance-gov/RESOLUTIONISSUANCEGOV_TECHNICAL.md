@@ -1,5 +1,20 @@
 # RESOLUTION_ISSUANCE_GOV Technical Notes
 
+## 0. 功能需求
+`resolution-issuance-gov` 的功能需求是：把“国储会决议发行”治理流程接入联合投票，并在投票结果确定后自动驱动发行执行模块完成铸币分配。
+
+模块必须满足以下业务要求：
+- 仅允许国储会管理员发起决议发行提案。
+- 每个提案必须携带发行理由、总发行额、完整的收款账户分配明细和联合投票所需的人口快照参数。
+- 分配明细必须与链上配置的合法收款账户集合完全一致，且金额总和必须等于 `total_amount`。
+- 合法收款账户对应各省储行固定多签账户地址；账户管理员可变更，但账户地址本身不变。
+- 省储会机构集合只允许新增，不允许删除；旧提案在执行或重试时，按提案创建/投票时的机构集合执行，不追溯适配后续新增机构。
+- 联合投票通过后，系统必须自动调用 `resolution-issuance-iss` 执行发行；未通过则直接结束提案。
+- 若投票通过但发行执行失败，提案必须进入 `ExecutionFailed`，允许国储会管理员在上限次数内重试。
+- 模块必须维护“治理提案 <-> 联合投票提案”的双向映射，并在终结后及时清理。
+- 治理进行中不得切换合法收款账户集合，避免同一业务口径在投票前后发生漂移。
+- 提案创建、联合投票终结、发行执行结果落账和计数变更必须原子提交，不能出现半完成状态。
+
 ## 1. 模块定位
 `resolution-issuance-gov` 是“决议发行治理编排模块”，负责把国储会发起的发行决议接入联合投票，并在投票结果落地后驱动发行执行模块。
 
@@ -58,6 +73,9 @@ Genesis：
 5. 写入 `Proposals`、双向映射、`VotingProposalCount += 1`。
 6. 发 `ResolutionIssuanceProposed` 事件。
 
+实现约束：
+- 提案 ID 分配、联合投票创建、本地提案写入与 `VotingProposalCount` 增量在同一事务里提交，避免出现孤儿提案或孤儿映射。
+
 ### 4.2 `finalize_joint_vote`（call index = 1）
 流程：
 1. 校验来源为 `JointVoteFinalizeOrigin`。
@@ -67,6 +85,10 @@ Genesis：
 - 执行失败：状态置 `ExecutionFailed`，清理映射，`VotingProposalCount -= 1`。
 - `approved=false`：状态置 `Rejected`，清理映射，`VotingProposalCount -= 1`。
 3. 返回 post-dispatch `actual_weight`（失败/拒绝路径退费）。
+
+实现约束：
+- 联合投票终结、本地状态切换、联合投票映射清理和发行执行结果落账在同一事务里提交。
+- 若发行已成功执行，但本模块后续记账失败，整笔 finalize 会回滚，防止留下“发行已落地、治理状态未终结”的分叉状态。
 
 ### 4.3 `set_allowed_recipients`（call index = 2）
 流程：
@@ -94,12 +116,15 @@ Genesis：
 - 只有 `Voting` 状态允许 finalize，重复 finalize 会报 `ProposalNotVoting`。
 - finalize 后会清理联合投票映射，避免重复回调和脏映射残留。
 - `VotingProposalCount` 与 `Voting` 提案数量保持同向变化。
+- 提案创建与 finalize 采用事务提交，后半段任何错误都会回滚前面的本地治理写入。
 
 ## 6. 需求与安全约束（实现口径）
 业务约束：
 - 发行分配名单必须与链上 `AllowedRecipients` 精确匹配，不允许少人、多人、换人、重复。
 - `total_amount` 必须等于 allocations 金额和。
 - `amount` 不可为 0。
+- `AllowedRecipients` 表示固定机构收款账户集合；管理员变更不改变账户地址语义。
+- 新增省储会后，只影响新增后的新提案；历史失败提案重试仍按原提案的 allocations 执行。
 
 治理约束：
 - 仅 NRC 管理员可发起和重试。
@@ -158,11 +183,13 @@ benchmark 口径（`runtime-benchmarks`）：
 - `cargo test -p resolution-issuance-gov --quiet`
 
 当前结果（本仓库）：
-- `20 passed; 0 failed`
+- `22 passed; 0 failed`
 
 覆盖重点：
 - 提案创建与映射写入。
+- 提案创建路径的事务回滚。
 - 回调通过/拒绝/执行失败状态流转。
+- 投票通过后若本模块后续记账失败，finalize 事务回滚。
 - `ExecutionFailed` 重试成功恢复与重试上限约束。
 - 非 `ExecutionFailed` 状态重试拒绝。
 - 治理进行中禁止改收款集合、空集合/重复集合拒绝。
@@ -172,3 +199,4 @@ benchmark 口径（`runtime-benchmarks`）：
 1. 若后续引入 benchmark CLI 自动产出权重，建议将产出值替换手工估算，并保持 worst-case benchmark 输入不回退。  
 2. 监控 `IssuanceExecutionFailed` 事件，配合 `RetryCount` 做治理侧重试告警。  
 3. 升级含迁移逻辑时，优先在预发布环境验证 `VotingProposalCount` 重建结果与现网提案状态一致。  
+4. `AllowedRecipients` 的设计前提是机构收款账户地址长期固定且机构集合只增不减，因此 `ExecutionFailed` 提案允许按原始 allocations 重试，不需要因后续新增机构而冻结名单或重算历史提案。  

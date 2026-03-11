@@ -2918,25 +2918,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "finality-key-gov"
-version = "0.0.1"
-dependencies = [
- "curve25519-dalek",
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "pallet-grandpa",
- "parity-scale-codec",
- "primitives",
- "scale-info",
- "sp-consensus-grandpa",
- "sp-core",
- "sp-runtime",
- "sp-std",
- "voting-engine-system",
-]
-
-[[package]]
 name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3657,7 +3638,6 @@ dependencies = [
  "citizen-lightnode-issuance",
  "duoqian-transaction-pow",
  "ed25519-dalek",
- "finality-key-gov",
  "frame-benchmarking",
  "frame-executive",
  "frame-metadata-hash-extension",
@@ -3667,6 +3647,7 @@ dependencies = [
  "frame-system-rpc-runtime-api",
  "frame-try-runtime",
  "fullnode-pow-reward",
+ "grandpa-key-gov",
  "hex",
  "hex-literal",
  "offchain-transaction-fee",
@@ -3723,6 +3704,26 @@ dependencies = [
  "rand 0.8.5",
  "smallvec",
  "spinning_top",
+]
+
+[[package]]
+name = "grandpa-key-gov"
+version = "0.0.1"
+dependencies = [
+ "curve25519-dalek",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-grandpa",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-consensus-grandpa",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+ "voting-engine-system",
 ]
 
 [[package]]

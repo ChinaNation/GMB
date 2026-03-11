@@ -374,7 +374,7 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::ResolutionDestroGov(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
-            RuntimeCall::FinalityKeyGov(_) => {
+            RuntimeCall::GrandpaKeyGov(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
             RuntimeCall::DuoqianTransactionPow(_) => {
@@ -821,8 +821,8 @@ parameter_types! {
     /// 管理员替换提案过期清理窗口（区块数）。
     pub const AdminReplacementStaleProposalLifetime: u32 =
         primitives::count_const::VOTING_DURATION_BLOCKS * 2;
-    /// 最终性密钥替换提案过期清理窗口（区块数）。
-    pub const FinalityKeyStaleProposalLifetime: u32 =
+    /// GRANDPA 密钥替换提案过期清理窗口（区块数）。
+    pub const GrandpaKeyStaleProposalLifetime: u32 =
         primitives::count_const::VOTING_DURATION_BLOCKS * 2;
     /// GRANDPA authority set 变更生效延迟（单位：区块）。
     /// 取非 0，给运维注入新 gran 私钥预留窗口，避免立即切换导致短时失票。
@@ -845,12 +845,12 @@ impl resolution_destro_gov::Config for Runtime {
     type WeightInfo = resolution_destro_gov::weights::SubstrateWeight<Runtime>;
 }
 
-impl finality_key_gov::Config for Runtime {
+impl grandpa_key_gov::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type StaleProposalLifetime = FinalityKeyStaleProposalLifetime;
+    type StaleProposalLifetime = GrandpaKeyStaleProposalLifetime;
     type GrandpaChangeDelay = GrandpaAuthoritySetChangeDelay;
     type InternalVoteEngine = VotingEngineSystem;
-    type WeightInfo = finality_key_gov::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = grandpa_key_gov::weights::SubstrateWeight<Runtime>;
 }
 
 /// 禁用特权原点：始终拒绝任何 Origin，确保不存在可被调用的特权入口。
@@ -962,6 +962,8 @@ impl runtime_root_upgrade::Config for Runtime {
     type NrcProposeOrigin = EnsureNrcAdmin;
     type JointVoteEngine = VotingEngineSystem;
     type RuntimeCodeExecutor = RuntimeSetCodeExecutor;
+    // 中文注释：Runtime 升级执行失败后，最多允许 3 次人工重试，避免永久卡死但也避免无限 spam。
+    type MaxExecutionRetries = ConstU32<3>;
     type MaxReasonLen = RuntimeUpgradeMaxReasonLen;
     type MaxRuntimeCodeSize = RuntimeUpgradeMaxCodeSize;
     type MaxSnapshotNonceLength = ConstU32<64>;
@@ -1018,9 +1020,7 @@ impl voting_engine_system::Config for Runtime {
     type InternalAdminProvider = RuntimeInternalAdminProvider;
 }
 
-impl pow_difficulty_module::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-}
+impl pow_difficulty_module::Config for Runtime {}
 
 #[cfg(test)]
 mod tests {
