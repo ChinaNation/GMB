@@ -3,13 +3,13 @@
 }
 
 :root {
-  --primary: #008cb4;
+  --primary: #3AA8C1;
 }
 
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #f5f7fb;
+  background: #FFDAE9;
   color: #111827;
 }
 
@@ -17,6 +17,8 @@ body {
   width: 100%;
   margin: 0;
   padding: 16px;
+  background: #FFDAE9;
+  min-height: 100vh;
 }
 
 .app {
@@ -267,7 +269,7 @@ button[disabled] {
   border: none;
   outline: none;
   box-shadow: none;
-  background: #f5f7fb;
+  background: #FFDAE9;
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -276,7 +278,7 @@ button[disabled] {
 
 .top-nav button {
   background: rgba(0, 140, 180, 0.12);
-  color: var(--primary);
+  color: #000000;
   min-width: 88px;
   border: none;
   outline: none;
