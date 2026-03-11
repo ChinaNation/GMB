@@ -1,4 +1,4 @@
-//! 最终性密钥治理模块 Benchmark 定义。
+//! GRANDPA 密钥治理模块 Benchmark 定义。
 
 #![cfg(feature = "runtime-benchmarks")]
 
@@ -11,11 +11,11 @@ use sp_runtime::traits::{SaturatedConversion, Saturating};
 use voting_engine_system::InternalVoteEngine;
 
 use crate::{
-    pallet, reserve_pallet_id_to_bytes, ActiveProposalByInstitution, BlockNumberFor, Call,
-    CHINA_CB, Config, InstitutionPalletId, Pallet, ProposalActions,
+    pallet, reserve_pallet_id_to_bytes, ActiveProposalByInstitution, BlockNumberFor, Call, Config,
+    InstitutionPalletId, Pallet, ProposalActions, CHINA_CB,
 };
 
-use crate::Pallet as FinalityKeyGov;
+use crate::Pallet as GrandpaKeyGov;
 
 fn decode_account<T: pallet::Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
@@ -35,8 +35,12 @@ fn seeded_public_key(seed: u8) -> [u8; 32] {
     sp_core::ed25519::Pair::from_seed(&seed_bytes).public().0
 }
 
-fn propose<T: pallet::Config>(institution: InstitutionPalletId, proposer: T::AccountId, new_key: [u8; 32]) {
-    assert!(FinalityKeyGov::<T>::propose_replace_finality_key(
+fn propose<T: pallet::Config>(
+    institution: InstitutionPalletId,
+    proposer: T::AccountId,
+    new_key: [u8; 32],
+) {
+    assert!(GrandpaKeyGov::<T>::propose_replace_grandpa_key(
         RawOrigin::Signed(proposer).into(),
         institution,
         new_key,
@@ -56,20 +60,20 @@ mod benchmarks {
     use super::*;
 
     #[benchmark]
-    fn propose_replace_finality_key() {
+    fn propose_replace_grandpa_key() {
         let institution = prc_institution();
         let proposer = prc_admin::<T>(0);
         let new_key = seeded_public_key(11);
 
         #[extrinsic_call]
-        propose_replace_finality_key(RawOrigin::Signed(proposer), institution, new_key);
+        propose_replace_grandpa_key(RawOrigin::Signed(proposer), institution, new_key);
 
         assert_eq!(ActiveProposalByInstitution::<T>::get(institution), Some(0));
         assert!(ProposalActions::<T>::contains_key(0));
     }
 
     #[benchmark]
-    fn vote_replace_finality_key() {
+    fn vote_replace_grandpa_key() {
         let institution = prc_institution();
         let proposer = prc_admin::<T>(0);
         let final_voter = prc_admin::<T>(5);
@@ -83,11 +87,11 @@ mod benchmarks {
         }
 
         #[extrinsic_call]
-        vote_replace_finality_key(RawOrigin::Signed(final_voter), 0, true);
+        vote_replace_grandpa_key(RawOrigin::Signed(final_voter), 0, true);
     }
 
     #[benchmark]
-    fn execute_replace_finality_key() {
+    fn execute_replace_grandpa_key() {
         let institution = prc_institution();
         let proposer = prc_admin::<T>(0);
         let caller = prc_admin::<T>(6);
@@ -97,13 +101,13 @@ mod benchmarks {
         pass_proposal::<T>(0);
 
         #[extrinsic_call]
-        execute_replace_finality_key(RawOrigin::Signed(caller), 0);
+        execute_replace_grandpa_key(RawOrigin::Signed(caller), 0);
 
         assert!(!ProposalActions::<T>::contains_key(0));
     }
 
     #[benchmark]
-    fn cancel_stale_replace_finality_key() {
+    fn cancel_stale_replace_grandpa_key() {
         let institution = prc_institution();
         let proposer = prc_admin::<T>(0);
         let caller = prc_admin::<T>(1);
@@ -116,13 +120,13 @@ mod benchmarks {
         frame_system::Pallet::<T>::set_block_number(stale_block);
 
         #[extrinsic_call]
-        cancel_stale_replace_finality_key(RawOrigin::Signed(caller), 0);
+        cancel_stale_replace_grandpa_key(RawOrigin::Signed(caller), 0);
 
         assert!(!ProposalActions::<T>::contains_key(0));
     }
 
     #[benchmark]
-    fn cancel_failed_replace_finality_key() {
+    fn cancel_failed_replace_grandpa_key() {
         let institution = prc_institution();
         let proposer = prc_admin::<T>(0);
         let caller = prc_admin::<T>(1);
@@ -139,7 +143,7 @@ mod benchmarks {
         });
 
         #[extrinsic_call]
-        cancel_failed_replace_finality_key(RawOrigin::Signed(caller), 0);
+        cancel_failed_replace_grandpa_key(RawOrigin::Signed(caller), 0);
 
         assert!(!ProposalActions::<T>::contains_key(0));
     }

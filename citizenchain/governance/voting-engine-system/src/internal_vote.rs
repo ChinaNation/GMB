@@ -28,6 +28,7 @@ pub fn is_valid_org(org: u8) -> bool {
 }
 
 pub fn org_pass_threshold(org: u8) -> Option<u32> {
+    // 中文注释：不同组织的管理员规模不同，因此通过门槛必须按组织分别配置。
     match org {
         ORG_NRC => Some(NRC_INTERNAL_THRESHOLD),
         ORG_PRC => Some(PRC_INTERNAL_THRESHOLD),
@@ -43,6 +44,7 @@ fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
 }
 
 fn is_valid_internal_institution(org: u8, institution: InstitutionPalletId) -> bool {
+    // 中文注释：内部投票里的 institution 必须与 org 类型严格对应，避免伪造“跨组织机构”。
     match org {
         // 国储会只有一个机构
         ORG_NRC => nrc_pallet_id_bytes()
@@ -105,6 +107,7 @@ fn is_internal_admin<T: Config>(
 
 impl<T: Config> Pallet<T> {
     fn internal_stage_duration() -> frame_system::pallet_prelude::BlockNumberFor<T> {
+        // 中文注释：内部投票与联合/公民投票共用统一治理时长常量，便于链上运维校准。
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
@@ -126,6 +129,7 @@ impl<T: Config> Pallet<T> {
 
         let id = Self::allocate_proposal_id()?;
         let now = <frame_system::Pallet<T>>::block_number();
+        // 中文注释：end 是“最后一个允许投票的区块”，真正自动结算发生在 end + 1。
         let end = now.saturating_add(Self::internal_stage_duration());
 
         let proposal = Proposal {
@@ -209,6 +213,7 @@ impl<T: Config> Pallet<T> {
         proposal: &crate::Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
         proposal_id: u64,
     ) -> DispatchResult {
+        // 中文注释：内部投票超时只存在两种结果：已在投票期内提前通过，或到期直接否决。
         ensure!(
             proposal.stage == STAGE_INTERNAL,
             Error::<T>::InvalidProposalStage

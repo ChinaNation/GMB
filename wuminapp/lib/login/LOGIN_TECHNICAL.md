@@ -13,7 +13,8 @@
 - 触发签名前身份确认
 - 展示回执二维码供对端扫码
 
-签名能力由钱包模块 `wallet/capabilities/sign_service.dart` 完成。
+签名能力由 `lib/signer/` 提供，登录模块通过
+`wallet/capabilities/sign_service.dart` 调用 `LocalSigner` 执行签名。
 
 ## 2. 目录结构
 
@@ -75,7 +76,7 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 3. `LoginWhitelistPolicy.assertAllowed()` 校验 `aud` 白名单
 4. `UserIdentificationService.confirmBeforeSign()`（开启时）
 5. `LoginReplayGuard.assertNotConsumed(request_id)`
-6. 钱包模块执行 `sr25519` 签名
+6. `LocalSigner` 执行 `sr25519` 签名
 7. 生成并展示回执二维码
 8. `LoginReplayGuard.consume(request_id)` 记录已消费
 
@@ -95,6 +96,12 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 - 白名单：按 `system -> aud 集合` 校验
 - 签名前身份确认：生物识别守卫（开关控制）
 - 钱包一致性：助记词派生公钥必须匹配当前钱包公钥
+- 域隔离：登录签名串不得复用于转账/提案/投票签名或 SFID 投票凭证
+
+扫码签名扩展：
+
+- 协议层复用 `QrSigner`（`WUMINAPP_QR_SIGN_V1`）
+- 当前登录 UI 仍以本机签名为主
 
 ## 6. 本地存储
 

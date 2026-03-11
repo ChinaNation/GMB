@@ -1,5 +1,29 @@
 # ADMINS_ORIGIN_GOV Technical Notes
 
+## 0. 功能需求
+### 0.1 模块职责
+`admins-origin-gov` 负责把“同机构管理员替换”包装成一个受治理约束的链上流程，要求：
+- 只允许做替换，不允许增删管理员人数。
+- 只允许本机构管理员发起与投票。
+- 内部投票由 `voting-engine-system` 统一承载。
+
+### 0.2 提案创建需求
+- `org` 必须与 `institution` 的真实归属严格一致。
+- `old_admin` 必须存在于当前管理员列表中。
+- `new_admin` 不能已在当前管理员列表中。
+- 同一机构同一时间只允许一个活跃提案。
+
+### 0.3 执行与失败恢复需求
+- 提案投票通过后应自动尝试执行管理员替换。
+- 自动执行失败不能回滚已通过的投票结果。
+- 已通过但执行失败的提案应保留一段补救窗口，允许后续手动执行。
+- 已通过但执行失败的提案不能被第三方直接用普通 stale 清理取消。
+
+### 0.4 生命周期与清理需求
+- 被拒绝或不存在的历史提案不能长期阻塞同机构新提案。
+- 未通过且长期无人处理的 stale 提案应可被清理。
+- 已通过但执行失败的 stale 提案，在补救窗口结束后，应只在机构再次发起新提案时自动解阻塞。
+
 ## 1. 模块定位
 `admins-origin-gov` 是“机构管理员替换治理”pallet，只负责管理员替换动作本身，不负责投票引擎实现。
 
@@ -70,7 +94,11 @@ Runtime 配置：
 - hasher: `Twox64Concat`
 - 提案创建高度（用于 stale 清理）
 
-4. `ActiveProposalByInstitution: Map<InstitutionPalletId, u64>`
+4. `ProposalPassedAt: Map<u64, BlockNumber>`
+- hasher: `Twox64Concat`
+- 首次达到 `STATUS_PASSED` 的区块高度（用于给失败后的手动补救保留窗口）
+
+5. `ActiveProposalByInstitution: Map<InstitutionPalletId, u64>`
 - hasher: `Blake2_128Concat`
 - 机构到“当前活跃提案”的索引
 
@@ -116,8 +144,9 @@ Runtime 配置：
 ### 5.4 `cancel_stale_proposal`（call index = 3）
 语义：
 - 任意签名账户可触发。
-- 当 `now >= created_at + StaleProposalLifetime` 时允许清理未执行提案。
-- 删除 `ProposalActions` / `ProposalCreatedAt` / 机构活跃索引。
+- 仅允许清理“未通过且未执行”的 stale 提案。
+- 当 `now >= created_at + StaleProposalLifetime` 时允许清理。
+- 删除 `ProposalActions` / `ProposalCreatedAt` / `ProposalPassedAt` / 机构活跃索引。
 
 ---
 
@@ -127,16 +156,18 @@ Runtime 配置：
 2. `vote` 持续计票。
 3. 若通过：
    - 自动执行成功：立即替换并清理动作存储。
-   - 自动执行失败：保留动作，等待 `execute_admin_replacement` 重试。
+   - 自动执行失败：记录 `ProposalPassedAt`，保留动作，等待 `execute_admin_replacement` 重试。
 4. 若否决/终结：
    - 下次该机构 `propose` 时会检测到旧活跃索引并自动清理，不再阻塞。
 5. 若长期无人处理：
-   - 可通过 `cancel_stale_proposal` 清理。
+   - 未通过提案：可通过 `cancel_stale_proposal` 清理。
+   - 已通过但执行失败提案：在通过后窗口结束后，仅在机构下次 `propose` 时自动清理。
 
 当前解阻塞规则：
 - `ensure_no_active_proposal` 会读取投票引擎状态：
   - `STATUS_REJECTED` 或提案不存在：视为非活跃并清理旧动作/索引。
-  - 非 `STATUS_REJECTED`：仍视为活跃并阻塞新提案。
+  - `STATUS_PASSED`：在 `ProposalPassedAt + StaleProposalLifetime` 之前继续阻塞；超时后在下次 `propose` 时自动清理。
+  - 其他状态：仍视为活跃并阻塞新提案。
 
 注意：
 - 投票引擎已在 `on_initialize` 自动处理超时提案，通常无需人工 finalize。
@@ -154,12 +185,21 @@ Runtime 配置：
 3. 权限约束
 - 发起与投票必须是目标机构管理员。
 - 执行与 stale 清理是“公开触发型”接口（`ensure_signed`），不要求管理员身份。
+ - 但 stale 清理入口不能取消已通过提案，避免第三方删除治理已批准但待补救的动作。
 
 4. 回滚隔离
 - 投票成功后即记账；自动执行失败不会回滚投票行为。
 
 5. Panic 风险控制
 - `nrc_pallet_id_bytes` 返回 `Option`，避免 runtime `expect` panic。
+
+6. 已修复风险：已通过提案可被第三方 stale 清理
+- 旧实现中，`cancel_stale_proposal` 只看 `created_at`，不区分提案是否已经通过。
+- 这意味着“已通过但自动执行失败”的提案，理论上可能被任意签名账户在超时后直接取消。
+- 现已修复：
+  - 新增 `ProposalPassedAt`
+  - `cancel_stale_proposal` 禁止取消 `STATUS_PASSED` 提案
+  - 已通过失败提案仅在补救窗口结束后，由本机构再次发起新提案时自动解阻塞
 
 ---
 
@@ -180,6 +220,7 @@ Runtime 配置：
 - `ActiveProposalExists`
 - `ProposalNotStale`
 - `ProposalActionNotFound`
+- `PassedProposalCannotBeCancelled`
 
 ---
 
@@ -222,6 +263,8 @@ Runtime 配置：
 - 同机构并发提案限制。
 - 否决后不再阻塞同机构新提案。
 - stale 提案清理与解阻塞。
+- 已通过失败提案不能被普通 stale 取消。
+- 已通过失败提案在补救窗口前阻塞、窗口后自动解阻塞。
 - org 与 institution 不匹配校验。
 - `old_admin` 缺失、`new_admin` 已存在校验。
 - 无效机构拒绝。

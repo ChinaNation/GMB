@@ -18,6 +18,10 @@ class OnchainTradePage extends StatefulWidget {
 }
 
 class _OnchainTradePageState extends State<OnchainTradePage> {
+  static const Color _brandPrimaryColor = Color(0xFF007A74);
+  static const Color _inputFieldColor = Color(0xFFF7F7F7);
+  static const Color _cardBgColor = Color(0xFFF5F5F5);
+  static const Color _inputTextColor = Colors.black87;
   final OnchainTradeService _tradeService = OnchainTradeService();
   final UserIdentificationService _signConfirmService =
       UserIdentificationService();
@@ -268,6 +272,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
 
   Widget _buildWalletCard() {
     return Card(
+      color: _cardBgColor,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
         child: _loadingWallet
@@ -323,6 +328,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
 
   Widget _buildSubmitCard() {
     return Card(
+      color: _cardBgColor,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
         child: Column(
@@ -333,6 +339,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
               decoration: InputDecoration(
                 border: const OutlineInputBorder(),
                 labelText: '收款地址',
+                filled: true,
+                fillColor: _inputFieldColor,
                 suffixIcon: IconButton(
                   tooltip: '扫码填入收款地址',
                   onPressed: _scanToAddress,
@@ -351,9 +359,12 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                   child: TextField(
                     controller: _amountController,
                     keyboardType: TextInputType.number,
+                    style: const TextStyle(color: _inputTextColor),
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       labelText: '金额',
+                      filled: true,
+                      fillColor: _inputFieldColor,
                     ),
                   ),
                 ),
@@ -362,15 +373,22 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                   width: 120,
                   child: DropdownButtonFormField<String>(
                     initialValue: _selectedSymbol,
+                    style: const TextStyle(color: _inputTextColor),
+                    iconEnabledColor: _inputTextColor,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       labelText: '币种',
+                      filled: true,
+                      fillColor: _inputFieldColor,
                     ),
                     items: _symbols
                         .map(
                           (symbol) => DropdownMenuItem<String>(
                             value: symbol,
-                            child: Text(symbol),
+                            child: Text(
+                              symbol,
+                              style: const TextStyle(color: _inputTextColor),
+                            ),
                           ),
                         )
                         .toList(growable: false),
@@ -390,6 +408,9 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: _brandPrimaryColor,
+                ),
                 onPressed:
                     (_submitting || _loadingWallet || _currentWallet == null)
                         ? null
@@ -405,6 +426,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
 
   Widget _buildSummaryCard() {
     return Card(
+      color: _cardBgColor,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -474,7 +496,15 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         for (final (label, value) in options)
           ChoiceChip(
             selected: _statusFilter == value,
-            label: Text(label),
+            selectedColor: _brandPrimaryColor,
+            label: Text(
+              label,
+              style: TextStyle(
+                color: _statusFilter == value ? Colors.white : Colors.black87,
+                fontWeight:
+                    _statusFilter == value ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
             onSelected: (_) {
               setState(() {
                 _statusFilter = value;
@@ -496,6 +526,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
     final records = _filteredRecords();
     if (records.isEmpty) {
       return const Card(
+        color: _cardBgColor,
         child: Padding(
           padding: EdgeInsets.all(12),
           child: Text('暂无交易记录'),
@@ -507,6 +538,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       children: [
         for (final item in records)
           Card(
+            color: _cardBgColor,
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -574,7 +606,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             tooltip: '我的通讯录',
             onPressed: _openContactsPage,
             icon: SvgPicture.asset(
-              'assets/icons/file-user.svg',
+              'assets/icons/contact-round.svg',
               width: 20,
               height: 20,
             ),

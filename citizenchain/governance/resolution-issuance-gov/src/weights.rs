@@ -28,12 +28,12 @@ impl<T: crate::pallet::Config> WeightInfo for SubstrateWeight<T> {
     }
 
     fn finalize_joint_vote_approved() -> Weight {
-        T::DbWeight::get()
-            .reads_writes(2, 4)
-            .saturating_add(T::IssuanceWeightInfo::execute_resolution_issuance(
+        T::DbWeight::get().reads_writes(2, 4).saturating_add(
+            T::IssuanceWeightInfo::execute_resolution_issuance(
                 T::MaxReasonLen::get(),
                 T::MaxAllocations::get(),
-            ))
+            ),
+        )
     }
 
     fn finalize_joint_vote_rejected() -> Weight {
@@ -47,12 +47,12 @@ impl<T: crate::pallet::Config> WeightInfo for SubstrateWeight<T> {
     }
 
     fn retry_failed_execution() -> Weight {
-        T::DbWeight::get()
-            .reads_writes(2, 2)
-            .saturating_add(T::IssuanceWeightInfo::execute_resolution_issuance(
+        T::DbWeight::get().reads_writes(2, 2).saturating_add(
+            T::IssuanceWeightInfo::execute_resolution_issuance(
                 T::MaxReasonLen::get(),
                 T::MaxAllocations::get(),
-            ))
+            ),
+        )
     }
 }
 
@@ -66,9 +66,9 @@ impl WeightInfo for () {
     }
 
     fn finalize_joint_vote_approved() -> Weight {
-        RocksDbWeight::get()
-            .reads_writes(2, 4)
-            .saturating_add(<() as IssuanceWeightInfoT>::execute_resolution_issuance(1024, 128))
+        RocksDbWeight::get().reads_writes(2, 4).saturating_add(
+            <() as IssuanceWeightInfoT>::execute_resolution_issuance(1024, 128),
+        )
     }
 
     fn finalize_joint_vote_rejected() -> Weight {
@@ -82,8 +82,8 @@ impl WeightInfo for () {
     }
 
     fn retry_failed_execution() -> Weight {
-        RocksDbWeight::get()
-            .reads_writes(2, 2)
-            .saturating_add(<() as IssuanceWeightInfoT>::execute_resolution_issuance(1024, 128))
+        RocksDbWeight::get().reads_writes(2, 2).saturating_add(
+            <() as IssuanceWeightInfoT>::execute_resolution_issuance(1024, 128),
+        )
     }
 }

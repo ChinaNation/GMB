@@ -37,6 +37,6 @@ frame_benchmarking::define_benchmarks!(
     [sfid_code_auth, SfidCodeAuth]
     [admins_origin_gov, AdminsOriginGov]
     [resolution_destro_gov, ResolutionDestroGov]
-    [finality_key_gov, FinalityKeyGov]
+    [grandpa_key_gov, GrandpaKeyGov]
     [duoqian_transaction_pow, DuoqianTransactionPow]
 );

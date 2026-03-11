@@ -325,9 +325,9 @@ mod runtime {
     #[runtime::pallet_index(14)]
     pub type ResolutionDestroGov = resolution_destro_gov;
 
-    // 最终性密钥治理模块：国储会/省储会内部投票通过后替换 GRANDPA 投票公钥
+    // GRANDPA 密钥治理模块：国储会/省储会内部投票通过后替换 GRANDPA 投票公钥
     #[runtime::pallet_index(16)]
-    pub type FinalityKeyGov = finality_key_gov;
+    pub type GrandpaKeyGov = grandpa_key_gov;
 
     // 多签交易模块：duoqian_address 创建/注销与半数签名校验
     #[runtime::pallet_index(17)]
