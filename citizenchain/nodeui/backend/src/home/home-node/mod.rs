@@ -762,6 +762,7 @@ fn spawn_node(
         .arg("--rpc-port")
         .arg("9944")
         .arg("--no-prometheus")
+        .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 

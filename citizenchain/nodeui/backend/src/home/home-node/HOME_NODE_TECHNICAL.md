@@ -38,6 +38,7 @@
 ## 4. 启动流程（`start_node`）
 
 1. 校验开机密码与敏感密钥解锁能力。
+   - macOS 通过 `dscl -authonly <user> <password>` 做非交互认证，避免 UI 已输入密码后再次回退到宿主终端提示。
 2. 清理 `runtime-secrets` 中历史残留临时文件（`node-key-*.tmp`、`node-bin-*`）。
 3. 从受信目录 `backend/binaries/citizenchain-node` 定位二进制。
 4. 校验二进制 SHA-256：
@@ -51,6 +52,7 @@
    - 启动前将 `powr` 密钥同步到本地 keystore（不再注入明文 `POWR_MINER_SURI`）
    - 若配置 bootnode key，通过 `--node-key-file` 传入临时文件
    - 若存在 GRANDPA 私钥，追加 `--validator`
+   - 子进程显式设置 `stdin = null`，避免节点/依赖在启动阶段再次从宿主终端读取密码
    - 节点二进制执行路径使用 `runtime-secrets/node-bin-*` 副本
 9. 启动后补齐奖励地址链上绑定，并校验 GRANDPA 生效。
 10. 返回最新状态。
