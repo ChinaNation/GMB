@@ -3,7 +3,10 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 use frame_benchmarking::v2::*;
-use frame_support::{traits::{Get, UnfilteredDispatchable}, BoundedVec};
+use frame_support::{
+    traits::{Get, UnfilteredDispatchable},
+    BoundedVec,
+};
 use frame_system::RawOrigin;
 use sp_runtime::traits::{Hash, SaturatedConversion, Zero};
 use sp_std::vec;
@@ -28,10 +31,9 @@ mod benchmarks {
             let call = Call::<T>::register_sfid_institution {
                 sfid_id: sfid_id.clone(),
             };
-            assert!(
-                call.dispatch_bypass_filter(RawOrigin::Signed(operator.clone()).into())
-                    .is_err()
-            );
+            assert!(call
+                .dispatch_bypass_filter(RawOrigin::Signed(operator.clone()).into())
+                .is_err());
         }
     }
 
@@ -56,10 +58,9 @@ mod benchmarks {
                 expires_at,
                 approvals: approvals.clone(),
             };
-            assert!(
-                call.dispatch_bypass_filter(RawOrigin::Signed(caller.clone()).into())
-                    .is_err()
-            );
+            assert!(call
+                .dispatch_bypass_filter(RawOrigin::Signed(caller.clone()).into())
+                .is_err());
         }
     }
 
@@ -80,10 +81,9 @@ mod benchmarks {
                 expires_at,
                 approvals: approvals.clone(),
             };
-            assert!(
-                call.dispatch_bypass_filter(RawOrigin::Signed(caller.clone()).into())
-                    .is_err()
-            );
+            assert!(call
+                .dispatch_bypass_filter(RawOrigin::Signed(caller.clone()).into())
+                .is_err());
         }
     }
 }

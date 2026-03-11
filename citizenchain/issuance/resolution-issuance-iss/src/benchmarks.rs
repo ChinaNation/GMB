@@ -29,15 +29,16 @@ mod benchmarks {
 
         #[block]
         {
-            assert!(
-                <Pallet<T> as ResolutionIssuanceExecutor<T::AccountId, pallet::BalanceOf<T>>>::execute_resolution_issuance(
-                    proposal_id,
-                    reason.clone(),
-                    total_amount,
-                    allocations.clone(),
-                )
-                .is_ok()
-            );
+            assert!(<Pallet<T> as ResolutionIssuanceExecutor<
+                T::AccountId,
+                pallet::BalanceOf<T>,
+            >>::execute_resolution_issuance(
+                proposal_id,
+                reason.clone(),
+                total_amount,
+                allocations.clone(),
+            )
+            .is_ok());
         }
 
         assert!(Executed::<T>::contains_key(proposal_id));

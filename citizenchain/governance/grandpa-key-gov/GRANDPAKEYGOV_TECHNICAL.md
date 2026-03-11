@@ -70,8 +70,8 @@ Runtime 配置位置：
 
 ## 4. 创世初始化
 `GenesisBuild` 会从 `CHINA_CB` 初始化：
-- `CurrentGrandpaKeys[institution] = node.finality_key`
-- `GrandpaKeyOwnerByKey[node.finality_key] = institution`
+- `CurrentGrandpaKeys[institution] = node.grandpa_key`
+- `GrandpaKeyOwnerByKey[node.grandpa_key] = institution`
 
 并在构建时断言初始 key 不重复。
 
@@ -141,11 +141,11 @@ Runtime 配置位置：
 1. `grandpa_authority_keys_are_unique_valid_hex_and_32_bytes`
 - 校验长度、hex、唯一性，并用 `ed25519-dalek::VerifyingKey::from_bytes` 强制校验 ed25519 曲线点有效性。
 
-2. `grandpa_keys_match_china_cb_finality_keys`
-- 强制校验 `GRANDPA_AUTHORITY_KEYS_HEX` 与 `CHINA_CB.finality_key` 一一一致。
+2. `grandpa_keys_match_china_cb_grandpa_keys`
+- 强制校验 `GRANDPA_AUTHORITY_KEYS_HEX` 与 `CHINA_CB.grandpa_key` 一一一致。
 
-3. `china_cb_finality_keys_are_valid_ed25519_pubkeys`
-- 强制校验 `CHINA_CB.finality_key` 全量都是有效 ed25519 公钥。
+3. `china_cb_grandpa_keys_are_valid_ed25519_pubkeys`
+- 强制校验 `CHINA_CB.grandpa_key` 全量都是有效 ed25519 公钥。
 
 说明：
 - 当前若数据不是合法 ed25519 点，测试会失败。这是设计要求，不做兼容放宽。

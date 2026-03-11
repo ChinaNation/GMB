@@ -1,5 +1,25 @@
 # RESOLUTION Issuance Execution Technical Notes
 
+## 0. 功能需求
+### 0.1 核心职责
+`resolution-issuance-iss` 的功能需求是：
+- 只负责执行已通过治理的决议发行，不负责提案创建或投票流程。
+- 对发行参数做链上安全校验，确保总额、条目数、理由长度和 ED 要求满足制度规则。
+- 在执行成功后留下可审计状态和事件，支持治理层回查。
+- 执行层必须以治理模块传入的 `proposal_id`、`reason` 与 `allocations` 为唯一执行依据，不在本模块内重新推导制度口径。
+
+### 0.2 执行与防重放需求
+- 相同 `proposal_id` 不能重复执行。
+- 执行必须原子化，不能出现部分账户已到账、部分账户未到账的半完成状态。
+- 维护清理只能移除短期执行记录，不能移除永久防重放标记。
+
+### 0.3 权限需求
+- 外部普通 origin 不能直接调用实际执行入口。
+- 生产态执行应由上游治理模块通过 trait 驱动，维护入口只允许受限治理角色使用。
+- 维护动作只能用于暂停和清理短期执行记录，不能打开重放窗口或改写既有发行结果。
+
+---
+
 ## 1. 模块定位
 `resolution-issuance-iss` 是“决议发行执行层”pallet，负责把已通过治理流程的发行决议落地到链上账本。
 
@@ -150,13 +170,17 @@ Runtime 接线：
 ---
 
 ## 8. Weight 策略
+当前状态：
+- 模块已经具备 `runtime-benchmarks` 基础设施与 `benchmarks.rs` 入口。
+- `weights.rs` 目前仍是保守手工估算值，需通过 benchmark CLI 产物回填。
+
 当前 `WeightInfo for ()` 为手工估算：
 - `execute_resolution_issuance`：基础权重 + 按 `allocation_count`、`reason_len` 线性项 + DB 读写项。
 - `clear_executed`：`from_parts(10_000_000, 128) + reads_writes(1,2)`。
 - `set_paused`：`from_parts(5_000_000, 64) + reads_writes(1,2)`。
 
 说明：
-- 现阶段可用，但生产链建议补齐 benchmark 生成权重，以获得更准确的执行时间与 PoV 估算。
+- 现阶段可用，但生产链仍建议使用 benchmark CLI 生成权重，以获得更准确的执行时间与 PoV 估算。
 
 ---
 

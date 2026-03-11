@@ -2,10 +2,10 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
+use crate::{pallet, Call, Config, Pallet};
 use frame_benchmarking::v2::*;
 use frame_support::traits::Get;
 use frame_system::RawOrigin;
-use crate::{pallet, Call, Config, Pallet};
 
 #[benchmarks]
 mod benchmarks {
@@ -33,9 +33,5 @@ mod benchmarks {
         assert_eq!(pallet::LastSettledYear::<T>::get(), 1u32);
     }
 
-    impl_benchmark_test_suite!(
-        Pallet,
-        crate::tests::new_test_ext(),
-        crate::tests::Test,
-    );
+    impl_benchmark_test_suite!(Pallet, crate::tests::new_test_ext(), crate::tests::Test,);
 }

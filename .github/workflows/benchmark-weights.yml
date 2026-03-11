@@ -67,7 +67,7 @@ jobs:
           workspaces: |
             citizenchain -> target
 
-      - name: 跑全部 pallet benchmark 并写回权重文件
+      - name: 跑全部 benchmark 并写回权重文件
         working-directory: citizenchain
         run: ./scripts/run-benchmarks.sh --chain mainnet --steps 50 --repeat 20
 
@@ -76,18 +76,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          mapfile -t WEIGHT_FILES < <(find governance issuance otherpallet transaction -path '*/src/weights.rs' | sort)
+
           changed=0
-          for f in \
-            issuance/shengbank-stake-interest/src/weights.rs \
-            issuance/fullnode-pow-reward/src/weights.rs \
-            otherpallet/sfid-code-auth/src/weights.rs \
-            governance/resolution-destro-gov/src/weights.rs \
-            governance/finality-key-gov/src/weights.rs \
-            issuance/resolution-issuance-iss/src/weights.rs \
-            transaction/duoqian-transaction-pow/src/weights.rs \
-            governance/admins-origin-gov/src/weights.rs \
-            governance/resolution-issuance-gov/src/weights.rs \
-            transaction/offchain-transaction-pos/src/weights.rs; do
+          for f in "${WEIGHT_FILES[@]}"; do
             if ! git diff --quiet -- "$f"; then
               changed=1
               break
@@ -102,17 +94,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add \
-            issuance/shengbank-stake-interest/src/weights.rs \
-            issuance/fullnode-pow-reward/src/weights.rs \
-            otherpallet/sfid-code-auth/src/weights.rs \
-            governance/resolution-destro-gov/src/weights.rs \
-            governance/finality-key-gov/src/weights.rs \
-            issuance/resolution-issuance-iss/src/weights.rs \
-            transaction/duoqian-transaction-pow/src/weights.rs \
-            governance/admins-origin-gov/src/weights.rs \
-            governance/resolution-issuance-gov/src/weights.rs \
-            transaction/offchain-transaction-pos/src/weights.rs
+          git add "${WEIGHT_FILES[@]}"
 
           git commit -m "chore(weights): auto-update benchmark outputs"
           git push origin "HEAD:${GITHUB_REF_NAME}"

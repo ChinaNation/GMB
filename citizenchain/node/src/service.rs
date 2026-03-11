@@ -3,22 +3,16 @@
 use codec::{Decode, Encode};
 use futures::FutureExt;
 use gmb_runtime::{self, apis::RuntimeApi, opaque::Block};
-use sc_client_api::{Backend, BlockBackend};
 use pow_difficulty_module::PowDifficultyApi;
+use sc_client_api::{Backend, BlockBackend};
 use sc_consensus_pow::{MiningHandle, PowAlgorithm, PowBlockImport};
-use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_service::WarpSyncConfig;
+use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_api::ProvideRuntimeApi;
 use sp_consensus::NoNetwork;
-use sp_core::{
-    crypto::KeyTypeId,
-    hashing::blake2_256,
-    sr25519,
-    Pair,
-    U256,
-};
+use sp_core::{crypto::KeyTypeId, hashing::blake2_256, sr25519, Pair, U256};
 use sp_keystore::Keystore;
 use sp_runtime::traits::{Block as BlockT, IdentifyAccount};
 use std::{
@@ -43,12 +37,7 @@ pub type Service = sc_service::PartialComponents<
     sc_consensus::DefaultImportQueue<Block>,
     sc_transaction_pool::TransactionPoolHandle<Block, FullClient>,
     (
-        sc_consensus_grandpa::GrandpaBlockImport<
-            FullBackend,
-            Block,
-            FullClient,
-            FullSelectChain,
-        >,
+        sc_consensus_grandpa::GrandpaBlockImport<FullBackend, Block, FullClient, FullSelectChain>,
         sc_consensus_grandpa::LinkHalf<Block, FullClient, FullSelectChain>,
         Option<Telemetry>,
     ),
@@ -134,7 +123,10 @@ fn author_pre_digest(keystore: &sp_keystore::KeystorePtr) -> Option<Vec<u8>> {
         return None;
     }
 
-    let author_public = if let Some(suri) = env::var(POWR_MINER_SURI_ENV).ok().filter(|v| !v.trim().is_empty()) {
+    let author_public = if let Some(suri) = env::var(POWR_MINER_SURI_ENV)
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+    {
         match sr25519::Pair::from_string(&suri, None) {
             Ok(pair) => {
                 let target = pair.public();
@@ -153,19 +145,22 @@ fn author_pre_digest(keystore: &sp_keystore::KeystorePtr) -> Option<Vec<u8>> {
 
 fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceError> {
     let keys = keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE);
-    let configured_suri = env::var(POWR_MINER_SURI_ENV).ok().filter(|v| !v.trim().is_empty());
+    let configured_suri = env::var(POWR_MINER_SURI_ENV)
+        .ok()
+        .filter(|v| !v.trim().is_empty());
 
     if let Some(suri) = configured_suri.as_ref() {
-        let pair = sr25519::Pair::from_string(suri, None).map_err(|e| {
-            ServiceError::Other(format!("invalid {}: {e}", POWR_MINER_SURI_ENV))
-        })?;
+        let pair = sr25519::Pair::from_string(suri, None)
+            .map_err(|e| ServiceError::Other(format!("invalid {}: {e}", POWR_MINER_SURI_ENV)))?;
         let configured_public = pair.public();
         if keys.iter().any(|k| *k == configured_public) {
             return Ok(());
         }
         keystore
             .sr25519_generate_new(POW_AUTHOR_KEY_TYPE, Some(suri))
-            .map_err(|e| ServiceError::Other(format!("failed to generate configured powr key: {e}")))?;
+            .map_err(|e| {
+                ServiceError::Other(format!("failed to generate configured powr key: {e}"))
+            })?;
         return Ok(());
     }
 
@@ -203,7 +198,8 @@ fn start_cpu_miner<Proof: Send + 'static>(worker: MiningHandle<Block, SimplePow,
                 // 这样可以保证区块时间戳不会持续跑在本地时间之前导致 future 错误。
                 static MINER_GATE: std::sync::OnceLock<std::sync::Mutex<Instant>> =
                     std::sync::OnceLock::new();
-                let gate = MINER_GATE.get_or_init(|| Mutex::new(Instant::now() - min_submit_interval));
+                let gate =
+                    MINER_GATE.get_or_init(|| Mutex::new(Instant::now() - min_submit_interval));
                 let mut last_submit = gate.lock().expect("miner submit gate mutex poisoned");
                 let elapsed = last_submit.elapsed();
                 if elapsed < min_submit_interval {
@@ -326,7 +322,11 @@ pub fn new_full<
     let metrics = N::register_notification_metrics(config.prometheus_registry());
     let peer_store_handle = net_config.peer_store_handle();
     let grandpa_protocol_name = sc_consensus_grandpa::protocol_standard_name(
-        &client.block_hash(0).ok().flatten().expect("Genesis block exists; qed"),
+        &client
+            .block_hash(0)
+            .ok()
+            .flatten()
+            .expect("Genesis block exists; qed"),
         &config.chain_spec,
     );
     let (grandpa_protocol_config, grandpa_notification_service) =
@@ -470,9 +470,11 @@ pub fn new_full<
     if enable_grandpa {
         let local_grandpa_keys = keystore.ed25519_public_keys(sp_consensus_grandpa::KEY_TYPE);
         let current_authorities = grandpa_link.shared_authority_set().current_authorities();
-        let has_local_grandpa_authority = current_authorities
-            .iter()
-            .any(|(id, _)| local_grandpa_keys.iter().any(|local| id.encode() == local.encode()));
+        let has_local_grandpa_authority = current_authorities.iter().any(|(id, _)| {
+            local_grandpa_keys
+                .iter()
+                .any(|local| id.encode() == local.encode())
+        });
         let grandpa_keystore = if role.is_authority() && has_local_grandpa_authority {
             Some(keystore.clone())
         } else {

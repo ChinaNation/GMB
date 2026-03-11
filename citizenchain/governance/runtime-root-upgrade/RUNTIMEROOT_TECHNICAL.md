@@ -153,7 +153,7 @@ Runtime 配置位置：
 
 ### 7.3 推荐改进
 1. 当前 `finalize_joint_vote` 手工入口使用 `Root`，权限已经足够严格；若后续想与其他模块统一，可评估抽象出专用 `JointVoteFinalizeOrigin`。
-2. 当前 weight 仍是简单 `DbWeight` 估算；若生产上频繁治理升级，建议后续补 benchmark 与专用 `WeightInfo`。
+2. 模块现已补上 `runtime-benchmarks` 入口与专用 `WeightInfo`；当前 `weights.rs` 仍是保守手写值，后续可用 benchmark CLI 实测产物替换。
 
 ## 8. 中文注释覆盖重点
 本模块当前已在以下关键位置补充中文注释：

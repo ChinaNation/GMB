@@ -1,8 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub mod weights;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
+pub mod weights;
 
 pub use pallet::*;
 pub use weights::WeightInfo;
@@ -18,11 +18,11 @@ pub mod pallet {
 
     // ===== 引入制度常量 =====
     use primitives::{
+        china::china_ch::{shenfen_id_to_fixed48, CHINA_CH}, // 固定 43 个省储行多签地址
         core_const::{
             ENABLE_SHENGBANK_INTEREST_DECAY, SHENGBANK_INITIAL_INTEREST_BP,
             SHENGBANK_INTEREST_DECREASE_BP, SHENGBANK_INTEREST_DURATION_YEARS,
         },
-        china::china_ch::{shenfen_id_to_fixed48, CHINA_CH}, // 固定 43 个省储行多签地址
     };
 
     const AUTO_BACKFILL_MAX_YEARS_PER_BLOCK: u32 = 8;
@@ -69,19 +69,13 @@ pub mod pallet {
         },
 
         /// 省储行账户解码失败或配置无效（链上可审计，不依赖节点日志）。
-        ShengBankDecodeFailed {
-            year: u32,
-            pallet_id: [u8; 48],
-        },
+        ShengBankDecodeFailed { year: u32, pallet_id: [u8; 48] },
 
         /// shenfen_id 无法编码为固定 48 字节标识（链上配置异常）。
         ShengBankIdEncodeFailed { year: u32, index: u32 },
 
         /// stake_amount 转换到运行时 Balance 发生饱和截断。
-        ShengBankPrincipalOverflow {
-            year: u32,
-            pallet_id: [u8; 48],
-        },
+        ShengBankPrincipalOverflow { year: u32, pallet_id: [u8; 48] },
 
         /// 某一年度结算完成
         ShengBankYearSettled { year: u32 },
@@ -95,7 +89,6 @@ pub mod pallet {
 
         /// 由 Root 强制推进年度（跳过故障年度）。
         ShengBankYearForceAdvanced { year: u32 },
-
     }
 
     #[pallet::error]
@@ -150,6 +143,7 @@ pub mod pallet {
             max_years: u32,
         ) -> DispatchResultWithPostInfo {
             ensure_root(origin)?;
+            // 中文注释：手动补结算只允许推进有限年数，避免一次交易做过多年度工作。
             ensure!(
                 max_years > 0 && max_years <= MAX_FORCE_SETTLE_YEARS,
                 Error::<T>::InvalidOperationCount
@@ -178,15 +172,17 @@ pub mod pallet {
         pub fn force_advance_year(origin: OriginFor<T>, year: u32) -> DispatchResult {
             ensure_root(origin)?;
             let current = Self::last_settled_year();
+            let current_year = Self::current_year(frame_system::Pallet::<T>::block_number());
+            // 中文注释：force advance 只用于跳过“已经到期但无法修复”的故障年度，
+            // 不能越过当前链上时间提前跳过未来尚未到期的年度。
             ensure!(
-                year > current && year <= SHENGBANK_INTEREST_DURATION_YEARS,
+                year > current && year <= current_year && year <= SHENGBANK_INTEREST_DURATION_YEARS,
                 Error::<T>::InvalidYear
             );
             LastSettledYear::<T>::put(year);
             Self::deposit_event(Event::<T>::ShengBankYearForceAdvanced { year });
             Ok(())
         }
-
     }
 
     // ===== 核心逻辑 =====
@@ -221,6 +217,8 @@ pub mod pallet {
             let mut ops: u64 = 0;
             let mut iterations: u32 = 0;
             let mut last_year = Self::last_settled_year();
+            // 中文注释：必须按年度顺序逐年推进；只要中间某一年失败，就停止后续年度，
+            // 避免出现“后一年已发、前一年未发”的跨年错位。
             while last_year < current_year
                 && last_year < SHENGBANK_INTEREST_DURATION_YEARS
                 && iterations < max_years
@@ -243,7 +241,9 @@ pub mod pallet {
                 if success_count == total_count {
                     LastSettledYear::<T>::put(settling_year);
                     writes = writes.saturating_add(1);
-                    Self::deposit_event(Event::<T>::ShengBankYearSettled { year: settling_year });
+                    Self::deposit_event(Event::<T>::ShengBankYearSettled {
+                        year: settling_year,
+                    });
                     writes = writes.saturating_add(1);
                     last_year = settling_year;
                     iterations = iterations.saturating_add(1);
@@ -267,6 +267,7 @@ pub mod pallet {
             if per_year == 0 {
                 return 0;
             }
+            // 中文注释：第 1 个年度边界块对应 year=1；例如 block=per_year 时开始结算第 1 年。
             (b / per_year) as u32
         }
 
@@ -280,6 +281,7 @@ pub mod pallet {
                 return 0;
             }
 
+            // 中文注释：第 1 年使用初始利率，从第 2 年开始按固定 BP 递减，最低不会小于 0。
             let decay = year
                 .saturating_sub(1)
                 .saturating_mul(SHENGBANK_INTEREST_DECREASE_BP);
@@ -343,6 +345,8 @@ pub mod pallet {
                     continue;
                 }
                 if interest < T::Currency::minimum_balance() {
+                    // 中文注释：当前省储行固定 stake_amount 下不会命中这个分支；
+                    // 这里保留为防御性兜底，避免未来参数变化时创建 dust 账户。
                     log::warn!(
                         target: "runtime::shengbank",
                         "省储行利息低于 ED，跳过: {}",
@@ -377,9 +381,7 @@ mod tests {
     use super::pallet::*;
     use codec::Decode;
     use frame_support::{
-        assert_noop,
-        assert_ok,
-        derive_impl,
+        assert_noop, assert_ok, derive_impl,
         traits::{Get, OnFinalize, OnInitialize, VariantCountOf},
     };
     use frame_system as system;
@@ -483,9 +485,7 @@ mod tests {
     }
 
     fn shengbank_account(index: usize) -> AccountId32 {
-        AccountId32::decode(
-            &mut &primitives::china::china_ch::CHINA_CH[index].duoqian_address[..],
-        )
+        AccountId32::decode(&mut &primitives::china::china_ch::CHINA_CH[index].duoqian_address[..])
             .expect("pallet_address must decode")
     }
 
@@ -503,9 +503,7 @@ mod tests {
             let has_settled_event = System::events().iter().any(|r| {
                 matches!(
                     r.event,
-                    RuntimeEvent::ShengBankStakeInterest(
-                        Event::ShengBankYearSettled { year: 1 }
-                    )
+                    RuntimeEvent::ShengBankStakeInterest(Event::ShengBankYearSettled { year: 1 })
                 )
             });
             assert!(has_settled_event);
@@ -565,6 +563,7 @@ mod tests {
     #[test]
     fn root_can_force_advance_year_for_recovery() {
         new_test_ext().execute_with(|| {
+            System::set_block_number(50); // current_year = 5
             assert_ok!(ShengBankStakeInterest::force_advance_year(
                 RuntimeOrigin::root(),
                 5
@@ -576,6 +575,7 @@ mod tests {
     #[test]
     fn force_advance_year_rejects_noop_and_invalid() {
         new_test_ext().execute_with(|| {
+            System::set_block_number(50); // current_year = 5
             LastSettledYear::<Test>::put(5);
             assert_noop!(
                 ShengBankStakeInterest::force_advance_year(RuntimeOrigin::root(), 5),
@@ -583,6 +583,17 @@ mod tests {
             );
             assert_noop!(
                 ShengBankStakeInterest::force_advance_year(RuntimeOrigin::root(), 101),
+                Error::<Test>::InvalidYear
+            );
+        });
+    }
+
+    #[test]
+    fn force_advance_year_rejects_future_years() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(20); // current_year = 2
+            assert_noop!(
+                ShengBankStakeInterest::force_advance_year(RuntimeOrigin::root(), 3),
                 Error::<Test>::InvalidYear
             );
         });

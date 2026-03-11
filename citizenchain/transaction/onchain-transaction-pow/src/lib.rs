@@ -311,21 +311,15 @@ fn mul_perbill_round(amount: u128, rate: sp_runtime::Perbill) -> u128 {
 mod tests {
     use super::*;
     use frame_support::{
-        assert_ok,
-        derive_impl,
-        dispatch::GetDispatchInfo,
-        traits::VariantCountOf,
+        assert_ok, derive_impl, dispatch::GetDispatchInfo, traits::VariantCountOf,
         weights::ConstantMultiplier,
     };
     use frame_system as system;
     use pallet_transaction_payment::OnChargeTransaction;
-    use sp_runtime::{
-        traits::IdentityLookup,
-        AccountId32, BuildStorage, Perbill,
-    };
+    use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage, Perbill};
     use std::{cell::RefCell, thread_local};
 
-    type Block = frame_system::mocking::MockBlock<Test>;
+    type Block = frame_system::mocking::MockBlockU32<Test>;
     type Balance = u128;
 
     thread_local! {
@@ -408,6 +402,7 @@ mod tests {
     impl fullnode_pow_reward::Config for Test {
         type Currency = Balances;
         type FindAuthor = MockFindAuthor;
+        type WeightInfo = ();
     }
 
     struct MockNrcAccountProvider;
@@ -479,7 +474,9 @@ mod tests {
     }
 
     fn sample_call() -> RuntimeCall {
-        RuntimeCall::System(frame_system::Call::remark { remark: vec![1, 2, 3] })
+        RuntimeCall::System(frame_system::Call::remark {
+            remark: vec![1, 2, 3],
+        })
     }
 
     #[test]
@@ -516,10 +513,9 @@ mod tests {
             let info = call.get_dispatch_info();
 
             // Amount：50_000 * 0.1% = 50 分，+ tip(3) => 53 分
-            let fee_amount = custom_fee_with_tip::<Test, Balances, AmountExtractorAmount>(
-                &who, &call, &info, 3,
-            )
-            .expect("amount fee must be computable");
+            let fee_amount =
+                custom_fee_with_tip::<Test, Balances, AmountExtractorAmount>(&who, &call, &info, 3)
+                    .expect("amount fee must be computable");
             assert_eq!(fee_amount, 53);
 
             // NoAmount：不收基础费，仅返回 tip
@@ -530,13 +526,11 @@ mod tests {
             assert_eq!(fee_no_amount, 7);
 
             // Unknown：拒绝交易，避免漏提取手续费
-            let unknown_err =
-                custom_fee_with_tip::<Test, Balances, AmountExtractorUnknown>(&who, &call, &info, 0)
-                    .expect_err("unknown extract result should be rejected");
-            assert_eq!(
-                unknown_err,
-                InvalidTransaction::Call.into()
-            );
+            let unknown_err = custom_fee_with_tip::<Test, Balances, AmountExtractorUnknown>(
+                &who, &call, &info, 0,
+            )
+            .expect_err("unknown extract result should be rejected");
+            assert_eq!(unknown_err, InvalidTransaction::Call.into());
         });
     }
 
@@ -553,9 +547,10 @@ mod tests {
                 &who, &call, &info, 0, 2
             ));
 
-            let liq = <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 2)
-                .expect("withdraw should succeed")
-                .expect("non-zero fee must return liquidity info");
+            let liq =
+                <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 2)
+                    .expect("withdraw should succeed")
+                    .expect("non-zero fee must return liquidity info");
 
             assert_eq!(Balances::free_balance(who), 988);
             assert_eq!(liq.0.peek(), 10);
@@ -798,14 +793,16 @@ mod tests {
                     .expect("withdraw should succeed");
             assert_eq!(Balances::free_balance(&who), 945);
 
-            assert_ok!(<Adapter as OnChargeTransaction<Test>>::correct_and_deposit_fee(
-                &who,
-                &info,
-                &Default::default(),
-                1, // pretend corrected fee is tiny; adapter intentionally ignores it
-                5,
-                liquidity,
-            ));
+            assert_ok!(
+                <Adapter as OnChargeTransaction<Test>>::correct_and_deposit_fee(
+                    &who,
+                    &info,
+                    &Default::default(),
+                    1, // pretend corrected fee is tiny; adapter intentionally ignores it
+                    5,
+                    liquidity,
+                )
+            );
 
             assert_eq!(Balances::free_balance(&who), 945);
             assert_eq!(Balances::total_issuance(), issuance_before - 55);
@@ -851,14 +848,16 @@ mod tests {
             let liquidity =
                 <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 5)
                     .expect("withdraw should succeed");
-            assert_ok!(<Adapter as OnChargeTransaction<Test>>::correct_and_deposit_fee(
-                &who,
-                &info,
-                &Default::default(),
-                total_fee,
-                5,
-                liquidity,
-            ));
+            assert_ok!(
+                <Adapter as OnChargeTransaction<Test>>::correct_and_deposit_fee(
+                    &who,
+                    &info,
+                    &Default::default(),
+                    total_fee,
+                    5,
+                    liquidity,
+                )
+            );
 
             assert_eq!(Balances::free_balance(who), 985);
             assert_eq!(Balances::free_balance(reward_wallet), expected_fullnode);

@@ -287,7 +287,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
-        #[pallet::weight(T::WeightInfo::propose_admin_replacement())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_admin_replacement())]
         pub fn propose_admin_replacement(
             origin: OriginFor<T>,
             org: u8,
@@ -346,7 +346,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(1)]
-        #[pallet::weight(T::WeightInfo::vote_admin_replacement())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::vote_admin_replacement())]
         pub fn vote_admin_replacement(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -393,7 +393,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(2)]
-        #[pallet::weight(T::WeightInfo::execute_admin_replacement())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::execute_admin_replacement())]
         pub fn execute_admin_replacement(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let _ = ensure_signed(origin)?;
             // 中文注释：执行入口保持公开触发，只要提案已经通过，任何账户都可以帮助把已批准的替换落地。
@@ -401,7 +401,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(3)]
-        #[pallet::weight(T::WeightInfo::cancel_stale_proposal())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::cancel_stale_proposal())]
         pub fn cancel_stale_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let _ = ensure_signed(origin)?;
             let action =
@@ -694,6 +694,7 @@ mod tests {
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
+        type WeightInfo = ();
     }
 
     impl Config for Test {

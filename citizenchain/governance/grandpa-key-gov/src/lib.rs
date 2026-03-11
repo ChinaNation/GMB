@@ -143,11 +143,11 @@ pub mod pallet {
                     continue;
                 };
                 assert!(
-                    !GrandpaKeyOwnerByKey::<T>::contains_key(node.finality_key),
+                    !GrandpaKeyOwnerByKey::<T>::contains_key(node.grandpa_key),
                     "duplicated initial grandpa key in CHINA_CB"
                 );
-                CurrentGrandpaKeys::<T>::insert(institution, node.finality_key);
-                GrandpaKeyOwnerByKey::<T>::insert(node.finality_key, institution);
+                CurrentGrandpaKeys::<T>::insert(institution, node.grandpa_key);
+                GrandpaKeyOwnerByKey::<T>::insert(node.grandpa_key, institution);
             }
         }
     }
@@ -794,6 +794,7 @@ mod tests {
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
+        type WeightInfo = ();
     }
 
     impl Config for Test {
@@ -807,11 +808,11 @@ mod tests {
     fn grandpa_authorities() -> sp_consensus_grandpa::AuthorityList {
         vec![
             (
-                GrandpaAuthorityId::from(ed25519::Public::from_raw(CHINA_CB[0].finality_key)),
+                GrandpaAuthorityId::from(ed25519::Public::from_raw(CHINA_CB[0].grandpa_key)),
                 1,
             ),
             (
-                GrandpaAuthorityId::from(ed25519::Public::from_raw(CHINA_CB[1].finality_key)),
+                GrandpaAuthorityId::from(ed25519::Public::from_raw(CHINA_CB[1].grandpa_key)),
                 1,
             ),
         ]

@@ -188,7 +188,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 发起“决议销毁”内部投票提案。
         #[pallet::call_index(0)]
-        #[pallet::weight(T::WeightInfo::propose_destroy())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_destroy())]
         pub fn propose_destroy(
             origin: OriginFor<T>,
             org: u8,
@@ -243,7 +243,7 @@ pub mod pallet {
 
         /// 对“决议销毁”提案投票，达到阈值通过后自动执行销毁。
         #[pallet::call_index(1)]
-        #[pallet::weight(T::WeightInfo::vote_destroy())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::vote_destroy())]
         pub fn vote_destroy(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -289,7 +289,7 @@ pub mod pallet {
 
         /// 手动执行已通过的销毁提案。
         #[pallet::call_index(2)]
-        #[pallet::weight(T::WeightInfo::execute_destroy())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::execute_destroy())]
         pub fn execute_destroy(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             // 中文注释：这里保留公开触发入口，任何签名账户都可以推动“已获批准”的销毁落地，
             // 不要求再次拿到管理员身份，避免因管理员离线导致通过提案迟迟无法执行。
@@ -299,7 +299,7 @@ pub mod pallet {
 
         /// 清理已过期且未执行的销毁提案。
         #[pallet::call_index(3)]
-        #[pallet::weight(T::WeightInfo::cancel_stale_destroy())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::cancel_stale_destroy())]
         pub fn cancel_stale_destroy(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             // 中文注释：stale 清理同样设计为公开触发，只要提案已经超过治理窗口，
             // 任意签名账户都可以帮助系统回收阻塞状态，避免同机构长期无法再发起新提案。
@@ -593,6 +593,7 @@ mod tests {
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
+        type WeightInfo = ();
     }
 
     impl pallet::Config for Test {

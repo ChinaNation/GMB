@@ -3,9 +3,9 @@
 extern crate alloc;
 
 pub use pallet::*;
-pub mod weights;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
+pub mod weights;
 
 use alloc::vec::Vec;
 use frame_support::dispatch::DispatchResult;
@@ -116,6 +116,7 @@ pub mod pallet {
     #[pallet::storage]
     pub type TotalIssued<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
+    /// 紧急暂停开关；开启后拒绝任何新的发行执行，但不影响只读查询。
     #[pallet::storage]
     pub type Paused<T: Config> = StorageValue<_, bool, ValueQuery>;
 
@@ -206,6 +207,7 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::clear_executed())]
         pub fn clear_executed(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             T::MaintenanceOrigin::ensure_origin(origin)?;
+            // 中文注释：这里只清理短期展示/排障记录，不允许触碰永久防重放标记 EverExecuted。
             ensure!(
                 Executed::<T>::contains_key(proposal_id),
                 Error::<T>::NotExecuted
@@ -219,6 +221,7 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::set_paused())]
         pub fn set_paused(origin: OriginFor<T>, paused: bool) -> DispatchResult {
             T::MaintenanceOrigin::ensure_origin(origin)?;
+            // 中文注释：幂等保护，避免重复写入同一状态并制造无意义事件。
             ensure!(Paused::<T>::get() != paused, Error::<T>::AlreadyInState);
             Paused::<T>::put(paused);
             Self::deposit_event(Event::<T>::PausedSet { paused });
@@ -233,6 +236,7 @@ pub mod pallet {
             total_amount: BalanceOf<T>,
             allocations: &[RecipientAmount<T::AccountId, BalanceOf<T>>],
         ) -> DispatchResult {
+            // 中文注释：执行层要么整笔成功，要么整笔回滚，不能留下“部分账户已到账”的半状态。
             with_storage_layer(|| {
                 Self::do_execute_inner(proposal_id, reason, total_amount, allocations)
             })
@@ -245,6 +249,7 @@ pub mod pallet {
             allocations: &[RecipientAmount<T::AccountId, BalanceOf<T>>],
         ) -> DispatchResult {
             ensure!(!Paused::<T>::get(), Error::<T>::PalletPaused);
+            // 中文注释：重放判断看 EverExecuted，而不是可清理的 Executed，避免维护操作误释放重放窗口。
             ensure!(
                 !EverExecuted::<T>::contains_key(proposal_id),
                 Error::<T>::AlreadyExecuted
@@ -295,6 +300,7 @@ pub mod pallet {
                 ensure!(imbalance.peek() == item.amount, Error::<T>::DepositFailed);
                 total_imbalance.subsume(imbalance);
             }
+            // 中文注释：统一 drop 合并后的 imbalance，由 Currency 在这一点一次性完成总发行量记账。
             drop(total_imbalance);
 
             let current_block = frame_system::Pallet::<T>::block_number();
@@ -323,6 +329,7 @@ pub mod pallet {
             total_amount: BalanceOf<T>,
             allocations: Vec<(T::AccountId, BalanceOf<T>)>,
         ) -> DispatchResult {
+            // 中文注释：trait 路径给治理模块使用，不走 extrinsic origin，但仍复用同一套执行校验与状态机。
             let mapped: Vec<RecipientAmount<T::AccountId, BalanceOf<T>>> = allocations
                 .into_iter()
                 .map(|(recipient, amount)| RecipientAmount { recipient, amount })
@@ -625,6 +632,28 @@ mod tests {
     }
 
     #[test]
+    fn single_issuance_cap_is_rejected_before_mint() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
+                    AccountId,
+                    Balance,
+                >>::execute_resolution_issuance(
+                    35,
+                    b"x".to_vec(),
+                    14_434_973_780_001,
+                    vec![(10, 14_434_973_780_001)]
+                ),
+                pallet::Error::<Test>::ExceedsSingleIssuanceCap
+            );
+
+            assert_eq!(pallet_balances::Pallet::<Test>::free_balance(10), 0);
+            assert_eq!(pallet::Executed::<Test>::get(35), None);
+            assert_eq!(pallet::TotalIssued::<Test>::get(), 0);
+        });
+    }
+
+    #[test]
     fn clear_executed_requires_existing_key() {
         new_test_ext().execute_with(|| {
             assert_noop!(
@@ -784,9 +813,9 @@ mod tests {
                 .clone();
             assert_eq!(
                 last_event,
-                RuntimeEvent::ResolutionIssuanceIss(
-                    pallet::Event::<Test>::PausedSet { paused: true }
-                )
+                RuntimeEvent::ResolutionIssuanceIss(pallet::Event::<Test>::PausedSet {
+                    paused: true
+                })
             );
         });
     }

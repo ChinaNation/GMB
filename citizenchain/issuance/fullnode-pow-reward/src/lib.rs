@@ -32,9 +32,9 @@
 //!                                上述内容不得修改//!
 //! ============================================================================
 
-pub mod weights;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
+pub mod weights;
 
 pub use pallet::*;
 pub use weights::WeightInfo;
@@ -99,10 +99,7 @@ pub mod pallet {
         /// 本区块奖励跳过：未能从 digest 识别出作者。
         PowRewardSkippedNoAuthor { block: u32 },
         /// 本区块奖励跳过：作者未绑定奖励钱包。
-        PowRewardSkippedNoBoundWallet {
-            block: u32,
-            miner: T::AccountId,
-        },
+        PowRewardSkippedNoBoundWallet { block: u32, miner: T::AccountId },
         /// 矿工身份钱包重新绑定。
         RewardWalletRebound {
             miner: T::AccountId,
@@ -133,6 +130,7 @@ pub mod pallet {
                 Error::<T>::RewardWalletAlreadyBound
             );
 
+            // 中文注释：绑定表只决定奖励接收钱包，不改变矿工作者身份本身。
             RewardWalletByMiner::<T>::insert(&miner, &wallet);
             Self::deposit_event(Event::<T>::RewardWalletBound { miner, wallet });
             Ok(())
@@ -150,6 +148,7 @@ pub mod pallet {
                 RewardWalletByMiner::<T>::contains_key(&miner),
                 Error::<T>::RewardWalletNotBound
             );
+            // 中文注释：重绑后仅影响后续区块奖励，历史已经发放的奖励不会被追溯重定向。
             RewardWalletByMiner::<T>::insert(&miner, &new_wallet);
             Self::deposit_event(Event::<T>::RewardWalletRebound { miner, new_wallet });
             Ok(())
@@ -161,6 +160,16 @@ pub mod pallet {
     where
         BlockNumberFor<T>: Into<u32>,
     {
+        #[cfg(feature = "std")]
+        fn integrity_test() {
+            let reward: BalanceOf<T> = FULLNODE_BLOCK_REWARD.saturated_into();
+            let reward_back: u128 = reward.saturated_into();
+            assert_eq!(
+                reward_back, FULLNODE_BLOCK_REWARD,
+                "FULLNODE_BLOCK_REWARD must fit into runtime Balance"
+            );
+        }
+
         fn on_initialize(n: BlockNumberFor<T>) -> Weight {
             let block_number: u32 = n.into();
             if block_number >= FULLNODE_REWARD_START_BLOCK
@@ -212,7 +221,9 @@ pub mod pallet {
             };
 
             // 发放固定的全节点 PoW 铸块奖励
+            // 中文注释：奖励金额完全由制度常量决定，绑定表只决定“发给谁”，不影响“发多少”。
             let reward: BalanceOf<T> = FULLNODE_BLOCK_REWARD.saturated_into();
+            // 中文注释：deposit_creating 会在钱包尚未建户时自动建户，并同步增加总发行量。
             let _imbalance = T::Currency::deposit_creating(&wallet, reward);
             Self::deposit_event(Event::<T>::PowRewardIssued {
                 block: block_number,
@@ -358,7 +369,10 @@ mod tests {
 
             // 起始边界块 1 应发放奖励
             <FullnodePowReward as Hooks<u32>>::on_finalize(1);
-            assert_eq!(Balances::free_balance(wallet.clone()), primitives::pow_const::FULLNODE_BLOCK_REWARD);
+            assert_eq!(
+                Balances::free_balance(wallet.clone()),
+                primitives::pow_const::FULLNODE_BLOCK_REWARD
+            );
 
             let has_event = System::events().iter().any(|r| {
                 matches!(
@@ -516,7 +530,10 @@ mod tests {
                 RuntimeOrigin::signed(miner.clone()),
                 wallet2.clone()
             ));
-            assert_eq!(RewardWalletByMiner::<Test>::get(&miner), Some(wallet2.clone()));
+            assert_eq!(
+                RewardWalletByMiner::<Test>::get(&miner),
+                Some(wallet2.clone())
+            );
 
             let has_event = System::events().iter().any(|r| {
                 matches!(
@@ -591,8 +608,9 @@ mod tests {
             let w1 = <FullnodePowReward as Hooks<u32>>::on_initialize(1);
             assert_ne!(w1, Weight::zero());
 
-            let w_after =
-                <FullnodePowReward as Hooks<u32>>::on_initialize(primitives::pow_const::FULLNODE_REWARD_END_BLOCK + 1);
+            let w_after = <FullnodePowReward as Hooks<u32>>::on_initialize(
+                primitives::pow_const::FULLNODE_REWARD_END_BLOCK + 1,
+            );
             assert_eq!(w_after, Weight::zero());
         });
     }

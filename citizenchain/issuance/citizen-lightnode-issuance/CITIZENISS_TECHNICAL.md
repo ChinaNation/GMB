@@ -1,5 +1,27 @@
 # CITIZEN Lightnode Issuance Technical Notes
 
+## 0. 功能需求
+### 0.1 核心职责
+`citizen-lightnode-issuance` 的功能需求是：
+- 在 SFID 绑定成功后，按链上固定规则自动发放一次性“公民轻节点认证奖励”。
+- 奖励发放逻辑必须与 `sfid-code-auth` 解耦，由回调触发而非独立用户交易触发。
+- 奖励结果必须可审计，成功与跳过都要有事件。
+
+### 0.2 业务规则需求
+- 同一 SFID 只能领奖一次。
+- 同一账户只能领奖一次，即使后续换绑 SFID 也不能重复领奖。
+- 奖励人数总量不得超过 `CITIZEN_LIGHTNODE_MAX_COUNT`。
+- 前 `CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT` 人与其后用户使用不同奖励档位。
+- 模块不得提供人工补发、人工重试或人工改写领奖状态的外部治理入口，避免绕过一次性奖励约束。
+
+### 0.3 计重与接线需求
+- 模块不提供外部 extrinsic，全部逻辑由 `OnSfidBound` 回调驱动。
+- 模块必须向上游暴露 `on_sfid_bound_weight()`，供 `sfid-code-auth::bind_sfid` 叠加申报 weight。
+- weight 的单一真相源必须来自本模块自身，而不是由上游模块手写估算。
+- 上游只有在 SFID 绑定真正成功后才能触发奖励回调，模块自身不负责认证流程与身份校验。
+
+---
+
 ## 1. 模块定位
 `citizen-lightnode-issuance` 是一个 FRAME pallet，用于在 SFID 绑定成功后发放“公民轻节点认证奖励”。
 
@@ -21,6 +43,7 @@
 - `sfid-code-auth::bind_sfid` 成功后调用 `T::OnSfidBound::on_sfid_bound(&who, sfid_hash)`。
 - Runtime 中配置 `type OnSfidBound = CitizenLightnodeIssuance`：
   - `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs`
+  - `type WeightInfo = citizen_lightnode_issuance::weights::SubstrateWeight<Runtime>`
 
 Weight 集成：
 - `sfid-code-auth` 在 `bind_sfid` 的 weight 中，叠加 `T::OnSfidBound::on_sfid_bound_weight()`。
@@ -91,17 +114,25 @@ Weight 集成：
 本模块暴露：
 - `Pallet::on_sfid_bound_weight() -> Weight`
 - `OnSfidBoundWeight::on_sfid_bound_weight()`（委托到上述方法，单一真相源）
+- `WeightInfo::on_sfid_bound()`（由 runtime 注入）
 
 当前估算：
-- `T::DbWeight::get().reads_writes(5, 5)`（按最重成功路径保守估算）
+- `WeightInfo::on_sfid_bound()` 当前采用保守手写值，覆盖最重成功路径。
 
 说明：
 - 该值用于上游 `bind_sfid` 申报 weight 叠加。
-- 当前为估算法，后续可引入 benchmark 做精确化。
+- 模块现已提供 `runtime-benchmarks` 的成功路径 benchmark，用于后续替换手写值。
 
 ---
 
-## 8. 安全性与制度语义
+## 8. Benchmark 设计
+- benchmark 入口：`on_sfid_bound`
+- 覆盖口径：首次成功发奖路径（含 `deposit_creating`、计数写回、双重去重标记与事件）
+- 目的：校准上游 `bind_sfid` 叠加的回调 weight，而不是测用户交易本身
+
+---
+
+## 9. 安全性与制度语义
 - 双重防重：
   - SFID 级：同一 SFID 只能领取一次。
   - 账户级：同一账户只能领取一次（即使后续换绑 SFID）。
@@ -112,7 +143,7 @@ Weight 集成：
 
 ---
 
-## 9. 测试覆盖（当前）
+## 10. 测试覆盖（当前）
 `cargo test -p citizen-lightnode-issuance` 覆盖：
 - 首次绑定发放高额奖励
 - 达到 `MAX_COUNT` 后停止发放
@@ -126,7 +157,7 @@ Weight 集成：
 
 ---
 
-## 10. 运维与审计建议
+## 11. 运维与审计建议
 - 核查奖励问题时优先查看事件：
   - `CertificationRewardIssued`
   - `CertificationRewardSkipped`

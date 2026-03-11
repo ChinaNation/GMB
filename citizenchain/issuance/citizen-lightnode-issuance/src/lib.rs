@@ -1,5 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
+pub mod weights;
+
 pub use pallet::*;
 
 #[frame_support::pallet]
@@ -7,10 +11,11 @@ pub mod pallet {
     use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
     use frame_support::{pallet_prelude::*, traits::Currency, Blake2_128Concat};
     use scale_info::TypeInfo;
+    use sfid_code_auth::{OnSfidBound, OnSfidBoundWeight};
     use sp_runtime::traits::{SaturatedConversion, Zero};
     use sp_runtime::RuntimeDebug;
-    use sfid_code_auth::{OnSfidBound, OnSfidBoundWeight};
 
+    use crate::weights::WeightInfo;
     use primitives::citizen_const::{
         CITIZEN_LIGHTNODE_HIGH_REWARD, CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT,
         CITIZEN_LIGHTNODE_MAX_COUNT, CITIZEN_LIGHTNODE_NORMAL_REWARD,
@@ -32,6 +37,7 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         type Currency: Currency<Self::AccountId>;
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
     #[pallet::pallet]
@@ -39,14 +45,17 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn rewarded_count)]
+    /// 中文注释：全局累计已领奖人数，用于控制总发放上限与奖励档位切换。
     pub type RewardedCount<T> = StorageValue<_, u64, ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn reward_claimed)]
+    /// 中文注释：按 SFID 维度防重，确保同一认证标识不会重复领取奖励。
     pub type RewardClaimed<T: Config> = StorageMap<_, Blake2_128Concat, T::Hash, (), ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn account_rewarded)]
+    /// 中文注释：按账户维度再做一次防重，避免同一账户换绑 SFID 后再次领奖。
     pub type AccountRewarded<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, (), ValueQuery>;
 
@@ -93,14 +102,15 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 调用方在 weight 宏中引用此值。
         pub fn on_sfid_bound_weight() -> Weight {
-            // 最重成功路径: RewardClaimed + AccountRewarded + RewardedCount + Balances::deposit_creating。
-            T::DbWeight::get().reads_writes(5, 5)
+            // 中文注释：上游 bind_sfid 在申报 weight 时会叠加这里的回调预算。
+            T::WeightInfo::on_sfid_bound()
         }
 
         fn try_issue_certification_reward(
             who: &T::AccountId,
             sfid_hash: T::Hash,
         ) -> Result<BalanceOf<T>, SkipReason> {
+            // 中文注释：先查 SFID，再查账户，优先返回更贴近业务语义的跳过原因。
             if CITIZEN_LIGHTNODE_ONE_TIME_ONLY && RewardClaimed::<T>::contains_key(sfid_hash) {
                 return Err(SkipReason::DuplicateSfid);
             }
@@ -110,10 +120,12 @@ pub mod pallet {
             }
 
             let rewarded_count = RewardedCount::<T>::get();
+            // 中文注释：总人数达到上限后直接跳过，不再尝试铸币或写入任何领奖标记。
             if rewarded_count >= CITIZEN_LIGHTNODE_MAX_COUNT {
                 return Err(SkipReason::MaxCountReached);
             }
 
+            // 中文注释：奖励档位完全由全局累计人数决定，避免链下参与者各自推导口径不一致。
             let reward_amount = if rewarded_count < CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT {
                 CITIZEN_LIGHTNODE_HIGH_REWARD
             } else {
@@ -123,6 +135,7 @@ pub mod pallet {
             let reward: BalanceOf<T> = reward_amount.saturated_into();
             let _imbalance = T::Currency::deposit_creating(who, reward);
 
+            // 中文注释：只有铸币成功进入账本后，才推进累计人数并写入双重防重标记。
             RewardedCount::<T>::put(rewarded_count.saturating_add(1));
             if CITIZEN_LIGHTNODE_ONE_TIME_ONLY {
                 RewardClaimed::<T>::insert(sfid_hash, ());
@@ -235,6 +248,7 @@ mod tests {
     impl Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type Currency = Balances;
+        type WeightInfo = ();
     }
 
     fn new_test_ext() -> sp_io::TestExternalities {
@@ -261,13 +275,13 @@ mod tests {
             assert_eq!(RewardedCount::<Test>::get(), 1);
             assert!(RewardClaimed::<Test>::contains_key(sfid_hash));
             assert!(AccountRewarded::<Test>::contains_key(1));
-            System::assert_last_event(
-                RuntimeEvent::CitizenLightnodeIssuance(Event::<Test>::CertificationRewardIssued {
+            System::assert_last_event(RuntimeEvent::CitizenLightnodeIssuance(
+                Event::<Test>::CertificationRewardIssued {
                     who: 1,
                     sfid_hash,
                     reward: CITIZEN_LIGHTNODE_HIGH_REWARD,
-                }),
-            );
+                },
+            ));
         });
     }
 
@@ -284,13 +298,13 @@ mod tests {
 
             assert_eq!(Balances::free_balance(1), 0);
             assert_eq!(RewardedCount::<Test>::get(), CITIZEN_LIGHTNODE_MAX_COUNT);
-            System::assert_last_event(
-                RuntimeEvent::CitizenLightnodeIssuance(Event::<Test>::CertificationRewardSkipped {
+            System::assert_last_event(RuntimeEvent::CitizenLightnodeIssuance(
+                Event::<Test>::CertificationRewardSkipped {
                     who: 1,
                     sfid_hash,
                     reason: SkipReason::MaxCountReached,
-                }),
-            );
+                },
+            ));
         });
     }
 
@@ -310,13 +324,13 @@ mod tests {
 
             assert_eq!(Balances::free_balance(1), CITIZEN_LIGHTNODE_HIGH_REWARD);
             assert_eq!(RewardedCount::<Test>::get(), 1);
-            System::assert_last_event(
-                RuntimeEvent::CitizenLightnodeIssuance(Event::<Test>::CertificationRewardSkipped {
+            System::assert_last_event(RuntimeEvent::CitizenLightnodeIssuance(
+                Event::<Test>::CertificationRewardSkipped {
                     who: 1,
                     sfid_hash,
                     reason: SkipReason::DuplicateSfid,
-                }),
-            );
+                },
+            ));
         });
     }
 
@@ -351,13 +365,13 @@ mod tests {
             >>::on_sfid_bound(&1, sfid_hash);
 
             assert_eq!(Balances::free_balance(1), CITIZEN_LIGHTNODE_HIGH_REWARD);
-            System::assert_last_event(
-                RuntimeEvent::CitizenLightnodeIssuance(Event::<Test>::CertificationRewardIssued {
+            System::assert_last_event(RuntimeEvent::CitizenLightnodeIssuance(
+                Event::<Test>::CertificationRewardIssued {
                     who: 1,
                     sfid_hash,
                     reward: CITIZEN_LIGHTNODE_HIGH_REWARD,
-                }),
-            );
+                },
+            ));
         });
     }
 
@@ -399,13 +413,13 @@ mod tests {
 
             assert_eq!(Balances::free_balance(1), CITIZEN_LIGHTNODE_HIGH_REWARD);
             assert_eq!(RewardedCount::<Test>::get(), 1);
-            System::assert_last_event(
-                RuntimeEvent::CitizenLightnodeIssuance(Event::<Test>::CertificationRewardSkipped {
+            System::assert_last_event(RuntimeEvent::CitizenLightnodeIssuance(
+                Event::<Test>::CertificationRewardSkipped {
                     who: 1,
                     sfid_hash: sfid_hash_b,
                     reason: SkipReason::AccountAlreadyRewarded,
-                }),
-            );
+                },
+            ));
         });
     }
 }

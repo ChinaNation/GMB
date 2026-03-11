@@ -2,9 +2,9 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
+use crate::{pallet, Call, Config, Pallet};
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
-use crate::{pallet, Call, Config, Pallet};
 
 #[benchmarks]
 mod benchmarks {

@@ -916,10 +916,7 @@ mod tests {
     #[test]
     fn stake_sum_matches_population_basis() {
         // 中文注释：省储行创立发行按“每人 10_000 分”汇总。
-        let citizens_sum: u128 = CHINA_CH
-            .iter()
-            .map(|n| n.citizens_number as u128)
-            .sum();
+        let citizens_sum: u128 = CHINA_CH.iter().map(|n| n.citizens_number as u128).sum();
         let stake_sum: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
         assert_eq!(stake_sum, citizens_sum * 10_000u128);
     }
