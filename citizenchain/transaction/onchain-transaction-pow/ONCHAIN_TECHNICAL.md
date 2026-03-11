@@ -7,12 +7,42 @@
 - 支持按制度规则把手续费分配给全节点、国储会与黑洞销毁。
 - 支持代付账户与交易金额提取策略由 runtime 注入。
 
-### 0.2 资金安全需求
+### 0.2 功能边界
+- 本模块是运行时手续费适配 crate，不是独立 pallet，不维护自己的 storage。
+- 本模块不负责识别“哪些交易属于 PoW 交易”，该判断由 runtime 在 `CallAmount` / `CallFeePayer` 中注入。
+- 本模块不负责默认 weight fee、length fee、动态费率调整等 `pallet-transaction-payment` 常规策略，而是覆盖为“按业务金额收费”的制度模型。
+- 本模块不负责执行后退款；一旦扣费成功，最终只做分账与销毁，不回退已扣手续费。
+
+### 0.3 计费规则需求
+- 当 `CallAmount` 返回 `Amount(v)` 时，基础手续费必须按 `v * ONCHAIN_FEE_RATE` 计算，并按“分”四舍五入。
+- 当按比例计算结果低于 `ONCHAIN_MIN_FEE` 时，必须提升到最低费。
+- 当 `CallAmount` 返回 `NoAmount` 时，仅允许收取 tip，不收基础手续费。
+- 当 `CallAmount` 返回 `Unknown` 时，必须拒绝交易，避免制度内应收费交易被漏收。
+- 最终扣费金额必须等于 `base_fee + tip`，且 `can_withdraw_fee` 与 `withdraw_fee` 使用完全一致的计算口径。
+
+### 0.4 分账规则需求
+- 已扣手续费必须按常量 `ONCHAIN_FEE_FULLNODE_PERCENT`、`ONCHAIN_FEE_NRC_PERCENT`、`ONCHAIN_FEE_BLACKHOLE_PERCENT` 分配。
+- 全节点分成必须仅发给“当前区块作者绑定的钱包地址”；若作者不存在或未绑定钱包，该份额必须销毁。
+- 国储会分成必须仅发给 `NrcAccountProvider` 提供的账户；若账户缺失或无法入账，该份额必须销毁。
+- 黑洞分成必须直接销毁，不得转入任何中间地址或保留地址。
+- tip 与基础手续费必须走同一条 Router 分账路径，避免出现两套分账口径。
+
+### 0.5 资金安全需求
 - 任何分账失败都不能把手续费错误打给未知账户。
 - 作者缺失、奖励钱包未绑定、NRC 账户缺失等异常场景必须安全退化为销毁并留下日志。
 - 协议明确不做执行后退款，`correct_and_deposit_fee` 只负责最终分账。
 
-### 0.3 Benchmark 需求
+### 0.6 可配置与可扩展需求
+- Runtime 必须可以替换交易金额提取逻辑（`CallAmount`）。
+- Runtime 必须可以替换代付账户判定逻辑（`CallFeePayer`）。
+- Runtime 必须可以替换 NRC 收款账户来源（`NrcAccountProvider`）。
+- Runtime 必须可以替换块作者识别逻辑（`FindAuthor`）。
+
+### 0.7 可观测性需求
+- 对作者缺失、钱包未绑定、NRC 账户缺失、resolve 失败等异常场景，模块必须输出 `runtime::onchain_transaction_pow` 目标日志。
+- 日志必须能够区分“全节点份额销毁”和“NRC 份额销毁”的原因，便于运维排障。
+
+### 0.8 Benchmark 需求
 - 本模块不是 FRAME pallet，因此不进入 runtime 的 `define_benchmarks!` 注册表。
 - 需要提供专项 benchmark，覆盖：
   - 扣费热路径（计算费用 + 扣费 + 分账）
@@ -122,7 +152,7 @@
   - `onchain_fee_charge_transaction_amount_path`
   - `onchain_fee_router_distribution_success`
 - 执行命令：
-  - `cargo bench -p onchain-transaction-fee --bench transaction_fee_paths`
+  - `cargo bench -p onchain-transaction-pow --bench transaction_fee_paths`
 - 说明：
   - 这里不是标准 pallet benchmark，而是针对交易扣费与分账热路径的专项性能验证。
 
@@ -141,7 +171,7 @@
 - tip 与 fee 合并后按同一比例分配
 
 执行命令：
-- `cargo test -p onchain-transaction-fee`
+- `cargo test -p onchain-transaction-pow`
 
 ---
 

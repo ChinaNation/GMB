@@ -17,6 +17,7 @@ pub trait SfidEligibility<AccountId, Hash> {
     ) -> bool;
 
     /// 清理某个联合/公民提案对应的投票凭证防重放状态。
+    /// 默认由投票引擎在提案进入终态时自动触发，业务模块无需再手工补调。
     fn cleanup_vote_credentials(_proposal_id: u64) {}
 }
 

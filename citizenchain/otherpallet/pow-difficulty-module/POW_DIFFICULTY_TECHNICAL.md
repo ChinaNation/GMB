@@ -1,25 +1,44 @@
 # PoW Difficulty Module Technical Notes
 
 ## 0. 功能需求
-### 0.1 核心职责
-`pow-difficulty-module` 的功能需求是：
-- 链上保存当前 PoW 挖矿难度，供 Runtime API 与节点侧共识逻辑读取。
-- 难度必须按固定窗口自动调整，不能每块抖动。
-- 调整结果必须落链并可通过事件审计。
+### 0.1 模块职责
+`pow-difficulty-module` 在一期链路中的功能需求是：
+- 作为 PoW 共识难度的链上唯一来源，维护当前生效难度值。
+- 通过 Runtime API 向节点挖矿与验块逻辑提供可读取的最新难度。
+- 采用窗口化调整而不是逐块调整，避免难度随短期抖动来回摆动。
+- 把每次难度变更落链并产生审计事件，便于运维和事后追溯。
 
-### 0.2 调整规则需求
-- 首个有效窗口必须从 `block 1` 开始，到 `interval + 1` 首次结算。
+### 0.2 状态与不变量需求
+- `CurrentDifficulty` 必须始终表示一个正数难度值，正常运行中不得写入 0。
+- `WindowStartMs` 用于记录当前调整窗口的起点时间；仅在窗口尚未建立时允许为空。
+- 模块不提供外部 extrinsic，外部账户不能直接改写难度或窗口状态。
+- 出现迁移异常、脏状态或历史遗留数据时，模块不得因为异常存储值直接 panic 停链。
+
+### 0.3 难度调整规则需求
+- 首个有效窗口必须从 `block 1` 的时间戳开始，在 `block(interval + 1)` 首次结算。
+- 每个窗口只允许结算一次；结算完成后必须立即把当前调整块时间戳推进为下一窗口起点。
 - 新难度必须按 `old_difficulty * target_window_ms / actual_window_ms` 计算。
-- 单次调整幅度必须限制在 `[old/4, old*4]` 区间内。
-- 极端情况下不得因为算术溢出、分母为 0 或强转回绕导致异常难度值。
+- 单次调整幅度必须限制在 `[old/4, old*4]` 区间内，避免因极端算力或时间抖动导致剧烈跳变。
+- 难度调整只依赖窗口首尾时间点，因此时间戳制度本身必须可靠；本模块不负责额外校正时间源。
 
-### 0.3 生命周期与计重需求
-- 模块不提供外部 extrinsic，全部逻辑由 hook 驱动。
+### 0.4 安全与鲁棒性需求
+- 任何情况下都不得因为分母为 0、整数溢出或 `u128 -> u64` 强转回绕生成异常难度值。
+- 即便当前窗口耗时极小或极大，输出也必须被夹紧到制度允许范围内。
+- 即便存储中的旧难度异常为 0，模块也必须优先自修复到最小正难度，而不是在调整块触发 panic。
+- 若窗口状态缺失导致本轮无法结算，模块至少要保持链继续出块，并重建下一窗口起点。
+
+### 0.5 生命周期与计重需求
+- 业务逻辑全部由 `on_initialize` 和 `on_finalize` 驱动，不能依赖人工触发。
 - `on_finalize` 必须在读取到当前块时间戳后执行难度调整。
-- Runtime 必须在 `on_initialize` 预申报对应区块路径的 weight，覆盖：
+- `on_initialize` 必须按真实执行路径预申报预算，至少覆盖：
   - 调整块路径
   - 首次建立窗口路径
   - 普通空转路径
+
+### 0.6 集成与可观测性需求
+- Runtime 必须挂载本 pallet，并向节点暴露 `PowDifficultyApi::current_pow_difficulty()`。
+- 节点侧获取 Runtime API 失败时，可回退到初始难度启动，但正常运行应以链上值为准。
+- 运维侧必须能够通过 `DifficultyAdjusted` 事件观察窗口耗时、旧难度和新难度的变化轨迹。
 
 ---
 
@@ -164,12 +183,13 @@ new_difficulty_raw = old_difficulty * target_window_ms / actual_window_ms
 ---
 
 ## 9. 测试覆盖（当前）
-`cargo test -p pow-difficulty-module` 当前覆盖 7 项：
+`cargo test -p pow-difficulty-module` 当前覆盖 8 项：
 - `first_adjustment_happens_at_interval_plus_one_and_window_is_exact`
 - `raises_difficulty_when_blocks_are_too_fast`
 - `lowers_difficulty_when_blocks_are_too_slow`
 - `clamps_to_adjustment_bounds`
 - `saturating_cast_prevents_u128_to_u64_wraparound`
+- `zero_difficulty_storage_is_repaired_without_panic`
 - `test_genesis_config_builds`
 - `runtime_integrity_tests`
 

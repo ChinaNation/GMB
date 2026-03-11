@@ -216,6 +216,9 @@ pub mod pallet {
         bool,
         ValueQuery,
     >;
+    // 中文注释：该存储按“提案维度”累计已消费的投票 nonce。
+    // `voting-engine-system` 会在联合/公民提案进入终态时自动调用
+    // `cleanup_vote_credentials(proposal_id)` 清空对应前缀，避免历史提案持续占用状态。
 
     /// 中文注释：SFID 当前主账户（用于 SFID 码验签）。
     #[pallet::storage]
@@ -423,12 +426,16 @@ pub mod pallet {
                 return Err(Error::<T>::SameSfidAlreadyBound.into());
             }
 
+            // 中文注释：账户允许“换绑”到新的 SFID，但换绑只释放旧映射，不减少绑定人数；
+            // BoundCount 表示当前已绑定账户数，而不是历史累计绑定次数。
             if let Some(old_sfid_hash) = AccountToSfid::<T>::get(&who) {
                 SfidToAccount::<T>::remove(old_sfid_hash);
             } else {
                 BoundCount::<T>::mutate(|v| *v = v.saturating_add(1));
             }
 
+            // 中文注释：先把 nonce 注册到按过期高度分桶的索引中，再写入主防重放表，
+            // 保证后续 `on_initialize` 能按块预算回收已过期绑定凭证。
             CredentialNoncesByExpiry::<T>::try_mutate(
                 credential.expires_at,
                 |nonces_by_expiry| -> Result<(), Error<T>> {
@@ -442,6 +449,8 @@ pub mod pallet {
             AccountToSfid::<T>::insert(&who, sfid_hash);
             UsedCredentialNonce::<T>::insert(nonce_hash, credential.expires_at);
 
+            // 中文注释：绑定关系先落链再触发上游回调，
+            // 这样发行/治理模块读取到的一定是最新绑定状态。
             T::OnSfidBound::on_sfid_bound(&who, sfid_hash);
 
             Self::deposit_event(Event::<T>::SfidBound {
@@ -522,6 +531,7 @@ pub mod pallet {
             for nonce_hash in nonce_hashes.drain(..remove_count) {
                 UsedCredentialNonce::<T>::remove(nonce_hash);
             }
+            // 中文注释：逐个删除主防重放表中的 nonce 哈希，避免一次性清理超出区块预算。
             weight = weight.saturating_add(db_weight.writes(remove_count as u64));
 
             let has_remaining = !nonce_hashes.is_empty();
@@ -551,6 +561,9 @@ pub mod pallet {
         pub fn current_sfid_verify_pubkey() -> Option<[u8; 32]> {
             let main = SfidMainAccount::<T>::get()?;
             let encoded = main.encode();
+            // 中文注释：当前 Runtime 的 AccountId 实际为 32 字节公钥容器。
+            // 若未来切换为非 32 字节账户格式，这里会返回 None，并导致验签统一失败；
+            // 届时必须同步调整 Runtime verifier 的公钥提取方式。
             if encoded.len() != 32 {
                 return None;
             }
@@ -610,6 +623,8 @@ pub mod pallet {
         }
 
         fn cleanup_vote_credentials(proposal_id: u64) {
+            // 中文注释：投票引擎在提案终态时会自动走到这里；保留该接口也方便
+            // 上层在删除历史提案快照时做显式兜底清理。
             let clear_result = UsedVoteNonce::<T>::clear_prefix(proposal_id, u32::MAX, None);
             debug_assert!(
                 clear_result.maybe_cursor.is_none(),

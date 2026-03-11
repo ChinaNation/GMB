@@ -66,8 +66,8 @@ case "$MODE" in
     run_step "cargo test runtime package" cargo test -p gmb-runtime -q
     run_step "cargo test voting-engine-system package" cargo test -p voting-engine-system -q
     run_step "cargo test sfid-code-auth package" cargo test -p sfid-code-auth -q
-    run_step "cargo test onchain-transaction-fee package" cargo test -p onchain-transaction-fee -q
-    run_step "cargo test offchain-transaction-fee package" cargo test -p offchain-transaction-fee -q
+    run_step "cargo test onchain-transaction-pow package" cargo test -p onchain-transaction-pow -q
+    run_step "cargo test offchain-transaction-pos package" cargo test -p offchain-transaction-pos -q
     log "full 模式结束（包含关键模块回归）"
     ;;
 

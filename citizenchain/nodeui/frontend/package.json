@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "pretauri:dev": "bash ../../../.github/scripts/prepare-nodeui-sidecar.sh",
     "tauri:dev": "cd .. && tauri dev -c backend/tauri.conf.json",
+    "pretauri:build": "bash ../../../.github/scripts/prepare-nodeui-sidecar.sh",
     "tauri:build": "cd .. && tauri build -c backend/tauri.conf.json"
   },
   "dependencies": {

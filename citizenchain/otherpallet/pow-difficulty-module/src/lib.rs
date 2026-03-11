@@ -14,6 +14,7 @@
 //! - 窗口起始时间戳在调整周期首块的 on_finalize 中记录（此时 pallet_timestamp 已完成时间戳注入）。
 //! - 窗口终止时间戳在调整周期末块的 on_finalize 中读取并触发调整。
 //! - 节点层通过 PowDifficultyApi Runtime API 读取当前链上难度，替代固定常量。
+//! - 当前算法只取窗口首尾两个时间点，不对窗口内每一块做采样；因此制度安全仍依赖时间戳 inherent 的有效性。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -58,6 +59,7 @@ pub mod pallet {
     // ─── Storage ──────────────────────────────────────────────────────────────
 
     /// 当前 PoW 挖矿难度值。创世时为 POW_INITIAL_DIFFICULTY，此后由调整算法自动维护。
+    /// 正常路径下该值必须始终大于 0；若迁移/脏状态把它写成 0，on_finalize 会兜底修复到至少 1。
     #[pallet::storage]
     #[pallet::getter(fn current_difficulty)]
     pub type CurrentDifficulty<T> = StorageValue<_, u64, ValueQuery, DefaultInitialDifficulty>;
@@ -102,6 +104,7 @@ pub mod pallet {
             }
 
             let interval = DIFFICULTY_ADJUSTMENT_INTERVAL;
+            // 中文注释：首个调整块是 interval + 1，因为窗口从 block 1 的时间戳开始计时。
             let is_adjustment_block = block_num > 1 && (block_num - 1) % interval == 0;
 
             if is_adjustment_block {
@@ -137,17 +140,21 @@ pub mod pallet {
                     let actual_window_ms = now_ms.saturating_sub(start_ms).max(1);
                     let target_window_ms = DIFFICULTY_TARGET_WINDOW_MS;
                     let old_difficulty = CurrentDifficulty::<T>::get();
+                    // 中文注释：正常情况下 old_difficulty 不会为 0；这里做兜底是为了防止
+                    // 迁移错误或脏状态把 clamp 的上下界反转，进而在调整块上触发 panic。
+                    let calc_difficulty = old_difficulty.max(1);
 
                     // 新难度 = 旧难度 × (目标时间 / 实际时间)
                     // 出块过快 → actual < target → 新难度升高（更难挖）
                     // 出块过慢 → actual > target → 新难度降低（更易挖）
-                    let new_diff_u128 = (old_difficulty as u128)
+                    let new_diff_u128 = (calc_difficulty as u128)
                         .saturating_mul(target_window_ms as u128)
                         / actual_window_ms as u128;
 
-                    // 单次调整幅度限制：[old/4, old×4]
-                    let max_diff = old_difficulty.saturating_mul(DIFFICULTY_MAX_ADJUST_FACTOR);
-                    let min_diff = (old_difficulty / DIFFICULTY_MIN_ADJUST_FACTOR).max(1);
+                    // 中文注释：单次调整幅度限制按“参与计算的安全难度”夹紧；
+                    // 即便存储里出现 0，也只会被修复为 >= 1，而不会把链直接打崩。
+                    let max_diff = calc_difficulty.saturating_mul(DIFFICULTY_MAX_ADJUST_FACTOR);
+                    let min_diff = (calc_difficulty / DIFFICULTY_MIN_ADJUST_FACTOR).max(1);
                     let new_diff = new_diff_u128.saturated_into::<u64>();
                     let new_difficulty = new_diff.clamp(min_diff, max_diff);
 
@@ -338,6 +345,27 @@ mod tests {
             PowDifficulty::on_finalize(FIRST_ADJUST_BLOCK);
 
             assert_eq!(PowDifficulty::current_difficulty(), u64::MAX);
+        });
+    }
+
+    #[test]
+    fn zero_difficulty_storage_is_repaired_without_panic() {
+        new_test_ext().execute_with(|| {
+            CurrentDifficulty::<Test>::put(0);
+            WindowStartMs::<Test>::put(0);
+            System::set_block_number(FIRST_ADJUST_BLOCK);
+            Timestamp::set_timestamp(DIFFICULTY_TARGET_WINDOW_MS);
+
+            PowDifficulty::on_finalize(FIRST_ADJUST_BLOCK);
+
+            assert_eq!(PowDifficulty::current_difficulty(), 1);
+            System::assert_last_event(RuntimeEvent::PowDifficulty(Event::DifficultyAdjusted {
+                block: FIRST_ADJUST_BLOCK,
+                old_difficulty: 0,
+                new_difficulty: 1,
+                actual_window_ms: DIFFICULTY_TARGET_WINDOW_MS,
+                target_window_ms: DIFFICULTY_TARGET_WINDOW_MS,
+            }));
         });
     }
 }

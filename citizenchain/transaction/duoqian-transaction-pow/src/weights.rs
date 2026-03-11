@@ -6,8 +6,11 @@ use frame_support::weights::Weight;
 
 /// 权重接口：由 runtime 注入实现。
 pub trait WeightInfo {
+    /// 机构登记开销主要来自双向映射写入与地址派生。
     fn register_sfid_institution() -> Weight;
+    /// 创建开销随管理员数量和提交的审批签名数量线性增长。
     fn create_duoqian(admin_count: u32, approval_count: u32) -> Weight;
+    /// 注销开销同样受管理员数量和审批签名数量影响。
     fn close_duoqian(admin_count: u32, approval_count: u32) -> Weight;
 }
 
