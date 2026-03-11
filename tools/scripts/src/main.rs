@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 use primitives::{
-    genesis::{GENESIS_DEV_ACCOUNT_SS58, GENESIS_DEV_ALLOCATION, GENESIS_ISSUANCE},
     china::china_cb::CHINA_CB,
     china::china_ch::CHINA_CH,
+    genesis::{GENESIS_DEV_ACCOUNT_SS58, GENESIS_DEV_ALLOCATION, GENESIS_ISSUANCE},
 };
 use serde_json::{json, Value};
 use sp_core::{

@@ -1,6 +1,25 @@
 # SFID Code Auth Technical Notes
 
-## 0. Runtime 对齐基线（冻结）
+## 0. 功能需求
+### 0.1 核心职责
+`sfid-code-auth` 的功能需求是：
+- 维护 SFID 与链上账户的一对一绑定关系。
+- 为公民投票提供基于 SFID 的资格校验与投票凭证验签能力。
+- 维护 SFID 验签主备账户，并支持受限轮换。
+
+### 0.2 绑定与解绑需求
+- 绑定时不得保存 SFID 明文，只保存 `sfid_hash`。
+- 同一 SFID 同一时刻只能绑定到一个账户。
+- 同一账户允许换绑，但旧映射必须原子释放。
+- 绑定凭证 nonce 必须防重放，并按过期块高回收。
+
+### 0.3 投票资格需求
+- 投票资格校验必须以链上绑定关系为真值。
+- 投票凭证摘要算法统一为 `blake2_256(scale_encode(payload))`。
+- 投票签名算法统一为 `sr25519`。
+- 每个 `(proposal_id, sfid_hash, nonce_hash)` 只能使用一次。
+
+### 0.4 Runtime 对齐基线（冻结）
 1. 以链上 Runtime 为唯一验签真值。
 2. 功能 1/2/3 的摘要算法统一为 `blake2_256(scale_encode(payload))`，签名算法统一为 `sr25519`。
 3. Runtime 绑定点（代码锚点）：

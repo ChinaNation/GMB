@@ -23,7 +23,9 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
         Weight::from_parts(120_000_000, 4_096)
             .saturating_add(Weight::from_parts(20_000_000, 256).saturating_mul(allocation_count))
             .saturating_add(Weight::from_parts(40_000, 1).saturating_mul(reason_len))
-            .saturating_add(T::DbWeight::get().reads_writes(4 + allocation_count, 5 + allocation_count))
+            .saturating_add(
+                T::DbWeight::get().reads_writes(4 + allocation_count, 5 + allocation_count),
+            )
     }
 
     fn clear_executed() -> Weight {
@@ -43,7 +45,9 @@ impl WeightInfo for () {
         Weight::from_parts(120_000_000, 4_096)
             .saturating_add(Weight::from_parts(20_000_000, 256).saturating_mul(allocation_count))
             .saturating_add(Weight::from_parts(40_000, 1).saturating_mul(reason_len))
-            .saturating_add(RocksDbWeight::get().reads_writes(4 + allocation_count, 5 + allocation_count))
+            .saturating_add(
+                RocksDbWeight::get().reads_writes(4 + allocation_count, 5 + allocation_count),
+            )
     }
 
     fn clear_executed() -> Weight {

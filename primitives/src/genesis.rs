@@ -12,5 +12,4 @@ pub const GENESIS_ISSUANCE: u128 = 14_434_973_780_000; // 每人100元的创世�
 
 /// 四、创世开发账户（单位：分）
 pub const GENESIS_DEV_ALLOCATION: u128 = 1_000_000_000; // 创世时开发账户初始余额：10,000,000.00 元
-pub const GENESIS_DEV_ACCOUNT_SS58: &str =
-    "w5Gyz7cNSa4UPqvwC1L4UPCcJwdFbZHt7TL1CCwWyxzDuYCnS"; // 主网开发账户地址
+pub const GENESIS_DEV_ACCOUNT_SS58: &str = "w5Gyz7cNSa4UPqvwC1L4UPCcJwdFbZHt7TL1CCwWyxzDuYCnS"; // 主网开发账户地址

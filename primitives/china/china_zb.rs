@@ -284,5 +284,7 @@ pub const CHINA_RESERVED_DUOQIAN_ADDRESSES: &[[u8; 32]; 277] = &[
 ];
 
 pub fn is_reserved_duoqian_address(address: &[u8; 32]) -> bool {
-    CHINA_RESERVED_DUOQIAN_ADDRESSES.iter().any(|a| a == address)
+    CHINA_RESERVED_DUOQIAN_ADDRESSES
+        .iter()
+        .any(|a| a == address)
 }

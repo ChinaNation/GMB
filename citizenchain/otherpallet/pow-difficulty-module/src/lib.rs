@@ -17,6 +17,10 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
+pub mod weights;
+
 pub use pallet::*;
 
 // PoW 难度 Runtime API：节点层 SimplePow::difficulty() 通过此接口读取链上实时难度。
@@ -37,6 +41,8 @@ pub mod pallet {
     };
     use sp_runtime::traits::SaturatedConversion;
 
+    use crate::weights::WeightInfo as PowDifficultyWeightInfo;
+
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
@@ -45,7 +51,9 @@ pub mod pallet {
     #[pallet::config]
     pub trait Config:
         frame_system::Config<RuntimeEvent: From<Event<Self>>> + pallet_timestamp::Config
-    {}
+    {
+        type WeightInfo: crate::weights::WeightInfo;
+    }
 
     // ─── Storage ──────────────────────────────────────────────────────────────
 
@@ -87,6 +95,25 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+            let block_num: u32 = n.saturated_into();
+            if block_num == 0 {
+                return Weight::zero();
+            }
+
+            let interval = DIFFICULTY_ADJUSTMENT_INTERVAL;
+            let is_adjustment_block = block_num > 1 && (block_num - 1) % interval == 0;
+
+            if is_adjustment_block {
+                // 中文注释：实际重活在 on_finalize，但 FRAME 只能在 on_initialize 预申报预算。
+                <T as Config>::WeightInfo::on_initialize_adjustment()
+            } else if WindowStartMs::<T>::get().is_none() {
+                <T as Config>::WeightInfo::on_initialize_start_window()
+            } else {
+                <T as Config>::WeightInfo::on_initialize_idle()
+            }
+        }
+
         /// on_finalize 在 pallet_timestamp 的时间戳注入（inherent）之后执行，
         /// 因此可安全调用 pallet_timestamp::Pallet::<T>::now() 获取当前块时间戳。
         fn on_finalize(n: BlockNumberFor<T>) {
@@ -199,7 +226,9 @@ mod tests {
         type WeightInfo = ();
     }
 
-    impl Config for Test {}
+    impl Config for Test {
+        type WeightInfo = ();
+    }
 
     fn new_test_ext() -> sp_io::TestExternalities {
         let storage = frame_system::GenesisConfig::<Test>::default()

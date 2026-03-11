@@ -1,5 +1,25 @@
 # ONCHAIN Transaction Pow Technical Notes
 
+## 0. 功能需求
+### 0.1 核心职责
+`onchain-transaction-pow` 的功能需求是：
+- 对链上 PoW 交易按“交易金额 + 最低费”规则收取手续费。
+- 支持按制度规则把手续费分配给全节点、国储会与黑洞销毁。
+- 支持代付账户与交易金额提取策略由 runtime 注入。
+
+### 0.2 资金安全需求
+- 任何分账失败都不能把手续费错误打给未知账户。
+- 作者缺失、奖励钱包未绑定、NRC 账户缺失等异常场景必须安全退化为销毁并留下日志。
+- 协议明确不做执行后退款，`correct_and_deposit_fee` 只负责最终分账。
+
+### 0.3 Benchmark 需求
+- 本模块不是 FRAME pallet，因此不进入 runtime 的 `define_benchmarks!` 注册表。
+- 需要提供专项 benchmark，覆盖：
+  - 扣费热路径（计算费用 + 扣费 + 分账）
+  - Router 分账热路径
+
+---
+
 ## 1. 模块定位
 `onchain-transaction-pow` 是运行时手续费适配模块（crate），不是 FRAME pallet。  
 它提供两类核心能力：
@@ -96,7 +116,19 @@
 
 ---
 
-## 8. 测试覆盖（当前）
+## 8. 专项 Benchmark
+- 本模块新增独立 benchmark harness：`benches/transaction_fee_paths.rs`
+- 基准用例：
+  - `onchain_fee_charge_transaction_amount_path`
+  - `onchain_fee_router_distribution_success`
+- 执行命令：
+  - `cargo bench -p onchain-transaction-fee --bench transaction_fee_paths`
+- 说明：
+  - 这里不是标准 pallet benchmark，而是针对交易扣费与分账热路径的专项性能验证。
+
+---
+
+## 9. 测试覆盖（当前）
 当前单测覆盖 14 项，包含：
 - 费率四舍五入与最低费
 - `Amount/NoAmount/Unknown` 三类金额提取行为
@@ -113,7 +145,7 @@
 
 ---
 
-## 9. 运维排障建议
+## 10. 运维排障建议
 关注日志目标：`runtime::onchain_transaction_pow`
 
 常见告警含义：

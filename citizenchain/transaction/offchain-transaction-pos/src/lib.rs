@@ -914,7 +914,7 @@ pub mod pallet {
         /// - 执行时主金额 payer->recipient，链下手续费 payer->fee_pallet_address；
         /// - 本次上链交易的链上手续费由 fee_pallet_address 自动承担。
         #[pallet::call_index(0)]
-        #[pallet::weight(T::WeightInfo::submit_offchain_batch(T::MaxBatchSize::get()))]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::submit_offchain_batch(T::MaxBatchSize::get()))]
         pub fn submit_offchain_batch(
             origin: OriginFor<T>,
             institution: InstitutionPalletId,
@@ -1088,7 +1088,7 @@ pub mod pallet {
 
         /// 将批次持久化进入出队队列（先落库，再由中继账户反复重试打包）。
         #[pallet::call_index(10)]
-        #[pallet::weight(T::WeightInfo::enqueue_offchain_batch(T::MaxBatchSize::get()))]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::enqueue_offchain_batch(T::MaxBatchSize::get()))]
         pub fn enqueue_offchain_batch(
             origin: OriginFor<T>,
             institution: InstitutionPalletId,
@@ -1185,7 +1185,7 @@ pub mod pallet {
 
         /// 从持久化队列出队并执行；失败不丢队列，记录重试次数并可继续重试。
         #[pallet::call_index(11)]
-        #[pallet::weight(T::WeightInfo::process_queued_batch(T::MaxBatchSize::get()))]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::process_queued_batch(T::MaxBatchSize::get()))]
         pub fn process_queued_batch(origin: OriginFor<T>, queue_id: u64) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             let mut queued =
@@ -3085,6 +3085,7 @@ mod tests {
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
+        type WeightInfo = ();
     }
 
     pub struct TestOffchainBatchVerifier;

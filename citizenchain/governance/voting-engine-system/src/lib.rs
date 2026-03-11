@@ -1,20 +1,18 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+mod benchmarks;
 pub mod citizen_vote;
 pub mod internal_vote;
 pub mod joint_vote;
+pub mod weights;
 
 pub use citizen_vote::SfidEligibility;
 pub use pallet::*;
 
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{
-    dispatch::DispatchResult,
-    weights::{constants::RocksDbWeight, Weight},
-};
+use frame_support::dispatch::DispatchResult;
 use scale_info::TypeInfo;
 use sp_runtime::DispatchError;
-use sp_std::marker::PhantomData;
 
 pub type InstitutionPalletId = [u8; 48];
 
@@ -190,74 +188,11 @@ pub mod pallet {
 
         type JointVoteResultCallback: JointVoteResultCallback;
         type InternalAdminProvider: InternalAdminProvider<Self::AccountId>;
+
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
-    pub trait WeightInfo {
-        fn create_internal_proposal() -> Weight;
-        fn submit_joint_institution_vote() -> Weight;
-        fn citizen_vote() -> Weight;
-        fn finalize_proposal_internal() -> Weight;
-        fn finalize_proposal_joint() -> Weight;
-        fn finalize_proposal_citizen() -> Weight;
-    }
-
-    pub struct SubstrateWeight<T>(PhantomData<T>);
-
-    impl<T: Config> WeightInfo for SubstrateWeight<T> {
-        fn create_internal_proposal() -> Weight {
-            T::DbWeight::get().reads_writes(2, 2)
-        }
-
-        fn submit_joint_institution_vote() -> Weight {
-            // 最坏路径含阶段推进与联合回调估算。
-            T::DbWeight::get().reads_writes(8, 6)
-        }
-
-        fn citizen_vote() -> Weight {
-            // 最坏路径含提案通过后的联合回调估算。
-            T::DbWeight::get().reads_writes(9, 4)
-        }
-
-        fn finalize_proposal_internal() -> Weight {
-            T::DbWeight::get().reads_writes(3, 1)
-        }
-
-        fn finalize_proposal_joint() -> Weight {
-            // 最坏路径含推进到公民阶段或联合回调估算。
-            T::DbWeight::get().reads_writes(8, 3)
-        }
-
-        fn finalize_proposal_citizen() -> Weight {
-            // 最坏路径含联合回调估算。
-            T::DbWeight::get().reads_writes(7, 2)
-        }
-    }
-
-    impl WeightInfo for () {
-        fn create_internal_proposal() -> Weight {
-            RocksDbWeight::get().reads_writes(2, 2)
-        }
-
-        fn submit_joint_institution_vote() -> Weight {
-            RocksDbWeight::get().reads_writes(8, 6)
-        }
-
-        fn citizen_vote() -> Weight {
-            RocksDbWeight::get().reads_writes(9, 4)
-        }
-
-        fn finalize_proposal_internal() -> Weight {
-            RocksDbWeight::get().reads_writes(3, 1)
-        }
-
-        fn finalize_proposal_joint() -> Weight {
-            RocksDbWeight::get().reads_writes(8, 3)
-        }
-
-        fn finalize_proposal_citizen() -> Weight {
-            RocksDbWeight::get().reads_writes(7, 2)
-        }
-    }
+    use crate::weights::WeightInfo;
 
     pub type VoteNonceOf<T> = BoundedVec<u8, <T as Config>::MaxVoteNonceLength>;
     pub type VoteSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxVoteSignatureLength>;
@@ -474,7 +409,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(3)]
-        #[pallet::weight(SubstrateWeight::<T>::submit_joint_institution_vote())]
+        #[pallet::weight(T::WeightInfo::submit_joint_institution_vote())]
         pub fn submit_joint_institution_vote(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -486,7 +421,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(4)]
-        #[pallet::weight(SubstrateWeight::<T>::citizen_vote())]
+        #[pallet::weight(T::WeightInfo::citizen_vote())]
         pub fn citizen_vote(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -501,9 +436,9 @@ pub mod pallet {
 
         #[pallet::call_index(5)]
         #[pallet::weight(
-            SubstrateWeight::<T>::finalize_proposal_internal()
-                .max(SubstrateWeight::<T>::finalize_proposal_joint())
-                .max(SubstrateWeight::<T>::finalize_proposal_citizen())
+            T::WeightInfo::finalize_proposal_internal()
+                .max(T::WeightInfo::finalize_proposal_joint())
+                .max(T::WeightInfo::finalize_proposal_citizen())
         )]
         pub fn finalize_proposal(
             origin: OriginFor<T>,
@@ -515,15 +450,15 @@ pub mod pallet {
             let actual_weight = match proposal.stage {
                 STAGE_INTERNAL => {
                     Self::do_finalize_internal_timeout(&proposal, proposal_id)?;
-                    SubstrateWeight::<T>::finalize_proposal_internal()
+                    T::WeightInfo::finalize_proposal_internal()
                 }
                 STAGE_JOINT => {
                     Self::do_finalize_joint_timeout(&proposal, proposal_id)?;
-                    SubstrateWeight::<T>::finalize_proposal_joint()
+                    T::WeightInfo::finalize_proposal_joint()
                 }
                 STAGE_CITIZEN => {
                     Self::do_finalize_citizen_timeout(&proposal, proposal_id)?;
-                    SubstrateWeight::<T>::finalize_proposal_citizen()
+                    T::WeightInfo::finalize_proposal_citizen()
                 }
                 _ => return Err(Error::<T>::InvalidProposalStage.into()),
             };
@@ -582,9 +517,9 @@ pub mod pallet {
                 weight = weight.saturating_add(db_weight.writes(1));
             }
 
-            let per_finalize_weight = SubstrateWeight::<T>::finalize_proposal_internal()
-                .max(SubstrateWeight::<T>::finalize_proposal_joint())
-                .max(SubstrateWeight::<T>::finalize_proposal_citizen());
+            let per_finalize_weight = T::WeightInfo::finalize_proposal_internal()
+                .max(T::WeightInfo::finalize_proposal_joint())
+                .max(T::WeightInfo::finalize_proposal_citizen());
             let finalize_weight = per_finalize_weight.saturating_mul(process_count as u64);
             weight = weight.saturating_add(finalize_weight);
 
@@ -724,206 +659,6 @@ impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
     }
 }
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking {
-    use super::*;
-    use codec::Decode;
-    use frame_benchmarking::v2::*;
-    use primitives::china::china_cb::{
-        shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
-    };
-    use sp_runtime::traits::{Hash as HashT, SaturatedConversion, Saturating};
-
-    fn decode_account<T: pallet::Config>(raw: [u8; 32]) -> T::AccountId {
-        T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
-    }
-
-    fn nrc_institution() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
-            .expect("NRC institution id should decode")
-    }
-
-    #[benchmarks]
-    mod benchmarks {
-        use super::*;
-
-        #[benchmark]
-        fn create_internal_proposal() {
-            pallet::NextProposalId::<T>::put(0u64);
-            let now = frame_system::Pallet::<T>::block_number();
-            let proposal = Proposal {
-                kind: PROPOSAL_KIND_INTERNAL,
-                stage: STAGE_INTERNAL,
-                status: STATUS_VOTING,
-                internal_org: Some(crate::internal_vote::ORG_NRC),
-                internal_institution: Some(nrc_institution()),
-                start: now,
-                end: now,
-                citizen_eligible_total: 0,
-            };
-
-            #[block]
-            {
-                let id = pallet::Pallet::<T>::allocate_proposal_id().expect("id should allocate");
-                pallet::Proposals::<T>::insert(id, proposal);
-            }
-
-            assert!(pallet::Proposals::<T>::contains_key(0u64));
-        }
-
-        #[benchmark]
-        fn submit_joint_institution_vote() {
-            let who = decode_account::<T>(CHINA_CB[0].duoqian_address);
-            let institution = nrc_institution();
-            let now = frame_system::Pallet::<T>::block_number();
-            let end = now.saturating_add(100u32.saturated_into());
-            pallet::Proposals::<T>::insert(
-                1u64,
-                Proposal {
-                    kind: PROPOSAL_KIND_JOINT,
-                    stage: STAGE_JOINT,
-                    status: STATUS_VOTING,
-                    internal_org: None,
-                    internal_institution: None,
-                    start: now,
-                    end,
-                    citizen_eligible_total: 1_000,
-                },
-            );
-
-            #[block]
-            {
-                pallet::Pallet::<T>::do_submit_joint_institution_vote(who, 1u64, institution, true)
-                    .expect("joint vote should succeed");
-            }
-        }
-
-        #[benchmark]
-        fn citizen_vote() {
-            let proposal_id = 2u64;
-            let who = decode_account::<T>(CHINA_CB[0].admins[0]);
-            let now = frame_system::Pallet::<T>::block_number();
-            let end = now.saturating_add(100u32.saturated_into());
-            pallet::Proposals::<T>::insert(
-                proposal_id,
-                Proposal {
-                    kind: PROPOSAL_KIND_JOINT,
-                    stage: STAGE_CITIZEN,
-                    status: STATUS_VOTING,
-                    internal_org: None,
-                    internal_institution: None,
-                    start: now,
-                    end,
-                    citizen_eligible_total: 1_000,
-                },
-            );
-            pallet::CitizenTallies::<T>::insert(proposal_id, VoteCountU64 { yes: 0, no: 0 });
-            let sfid_hash = T::Hashing::hash(b"bench-sfid");
-            let nonce: pallet::VoteNonceOf<T> = b"bench-nonce"
-                .to_vec()
-                .try_into()
-                .expect("nonce should fit");
-            let signature: pallet::VoteSignatureOf<T> = b"bench-signature"
-                .to_vec()
-                .try_into()
-                .expect("signature should fit");
-
-            #[block]
-            {
-                pallet::Pallet::<T>::do_citizen_vote(
-                    who,
-                    proposal_id,
-                    sfid_hash,
-                    nonce,
-                    signature,
-                    true,
-                )
-                .expect("citizen vote should succeed");
-            }
-
-            assert!(pallet::CitizenVotesBySfid::<T>::contains_key(
-                proposal_id,
-                sfid_hash
-            ));
-            assert_eq!(pallet::CitizenTallies::<T>::get(proposal_id).yes, 1u64);
-        }
-
-        #[benchmark]
-        fn finalize_proposal_internal() {
-            let proposal_id = 3u64;
-            let one: frame_system::pallet_prelude::BlockNumberFor<T> = 1u32.saturated_into();
-            frame_system::Pallet::<T>::set_block_number(one.saturating_add(one));
-            let proposal = Proposal {
-                kind: PROPOSAL_KIND_INTERNAL,
-                stage: STAGE_INTERNAL,
-                status: STATUS_VOTING,
-                internal_org: Some(crate::internal_vote::ORG_NRC),
-                internal_institution: Some(nrc_institution()),
-                start: one,
-                end: one,
-                citizen_eligible_total: 0,
-            };
-            pallet::Proposals::<T>::insert(proposal_id, proposal);
-
-            #[block]
-            {
-                pallet::Pallet::<T>::do_finalize_internal_timeout(&proposal, proposal_id)
-                    .expect("internal finalize should succeed");
-            }
-        }
-
-        #[benchmark]
-        fn finalize_proposal_joint() {
-            let proposal_id = 4u64;
-            let one: frame_system::pallet_prelude::BlockNumberFor<T> = 1u32.saturated_into();
-            frame_system::Pallet::<T>::set_block_number(one.saturating_add(one));
-            let proposal = Proposal {
-                kind: PROPOSAL_KIND_JOINT,
-                stage: STAGE_JOINT,
-                status: STATUS_VOTING,
-                internal_org: None,
-                internal_institution: None,
-                start: one,
-                end: one,
-                citizen_eligible_total: 10,
-            };
-            pallet::Proposals::<T>::insert(proposal_id, proposal);
-            pallet::JointTallies::<T>::insert(proposal_id, VoteCountU32 { yes: 0, no: 1 });
-
-            #[block]
-            {
-                pallet::Pallet::<T>::do_finalize_joint_timeout(&proposal, proposal_id)
-                    .expect("joint finalize should succeed");
-            }
-        }
-
-        #[benchmark]
-        fn finalize_proposal_citizen() {
-            let proposal_id = 5u64;
-            let one: frame_system::pallet_prelude::BlockNumberFor<T> = 1u32.saturated_into();
-            frame_system::Pallet::<T>::set_block_number(one.saturating_add(one));
-            let proposal = Proposal {
-                kind: PROPOSAL_KIND_JOINT,
-                stage: STAGE_CITIZEN,
-                status: STATUS_VOTING,
-                internal_org: None,
-                internal_institution: None,
-                start: one,
-                end: one,
-                citizen_eligible_total: 10,
-            };
-            pallet::Proposals::<T>::insert(proposal_id, proposal);
-            pallet::CitizenTallies::<T>::insert(proposal_id, VoteCountU64 { yes: 0, no: 1 });
-
-            #[block]
-            {
-                pallet::Pallet::<T>::do_finalize_citizen_timeout(&proposal, proposal_id)
-                    .expect("citizen finalize should succeed");
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -984,6 +719,7 @@ mod tests {
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = TestJointVoteResultCallback;
         type InternalAdminProvider = ();
+        type WeightInfo = ();
     }
 
     thread_local! {

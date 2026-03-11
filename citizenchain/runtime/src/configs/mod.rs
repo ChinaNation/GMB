@@ -374,9 +374,7 @@ impl onchain_transaction_fee::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::ResolutionDestroGov(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
-            RuntimeCall::GrandpaKeyGov(_) => {
-                onchain_transaction_fee::AmountExtractResult::NoAmount
-            }
+            RuntimeCall::GrandpaKeyGov(_) => onchain_transaction_fee::AmountExtractResult::NoAmount,
             RuntimeCall::DuoqianTransactionPow(_) => {
                 onchain_transaction_fee::AmountExtractResult::NoAmount
             }
@@ -804,6 +802,7 @@ impl
 impl citizen_lightnode_issuance::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
+    type WeightInfo = citizen_lightnode_issuance::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -968,6 +967,7 @@ impl runtime_root_upgrade::Config for Runtime {
     type MaxRuntimeCodeSize = RuntimeUpgradeMaxCodeSize;
     type MaxSnapshotNonceLength = ConstU32<64>;
     type MaxSnapshotSignatureLength = ConstU32<64>;
+    type WeightInfo = runtime_root_upgrade::weights::SubstrateWeight<Runtime>;
 }
 
 pub struct RuntimeSetCodeExecutor;
@@ -1018,9 +1018,12 @@ impl voting_engine_system::Config for Runtime {
     type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
     type InternalAdminProvider = RuntimeInternalAdminProvider;
+    type WeightInfo = voting_engine_system::weights::SubstrateWeight<Runtime>;
 }
 
-impl pow_difficulty_module::Config for Runtime {}
+impl pow_difficulty_module::Config for Runtime {
+    type WeightInfo = pow_difficulty_module::weights::SubstrateWeight<Runtime>;
+}
 
 #[cfg(test)]
 mod tests {

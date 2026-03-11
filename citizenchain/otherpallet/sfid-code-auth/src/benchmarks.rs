@@ -2,13 +2,13 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
-use frame_benchmarking::v2::*;
-use frame_system::RawOrigin;
-use sp_runtime::traits::{Hash, Saturating};
 use crate::{
     AccountToSfid, BindCredential, BoundCount, Call, Config, NonceOf, Pallet, SfidBackupAccount1,
     SfidBackupAccount2, SfidMainAccount, SfidOf, SfidToAccount, SignatureOf,
 };
+use frame_benchmarking::v2::*;
+use frame_system::RawOrigin;
+use sp_runtime::traits::{Hash, Saturating};
 
 #[benchmarks]
 mod benchmarks {

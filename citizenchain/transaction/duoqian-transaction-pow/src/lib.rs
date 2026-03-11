@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
-pub mod weights;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
+pub mod weights;
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
@@ -214,8 +214,13 @@ pub mod pallet {
     /// SFID 机构登记反向索引：duoqian_address -> { sfid_id, nonce }
     #[pallet::storage]
     #[pallet::getter(fn address_registered_sfid)]
-    pub type AddressRegisteredSfid<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, RegisteredInstitution<SfidIdOf<T>>, OptionQuery>;
+    pub type AddressRegisteredSfid<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        T::AccountId,
+        RegisteredInstitution<SfidIdOf<T>>,
+        OptionQuery,
+    >;
 
     /// 持久化的链域哈希（固定为 genesis hash），用于签名域隔离。
     #[pallet::storage]
@@ -394,10 +399,7 @@ pub mod pallet {
             let now = frame_system::Pallet::<T>::block_number();
             ensure!(now <= expires_at, Error::<T>::SignatureExpired);
 
-            ensure!(
-                T::MaxAdmins::get() >= 2,
-                Error::<T>::InvalidRuntimeConfig
-            );
+            ensure!(T::MaxAdmins::get() >= 2, Error::<T>::InvalidRuntimeConfig);
             ensure!(
                 amount >= T::MinCreateAmount::get(),
                 Error::<T>::CreateAmountBelowMinimum
@@ -409,11 +411,14 @@ pub mod pallet {
                 Error::<T>::AdminCountMismatch
             );
 
-            let duoqian_address =
-                SfidRegisteredAddress::<T>::get(&sfid_id).ok_or(Error::<T>::InstitutionNotRegistered)?;
+            let duoqian_address = SfidRegisteredAddress::<T>::get(&sfid_id)
+                .ok_or(Error::<T>::InstitutionNotRegistered)?;
             let mut registered = AddressRegisteredSfid::<T>::get(&duoqian_address)
                 .ok_or(Error::<T>::InstitutionNotRegistered)?;
-            ensure!(registered.sfid_id == sfid_id, Error::<T>::InstitutionNotRegistered);
+            ensure!(
+                registered.sfid_id == sfid_id,
+                Error::<T>::InstitutionNotRegistered
+            );
 
             ensure!(
                 !T::ReservedAddressChecker::is_reserved(&duoqian_address),
@@ -623,8 +628,7 @@ pub mod pallet {
         }
 
         fn signature_domain_hash_value() -> Result<T::Hash, DispatchError> {
-            ChainDomainHash::<T>::get()
-                .ok_or(Error::<T>::ChainDomainHashUnavailable.into())
+            ChainDomainHash::<T>::get().ok_or(Error::<T>::ChainDomainHashUnavailable.into())
         }
 
         /// 从 sfid_id 派生 duoqian 地址。
@@ -889,7 +893,8 @@ mod tests {
             RuntimeOrigin::signed(AccountId32::new([0x55; 32])),
             sfid.clone()
         ));
-        let duoqian_address = Duoqian::sfid_registered_address(sfid.clone()).expect("sfid should be registered");
+        let duoqian_address =
+            Duoqian::sfid_registered_address(sfid.clone()).expect("sfid should be registered");
         (sfid, duoqian_address)
     }
 
@@ -1053,7 +1058,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("create-ok");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -1090,7 +1103,15 @@ mod tests {
             let duplicated = public_of(&p1);
 
             let admins = admins_vec(vec![duplicated, duplicated]);
-            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![AdminApproval {
                 public_key: duplicated,
                 signature: sign(&p1, &payload),
@@ -1102,10 +1123,10 @@ mod tests {
                     sfid,
                     2,
                     admins,
-                2,
+                    2,
                     111,
-                approvals
-            ),
+                    approvals
+                ),
                 Error::<Test>::DuplicatePublicKey
             );
         });
@@ -1119,7 +1140,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("threshold");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 0u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                0u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![AdminApproval {
                 public_key: public_of(&p1),
                 signature: sign(&p1, &payload),
@@ -1133,8 +1162,8 @@ mod tests {
                     admins,
                     0,
                     111,
-                approvals
-            ),
+                    approvals
+                ),
                 Error::<Test>::InvalidThreshold
             );
         });
@@ -1149,7 +1178,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("half-sign");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2), public_of(&p3)]);
-            let payload = create_payload(&sfid, &duoqian, 3u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                3u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![AdminApproval {
                 public_key: public_of(&p1),
                 signature: sign(&p1, &payload),
@@ -1163,8 +1200,8 @@ mod tests {
                     admins,
                     2,
                     111,
-                approvals
-            ),
+                    approvals
+                ),
                 Error::<Test>::InsufficientSignatures
             );
         });
@@ -1182,7 +1219,15 @@ mod tests {
 
             // first create: admins p1,p2 threshold 1
             let admins1 = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let create_payload_1 = create_payload(&sfid, &duoqian, 2u32, &admins1, 2u32, 200u128, DEFAULT_EXPIRES_AT);
+            let create_payload_1 = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins1,
+                2u32,
+                200u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals_1 = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -1248,7 +1293,15 @@ mod tests {
 
             // recreate same address with different admins + threshold
             let admins2 = admins_vec(vec![public_of(&p3), public_of(&p4)]);
-            let create_payload_2 = create_payload(&sfid, &duoqian, 2u32, &admins2, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let create_payload_2 = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins2,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals_2 = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p3),
@@ -1290,7 +1343,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("count-mismatch");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let payload = create_payload(&sfid, &duoqian, 3u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                3u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -1310,8 +1371,8 @@ mod tests {
                     admins,
                     2,
                     111,
-                approvals
-            ),
+                    approvals
+                ),
                 Error::<Test>::AdminCountMismatch
             );
         });
@@ -1326,7 +1387,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("non-admin-submit");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -1344,10 +1413,10 @@ mod tests {
                     sfid,
                     2,
                     admins,
-                2,
+                    2,
                     111,
-                approvals
-            ),
+                    approvals
+                ),
                 Error::<Test>::PermissionDenied
             );
         });
@@ -1386,7 +1455,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("non-admin-approval");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![AdminApproval {
                 public_key: public_of(&outsider),
                 signature: sign(&outsider, &payload),
@@ -1398,10 +1475,10 @@ mod tests {
                     sfid,
                     2,
                     admins,
-                2,
+                    2,
                     111,
-                approvals
-            ),
+                    approvals
+                ),
                 Error::<Test>::PermissionDenied
             );
         });
@@ -1415,7 +1492,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("invalid-sig");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             // 使用错误签名者 p2 对 p1 公钥字段造签名，应该失败
             let approvals = approvals_vec(vec![AdminApproval {
                 public_key: public_of(&p1),
@@ -1428,10 +1513,10 @@ mod tests {
                     sfid,
                     2,
                     admins,
-                2,
+                    2,
                     111,
-                approvals
-            ),
+                    approvals
+                ),
                 Error::<Test>::InvalidAdminSignature
             );
         });
@@ -1445,7 +1530,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("dup-signatures");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -1546,7 +1639,15 @@ mod tests {
             let p3 = pair(3);
             let (sfid, duoqian) = register_sfid_and_get_address("threshold-all");
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2), public_of(&p3)]);
-            let payload = create_payload(&sfid, &duoqian, 3u32, &admins, 3u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                3u32,
+                &admins,
+                3u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -1581,8 +1682,21 @@ mod tests {
             let p3 = pair(3);
             let p4 = pair(4);
             let (sfid, duoqian) = register_sfid_and_get_address("threshold-min");
-            let admins = admins_vec(vec![public_of(&p1), public_of(&p2), public_of(&p3), public_of(&p4)]);
-            let payload = create_payload(&sfid, &duoqian, 4u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let admins = admins_vec(vec![
+                public_of(&p1),
+                public_of(&p2),
+                public_of(&p3),
+                public_of(&p4),
+            ]);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                4u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -1614,8 +1728,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("3of2-flow");
             let beneficiary = account_of(&pair(9));
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2), public_of(&p3)]);
-            let create_payload =
-                create_payload(&sfid, &duoqian, 3u32, &admins, 2u32, 300u128, DEFAULT_EXPIRES_AT);
+            let create_payload = create_payload(
+                &sfid,
+                &duoqian,
+                3u32,
+                &admins,
+                2u32,
+                300u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let create_approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -1676,7 +1797,15 @@ mod tests {
             let _ = Balances::deposit_creating(&duoqian, 50);
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -1721,7 +1850,15 @@ mod tests {
             );
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![AdminApproval {
                 public_key: public_of(&p1),
                 signature: sign(&p1, &payload),
@@ -1733,10 +1870,10 @@ mod tests {
                     sfid,
                     2,
                     admins,
-                2,
+                    2,
                     111,
-                approvals
-            ),
+                    approvals
+                ),
                 Error::<Test>::AddressReserved
             );
         });
@@ -1750,7 +1887,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("close-self");
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let create_payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 200u128, DEFAULT_EXPIRES_AT);
+            let create_payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                200u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let create_approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -2027,7 +2172,15 @@ mod tests {
             let beneficiary = account_of(&pair(8));
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let create_payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 200u128, DEFAULT_EXPIRES_AT);
+            let create_payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                200u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let create_approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -2083,7 +2236,15 @@ mod tests {
             let duoqian_b = account_of(&pair(10));
 
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let create_payload = create_payload(&sfid_a, &duoqian_a, 2u32, &admins, 2u32, 300u128, DEFAULT_EXPIRES_AT);
+            let create_payload = create_payload(
+                &sfid_a,
+                &duoqian_a,
+                2u32,
+                &admins,
+                2u32,
+                300u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let create_approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -2145,8 +2306,15 @@ mod tests {
             let beneficiary = account_of(&pair(9));
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
 
-            let create_payload_1 =
-                create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 200u128, DEFAULT_EXPIRES_AT);
+            let create_payload_1 = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                200u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let create_approvals_1 = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -2230,8 +2398,15 @@ mod tests {
             let beneficiary = account_of(&pair(8));
 
             let admins1 = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let create_payload_1 =
-                create_payload(&sfid, &duoqian, 2u32, &admins1, 2u32, 200u128, DEFAULT_EXPIRES_AT);
+            let create_payload_1 = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins1,
+                2u32,
+                200u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let create_approvals_1 = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -2280,8 +2455,15 @@ mod tests {
 
             // 重建后再次尝试重放旧 close 签名，必须失败（nonce 已变化）
             let admins2 = admins_vec(vec![public_of(&p3), public_of(&p4)]);
-            let create_payload_2 =
-                create_payload(&sfid, &duoqian, 2u32, &admins2, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let create_payload_2 = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins2,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let create_approvals_2 = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p3),
@@ -2335,7 +2517,15 @@ mod tests {
                 .expect("sfid id should fit");
             let duoqian = account_of(&pair(9));
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![AdminApproval {
                 public_key: public_of(&p1),
                 signature: sign(&p1, &payload),
@@ -2347,10 +2537,10 @@ mod tests {
                     sfid,
                     2,
                     admins,
-                2,
+                    2,
                     111,
-                approvals
-            ),
+                    approvals
+                ),
                 Error::<Test>::InstitutionNotRegistered
             );
         });
@@ -2364,7 +2554,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("expired-sig");
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
 
-            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -2405,7 +2603,15 @@ mod tests {
             });
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
 
-            let payload = create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 111u128, DEFAULT_EXPIRES_AT);
+            let payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                111u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -2440,8 +2646,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("close-nonce-overflow");
             let beneficiary = account_of(&pair(8));
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let create_payload =
-                create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 200u128, DEFAULT_EXPIRES_AT);
+            let create_payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                200u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let create_approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -2506,8 +2719,15 @@ mod tests {
             let (sfid, duoqian) = register_sfid_and_get_address("close-expired");
             let beneficiary = account_of(&pair(8));
             let admins = admins_vec(vec![public_of(&p1), public_of(&p2)]);
-            let create_payload =
-                create_payload(&sfid, &duoqian, 2u32, &admins, 2u32, 200u128, DEFAULT_EXPIRES_AT);
+            let create_payload = create_payload(
+                &sfid,
+                &duoqian,
+                2u32,
+                &admins,
+                2u32,
+                200u128,
+                DEFAULT_EXPIRES_AT,
+            );
             let create_approvals = approvals_vec(vec![
                 AdminApproval {
                     public_key: public_of(&p1),
@@ -2572,9 +2792,12 @@ mod tests {
                 RuntimeOrigin::signed(AccountId32::new([0x55; 32])),
                 sfid.clone()
             ));
-            let expected = Duoqian::derive_duoqian_address_from_sfid_id(sfid.as_slice())
-                .expect("must derive");
-            assert_eq!(Duoqian::sfid_registered_address(sfid.clone()), Some(expected));
+            let expected =
+                Duoqian::derive_duoqian_address_from_sfid_id(sfid.as_slice()).expect("must derive");
+            assert_eq!(
+                Duoqian::sfid_registered_address(sfid.clone()),
+                Some(expected)
+            );
 
             assert_noop!(
                 Duoqian::register_sfid_institution(
@@ -2624,11 +2847,7 @@ mod tests {
             let mut found: Option<SfidIdOf<Test>> = None;
             for i in 0..500_000u32 {
                 let candidate = format!("GFR-LN001-CB0C-rsvd-{}-20260222", i);
-                let sfid: SfidIdOf<Test> = candidate
-                    .as_bytes()
-                    .to_vec()
-                    .try_into()
-                    .expect("fit");
+                let sfid: SfidIdOf<Test> = candidate.as_bytes().to_vec().try_into().expect("fit");
                 let derived =
                     Duoqian::derive_duoqian_address_from_sfid_id(sfid.as_slice()).expect("derive");
                 let bytes: &[u8] = derived.as_ref();

@@ -1,5 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+mod benchmarks;
+pub mod weights;
+
 use frame_support::pallet_prelude::DispatchResult;
 pub use pallet::*;
 use voting_engine_system::JointVoteResultCallback;
@@ -69,6 +72,8 @@ pub mod pallet {
         pub status: ProposalStatus,
     }
 
+    use crate::weights::WeightInfo;
+
     #[pallet::config]
     pub trait Config: frame_system::Config {
         #[allow(deprecated)]
@@ -94,6 +99,8 @@ pub mod pallet {
 
         #[pallet::constant]
         type MaxExecutionRetries: Get<u32>;
+
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
     #[pallet::pallet]
@@ -162,7 +169,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 国储会管理员发起 runtime 升级提案，升级流程走联合投票。
         #[pallet::call_index(0)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(1, 3))]
+        #[pallet::weight(T::WeightInfo::propose_runtime_upgrade())]
         pub fn propose_runtime_upgrade(
             origin: OriginFor<T>,
             reason: ReasonOf<T>,
@@ -209,7 +216,7 @@ pub mod pallet {
 
         /// 联合投票回调：保持与其他治理模块一致，Root 可手工回放。
         #[pallet::call_index(1)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(2, 4))]
+        #[pallet::weight(T::WeightInfo::finalize_joint_vote())]
         pub fn finalize_joint_vote(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -222,7 +229,7 @@ pub mod pallet {
         /// 中文注释：联合投票已经通过但执行 runtime code 失败时，
         /// 允许 NRC 管理员在保留原始 code 的前提下重试执行。
         #[pallet::call_index(2)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(2, 2))]
+        #[pallet::weight(T::WeightInfo::retry_failed_execution())]
         pub fn retry_failed_execution(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let _ = T::NrcProposeOrigin::ensure_origin(origin)?;
             Self::retry_execution(proposal_id)
@@ -449,6 +456,7 @@ mod tests {
         type MaxSnapshotNonceLength = ConstU32<64>;
         type MaxSnapshotSignatureLength = ConstU32<64>;
         type MaxExecutionRetries = ConstU32<3>;
+        type WeightInfo = ();
     }
 
     thread_local! {

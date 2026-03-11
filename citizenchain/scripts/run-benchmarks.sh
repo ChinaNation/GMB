@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 中文注释：批量运行自定义 pallet benchmark，并将结果写回各自的 weights.rs。
+# 中文注释：批量运行自定义 benchmark。
+# - pallet 类型：调用 `node benchmark pallet`，写回各自的 weights.rs。
+# - utility 类型：运行独立 bench harness，用于非 pallet 模块的专项性能验证。
 # 用法：
 #   ./scripts/run-benchmarks.sh
 #   ./scripts/run-benchmarks.sh --check
@@ -22,18 +24,26 @@ TEMPLATE_PATH="${TEMPLATE_PATH:-}"
 
 declare -a SELECTED_PALLETS=()
 
-# 中文注释：需要 benchmark 的自定义 pallet 列表（pallet_name:weights_path）。
+# 中文注释：benchmark 目标列表。
+# 格式：kind:name:payload
+# - pallet: payload=weights.rs 相对路径
+# - utility: payload=说明性路径（当前仅用于日志展示）
 declare -a TARGETS=(
-  "shengbank_stake_interest:issuance/shengbank-stake-interest/src/weights.rs"
-  "fullnode_pow_reward:issuance/fullnode-pow-reward/src/weights.rs"
-  "sfid_code_auth:otherpallet/sfid-code-auth/src/weights.rs"
-  "resolution_destro_gov:governance/resolution-destro-gov/src/weights.rs"
-  "grandpa_key_gov:governance/grandpa-key-gov/src/weights.rs"
-  "resolution_issuance_iss:issuance/resolution-issuance-iss/src/weights.rs"
-  "duoqian_transaction_pow:transaction/duoqian-transaction-pow/src/weights.rs"
-  "admins_origin_gov:governance/admins-origin-gov/src/weights.rs"
-  "resolution_issuance_gov:governance/resolution-issuance-gov/src/weights.rs"
-  "offchain_transaction_fee:transaction/offchain-transaction-pos/src/weights.rs"
+  "pallet:shengbank_stake_interest:issuance/shengbank-stake-interest/src/weights.rs"
+  "pallet:fullnode_pow_reward:issuance/fullnode-pow-reward/src/weights.rs"
+  "pallet:citizen_lightnode_issuance:issuance/citizen-lightnode-issuance/src/weights.rs"
+  "pallet:sfid_code_auth:otherpallet/sfid-code-auth/src/weights.rs"
+  "pallet:pow_difficulty_module:otherpallet/pow-difficulty-module/src/weights.rs"
+  "pallet:resolution_issuance_iss:issuance/resolution-issuance-iss/src/weights.rs"
+  "pallet:resolution_issuance_gov:governance/resolution-issuance-gov/src/weights.rs"
+  "pallet:voting_engine_system:governance/voting-engine-system/src/weights.rs"
+  "pallet:admins_origin_gov:governance/admins-origin-gov/src/weights.rs"
+  "pallet:grandpa_key_gov:governance/grandpa-key-gov/src/weights.rs"
+  "pallet:runtime_root_upgrade:governance/runtime-root-upgrade/src/weights.rs"
+  "pallet:resolution_destro_gov:governance/resolution-destro-gov/src/weights.rs"
+  "pallet:offchain_transaction_fee:transaction/offchain-transaction-pos/src/weights.rs"
+  "pallet:duoqian_transaction_pow:transaction/duoqian-transaction-pow/src/weights.rs"
+  "utility:onchain_transaction_fee:transaction/onchain-transaction-pow/benches/transaction_fee_paths.rs"
 )
 
 usage() {
@@ -49,7 +59,7 @@ Options:
   --repeat <N>           benchmark repeat，默认 20。
   --heap-pages <N>       wasm heap pages，默认 4096。
   --template <path>      可选 hbs 模板路径（未传则使用 CLI 默认模板）。
-  --pallet <name>        仅运行指定 pallet（可重复传入多个）。
+  --pallet <name>        仅运行指定 benchmark 目标（可重复传入多个）。
   -h, --help             显示帮助。
 EOF
 }
@@ -126,12 +136,21 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   BUILD_NODE=0
 fi
 
-if [[ "$BUILD_NODE" -eq 1 ]]; then
+NEEDS_NODE=0
+for target in "${TARGETS[@]}"; do
+  IFS=':' read -r kind pallet _ <<< "$target"
+  if [[ "$kind" == "pallet" ]] && contains_selected_pallet "$pallet"; then
+    NEEDS_NODE=1
+    break
+  fi
+done
+
+if [[ "$BUILD_NODE" -eq 1 && "$NEEDS_NODE" -eq 1 ]]; then
   log "构建 benchmark 节点二进制（node, release, runtime-benchmarks）"
   cargo build -p node --release --features runtime-benchmarks --locked
 fi
 
-if [[ "$DRY_RUN" -eq 0 && ! -x "$NODE_BIN" ]]; then
+if [[ "$DRY_RUN" -eq 0 && "$NEEDS_NODE" -eq 1 && ! -x "$NODE_BIN" ]]; then
   echo "未找到可执行文件: $NODE_BIN" >&2
   echo "请先执行: cargo build -p node --release --features runtime-benchmarks" >&2
   exit 1
@@ -143,41 +162,64 @@ declare -a TOUCHED_OUTPUTS=()
 declare -i RUN_COUNT=0
 
 for target in "${TARGETS[@]}"; do
-  pallet="${target%%:*}"
-  rel_output="${target#*:}"
+  IFS=':' read -r kind pallet rel_output <<< "$target"
 
   if ! contains_selected_pallet "$pallet"; then
     continue
   fi
 
-  output="$ROOT_DIR/$rel_output"
-  mkdir -p "$(dirname "$output")"
-  TOUCHED_OUTPUTS+=("$rel_output")
   RUN_COUNT+=1
 
-  cmd=(
-    "$NODE_BIN"
-    benchmark pallet
-    --chain "$CHAIN"
-    --pallet "$pallet"
-    --extrinsic "*"
-    --steps "$STEPS"
-    --repeat "$REPEAT"
-    --wasm-execution compiled
-    --heap-pages "$HEAP_PAGES"
-    --output "$output"
-  )
+  if [[ "$kind" == "pallet" ]]; then
+    output="$ROOT_DIR/$rel_output"
+    mkdir -p "$(dirname "$output")"
+    TOUCHED_OUTPUTS+=("$rel_output")
 
-  if [[ -n "$TEMPLATE_PATH" ]]; then
-    cmd+=(--template "$TEMPLATE_PATH")
-  fi
+    cmd=(
+      "$NODE_BIN"
+      benchmark pallet
+      --chain "$CHAIN"
+      --pallet "$pallet"
+      --extrinsic "*"
+      --steps "$STEPS"
+      --repeat "$REPEAT"
+      --wasm-execution compiled
+      --heap-pages "$HEAP_PAGES"
+      --output "$output"
+    )
 
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    log "DRY-RUN: ${cmd[*]}"
+    if [[ -n "$TEMPLATE_PATH" ]]; then
+      cmd+=(--template "$TEMPLATE_PATH")
+    fi
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      log "DRY-RUN: ${cmd[*]}"
+    else
+      log "开始 pallet benchmark: pallet=$pallet output=$rel_output"
+      "${cmd[@]}"
+      log "完成 pallet benchmark: pallet=$pallet"
+    fi
+  elif [[ "$kind" == "utility" ]]; then
+    cmd=(
+      cargo bench
+      -p onchain-transaction-fee
+      --bench transaction_fee_paths
+      --
+      --warm-up-time 1
+      --measurement-time 1
+      --sample-size 10
+    )
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      log "DRY-RUN: ${cmd[*]}"
+    else
+      log "开始 utility benchmark: target=$pallet harness=$rel_output"
+      "${cmd[@]}"
+      log "完成 utility benchmark: target=$pallet"
+    fi
   else
-    log "开始 benchmark: pallet=$pallet output=$rel_output"
-    "${cmd[@]}"
-    log "完成 benchmark: pallet=$pallet"
+    echo "未知 benchmark 类型: $kind" >&2
+    exit 2
   fi
 done
 
@@ -187,6 +229,10 @@ if [[ "${RUN_COUNT}" -eq 0 ]]; then
 fi
 
 if [[ "$CHECK_MODE" -eq 1 && "$DRY_RUN" -eq 0 ]]; then
+  if [[ "${#TOUCHED_OUTPUTS[@]}" -eq 0 ]]; then
+    log "本次未生成任何 weights.rs（可能只运行了 utility benchmark），跳过 weights 变更检查。"
+    exit 0
+  fi
   if ! git -C "$ROOT_DIR" diff --quiet -- "${TOUCHED_OUTPUTS[@]}"; then
     log "检测到 benchmark 生成的 weights 变更，请提交更新。"
     git -C "$ROOT_DIR" --no-pager diff -- "${TOUCHED_OUTPUTS[@]}"
