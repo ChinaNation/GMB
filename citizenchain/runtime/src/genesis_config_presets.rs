@@ -27,7 +27,9 @@ use codec::Decode;
 use hex_literal::hex;
 #[cfg(feature = "std")]
 use primitives::{
-    china::china_cb::CHINA_CB, china::china_ch::CHINA_CH, core_const::SS58_FORMAT,
+    china::china_cb::CHINA_CB,
+    china::china_ch::CHINA_CH,
+    core_const::SS58_FORMAT,
     genesis::{GENESIS_DEV_ACCOUNT_SS58, GENESIS_DEV_ALLOCATION, GENESIS_ISSUANCE},
 };
 #[cfg(feature = "std")]
@@ -309,19 +311,16 @@ mod tests {
         let total_shengbank_stake: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
 
         // 中文注释：创世总注入 = 创世发行 + 省储行创立发行（开发账户余额来自国储会切分）。
-        assert_eq!(
-            total_in_patch,
-            GENESIS_ISSUANCE + total_shengbank_stake
-        );
+        assert_eq!(total_in_patch, GENESIS_ISSUANCE + total_shengbank_stake);
     }
 
     #[test]
-    fn mainnet_genesis_contains_federal_registry_institutions() {
+    fn mainnet_genesis_omits_national_institutional_registry_without_runtime_pallet() {
         let patch = mainnet_config_genesis();
-        let institutions = patch["nationalInstitutionalRegistry"]["institutions"]
-            .as_array()
-            .expect("nationalInstitutionalRegistry.institutions should be an array");
-        assert!(institutions.is_empty());
+        assert!(
+            patch.get("nationalInstitutionalRegistry").is_none(),
+            "nationalInstitutionalRegistry should be absent until the runtime pallet is wired into genesis"
+        );
     }
 
     #[test]
@@ -340,26 +339,26 @@ mod tests {
     }
 
     #[test]
-    fn grandpa_keys_match_china_cb_finality_keys() {
+    fn grandpa_keys_match_china_cb_grandpa_keys() {
         assert_eq!(
             GRANDPA_AUTHORITY_KEYS_HEX.len(),
             CHINA_CB.len(),
             "grandpa key list length must match CHINA_CB length"
         );
         for (i, node) in CHINA_CB.iter().enumerate() {
-            let expected = hex::encode(node.finality_key);
+            let expected = hex::encode(node.grandpa_key);
             assert_eq!(
                 GRANDPA_AUTHORITY_KEYS_HEX[i], expected,
-                "grandpa key at index {i} must match CHINA_CB.finality_key"
+                "grandpa key at index {i} must match CHINA_CB.grandpa_key"
             );
         }
     }
 
     #[test]
-    fn china_cb_finality_keys_are_valid_ed25519_pubkeys() {
+    fn china_cb_grandpa_keys_are_valid_ed25519_pubkeys() {
         for node in CHINA_CB {
-            VerifyingKey::from_bytes(&node.finality_key)
-                .expect("CHINA_CB.finality_key must be valid ed25519 point");
+            VerifyingKey::from_bytes(&node.grandpa_key)
+                .expect("CHINA_CB.grandpa_key must be valid ed25519 point");
         }
     }
 }

@@ -21,10 +21,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
         let banks: u64 = 43;
         let years: u64 = max_years as u64;
         T::DbWeight::get()
-            .reads_writes(
-                1 + years * (1 + banks * 3),
-                1 + years * (2 + banks * 3),
-            )
+            .reads_writes(1 + years * (1 + banks * 3), 1 + years * (2 + banks * 3))
             .saturating_add(Weight::from_parts(
                 years.saturating_mul(banks).saturating_mul(50_000),
                 0,
@@ -42,10 +39,7 @@ impl WeightInfo for () {
         let banks: u64 = 43;
         let years: u64 = max_years as u64;
         RocksDbWeight::get()
-            .reads_writes(
-                1 + years * (1 + banks * 3),
-                1 + years * (2 + banks * 3),
-            )
+            .reads_writes(1 + years * (1 + banks * 3), 1 + years * (2 + banks * 3))
             .saturating_add(Weight::from_parts(
                 years.saturating_mul(banks).saturating_mul(50_000),
                 0,
