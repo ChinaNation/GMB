@@ -43,7 +43,7 @@ Runtime 注入：
 - `Config::WeightInfo = shengbank_stake_interest::weights::SubstrateWeight<Runtime>`
 
 Runtime 接线：
-- `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs:415`
+- `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs:369`
 
 ## 3. 存储结构
 - `LastSettledYear: u32`
