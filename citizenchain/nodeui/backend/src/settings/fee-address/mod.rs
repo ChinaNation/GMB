@@ -1,9 +1,9 @@
 use crate::{
     settings::{
         address_utils::{decode_hex_32_with_optional_0x, decode_ss58_prefix},
-        security,
+        device_password,
     },
-    validation::normalize_wallet_address,
+    shared::{rpc, security, validation::normalize_wallet_address},
 };
 use blake2::{Blake2b512, Digest};
 use rand::RngCore;
@@ -14,6 +14,7 @@ use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
     str::FromStr,
+    time::Duration,
 };
 use subxt::{
     config::substrate::{AccountId32, MultiSignature},
@@ -26,15 +27,19 @@ use twox_hash::XxHash64;
 use zeroize::Zeroizing;
 
 const SS58_PREFIX: u16 = 2027;
+const EXPECTED_SS58_PREFIX: u64 = 2027;
 const POWR_KEY_TYPE_HEX_PREFIX: &str = "706f7772";
 const DEFAULT_CHAIN_WS_URL: &str = "ws://127.0.0.1:9944";
 const DEFAULT_CHAIN_ID: &str = "citizenchain";
 const LEGACY_MINER_SURI_FILENAME: &str = "miner-suri.txt";
 const KEYCHAIN_ACCOUNT_MINER_SURI: &str = "powr-miner-suri";
 const REWARD_BIND_TIMEOUT_SECS: u64 = 45;
+const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// 前端展示的手续费收款地址配置。
 pub struct RewardWallet {
     pub address: Option<String>,
 }
@@ -83,6 +88,7 @@ fn save_reward_wallet(app: &AppHandle, address: &str) -> Result<(), String> {
         .map_err(|e| format!("write reward wallet failed: {e}"))
 }
 
+// 迁移旧明文文件时只做一次性读取，然后立即删除，避免继续保留历史明文秘密。
 fn load_legacy_miner_suri_file(path: &Path) -> Result<Option<String>, String> {
     let raw = match fs::read_to_string(path) {
         Ok(v) => v,
@@ -377,6 +383,43 @@ fn blake2_128(input: &[u8]) -> [u8; 16] {
     out
 }
 
+fn ensure_expected_reward_wallet_rpc_node() -> Result<(), String> {
+    let properties = rpc::rpc_post(
+        "system_properties",
+        serde_json::Value::Array(vec![]),
+        RPC_REQUEST_TIMEOUT,
+        MAX_RPC_RESPONSE_BYTES,
+    )?;
+    let ss58 = properties
+        .get("ss58Format")
+        .and_then(|v| {
+            if let Some(raw) = v.as_u64() {
+                Some(raw)
+            } else {
+                v.as_str().and_then(|s| s.parse::<u64>().ok())
+            }
+        })
+        .ok_or_else(|| "RPC 节点缺少 ss58Format".to_string())?;
+    if ss58 != EXPECTED_SS58_PREFIX {
+        return Err(format!("RPC 链前缀不匹配：expected=2027, got={ss58}"));
+    }
+
+    let name = rpc::rpc_post(
+        "system_name",
+        serde_json::Value::Array(vec![]),
+        RPC_REQUEST_TIMEOUT,
+        MAX_RPC_RESPONSE_BYTES,
+    )?
+    .as_str()
+    .map(str::trim)
+    .unwrap_or("")
+    .to_string();
+    if name.is_empty() {
+        return Err("RPC 节点名称为空".to_string());
+    }
+    Ok(())
+}
+
 fn reward_wallet_storage_key(miner_account: &[u8; 32]) -> Vec<u8> {
     let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
     key.extend_from_slice(&twox_128(b"FullnodePowReward"));
@@ -405,6 +448,8 @@ pub(crate) fn ensure_miner_suri(app: &AppHandle, unlock_password: &str) -> Resul
     let unlock = security::ensure_unlock_password(unlock_password)?;
     migrate_legacy_miner_suri_file(app, unlock)?;
 
+    // 迁移优先级：安全存储 -> 现有 keystore -> 新生成随机 seed。
+    // 这样既兼容历史数据，又尽量保持矿工账户稳定不漂移。
     if let Some(suri) = load_miner_suri_secure(unlock)? {
         return Ok(suri);
     }
@@ -421,6 +466,7 @@ pub(crate) fn ensure_powr_keystore_key(
     app: &AppHandle,
     unlock_password: &str,
 ) -> Result<(), String> {
+    // `powr` 只保留当前矿工账户对应的一把密钥，避免旧 key 残留导致收益归属漂移。
     let suri = Zeroizing::new(ensure_miner_suri(app, unlock_password)?);
     let pubkey_hex = powr_pubkey_hex_from_suri(&suri)?;
     write_powr_key_to_keystore(app, &suri, &pubkey_hex)?;
@@ -436,6 +482,9 @@ async fn sync_saved_reward_wallet_inner(
     let Some(saved_address) = load_reward_wallet(app)? else {
         return Ok(());
     };
+    // 在提交链上绑定交易前，先确认当前 9944 端口确实属于目标链，
+    // 避免把奖励地址绑定误发到错误节点或错误网络。
+    ensure_expected_reward_wallet_rpc_node()?;
     let normalized = normalize_wallet_address(&saved_address)?;
     let target_wallet = account_id_from_address(&normalized)?;
     let miner_suri = Zeroizing::new(ensure_miner_suri(app, unlock_password)?);
@@ -529,7 +578,7 @@ pub async fn set_reward_wallet(
 ) -> Result<RewardWallet, String> {
     let _ = security::append_audit_log(&app, "set_reward_wallet", "attempt");
     let unlock = security::ensure_unlock_password(&unlock_password)?;
-    security::verify_device_login_password(&app, unlock)?;
+    device_password::verify_device_login_password(&app, unlock)?;
     let normalized = normalize_wallet_address(&address)?;
 
     save_reward_wallet(&app, &normalized)?;

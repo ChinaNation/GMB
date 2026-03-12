@@ -1,4 +1,8 @@
-use crate::{home::home_node, rpc, settings::bootnodes_address, settings::security};
+use crate::{
+    home::home_node,
+    settings::bootnodes_address,
+    shared::{rpc, security},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -19,6 +23,7 @@ static KNOWN_PEERS_IO_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// 网络总览面板对前端返回的聚合统计结果。
 pub struct NetworkOverview {
     pub total_nodes: u64,
     pub online_nodes: u64,
@@ -36,6 +41,11 @@ struct StoredKnownPeers {
     peer_ids: Vec<String>,
 }
 
+struct LoadKnownPeersResult {
+    peer_ids: Vec<String>,
+    normalized_changed: bool,
+}
+
 fn known_peers_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(security::app_data_dir(app)?.join("known-peers.json"))
 }
@@ -51,10 +61,13 @@ fn normalize_peer_id(input: &str) -> Option<String> {
     Some(v.to_string())
 }
 
-fn load_known_peers(app: &AppHandle) -> Result<Vec<String>, String> {
+fn load_known_peers(app: &AppHandle) -> Result<LoadKnownPeersResult, String> {
     let path = known_peers_path(app)?;
     if !path.exists() {
-        return Ok(Vec::new());
+        return Ok(LoadKnownPeersResult {
+            peer_ids: Vec::new(),
+            normalized_changed: false,
+        });
     }
     let raw = fs::read_to_string(path).map_err(|e| format!("read known peers failed: {e}"))?;
     let record: StoredKnownPeers =
@@ -62,14 +75,25 @@ fn load_known_peers(app: &AppHandle) -> Result<Vec<String>, String> {
 
     let mut seen: HashSet<String> = HashSet::new();
     let mut peer_ids: Vec<String> = Vec::new();
+    let mut normalized_changed = false;
     for id in record.peer_ids {
         if let Some(pid) = normalize_peer_id(&id) {
             if seen.insert(pid.clone()) {
+                if pid != id {
+                    normalized_changed = true;
+                }
                 peer_ids.push(pid);
+            } else {
+                normalized_changed = true;
             }
+        } else {
+            normalized_changed = true;
         }
     }
-    Ok(peer_ids)
+    Ok(LoadKnownPeersResult {
+        peer_ids,
+        normalized_changed,
+    })
 }
 
 fn save_known_peers(app: &AppHandle, peer_ids: &[String]) -> Result<(), String> {
@@ -102,6 +126,8 @@ struct KnownPeersMergeResult {
     warnings: Vec<String>,
 }
 
+// known-peers 既承担“历史已见节点集合”，也承担本地容错缓存；
+// 这里在合并观测结果时顺手把无效/重复旧数据清洗并回写磁盘。
 fn merge_known_peers(app: &AppHandle, observed_peer_ids: &[String]) -> KnownPeersMergeResult {
     let _guard = KNOWN_PEERS_IO_LOCK.lock().unwrap_or_else(|err| {
         eprintln!("KNOWN_PEERS_IO_LOCK poisoned; continuing with recovered lock");
@@ -109,14 +135,21 @@ fn merge_known_peers(app: &AppHandle, observed_peer_ids: &[String]) -> KnownPeer
     });
     let mut warnings: Vec<String> = Vec::new();
 
-    let mut merged_peer_ids = match load_known_peers(app) {
+    let load_result = match load_known_peers(app) {
         Ok(v) => v,
         Err(err) => {
             warnings.push(format!("读取 known-peers 失败，使用空集合: {err}"));
-            Vec::new()
+            LoadKnownPeersResult {
+                peer_ids: Vec::new(),
+                normalized_changed: false,
+            }
         }
     };
+    let mut merged_peer_ids = load_result.peer_ids;
     let mut changed = false;
+    if load_result.normalized_changed {
+        changed = true;
+    }
     let mut known_set: HashSet<String> = merged_peer_ids.iter().cloned().collect();
     for pid in observed_peer_ids {
         if known_set.insert(pid.clone()) {
@@ -148,7 +181,9 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
 }
 
-fn ensure_expected_rpc_node() -> Result<Option<String>, String> {
+// 网络统计必须建立在“当前 RPC 确认属于目标链”的前提上，
+// 否则宁可降级返回告警，也不要继续产出可能误导的网络数据。
+fn ensure_expected_rpc_node() -> Result<(), String> {
     let properties = rpc_post("system_properties", Value::Array(vec![]))?;
     let ss58 = properties
         .get("ss58Format")
@@ -164,19 +199,17 @@ fn ensure_expected_rpc_node() -> Result<Option<String>, String> {
         return Err(format!("RPC 链前缀不匹配：expected=2027, got={ss58}"));
     }
 
-    let name = match rpc_post("system_name", Value::Array(vec![])) {
-        Ok(v) => v.as_str().map(str::trim).unwrap_or("").to_string(),
-        Err(err) => {
-            return Ok(Some(format!(
-                "读取 system_name 失败，继续使用链前缀校验结果: {err}"
-            )));
-        }
-    };
+    let name = rpc_post("system_name", Value::Array(vec![]))
+        .map_err(|err| format!("读取 system_name 失败: {err}"))?
+        .as_str()
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string();
     if name.is_empty() {
-        return Ok(Some("RPC 节点名称为空，继续使用链前缀校验结果".to_string()));
+        return Err("RPC 节点名称为空".to_string());
     }
 
-    Ok(None)
+    Ok(())
 }
 
 fn extract_light_role(roles_value: &Value) -> bool {
@@ -201,6 +234,8 @@ pub async fn get_network_overview(app: AppHandle) -> Result<NetworkOverview, Str
 }
 
 fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, String> {
+    // 网络总览是一个“尽量返回”的聚合接口：
+    // 只要能确认当前 RPC 属于目标链，就尽量返回已知在线节点、历史节点和本机状态。
     let bootnodes = bootnodes_address::genesis_bootnode_options()?;
     let bootnode_map: HashMap<String, String> = bootnodes
         .iter()
@@ -210,12 +245,7 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
 
     let mut warnings: Vec<String> = Vec::new();
     let rpc_ready = match ensure_expected_rpc_node() {
-        Ok(name_warning) => {
-            if let Some(msg) = name_warning {
-                warnings.push(msg);
-            }
-            true
-        }
+        Ok(()) => true,
         Err(err) => {
             warnings.push(format!("网络 RPC 校验失败: {err}"));
             false
@@ -227,7 +257,7 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
     let mut online_peer_ids: HashSet<String> = HashSet::new();
     let mut known_peer_observed: Vec<String> = Vec::new();
     let mut known_peer_observed_set: HashSet<String> = HashSet::new();
-    let mut remote_light_nodes: u64 = 0;
+    let mut remote_light_peer_ids: HashSet<String> = HashSet::new();
     let mut local_role_known = false;
     let mut local_is_light = false;
     let mut invalid_peer_count: u64 = 0;
@@ -239,27 +269,24 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
             Ok(peers) => {
                 if let Some(arr) = peers.as_array() {
                     for p in arr {
-                        let mut valid_peer = false;
                         if let Some(pid_raw) = p.get("peerId").and_then(Value::as_str) {
                             if let Some(pid) = normalize_peer_id(pid_raw) {
                                 online_peer_ids.insert(pid.clone());
                                 push_unique_peer(
                                     &mut known_peer_observed,
                                     &mut known_peer_observed_set,
-                                    pid,
+                                    pid.clone(),
                                 );
-                                valid_peer = true;
+                                let is_light =
+                                    p.get("roles").map(extract_light_role).unwrap_or(false);
+                                if is_light {
+                                    let _ = remote_light_peer_ids.insert(pid);
+                                }
                             } else {
                                 invalid_peer_count = invalid_peer_count.saturating_add(1);
                             }
                         } else {
                             invalid_peer_count = invalid_peer_count.saturating_add(1);
-                        }
-
-                        let is_light =
-                            valid_peer && p.get("roles").map(extract_light_role).unwrap_or(false);
-                        if is_light {
-                            remote_light_nodes = remote_light_nodes.saturating_add(1);
                         }
                     }
                 } else {
@@ -323,7 +350,10 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
         warnings.push(format!("忽略了 {} 条无效 peerId 记录", invalid_peer_count));
     }
 
+    // full/light 统计需要与 onlineNodes 口径一致：
+    // 远端按唯一 peerId 去重，本机角色未知时按 full 兜底，避免 total 不守恒。
     let online_nodes = (online_peer_ids.len() as u64).saturating_add(local_online_extra);
+    let remote_light_nodes = remote_light_peer_ids.len() as u64;
     let local_light_nodes = if status.running && local_role_known && local_is_light {
         1
     } else {
@@ -333,13 +363,13 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
     let remote_online_nodes =
         (online_peer_ids.len() as u64).saturating_sub(if local_in_online_set { 1 } else { 0 });
     let remote_full_nodes = remote_online_nodes.saturating_sub(remote_light_nodes);
-    let local_full_nodes = if status.running && local_role_known && !local_is_light {
+    let local_full_nodes = if status.running && (!local_role_known || !local_is_light) {
         1
     } else {
         0
     };
     if status.running && !local_role_known {
-        warnings.push("未能判定本机轻/全节点，本机未计入 fullNodes".to_string());
+        warnings.push("未能判定本机轻/全节点，本机按全节点口径计入 fullNodes".to_string());
     }
 
     let mut guochuhui_nodes = 0u64;

@@ -2,9 +2,8 @@ mod home;
 mod mining;
 mod network;
 mod other;
-mod rpc;
 mod settings;
-mod validation;
+mod shared;
 
 use home::home_node::{
     cleanup_on_exit, get_chain_status, get_node_identity, get_node_status, set_node_name,
