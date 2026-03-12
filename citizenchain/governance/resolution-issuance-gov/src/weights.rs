@@ -43,8 +43,8 @@ use frame_support::{
 
 /// Weight functions for `resolution_issuance_gov`.
 pub trait WeightInfo {
-	fn set_allowed_recipients() -> Weight;
-	fn propose_resolution_issuance() -> Weight;
+	fn set_allowed_recipients(recipient_count: u32) -> Weight;
+	fn propose_resolution_issuance(allocation_count: u32, reason_len: u32) -> Weight;
 	fn finalize_joint_vote_approved() -> Weight;
 	fn finalize_joint_vote_rejected() -> Weight;
 	fn retry_failed_execution() -> Weight;
@@ -56,7 +56,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `ResolutionIssuanceGov::VotingProposalCount` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `ResolutionIssuanceGov::AllowedRecipients` (r:0 w:1)
 	/// Proof: `ResolutionIssuanceGov::AllowedRecipients` (`max_values`: Some(1), `max_size`: Some(1377), added: 1872, mode: `MaxEncodedLen`)
-	fn set_allowed_recipients() -> Weight {
+	fn set_allowed_recipients(_recipient_count: u32) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `103`
 		//  Estimated: `1489`
@@ -88,7 +88,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `ResolutionIssuanceGov::Proposals` (`max_values`: None, `max_size`: Some(3165), added: 5640, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::Proposals` (r:0 w:1)
 	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	fn propose_resolution_issuance() -> Weight {
+	fn propose_resolution_issuance(_allocation_count: u32, _reason_len: u32) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `2922`
 		//  Estimated: `6387`
@@ -191,7 +191,7 @@ impl WeightInfo for () {
 	/// Proof: `ResolutionIssuanceGov::VotingProposalCount` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `ResolutionIssuanceGov::AllowedRecipients` (r:0 w:1)
 	/// Proof: `ResolutionIssuanceGov::AllowedRecipients` (`max_values`: Some(1), `max_size`: Some(1377), added: 1872, mode: `MaxEncodedLen`)
-	fn set_allowed_recipients() -> Weight {
+	fn set_allowed_recipients(_recipient_count: u32) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `103`
 		//  Estimated: `1489`
@@ -223,7 +223,7 @@ impl WeightInfo for () {
 	/// Proof: `ResolutionIssuanceGov::Proposals` (`max_values`: None, `max_size`: Some(3165), added: 5640, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::Proposals` (r:0 w:1)
 	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	fn propose_resolution_issuance() -> Weight {
+	fn propose_resolution_issuance(_allocation_count: u32, _reason_len: u32) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `2922`
 		//  Estimated: `6387`

@@ -43,7 +43,7 @@ use frame_support::{
 
 /// Weight functions for `resolution_issuance_iss`.
 pub trait WeightInfo {
-	fn execute_resolution_issuance() -> Weight;
+	fn execute_resolution_issuance(reason_len: u32, allocation_count: u32) -> Weight;
 	fn clear_executed() -> Weight;
 	fn set_paused() -> Weight;
 }
@@ -60,7 +60,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `ResolutionIssuanceIss::Executed` (r:0 w:1)
 	/// Proof: `ResolutionIssuanceIss::Executed` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	fn execute_resolution_issuance() -> Weight {
+	fn execute_resolution_issuance(_reason_len: u32, _allocation_count: u32) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `337`
 		//  Estimated: `6196`
@@ -107,7 +107,7 @@ impl WeightInfo for () {
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `ResolutionIssuanceIss::Executed` (r:0 w:1)
 	/// Proof: `ResolutionIssuanceIss::Executed` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	fn execute_resolution_issuance() -> Weight {
+	fn execute_resolution_issuance(_reason_len: u32, _allocation_count: u32) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `337`
 		//  Estimated: `6196`
