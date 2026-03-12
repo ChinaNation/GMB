@@ -11,7 +11,10 @@ use frame_benchmarking::v2::*;
 use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
 use sp_core::{crypto::KeyTypeId, sr25519};
 use sp_io::crypto::{sr25519_generate, sr25519_sign};
-use sp_runtime::{traits::{BlakeTwo256, Hash, IdentifyAccount, Saturating, Zero}, MultiSigner};
+use sp_runtime::{
+    traits::{BlakeTwo256, Hash, IdentifyAccount, Saturating, Zero},
+    MultiSigner,
+};
 
 #[benchmarks]
 mod benchmarks {
@@ -22,9 +25,10 @@ mod benchmarks {
         let caller: T::AccountId = frame_benchmarking::account("caller", 0, 0);
         let key_type = KeyTypeId(*b"sfid");
         let public: sr25519::Public = sr25519_generate(key_type, None);
-        let sfid_main: T::AccountId =
-            T::AccountId::decode(&mut &MultiSigner::from(public.clone()).into_account().encode()[..])
-                .expect("benchmark sfid main account must decode");
+        let sfid_main: T::AccountId = T::AccountId::decode(
+            &mut &MultiSigner::from(public.clone()).into_account().encode()[..],
+        )
+        .expect("benchmark sfid main account must decode");
         SfidMainAccount::<T>::put(sfid_main);
 
         let sfid_bytes = b"benchmark-sfid-code".to_vec();

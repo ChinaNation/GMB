@@ -36,7 +36,7 @@ Runtime 接线位置：
 - `NrcProposeOrigin = EnsureNrcAdmin`：仅 NRC 管理员可发起提案与执行重试。
 - `RecipientSetOrigin = EnsureRoot<AccountId>`：仅 Root 可更新收款账户集合。
 - `JointVoteFinalizeOrigin = EnsureJointVoteFinalizeOrigin`：生产态拒绝外部 finalize 调用；benchmark 下允许 Root。
-- `IssuanceExecutor = ResolutionIssuanceIss`：发行执行委托给发行模块。
+- `IssuanceExecutor = ResolutionIssuanceIss`：发行执行委托给发行模块，trait 载荷同样受 `MaxReasonLen` / `MaxAllocations` 限制。
 - `JointVoteEngine = VotingEngineSystem`：联合投票创建由投票引擎承担。
 - `MaxExecutionRetries = ConstU32<5>`：生产态最多重试 5 次。
 
@@ -80,7 +80,7 @@ Genesis：
 流程：
 1. 校验来源为 `JointVoteFinalizeOrigin`。
 2. 进入 `apply_joint_vote_result`：
-- `approved=true` 时尝试执行发行。
+- `approved=true` 时将提案中的 bounded `reason` / `allocations` 组装成执行载荷并尝试执行发行。
 - 执行成功：状态置 `Passed`，清理映射，清理重试计数，`VotingProposalCount -= 1`。
 - 执行失败：状态置 `ExecutionFailed`，清理映射，`VotingProposalCount -= 1`。
 - `approved=false`：状态置 `Rejected`，清理映射，`VotingProposalCount -= 1`。
@@ -103,6 +103,7 @@ Genesis：
 2. 提案必须存在且状态为 `ExecutionFailed`。
 3. `RetryCount < MaxExecutionRetries`。
 4. 再次调用发行执行模块。
+   调用时继续沿用提案内已受边界约束的 `reason` / `allocations`。
 5. 成功则状态改 `Passed` 并清除 `RetryCount`；失败则 `RetryCount += 1` 并发失败事件。
 
 ## 5. 生命周期与状态机

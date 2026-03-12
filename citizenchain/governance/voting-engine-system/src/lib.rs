@@ -6,7 +6,7 @@ pub mod internal_vote;
 pub mod joint_vote;
 pub mod weights;
 
-pub use citizen_vote::SfidEligibility;
+pub use citizen_vote::{SfidEligibility, VoteCredentialCleanup};
 pub use pallet::*;
 
 use codec::{Decode, Encode, MaxEncodedLen};
@@ -152,6 +152,14 @@ pub struct VoteCountU64 {
     pub no: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub enum PendingCleanupStage {
+    InternalVotes,
+    JointVotes,
+    CitizenVotes,
+    VoteCredentials,
+}
+
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
@@ -178,6 +186,18 @@ pub mod pallet {
         /// 每个区块自动处理的“到期提案”上限，避免 on_initialize 无界增长。
         #[pallet::constant]
         type MaxAutoFinalizePerBlock: Get<u32>;
+
+        /// 单个到期区块允许挂载的提案 ID 上限，避免 expiry 桶无界增长。
+        #[pallet::constant]
+        type MaxProposalsPerExpiry: Get<u32>;
+
+        /// 每个区块最多执行多少个清理步骤，避免历史提案清理拖垮 on_initialize。
+        #[pallet::constant]
+        type MaxCleanupStepsPerBlock: Get<u32>;
+
+        /// 每个清理步骤最多删除多少条前缀项。
+        #[pallet::constant]
+        type CleanupKeysPerStep: Get<u32>;
 
         type SfidEligibility: SfidEligibility<Self::AccountId, Self::Hash>;
         type PopulationSnapshotVerifier: PopulationSnapshotVerifier<
@@ -211,15 +231,25 @@ pub mod pallet {
 
     /// 以“阶段截止区块”索引提案，用于 on_initialize 自动超时结算。
     #[pallet::storage]
-    #[pallet::unbounded]
     #[pallet::getter(fn proposals_by_expiry)]
-    pub type ProposalsByExpiry<T: Config> =
-        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Vec<u64>, ValueQuery>;
+    pub type ProposalsByExpiry<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        BlockNumberFor<T>,
+        BoundedVec<u64, <T as Config>::MaxProposalsPerExpiry>,
+        ValueQuery,
+    >;
 
     /// 自动结算游标：记录上个区块未处理完的过期桶。
     #[pallet::storage]
     #[pallet::getter(fn pending_expiry_bucket)]
     pub type PendingExpiryBucket<T: Config> = StorageValue<_, BlockNumberFor<T>, OptionQuery>;
+
+    /// 分块清理游标：按提案维度逐步清理历史投票状态，避免 finalize 路径单次无界删除。
+    #[pallet::storage]
+    #[pallet::getter(fn pending_cleanup_stage)]
+    pub type PendingProposalCleanups<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, PendingCleanupStage, OptionQuery>;
 
     #[pallet::storage]
     pub type InternalVotesByAccount<T: Config> = StorageDoubleMap<
@@ -320,50 +350,49 @@ pub mod pallet {
         ProposalAlreadyFinalized,
         ProposalIdOverflow,
         AccountIdEncodingMismatch,
+        TooManyProposalsAtExpiry,
     }
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+            let mut weight = Weight::zero();
             let max_auto_finalize = T::MaxAutoFinalizePerBlock::get() as usize;
-            if max_auto_finalize == 0 {
-                return Weight::zero();
-            }
 
-            let db_weight = T::DbWeight::get();
-            let mut weight = db_weight.reads(1);
-            let mut budget = max_auto_finalize;
-            let pending = PendingExpiryBucket::<T>::get();
+            if max_auto_finalize > 0 {
+                let db_weight = T::DbWeight::get();
+                weight = weight.saturating_add(db_weight.reads(1));
+                let mut budget = max_auto_finalize;
+                let pending = PendingExpiryBucket::<T>::get();
 
-            if let Some(expiry) = pending {
-                if expiry <= n {
-                    let (processed, has_remaining, processed_weight) =
-                        Self::auto_finalize_expiry_bucket(expiry, n, budget);
-                    weight = weight.saturating_add(processed_weight);
-                    budget = budget.saturating_sub(processed);
-                    if has_remaining {
-                        PendingExpiryBucket::<T>::put(expiry);
+                if let Some(expiry) = pending {
+                    if expiry <= n {
+                        let (processed, has_remaining, processed_weight) =
+                            Self::auto_finalize_expiry_bucket(expiry, n, budget);
+                        weight = weight.saturating_add(processed_weight);
+                        budget = budget.saturating_sub(processed);
+                        if has_remaining {
+                            PendingExpiryBucket::<T>::put(expiry);
+                            weight = weight.saturating_add(db_weight.writes(1));
+                            return weight.saturating_add(Self::process_pending_cleanup_steps());
+                        }
+                        PendingExpiryBucket::<T>::kill();
                         weight = weight.saturating_add(db_weight.writes(1));
-                        return weight;
                     }
-                    PendingExpiryBucket::<T>::kill();
-                    weight = weight.saturating_add(db_weight.writes(1));
+                }
+
+                if budget > 0 {
+                    let (_processed, has_remaining, processed_weight) =
+                        Self::auto_finalize_expiry_bucket(n, n, budget);
+                    weight = weight.saturating_add(processed_weight);
+                    if has_remaining {
+                        PendingExpiryBucket::<T>::put(n);
+                        weight = weight.saturating_add(db_weight.writes(1));
+                    }
                 }
             }
 
-            if budget == 0 {
-                return weight;
-            }
-
-            let (_processed, has_remaining, processed_weight) =
-                Self::auto_finalize_expiry_bucket(n, n, budget);
-            weight = weight.saturating_add(processed_weight);
-            if has_remaining {
-                PendingExpiryBucket::<T>::put(n);
-                weight = weight.saturating_add(db_weight.writes(1));
-            }
-
-            weight
+            weight.saturating_add(Self::process_pending_cleanup_steps())
         }
     }
 
@@ -468,10 +497,16 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        pub(crate) fn schedule_proposal_expiry(proposal_id: u64, end: BlockNumberFor<T>) {
+        pub(crate) fn schedule_proposal_expiry(
+            proposal_id: u64,
+            end: BlockNumberFor<T>,
+        ) -> DispatchResult {
             // end 表示“最后一个仍可投票区块”，因此超时结算应在 end+1 触发。
             let expiry = end.saturating_add(One::one());
-            ProposalsByExpiry::<T>::mutate(expiry, |ids| ids.push(proposal_id));
+            ProposalsByExpiry::<T>::try_mutate(expiry, |ids| {
+                ids.try_push(proposal_id)
+                    .map_err(|_| Error::<T>::TooManyProposalsAtExpiry.into())
+            })
         }
 
         fn auto_finalize_expiry_bucket(
@@ -509,7 +544,11 @@ pub mod pallet {
                     retry_ids.push(proposal_id);
                 }
             }
-            proposal_ids.extend(retry_ids);
+            for proposal_id in retry_ids {
+                proposal_ids
+                    .try_push(proposal_id)
+                    .expect("retry ids come from the drained expiry bucket and must fit");
+            }
 
             let has_remaining = !proposal_ids.is_empty();
             if has_remaining {
@@ -579,13 +618,110 @@ pub mod pallet {
                         // 才允许投票引擎把提案标记为最终状态。
                         return TransactionOutcome::Rollback(Err(err));
                     }
-                    // 中文注释：联合/公民提案一旦进入终态，就自动释放该提案维度下
-                    // 的 SFID 投票防重放状态，避免 UsedVoteNonce 随历史提案持续膨胀。
-                    T::SfidEligibility::cleanup_vote_credentials(proposal_id);
                 }
 
                 TransactionOutcome::Commit(Ok(()))
             })
+        }
+
+        fn process_pending_cleanup_steps() -> Weight {
+            let max_steps = T::MaxCleanupStepsPerBlock::get() as usize;
+            if max_steps == 0 {
+                return Weight::zero();
+            }
+
+            let cleanup_limit = T::CleanupKeysPerStep::get().max(1);
+            let db_weight = T::DbWeight::get();
+            let mut weight = Weight::zero();
+
+            for _ in 0..max_steps {
+                let Some((proposal_id, stage)) = PendingProposalCleanups::<T>::iter().next() else {
+                    break;
+                };
+                weight = weight.saturating_add(db_weight.reads(1));
+
+                let (next_stage, step_weight) =
+                    Self::process_pending_cleanup_step(proposal_id, stage, cleanup_limit);
+                weight = weight.saturating_add(step_weight);
+
+                match next_stage {
+                    Some(next) if next != stage => {
+                        PendingProposalCleanups::<T>::insert(proposal_id, next);
+                        weight = weight.saturating_add(db_weight.writes(1));
+                    }
+                    Some(_) => {}
+                    None => {
+                        PendingProposalCleanups::<T>::remove(proposal_id);
+                        weight = weight.saturating_add(db_weight.writes(1));
+                    }
+                }
+            }
+
+            weight
+        }
+
+        fn process_pending_cleanup_step(
+            proposal_id: u64,
+            stage: PendingCleanupStage,
+            cleanup_limit: u32,
+        ) -> (Option<PendingCleanupStage>, Weight) {
+            let db_weight = T::DbWeight::get();
+
+            match stage {
+                PendingCleanupStage::InternalVotes => {
+                    let result =
+                        InternalVotesByAccount::<T>::clear_prefix(proposal_id, cleanup_limit, None);
+                    let weight =
+                        db_weight.reads_writes(u64::from(result.loops), u64::from(result.unique));
+                    let next = if result.maybe_cursor.is_some() {
+                        Some(PendingCleanupStage::InternalVotes)
+                    } else {
+                        None
+                    };
+                    (next, weight)
+                }
+                PendingCleanupStage::JointVotes => {
+                    let result = JointVotesByInstitution::<T>::clear_prefix(
+                        proposal_id,
+                        cleanup_limit,
+                        None,
+                    );
+                    let weight =
+                        db_weight.reads_writes(u64::from(result.loops), u64::from(result.unique));
+                    let next = if result.maybe_cursor.is_some() {
+                        Some(PendingCleanupStage::JointVotes)
+                    } else {
+                        Some(PendingCleanupStage::CitizenVotes)
+                    };
+                    (next, weight)
+                }
+                PendingCleanupStage::CitizenVotes => {
+                    let result =
+                        CitizenVotesBySfid::<T>::clear_prefix(proposal_id, cleanup_limit, None);
+                    let weight =
+                        db_weight.reads_writes(u64::from(result.loops), u64::from(result.unique));
+                    let next = if result.maybe_cursor.is_some() {
+                        Some(PendingCleanupStage::CitizenVotes)
+                    } else {
+                        Some(PendingCleanupStage::VoteCredentials)
+                    };
+                    (next, weight)
+                }
+                PendingCleanupStage::VoteCredentials => {
+                    let result = T::SfidEligibility::cleanup_vote_credentials_chunk(
+                        proposal_id,
+                        cleanup_limit,
+                    );
+                    let weight =
+                        db_weight.reads_writes(u64::from(result.loops), u64::from(result.removed));
+                    let next = if result.has_remaining {
+                        Some(PendingCleanupStage::VoteCredentials)
+                    } else {
+                        None
+                    };
+                    (next, weight)
+                }
+            }
         }
     }
 }
@@ -616,20 +752,8 @@ impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
     fn cleanup_joint_proposal(proposal_id: u64) {
         pallet::Proposals::<T>::remove(proposal_id);
         pallet::JointTallies::<T>::remove(proposal_id);
-        let clear_joint =
-            pallet::JointVotesByInstitution::<T>::clear_prefix(proposal_id, u32::MAX, None);
-        debug_assert!(
-            clear_joint.maybe_cursor.is_none(),
-            "joint institution votes were not fully cleared"
-        );
         pallet::CitizenTallies::<T>::remove(proposal_id);
-        let clear_citizen =
-            pallet::CitizenVotesBySfid::<T>::clear_prefix(proposal_id, u32::MAX, None);
-        debug_assert!(
-            clear_citizen.maybe_cursor.is_none(),
-            "citizen votes were not fully cleared"
-        );
-        T::SfidEligibility::cleanup_vote_credentials(proposal_id);
+        pallet::PendingProposalCleanups::<T>::insert(proposal_id, PendingCleanupStage::JointVotes);
     }
 }
 
@@ -653,11 +777,9 @@ impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
     fn cleanup_internal_proposal(proposal_id: u64) {
         pallet::Proposals::<T>::remove(proposal_id);
         pallet::InternalTallies::<T>::remove(proposal_id);
-        let clear_result =
-            pallet::InternalVotesByAccount::<T>::clear_prefix(proposal_id, u32::MAX, None);
-        debug_assert!(
-            clear_result.maybe_cursor.is_none(),
-            "internal votes were not fully cleared"
+        pallet::PendingProposalCleanups::<T>::insert(
+            proposal_id,
+            PendingCleanupStage::InternalVotes,
         );
     }
 }
@@ -718,6 +840,9 @@ mod tests {
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
         type MaxAutoFinalizePerBlock = ConstU32<64>;
+        type MaxProposalsPerExpiry = ConstU32<128>;
+        type MaxCleanupStepsPerBlock = ConstU32<3>;
+        type CleanupKeysPerStep = ConstU32<2>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = TestJointVoteResultCallback;
@@ -787,6 +912,34 @@ mod tests {
             USED_VOTE_NONCES.with(|set| {
                 set.borrow_mut().retain(|(pid, _, _)| *pid != proposal_id);
             });
+        }
+
+        fn cleanup_vote_credentials_chunk(proposal_id: u64, limit: u32) -> VoteCredentialCleanup {
+            let mut to_remove = Vec::new();
+            USED_VOTE_NONCES.with(|set| {
+                for key in set.borrow().iter() {
+                    if key.0 == proposal_id {
+                        to_remove.push(key.clone());
+                        if to_remove.len() >= limit as usize {
+                            break;
+                        }
+                    }
+                }
+            });
+
+            let has_remaining = USED_VOTE_NONCES.with(|set| {
+                let mut set = set.borrow_mut();
+                for key in &to_remove {
+                    set.remove(key);
+                }
+                set.iter().any(|(pid, _, _)| *pid == proposal_id)
+            });
+
+            VoteCredentialCleanup {
+                removed: to_remove.len() as u32,
+                loops: to_remove.len() as u32,
+                has_remaining,
+            }
         }
     }
 
@@ -987,7 +1140,7 @@ mod tests {
                     internal_vote::ORG_NRC,
                     nrc_pid(),
                 ),
-                pallet::Error::<Test>::InvalidInstitution
+                pallet::Error::<Test>::NoPermission
             );
 
             assert_noop!(
@@ -996,7 +1149,7 @@ mod tests {
                     internal_vote::ORG_NRC,
                     nrc_pid(),
                 ),
-                pallet::Error::<Test>::InvalidInstitution
+                pallet::Error::<Test>::NoPermission
             );
 
             assert_eq!(
@@ -1027,7 +1180,7 @@ mod tests {
                     0,
                     true,
                 ),
-                pallet::Error::<Test>::InvalidInstitution
+                pallet::Error::<Test>::NoPermission
             );
 
             assert_ok!(
@@ -1382,7 +1535,7 @@ mod tests {
     fn citizen_timeout_is_auto_rejected_on_initialize() {
         new_test_ext().execute_with(|| {
             insert_citizen_proposal(0, 10, 5);
-            VotingEngineSystem::schedule_proposal_expiry(0, 5);
+            assert_ok!(VotingEngineSystem::schedule_proposal_expiry(0, 5));
             CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
 
             System::set_block_number(6);
@@ -1397,10 +1550,10 @@ mod tests {
     }
 
     #[test]
-    fn citizen_timeout_auto_cleanup_used_vote_nonce_on_initialize() {
+    fn citizen_timeout_cleanup_requires_explicit_joint_cleanup_request() {
         new_test_ext().execute_with(|| {
             insert_citizen_proposal(0, 10, 5);
-            VotingEngineSystem::schedule_proposal_expiry(0, 5);
+            assert_ok!(VotingEngineSystem::schedule_proposal_expiry(0, 5));
 
             assert_ok!(VotingEngineSystem::citizen_vote(
                 RuntimeOrigin::signed(nrc_admin(0)),
@@ -1421,6 +1574,11 @@ mod tests {
                     .status,
                 STATUS_REJECTED
             );
+            assert!(has_used_vote_nonce(0, sfid_hash_ok(), "timeout-cleanup"));
+
+            <VotingEngineSystem as JointVoteEngine<AccountId32>>::cleanup_joint_proposal(0);
+            System::set_block_number(7);
+            <VotingEngineSystem as Hooks<u64>>::on_initialize(7);
             assert!(!has_used_vote_nonce(0, sfid_hash_ok(), "timeout-cleanup"));
         });
     }
@@ -1506,7 +1664,7 @@ mod tests {
     }
 
     #[test]
-    fn citizen_vote_immediate_pass_auto_cleans_used_vote_nonce() {
+    fn cleanup_joint_proposal_cleans_used_vote_nonce_on_next_initialize() {
         new_test_ext().execute_with(|| {
             insert_citizen_proposal(0, 10, 100);
             CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
@@ -1522,6 +1680,11 @@ mod tests {
 
             let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
             assert_eq!(proposal.status, STATUS_PASSED);
+            assert!(has_used_vote_nonce(0, sfid_hash_ok(), "immediate-cleanup"));
+
+            <VotingEngineSystem as JointVoteEngine<AccountId32>>::cleanup_joint_proposal(0);
+            System::set_block_number(101);
+            <VotingEngineSystem as Hooks<u64>>::on_initialize(101);
             assert!(!has_used_vote_nonce(0, sfid_hash_ok(), "immediate-cleanup"));
         });
     }
@@ -1880,7 +2043,10 @@ mod tests {
             let total = 70u64;
             for proposal_id in 0..total {
                 insert_citizen_proposal(proposal_id, 10, end);
-                VotingEngineSystem::schedule_proposal_expiry(proposal_id, end);
+                assert_ok!(VotingEngineSystem::schedule_proposal_expiry(
+                    proposal_id,
+                    end
+                ));
             }
 
             System::set_block_number(6);
@@ -1900,6 +2066,89 @@ mod tests {
                     STATUS_REJECTED
                 );
             }
+        });
+    }
+
+    #[test]
+    fn schedule_proposal_expiry_rejects_bucket_overflow() {
+        new_test_ext().execute_with(|| {
+            let end = 5u64;
+            for proposal_id in 0..128u64 {
+                assert_ok!(VotingEngineSystem::schedule_proposal_expiry(
+                    proposal_id,
+                    end
+                ));
+            }
+
+            assert_noop!(
+                VotingEngineSystem::schedule_proposal_expiry(999, end),
+                pallet::Error::<Test>::TooManyProposalsAtExpiry
+            );
+        });
+    }
+
+    #[test]
+    fn cleanup_joint_proposal_chunks_cleanup_across_blocks() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = 42u64;
+            let citizen_hashes = [
+                <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-1"),
+                <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-2"),
+                <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-3"),
+            ];
+
+            insert_citizen_proposal(proposal_id, 10, 100);
+            JointVotesByInstitution::<Test>::insert(proposal_id, nrc_pid(), true);
+            JointVotesByInstitution::<Test>::insert(proposal_id, prc_pid(), true);
+            JointVotesByInstitution::<Test>::insert(proposal_id, prb_pid(), true);
+            for (index, sfid_hash) in citizen_hashes.iter().enumerate() {
+                CitizenVotesBySfid::<Test>::insert(proposal_id, *sfid_hash, true);
+                let nonce = match index {
+                    0 => "cleanup-nonce-1",
+                    1 => "cleanup-nonce-2",
+                    _ => "cleanup-nonce-3",
+                };
+                mark_vote_nonce_used(proposal_id, *sfid_hash, nonce);
+            }
+
+            <VotingEngineSystem as JointVoteEngine<AccountId32>>::cleanup_joint_proposal(
+                proposal_id,
+            );
+            assert_eq!(
+                PendingProposalCleanups::<Test>::get(proposal_id),
+                Some(PendingCleanupStage::JointVotes)
+            );
+
+            System::set_block_number(1);
+            <VotingEngineSystem as Hooks<u64>>::on_initialize(1);
+            assert_eq!(
+                PendingProposalCleanups::<Test>::get(proposal_id),
+                Some(PendingCleanupStage::VoteCredentials)
+            );
+            assert!(
+                has_used_vote_nonce(proposal_id, citizen_hashes[0], "cleanup-nonce-1")
+                    || has_used_vote_nonce(proposal_id, citizen_hashes[1], "cleanup-nonce-2")
+                    || has_used_vote_nonce(proposal_id, citizen_hashes[2], "cleanup-nonce-3")
+            );
+
+            System::set_block_number(2);
+            <VotingEngineSystem as Hooks<u64>>::on_initialize(2);
+            assert!(PendingProposalCleanups::<Test>::get(proposal_id).is_none());
+            assert!(!has_used_vote_nonce(
+                proposal_id,
+                <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-1"),
+                "cleanup-nonce-1"
+            ));
+            assert!(!has_used_vote_nonce(
+                proposal_id,
+                <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-2"),
+                "cleanup-nonce-2"
+            ));
+            assert!(!has_used_vote_nonce(
+                proposal_id,
+                <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-3"),
+                "cleanup-nonce-3"
+            ));
         });
     }
 }

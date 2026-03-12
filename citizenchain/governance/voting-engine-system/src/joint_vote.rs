@@ -1,7 +1,11 @@
 #![allow(dead_code)]
 
 use codec::Encode;
-use frame_support::{ensure, pallet_prelude::DispatchResult};
+use frame_support::{
+    ensure,
+    pallet_prelude::DispatchResult,
+    storage::{with_transaction, TransactionOutcome},
+};
 use sp_runtime::traits::Hash;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 
@@ -154,7 +158,6 @@ impl<T: Config> Pallet<T> {
             Error::<T>::InvalidPopulationSnapshot
         );
 
-        let id = Self::allocate_proposal_id()?;
         let snapshot_nonce_hash = T::Hashing::hash(snapshot_nonce.as_slice());
         ensure!(
             !UsedPopulationSnapshotNonce::<T>::get(snapshot_nonce_hash),
@@ -169,7 +172,6 @@ impl<T: Config> Pallet<T> {
             ),
             Error::<T>::InvalidPopulationSnapshot
         );
-        UsedPopulationSnapshotNonce::<T>::insert(snapshot_nonce_hash, true);
 
         let now = <frame_system::Pallet<T>>::block_number();
         // 中文注释：联合提案创建时就锁定公民投票分母与人口快照，后续阶段切换不再改写。
@@ -186,15 +188,25 @@ impl<T: Config> Pallet<T> {
             citizen_eligible_total: eligible_total,
         };
 
-        Proposals::<T>::insert(id, proposal);
-        Self::schedule_proposal_expiry(id, end);
-        Self::deposit_event(Event::<T>::ProposalCreated {
-            proposal_id: id,
-            kind: PROPOSAL_KIND_JOINT,
-            stage: STAGE_JOINT,
-            end,
-        });
-        Ok(id)
+        with_transaction(|| {
+            let id = match Self::allocate_proposal_id() {
+                Ok(id) => id,
+                Err(err) => return TransactionOutcome::Rollback(Err(err)),
+            };
+
+            UsedPopulationSnapshotNonce::<T>::insert(snapshot_nonce_hash, true);
+            Proposals::<T>::insert(id, proposal);
+            if let Err(err) = Self::schedule_proposal_expiry(id, end) {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+            Self::deposit_event(Event::<T>::ProposalCreated {
+                proposal_id: id,
+                kind: PROPOSAL_KIND_JOINT,
+                stage: STAGE_JOINT,
+                end,
+            });
+            TransactionOutcome::Commit(Ok(id))
+        })
     }
 
     pub(crate) fn do_submit_joint_institution_vote(
@@ -292,25 +304,33 @@ impl<T: Config> Pallet<T> {
     fn advance_joint_to_citizen(proposal_id: u64) -> DispatchResult {
         let now = <frame_system::Pallet<T>>::block_number();
         let citizen_end = now.saturating_add(Self::citizen_stage_duration());
-        let eligible_total = Proposals::<T>::try_mutate(
-            proposal_id,
-            |maybe| -> Result<u64, sp_runtime::DispatchError> {
-                let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
-                let eligible_total = proposal.citizen_eligible_total;
-                // 中文注释：这里只切换阶段窗口，不重算 eligible_total，保证联合阶段锁定的分母继续生效。
-                proposal.stage = crate::STAGE_CITIZEN;
-                proposal.start = now;
-                proposal.end = citizen_end;
-                Ok(eligible_total)
-            },
-        )?;
-        Self::schedule_proposal_expiry(proposal_id, citizen_end);
+        with_transaction(|| {
+            let eligible_total = match Proposals::<T>::try_mutate(
+                proposal_id,
+                |maybe| -> Result<u64, sp_runtime::DispatchError> {
+                    let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
+                    let eligible_total = proposal.citizen_eligible_total;
+                    // 中文注释：这里只切换阶段窗口，不重算 eligible_total，保证联合阶段锁定的分母继续生效。
+                    proposal.stage = crate::STAGE_CITIZEN;
+                    proposal.start = now;
+                    proposal.end = citizen_end;
+                    Ok(eligible_total)
+                },
+            ) {
+                Ok(total) => total,
+                Err(err) => return TransactionOutcome::Rollback(Err(err)),
+            };
 
-        Self::deposit_event(Event::<T>::ProposalAdvancedToCitizen {
-            proposal_id,
-            citizen_end,
-            eligible_total,
-        });
-        Ok(())
+            if let Err(err) = Self::schedule_proposal_expiry(proposal_id, citizen_end) {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+
+            Self::deposit_event(Event::<T>::ProposalAdvancedToCitizen {
+                proposal_id,
+                citizen_end,
+                eligible_total,
+            });
+            TransactionOutcome::Commit(Ok(()))
+        })
     }
 }

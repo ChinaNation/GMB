@@ -18,8 +18,10 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use primitives::china::china_cb::CHINA_CB;
-    use resolution_issuance_iss::weights::WeightInfo as IssuanceWeightInfoT;
-    use resolution_issuance_iss::ResolutionIssuanceExecutor;
+    use resolution_issuance_iss::{
+        weights::WeightInfo as IssuanceWeightInfoT, ResolutionAllocationsOf,
+        ResolutionIssuanceExecutor, ResolutionReasonOf,
+    };
     use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
     use voting_engine_system::JointVoteEngine;
 
@@ -122,7 +124,12 @@ pub mod pallet {
         type JointVoteFinalizeOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
         /// 投票通过后，调用发行执行模块执行铸币。
-        type IssuanceExecutor: ResolutionIssuanceExecutor<Self::AccountId, u128>;
+        type IssuanceExecutor: ResolutionIssuanceExecutor<
+            Self::AccountId,
+            u128,
+            Self::MaxReasonLen,
+            Self::MaxAllocations,
+        >;
         /// 用于估算发行执行路径的 weight。
         type IssuanceWeightInfo: IssuanceWeightInfoT;
         type JointVoteEngine: JointVoteEngine<Self::AccountId>;
@@ -477,15 +484,12 @@ pub mod pallet {
             );
             let next_retry_count = retry_count.saturating_add(1);
 
-            let execute_allocations = proposal
-                .allocations
-                .iter()
-                .map(|x| (x.recipient.clone(), x.amount))
-                .collect();
+            let (execute_reason, execute_allocations) =
+                Self::issuance_payload(&proposal.reason, &proposal.allocations);
 
             if T::IssuanceExecutor::execute_resolution_issuance(
                 proposal_id,
-                proposal.reason.to_vec(),
+                execute_reason,
                 proposal.total_amount,
                 execute_allocations,
             )
@@ -530,15 +534,12 @@ pub mod pallet {
                 }
 
                 if approved {
-                    let execute_allocations = proposal
-                        .allocations
-                        .iter()
-                        .map(|x| (x.recipient.clone(), x.amount))
-                        .collect();
+                    let (execute_reason, execute_allocations) =
+                        Self::issuance_payload(&proposal.reason, &proposal.allocations);
 
                     if T::IssuanceExecutor::execute_resolution_issuance(
                         proposal_id,
-                        proposal.reason.to_vec(),
+                        execute_reason,
                         proposal.total_amount,
                         execute_allocations,
                     )
@@ -642,6 +643,27 @@ pub mod pallet {
             ensure!(seen == expected_set, Error::<T>::InvalidRecipientSet);
             ensure!(sum == total_amount, Error::<T>::TotalMismatch);
             Ok(())
+        }
+
+        fn issuance_payload(
+            reason: &ReasonOf<T>,
+            allocations: &AllocationOf<T>,
+        ) -> (
+            ResolutionReasonOf<T::MaxReasonLen>,
+            ResolutionAllocationsOf<T::AccountId, u128, T::MaxAllocations>,
+        ) {
+            let execute_reason: ResolutionReasonOf<T::MaxReasonLen> = reason.clone();
+            let execute_allocations: ResolutionAllocationsOf<
+                T::AccountId,
+                u128,
+                T::MaxAllocations,
+            > = allocations
+                .iter()
+                .map(|x| (x.recipient.clone(), x.amount))
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("proposal allocations are already bounded by MaxAllocations");
+            (execute_reason, execute_allocations)
         }
 
         fn ensure_unique_recipients(recipients: &[T::AccountId]) -> DispatchResult {
@@ -797,14 +819,23 @@ mod tests {
     }
 
     pub struct TestIssuanceExecutor;
-    impl resolution_issuance_iss::ResolutionIssuanceExecutor<AccountId32, u128>
-        for TestIssuanceExecutor
+    impl
+        resolution_issuance_iss::ResolutionIssuanceExecutor<
+            AccountId32,
+            u128,
+            ConstU32<128>,
+            ConstU32<64>,
+        > for TestIssuanceExecutor
     {
         fn execute_resolution_issuance(
             proposal_id: u64,
-            _reason: Vec<u8>,
+            _reason: resolution_issuance_iss::ResolutionReasonOf<ConstU32<128>>,
             total_amount: u128,
-            allocations: Vec<(AccountId32, u128)>,
+            allocations: resolution_issuance_iss::ResolutionAllocationsOf<
+                AccountId32,
+                u128,
+                ConstU32<64>,
+            >,
         ) -> DispatchResult {
             let should_fail = EXEC_SHOULD_FAIL.with(|v| *v.borrow());
             if should_fail {

@@ -50,7 +50,7 @@ use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use sp_core::{sr25519, Void};
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
 use sp_runtime::{
-    traits::{AccountIdConversion, Hash as _, IdentifyAccount, One},
+    traits::{AccountIdConversion, IdentifyAccount, One},
     MultiSigner, Perbill,
 };
 use sp_version::RuntimeVersion;
@@ -950,6 +950,9 @@ impl voting_engine_system::Config for Runtime {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<2_048>;
+    type MaxProposalsPerExpiry = ConstU32<2_048>;
+    type MaxCleanupStepsPerBlock = ConstU32<8>;
+    type CleanupKeysPerStep = ConstU32<256>;
     type SfidEligibility = RuntimeSfidEligibility;
     type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
@@ -1643,5 +1646,21 @@ impl voting_engine_system::SfidEligibility<AccountId, Hash> for RuntimeSfidEligi
             AccountId,
             Hash,
         >>::cleanup_vote_credentials(proposal_id)
+    }
+
+    fn cleanup_vote_credentials_chunk(
+        proposal_id: u64,
+        limit: u32,
+    ) -> voting_engine_system::VoteCredentialCleanup {
+        let result = sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::clear_prefix(
+            proposal_id,
+            limit,
+            None,
+        );
+        voting_engine_system::VoteCredentialCleanup {
+            removed: result.unique,
+            loops: result.loops,
+            has_remaining: result.maybe_cursor.is_some(),
+        }
     }
 }

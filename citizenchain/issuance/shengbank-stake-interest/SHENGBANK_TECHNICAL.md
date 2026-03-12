@@ -124,8 +124,9 @@ Runtime 接线：
 - `force_advance_year()`
 
 补充说明：
-- `weights.rs` 仍是保守手写估算。
-- `benchmarks.rs` 已覆盖两个 Root 调用，后续可用 benchmark 产物替换手工值。
+- `weights.rs` 当前为 `frame-benchmarking` 生成产物。
+- `benchmarks.rs` 覆盖两个 Root 调用，`force_settle_years` 的组件范围应与 `MAX_FORCE_SETTLE_YEARS` 保持一致。
+- 若 benchmark 组件范围、执行路径或常量边界发生变化，需要重新生成 `weights.rs`，不是历史上跑过一次就可以永久沿用。
 
 ## 9. 测试覆盖
 执行命令：
@@ -147,6 +148,6 @@ Runtime 接线：
 本轮没有发现新的高风险权限绕过或资金记账一致性漏洞。
 
 建议：
-1. `weights.rs` 仍为保守手写值，后续应以 benchmark 产物替换。  
+1. 若调整 benchmark 组件范围、年度上限或结算路径，应同步重新跑 benchmark 并更新 `weights.rs`。  
 2. `force_advance_year` 属于恢复型 Root 接口，运维上应优先修复故障再跳过年度，只把它当成最后手段。  
 3. 若未来 `CHINA_CH` 的 `stake_amount` 或运行时 `Balance` 精度发生变化，建议补一条“利息乘法溢出”显式检测事件，避免继续依赖饱和算术。  
