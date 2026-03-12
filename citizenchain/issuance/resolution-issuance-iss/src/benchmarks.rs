@@ -21,9 +21,9 @@ mod benchmarks {
 
         let recipient_a: T::AccountId = frame_benchmarking::account("recipient", 0, 0);
         let recipient_b: T::AccountId = frame_benchmarking::account("recipient", 1, 0);
-        let amount_a: pallet::BalanceOf<T> = 100u32.saturated_into();
-        let amount_b: pallet::BalanceOf<T> = 200u32.saturated_into();
-        let total_amount: pallet::BalanceOf<T> = 300u32.saturated_into();
+        let amount_a: pallet::BalanceOf<T> = 200u32.saturated_into();
+        let amount_b: pallet::BalanceOf<T> = 300u32.saturated_into();
+        let total_amount: pallet::BalanceOf<T> = 500u32.saturated_into();
 
         let allocations = vec![(recipient_a, amount_a), (recipient_b, amount_b)];
 
@@ -49,7 +49,7 @@ mod benchmarks {
         let proposal_id = 2u64;
         let reason = vec![b'c'; 8];
         let recipient: T::AccountId = frame_benchmarking::account("recipient", 2, 0);
-        let amount: pallet::BalanceOf<T> = 100u32.saturated_into();
+        let amount: pallet::BalanceOf<T> = 200u32.saturated_into();
 
         assert!(
             <Pallet<T> as ResolutionIssuanceExecutor<T::AccountId, pallet::BalanceOf<T>>>::execute_resolution_issuance(
