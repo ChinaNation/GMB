@@ -25,6 +25,9 @@ mod benchmarks {
     #[benchmark]
     fn force_advance_year() {
         // 确保可推进到年度 1
+        let blocks_per_year = T::BlocksPerYear::get();
+        let target_block = u32::try_from(blocks_per_year.max(1)).unwrap_or(u32::MAX);
+        frame_system::Pallet::<T>::set_block_number(target_block.into());
         pallet::LastSettledYear::<T>::put(0u32);
 
         #[extrinsic_call]
