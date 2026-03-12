@@ -1,3 +1,4 @@
+// 共享 RPC 请求封装，供 home/settings/mining/network 复用同一套连接池与安全限制。
 use serde_json::Value;
 use std::{
     io::Read,

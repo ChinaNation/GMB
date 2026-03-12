@@ -1,5 +1,16 @@
 # Network Overview 模块技术文档
 
+## 0. 功能需求
+
+- 页面需要展示网络总览指标，包括总节点数、在线节点数、国储会节点、省储会节点、省储行节点、全节点数和轻节点数。
+- 模块需要优先基于本机节点当前可观测到的 `system_peers` 与 `system_localPeerId` 生成在线网络统计。
+- 当本机节点正在运行时，模块需要把本机节点计入在线节点，并尽量识别其轻节点/全节点角色。
+- 模块需要持续维护历史已见 PeerId 集合，用于在实时在线数据不完整时补足“总节点数”视角。
+- 前端会定时轮询该接口，模块需要支持高频读取，并避免每次请求都无意义重写 `known-peers.json`。
+- 当 RPC 不可用、链指纹不匹配、PeerId 非法或部分字段缺失时，模块需要返回尽量可展示的统计结果，并通过 `warning` 告知降级原因。
+- 统计口径需要保持自洽：`onlineNodes`、`fullNodes`、`lightNodes` 的去重和本机计入口径要一致，避免出现在线节点已计入但 full/light 漏计的情况。
+- 模块需要避免把错误链或错误端口上的 RPC 数据误当作目标网络统计结果。
+
 ## 1. 模块位置
 
 - 路径：`nodeui/backend/src/network/network-overview/mod.rs`
@@ -44,7 +55,9 @@
 2. 分类统计：
    - 按创世节点名称关键字（国储会/储行/省储会）对在线 PeerId 分类。
 3. 全节点统计：
-   - `full_nodes = online_nodes - light_nodes`（本机在线但角色未知时默认计入 full）。
+   - 远端 light 节点按唯一 PeerId 去重。
+   - 本机在线但角色未知时默认计入 full。
+   - `full_nodes + light_nodes` 与在线节点口径保持一致。
 4. 总节点统计：
    - `创世节点数 + 已见非创世节点数`。
 
@@ -57,7 +70,7 @@
 
 ## 7. RPC 健壮性与链指纹校验
 
-- RPC 通过共享模块 `nodeui/backend/src/rpc.rs` 发起（`rpc::rpc_post`）。
+- RPC 通过共享模块 `nodeui/backend/src/shared/rpc.rs` 发起（`rpc::rpc_post`）。
 - 共享 RPC 客户端使用 `OnceLock<Client>` + 初始化互斥锁：
   - 首次成功后复用连接池；
   - 初始化失败不会缓存错误，后续调用会重试；
@@ -70,7 +83,7 @@
 - 统计前先做链指纹校验：
   - `system_properties.ss58Format == 2027`
   - `system_name` 非空
-- 指纹不匹配时不信任网络统计，返回告警并降级输出。
+- 任一指纹项校验失败时不信任网络统计，返回告警并降级输出。
 
 ## 8. 告警策略
 

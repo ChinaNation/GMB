@@ -1,5 +1,15 @@
 # Fee Address 模块技术文档
 
+## 0. 功能需求
+
+- 页面需要支持绑定或变更手续费收款地址，并展示当前已绑定地址。
+- 模块需要校验设备开机密码后才允许修改地址。
+- 模块需要同时支持 `0x + 64 hex` 和 SS58(2027) 两种地址输入格式，并进行标准化。
+- 模块需要为本机维护稳定的 `powr` 矿工签名账户，确保奖励地址绑定和实际挖矿账户一致。
+- 模块需要把矿工签名密钥安全存储，并同步写入本地节点 keystore，且清理旧的 `powr` key 文件。
+- 模块需要在提交链上绑定交易前确认当前 9944 端口确实属于目标链，避免把绑定操作误发到错误网络。
+- 当链上绑定失败或超时时，模块需要明确告诉调用方“本地已保存，但链上未完成”。
+
 ## 1. 模块位置
 
 - 路径：`nodeui/backend/src/settings/fee-address/mod.rs`
@@ -28,7 +38,7 @@
 
 - 地址配置：`<app_data_dir>/reward-wallet.json`
 - 矿工签名 URI：系统安全存储（Keychain/Keyring）键 `powr-miner-suri`
-  - 以 `settings/security.rs` 的 AES-GCM 密文封装保存。
+  - 以 `nodeui/backend/src/shared/security.rs` 的 AES-GCM 密文封装保存。
   - 首次缺失时，尝试从本地链 keystore 的 `powr` key 文件提取；仍不存在则生成随机 `0x<32bytes>` seed 并写入安全存储。
   - 旧版明文文件 `<app_data_dir>/miner-suri.txt` 仅用于一次性迁移，迁移后立即删除。
 
@@ -43,19 +53,21 @@
 ### 5.2 `set_reward_wallet`
 
 1. 校验设备登录密码非空。
-2. 通过 `settings/security.rs` 执行设备密码验证（macOS/Linux/Windows）。
+2. 通过 `nodeui/backend/src/settings/device-password/mod.rs` 执行设备密码验证（macOS/Linux/Windows）。
 3. 调用 `normalize_wallet_address` 校验并标准化地址。
 4. 写入 `reward-wallet.json`。
 5. 确保安全存储中的 `miner-suri` 可用（必要时创建/迁移）。
-6. 读取链上 `RewardWalletByMiner[miner]`：
+6. 校验当前 RPC 目标链指纹（`ss58Format == 2027` 且 `system_name` 非空）。
+7. 读取链上 `RewardWalletByMiner[miner]`：
    - 无值：提交 `bind_reward_wallet(wallet)`。
    - 有值且不同：提交 `rebind_reward_wallet(new_wallet)`。
    - 有值且相同：跳过提交。
-7. 等待交易 finalized 成功后返回最新地址。
+8. 等待交易 finalized 成功后返回最新地址。
 
 ## 6. 安全与边界
 
 - 修改地址必须先通过设备密码验证。
 - 签名算法为 `sr25519`，签名账户为本地 `powr` 矿工账户。
+- 发起链上绑定前必须确认当前 9944 端口属于目标链，避免误发交易。
 - 若地址已保存但链上提交失败，命令返回错误，提示“本地已保存，但链上绑定失败”。
 - `home::home_node::start_node` 会调用本模块同步函数，节点启动后自动补齐链上绑定。

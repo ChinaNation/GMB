@@ -1,4 +1,4 @@
-// 地址与 node-key 的最小校验逻辑。
+// 共享输入校验与标准化逻辑。
 use crate::settings::address_utils::decode_ss58_prefix;
 use blake2::{Blake2b512, Digest};
 

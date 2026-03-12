@@ -1,7 +1,6 @@
 use crate::{
-    rpc,
-    settings::{bootnodes_address, fee_address, grandpa_address, security},
-    validation::normalize_node_name,
+    settings::{bootnodes_address, device_password, fee_address, grandpa_address},
+    shared::{rpc, security, validation::normalize_node_name},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -11,7 +10,7 @@ use std::{
     io::{ErrorKind, Read},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::Mutex,
+    sync::{Mutex, OnceLock},
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -27,16 +26,22 @@ const NODE_KEY_TEMP_PREFIX: &str = "node-key-";
 const NODE_KEY_TEMP_SUFFIX: &str = ".tmp";
 const NODE_BIN_STAGE_PREFIX: &str = "node-bin-";
 
+// 串行化节点启停与退出清理，避免并发命令互删临时文件或遗留孤儿进程。
+static NODE_LIFECYCLE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+/// 进程托管状态，只记录当前桌面应用会话直接拉起的节点进程及其临时文件。
 pub struct RuntimeState {
     pub local_node: Option<Child>,
     pub node_key_file: Option<PathBuf>,
     pub node_bin_file: Option<PathBuf>,
 }
 
+/// Tauri 全局状态，供首页节点相关命令共享。
 pub struct AppState(pub Mutex<RuntimeState>);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// 首页展示的节点运行状态。
 pub struct NodeStatus {
     pub running: bool,
     pub state: String,
@@ -45,6 +50,7 @@ pub struct NodeStatus {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// 首页展示的链同步状态。
 pub struct ChainStatus {
     pub block_height: Option<u64>,
     pub finalized_height: Option<u64>,
@@ -53,6 +59,7 @@ pub struct ChainStatus {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// 首页展示的节点身份信息。
 pub struct NodeIdentity {
     pub node_name: Option<String>,
     pub peer_id: Option<String>,
@@ -62,6 +69,13 @@ pub struct NodeIdentity {
 #[derive(Debug, Serialize, Deserialize)]
 struct StoredNodeName {
     node_name: String,
+}
+
+fn lock_node_lifecycle() -> std::sync::MutexGuard<'static, ()> {
+    NODE_LIFECYCLE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|err| err.into_inner())
 }
 
 fn node_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -203,6 +217,7 @@ fn node_name_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(security::app_data_dir(app)?.join("node-name.json"))
 }
 
+// 角色由 bootnode 名称映射得出，未命中时统一按“全节点”展示。
 fn role_from_peer_id(peer_id: Option<&str>) -> String {
     if let Some(pid) = peer_id {
         if let Ok(Some(name)) = bootnodes_address::find_genesis_bootnode_name_by_peer_id(pid) {
@@ -386,6 +401,8 @@ fn staged_node_bin_path(app: &AppHandle, source_bin: &Path) -> Result<PathBuf, S
     Err("create staged node binary path failed: exhausted retries".to_string())
 }
 
+// 节点二进制先复制到运行时目录并在副本上再次验 hash，
+// 这样可以把“校验通过的文件”和“真正执行的文件”绑定到同一个副本。
 fn stage_verified_node_bin(app: &AppHandle) -> Result<PathBuf, String> {
     let source_bin = find_node_bin_source(app)?;
     let hash_path = resolve_node_bin_hash_path(&source_bin)?;
@@ -475,7 +492,7 @@ fn find_node_bin_source(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn verify_start_unlock_password(app: &AppHandle, unlock_password: &str) -> Result<(), String> {
     let unlock = security::ensure_unlock_password(unlock_password)?;
-    security::verify_device_login_password(app, unlock)?;
+    device_password::verify_device_login_password(app, unlock)?;
     bootnodes_address::verify_bootnode_secret_unlock(unlock)?;
     grandpa_address::verify_grandpa_secret_unlock(unlock)?;
     Ok(())
@@ -610,6 +627,8 @@ fn node_pid_command_pairs() -> Result<Vec<(u32, String)>, String> {
     Ok(Vec::new())
 }
 
+// 历史会话可能遗留旧节点进程，这里按“命令行特征 -> lsof -> RPC 指纹”逐层收敛，
+// 只把高度疑似本应用节点的 PID 作为可信目标返回。
 fn trusted_node_process_pids_on_rpc_port(app: &AppHandle) -> Result<Vec<u32>, String> {
     let data_dir_raw = node_data_dir(app)?;
     let mut base_tokens = vec![data_dir_raw.to_string_lossy().to_string()];
@@ -744,6 +763,8 @@ fn terminate_trusted_listener_nodes(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// 启动命令只拼接固定参数，敏感密钥通过临时文件或本地 keystore 注入，
+// 避免把明文秘密直接暴露在命令行参数或环境变量里。
 fn spawn_node(
     app: &AppHandle,
     node_bin: &Path,
@@ -835,6 +856,21 @@ fn terminate_child(child: &mut Child) {
     let _ = child.try_wait();
 }
 
+// 启动后的关键校验失败时，需要把刚拉起的节点和临时文件一并回滚，
+// 避免前端看到“启动失败”，而本机实际上还有节点继续运行。
+fn rollback_started_node(app: &AppHandle) {
+    let app_state = app.state::<AppState>();
+    let mut state = match app_state.0.lock() {
+        Ok(state) => state,
+        Err(err) => err.into_inner(),
+    };
+    if let Some(mut child) = state.local_node.take() {
+        terminate_child(&mut child);
+    }
+    clear_runtime_node_key_file(&mut state);
+    clear_runtime_node_bin_file(&mut state);
+}
+
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     let mut last_err = String::new();
     for attempt in 0..RPC_RETRY_COUNT {
@@ -921,6 +957,7 @@ fn syncing_flag() -> Option<bool> {
 }
 
 pub(crate) fn cleanup_on_exit(app: &AppHandle) {
+    let _lifecycle_guard = lock_node_lifecycle();
     if let Ok(mut state) = app.state::<AppState>().0.lock() {
         if let Some(mut child) = state.local_node.take() {
             terminate_child(&mut child);
@@ -938,6 +975,8 @@ pub(crate) fn cleanup_on_exit(app: &AppHandle) {
 }
 
 pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
+    // 先看本会话托管进程，再看可信监听进程，最后才退化到 RPC 指纹探测，
+    // 减少仅凭 9944 端口连通就误判为“节点在运行”的概率。
     let (managed_running, managed_pid) = {
         let app_state = app.state::<AppState>();
         let mut state = app_state
@@ -990,6 +1029,7 @@ fn get_node_status_sync(app: AppHandle) -> Result<NodeStatus, String> {
 }
 
 fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
+    let _lifecycle_guard = lock_node_lifecycle();
     let _ = security::append_audit_log(&app, "start_node", "attempt");
     let result = (|| -> Result<NodeStatus, String> {
         let unlock_password = security::ensure_unlock_password(&unlock_password)?.to_string();
@@ -1043,7 +1083,12 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
         if let Err(err) = fee_address::sync_saved_reward_wallet_binding(&app, &unlock_password) {
             eprintln!("sync reward wallet binding skipped: {err}");
         }
-        grandpa_address::verify_grandpa_after_start(&app, &unlock_password)?;
+        if let Err(err) = grandpa_address::verify_grandpa_after_start(&app, &unlock_password) {
+            rollback_started_node(&app);
+            let _ = cleanup_stale_staged_node_bins(&app, None);
+            let _ = cleanup_stale_node_key_temp_files(&app);
+            return Err(format!("verify grandpa after start failed: {err}"));
+        }
         current_status(&app)
     })();
     let _ = security::append_audit_log(
@@ -1055,6 +1100,7 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
 }
 
 fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
+    let _lifecycle_guard = lock_node_lifecycle();
     let _ = security::append_audit_log(&app, "stop_node", "attempt");
     let result = (|| -> Result<NodeStatus, String> {
         {
@@ -1126,7 +1172,7 @@ pub fn set_node_name(
     unlock_password: String,
 ) -> Result<NodeIdentity, String> {
     let unlock = security::ensure_unlock_password(&unlock_password)?;
-    security::verify_device_login_password(&app, unlock)?;
+    device_password::verify_device_login_password(&app, unlock)?;
     let normalized = normalize_node_name(&node_name)?;
     let raw = serde_json::to_string_pretty(&StoredNodeName {
         node_name: normalized.clone(),
