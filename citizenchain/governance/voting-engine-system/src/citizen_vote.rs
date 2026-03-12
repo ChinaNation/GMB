@@ -6,6 +6,23 @@ use crate::{
 };
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VoteCredentialCleanup {
+    pub removed: u32,
+    pub loops: u32,
+    pub has_remaining: bool,
+}
+
+impl VoteCredentialCleanup {
+    pub const fn done() -> Self {
+        Self {
+            removed: 0,
+            loops: 0,
+            has_remaining: false,
+        }
+    }
+}
+
 pub trait SfidEligibility<AccountId, Hash> {
     fn is_eligible(sfid_hash: &Hash, who: &AccountId) -> bool;
     fn verify_and_consume_vote_credential(
@@ -17,8 +34,15 @@ pub trait SfidEligibility<AccountId, Hash> {
     ) -> bool;
 
     /// 清理某个联合/公民提案对应的投票凭证防重放状态。
-    /// 默认由投票引擎在提案进入终态时自动触发，业务模块无需再手工补调。
+    /// 默认给兼容实现保留一次性清理入口；生产路径优先走分块清理。
     fn cleanup_vote_credentials(_proposal_id: u64) {}
+
+    /// 分块清理某个提案维度下的投票凭证，避免单次 clear_prefix 无界增长。
+    fn cleanup_vote_credentials_chunk(proposal_id: u64, _limit: u32) -> VoteCredentialCleanup {
+        Self::cleanup_vote_credentials(proposal_id);
+        let _ = proposal_id;
+        VoteCredentialCleanup::done()
+    }
 }
 
 impl<AccountId, Hash> SfidEligibility<AccountId, Hash> for () {

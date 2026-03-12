@@ -75,6 +75,7 @@ pub mod pallet {
         DuplicateSfid,
         MaxCountReached,
         AccountAlreadyRewarded,
+        ZeroRewardConfigured,
     }
 
     #[pallet::event]
@@ -111,11 +112,11 @@ pub mod pallet {
             sfid_hash: T::Hash,
         ) -> Result<BalanceOf<T>, SkipReason> {
             // 中文注释：先查 SFID，再查账户，优先返回更贴近业务语义的跳过原因。
-            if CITIZEN_LIGHTNODE_ONE_TIME_ONLY && RewardClaimed::<T>::contains_key(sfid_hash) {
+            if RewardClaimed::<T>::contains_key(sfid_hash) {
                 return Err(SkipReason::DuplicateSfid);
             }
 
-            if CITIZEN_LIGHTNODE_ONE_TIME_ONLY && AccountRewarded::<T>::contains_key(who) {
+            if AccountRewarded::<T>::contains_key(who) {
                 return Err(SkipReason::AccountAlreadyRewarded);
             }
 
@@ -133,14 +134,22 @@ pub mod pallet {
             };
 
             let reward: BalanceOf<T> = reward_amount.saturated_into();
+            debug_assert!(
+                !reward.is_zero(),
+                "citizen lightnode reward constants must stay greater than zero"
+            );
+            if reward.is_zero() {
+                return Err(SkipReason::ZeroRewardConfigured);
+            }
+
+            // 中文注释：这里有意通过 deposit_creating 主动增发，并丢弃返回的 PositiveImbalance；
+            // 奖励发行本身就是本模块的职责，不需要再将该发行凭证向外传递。
             let _imbalance = T::Currency::deposit_creating(who, reward);
 
             // 中文注释：只有铸币成功进入账本后，才推进累计人数并写入双重防重标记。
             RewardedCount::<T>::put(rewarded_count.saturating_add(1));
-            if CITIZEN_LIGHTNODE_ONE_TIME_ONLY {
-                RewardClaimed::<T>::insert(sfid_hash, ());
-                AccountRewarded::<T>::insert(who, ());
-            }
+            RewardClaimed::<T>::insert(sfid_hash, ());
+            AccountRewarded::<T>::insert(who, ());
 
             Ok(reward)
         }
@@ -149,15 +158,13 @@ pub mod pallet {
     impl<T: Config> OnSfidBound<T::AccountId, T::Hash> for Pallet<T> {
         fn on_sfid_bound(who: &T::AccountId, sfid_hash: T::Hash) {
             match Self::try_issue_certification_reward(who, sfid_hash) {
-                // 中文注释：仅在实际发放奖励时发事件，避免 reward=0 造成“已发奖”误解。
-                Ok(reward) if !reward.is_zero() => {
+                Ok(reward) => {
                     Self::deposit_event(Event::<T>::CertificationRewardIssued {
                         who: who.clone(),
                         sfid_hash,
                         reward,
                     });
                 }
-                Ok(_) => {}
                 Err(reason) => {
                     Self::deposit_event(Event::<T>::CertificationRewardSkipped {
                         who: who.clone(),
@@ -309,6 +316,47 @@ mod tests {
     }
 
     #[test]
+    fn max_count_minus_one_allows_last_reward_then_rejects_next() {
+        new_test_ext().execute_with(|| {
+            let last_reward_amount = if CITIZEN_LIGHTNODE_MAX_COUNT.saturating_sub(1)
+                < CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT
+            {
+                CITIZEN_LIGHTNODE_HIGH_REWARD
+            } else {
+                CITIZEN_LIGHTNODE_NORMAL_REWARD
+            };
+            let sfid_hash_a = <Test as frame_system::Config>::Hashing::hash(b"sfid-last-slot");
+            let sfid_hash_b = <Test as frame_system::Config>::Hashing::hash(b"sfid-over-cap");
+
+            RewardedCount::<Test>::put(CITIZEN_LIGHTNODE_MAX_COUNT.saturating_sub(1));
+
+            <CitizenLightnodeIssuance as sfid_code_auth::OnSfidBound<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::on_sfid_bound(&1, sfid_hash_a);
+            <CitizenLightnodeIssuance as sfid_code_auth::OnSfidBound<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::on_sfid_bound(&2, sfid_hash_b);
+
+            assert_eq!(Balances::free_balance(1), last_reward_amount);
+            assert_eq!(Balances::free_balance(2), 0);
+            assert_eq!(RewardedCount::<Test>::get(), CITIZEN_LIGHTNODE_MAX_COUNT);
+            assert!(RewardClaimed::<Test>::contains_key(sfid_hash_a));
+            assert!(!RewardClaimed::<Test>::contains_key(sfid_hash_b));
+            assert!(AccountRewarded::<Test>::contains_key(1));
+            assert!(!AccountRewarded::<Test>::contains_key(2));
+            System::assert_last_event(RuntimeEvent::CitizenLightnodeIssuance(
+                Event::<Test>::CertificationRewardSkipped {
+                    who: 2,
+                    sfid_hash: sfid_hash_b,
+                    reason: SkipReason::MaxCountReached,
+                },
+            ));
+        });
+    }
+
+    #[test]
     fn same_sfid_only_rewards_once() {
         new_test_ext().execute_with(|| {
             let sfid_hash = <Test as frame_system::Config>::Hashing::hash(b"sfid-repeat");
@@ -331,6 +379,56 @@ mod tests {
                     reason: SkipReason::DuplicateSfid,
                 },
             ));
+        });
+    }
+
+    #[test]
+    fn consecutive_rewards_switch_from_high_to_normal_in_same_block() {
+        new_test_ext().execute_with(|| {
+            let sfid_hash_a = <Test as frame_system::Config>::Hashing::hash(b"sfid-tier-a");
+            let sfid_hash_b = <Test as frame_system::Config>::Hashing::hash(b"sfid-tier-b");
+
+            RewardedCount::<Test>::put(CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT.saturating_sub(1));
+
+            <CitizenLightnodeIssuance as sfid_code_auth::OnSfidBound<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::on_sfid_bound(&1, sfid_hash_a);
+            <CitizenLightnodeIssuance as sfid_code_auth::OnSfidBound<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::on_sfid_bound(&2, sfid_hash_b);
+
+            assert_eq!(Balances::free_balance(1), CITIZEN_LIGHTNODE_HIGH_REWARD);
+            assert_eq!(Balances::free_balance(2), CITIZEN_LIGHTNODE_NORMAL_REWARD);
+            assert_eq!(
+                RewardedCount::<Test>::get(),
+                CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT.saturating_add(1)
+            );
+
+            let issuance_events: Vec<_> = System::events()
+                .into_iter()
+                .filter_map(|record| match record.event {
+                    RuntimeEvent::CitizenLightnodeIssuance(event) => Some(event),
+                    _ => None,
+                })
+                .collect();
+
+            assert_eq!(
+                issuance_events,
+                vec![
+                    Event::<Test>::CertificationRewardIssued {
+                        who: 1,
+                        sfid_hash: sfid_hash_a,
+                        reward: CITIZEN_LIGHTNODE_HIGH_REWARD,
+                    },
+                    Event::<Test>::CertificationRewardIssued {
+                        who: 2,
+                        sfid_hash: sfid_hash_b,
+                        reward: CITIZEN_LIGHTNODE_NORMAL_REWARD,
+                    },
+                ]
+            );
         });
     }
 
@@ -370,6 +468,34 @@ mod tests {
                     who: 1,
                     sfid_hash,
                     reward: CITIZEN_LIGHTNODE_HIGH_REWARD,
+                },
+            ));
+        });
+    }
+
+    #[test]
+    fn same_account_second_sfid_is_not_marked_reward_claimed() {
+        new_test_ext().execute_with(|| {
+            let sfid_hash_a = <Test as frame_system::Config>::Hashing::hash(b"sfid-claim-a");
+            let sfid_hash_b = <Test as frame_system::Config>::Hashing::hash(b"sfid-claim-b");
+
+            <CitizenLightnodeIssuance as sfid_code_auth::OnSfidBound<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::on_sfid_bound(&1, sfid_hash_a);
+            <CitizenLightnodeIssuance as sfid_code_auth::OnSfidBound<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::on_sfid_bound(&1, sfid_hash_b);
+
+            assert!(RewardClaimed::<Test>::contains_key(sfid_hash_a));
+            assert!(!RewardClaimed::<Test>::contains_key(sfid_hash_b));
+            assert!(AccountRewarded::<Test>::contains_key(1));
+            System::assert_last_event(RuntimeEvent::CitizenLightnodeIssuance(
+                Event::<Test>::CertificationRewardSkipped {
+                    who: 1,
+                    sfid_hash: sfid_hash_b,
+                    reason: SkipReason::AccountAlreadyRewarded,
                 },
             ));
         });

@@ -22,6 +22,7 @@
 
 ### 0.4 分账规则需求
 - 已扣手续费必须按常量 `ONCHAIN_FEE_FULLNODE_PERCENT`、`ONCHAIN_FEE_NRC_PERCENT`、`ONCHAIN_FEE_BLACKHOLE_PERCENT` 分配。
+- 三项分账比例必须固定总和为 `100`，避免“名为百分比、实为任意权重”的语义漂移。
 - 全节点分成必须仅发给“当前区块作者绑定的钱包地址”；若作者不存在或未绑定钱包，该份额必须销毁。
 - 国储会分成必须仅发给 `NrcAccountProvider` 提供的账户；若账户缺失或无法入账，该份额必须销毁。
 - 黑洞分成必须直接销毁，不得转入任何中间地址或保留地址。
@@ -63,7 +64,7 @@
 
 ## 2. 编译期常量约束
 模块顶部使用 `const` 断言，确保关键常量合法：
-- `ONCHAIN_FEE_FULLNODE_PERCENT + ONCHAIN_FEE_NRC_PERCENT + ONCHAIN_FEE_BLACKHOLE_PERCENT > 0`
+- `ONCHAIN_FEE_FULLNODE_PERCENT + ONCHAIN_FEE_NRC_PERCENT + ONCHAIN_FEE_BLACKHOLE_PERCENT == 100`
 - `ONCHAIN_MIN_FEE > 0`
 - `ONCHAIN_FEE_RATE.deconstruct() > 0`
 
@@ -95,7 +96,7 @@
   - 余额扣除后把 credit 拆为 `(inclusion_fee, tip_credit)`
 - `correct_and_deposit_fee`：
   - 设计上不做执行后退款（`_corrected_fee_with_tip` 被有意忽略）
-  - 将 `fee_credit + tip_credit` 一并交给 Router 分配
+  - 将 `fee_credit` 与 `tip_credit` 一并交给 Router，由 `on_unbalanceds` 合并后按同一口径统一分账
 
 ---
 
@@ -108,20 +109,22 @@
 - 黑洞销毁：`ONCHAIN_FEE_BLACKHOLE_PERCENT`
 
 处理顺序：
-1. 先按比例把总手续费拆成：
+1. 先按 `fullnode : (nrc + blackhole)` 把总手续费拆成两部分：
    - `fullnode_credit`
+   - `remainder`
+2. 再把 `remainder` 按 `nrc : blackhole` 二次拆分成：
    - `nrc_credit`
    - `blackhole_credit`
-2. 全节点分成：
+3. 全节点分成：
    - 通过 `FindAuthor` 找当前作者
    - 再查 `fullnode_pow_reward::RewardWalletByMiner`
    - 若可用，`Currency::resolve` 入账；resolve 失败会告警并销毁剩余 credit
    - 作者缺失/未绑定钱包则告警并销毁
-3. NRC 分成：
+4. NRC 分成：
    - 通过 `NrcAccountProvider::nrc_account()` 获取收款账户
    - `resolve` 失败告警并销毁
    - 账户缺失告警并销毁
-4. 黑洞分成：直接 `drop(blackhole_credit)`，减少总发行量
+5. 黑洞分成：直接 `drop(blackhole_credit)`，减少总发行量
 
 ---
 

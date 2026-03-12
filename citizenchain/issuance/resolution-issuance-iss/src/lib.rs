@@ -8,25 +8,39 @@ mod benchmarks;
 pub mod weights;
 
 use alloc::vec::Vec;
-use frame_support::dispatch::DispatchResult;
-use frame_support::pallet_prelude::StorageVersion;
+use frame_support::{
+    dispatch::DispatchResult, pallet_prelude::StorageVersion, traits::Get, BoundedVec,
+};
 use sp_runtime::DispatchError;
 
-pub trait ResolutionIssuanceExecutor<AccountId, Amount> {
+pub type ResolutionReasonOf<MaxReasonLen> = BoundedVec<u8, MaxReasonLen>;
+pub type ResolutionAllocationsOf<AccountId, Amount, MaxAllocations> =
+    BoundedVec<(AccountId, Amount), MaxAllocations>;
+
+pub trait ResolutionIssuanceExecutor<AccountId, Amount, MaxReasonLen, MaxAllocations>
+where
+    MaxReasonLen: Get<u32>,
+    MaxAllocations: Get<u32>,
+{
     fn execute_resolution_issuance(
         proposal_id: u64,
-        reason: Vec<u8>,
+        reason: ResolutionReasonOf<MaxReasonLen>,
         total_amount: Amount,
-        allocations: Vec<(AccountId, Amount)>,
+        allocations: ResolutionAllocationsOf<AccountId, Amount, MaxAllocations>,
     ) -> DispatchResult;
 }
 
-impl<AccountId, Amount> ResolutionIssuanceExecutor<AccountId, Amount> for () {
+impl<AccountId, Amount, MaxReasonLen, MaxAllocations>
+    ResolutionIssuanceExecutor<AccountId, Amount, MaxReasonLen, MaxAllocations> for ()
+where
+    MaxReasonLen: Get<u32>,
+    MaxAllocations: Get<u32>,
+{
     fn execute_resolution_issuance(
         _proposal_id: u64,
-        _reason: Vec<u8>,
+        _reason: ResolutionReasonOf<MaxReasonLen>,
         _total_amount: Amount,
-        _allocations: Vec<(AccountId, Amount)>,
+        _allocations: ResolutionAllocationsOf<AccountId, Amount, MaxAllocations>,
     ) -> DispatchResult {
         Err(DispatchError::Other(
             "ResolutionIssuanceExecutorNotConfigured",
@@ -40,6 +54,7 @@ const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
+    use codec::Encode;
     use frame_support::{
         pallet_prelude::*,
         storage::with_storage_layer,
@@ -47,6 +62,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::{CheckedAdd, Hash, Zero};
+    use sp_std::collections::btree_set::BTreeSet;
 
     pub type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -145,6 +161,7 @@ pub mod pallet {
         EmptyReason,
         EmptyAllocations,
         TooManyAllocations,
+        DuplicateRecipient,
         ZeroAmount,
         AllocationOverflow,
         TotalMismatch,
@@ -267,7 +284,13 @@ pub mod pallet {
 
             let existential_deposit = T::Currency::minimum_balance();
             let mut sum: BalanceOf<T> = Zero::zero();
+            let mut seen_recipients: BTreeSet<Vec<u8>> = BTreeSet::new();
             for item in allocations {
+                let recipient_key = item.recipient.encode();
+                ensure!(
+                    seen_recipients.insert(recipient_key),
+                    Error::<T>::DuplicateRecipient
+                );
                 ensure!(!item.amount.is_zero(), Error::<T>::ZeroAmount);
                 ensure!(
                     item.amount >= existential_deposit,
@@ -322,14 +345,18 @@ pub mod pallet {
         }
     }
 
-    impl<T: Config> ResolutionIssuanceExecutor<T::AccountId, BalanceOf<T>> for Pallet<T> {
+    impl<T: Config>
+        ResolutionIssuanceExecutor<T::AccountId, BalanceOf<T>, T::MaxReasonLen, T::MaxAllocations>
+        for Pallet<T>
+    {
         fn execute_resolution_issuance(
             proposal_id: u64,
-            reason: Vec<u8>,
+            reason: ResolutionReasonOf<T::MaxReasonLen>,
             total_amount: BalanceOf<T>,
-            allocations: Vec<(T::AccountId, BalanceOf<T>)>,
+            allocations: ResolutionAllocationsOf<T::AccountId, BalanceOf<T>, T::MaxAllocations>,
         ) -> DispatchResult {
-            // 中文注释：trait 路径给治理模块使用，不走 extrinsic origin，但仍复用同一套执行校验与状态机。
+            // 中文注释：trait 路径现在与 extrinsic 一样直接接收 bounded 类型，
+            // 让上游调用点在类型层面就表达长度上限。
             let mapped: Vec<RecipientAmount<T::AccountId, BalanceOf<T>>> = allocations
                 .into_iter()
                 .map(|(recipient, amount)| RecipientAmount { recipient, amount })
@@ -437,16 +464,41 @@ mod tests {
         pallet::RecipientAmount { recipient, amount }
     }
 
+    type TraitReason = ResolutionReasonOf<ConstU32<128>>;
+    type TraitAllocations = ResolutionAllocationsOf<AccountId, Balance, ConstU32<4>>;
+
+    fn trait_reason(raw: Vec<u8>) -> TraitReason {
+        raw.try_into().expect("trait reason should fit bounds")
+    }
+
+    fn trait_allocations(raw: Vec<(AccountId, Balance)>) -> TraitAllocations {
+        raw.try_into().expect("trait allocations should fit bounds")
+    }
+
+    fn execute_via_trait(
+        proposal_id: u64,
+        reason: Vec<u8>,
+        total_amount: Balance,
+        allocations: Vec<(AccountId, Balance)>,
+    ) -> DispatchResult {
+        <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
+            AccountId,
+            Balance,
+            ConstU32<128>,
+            ConstU32<4>,
+        >>::execute_resolution_issuance(
+            proposal_id,
+            trait_reason(reason),
+            total_amount,
+            trait_allocations(allocations),
+        )
+    }
+
     #[test]
     fn execute_via_trait_updates_balances_and_markers() {
         new_test_ext().execute_with(|| {
             let allocations = vec![(10, 30), (20, 70)];
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                1, b"ok".to_vec(), 100, allocations
-            ));
+            assert_ok!(execute_via_trait(1, b"ok".to_vec(), 100, allocations));
 
             assert_eq!(pallet_balances::Pallet::<Test>::free_balance(10), 30);
             assert_eq!(pallet_balances::Pallet::<Test>::free_balance(20), 70);
@@ -460,22 +512,14 @@ mod tests {
     fn replay_is_rejected() {
         new_test_ext().execute_with(|| {
             let allocations = vec![(10, 100)];
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
+            assert_ok!(execute_via_trait(
                 2,
                 b"a".to_vec(),
                 100,
                 allocations.clone()
             ));
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(
-                    2, b"b".to_vec(), 100, allocations
-                ),
+                execute_via_trait(2, b"b".to_vec(), 100, allocations),
                 pallet::Error::<Test>::AlreadyExecuted
             );
         });
@@ -485,12 +529,7 @@ mod tests {
     fn total_mismatch_is_rejected() {
         new_test_ext().execute_with(|| {
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(
-                    3, b"x".to_vec(), 100, vec![(10, 40), (20, 50)]
-                ),
+                execute_via_trait(3, b"x".to_vec(), 100, vec![(10, 40), (20, 50)]),
                 pallet::Error::<Test>::TotalMismatch
             );
         });
@@ -500,15 +539,7 @@ mod tests {
     fn zero_amount_is_rejected() {
         new_test_ext().execute_with(|| {
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(
-                    16,
-                    b"x".to_vec(),
-                    20,
-                    vec![(10, 20), (20, 0)]
-                ),
+                execute_via_trait(16, b"x".to_vec(), 20, vec![(10, 20), (20, 0)]),
                 pallet::Error::<Test>::ZeroAmount
             );
         });
@@ -518,39 +549,23 @@ mod tests {
     fn empty_allocations_via_trait_is_rejected() {
         new_test_ext().execute_with(|| {
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(17, b"x".to_vec(), 0, vec![]),
+                execute_via_trait(17, b"x".to_vec(), 0, vec![]),
                 pallet::Error::<Test>::EmptyAllocations
             );
         });
     }
 
     #[test]
-    fn too_many_allocations_is_rejected() {
-        new_test_ext().execute_with(|| {
-            let many = vec![(1, 10), (2, 10), (3, 10), (4, 10), (5, 10)];
-            assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(
-                    4, b"x".to_vec(), 50, many
-                ),
-                pallet::Error::<Test>::TooManyAllocations
-            );
-        });
+    fn trait_signature_prevents_too_many_allocations() {
+        let many = vec![(1, 10), (2, 10), (3, 10), (4, 10), (5, 10)];
+        assert!(TraitAllocations::try_from(many).is_err());
     }
 
     #[test]
     fn allocation_sum_overflow_is_rejected() {
         new_test_ext().execute_with(|| {
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(
+                execute_via_trait(
                     21,
                     b"x".to_vec(),
                     u128::MAX,
@@ -566,12 +581,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             pallet::TotalIssued::<Test>::put(u128::MAX - 5);
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(
-                    5, b"x".to_vec(), 10, vec![(10, 10)]
-                ),
+                execute_via_trait(5, b"x".to_vec(), 10, vec![(10, 10)]),
                 pallet::Error::<Test>::TotalIssuedOverflow
             );
 
@@ -582,30 +592,15 @@ mod tests {
     }
 
     #[test]
-    fn trait_path_rejects_reason_too_long() {
-        new_test_ext().execute_with(|| {
-            assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(
-                    7, vec![b'x'; 129], 10, vec![(10, 10)]
-                ),
-                pallet::Error::<Test>::ReasonTooLong
-            );
-        });
+    fn trait_signature_prevents_reason_too_long() {
+        assert!(TraitReason::try_from(vec![b'x'; 129]).is_err());
     }
 
     #[test]
     fn empty_reason_is_rejected() {
         new_test_ext().execute_with(|| {
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(
-                    26, vec![], 10, vec![(10, 10)]
-                ),
+                execute_via_trait(26, vec![], 10, vec![(10, 10)]),
                 pallet::Error::<Test>::EmptyReason
             );
         });
@@ -616,12 +611,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             pallet::TotalIssued::<Test>::put(1_000_000 - 5);
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(
-                    8, b"x".to_vec(), 10, vec![(10, 10)]
-                ),
+                execute_via_trait(8, b"x".to_vec(), 10, vec![(10, 10)]),
                 pallet::Error::<Test>::ExceedsTotalIssuanceCap
             );
 
@@ -635,10 +625,7 @@ mod tests {
     fn single_issuance_cap_is_rejected_before_mint() {
         new_test_ext().execute_with(|| {
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(
+                execute_via_trait(
                     35,
                     b"x".to_vec(),
                     14_434_973_780_001,
@@ -666,12 +653,7 @@ mod tests {
     #[test]
     fn clear_executed_removes_marker() {
         new_test_ext().execute_with(|| {
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                9, b"ok".to_vec(), 10, vec![(10, 10)]
-            ));
+            assert_ok!(execute_via_trait(9, b"ok".to_vec(), 10, vec![(10, 10)]));
             assert_eq!(pallet::Executed::<Test>::get(9), Some(0));
 
             assert_ok!(pallet::Pallet::<Test>::clear_executed(
@@ -700,12 +682,7 @@ mod tests {
     fn clear_executed_emits_event() {
         new_test_ext().execute_with(|| {
             frame_system::Pallet::<Test>::set_block_number(1);
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                22, b"ok".to_vec(), 10, vec![(10, 10)]
-            ));
+            assert_ok!(execute_via_trait(22, b"ok".to_vec(), 10, vec![(10, 10)]));
 
             assert_ok!(pallet::Pallet::<Test>::clear_executed(
                 RuntimeOrigin::root(),
@@ -728,12 +705,7 @@ mod tests {
     #[test]
     fn clear_executed_works_while_paused() {
         new_test_ext().execute_with(|| {
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                30, b"ok".to_vec(), 10, vec![(10, 10)]
-            ));
+            assert_ok!(execute_via_trait(30, b"ok".to_vec(), 10, vec![(10, 10)]));
             assert_ok!(pallet::Pallet::<Test>::set_paused(
                 RuntimeOrigin::root(),
                 true
@@ -749,18 +721,8 @@ mod tests {
     #[test]
     fn clear_executed_does_not_affect_other_proposals() {
         new_test_ext().execute_with(|| {
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                31, b"ok".to_vec(), 10, vec![(10, 10)]
-            ));
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                32, b"ok".to_vec(), 10, vec![(20, 10)]
-            ));
+            assert_ok!(execute_via_trait(31, b"ok".to_vec(), 10, vec![(10, 10)]));
+            assert_ok!(execute_via_trait(32, b"ok".to_vec(), 10, vec![(20, 10)]));
 
             assert_ok!(pallet::Pallet::<Test>::clear_executed(
                 RuntimeOrigin::root(),
@@ -779,22 +741,14 @@ mod tests {
                 true
             ));
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(23, b"ok".to_vec(), 10, vec![(10, 10)]),
+                execute_via_trait(23, b"ok".to_vec(), 10, vec![(10, 10)]),
                 pallet::Error::<Test>::PalletPaused
             );
             assert_ok!(pallet::Pallet::<Test>::set_paused(
                 RuntimeOrigin::root(),
                 false
             ));
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                23, b"ok".to_vec(), 10, vec![(10, 10)]
-            ));
+            assert_ok!(execute_via_trait(23, b"ok".to_vec(), 10, vec![(10, 10)]));
         });
     }
 
@@ -837,21 +791,13 @@ mod tests {
     #[test]
     fn paused_has_priority_over_already_executed() {
         new_test_ext().execute_with(|| {
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                33, b"ok".to_vec(), 10, vec![(10, 10)]
-            ));
+            assert_ok!(execute_via_trait(33, b"ok".to_vec(), 10, vec![(10, 10)]));
             assert_ok!(pallet::Pallet::<Test>::set_paused(
                 RuntimeOrigin::root(),
                 true
             ));
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(33, b"ok".to_vec(), 10, vec![(10, 10)]),
+                execute_via_trait(33, b"ok".to_vec(), 10, vec![(10, 10)]),
                 pallet::Error::<Test>::PalletPaused
             );
         });
@@ -862,10 +808,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let _ = pallet_balances::Pallet::<Test>::deposit_creating(&10, u128::MAX);
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(24, b"ok".to_vec(), 10, vec![(10, 10)]),
+                execute_via_trait(24, b"ok".to_vec(), 10, vec![(10, 10)]),
                 pallet::Error::<Test>::DepositFailed
             );
         });
@@ -874,22 +817,14 @@ mod tests {
     #[test]
     fn clear_executed_does_not_allow_replay() {
         new_test_ext().execute_with(|| {
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                10, b"ok".to_vec(), 20, vec![(10, 20)]
-            ));
+            assert_ok!(execute_via_trait(10, b"ok".to_vec(), 20, vec![(10, 20)]));
             assert_ok!(pallet::Pallet::<Test>::clear_executed(
                 RuntimeOrigin::root(),
                 10
             ));
 
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(10, b"ok".to_vec(), 20, vec![(10, 20)]),
+                execute_via_trait(10, b"ok".to_vec(), 20, vec![(10, 20)]),
                 pallet::Error::<Test>::AlreadyExecuted
             );
             assert_eq!(pallet_balances::Pallet::<Test>::free_balance(10), 20);
@@ -901,10 +836,7 @@ mod tests {
     fn amount_below_ed_is_rejected() {
         new_test_ext().execute_with(|| {
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(11, b"ok".to_vec(), 9, vec![(10, 9)]),
+                execute_via_trait(11, b"ok".to_vec(), 9, vec![(10, 9)]),
                 pallet::Error::<Test>::BelowExistentialDeposit
             );
         });
@@ -914,10 +846,7 @@ mod tests {
     fn prevalidation_prevents_partial_mint_on_ed_error() {
         new_test_ext().execute_with(|| {
             assert_noop!(
-                <pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                    AccountId,
-                    Balance,
-                >>::execute_resolution_issuance(12, b"ok".to_vec(), 25, vec![(10, 20), (20, 5)]),
+                execute_via_trait(12, b"ok".to_vec(), 25, vec![(10, 20), (20, 5)]),
                 pallet::Error::<Test>::BelowExistentialDeposit
             );
             assert_eq!(pallet_balances::Pallet::<Test>::free_balance(10), 0);
@@ -927,37 +856,22 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_recipient_allocations_accumulate() {
+    fn duplicate_recipient_allocations_are_rejected() {
         new_test_ext().execute_with(|| {
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                13,
-                b"ok".to_vec(),
-                100,
-                vec![(10, 40), (10, 60)]
-            ));
-            assert_eq!(pallet_balances::Pallet::<Test>::free_balance(10), 100);
-            assert_eq!(pallet::TotalIssued::<Test>::get(), 100);
+            assert_noop!(
+                execute_via_trait(13, b"ok".to_vec(), 100, vec![(10, 40), (10, 60)]),
+                pallet::Error::<Test>::DuplicateRecipient
+            );
+            assert_eq!(pallet_balances::Pallet::<Test>::free_balance(10), 0);
+            assert_eq!(pallet::TotalIssued::<Test>::get(), 0);
         });
     }
 
     #[test]
     fn total_issued_accumulates_across_proposals() {
         new_test_ext().execute_with(|| {
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                14, b"a".to_vec(), 20, vec![(10, 20)]
-            ));
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                15, b"b".to_vec(), 30, vec![(20, 30)]
-            ));
+            assert_ok!(execute_via_trait(14, b"a".to_vec(), 20, vec![(10, 20)]));
+            assert_ok!(execute_via_trait(15, b"b".to_vec(), 30, vec![(20, 30)]));
 
             assert_eq!(pallet::TotalIssued::<Test>::get(), 50);
             assert_eq!(pallet_balances::Pallet::<Test>::free_balance(10), 20);
@@ -968,10 +882,7 @@ mod tests {
     #[test]
     fn max_allocations_boundary_passes() {
         new_test_ext().execute_with(|| {
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
+            assert_ok!(execute_via_trait(
                 18,
                 b"ok".to_vec(),
                 40,
@@ -985,12 +896,7 @@ mod tests {
     fn cap_boundary_exactly_reached_is_allowed() {
         new_test_ext().execute_with(|| {
             pallet::TotalIssued::<Test>::put(1_000_000 - 20);
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                19, b"ok".to_vec(), 20, vec![(10, 20)]
-            ));
+            assert_ok!(execute_via_trait(19, b"ok".to_vec(), 20, vec![(10, 20)]));
             assert_eq!(pallet::TotalIssued::<Test>::get(), 1_000_000);
         });
     }
@@ -1001,10 +907,7 @@ mod tests {
             frame_system::Pallet::<Test>::set_block_number(1);
             let reason = b"audit".to_vec();
             let allocations = vec![(10, 20), (20, 30)];
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
+            assert_ok!(execute_via_trait(
                 20,
                 reason.clone(),
                 50,
@@ -1043,12 +946,7 @@ mod tests {
     fn reason_exactly_at_max_len_passes() {
         new_test_ext().execute_with(|| {
             let reason = vec![b'x'; 128];
-            assert_ok!(<pallet::Pallet<Test> as ResolutionIssuanceExecutor<
-                AccountId,
-                Balance,
-            >>::execute_resolution_issuance(
-                25, reason, 10, vec![(10, 10)]
-            ));
+            assert_ok!(execute_via_trait(25, reason, 10, vec![(10, 10)]));
         });
     }
 

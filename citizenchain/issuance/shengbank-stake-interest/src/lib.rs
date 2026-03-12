@@ -39,7 +39,7 @@ pub mod pallet {
         #[pallet::constant]
         type BlocksPerYear: Get<u64>;
 
-        /// 权重信息（由 benchmark 自动生成或手动估算）
+        /// 权重信息（通常由 benchmark 生成）
         type WeightInfo: crate::weights::WeightInfo;
     }
 

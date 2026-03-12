@@ -121,10 +121,11 @@
 - `finalize_proposal`：主入口读取 proposal 后传入各 timeout 分支，避免重复读
 
 ### 5.5 清理机制
-新增 `cleanup_joint_proposal`，可清理联合/公民相关索引：
+`cleanup_joint_proposal` / `cleanup_internal_proposal` 改为“小对象立即删，大前缀分块删”：
 - `Proposals`
-- `JointTallies` + `JointVotesByInstitution`
-- `CitizenTallies` + `CitizenVotesBySfid`
+- `JointTallies` / `CitizenTallies` / `InternalTallies`
+- 大体量前缀（`JointVotesByInstitution` / `CitizenVotesBySfid` / `InternalVotesByAccount` / vote credential nonce）改为写入 `PendingProposalCleanups`
+- `on_initialize` 按 `MaxCleanupStepsPerBlock` 与 `CleanupKeysPerStep` 分块续清，避免 finalize 路径单次无界 `clear_prefix`
 
 ### 5.6 联合回调一致性
 `set_status_and_emit` 现已使用存储事务包裹：
@@ -135,6 +136,11 @@
 `auto_finalize_expiry_bucket` 现会把终结失败的提案重新写回 `ProposalsByExpiry`：
 - 避免 `on_initialize` 取出过期桶后因为回调失败直接“吞掉重试入口”。
 - 下一块会通过 `PendingExpiryBucket` 继续重试，直到回调成功或人工介入。
+
+### 5.8 到期桶有界化
+`ProposalsByExpiry` 已改为 `BoundedVec`，由 `MaxProposalsPerExpiry` 限制单个 expiry 桶大小：
+- 避免同一过期区块下的提案 ID 列表无界膨胀。
+- 创建提案或阶段切换时若桶已满，会返回显式错误而不是悄悄留下未调度提案。
 
 ## 6. Weight 与计费
 ### 6.1 WeightInfo
@@ -149,6 +155,7 @@
 ### 6.2 finalize 动态退费
 `finalize_proposal` 返回 `DispatchResultWithPostInfo`，按实际阶段路径返回实际 weight，避免按最坏路径统一收费。
 自动超时结算由 `on_initialize` 承担，单块处理量受 `MaxAutoFinalizePerBlock` 限制。
+历史提案清理由同一个 hook 分块续跑，额度受 `MaxCleanupStepsPerBlock` / `CleanupKeysPerStep` 限制。
 
 ## 7. Benchmark 设计
 启用 `runtime-benchmarks` 后提供 6 个基准入口，对应上面的 6 个 weight 函数。
@@ -165,3 +172,5 @@
 - 内部投票：`src/internal_vote.rs`
 - 联合投票：`src/joint_vote.rs`
 - 公民投票：`src/citizen_vote.rs`
+- Benchmark：`src/benchmarks.rs`
+- Weight：`src/weights.rs`

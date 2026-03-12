@@ -12,7 +12,7 @@ mod benchmarks {
     use super::*;
 
     #[benchmark]
-    fn force_settle_years(y: Linear<1, 8>) {
+    fn force_settle_years(y: Linear<1, 100>) {
         // 设置区块号使 current_year >= y，确保有 y 个年度待结算
         let blocks_per_year = T::BlocksPerYear::get();
         let target_block: u32 = ((y as u64) * blocks_per_year + 1).min(u32::MAX as u64) as u32;

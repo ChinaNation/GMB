@@ -61,6 +61,7 @@ Weight 集成：
 - `CITIZEN_LIGHTNODE_HIGH_REWARD = 999_900`（单位：分）
 - `CITIZEN_LIGHTNODE_NORMAL_REWARD = 99_900`（单位：分）
 - `CITIZEN_LIGHTNODE_ONE_TIME_ONLY = true`
+  - 代码中使用编译期断言强制该值恒为 `true`，运行时不存在“关闭一次性奖励”的分支。
 
 ---
 
@@ -87,6 +88,7 @@ Weight 集成：
 - `DuplicateSfid`
 - `MaxCountReached`
 - `AccountAlreadyRewarded`
+- `ZeroRewardConfigured`
 
 错误：
 - `Error<T>` 当前为空（模块无外部可调用 extrinsic，核心流程由回调驱动）。
@@ -102,9 +104,11 @@ Weight 集成：
 2. 再进行账户去重检查（`AccountRewarded`）。
 3. 读取 `RewardedCount`，若达到 `MAX_COUNT` 则跳过。
 4. 根据 `RewardedCount` 与 `HIGH_REWARD_COUNT` 决定高额/常规奖励。
-5. `Currency::deposit_creating` 铸币到 `who`。
-6. 写回 `RewardedCount += 1`，并写入两级去重标记。
-7. 发事件：
+5. 将奖励常量转换为 `BalanceOf<T>`；若未来配置漂移导致奖励变成 0，则返回 `ZeroRewardConfigured` 并跳过，不推进状态。
+6. `Currency::deposit_creating` 铸币到 `who`。
+   - 这是模块设计内的主动增发，返回的 `PositiveImbalance` 会被有意丢弃。
+7. 写回 `RewardedCount += 1`，并写入两级去重标记。
+8. 发事件：
    - 成功发 `CertificationRewardIssued`
    - 跳过发 `CertificationRewardSkipped`
 
@@ -116,18 +120,20 @@ Weight 集成：
 - `OnSfidBoundWeight::on_sfid_bound_weight()`（委托到上述方法，单一真相源）
 - `WeightInfo::on_sfid_bound()`（由 runtime 注入）
 
-当前估算：
-- `WeightInfo::on_sfid_bound()` 当前采用保守手写值，覆盖最重成功路径。
+当前状态：
+- `WeightInfo::on_sfid_bound()` 已由 Substrate benchmark CLI 自动生成（见 `src/weights.rs` 文件头，日期 2026-03-12）。
 
 说明：
 - 该值用于上游 `bind_sfid` 申报 weight 叠加。
-- 模块现已提供 `runtime-benchmarks` 的成功路径 benchmark，用于后续替换手写值。
+- benchmark 入口当前覆盖首次成功发奖路径；重复领取、达到上限、零奖励配置等跳过路径未单独申报。
+- 由于跳过路径的存储读写与状态推进都少于成功路径，当前成功路径 weight 可视为保守上界。
 
 ---
 
 ## 8. Benchmark 设计
 - benchmark 入口：`on_sfid_bound`
 - 覆盖口径：首次成功发奖路径（含 `deposit_creating`、计数写回、双重去重标记与事件）
+- 未单独覆盖：重复领取、达到上限、零奖励配置等跳过路径
 - 目的：校准上游 `bind_sfid` 叠加的回调 weight，而不是测用户交易本身
 
 ---
@@ -140,6 +146,8 @@ Weight 集成：
   - 超过 `CITIZEN_LIGHTNODE_MAX_COUNT` 不再发放。
 - 可审计性：
   - 跳过路径均有链上原因事件，不依赖链下日志推断。
+- 配置健壮性：
+  - 若未来奖励常量被误配为 0，模块会显式发出 `ZeroRewardConfigured` 跳过事件，而不是静默吞掉。
 
 ---
 

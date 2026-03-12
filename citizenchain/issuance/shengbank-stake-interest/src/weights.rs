@@ -53,16 +53,16 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `ShengBankStakeInterest::LastSettledYear` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:43 w:43)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// The range of component `y` is `[1, 8]`.
+	/// The range of component `y` is `[1, 100]`.
 	fn force_settle_years(y: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1189`
 		//  Estimated: `112919`
-		// Minimum execution time: 516_000_000 picoseconds.
-		Weight::from_parts(197_137_868, 0)
+		// Minimum execution time: 527_000_000 picoseconds.
+		Weight::from_parts(198_476_654, 0)
 			.saturating_add(Weight::from_parts(0, 112919))
-			// Standard Error: 311_403
-			.saturating_add(Weight::from_parts(344_755_914, 0).saturating_mul(y.into()))
+			// Standard Error: 175_424
+			.saturating_add(Weight::from_parts(349_925_376, 0).saturating_mul(y.into()))
 			.saturating_add(T::DbWeight::get().reads(44))
 			.saturating_add(T::DbWeight::get().writes(44))
 	}
@@ -85,16 +85,16 @@ impl WeightInfo for () {
 	/// Proof: `ShengBankStakeInterest::LastSettledYear` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:43 w:43)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// The range of component `y` is `[1, 8]`.
+	/// The range of component `y` is `[1, 100]`.
 	fn force_settle_years(y: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1189`
 		//  Estimated: `112919`
-		// Minimum execution time: 516_000_000 picoseconds.
-		Weight::from_parts(197_137_868, 0)
+		// Minimum execution time: 527_000_000 picoseconds.
+		Weight::from_parts(198_476_654, 0)
 			.saturating_add(Weight::from_parts(0, 112919))
-			// Standard Error: 311_403
-			.saturating_add(Weight::from_parts(344_755_914, 0).saturating_mul(y.into()))
+			// Standard Error: 175_424
+			.saturating_add(Weight::from_parts(349_925_376, 0).saturating_mul(y.into()))
 			.saturating_add(RocksDbWeight::get().reads(44))
 			.saturating_add(RocksDbWeight::get().writes(44))
 	}

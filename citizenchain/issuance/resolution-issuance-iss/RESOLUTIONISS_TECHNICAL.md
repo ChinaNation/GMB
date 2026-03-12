@@ -36,7 +36,7 @@
 ## 2. 上下游关系
 上游（治理）：
 - `/Users/rhett/GMB/citizenchain/governance/resolution-issuance-gov/src/lib.rs`
-- 通过 `ResolutionIssuanceExecutor<AccountId, Amount>` trait 调用本模块执行发行。
+- 通过 `ResolutionIssuanceExecutor<AccountId, Amount, MaxReasonLen, MaxAllocations>` trait 调用本模块执行发行。
 
 Runtime 接线：
 - `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs`
@@ -46,6 +46,7 @@ Runtime 接线：
   - `MaxReasonLen = RESOLUTION_ISSUANCE_MAX_REASON_LEN`
   - `MaxAllocations = RESOLUTION_ISSUANCE_MAX_ALLOCATIONS`
   - `MaxTotalIssuance = u128::MAX`
+  - `MaxSingleIssuance = 14_434_973_780_000`
 
 常量来源（默认值）：
 - `/Users/rhett/GMB/primitives/src/count_const.rs`
@@ -65,12 +66,15 @@ Runtime 接线：
 - `MaxReasonLen`：理由最大字节长度。
 - `MaxAllocations`：单次最大分配条数。
 - `MaxTotalIssuance`：本模块累计发行上限。
+- `MaxSingleIssuance`：单次发行上限。
 - `WeightInfo`：weight 估算实现。
 
 核心类型：
 - `BalanceOf<T>`：从 `Currency` 推导出的链上余额类型。
 - `ReasonOf<T> = BoundedVec<u8, MaxReasonLen>`。
 - `AllocationOf<T> = BoundedVec<RecipientAmount<AccountId, BalanceOf<T>>, MaxAllocations>`。
+- `ResolutionReasonOf<MaxReasonLen>`：跨 pallet trait 使用的 bounded reason 载荷。
+- `ResolutionAllocationsOf<AccountId, Amount, MaxAllocations>`：跨 pallet trait 使用的 bounded allocations 载荷。
 - `RecipientAmount { recipient, amount }`：单条分配记录。
 
 ---
@@ -118,6 +122,7 @@ Runtime 接线：
 ### 5.4 Trait 执行入口
 - 接口：`ResolutionIssuanceExecutor::execute_resolution_issuance(...)`
 - 作用：供治理模块或其他 runtime 内组件直接调用，不依赖 extrinsic origin。
+- trait 签名本身直接接收 bounded reason / allocation 载荷，与 extrinsic 路径保持同一长度语义。
 - 在 `resolution-issuance-gov` 中，联合投票通过后调用该接口触发执行。
 
 ---
@@ -134,12 +139,14 @@ Runtime 接线：
 - `allocations` 非空且长度 `<= MaxAllocations`
 
 3. 分配逐条校验与求和
+- `recipient` 不可重复（`DuplicateRecipient`）
 - 每条 `amount > 0`
 - 每条 `amount >= ExistentialDeposit`
 - 累加求和不得溢出（`AllocationOverflow`）
 - 求和必须等于 `total_amount`（`TotalMismatch`）
 
-4. 累计发行量检查
+4. 发行上限与累计量检查
+- `total_amount <= MaxSingleIssuance`（`ExceedsSingleIssuanceCap`）
 - `TotalIssued + total_amount` 不得溢出（`TotalIssuedOverflow`）
 - 不得超过 `MaxTotalIssuance`（`ExceedsTotalIssuanceCap`）
 
@@ -164,32 +171,32 @@ Runtime 接线：
 
 错误：
 - 执行状态类：`AlreadyExecuted`, `PalletPaused`, `AlreadyInState`, `NotExecuted`
-- 参数类：`EmptyReason`, `ReasonTooLong`, `EmptyAllocations`, `TooManyAllocations`, `ZeroAmount`
-- 数值类：`AllocationOverflow`, `TotalMismatch`, `TotalIssuedOverflow`, `ExceedsTotalIssuanceCap`, `BelowExistentialDeposit`, `DepositFailed`
+- 参数类：`EmptyReason`, `ReasonTooLong`, `EmptyAllocations`, `TooManyAllocations`, `DuplicateRecipient`, `ZeroAmount`
+- 数值类：`AllocationOverflow`, `TotalMismatch`, `TotalIssuedOverflow`, `ExceedsSingleIssuanceCap`, `ExceedsTotalIssuanceCap`, `BelowExistentialDeposit`, `DepositFailed`
 
 ---
 
 ## 8. Weight 策略
 当前状态：
 - 模块已经具备 `runtime-benchmarks` 基础设施与 `benchmarks.rs` 入口。
-- `weights.rs` 目前仍是保守手工估算值，需通过 benchmark CLI 产物回填。
+- `weights.rs` 已由 Substrate benchmark CLI 自动生成（见 `src/weights.rs` 文件头，日期 2026-03-12）。
 
-当前 `WeightInfo for ()` 为手工估算：
-- `execute_resolution_issuance`：基础权重 + 按 `allocation_count`、`reason_len` 线性项 + DB 读写项。
-- `clear_executed`：`from_parts(10_000_000, 128) + reads_writes(1,2)`。
-- `set_paused`：`from_parts(5_000_000, 64) + reads_writes(1,2)`。
+benchmark 口径：
+- `execute_resolution_issuance` 使用参数化 benchmark，覆盖 `reason_len` 与 `allocation_count` 的变化；当前自动回归结果对 `allocation_count` 生成线性项，对 `reason_len` 给出 0 斜率。
+- `clear_executed`、`set_paused` 使用固定路径 benchmark。
 
 说明：
-- 现阶段可用，但生产链仍建议使用 benchmark CLI 生成权重，以获得更准确的执行时间与 PoV 估算。
+- benchmark 范围需要与 runtime 的 `MaxReasonLen` / `MaxAllocations` 保持同步，避免 worst-case 输入回退。
 
 ---
 
 ## 9. 安全设计要点
 - 原子性：`with_storage_layer` 防止部分发币后失败造成账本不一致。
 - 永久防重放：`EverExecuted` 与可清理 `Executed` 分离。
-- 发行上限：`MaxTotalIssuance` 可配置。
+- 发行上限：`MaxTotalIssuance` 与 `MaxSingleIssuance` 双重约束。
 - Dust 防护：要求每笔分配 `>= ED`。
 - 暂停机制：`Paused` 可快速停止所有发行执行。
+- 重复收款保护：执行层自身也拒绝重复 `recipient`，不只依赖上游治理校验。
 - 审计增强：事件含 `reason_hash`、`allocations_hash` 与执行块高记录。
 
 ---
@@ -200,9 +207,9 @@ Runtime 接线：
 已覆盖重点：
 - 正常执行与余额更新
 - 防重放（含 `clear_executed` 后仍不可重放）
-- 总额不一致、求和溢出、累计上限溢出
+- 总额不一致、求和溢出、单次上限、累计上限溢出
 - 原因长度边界与空理由
-- 空分配、超分配、零金额、低于 ED
+- 空分配、超分配、重复收款、零金额、低于 ED
 - 暂停机制（trait 路径与 extrinsic 路径）
 - `set_paused` 事件与幂等保护
 - `clear_executed` 权限与事件
