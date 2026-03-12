@@ -1,7 +1,7 @@
 use crate::{
     home::home_node,
-    settings::{address_utils::decode_hex_32_strict, grandpa_address, security},
-    validation::normalize_node_key,
+    settings::{address_utils::decode_hex_32_strict, device_password, grandpa_address},
+    shared::{security, validation::normalize_node_key},
 };
 use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,7 @@ const KEYCHAIN_ACCOUNT_BOOTNODE: &str = "bootnode-node-key";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// 前端展示的引导节点私钥绑定状态。
 pub struct BootnodeKey {
     pub node_key: Option<String>,
     pub peer_id: Option<String>,
@@ -21,6 +22,7 @@ pub struct BootnodeKey {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// 创世引导节点选项，供前端/首页做 PeerId 到机构名映射。
 pub struct GenesisBootnodeOption {
     pub name: String,
     pub peer_id: String,
@@ -103,6 +105,7 @@ fn peer_id_from_node_key_hex(node_key_hex: &str) -> Result<String, String> {
     Ok(peer_id.to_string())
 }
 
+// node-key 只在本地安全存储中保存，真正启动节点时再临时解密注入。
 pub(crate) fn load_bootnode_node_key(
     _app: &AppHandle,
     unlock_password: &str,
@@ -168,7 +171,7 @@ pub fn set_bootnode_key(
 ) -> Result<BootnodeKey, String> {
     let _ = security::append_audit_log(&app, "set_bootnode_key", "attempt");
     let unlock = security::ensure_unlock_password(&unlock_password)?;
-    security::verify_device_login_password(&app, unlock)?;
+    device_password::verify_device_login_password(&app, unlock)?;
     let normalized = normalize_node_key(&node_key)?;
     let derived_peer_id = peer_id_from_node_key_hex(&normalized)?;
     if !is_genesis_bootnode_peer_id(&derived_peer_id)? {
@@ -183,7 +186,8 @@ pub fn set_bootnode_key(
     security::secure_store_set(KEYCHAIN_ACCOUNT_BOOTNODE, &encrypted)?;
     save_bootnode_meta(&app, &derived_peer_id, institution_name.clone())?;
 
-    // 若节点当前在运行，保存新私钥后立即重启以应用新的 p2p 身份。
+    // 若节点当前在运行，保存新私钥后立即重启以应用新的 p2p 身份，
+    // 并轮询确认本机 PeerId 已切换到目标引导节点。
     if home_node::current_status(&app)?.running {
         if let Err(err) = (|| -> Result<(), String> {
             let _ = home_node::stop_node_blocking(app.clone())?;

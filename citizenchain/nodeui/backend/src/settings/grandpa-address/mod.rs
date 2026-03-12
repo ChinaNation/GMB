@@ -1,10 +1,14 @@
 use crate::{
-    home::home_node, rpc, settings::address_utils::decode_hex_32_strict, settings::security,
-    validation::normalize_grandpa_key,
+    home::home_node,
+    settings::{address_utils::decode_hex_32_strict, device_password},
+    shared::{rpc, security, validation::normalize_grandpa_key},
 };
+use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashSet, fs, io::ErrorKind, path::PathBuf, thread, time::Duration};
+use std::{
+    collections::HashSet, fs, io::ErrorKind, path::PathBuf, str::FromStr, thread, time::Duration,
+};
 use tauri::AppHandle;
 use zeroize::Zeroizing;
 
@@ -17,6 +21,7 @@ const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// 前端展示的 GRANDPA 私钥绑定状态。
 pub struct GrandpaKey {
     pub key: Option<String>,
     pub institution_name: Option<String>,
@@ -36,6 +41,8 @@ pub(crate) struct InstitutionCatalogEntry {
     pub grandpa_pubkey_hex: String,
 }
 
+// 机构清单既被 bootnode 模块用于 PeerId 映射，也被 GRANDPA 模块用于公钥匹配，
+// 加载时统一做 trim / 去重 / 格式校验，避免配置里的空格或脏数据影响运行时判断。
 pub(crate) fn load_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>, String> {
     let entries: Vec<InstitutionCatalogEntry> = serde_json::from_str(INSTITUTION_CATALOG_SRC)
         .map_err(|e| format!("parse institution-catalog.json failed: {e}"))?;
@@ -46,6 +53,7 @@ pub(crate) fn load_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>,
     let mut seen_names = HashSet::new();
     let mut seen_peer_ids = HashSet::new();
     let mut seen_grandpa = HashSet::new();
+    let mut normalized_entries = Vec::with_capacity(entries.len());
     for (idx, entry) in entries.iter().enumerate() {
         let line = idx + 1;
         let name = entry.name.trim();
@@ -64,6 +72,8 @@ pub(crate) fn load_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>,
                 "institution-catalog.json 第 {line} 项 peerId 不能为空"
             ));
         }
+        PeerId::from_str(peer_id)
+            .map_err(|_| format!("institution-catalog.json 第 {line} 项 peerId 无效"))?;
         if !seen_peer_ids.insert(peer_id.to_string()) {
             return Err(format!("institution-catalog.json peerId 重复: {peer_id}"));
         }
@@ -81,9 +91,15 @@ pub(crate) fn load_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>,
                 entry.grandpa_pubkey_hex
             ));
         }
+
+        normalized_entries.push(InstitutionCatalogEntry {
+            name: name.to_string(),
+            peer_id: peer_id.to_string(),
+            grandpa_pubkey_hex: grandpa.to_ascii_lowercase(),
+        });
     }
 
-    Ok(entries)
+    Ok(normalized_entries)
 }
 
 fn grandpa_meta_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -161,6 +177,53 @@ fn grandpa_keystore_filename(pubkey_hex: &str) -> String {
     format!("{GRANDPA_KEY_TYPE_HEX_PREFIX}{pubkey_hex}")
 }
 
+fn collect_grandpa_keystore_files(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
+    let mut files = Vec::new();
+    for dir in keystore_dirs_for_grandpa(app)? {
+        if !dir.is_dir() {
+            continue;
+        }
+        let entries = fs::read_dir(&dir)
+            .map_err(|e| format!("read grandpa keystore dir failed ({}): {e}", dir.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("read grandpa keystore entry failed: {e}"))?;
+            let file_type = entry
+                .file_type()
+                .map_err(|e| format!("read grandpa keystore file type failed: {e}"))?;
+            if file_type.is_symlink() || !file_type.is_file() {
+                continue;
+            }
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
+                continue;
+            };
+            if name.starts_with(GRANDPA_KEY_TYPE_HEX_PREFIX) {
+                files.push(path);
+            }
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+fn remove_other_grandpa_keys(app: &AppHandle, keep_filename: &str) -> Result<(), String> {
+    for path in collect_grandpa_keystore_files(app)? {
+        let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
+            continue;
+        };
+        if name == keep_filename {
+            continue;
+        }
+        fs::remove_file(&path).map_err(|e| {
+            format!(
+                "remove stale grandpa keystore file failed ({}): {e}",
+                path.display()
+            )
+        })?;
+    }
+    Ok(())
+}
+
 fn write_grandpa_key_to_keystore(
     app: &AppHandle,
     private_hex: &str,
@@ -181,6 +244,8 @@ fn write_grandpa_key_to_keystore(
             )
         })?;
     }
+    // 始终只保留当前机构对应的一把 gran 密钥，避免旧密钥残留导致节点加载多把 authority key。
+    remove_other_grandpa_keys(app, &filename)?;
     Ok(())
 }
 
@@ -273,6 +338,7 @@ pub(crate) fn prepare_grandpa_for_start(
     app: &AppHandle,
     unlock_password: &str,
 ) -> Result<bool, String> {
+    // 启动前再次校验“私钥 -> 公钥 -> 机构清单”关系，防止历史配置和当前清单漂移后误启动 validator。
     let Some(private_hex) = load_saved_grandpa_private_hex(unlock_password)? else {
         return Ok(false);
     };
@@ -331,7 +397,7 @@ pub fn set_grandpa_key(
 ) -> Result<GrandpaKey, String> {
     let _ = security::append_audit_log(&app, "set_grandpa_key", "attempt");
     let unlock = security::ensure_unlock_password(&unlock_password)?;
-    security::verify_device_login_password(&app, unlock)?;
+    device_password::verify_device_login_password(&app, unlock)?;
     let normalized = normalize_grandpa_key(&key)?;
     let pubkey = grandpa_pubkey_from_private_hex(&normalized)?;
     let institution_name = institution_name_by_grandpa_pubkey(&pubkey)?

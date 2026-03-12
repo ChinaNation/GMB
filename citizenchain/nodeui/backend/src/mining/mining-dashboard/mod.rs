@@ -1,7 +1,7 @@
 use crate::{
     home::home_node,
-    rpc,
-    settings::{fee_address, security},
+    settings::fee_address,
+    shared::{rpc, security},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -32,6 +32,7 @@ const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// 前端“收益卡片”展示的累计与当日收益。
 pub struct MiningIncome {
     pub total_income: String,
     pub total_fee_income: String,
@@ -41,6 +42,7 @@ pub struct MiningIncome {
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+/// 前端“出块记录”表格的单行数据。
 pub struct MiningBlockRecord {
     pub block_height: u64,
     pub timestamp_ms: Option<u64>,
@@ -51,6 +53,7 @@ pub struct MiningBlockRecord {
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+/// 资源监控面板展示的节点资源占用。
 pub struct ResourceUsage {
     pub cpu_percent: Option<f64>,
     pub memory_mb: Option<u64>,
@@ -60,6 +63,7 @@ pub struct ResourceUsage {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// 挖矿看板聚合响应。
 pub struct MiningDashboard {
     pub income: MiningIncome,
     pub records: Vec<MiningBlockRecord>,
@@ -145,8 +149,6 @@ static MINING_CACHE: OnceLock<Mutex<MiningComputationCache>> = OnceLock::new();
 static RESOURCE_USAGE_CACHE: OnceLock<Mutex<Option<ResourceUsageSample>>> = OnceLock::new();
 static MINING_REFRESHING: OnceLock<Mutex<bool>> = OnceLock::new();
 static MINING_CACHE_LOADED: OnceLock<Mutex<bool>> = OnceLock::new();
-static EXPECTED_RPC_NODE_VERIFIED: OnceLock<()> = OnceLock::new();
-static CHAIN_GENESIS_HASH_CACHE: OnceLock<String> = OnceLock::new();
 static TIMESTAMP_NOW_STORAGE_KEY_CACHE: OnceLock<String> = OnceLock::new();
 static LAST_CACHE_PERSIST_AT_MS: OnceLock<Mutex<u64>> = OnceLock::new();
 static NODE_DATA_SIZE_CACHE: OnceLock<Mutex<Option<NodeDataSizeSample>>> = OnceLock::new();
@@ -175,6 +177,8 @@ fn last_cache_persist_at_ms() -> &'static Mutex<u64> {
     LAST_CACHE_PERSIST_AT_MS.get_or_init(|| Mutex::new(0))
 }
 
+// 该模块会被前端轮询，缓存锁一旦因 panic 污染，就重置成默认值继续服务，
+// 避免一次异常导致整个挖矿面板永久不可用。
 fn lock_or_reset<'a, T: Default>(mutex: &'a Mutex<T>, name: &str) -> MutexGuard<'a, T> {
     match mutex.lock() {
         Ok(guard) => guard,
@@ -199,6 +203,7 @@ fn persist_mining_cache(app: &AppHandle, cache: &MiningComputationCache) -> Resu
         .map_err(|e| format!("write mining cache failed ({}): {e}", path.display()))
 }
 
+// 先更新进程内缓存，再按时间窗口/追赶进度决定是否落盘，兼顾数据连续性与写盘频率。
 fn commit_working_cache(
     app: &AppHandle,
     working: &MiningComputationCache,
@@ -316,12 +321,8 @@ fn ensure_expected_rpc_node_uncached() -> Result<(), String> {
 }
 
 fn ensure_expected_rpc_node() -> Result<(), String> {
-    if EXPECTED_RPC_NODE_VERIFIED.get().is_some() {
-        return Ok(());
-    }
-    ensure_expected_rpc_node_uncached()?;
-    let _ = EXPECTED_RPC_NODE_VERIFIED.set(());
-    Ok(())
+    // RPC 目标可能随着节点重启或端口复用而变化，不能跨请求永久信任第一次校验结果。
+    ensure_expected_rpc_node_uncached()
 }
 
 fn chain_genesis_hash_uncached() -> Result<String, String> {
@@ -335,12 +336,8 @@ fn chain_genesis_hash_uncached() -> Result<String, String> {
 }
 
 fn chain_genesis_hash() -> Result<String, String> {
-    if let Some(hash) = CHAIN_GENESIS_HASH_CACHE.get() {
-        return Ok(hash.clone());
-    }
-    let hash = chain_genesis_hash_uncached()?;
-    let _ = CHAIN_GENESIS_HASH_CACHE.set(hash.clone());
-    Ok(hash)
+    // genesis hash 用来判断链上下文是否切换；若永久缓存，链切换后会把旧链缓存误用到新链。
+    chain_genesis_hash_uncached()
 }
 
 fn best_block_height() -> Result<u64, String> {
@@ -509,6 +506,8 @@ fn author_from_pow_digest_logs(logs: &[Value]) -> Option<String> {
     None
 }
 
+// 手续费按区块内所有非 coinbase extrinsic 的 payment_queryInfo 累加；
+// 单条失败不终止整块处理，而是累计失败计数并在 warning 中提示。
 fn block_fee_fen(block_hash: &str, extrinsics: &[Value]) -> (u128, u32) {
     let mut total_fee: u128 = 0;
     let mut failures: u32 = 0;
@@ -536,6 +535,8 @@ fn block_fee_fen(block_hash: &str, extrinsics: &[Value]) -> (u128, u32) {
     (total_fee, failures)
 }
 
+// 单块处理负责把链上原始数据转换成统计友好的结构，
+// 后续累计逻辑只消费 ProcessedBlock，减少状态更新分散在多处。
 fn process_block(height: u64, ts_key: &str) -> Result<ProcessedBlock, String> {
     let block_hash = block_hash_by_height(height)?;
     let block = rpc_post(
@@ -603,6 +604,7 @@ fn refresh_cache(
     today_utc: u64,
     local_miner_account: Option<&str>,
 ) -> Result<RefreshStats, String> {
+    // 采用“工作副本 -> 整体提交”的方式，避免处理中途失败时把半成品写回全局缓存。
     let mut working = {
         let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
         cache.clone()
@@ -758,6 +760,7 @@ fn warning_from_stats(stats: &RefreshStats) -> Option<String> {
     }
 }
 
+// 资源采样与收益统计解耦，即使 RPC 不可用，也尽量继续返回本地资源面板。
 fn dashboard_from_cache(
     cache: &MiningComputationCache,
     resources: ResourceUsage,
@@ -940,6 +943,7 @@ fn resource_usage(app: &AppHandle) -> ResourceUsage {
     usage
 }
 
+// 同一时刻只允许一个请求做增量追块，其余请求直接复用最近缓存，避免重复扫链。
 fn try_begin_refresh() -> bool {
     let mut refreshing = lock_or_reset(mining_refreshing_flag(), "MINING_REFRESHING");
     if *refreshing {
@@ -961,6 +965,7 @@ impl Drop for RefreshInFlightGuard {
 
 #[tauri::command]
 pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
+    // 先加载最近一次落盘缓存，保证 RPC 短暂异常时仍能返回可展示的旧数据。
     ensure_mining_cache_loaded(&app);
     let resources = resource_usage(&app);
     let today_utc = utc_day(unix_now_ms().unwrap_or(0));
@@ -985,7 +990,13 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
         Ok(v) => v,
         Err(err) => {
             warnings.push(format!("读取本节点矿工账号失败：{err}"));
-            None
+            let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
+            return Ok(dashboard_from_cache(
+                &cache,
+                resources,
+                merge_warnings(warnings),
+                today_utc,
+            ));
         }
     };
 
