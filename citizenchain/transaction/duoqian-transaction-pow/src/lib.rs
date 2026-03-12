@@ -136,7 +136,7 @@ pub struct RegisteredInstitution<SfidId> {
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -229,6 +229,57 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn chain_domain_hash)]
     pub type ChainDomainHash<T: Config> = StorageValue<_, T::Hash, OptionQuery>;
+
+    #[pallet::genesis_config]
+    pub struct GenesisConfig<T: Config> {
+        pub _phantom: core::marker::PhantomData<T>,
+    }
+
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            Self {
+                _phantom: Default::default(),
+            }
+        }
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            let genesis_hash = frame_system::Pallet::<T>::block_hash(BlockNumberFor::<T>::zero());
+            if genesis_hash != T::Hash::default() {
+                ChainDomainHash::<T>::put(genesis_hash);
+            }
+        }
+    }
+
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_runtime_upgrade() -> Weight {
+            let db = T::DbWeight::get();
+            let on_chain = StorageVersion::get::<Pallet<T>>();
+            if on_chain >= STORAGE_VERSION {
+                return db.reads(1);
+            }
+
+            let mut reads = 2u64;
+            let mut writes = 0u64;
+
+            if ChainDomainHash::<T>::get().is_none() {
+                let genesis_hash =
+                    frame_system::Pallet::<T>::block_hash(BlockNumberFor::<T>::zero());
+                reads = reads.saturating_add(1);
+                if genesis_hash != T::Hash::default() {
+                    ChainDomainHash::<T>::put(genesis_hash);
+                    writes = writes.saturating_add(1);
+                }
+            }
+
+            STORAGE_VERSION.put::<Pallet<T>>();
+            writes = writes.saturating_add(1);
+            db.reads_writes(reads, writes)
+        }
+    }
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -401,7 +452,7 @@ pub mod pallet {
             amount: BalanceOf<T>,
             expires_at: BlockNumberFor<T>,
             approvals: AdminApprovalsOf<T>,
-        ) -> DispatchResult {
+        ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             ensure!(
                 !T::ProtectedSourceChecker::is_protected(&who),
@@ -516,7 +567,8 @@ pub mod pallet {
                 amount,
             });
 
-            Ok(())
+            let actual_weight = T::WeightInfo::create_duoqian(admin_count, approvals.len() as u32);
+            Ok(Some(actual_weight).into())
         }
 
         /// 注销多签账户：
@@ -637,8 +689,8 @@ pub mod pallet {
             if ChainDomainHash::<T>::get().is_some() {
                 return Ok(());
             }
-            // 中文注释：链域哈希固定取 genesis hash 并持久化，只允许初始化一次。
-            // 这样地址派生和签名域都会稳定绑定到当前链，而不是随区块高度变化。
+            // 中文注释：新链会在创世阶段直接写入链域哈希；
+            // 这里保留旧链/测试环境兜底，确保地址派生和签名域始终绑定 genesis hash。
             let genesis_hash = frame_system::Pallet::<T>::block_hash(BlockNumberFor::<T>::zero());
             ensure!(
                 genesis_hash != T::Hash::default(),
@@ -865,6 +917,10 @@ mod tests {
             .build_storage()
             .expect("system genesis build should succeed");
 
+        crate::pallet::GenesisConfig::<Test>::default()
+            .assimilate_storage(&mut storage)
+            .expect("duoqian genesis build should succeed");
+
         let p1 = pair(1);
         let p2 = pair(2);
         let p3 = pair(3);
@@ -939,7 +995,7 @@ mod tests {
         let nonce = Duoqian::address_registered_sfid(duoqian)
             .map(|r| r.nonce)
             .unwrap_or(0);
-        let domain = Duoqian::chain_domain_hash().unwrap_or_else(|| System::block_hash(0));
+        let domain = Duoqian::chain_domain_hash().expect("chain domain hash should be initialized");
         (
             b"DUOQIAN_CREATE_V3".to_vec(),
             domain,
@@ -994,7 +1050,7 @@ mod tests {
         let nonce = Duoqian::address_registered_sfid(duoqian)
             .map(|r| r.nonce)
             .unwrap_or(0);
-        let domain = Duoqian::chain_domain_hash().unwrap_or_else(|| System::block_hash(0));
+        let domain = Duoqian::chain_domain_hash().expect("chain domain hash should be initialized");
         (
             b"DUOQIAN_CLOSE_V3".to_vec(),
             domain,
@@ -1044,7 +1100,7 @@ mod tests {
         threshold: u32,
         amount: u128,
         approvals: AdminApprovalsOf<Test>,
-    ) -> DispatchResult {
+    ) -> frame_support::dispatch::DispatchResultWithPostInfo {
         Duoqian::create_duoqian(
             origin,
             sfid_id,
@@ -2862,6 +2918,13 @@ mod tests {
     }
 
     #[test]
+    fn chain_domain_hash_is_initialized_in_genesis() {
+        new_test_ext().execute_with(|| {
+            assert_eq!(Duoqian::chain_domain_hash(), Some(System::block_hash(0)));
+        });
+    }
+
+    #[test]
     fn register_sfid_institution_derives_blake3_address_and_blocks_duplicate_sfid() {
         new_test_ext().execute_with(|| {
             let sfid: SfidIdOf<Test> = b"GFR-LN001-CB0C-617776487-20260222"
@@ -2923,7 +2986,6 @@ mod tests {
     #[test]
     fn register_sfid_institution_rejects_derived_reserved_address() {
         new_test_ext().execute_with(|| {
-            ChainDomainHash::<Test>::put(System::block_hash(0));
             let mut found: Option<SfidIdOf<Test>> = None;
             for i in 0..500_000u32 {
                 let candidate = format!("GFR-LN001-CB0C-rsvd-{}-20260222", i);

@@ -3,7 +3,7 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 use codec::Decode;
-use frame_benchmarking::v2::*;
+use frame_benchmarking::{v2::*, BenchmarkError};
 use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
 use sp_runtime::traits::{Hash as HashT, SaturatedConversion, Saturating};
 
@@ -14,12 +14,14 @@ use crate::{
     STATUS_VOTING,
 };
 
-fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
-    T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
+fn decode_account<T: Config>(raw: [u8; 32]) -> Result<T::AccountId, BenchmarkError> {
+    T::AccountId::decode(&mut &raw[..])
+        .map_err(|_| BenchmarkError::Stop("benchmark account must decode"))
 }
 
-fn nrc_institution() -> InstitutionPalletId {
-    reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("NRC institution id should decode")
+fn nrc_institution() -> Result<InstitutionPalletId, BenchmarkError> {
+    reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
+        .ok_or(BenchmarkError::Stop("NRC institution id should decode"))
 }
 
 #[benchmarks]
@@ -27,7 +29,7 @@ mod benchmarks {
     use super::*;
 
     #[benchmark]
-    fn create_internal_proposal() {
+    fn create_internal_proposal() -> Result<(), BenchmarkError> {
         NextProposalId::<T>::put(0u64);
         let now = frame_system::Pallet::<T>::block_number();
         let proposal = Proposal {
@@ -35,7 +37,7 @@ mod benchmarks {
             stage: STAGE_INTERNAL,
             status: STATUS_VOTING,
             internal_org: Some(crate::internal_vote::ORG_NRC),
-            internal_institution: Some(nrc_institution()),
+            internal_institution: Some(nrc_institution()?),
             start: now,
             end: now,
             citizen_eligible_total: 0,
@@ -43,17 +45,19 @@ mod benchmarks {
 
         #[block]
         {
-            let id = Pallet::<T>::allocate_proposal_id().expect("id should allocate");
+            let id = Pallet::<T>::allocate_proposal_id()
+                .map_err(|_| BenchmarkError::Stop("id should allocate"))?;
             Proposals::<T>::insert(id, proposal);
         }
 
         assert!(Proposals::<T>::contains_key(0u64));
+        Ok(())
     }
 
     #[benchmark]
-    fn submit_joint_institution_vote() {
-        let who = decode_account::<T>(CHINA_CB[0].duoqian_address);
-        let institution = nrc_institution();
+    fn submit_joint_institution_vote() -> Result<(), BenchmarkError> {
+        let who = decode_account::<T>(CHINA_CB[0].duoqian_address)?;
+        let institution = nrc_institution()?;
         let now = frame_system::Pallet::<T>::block_number();
         let end = now.saturating_add(100u32.saturated_into());
         Proposals::<T>::insert(
@@ -73,14 +77,16 @@ mod benchmarks {
         #[block]
         {
             Pallet::<T>::do_submit_joint_institution_vote(who, 1u64, institution, true)
-                .expect("joint vote should succeed");
+                .map_err(|_| BenchmarkError::Stop("joint vote should succeed"))?;
         }
+
+        Ok(())
     }
 
     #[benchmark]
-    fn citizen_vote() {
+    fn citizen_vote() -> Result<(), BenchmarkError> {
         let proposal_id = 2u64;
-        let who = decode_account::<T>(CHINA_CB[0].admins[0]);
+        let who = decode_account::<T>(CHINA_CB[0].admins[0])?;
         let now = frame_system::Pallet::<T>::block_number();
         let end = now.saturating_add(100u32.saturated_into());
         Proposals::<T>::insert(
@@ -101,16 +107,16 @@ mod benchmarks {
         let nonce: VoteNonceOf<T> = b"bench-nonce"
             .to_vec()
             .try_into()
-            .expect("nonce should fit");
+            .map_err(|_| BenchmarkError::Stop("nonce should fit"))?;
         let signature: VoteSignatureOf<T> = b"bench-signature"
             .to_vec()
             .try_into()
-            .expect("signature should fit");
+            .map_err(|_| BenchmarkError::Stop("signature should fit"))?;
 
         #[block]
         {
             Pallet::<T>::do_citizen_vote(who, proposal_id, sfid_hash, nonce, signature, true)
-                .expect("citizen vote should succeed");
+                .map_err(|_| BenchmarkError::Stop("citizen vote should succeed"))?;
         }
 
         assert!(CitizenVotesBySfid::<T>::contains_key(
@@ -118,10 +124,11 @@ mod benchmarks {
             sfid_hash
         ));
         assert_eq!(CitizenTallies::<T>::get(proposal_id).yes, 1u64);
+        Ok(())
     }
 
     #[benchmark]
-    fn finalize_proposal_internal() {
+    fn finalize_proposal_internal() -> Result<(), BenchmarkError> {
         let proposal_id = 3u64;
         let one: frame_system::pallet_prelude::BlockNumberFor<T> = 1u32.saturated_into();
         frame_system::Pallet::<T>::set_block_number(one.saturating_add(one));
@@ -130,7 +137,7 @@ mod benchmarks {
             stage: STAGE_INTERNAL,
             status: STATUS_VOTING,
             internal_org: Some(crate::internal_vote::ORG_NRC),
-            internal_institution: Some(nrc_institution()),
+            internal_institution: Some(nrc_institution()?),
             start: one,
             end: one,
             citizen_eligible_total: 0,
@@ -140,12 +147,14 @@ mod benchmarks {
         #[block]
         {
             Pallet::<T>::do_finalize_internal_timeout(&proposal, proposal_id)
-                .expect("internal finalize should succeed");
+                .map_err(|_| BenchmarkError::Stop("internal finalize should succeed"))?;
         }
+
+        Ok(())
     }
 
     #[benchmark]
-    fn finalize_proposal_joint() {
+    fn finalize_proposal_joint() -> Result<(), BenchmarkError> {
         let proposal_id = 4u64;
         let one: frame_system::pallet_prelude::BlockNumberFor<T> = 1u32.saturated_into();
         frame_system::Pallet::<T>::set_block_number(one.saturating_add(one));
@@ -165,12 +174,14 @@ mod benchmarks {
         #[block]
         {
             Pallet::<T>::do_finalize_joint_timeout(&proposal, proposal_id)
-                .expect("joint finalize should succeed");
+                .map_err(|_| BenchmarkError::Stop("joint finalize should succeed"))?;
         }
+
+        Ok(())
     }
 
     #[benchmark]
-    fn finalize_proposal_citizen() {
+    fn finalize_proposal_citizen() -> Result<(), BenchmarkError> {
         let proposal_id = 5u64;
         let one: frame_system::pallet_prelude::BlockNumberFor<T> = 1u32.saturated_into();
         frame_system::Pallet::<T>::set_block_number(one.saturating_add(one));
@@ -190,7 +201,9 @@ mod benchmarks {
         #[block]
         {
             Pallet::<T>::do_finalize_citizen_timeout(&proposal, proposal_id)
-                .expect("citizen finalize should succeed");
+                .map_err(|_| BenchmarkError::Stop("citizen finalize should succeed"))?;
         }
+
+        Ok(())
     }
 }

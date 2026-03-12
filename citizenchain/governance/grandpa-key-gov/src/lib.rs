@@ -790,6 +790,9 @@ mod tests {
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
         type MaxAutoFinalizePerBlock = ConstU32<64>;
+        type MaxProposalsPerExpiry = ConstU32<128>;
+        type MaxCleanupStepsPerBlock = ConstU32<8>;
+        type CleanupKeysPerStep = ConstU32<64>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();

@@ -113,6 +113,10 @@ pub mod pallet {
         RewardWalletAlreadyBound,
         /// 矿工身份未绑定奖励钱包。
         RewardWalletNotBound,
+        /// 奖励钱包不得与矿工身份账户相同。
+        RewardWalletCannotBeMiner,
+        /// 新奖励钱包必须不同于当前已绑定钱包。
+        RewardWalletUnchanged,
     }
 
     #[pallet::call]
@@ -129,6 +133,7 @@ pub mod pallet {
                 !RewardWalletByMiner::<T>::contains_key(&miner),
                 Error::<T>::RewardWalletAlreadyBound
             );
+            ensure!(wallet != miner, Error::<T>::RewardWalletCannotBeMiner);
 
             // 中文注释：绑定表只决定奖励接收钱包，不改变矿工作者身份本身。
             RewardWalletByMiner::<T>::insert(&miner, &wallet);
@@ -144,9 +149,12 @@ pub mod pallet {
             new_wallet: T::AccountId,
         ) -> DispatchResult {
             let miner = ensure_signed(origin)?;
+            let current_wallet =
+                RewardWalletByMiner::<T>::get(&miner).ok_or(Error::<T>::RewardWalletNotBound)?;
+            ensure!(new_wallet != miner, Error::<T>::RewardWalletCannotBeMiner);
             ensure!(
-                RewardWalletByMiner::<T>::contains_key(&miner),
-                Error::<T>::RewardWalletNotBound
+                new_wallet != current_wallet,
+                Error::<T>::RewardWalletUnchanged
             );
             // 中文注释：重绑后仅影响后续区块奖励，历史已经发放的奖励不会被追溯重定向。
             RewardWalletByMiner::<T>::insert(&miner, &new_wallet);
@@ -357,6 +365,17 @@ mod tests {
     }
 
     #[test]
+    fn bind_rejects_miner_wallet() {
+        new_test_ext().execute_with(|| {
+            let miner = account(4);
+            assert_noop!(
+                FullnodePowReward::bind_reward_wallet(RuntimeOrigin::signed(miner.clone()), miner),
+                Error::<Test>::RewardWalletCannotBeMiner
+            );
+        });
+    }
+
+    #[test]
     fn reward_issued_within_range_when_bound() {
         new_test_ext().execute_with(|| {
             let miner = account(11);
@@ -545,6 +564,48 @@ mod tests {
                 )
             });
             assert!(has_event);
+        });
+    }
+
+    #[test]
+    fn rebind_rejects_miner_wallet() {
+        new_test_ext().execute_with(|| {
+            let miner = account(114);
+            let wallet = account(115);
+            assert_ok!(FullnodePowReward::bind_reward_wallet(
+                RuntimeOrigin::signed(miner.clone()),
+                wallet.clone()
+            ));
+
+            assert_noop!(
+                FullnodePowReward::rebind_reward_wallet(
+                    RuntimeOrigin::signed(miner.clone()),
+                    miner.clone()
+                ),
+                Error::<Test>::RewardWalletCannotBeMiner
+            );
+            assert_eq!(RewardWalletByMiner::<Test>::get(&miner), Some(wallet));
+        });
+    }
+
+    #[test]
+    fn rebind_rejects_unchanged_wallet() {
+        new_test_ext().execute_with(|| {
+            let miner = account(116);
+            let wallet = account(117);
+            assert_ok!(FullnodePowReward::bind_reward_wallet(
+                RuntimeOrigin::signed(miner.clone()),
+                wallet.clone()
+            ));
+
+            assert_noop!(
+                FullnodePowReward::rebind_reward_wallet(
+                    RuntimeOrigin::signed(miner.clone()),
+                    wallet.clone()
+                ),
+                Error::<Test>::RewardWalletUnchanged
+            );
+            assert_eq!(RewardWalletByMiner::<Test>::get(&miner), Some(wallet));
         });
     }
 

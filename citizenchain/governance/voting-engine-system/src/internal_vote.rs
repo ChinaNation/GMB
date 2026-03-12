@@ -2,7 +2,11 @@
 
 #[cfg(test)]
 use codec::Encode;
-use frame_support::{ensure, pallet_prelude::DispatchResult};
+use frame_support::{
+    ensure,
+    pallet_prelude::DispatchResult,
+    storage::{with_transaction, TransactionOutcome},
+};
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 
 use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
@@ -124,10 +128,9 @@ impl<T: Config> Pallet<T> {
         // 中文注释：内部投票仅允许该机构管理员发起
         ensure!(
             is_internal_admin::<T>(org, institution, &who),
-            Error::<T>::InvalidInstitution
+            Error::<T>::NoPermission
         );
 
-        let id = Self::allocate_proposal_id()?;
         let now = <frame_system::Pallet<T>>::block_number();
         // 中文注释：end 是“最后一个允许投票的区块”，真正自动结算发生在 end + 1。
         let end = now.saturating_add(Self::internal_stage_duration());
@@ -143,15 +146,24 @@ impl<T: Config> Pallet<T> {
             citizen_eligible_total: 0,
         };
 
-        Proposals::<T>::insert(id, proposal);
-        Self::schedule_proposal_expiry(id, end);
-        Self::deposit_event(Event::<T>::ProposalCreated {
-            proposal_id: id,
-            kind: PROPOSAL_KIND_INTERNAL,
-            stage: STAGE_INTERNAL,
-            end,
-        });
-        Ok(id)
+        with_transaction(|| {
+            let id = match Self::allocate_proposal_id() {
+                Ok(id) => id,
+                Err(err) => return TransactionOutcome::Rollback(Err(err)),
+            };
+
+            Proposals::<T>::insert(id, proposal);
+            if let Err(err) = Self::schedule_proposal_expiry(id, end) {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+            Self::deposit_event(Event::<T>::ProposalCreated {
+                proposal_id: id,
+                kind: PROPOSAL_KIND_INTERNAL,
+                stage: STAGE_INTERNAL,
+                end,
+            });
+            TransactionOutcome::Commit(Ok(id))
+        })
     }
 
     pub(crate) fn do_internal_vote(
@@ -182,7 +194,7 @@ impl<T: Config> Pallet<T> {
         // 中文注释：内部投票仅允许该机构管理员投票
         ensure!(
             is_internal_admin::<T>(org, institution, &who),
-            Error::<T>::InvalidInstitution
+            Error::<T>::NoPermission
         );
 
         InternalVotesByAccount::<T>::insert(proposal_id, &who, approve);

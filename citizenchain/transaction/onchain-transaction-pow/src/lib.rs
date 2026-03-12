@@ -16,13 +16,15 @@ use sp_runtime::{
 };
 use sp_std::{marker::PhantomData, prelude::*};
 
+const EXPECTED_FEE_PERCENT_TOTAL: u32 = 100;
+
 const _: () = {
+    let total_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT
+        .saturating_add(primitives::core_const::ONCHAIN_FEE_NRC_PERCENT)
+        .saturating_add(primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT);
     assert!(
-        primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT
-            .saturating_add(primitives::core_const::ONCHAIN_FEE_NRC_PERCENT)
-            .saturating_add(primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT)
-            > 0,
-        "fee distribution percents must sum to positive"
+        total_percent == EXPECTED_FEE_PERCENT_TOTAL,
+        "fee distribution percents must sum to 100"
     );
     assert!(
         primitives::core_const::ONCHAIN_MIN_FEE > 0,
@@ -217,13 +219,12 @@ where
             .saturating_add(nrc_percent)
             .saturating_add(blackhole_percent);
         debug_assert_eq!(
-            nrc_percent.saturating_add(blackhole_percent),
-            total_percent.saturating_sub(fullnode_percent),
-            "fee distribution constants must sum correctly"
+            total_percent, EXPECTED_FEE_PERCENT_TOTAL,
+            "fee distribution constants must sum to 100"
         );
 
         // 中文注释：制度常量异常时，直接全部销毁，避免错误分配。
-        if total_percent == 0 {
+        if total_percent != EXPECTED_FEE_PERCENT_TOTAL {
             return;
         }
 
@@ -320,19 +321,22 @@ fn mul_perbill_round(amount: u128, rate: sp_runtime::Perbill) -> u128 {
     // 中文注释：链上精度为“分”，这里做四舍五入到分。
     const PERBILL_DENOMINATOR: u128 = 1_000_000_000;
     let parts: u128 = rate.deconstruct() as u128;
-    // 中文注释：采用 half-up（+0.5 后整除）而不是直接截断，
-    // 这样更符合面向金额场景的直觉，也避免系统性向下偏差。
-    amount
-        .saturating_mul(parts)
-        .saturating_add(PERBILL_DENOMINATOR / 2)
-        .saturating_div(PERBILL_DENOMINATOR)
+    let whole = amount / PERBILL_DENOMINATOR;
+    let remainder = amount % PERBILL_DENOMINATOR;
+
+    // 中文注释：先拆成“整分量”和“小数尾量”分别计算，避免 `amount * parts`
+    // 在极大金额下先溢出再饱和，导致费率结果被错误压扁。
+    let whole_component = whole * parts;
+    let remainder_component =
+        (remainder * parts).saturating_add(PERBILL_DENOMINATOR / 2) / PERBILL_DENOMINATOR;
+    whole_component.saturating_add(remainder_component)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use frame_support::{
-        assert_ok, derive_impl, dispatch::GetDispatchInfo, traits::VariantCountOf,
+        assert_ok, derive_impl, dispatch::GetDispatchInfo, parameter_types, traits::VariantCountOf,
         weights::ConstantMultiplier,
     };
     use frame_system as system;
@@ -383,6 +387,10 @@ mod tests {
         type Nonce = u64;
     }
 
+    parameter_types! {
+        pub static TestExistentialDeposit: Balance = 1;
+    }
+
     impl pallet_balances::Config for Test {
         type MaxLocks = frame_support::traits::ConstU32<0>;
         type MaxReserves = frame_support::traits::ConstU32<0>;
@@ -390,7 +398,7 @@ mod tests {
         type Balance = Balance;
         type RuntimeEvent = RuntimeEvent;
         type DustRemoval = ();
-        type ExistentialDeposit = frame_support::traits::ConstU128<1>;
+        type ExistentialDeposit = TestExistentialDeposit;
         type AccountStore = System;
         type WeightInfo = ();
         type FreezeIdentifier = RuntimeFreezeReason;
@@ -447,6 +455,7 @@ mod tests {
     }
 
     fn new_test_ext() -> sp_io::TestExternalities {
+        TestExistentialDeposit::set(1);
         let mut storage = frame_system::GenesisConfig::<Test>::default()
             .build_storage()
             .expect("system genesis build should succeed");
@@ -524,6 +533,14 @@ mod tests {
         assert_eq!(mul_perbill_round(500, Perbill::from_parts(1_000_000)), 1);
         // 499 * 0.1% = 0.499 分，按四舍五入应为 0 分
         assert_eq!(mul_perbill_round(499, Perbill::from_parts(1_000_000)), 0);
+    }
+
+    #[test]
+    fn mul_perbill_round_handles_u128_max_without_saturating_distortion() {
+        assert_eq!(
+            mul_perbill_round(u128::MAX, Perbill::from_percent(100)),
+            u128::MAX
+        );
     }
 
     #[test]
@@ -790,6 +807,58 @@ mod tests {
             assert_eq!(Balances::free_balance(payer), 900);
             assert_eq!(Balances::free_balance(reward_wallet), expected_fullnode);
             assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
+        });
+    }
+
+    struct MockNrcAccountProviderResolveFail;
+    impl NrcAccountProvider<AccountId32> for MockNrcAccountProviderResolveFail {
+        fn nrc_account() -> Option<AccountId32> {
+            Some(account(42))
+        }
+    }
+
+    #[test]
+    fn fee_router_burns_nrc_share_when_resolve_fails() {
+        new_test_ext().execute_with(|| {
+            let payer = account(1);
+            let miner = account(9);
+            let reward_wallet = account(8);
+            let nrc = MockNrcAccountProviderResolveFail::nrc_account()
+                .expect("nrc account must exist for resolve failure test");
+            let issuance_before = Balances::total_issuance();
+            let total_fee = 500u128;
+            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let blackhole_percent = primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT as u128;
+            let total_percent = fullnode_percent
+                .saturating_add(nrc_percent)
+                .saturating_add(blackhole_percent);
+            let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
+            let remainder = total_fee.saturating_sub(expected_fullnode);
+            let expected_nrc = remainder.saturating_mul(nrc_percent)
+                / nrc_percent.saturating_add(blackhole_percent);
+            let expected_burn = total_fee.saturating_sub(expected_fullnode);
+
+            TestExistentialDeposit::set(100);
+            fullnode_pow_reward::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
+            let credit = <Balances as Balanced<AccountId32>>::withdraw(
+                &payer,
+                total_fee,
+                Precision::Exact,
+                Preservation::Preserve,
+                Fortitude::Polite,
+            )
+            .expect("payer should have enough balance");
+
+            PowOnchainFeeRouter::<Test, Balances, MockFindAuthor, MockNrcAccountProviderResolveFail>::on_nonzero_unbalanced(credit);
+
+            assert_eq!(Balances::free_balance(payer), 500);
+            assert_eq!(Balances::free_balance(reward_wallet), expected_fullnode);
+            assert_eq!(Balances::free_balance(nrc), 0);
+            assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
+            assert!(expected_nrc < 100, "nrc share should stay below high ED");
+            TestExistentialDeposit::set(1);
         });
     }
 

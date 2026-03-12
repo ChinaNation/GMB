@@ -362,6 +362,15 @@ fn account_id_from_address(address: &str) -> Result<[u8; 32], String> {
     decode_ss58_account_id(address)
 }
 
+fn miner_account_id(app: &AppHandle, unlock_password: &str) -> Result<[u8; 32], String> {
+    let miner_suri = Zeroizing::new(ensure_miner_suri(app, unlock_password)?);
+    let secret_uri =
+        SecretUri::from_str(&miner_suri).map_err(|e| format!("矿工签名密钥解析失败: {e}"))?;
+    let signer =
+        Sr25519Keypair::from_uri(&secret_uri).map_err(|e| format!("矿工签名密钥加载失败: {e}"))?;
+    Ok(signer.public_key().0)
+}
+
 fn twox_128(input: &[u8]) -> [u8; 16] {
     let mut h1 = XxHash64::with_seed(0);
     h1.write(input);
@@ -494,6 +503,9 @@ async fn sync_saved_reward_wallet_inner(
     let signer =
         Sr25519Keypair::from_uri(&secret_uri).map_err(|e| format!("矿工签名密钥加载失败: {e}"))?;
     let signer_account = AccountId32(signer.public_key().0);
+    if target_wallet == signer_account.0 {
+        return Err("奖励钱包不能与矿工签名账户相同，请使用独立收款钱包".to_string());
+    }
 
     let client = OnlineClient::<PolkadotConfig>::from_url(DEFAULT_CHAIN_WS_URL)
         .await
@@ -580,6 +592,11 @@ pub async fn set_reward_wallet(
     let unlock = security::ensure_unlock_password(&unlock_password)?;
     device_password::verify_device_login_password(&app, unlock)?;
     let normalized = normalize_wallet_address(&address)?;
+    let target_wallet = account_id_from_address(&normalized)?;
+    let miner_account = miner_account_id(&app, unlock)?;
+    if target_wallet == miner_account {
+        return Err("奖励钱包不能与矿工签名账户相同，请使用独立收款钱包".to_string());
+    }
 
     save_reward_wallet(&app, &normalized)?;
     ensure_powr_keystore_key(&app, unlock)?;
