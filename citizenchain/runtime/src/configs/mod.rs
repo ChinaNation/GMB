@@ -50,7 +50,7 @@ use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use sp_core::{sr25519, Void};
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
 use sp_runtime::{
-    traits::{AccountIdConversion, IdentifyAccount, One},
+    traits::{AccountIdConversion, Hash as _, IdentifyAccount, One},
     MultiSigner, Perbill,
 };
 use sp_version::RuntimeVersion;
@@ -58,11 +58,12 @@ use sp_version::RuntimeVersion;
 // Local module imports
 use super::{
     AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance, Hash,
-    Nonce, PalletInfo, ResolutionIssuanceGov, ResolutionIssuanceIss, Runtime, RuntimeCall,
-    RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeRootUpgrade,
-    RuntimeTask, System, VotingEngineSystem, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION,
-    VERSION,
+    Nonce, PalletInfo, ResolutionIssuanceIss, Runtime, RuntimeCall, RuntimeEvent,
+    RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
+    VotingEngineSystem, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
+#[cfg(not(feature = "runtime-benchmarks"))]
+use super::{ResolutionIssuanceGov, RuntimeRootUpgrade};
 
 const NORMAL_DISPATCH_RATIO: Perbill =
     Perbill::from_percent(primitives::core_const::NORMAL_DISPATCH_PERCENT);
@@ -624,6 +625,14 @@ impl
         nonce: &sfid_code_auth::pallet::NonceOf<Runtime>,
         signature: &sfid_code_auth::pallet::SignatureOf<Runtime>,
     ) -> bool {
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            let _ = (account, sfid_hash, proposal_id);
+            return !nonce.is_empty() && !signature.is_empty();
+        }
+
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
         let public = match current_sfid_verify_public() {
             Some(v) => v,
             None => return false,
@@ -648,6 +657,7 @@ impl
         let msg = blake2_256(&payload.encode());
 
         sr25519_verify(&signature, &msg, &public)
+        }
     }
 }
 
@@ -905,6 +915,14 @@ pub struct RuntimeJointVoteResultCallback;
 
 impl voting_engine_system::JointVoteResultCallback for RuntimeJointVoteResultCallback {
     fn on_joint_vote_finalized(vote_proposal_id: u64, approved: bool) -> DispatchResult {
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            let _ = (vote_proposal_id, approved);
+            Ok(())
+        }
+
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
         if resolution_issuance_gov::Pallet::<Runtime>::joint_vote_to_gov(vote_proposal_id).is_some()
         {
             return <ResolutionIssuanceGov as voting_engine_system::JointVoteResultCallback>::on_joint_vote_finalized(
@@ -923,6 +941,7 @@ impl voting_engine_system::JointVoteResultCallback for RuntimeJointVoteResultCal
         Err(sp_runtime::DispatchError::Other(
             "joint vote mapping not found",
         ))
+        }
     }
 }
 
@@ -1564,10 +1583,19 @@ pub struct RuntimeSfidEligibility;
 
 impl voting_engine_system::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
     fn is_eligible(sfid_hash: &Hash, who: &AccountId) -> bool {
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            let _ = (who, sfid_code_auth::pallet::SfidToAccount::<Runtime>::get(sfid_hash));
+            true
+        }
+
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
         <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<
             AccountId,
             Hash,
         >>::is_eligible(sfid_hash, who)
+        }
     }
 
     fn verify_and_consume_vote_credential(
@@ -1577,10 +1605,37 @@ impl voting_engine_system::SfidEligibility<AccountId, Hash> for RuntimeSfidEligi
         nonce: &[u8],
         signature: &[u8],
     ) -> bool {
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            let _ = who;
+            if nonce.is_empty() || signature.is_empty() {
+                return false;
+            }
+
+            let nonce_hash = <Runtime as frame_system::Config>::Hashing::hash_of(&nonce);
+            let vote_nonce_key = (sfid_hash.clone(), nonce_hash);
+            if sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::get(
+                proposal_id,
+                vote_nonce_key.clone(),
+            ) {
+                return false;
+            }
+
+            sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::insert(
+                proposal_id,
+                vote_nonce_key,
+                true,
+            );
+            true
+        }
+
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
         <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<
             AccountId,
             Hash,
         >>::verify_and_consume_vote_credential(sfid_hash, who, proposal_id, nonce, signature)
+        }
     }
 
     fn cleanup_vote_credentials(proposal_id: u64) {
