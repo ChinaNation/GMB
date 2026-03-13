@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../../api';
+import { api, sanitizeError } from '../../../api';
 import type { NodeIdentity } from '../../../types';
 
 type Props = {
@@ -42,7 +42,7 @@ export function IdentitySection({ identity, onUpdated, disabled }: Props) {
       setShowUnlockModal(false);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(sanitizeError(e));
     } finally {
       setUnlockPassword('');
       setSaving(false);

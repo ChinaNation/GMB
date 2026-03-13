@@ -35,7 +35,7 @@ use frame_support::{
         fungible::{Balanced, Credit, Inspect},
         tokens::{Fortitude, Preservation},
         ConstU128, ConstU32, ConstU64, ConstU8, Contains, EnsureOrigin, FindAuthor, OnUnbalanced,
-        VariantCountOf,
+        UnfilteredDispatchable, VariantCountOf,
     },
     weights::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
@@ -50,7 +50,7 @@ use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use sp_core::{sr25519, Void};
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
 use sp_runtime::{
-    traits::{AccountIdConversion, Hash as HashT, IdentifyAccount, One},
+    traits::{AccountIdConversion, IdentifyAccount, One},
     MultiSigner, Perbill,
 };
 use sp_version::RuntimeVersion;

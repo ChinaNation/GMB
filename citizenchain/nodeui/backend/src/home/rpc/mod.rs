@@ -8,7 +8,6 @@ use tauri::AppHandle;
 
 use super::identity::current_status;
 
-const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 const RPC_RETRY_COUNT: usize = 3;
 
@@ -18,7 +17,7 @@ pub(super) fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
         match rpc::rpc_post(
             method,
             params.clone(),
-            RPC_REQUEST_TIMEOUT,
+            rpc::RPC_REQUEST_TIMEOUT,
             MAX_RPC_RESPONSE_BYTES,
         ) {
             Ok(v) => return Ok(v),

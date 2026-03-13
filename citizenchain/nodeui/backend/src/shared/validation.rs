@@ -48,7 +48,8 @@ fn validate_ss58_address(input: &str) -> Result<(), ValidationError> {
         .into_vec()
         .map_err(|_| ValidationError::Ss58DecodeFailed)?;
 
-    let (prefix, prefix_len) = decode_ss58_prefix(&data).map_err(ValidationError::Ss58PrefixDecode)?;
+    let (prefix, prefix_len) =
+        decode_ss58_prefix(&data).map_err(ValidationError::Ss58PrefixDecode)?;
     if prefix != SS58_PREFIX {
         return Err(ValidationError::Ss58InvalidPrefix);
     }

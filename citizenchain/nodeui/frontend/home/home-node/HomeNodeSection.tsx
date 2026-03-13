@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '../../api';
+import { api, sanitizeError } from '../../api';
 import { ChainSection } from './components/ChainSection';
 import { IdentitySection } from './components/IdentitySection';
 import type { ChainStatus, NodeIdentity, NodeStatus } from '../../types';
@@ -38,7 +38,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
         successCount += 1;
         return;
       }
-      failures.push(result.reason instanceof Error ? result.reason.message : String(result.reason));
+      failures.push(sanitizeError(result.reason));
     };
 
     applyResult(s, setStatus);
@@ -77,7 +77,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
   }, [loadHome]);
 
   useEffect(() => {
-    void runLoadHome(false).catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    void runLoadHome(false).catch((e) => setError(sanitizeError(e)));
   }, [runLoadHome]);
 
   useEffect(() => {
@@ -115,7 +115,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
       await runLoadHome(false);
       setShowStartUnlockDialog(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(sanitizeError(e));
     } finally {
       setStartUnlockPassword('');
       setStarting(false);
@@ -131,7 +131,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
       setStatus(next);
       await runLoadHome(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(sanitizeError(e));
     } finally {
       setStopping(false);
     }

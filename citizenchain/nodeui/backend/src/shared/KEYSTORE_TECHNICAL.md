@@ -31,8 +31,10 @@
 
 ## 安全特性
 
-- 密钥文件通过 `write_secret_text_atomic` 写入（Unix 0600 权限）
-- 跳过符号链接目录和文件，防止路径穿越
+- Unix 下目录创建/打开使用 `mkdirat/openat(O_NOFOLLOW | O_DIRECTORY)` 逐级完成，避免“先检查再使用”的符号链接 TOCTOU
+- `node-data`、`chains`、`<chain-id>`、`keystore` 目录都会显式收口到 Unix `0700` 权限，不依赖进程 `umask`
+- 密钥文件在已打开的 keystore 目录句柄内以“临时文件 -> fsync -> renameat”原子写入，并显式收口到 Unix `0600` 权限
+- 扫描、存在性检查、删除旧 key 都基于已打开目录句柄和 `fstatat/unlinkat` 完成，符号链接与非常规文件会被跳过
 - 写入后自动清理同类型旧密钥，避免节点加载多把 authority key
 
 ## 调用方

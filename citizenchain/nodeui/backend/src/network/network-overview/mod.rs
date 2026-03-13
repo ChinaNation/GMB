@@ -15,6 +15,7 @@ use std::{
 use tauri::AppHandle;
 
 const KNOWN_PEERS_MAX: usize = 5000;
+// 网络统计需要查询较多 peer 信息，给予额外 1 秒余量。
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(4);
 const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -79,6 +80,10 @@ fn normalize_peer_id(input: &str) -> Option<String> {
     if !v.chars().all(|c| c.is_ascii_alphanumeric()) {
         return None;
     }
+    // libp2p Ed25519 PeerId 以 "12D3KooW" 开头，长度通常 >= 46 字符。
+    if !v.starts_with("12D3KooW") || v.len() < 46 {
+        return None;
+    }
     Some(v.to_string())
 }
 
@@ -123,8 +128,12 @@ fn save_known_peers(app: &AppHandle, peer_ids: &[String]) -> Result<(), String> 
     })
     .map_err(|e| format!("encode known peers failed: {e}"))?;
     let path = known_peers_path(app)?;
-    security::write_text_atomic_restricted(&path, &format!("{raw}\n"))
-        .map_err(|e| format!("write known peers failed ({}): {e}", security::sanitize_path(&path)))
+    security::write_text_atomic_restricted(&path, &format!("{raw}\n")).map_err(|e| {
+        format!(
+            "write known peers failed ({}): {e}",
+            security::sanitize_path(&path)
+        )
+    })
 }
 
 fn trim_known_peers_fifo(peer_ids: &mut Vec<String>) -> bool {
@@ -172,9 +181,17 @@ fn merge_known_peers(app: &AppHandle, observed_peer_ids: &[String]) -> KnownPeer
         cache.loaded = true;
     }
 
-    // 合并观测到的新 peer
+    // LRU 合并：已知且在线的 peer 移到队尾，全新 peer 追加到队尾。
+    // 截断时队首的不活跃旧节点优先被淘汰，活跃节点得以保留。
     for pid in observed_peer_ids {
-        if cache.peer_set.insert(pid.clone()) {
+        if cache.peer_set.contains(pid) {
+            if let Some(pos) = cache.peers.iter().position(|p| p == pid) {
+                cache.peers.remove(pos);
+                cache.peers.push(pid.clone());
+                cache.dirty = true;
+            }
+        } else {
+            cache.peer_set.insert(pid.clone());
             cache.peers.push(pid.clone());
             cache.dirty = true;
         }
@@ -185,7 +202,7 @@ fn merge_known_peers(app: &AppHandle, observed_peer_ids: &[String]) -> KnownPeer
         cache.peer_set = cache.peers.iter().cloned().collect();
         cache.dirty = true;
         warnings.push(format!(
-            "known-peers 超出上限，已按 FIFO 截断到 {} 条",
+            "known-peers 超出上限，已按 LRU 截断到 {} 条",
             KNOWN_PEERS_MAX
         ));
     }
@@ -236,6 +253,8 @@ fn ensure_expected_rpc_node() -> Result<(), String> {
     if name.is_empty() {
         return Err("RPC 节点名称为空".to_string());
     }
+
+    rpc::verify_genesis_hash().map_err(|e| format!("genesis hash 校验失败: {e}"))?;
 
     Ok(())
 }
@@ -406,11 +425,11 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
     let mut uncategorized_bootnodes = 0u64;
     for pid in &online_peer_ids {
         if let Some(name) = bootnode_map.get(pid) {
-            if name.contains("国储会") {
+            if name.starts_with("国储会") {
                 guochuhui_nodes = guochuhui_nodes.saturating_add(1);
-            } else if name.contains("省储会") {
+            } else if name.starts_with("省储会") {
                 shengchuhui_nodes = shengchuhui_nodes.saturating_add(1);
-            } else if name.contains("省储行") || name.contains("储行") {
+            } else if name.starts_with("省储行") {
                 shengchuhang_nodes = shengchuhang_nodes.saturating_add(1);
             } else {
                 uncategorized_bootnodes = uncategorized_bootnodes.saturating_add(1);

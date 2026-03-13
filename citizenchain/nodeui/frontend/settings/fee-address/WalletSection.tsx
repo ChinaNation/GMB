@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { blake3 } from '@noble/hashes/blake3.js';
-import { api } from '../../api';
+import { api, sanitizeError } from '../../api';
 import type { RewardWallet } from '../../types';
 
 const SS58_PREFIX = 2027;
@@ -140,7 +140,7 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
             try {
               nextAddress = normalizeWalletAddressClient(input);
             } catch (e) {
-              setError(e instanceof Error ? e.message : String(e));
+              setError(sanitizeError(e));
               return;
             }
             setError(null);
@@ -193,7 +193,7 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
                     setPendingAddress(null);
                     setError(null);
                   } catch (e) {
-                    setError(e instanceof Error ? e.message : String(e));
+                    setError(sanitizeError(e));
                   } finally {
                     setUnlockPassword('');
                     setSaving(false);

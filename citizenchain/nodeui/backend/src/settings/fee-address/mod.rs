@@ -3,7 +3,11 @@ use crate::{
         address_utils::{decode_hex_32_with_optional_0x, decode_ss58_prefix},
         device_password,
     },
-    shared::{constants::{SS58_PREFIX, EXPECTED_SS58_PREFIX}, keystore, rpc, security, validation::normalize_wallet_address},
+    shared::{
+        constants::{EXPECTED_SS58_PREFIX, SS58_PREFIX},
+        keystore, rpc, security,
+        validation::normalize_wallet_address,
+    },
 };
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -26,12 +30,10 @@ use twox_hash::XxHash64;
 use zeroize::Zeroizing;
 
 const POWR_KEY_TYPE_HEX_PREFIX: &str = "706f7772";
-const DEFAULT_CHAIN_WS_URL: &str = "ws://127.0.0.1:9944";
 const DEFAULT_CHAIN_ID: &str = "citizenchain";
 const LEGACY_MINER_SURI_FILENAME: &str = "miner-suri.txt";
 const KEYCHAIN_ACCOUNT_MINER_SURI: &str = "powr-miner-suri";
 const REWARD_BIND_TIMEOUT_SECS: u64 = 45;
-const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
@@ -140,8 +142,12 @@ fn collect_powr_keystore_files(app: &AppHandle) -> Result<Vec<PathBuf>, String> 
         if !keystore_dir.is_dir() {
             continue;
         }
-        let entries = fs::read_dir(&keystore_dir)
-            .map_err(|e| format!("read keystore dir failed ({}): {e}", security::sanitize_path(&keystore_dir)))?;
+        let entries = fs::read_dir(&keystore_dir).map_err(|e| {
+            format!(
+                "read keystore dir failed ({}): {e}",
+                security::sanitize_path(&keystore_dir)
+            )
+        })?;
         for entry in entries {
             let entry = entry.map_err(|e| format!("read keystore file entry failed: {e}"))?;
             let file_type = entry
@@ -216,8 +222,12 @@ fn keystore_dirs_for_powr(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
     dirs.sort();
     dirs.dedup();
     for dir in &dirs {
-        fs::create_dir_all(dir)
-            .map_err(|e| format!("create powr keystore dir failed ({}): {e}", security::sanitize_path(dir)))?;
+        fs::create_dir_all(dir).map_err(|e| {
+            format!(
+                "create powr keystore dir failed ({}): {e}",
+                security::sanitize_path(dir)
+            )
+        })?;
     }
     Ok(dirs)
 }
@@ -241,8 +251,12 @@ fn write_powr_key_to_keystore(app: &AppHandle, suri: &str, pubkey_hex: &str) -> 
     let filename = powr_keystore_filename(pubkey_hex);
     for dir in keystore_dirs_for_powr(app)? {
         let path = dir.join(&filename);
-        security::write_secret_text_atomic(&path, &content)
-            .map_err(|e| format!("write powr keystore file failed ({}): {e}", security::sanitize_path(&path)))?;
+        security::write_secret_text_atomic(&path, &content).map_err(|e| {
+            format!(
+                "write powr keystore file failed ({}): {e}",
+                security::sanitize_path(&path)
+            )
+        })?;
     }
     Ok(())
 }
@@ -268,8 +282,12 @@ fn remove_other_powr_keys(app: &AppHandle, keep_filename: &str) -> Result<(), St
 fn load_powr_suri_from_keystore(app: &AppHandle) -> Result<Option<String>, String> {
     let files = collect_powr_keystore_files(app)?;
     for path in files {
-        let raw = fs::read_to_string(&path)
-            .map_err(|e| format!("read powr keystore file failed ({}): {e}", security::sanitize_path(&path)))?;
+        let raw = fs::read_to_string(&path).map_err(|e| {
+            format!(
+                "read powr keystore file failed ({}): {e}",
+                security::sanitize_path(&path)
+            )
+        })?;
         let suri = parse_keystore_secret(&raw)?;
         if !suri.is_empty() {
             return Ok(Some(suri));
@@ -278,16 +296,19 @@ fn load_powr_suri_from_keystore(app: &AppHandle) -> Result<Option<String>, Strin
     Ok(None)
 }
 
-fn load_miner_suri_secure(unlock_password: &str) -> Result<Option<String>, String> {
+fn load_miner_suri_secure(unlock_password: &str) -> Result<Option<Zeroizing<String>>, String> {
     let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_MINER_SURI)? else {
         return Ok(None);
     };
     let suri = security::decrypt_secret_value(&enveloped, unlock_password)?;
-    let normalized = suri.trim().to_string();
+    let normalized = suri.trim();
     if normalized.is_empty() {
         return Ok(None);
     }
-    Ok(Some(normalized))
+    if normalized.len() == suri.len() {
+        return Ok(Some(suri));
+    }
+    Ok(Some(Zeroizing::new(normalized.to_string())))
 }
 
 fn save_miner_suri_secure(suri: &str, unlock_password: &str) -> Result<(), String> {
@@ -302,20 +323,21 @@ fn save_miner_suri_secure(suri: &str, unlock_password: &str) -> Result<(), Strin
 fn migrate_legacy_miner_suri_file(app: &AppHandle, unlock_password: &str) -> Result<(), String> {
     let legacy_path = legacy_miner_suri_path(app)?;
     let legacy = load_legacy_miner_suri_file(&legacy_path)?;
-    if legacy.is_none() {
+    let Some(suri) = legacy else {
         return Ok(());
-    }
-    let has_secure = security::secure_store_get(KEYCHAIN_ACCOUNT_MINER_SURI)?.is_some();
-    if !has_secure {
-        if let Some(suri) = legacy {
-            save_miner_suri_secure(&suri, unlock_password)?;
-        }
-    }
+    };
 
+    // 安全优先：无论后续安全存储操作是否成功，都先删除明文旧文件，
+    // 避免 save_miner_suri_secure 失败时明文密钥继续残留在磁盘。
     if let Err(e) = fs::remove_file(&legacy_path) {
         if e.kind() != ErrorKind::NotFound {
             return Err(format!("remove legacy miner suri file failed: {e}"));
         }
+    }
+
+    let has_secure = security::secure_store_get(KEYCHAIN_ACCOUNT_MINER_SURI)?.is_some();
+    if !has_secure {
+        save_miner_suri_secure(&suri, unlock_password)?;
     }
     Ok(())
 }
@@ -358,7 +380,7 @@ fn account_id_from_address(address: &str) -> Result<[u8; 32], String> {
 }
 
 fn miner_account_id(app: &AppHandle, unlock_password: &str) -> Result<[u8; 32], String> {
-    let miner_suri = Zeroizing::new(ensure_miner_suri(app, unlock_password)?);
+    let miner_suri = ensure_miner_suri(app, unlock_password)?;
     let secret_uri =
         SecretUri::from_str(&miner_suri).map_err(|e| format!("矿工签名密钥解析失败: {e}"))?;
     let signer =
@@ -389,7 +411,7 @@ fn ensure_expected_reward_wallet_rpc_node() -> Result<(), String> {
     let properties = rpc::rpc_post(
         "system_properties",
         serde_json::Value::Array(vec![]),
-        RPC_REQUEST_TIMEOUT,
+        rpc::RPC_REQUEST_TIMEOUT,
         MAX_RPC_RESPONSE_BYTES,
     )?;
     let ss58 = properties
@@ -409,7 +431,7 @@ fn ensure_expected_reward_wallet_rpc_node() -> Result<(), String> {
     let name = rpc::rpc_post(
         "system_name",
         serde_json::Value::Array(vec![]),
-        RPC_REQUEST_TIMEOUT,
+        rpc::RPC_REQUEST_TIMEOUT,
         MAX_RPC_RESPONSE_BYTES,
     )?
     .as_str()
@@ -446,7 +468,10 @@ fn generate_random_hex_suri() -> String {
     format!("0x{}", hex::encode(seed))
 }
 
-pub(crate) fn ensure_miner_suri(app: &AppHandle, unlock_password: &str) -> Result<String, String> {
+pub(crate) fn ensure_miner_suri(
+    app: &AppHandle,
+    unlock_password: &str,
+) -> Result<Zeroizing<String>, String> {
     let unlock = security::ensure_unlock_password(unlock_password)?;
     migrate_legacy_miner_suri_file(app, unlock)?;
 
@@ -457,11 +482,11 @@ pub(crate) fn ensure_miner_suri(app: &AppHandle, unlock_password: &str) -> Resul
     }
     if let Some(suri) = load_powr_suri_from_keystore(app)? {
         save_miner_suri_secure(&suri, unlock)?;
-        return Ok(suri);
+        return Ok(Zeroizing::new(suri));
     }
     let suri = generate_random_hex_suri();
     save_miner_suri_secure(&suri, unlock)?;
-    Ok(suri)
+    Ok(Zeroizing::new(suri))
 }
 
 pub(crate) fn ensure_powr_keystore_key(
@@ -469,7 +494,7 @@ pub(crate) fn ensure_powr_keystore_key(
     unlock_password: &str,
 ) -> Result<(), String> {
     // `powr` 只保留当前矿工账户对应的一把密钥，避免旧 key 残留导致收益归属漂移。
-    let suri = Zeroizing::new(ensure_miner_suri(app, unlock_password)?);
+    let suri = ensure_miner_suri(app, unlock_password)?;
     let pubkey_hex = powr_pubkey_hex_from_suri(&suri)?;
     write_powr_key_to_keystore(app, &suri, &pubkey_hex)?;
     let keep_filename = powr_keystore_filename(&pubkey_hex);
@@ -484,12 +509,12 @@ async fn sync_saved_reward_wallet_inner(
     let Some(saved_address) = load_reward_wallet(app)? else {
         return Ok(());
     };
-    // 在提交链上绑定交易前，先确认当前 9944 端口确实属于目标链，
+    // 在提交链上绑定交易前，先确认当前本地 RPC 端口确实属于目标链，
     // 避免把奖励地址绑定误发到错误节点或错误网络。
     ensure_expected_reward_wallet_rpc_node()?;
     let normalized = normalize_wallet_address(&saved_address)?;
     let target_wallet = account_id_from_address(&normalized)?;
-    let miner_suri = Zeroizing::new(ensure_miner_suri(app, unlock_password)?);
+    let miner_suri = ensure_miner_suri(app, unlock_password)?;
 
     let secret_uri =
         SecretUri::from_str(&miner_suri).map_err(|e| format!("矿工签名密钥解析失败: {e}"))?;
@@ -500,7 +525,7 @@ async fn sync_saved_reward_wallet_inner(
         return Err("奖励钱包不能与矿工签名账户相同，请使用独立收款钱包".to_string());
     }
 
-    let client = OnlineClient::<PolkadotConfig>::from_url(DEFAULT_CHAIN_WS_URL)
+    let client = OnlineClient::<PolkadotConfig>::from_url(rpc::local_rpc_ws_url())
         .await
         .map_err(|e| format!("连接本地链节点失败: {e}"))?;
 

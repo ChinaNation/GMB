@@ -265,11 +265,32 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
+  Widget _buildExpandedTapArea({
+    required Widget child,
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          height: 36,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: IgnorePointer(
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildBindAction() {
     if (_bindState.status == SfidBindStatus.pending) {
-      return const Align(
-        alignment: Alignment.centerLeft,
-        child: SizedBox(
+      return _buildExpandedTapArea(
+        child: const SizedBox(
           height: 20,
           child: FilledButton(
             onPressed: null,
@@ -291,9 +312,8 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     }
     if (_bindState.status == SfidBindStatus.bound) {
-      return InkWell(
+      return _buildExpandedTapArea(
         onTap: _handleBindIdentity,
-        borderRadius: BorderRadius.circular(8),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -326,12 +346,12 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       );
     }
-    return Align(
-      alignment: Alignment.centerLeft,
+    return _buildExpandedTapArea(
+      onTap: _bindingSubmitting ? null : _handleBindIdentity,
       child: SizedBox(
         height: 20,
         child: FilledButton(
-          onPressed: _bindingSubmitting ? null : _handleBindIdentity,
+          onPressed: () {},
           style: const ButtonStyle(
             padding: WidgetStatePropertyAll(
               EdgeInsets.symmetric(horizontal: 6),
@@ -439,8 +459,8 @@ class _ProfilePageState extends State<ProfilePage> {
                       onTap: _openProfileEdit,
                       borderRadius: BorderRadius.circular(8),
                       child: const SizedBox(
-                        width: 28,
-                        height: 28,
+                        width: 40,
+                        height: 40,
                         child: Icon(
                           Icons.chevron_right,
                           size: 24,

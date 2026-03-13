@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../api';
+import { api, sanitizeError } from '../../api';
 import type { BootnodeKey } from '../../types';
 
 type Props = {
@@ -117,7 +117,13 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
       {showPasswordModal ? (
         <div
           className="unlock-modal-mask"
-          onClick={() => !(saving || savingGrandpa) && setShowPasswordModal(false)}
+          onClick={() => {
+            if (!(saving || savingGrandpa)) {
+              setShowPasswordModal(false);
+              setUnlockPassword('');
+              setPendingAction(null);
+            }
+          }}
         >
           <div className="unlock-modal" onClick={(e) => e.stopPropagation()}>
             <h3>设备密码验证</h3>
@@ -131,7 +137,11 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
             />
             <div className="unlock-modal-actions">
               <button
-                onClick={() => setShowPasswordModal(false)}
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setUnlockPassword('');
+                  setPendingAction(null);
+                }}
                 disabled={saving || savingGrandpa}
               >
                 取消
@@ -163,7 +173,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
                       setPendingAction(null);
                       setBootnodeError(null);
                     } catch (e) {
-                      setBootnodeError(e instanceof Error ? e.message : String(e));
+                      setBootnodeError(sanitizeError(e));
                     } finally {
                       setUnlockPassword('');
                       setSaving(false);
@@ -181,7 +191,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
                       setPendingAction(null);
                       setGrandpaError(null);
                     } catch (e) {
-                      setGrandpaError(e instanceof Error ? e.message : String(e));
+                      setGrandpaError(sanitizeError(e));
                     } finally {
                       setUnlockPassword('');
                       setSavingGrandpa(false);

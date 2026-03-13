@@ -5,11 +5,19 @@ use crate::{
 };
 use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
-use std::{fs, io::ErrorKind, path::PathBuf, thread, time::Duration};
+use std::{
+    fs,
+    io::ErrorKind,
+    path::PathBuf,
+    thread,
+    time::{Duration, Instant},
+};
 use tauri::AppHandle;
 use zeroize::Zeroizing;
 
 const KEYCHAIN_ACCOUNT_BOOTNODE: &str = "bootnode-node-key";
+const PEER_ID_WAIT_TIMEOUT: Duration = Duration::from_secs(20);
+const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -109,7 +117,7 @@ fn peer_id_from_node_key_hex(node_key_hex: &str) -> Result<String, String> {
 pub(crate) fn load_bootnode_node_key(
     _app: &AppHandle,
     unlock_password: &str,
-) -> Result<Option<String>, String> {
+) -> Result<Option<Zeroizing<String>>, String> {
     let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_BOOTNODE)? else {
         return Ok(None);
     };
@@ -119,22 +127,27 @@ pub(crate) fn load_bootnode_node_key(
 
 pub(crate) fn verify_bootnode_secret_unlock(unlock_password: &str) -> Result<(), String> {
     if let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_BOOTNODE)? {
-        let _key = Zeroizing::new(security::decrypt_secret_value(&enveloped, unlock_password)?);
+        let _key = security::decrypt_secret_value(&enveloped, unlock_password)?;
     }
     Ok(())
 }
 
 fn wait_peer_id_applied(app: &AppHandle, expected_peer_id: &str) -> Result<(), String> {
-    for _ in 0..20 {
+    let deadline = Instant::now() + PEER_ID_WAIT_TIMEOUT;
+    let mut last_peer_id: Option<String> = None;
+    while Instant::now() < deadline {
         if let Ok(identity) = home::get_node_identity_blocking(app.clone()) {
+            last_peer_id = identity.peer_id.clone();
             if identity.peer_id.as_deref() == Some(expected_peer_id) {
                 return Ok(());
             }
         }
-        thread::sleep(Duration::from_millis(250));
+        thread::sleep(STATUS_POLL_INTERVAL);
     }
+    let observed = last_peer_id.unwrap_or_else(|| "<none>".to_string());
     Err(format!(
-        "节点重启后 PeerId 未切换到目标引导节点（expected={expected_peer_id}）"
+        "等待 {} 秒后节点重启后的 PeerId 仍未切换到目标引导节点（expected={expected_peer_id}, actual={observed}）",
+        PEER_ID_WAIT_TIMEOUT.as_secs()
     ))
 }
 

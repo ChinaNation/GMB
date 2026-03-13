@@ -53,7 +53,7 @@
    - 先采集 `system_peers` 到 `online_peer_ids`（集合）。
    - 本机节点运行时优先插入 `system_localPeerId`；失败则按本机在线 `+1` 估算。
 2. 分类统计：
-   - 按创世节点名称关键字（国储会/储行/省储会）对在线 PeerId 分类。
+   - 按创世节点名称前缀精确匹配（`starts_with("国储会")`/`starts_with("省储会")`/`starts_with("省储行")`）对在线 PeerId 分类。
 3. 全节点统计：
    - 远端 light 节点按唯一 PeerId 去重。
    - 本机在线但角色未知时默认计入 full。
@@ -64,8 +64,9 @@
 ## 6. known-peers 持久化策略
 
 - 存储路径：`<app_data_dir>/known-peers.json`。
-- 仅保留合法 PeerId（ASCII 字母数字，非空，长度 <= 128）。
-- 设置上限 `KNOWN_PEERS_MAX = 5000`，超限时 FIFO 截断。
+- 仅保留合法 libp2p PeerId（ASCII 字母数字、`12D3KooW` 前缀、长度 46–128）。
+- 设置上限 `KNOWN_PEERS_MAX = 5000`，超限时从头部（最久未见）截断。
+- 合并策略采用 LRU：已知且在线的 peer 移到队尾，全新 peer 追加到队尾，使活跃节点不易被淘汰。
 - 使用内存缓存 + 脏标记（`CachedKnownPeers`）：
   - 首次访问从文件加载到内存。
   - 后续合并新 peers 在内存中操作，设置 `dirty = true`。
@@ -74,7 +75,7 @@
 
 ## 7. RPC 健壮性与链指纹校验
 
-- RPC 通过共享模块 `nodeui/backend/src/shared/rpc.rs` 发起（`rpc::rpc_post`）。
+- RPC 通过共享模块 `nodeui/backend/src/shared/rpc.rs` 发起（`rpc::rpc_post`），统一使用 `rpc::RPC_REQUEST_TIMEOUT` 作为请求超时，避免各模块分散定义导致不一致。
 - 共享 RPC 客户端使用 `OnceLock<Client>` + 初始化互斥锁：
   - 首次成功后复用连接池；
   - 初始化失败不会缓存错误，后续调用会重试；
@@ -87,7 +88,7 @@
 - 统计前先做链指纹校验：
   - `system_properties.ss58Format == 2027`
   - `system_name` 非空
-  - genesis hash 与首次连接缓存一致（`shared::rpc::verify_genesis_hash`）
+  - genesis hash 与首次连接缓存一致（`shared::rpc::verify_genesis_hash`），且缓存/比对前都要求满足 `0x` + 64 位十六进制格式
 - 任一指纹项校验失败时不信任网络统计，返回告警并降级输出。
 
 ## 8. 告警策略
