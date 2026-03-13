@@ -182,7 +182,9 @@ pub fn set_bootnode_key(
     node_key: String,
     unlock_password: String,
 ) -> Result<BootnodeKey, String> {
-    let _ = security::append_audit_log(&app, "set_bootnode_key", "attempt");
+    if let Err(e) = security::append_audit_log(&app, "set_bootnode_key", "attempt") {
+        eprintln!("[审计] set_bootnode_key attempt 日志写入失败: {e}");
+    }
     let unlock = security::ensure_unlock_password(&unlock_password)?;
     device_password::verify_device_login_password(&app, unlock)?;
     let normalized = normalize_node_key(&node_key)?;
@@ -208,13 +210,17 @@ pub fn set_bootnode_key(
             wait_peer_id_applied(&app, &derived_peer_id)?;
             Ok(())
         })() {
-            let _ = security::append_audit_log(&app, "set_bootnode_key", "saved_restart_failed");
+            if let Err(e) = security::append_audit_log(&app, "set_bootnode_key", "saved_restart_failed") {
+                eprintln!("[审计] set_bootnode_key saved_restart_failed 日志写入失败: {e}");
+            }
             return Err(format!(
                 "引导节点私钥已保存，但节点重启失败：{err}。新密钥将在下次成功启动节点时自动生效。"
             ));
         }
     }
-    let _ = security::append_audit_log(&app, "set_bootnode_key", "success");
+    if let Err(e) = security::append_audit_log(&app, "set_bootnode_key", "success") {
+        eprintln!("[审计] set_bootnode_key success 日志写入失败: {e}");
+    }
 
     Ok(BootnodeKey {
         node_key: None,

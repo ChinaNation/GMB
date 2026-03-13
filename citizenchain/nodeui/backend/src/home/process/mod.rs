@@ -954,7 +954,9 @@ pub(crate) fn cleanup_on_exit(app: &AppHandle) {
 
 fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
     let _lifecycle_guard = lock_node_lifecycle();
-    let _ = security::append_audit_log(&app, "start_node", "attempt");
+    if let Err(e) = security::append_audit_log(&app, "start_node", "attempt") {
+        eprintln!("[审计] start_node attempt 日志写入失败: {e}");
+    }
     let result = (|| -> Result<NodeStatus, String> {
         let unlock_password = security::ensure_unlock_password(&unlock_password)?.to_string();
         verify_start_unlock_password(&app, &unlock_password)?;
@@ -1015,17 +1017,21 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
         }
         current_status(&app)
     })();
-    let _ = security::append_audit_log(
+    if let Err(e) = security::append_audit_log(
         &app,
         "start_node",
         if result.is_ok() { "success" } else { "failed" },
-    );
+    ) {
+        eprintln!("[审计] start_node 结果日志写入失败: {e}");
+    }
     result
 }
 
 fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
     let _lifecycle_guard = lock_node_lifecycle();
-    let _ = security::append_audit_log(&app, "stop_node", "attempt");
+    if let Err(e) = security::append_audit_log(&app, "stop_node", "attempt") {
+        eprintln!("[审计] stop_node attempt 日志写入失败: {e}");
+    }
     let result = (|| -> Result<NodeStatus, String> {
         {
             let app_state = app.state::<AppState>();
@@ -1055,11 +1061,13 @@ fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
         }
         Ok(status)
     })();
-    let _ = security::append_audit_log(
+    if let Err(e) = security::append_audit_log(
         &app,
         "stop_node",
         if result.is_ok() { "success" } else { "failed" },
-    );
+    ) {
+        eprintln!("[审计] stop_node 结果日志写入失败: {e}");
+    }
     result
 }
 

@@ -109,12 +109,14 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8], secret_mode: bool) -> Result<()
     #[cfg(unix)]
     if secret_mode {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&temp_path, fs::Permissions::from_mode(0o600)).map_err(|e| {
-            format!(
-                "set temp file permission failed ({}): {e}",
-                temp_path.display()
-            )
-        })?;
+        // 通过已打开的 File 对象设置权限（fchmod），消除路径级 set_permissions 的 TOCTOU 窗口。
+        file.set_permissions(fs::Permissions::from_mode(0o600))
+            .map_err(|e| {
+                format!(
+                    "set temp file permission failed ({}): {e}",
+                    temp_path.display()
+                )
+            })?;
     }
 
     #[cfg(target_os = "windows")]

@@ -403,7 +403,9 @@ pub fn set_grandpa_key(
     key: String,
     unlock_password: String,
 ) -> Result<GrandpaKey, String> {
-    let _ = security::append_audit_log(&app, "set_grandpa_key", "attempt");
+    if let Err(e) = security::append_audit_log(&app, "set_grandpa_key", "attempt") {
+        eprintln!("[审计] set_grandpa_key attempt 日志写入失败: {e}");
+    }
     let unlock = security::ensure_unlock_password(&unlock_password)?;
     device_password::verify_device_login_password(&app, unlock)?;
     let was_running = home::current_status(&app)?.running;
@@ -447,7 +449,7 @@ pub fn set_grandpa_key(
         } else {
             None
         };
-        let _ = security::append_audit_log(
+        if let Err(e) = security::append_audit_log(
             &app,
             "set_grandpa_key",
             if restore_err.is_some() || restart_restore_err.is_some() {
@@ -455,7 +457,9 @@ pub fn set_grandpa_key(
             } else {
                 "rolled_back"
             },
-        );
+        ) {
+            eprintln!("[审计] set_grandpa_key rollback 日志写入失败: {e}");
+        }
 
         let mut detail = format!("保存 GRANDPA 私钥后重启或校验失败：{err}");
         if let Some(restore_err) = restore_err {
@@ -470,7 +474,9 @@ pub fn set_grandpa_key(
         }
         return Err(detail);
     }
-    let _ = security::append_audit_log(&app, "set_grandpa_key", "success");
+    if let Err(e) = security::append_audit_log(&app, "set_grandpa_key", "success") {
+        eprintln!("[审计] set_grandpa_key success 日志写入失败: {e}");
+    }
 
     Ok(GrandpaKey {
         key: None,

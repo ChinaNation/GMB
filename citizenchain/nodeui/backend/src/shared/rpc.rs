@@ -21,11 +21,20 @@ static CACHED_GENESIS_HASH: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 static LOCAL_RPC_PORT: OnceLock<Mutex<u16>> = OnceLock::new();
 
 fn initial_rpc_port() -> u16 {
-    env::var(LOCAL_RPC_PORT_ENV)
+    match env::var(LOCAL_RPC_PORT_ENV)
         .ok()
         .and_then(|raw| raw.trim().parse::<u16>().ok())
         .filter(|port| *port > 0)
-        .unwrap_or(DEFAULT_LOCAL_RPC_PORT)
+    {
+        Some(port) if port != DEFAULT_LOCAL_RPC_PORT => {
+            eprintln!(
+                "[安全告警] RPC 端口被环境变量 {LOCAL_RPC_PORT_ENV} 覆盖为 {port}（默认 {DEFAULT_LOCAL_RPC_PORT}）"
+            );
+            port
+        }
+        Some(port) => port,
+        None => DEFAULT_LOCAL_RPC_PORT,
+    }
 }
 
 pub(crate) fn current_rpc_port() -> u16 {
