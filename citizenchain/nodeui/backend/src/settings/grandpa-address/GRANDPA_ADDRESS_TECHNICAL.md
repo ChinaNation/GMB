@@ -46,6 +46,7 @@
 6. 同步写入节点 keystore 的 `gran` 密钥文件。
    - 清理旧的 `gran` 密钥文件，只保留当前公钥对应的密钥。
 7. 若节点运行中，执行 `stop_node -> start_node`，并进行生效校验。
+8. 若写入后重启或校验失败，回滚旧的安全存储、元数据和 `gran` keystore 文件，避免留下半提交状态。
 
 ### 4.2 节点启动协同（满足“上传后成为投票节点”）
 
@@ -55,8 +56,19 @@
   - 返回 `enable_grandpa_validator=true`。
 - `home::home_node::start_node` 在 `enable_grandpa_validator=true` 时追加 `--validator`。
 - `home::home_node::start_node` 启动后调用 `verify_grandpa_after_start`：
-  - 校验 `system_nodeRoles` 含 `authority/validator`；
+  - 最长等待约 20 秒，校验 `system_nodeRoles` 含 `authority/validator`；
   - 校验本地 keystore 已存在匹配的 `gran` 密钥文件。
+
+### 4.3 明文私钥生命周期控制
+
+- `load_saved_grandpa_private_hex` 解密后返回 `Zeroizing<String>`，避免把私钥以裸 `String` 在调用链中长时间持有。
+- `prepare_grandpa_for_start` / `verify_grandpa_after_start` 直接在 `Zeroizing<String>` 上推导公钥和写入 keystore。
+- 写入 keystore 时产生的 `0x<private_hex>` 与 JSON 编码字符串也会尽量缩短生命周期，避免中间明文副本滞留。
+
+### 4.4 失败回滚
+
+- `set_grandpa_key` 在落盘前会先备份旧的 keyring 密文、`grandpa-meta.json` 与现有 `gran` keystore 文件。
+- 如果新配置写入后节点重启失败，模块会恢复旧持久化状态；若节点原本在运行，还会尝试按旧配置重新拉起。
 
 ## 5. 对外协作接口（给 home/process）
 

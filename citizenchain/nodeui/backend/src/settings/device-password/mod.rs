@@ -233,7 +233,7 @@ mod linux_password_auth {
         ffi::{c_char, c_int, c_void, CString},
         ptr,
     };
-    use zeroize::Zeroize;
+    use zeroize::{Zeroize, Zeroizing};
 
     const PAM_SUCCESS: c_int = 0;
     const PAM_BUF_ERR: c_int = 5;
@@ -351,10 +351,12 @@ mod linux_password_auth {
         super::enforce_auth_rate_limit(app, &user)?;
         let user_c =
             CString::new(user.as_str()).map_err(|_| "系统用户名包含非法字符".to_string())?;
-        let mut pass_raw = CString::new(password)
-            .map_err(|_| "密码包含非法字符".to_string())?
-            .into_bytes_with_nul();
-        // PAM 回调从这块缓冲区读取密码，认证结束后会主动清零。
+        let pass_raw = Zeroizing::new(
+            CString::new(password)
+                .map_err(|_| "密码包含非法字符".to_string())?
+                .into_bytes_with_nul(),
+        );
+        // PAM 回调从这块缓冲区读取密码，Zeroizing 在 drop 时自动清零。
         let conv = PamConv {
             conv: Some(conversation),
             appdata_ptr: pass_raw.as_ptr() as *mut c_void,
@@ -394,7 +396,7 @@ mod linux_password_auth {
             }
         }
 
-        pass_raw.zeroize();
+        drop(pass_raw);
         super::record_auth_attempt(app, &user, success)?;
         if success {
             Ok(())

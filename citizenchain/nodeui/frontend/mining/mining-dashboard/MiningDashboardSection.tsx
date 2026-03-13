@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '../../api';
+import { api, sanitizeError } from '../../api';
 import type { MiningDashboard } from '../../types';
 
 function formatIncomeDisplay(raw: string): string {
@@ -45,7 +45,7 @@ export function MiningDashboardSection() {
       if (!mountedRef.current || requestId !== requestIdRef.current) {
         return;
       }
-      setError(e instanceof Error ? e.message : String(e));
+      setError(sanitizeError(e));
     } finally {
       if (mountedRef.current && requestId === requestIdRef.current) {
         setLoading(false);

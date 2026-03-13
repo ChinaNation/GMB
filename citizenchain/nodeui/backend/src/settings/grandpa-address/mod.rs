@@ -7,8 +7,14 @@ use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
-    collections::HashSet, fs, io::ErrorKind, path::PathBuf, str::FromStr, sync::OnceLock, thread,
-    time::Duration,
+    collections::HashSet,
+    fs,
+    io::ErrorKind,
+    path::PathBuf,
+    str::FromStr,
+    sync::OnceLock,
+    thread,
+    time::{Duration, Instant},
 };
 use tauri::AppHandle;
 use zeroize::Zeroizing;
@@ -16,8 +22,9 @@ use zeroize::Zeroizing;
 const KEYCHAIN_ACCOUNT_GRANDPA: &str = "grandpa-key";
 const GRANDPA_KEY_TYPE_HEX_PREFIX: &str = "6772616e";
 const INSTITUTION_CATALOG_SRC: &str = include_str!("../institution-catalog.json");
-const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
+const AUTHORITY_ROLE_WAIT_TIMEOUT: Duration = Duration::from_secs(20);
+const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,10 +34,23 @@ pub struct GrandpaKey {
     pub institution_name: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct StoredGrandpaMeta {
     #[serde(default)]
     institution_name: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct GrandpaKeystoreBackupEntry {
+    path: PathBuf,
+    content: String,
+}
+
+#[derive(Debug, Clone)]
+struct GrandpaPersistedStateBackup {
+    secure_store_envelope: Option<String>,
+    meta: Option<StoredGrandpaMeta>,
+    keystore_files: Vec<GrandpaKeystoreBackupEntry>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -137,15 +157,89 @@ fn save_grandpa_meta(app: &AppHandle, institution_name: Option<String>) -> Resul
         .map_err(|e| format!("write grandpa meta failed: {e}"))
 }
 
+fn clear_grandpa_meta(app: &AppHandle) -> Result<(), String> {
+    match fs::remove_file(grandpa_meta_path(app)?) {
+        Ok(_) => Ok(()),
+        Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(format!("remove grandpa meta failed: {err}")),
+    }
+}
+
+fn snapshot_grandpa_persisted_state(
+    app: &AppHandle,
+) -> Result<GrandpaPersistedStateBackup, String> {
+    let secure_store_envelope = security::secure_store_get(KEYCHAIN_ACCOUNT_GRANDPA)?;
+    let meta = load_grandpa_meta(app)?;
+    let dirs = keystore::keystore_dirs(app)?;
+    let mut keystore_files = Vec::new();
+    for path in keystore::scan_keystore_files(&dirs, GRANDPA_KEY_TYPE_HEX_PREFIX)? {
+        let content = fs::read_to_string(&path).map_err(|e| {
+            format!(
+                "read grandpa keystore backup failed ({}): {e}",
+                security::sanitize_path(&path)
+            )
+        })?;
+        keystore_files.push(GrandpaKeystoreBackupEntry { path, content });
+    }
+    Ok(GrandpaPersistedStateBackup {
+        secure_store_envelope,
+        meta,
+        keystore_files,
+    })
+}
+
+fn remove_all_grandpa_keystore_files(app: &AppHandle) -> Result<(), String> {
+    let dirs = keystore::keystore_dirs(app)?;
+    for path in keystore::scan_keystore_files(&dirs, GRANDPA_KEY_TYPE_HEX_PREFIX)? {
+        match fs::remove_file(&path) {
+            Ok(_) => {}
+            Err(err) if err.kind() == ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(format!(
+                    "remove grandpa keystore file failed ({}): {err}",
+                    security::sanitize_path(&path)
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn restore_grandpa_persisted_state(
+    app: &AppHandle,
+    backup: &GrandpaPersistedStateBackup,
+) -> Result<(), String> {
+    match backup.secure_store_envelope.as_deref() {
+        Some(value) => security::secure_store_set(KEYCHAIN_ACCOUNT_GRANDPA, value)?,
+        None => security::secure_store_delete(KEYCHAIN_ACCOUNT_GRANDPA)?,
+    }
+
+    match &backup.meta {
+        Some(meta) => save_grandpa_meta(app, meta.institution_name.clone())?,
+        None => clear_grandpa_meta(app)?,
+    }
+
+    remove_all_grandpa_keystore_files(app)?;
+    for entry in &backup.keystore_files {
+        security::write_secret_text_atomic(&entry.path, &entry.content).map_err(|e| {
+            format!(
+                "restore grandpa keystore file failed ({}): {e}",
+                security::sanitize_path(&entry.path)
+            )
+        })?;
+    }
+    Ok(())
+}
+
 fn write_grandpa_key_to_keystore(
     app: &AppHandle,
     private_hex: &str,
     pubkey_hex: &str,
 ) -> Result<(), String> {
-    let secret = format!("0x{private_hex}");
-    let encoded = serde_json::to_string(&secret)
+    let secret = Zeroizing::new(format!("0x{private_hex}"));
+    let encoded = serde_json::to_string(&*secret)
         .map_err(|e| format!("encode grandpa keystore secret failed: {e}"))?;
-    let content = format!("{encoded}\n");
+    let content = Zeroizing::new(format!("{encoded}\n"));
     let dirs = keystore::keystore_dirs(app)?;
     // 始终只保留当前机构对应的一把 gran 密钥，避免旧密钥残留导致节点加载多把 authority key。
     keystore::write_key_to_keystore(&dirs, GRANDPA_KEY_TYPE_HEX_PREFIX, pubkey_hex, &content)
@@ -153,7 +247,11 @@ fn write_grandpa_key_to_keystore(
 
 fn has_grandpa_key_in_keystore(app: &AppHandle, pubkey_hex: &str) -> Result<bool, String> {
     let dirs = keystore::keystore_dirs(app)?;
-    Ok(keystore::has_key_in_keystore(&dirs, GRANDPA_KEY_TYPE_HEX_PREFIX, pubkey_hex))
+    Ok(keystore::has_key_in_keystore(
+        &dirs,
+        GRANDPA_KEY_TYPE_HEX_PREFIX,
+        pubkey_hex,
+    ))
 }
 
 fn grandpa_institution_options() -> Result<Vec<(String, String)>, String> {
@@ -183,7 +281,7 @@ fn grandpa_pubkey_from_private_hex(key_hex: &str) -> Result<String, String> {
 }
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
+    rpc::rpc_post(method, params, rpc::RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
 }
 
 fn node_roles() -> Result<Vec<String>, String> {
@@ -205,18 +303,31 @@ fn is_authority_role(roles: &[String]) -> bool {
 }
 
 fn wait_for_authority_role() -> Result<(), String> {
-    for _ in 0..20 {
+    let deadline = Instant::now() + AUTHORITY_ROLE_WAIT_TIMEOUT;
+    let mut last_roles = Vec::new();
+    while Instant::now() < deadline {
         if let Ok(roles) = node_roles() {
+            last_roles = roles.clone();
             if is_authority_role(&roles) {
                 return Ok(());
             }
         }
-        thread::sleep(Duration::from_millis(250));
+        thread::sleep(STATUS_POLL_INTERVAL);
     }
-    Err("节点未进入 AUTHORITY/VALIDATOR 角色，无法成为投票节点".to_string())
+    let observed = if last_roles.is_empty() {
+        "<none>".to_string()
+    } else {
+        last_roles.join(", ")
+    };
+    Err(format!(
+        "等待 {} 秒后节点仍未进入 AUTHORITY/VALIDATOR 角色（last_roles={observed}）",
+        AUTHORITY_ROLE_WAIT_TIMEOUT.as_secs()
+    ))
 }
 
-fn load_saved_grandpa_private_hex(unlock_password: &str) -> Result<Option<String>, String> {
+fn load_saved_grandpa_private_hex(
+    unlock_password: &str,
+) -> Result<Option<Zeroizing<String>>, String> {
     let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_GRANDPA)? else {
         return Ok(None);
     };
@@ -226,7 +337,7 @@ fn load_saved_grandpa_private_hex(unlock_password: &str) -> Result<Option<String
 
 pub(crate) fn verify_grandpa_secret_unlock(unlock_password: &str) -> Result<(), String> {
     if let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_GRANDPA)? {
-        let _key = Zeroizing::new(security::decrypt_secret_value(&enveloped, unlock_password)?);
+        let _key = security::decrypt_secret_value(&enveloped, unlock_password)?;
     }
     Ok(())
 }
@@ -295,6 +406,8 @@ pub fn set_grandpa_key(
     let _ = security::append_audit_log(&app, "set_grandpa_key", "attempt");
     let unlock = security::ensure_unlock_password(&unlock_password)?;
     device_password::verify_device_login_password(&app, unlock)?;
+    let was_running = home::current_status(&app)?.running;
+    let backup = snapshot_grandpa_persisted_state(&app)?;
     let normalized = normalize_grandpa_key(&key)?;
     let pubkey = grandpa_pubkey_from_private_hex(&normalized)?;
     let institution_name = institution_name_by_grandpa_pubkey(&pubkey)?
@@ -302,23 +415,60 @@ pub fn set_grandpa_key(
 
     let normalized = Zeroizing::new(normalized);
     let encrypted = security::encrypt_secret_value(&normalized, unlock)?;
-    security::secure_store_set(KEYCHAIN_ACCOUNT_GRANDPA, &encrypted)?;
-    save_grandpa_meta(&app, Some(institution_name.clone()))?;
-    write_grandpa_key_to_keystore(&app, &normalized, &pubkey)?;
+    let mut node_stopped_for_restart = false;
+    let mut new_node_started = false;
+    let apply_result = (|| -> Result<(), String> {
+        security::secure_store_set(KEYCHAIN_ACCOUNT_GRANDPA, &encrypted)?;
+        save_grandpa_meta(&app, Some(institution_name.clone()))?;
+        write_grandpa_key_to_keystore(&app, &normalized, &pubkey)?;
 
-    // 若节点当前在运行，保存后立即重启以 authority 模式加载并参与投票。
-    if home::current_status(&app)?.running {
-        if let Err(err) = (|| -> Result<(), String> {
+        // 若节点当前在运行，保存后立即重启以 authority 模式加载并参与投票。
+        if was_running {
             let _ = home::stop_node_blocking(app.clone())?;
+            node_stopped_for_restart = true;
             let _ = home::start_node_blocking(app.clone(), unlock.to_string())?;
+            new_node_started = true;
+            node_stopped_for_restart = false;
             verify_grandpa_after_start(&app, unlock)?;
-            Ok(())
-        })() {
-            let _ = security::append_audit_log(&app, "set_grandpa_key", "saved_restart_failed");
-            return Err(format!(
-                "GRANDPA 私钥已保存，但节点重启或校验失败：{err}。新密钥将在下次成功启动节点时自动生效。"
+        }
+        Ok(())
+    })();
+    if let Err(err) = apply_result {
+        let process_was_interrupted = node_stopped_for_restart || new_node_started;
+        if process_was_interrupted {
+            let _ = home::stop_node_blocking(app.clone());
+        }
+        let restore_err = restore_grandpa_persisted_state(&app, &backup).err();
+        let restart_restore_err = if was_running && process_was_interrupted && restore_err.is_none()
+        {
+            home::start_node_blocking(app.clone(), unlock.to_string())
+                .map(|_| ())
+                .err()
+        } else {
+            None
+        };
+        let _ = security::append_audit_log(
+            &app,
+            "set_grandpa_key",
+            if restore_err.is_some() || restart_restore_err.is_some() {
+                "rollback_failed"
+            } else {
+                "rolled_back"
+            },
+        );
+
+        let mut detail = format!("保存 GRANDPA 私钥后重启或校验失败：{err}");
+        if let Some(restore_err) = restore_err {
+            detail.push_str(&format!("；回滚旧配置失败：{restore_err}"));
+        } else {
+            detail.push_str("；已回滚到旧的安全存储、元数据和 keystore");
+        }
+        if let Some(restart_restore_err) = restart_restore_err {
+            detail.push_str(&format!(
+                "；恢复旧配置后重新启动节点失败：{restart_restore_err}"
             ));
         }
+        return Err(detail);
     }
     let _ = security::append_audit_log(&app, "set_grandpa_key", "success");
 

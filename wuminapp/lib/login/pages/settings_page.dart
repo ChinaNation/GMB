@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:wuminapp_mobile/login/pages/login_whitelist_page.dart';
 import 'package:wuminapp_mobile/wallet/core/user_identification_settings.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -105,20 +104,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     title: const Text('人脸识别'),
                     value: _faceAuthEnabled,
                     onChanged: _onFaceAuthChanged,
-                  ),
-                ),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.verified_user_outlined),
-                    title: const Text('登录白名单'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const LoginWhitelistPage(),
-                        ),
-                      );
-                    },
                   ),
                 ),
               ],

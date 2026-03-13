@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../api';
+import { api, sanitizeError } from '../../api';
 import type { OtherTabsPayload } from '../../types';
 
 type Props = {
@@ -20,7 +20,7 @@ export function OtherTabsSection({ activeKey }: Props) {
       })
       .catch((e) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
+        setError(sanitizeError(e));
       });
 
     return () => {

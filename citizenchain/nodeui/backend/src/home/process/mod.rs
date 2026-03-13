@@ -5,6 +5,8 @@ use crate::{
     shared::{keystore, rpc, security},
 };
 use sha2::{Digest, Sha256};
+#[cfg(target_os = "linux")]
+use std::collections::HashSet;
 use std::{
     fs,
     io::{ErrorKind, Read},
@@ -38,6 +40,12 @@ pub struct RuntimeState {
 
 /// Tauri 全局状态，供首页节点相关命令共享。
 pub struct AppState(pub Mutex<RuntimeState>);
+
+struct ProcessSnapshot {
+    pid: u32,
+    cmdline: String,
+    exe_path: Option<PathBuf>,
+}
 
 pub(super) fn lock_node_lifecycle() -> std::sync::MutexGuard<'static, ()> {
     NODE_LIFECYCLE_LOCK
@@ -442,13 +450,8 @@ fn find_node_bin_source(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(canonical_bin)
 }
 
-/// 判断命令行指向的可执行文件是否位于受信任目录。
-/// 解析命令行第一个 token 作为可执行路径，校验其规范化路径前缀在白名单目录内。
-fn is_trusted_node_process(cmd: &str, trusted_dirs: &[PathBuf]) -> bool {
-    let exe_path = match cmd.split_whitespace().next() {
-        Some(token) => PathBuf::from(token),
-        None => return false,
-    };
+/// 只信任 sysinfo 提供的结构化可执行路径，避免从拼接后的命令行字符串反推路径。
+fn is_trusted_executable_path(exe_path: &Path, trusted_dirs: &[PathBuf]) -> bool {
     let canonical = match exe_path.canonicalize() {
         Ok(p) => p,
         Err(_) => return false,
@@ -456,44 +459,83 @@ fn is_trusted_node_process(cmd: &str, trusted_dirs: &[PathBuf]) -> bool {
     trusted_dirs.iter().any(|dir| canonical.starts_with(dir))
 }
 
-/// 宽松兜底匹配，仅用于 lsof 回退路径中 comm 字段（纯进程名，无路径信息）的判断。
-fn likely_node_comm(comm: &str) -> bool {
-    let lower = comm.to_ascii_lowercase();
-    lower.contains("citizenchain-node")
+fn is_trusted_node_process(proc: &ProcessSnapshot, trusted_dirs: &[PathBuf]) -> bool {
+    proc.exe_path
+        .as_deref()
+        .map(|path| is_trusted_executable_path(path, trusted_dirs))
+        .unwrap_or(false)
 }
 
-/// 使用 sysinfo 获取指定进程的完整命令行参数。
-fn process_args(pid: u32) -> Option<String> {
+fn parse_rpc_port_from_cmdline(cmd: &str) -> Option<u16> {
+    let mut tokens = cmd.split_whitespace();
+    while let Some(token) = tokens.next() {
+        if let Some(raw) = token.strip_prefix("--rpc-port=") {
+            return raw.parse::<u16>().ok().filter(|port| *port > 0);
+        }
+        if token == "--rpc-port" {
+            return tokens
+                .next()
+                .and_then(|raw| raw.parse::<u16>().ok())
+                .filter(|port| *port > 0);
+        }
+    }
+    None
+}
+
+fn effective_rpc_port_for_cmdline(cmd: &str) -> u16 {
+    parse_rpc_port_from_cmdline(cmd).unwrap_or(rpc::DEFAULT_LOCAL_RPC_PORT)
+}
+
+fn process_snapshot(pid: u32) -> Option<ProcessSnapshot> {
     let sys = System::new_with_specifics(
-        RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing().with_cmd(sysinfo::UpdateKind::Always)),
+        RefreshKind::nothing().with_processes(
+            ProcessRefreshKind::nothing()
+                .with_cmd(sysinfo::UpdateKind::Always)
+                .with_exe(sysinfo::UpdateKind::OnlyIfNotSet),
+        ),
     );
     let sysinfo_pid = sysinfo::Pid::from_u32(pid);
     let proc = sys.process(sysinfo_pid)?;
-    let cmd = proc.cmd();
-    if cmd.is_empty() {
+    let cmdline = proc
+        .cmd()
+        .iter()
+        .map(|s| s.to_string_lossy().to_string())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if cmdline.is_empty() && proc.exe().is_none() {
         return None;
     }
-    let args = cmd.iter().map(|s| s.to_string_lossy().to_string()).collect::<Vec<_>>().join(" ");
-    if args.is_empty() { None } else { Some(args) }
+    Some(ProcessSnapshot {
+        pid,
+        cmdline,
+        exe_path: proc.exe().map(Path::to_path_buf),
+    })
 }
 
-/// 使用 sysinfo 获取指定进程的可执行文件名。
-fn process_comm(pid: u32) -> Option<String> {
-    let sys = System::new_with_specifics(
-        RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing()),
-    );
-    let sysinfo_pid = sysinfo::Pid::from_u32(pid);
-    let proc = sys.process(sysinfo_pid)?;
-    let name = proc.name().to_string_lossy().to_string();
-    if name.is_empty() { None } else { Some(name) }
+/// 使用 Rust/Linux procfs 或 lsof 获取监听目标 RPC 端口的进程 PID 列表。
+#[cfg(target_os = "linux")]
+fn listener_pids_on_rpc_port_best_effort(port: u16) -> Vec<u32> {
+    let from_proc = listener_pids_on_rpc_port_from_procfs(port);
+    if !from_proc.is_empty() {
+        return from_proc;
+    }
+    listener_pids_on_rpc_port_from_lsof(port)
 }
 
-/// 使用 lsof 获取监听 RPC 端口 9944 的进程 PID 列表。
-/// sysinfo 不提供端口监听信息，保留 lsof 实现。
+#[cfg(all(unix, not(target_os = "linux")))]
+fn listener_pids_on_rpc_port_best_effort(port: u16) -> Vec<u32> {
+    listener_pids_on_rpc_port_from_lsof(port)
+}
+
+#[cfg(not(unix))]
+fn listener_pids_on_rpc_port_best_effort(_port: u16) -> Vec<u32> {
+    Vec::new()
+}
+
 #[cfg(unix)]
-fn listener_pids_on_rpc_port_best_effort() -> Vec<u32> {
+fn listener_pids_on_rpc_port_from_lsof(port: u16) -> Vec<u32> {
     let Ok(out) = Command::new("lsof")
-        .args(["-nP", "-iTCP:9944", "-sTCP:LISTEN", "-t"])
+        .args(["-nP", &format!("-iTCP:{port}"), "-sTCP:LISTEN", "-t"])
         .output()
     else {
         return Vec::new();
@@ -508,27 +550,113 @@ fn listener_pids_on_rpc_port_best_effort() -> Vec<u32> {
     pids
 }
 
-#[cfg(not(unix))]
-fn listener_pids_on_rpc_port_best_effort() -> Vec<u32> {
-    Vec::new()
+#[cfg(target_os = "linux")]
+fn listener_pids_on_rpc_port_from_procfs(port: u16) -> Vec<u32> {
+    let mut inodes = HashSet::new();
+    collect_listener_socket_inodes("/proc/net/tcp", port, &mut inodes);
+    collect_listener_socket_inodes("/proc/net/tcp6", port, &mut inodes);
+    if inodes.is_empty() {
+        return Vec::new();
+    }
+
+    let Ok(proc_entries) = fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+
+    let mut pids = Vec::new();
+    for entry in proc_entries.flatten() {
+        let file_name = entry.file_name();
+        let Some(pid_str) = file_name.to_str() else {
+            continue;
+        };
+        let Ok(pid) = pid_str.parse::<u32>() else {
+            continue;
+        };
+        let fd_dir = entry.path().join("fd");
+        let Ok(fd_entries) = fs::read_dir(fd_dir) else {
+            continue;
+        };
+        let mut matched = false;
+        for fd_entry in fd_entries.flatten() {
+            let Ok(target) = fs::read_link(fd_entry.path()) else {
+                continue;
+            };
+            let Some(target_str) = target.to_str() else {
+                continue;
+            };
+            let Some(raw_inode) = target_str
+                .strip_prefix("socket:[")
+                .and_then(|value| value.strip_suffix(']'))
+            else {
+                continue;
+            };
+            if inodes.contains(raw_inode) {
+                pids.push(pid);
+                matched = true;
+                break;
+            }
+        }
+        if matched {
+            continue;
+        }
+    }
+    pids.sort_unstable();
+    pids.dedup();
+    pids
 }
 
-/// 使用 sysinfo 获取所有进程的 (pid, command_line) 对。
-fn node_pid_command_pairs() -> Result<Vec<(u32, String)>, String> {
+#[cfg(target_os = "linux")]
+fn collect_listener_socket_inodes(path: &str, port: u16, out: &mut HashSet<String>) {
+    let Ok(raw) = fs::read_to_string(path) else {
+        return;
+    };
+    for line in raw.lines().skip(1) {
+        let cols = line.split_whitespace().collect::<Vec<_>>();
+        if cols.len() <= 9 {
+            continue;
+        }
+        let Some((_, local_port_hex)) = cols[1].rsplit_once(':') else {
+            continue;
+        };
+        let Ok(local_port) = u16::from_str_radix(local_port_hex, 16) else {
+            continue;
+        };
+        if local_port != port {
+            continue;
+        }
+        if cols[3] != "0A" {
+            continue;
+        }
+        out.insert(cols[9].to_string());
+    }
+}
+
+/// 使用 sysinfo 获取所有进程的结构化快照。
+fn node_process_snapshots() -> Result<Vec<ProcessSnapshot>, String> {
     let sys = System::new_with_specifics(
-        RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing().with_cmd(sysinfo::UpdateKind::Always)),
+        RefreshKind::nothing().with_processes(
+            ProcessRefreshKind::nothing()
+                .with_cmd(sysinfo::UpdateKind::Always)
+                .with_exe(sysinfo::UpdateKind::OnlyIfNotSet),
+        ),
     );
     let mut pairs = Vec::new();
     for (pid, proc) in sys.processes() {
-        let cmd = proc.cmd();
-        if cmd.is_empty() {
+        let full_cmd = proc
+            .cmd()
+            .iter()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let exe_path = proc.exe().map(Path::to_path_buf);
+        if full_cmd.is_empty() && exe_path.is_none() {
             continue;
         }
-        let full_cmd = cmd.iter().map(|s| s.to_string_lossy().to_string()).collect::<Vec<_>>().join(" ");
-        if full_cmd.is_empty() {
-            continue;
-        }
-        pairs.push((pid.as_u32(), full_cmd));
+        pairs.push(ProcessSnapshot {
+            pid: pid.as_u32(),
+            cmdline: full_cmd,
+            exe_path,
+        });
     }
     Ok(pairs)
 }
@@ -536,6 +664,7 @@ fn node_pid_command_pairs() -> Result<Vec<(u32, String)>, String> {
 // 历史会话可能遗留旧节点进程，这里按"命令行特征 -> lsof -> RPC 指纹"逐层收敛，
 // 只把高度疑似本应用节点的 PID 作为可信目标返回。
 pub(super) fn trusted_node_process_pids_on_rpc_port(app: &AppHandle) -> Result<Vec<u32>, String> {
+    let expected_rpc_port = rpc::current_rpc_port();
     let trusted_dirs = trusted_node_bin_dirs(app).unwrap_or_default();
     let data_dir_raw = node_data_dir(app)?;
     let mut base_tokens = vec![data_dir_raw.to_string_lossy().to_string()];
@@ -543,13 +672,14 @@ pub(super) fn trusted_node_process_pids_on_rpc_port(app: &AppHandle) -> Result<V
         base_tokens.push(canonical.to_string_lossy().to_string());
     }
 
-    let all = node_pid_command_pairs().unwrap_or_default();
-    let mut candidate: Vec<(u32, String)> = all
+    let all = node_process_snapshots().unwrap_or_default();
+    let mut candidate: Vec<ProcessSnapshot> = all
         .into_iter()
-        .filter(|(_, cmd)| {
-            let has_bin = is_trusted_node_process(cmd, &trusted_dirs);
-            let has_rpc = cmd.contains("--rpc-port 9944") || cmd.contains("--rpc-port=9944");
-            let has_base = base_tokens.iter().any(|token| cmd.contains(token));
+        .filter(|proc| {
+            let has_bin = is_trusted_node_process(proc, &trusted_dirs);
+            let rpc_port = effective_rpc_port_for_cmdline(&proc.cmdline);
+            let has_rpc = rpc_port == expected_rpc_port;
+            let has_base = base_tokens.iter().any(|token| proc.cmdline.contains(token));
             has_bin && (has_rpc || has_base)
         })
         .collect();
@@ -558,9 +688,9 @@ pub(super) fn trusted_node_process_pids_on_rpc_port(app: &AppHandle) -> Result<V
 
     let filtered: Vec<u32> = candidate
         .iter_mut()
-        .filter_map(|(pid, cmd)| {
-            if base_tokens.iter().any(|token| cmd.contains(token)) {
-                Some(*pid)
+        .filter_map(|proc| {
+            if base_tokens.iter().any(|token| proc.cmdline.contains(token)) {
+                Some(proc.pid)
             } else {
                 None
             }
@@ -568,18 +698,22 @@ pub(super) fn trusted_node_process_pids_on_rpc_port(app: &AppHandle) -> Result<V
         .collect();
 
     if !filtered.is_empty() {
+        if let Some(proc) = candidate.iter().find(|proc| filtered.contains(&proc.pid)) {
+            rpc::remember_rpc_port(effective_rpc_port_for_cmdline(&proc.cmdline));
+        }
         resolved_pids.extend(filtered);
     } else if candidate.len() == 1 {
-        resolved_pids.push(candidate[0].0);
+        rpc::remember_rpc_port(effective_rpc_port_for_cmdline(&candidate[0].cmdline));
+        resolved_pids.push(candidate[0].pid);
     } else {
         let fallback: Vec<u32> = candidate
             .iter()
-            .filter_map(|(pid, _)| {
-                let args = process_args(*pid)?;
-                if is_trusted_node_process(&args, &trusted_dirs)
-                    && (args.contains("--rpc-port 9944") || args.contains("--rpc-port=9944"))
+            .filter_map(|proc| {
+                let refreshed = process_snapshot(proc.pid)?;
+                if is_trusted_node_process(&refreshed, &trusted_dirs)
+                    && effective_rpc_port_for_cmdline(&refreshed.cmdline) == expected_rpc_port
                 {
-                    Some(*pid)
+                    Some(proc.pid)
                 } else {
                     None
                 }
@@ -589,22 +723,19 @@ pub(super) fn trusted_node_process_pids_on_rpc_port(app: &AppHandle) -> Result<V
     }
 
     if resolved_pids.is_empty() {
-        let from_lsof: Vec<u32> = listener_pids_on_rpc_port_best_effort()
+        let from_lsof: Vec<u32> = listener_pids_on_rpc_port_best_effort(expected_rpc_port)
             .into_iter()
             .filter(|pid| {
-                process_args(*pid)
-                    .map(|args| is_trusted_node_process(&args, &trusted_dirs))
+                process_snapshot(*pid)
+                    .map(|proc| is_trusted_node_process(&proc, &trusted_dirs))
                     .unwrap_or(false)
-                    || process_comm(*pid)
-                        .map(|comm| likely_node_comm(&comm))
-                        .unwrap_or(false)
             })
             .collect();
         resolved_pids.extend(from_lsof);
     }
 
     if resolved_pids.is_empty() {
-        let listeners = listener_pids_on_rpc_port_best_effort();
+        let listeners = listener_pids_on_rpc_port_best_effort(expected_rpc_port);
         if !listeners.is_empty() && is_expected_rpc_node() {
             resolved_pids.extend(listeners);
         }
@@ -621,13 +752,26 @@ fn pid_alive(pid: u32) -> bool {
         return false;
     };
     let rc = unsafe { libc::kill(raw_pid, 0) };
-    if rc == 0 {
-        return true;
+    if rc != 0
+        && !matches!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EPERM)
+        )
+    {
+        return false;
     }
-    matches!(
-        std::io::Error::last_os_error().raw_os_error(),
-        Some(libc::EPERM)
-    )
+    // 验证进程可执行文件名包含节点二进制名称，防止 PID 复用导致误判。
+    let sys = System::new_with_specifics(
+        RefreshKind::nothing()
+            .with_processes(ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::Always)),
+    );
+    let sysinfo_pid = sysinfo::Pid::from_u32(pid);
+    sys.process(sysinfo_pid)
+        .and_then(|p| p.exe())
+        .and_then(|exe| exe.file_name())
+        .and_then(|name| name.to_str())
+        .map(|name| name.contains(NODE_BIN_BASENAME))
+        .unwrap_or(false)
 }
 
 #[cfg(not(unix))]
@@ -685,6 +829,7 @@ fn spawn_node(
     node_bin: &Path,
     unlock_password: &str,
 ) -> Result<(Child, Option<PathBuf>), String> {
+    let rpc_port = rpc::current_rpc_port();
     let base_path = node_data_dir(app)?;
     let bootnode_key = bootnodes_address::load_bootnode_node_key(app, unlock_password)?;
     let enable_grandpa_validator =
@@ -696,7 +841,7 @@ fn spawn_node(
     cmd.arg("--base-path")
         .arg(base_path)
         .arg("--rpc-port")
-        .arg("9944")
+        .arg(rpc_port.to_string())
         .arg("--no-prometheus")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -795,7 +940,9 @@ pub(crate) fn cleanup_on_exit(app: &AppHandle) {
         clear_runtime_node_key_file(&mut state);
         clear_runtime_node_bin_file(&mut state);
     }
-    let _ = terminate_trusted_listener_nodes(app);
+    if let Err(err) = terminate_trusted_listener_nodes(app) {
+        eprintln!("terminate trusted listener nodes on exit failed: {err}");
+    }
     if let Err(err) = cleanup_stale_staged_node_bins(app, None) {
         eprintln!("cleanup stale staged node bins on exit failed: {err}");
     }
@@ -942,4 +1089,48 @@ pub(crate) fn start_node_blocking(
 
 pub(crate) fn stop_node_blocking(app: AppHandle) -> Result<NodeStatus, String> {
     stop_node_sync(app)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_trusted_executable_path, parse_rpc_port_from_cmdline};
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|v| v.as_nanos())
+            .unwrap_or(0);
+        std::env::temp_dir().join(format!("nodeui-process-{label}-{stamp}"))
+    }
+
+    #[test]
+    fn trusted_executable_path_accepts_spaces_in_path() {
+        let trusted_dir = unique_temp_dir("trusted dir");
+        let nested_dir = trusted_dir.join("bin folder");
+        fs::create_dir_all(&nested_dir).unwrap();
+        let exe = nested_dir.join("citizenchain-node");
+        fs::write(&exe, b"test").unwrap();
+
+        let trusted_dirs = vec![trusted_dir.canonicalize().unwrap()];
+        assert!(is_trusted_executable_path(&exe, &trusted_dirs));
+
+        let _ = fs::remove_dir_all(&trusted_dir);
+    }
+
+    #[test]
+    fn parse_rpc_port_from_cmdline_supports_separate_flag() {
+        let cmd = "/tmp/citizenchain-node --rpc-port 12345 --validator";
+        assert_eq!(parse_rpc_port_from_cmdline(cmd), Some(12345));
+    }
+
+    #[test]
+    fn parse_rpc_port_from_cmdline_supports_equals_flag() {
+        let cmd = "/tmp/citizenchain-node --rpc-port=22334 --validator";
+        assert_eq!(parse_rpc_port_from_cmdline(cmd), Some(22334));
+    }
 }
