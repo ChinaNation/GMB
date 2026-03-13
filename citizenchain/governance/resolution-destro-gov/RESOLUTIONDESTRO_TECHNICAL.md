@@ -195,14 +195,16 @@ stale 判定：
 
 ---
 
-## 8. 权重策略（当前状态）
-当前为保守手工权重：
-- `propose_destroy`: `80_000_000 + DbWeight(reads_writes(8, 8))`
-- `vote_destroy`: `220_000_000 + DbWeight(reads_writes(14, 12))`
-- `execute_destroy`: `140_000_000 + DbWeight(reads_writes(9, 8))`
-- `cancel_stale_destroy`: `70_000_000 + DbWeight(reads_writes(6, 6))`
+## 8. 权重策略（benchmark 自动生成）
+当前 `src/weights.rs` 已由 Substrate benchmark CLI 自动生成（文件头日期 2026-03-12，`chain = mainnet`，`steps = 50`，`repeat = 20`）：
+- `propose_destroy`: `20_000_000 + proof_size(4641) + DbWeight(reads_writes(4, 6))`
+- `vote_destroy`: `61_000_000 + proof_size(16278) + DbWeight(reads_writes(13, 13))`
+- `execute_destroy`: `35_000_000 + proof_size(16278) + DbWeight(reads_writes(10, 13))`
+- `cancel_stale_destroy`: `21_000_000 + proof_size(3559) + DbWeight(reads_writes(4, 6))`
 
-模块内已提供 `runtime-benchmarks` 结构，可用于后续 CLI 产出精确值并替换保守估算。
+当前模块的 `runtime-benchmarks` 与 `src/benchmarks.rs` 已接入实际测量路径，覆盖提案创建、最终投票触发通过、公开执行入口与 stale 清理入口。
+
+若 benchmark 路径、组件范围、运行时常量边界或存储读写行为发生变化，需要重新跑 benchmark CLI 并更新 `src/weights.rs`，而不是继续沿用历史产物。
 
 ---
 
@@ -252,7 +254,7 @@ stale 判定：
 ---
 
 ## 11. 运维建议
-1. 上线前建议跑 benchmark CLI，用实测权重替换当前手工保守值。  
+1. 当前权重已完成 benchmark CLI 生成；后续若 benchmark 路径、组件范围、运行时常量边界或存储读写行为发生变化，应重新生成并更新 `src/weights.rs`。  
 2. 监控 `DestroyExecutionFailed`，出现后优先补齐机构余额再调用 `execute_destroy`。  
 3. 对长期未处理的旧提案，按策略使用 `cancel_stale_destroy` 或由新提案触发覆盖清理。  
 4. `StaleProposalLifetime` 当前复用管理员替换模块的配置常量；若后续销毁治理希望采用不同的经济补救窗口，建议拆分为独立 runtime 常量。  

@@ -28,15 +28,17 @@
 - 必须记录手动重试次数，限制最大重试次数，避免无限重试。
 - 生产链当前限制为每个提案最多重试 3 次。
 - 仅允许受限治理角色触发重试。
+- 当失败提案已达到重试上限时，必须提供显式取消/清理出口，避免 code 永久占用存储。
 
 ### 0.5 可审计与运维需求
-- 需要区分以下事件：提案创建、联合投票终结、升级执行成功、升级执行失败。
+- 需要区分以下事件：提案创建、联合投票终结、升级执行成功、升级执行失败、失败提案取消。
 - 提案状态机必须清晰可恢复：
   - `Voting -> Passed`
   - `Voting -> Rejected`
   - `Voting -> ExecutionFailed`
   - `ExecutionFailed -> Passed`
   - `ExecutionFailed -> ExecutionFailed`
+  - `ExecutionFailed -> Cancelled`
 
 ## 1. 模块定位
 `runtime-root-upgrade` 是“Runtime 升级治理编排模块”，负责：
@@ -57,6 +59,10 @@ Runtime 配置位置：
 - `JointVoteEngine = VotingEngineSystem`
 - `RuntimeCodeExecutor = RuntimeSetCodeExecutor`
 - `MaxExecutionRetries = ConstU32<3>`
+- `MaxReasonLen = 1024`
+- `MaxRuntimeCodeSize = 5 * 1024 * 1024`
+- `MaxSnapshotNonceLength = 64`
+- `MaxSnapshotSignatureLength = 64`
 
 说明：
 - `finalize_joint_vote` 当前仅允许 `Root` 手工回放；
@@ -68,6 +74,7 @@ Runtime 配置位置：
 - `Passed`：联合投票通过且 runtime code 执行成功
 - `Rejected`：联合投票拒绝
 - `ExecutionFailed`：联合投票通过，但 runtime code 执行失败，可重试
+- `Cancelled`：执行失败且重试额度耗尽后，被 NRC 管理员人工放弃并清空 code
 
 ### 3.2 Proposal
 - `proposer`：提案发起人
@@ -123,6 +130,15 @@ Runtime 配置位置：
 6. 失败：保持 `ExecutionFailed`，`RetryCount += 1`。
 7. 当失败重试次数达到 3 次后，后续重试请求会被拒绝。
 
+### 5.4 `cancel_failed_proposal`（call index = 3）
+流程：
+1. 校验 `NrcProposeOrigin`。
+2. 提案必须存在且状态为 `ExecutionFailed`。
+3. 校验 `RetryCount >= MaxExecutionRetries`，确保只有“额度耗尽”的失败提案才能取消。
+4. 状态改为 `Cancelled`。
+5. 清空保留的 wasm `code`，删除 `RetryCount`。
+6. 发出 `RuntimeUpgradeCancelled` 事件。
+
 ## 6. 回调路径
 `JointVoteResultCallback::on_joint_vote_finalized`：
 1. 用 `joint_vote_id` 查询 `JointVoteToGov`
@@ -153,7 +169,19 @@ Runtime 配置位置：
 
 ### 7.3 推荐改进
 1. 当前 `finalize_joint_vote` 手工入口使用 `Root`，权限已经足够严格；若后续想与其他模块统一，可评估抽象出专用 `JointVoteFinalizeOrigin`。
-2. 模块现已补上 `runtime-benchmarks` 入口与专用 `WeightInfo`；当前 `weights.rs` 仍是保守手写值，后续可用 benchmark CLI 实测产物替换。
+
+### 7.4 已修复风险：benchmark 与实际逻辑不一致
+旧版 benchmark 存在以下偏差：
+- `propose_runtime_upgrade` 跳过了 `JointVoteEngine::create_joint_proposal`
+- `finalize_joint_vote` 只覆盖拒绝路径
+- `retry_failed_execution` 只做 `RetryCount` 读写，未进入真实执行路径
+
+现已修复：
+- `propose_runtime_upgrade` benchmark 改为真实 extrinsic，覆盖投票引擎创建与映射写入
+- `finalize_joint_vote` 拆分为 `approved/rejected` 两条 benchmark
+- `retry_failed_execution` benchmark 改为真实 extrinsic，覆盖 `Proposals + RetryCount` 读写与执行编排
+- `weights.rs` 已在 2026-03-12 通过 benchmark CLI 重新生成
+- 由于 benchmark 环境不会真的改写链上 `:code`，`finalize_joint_vote(approved)` 与 `retry_failed_execution` 在权重声明中会额外叠加 `frame_system::set_code()` 的系统权重
 
 ## 8. 中文注释覆盖重点
 本模块当前已在以下关键位置补充中文注释：
@@ -163,6 +191,7 @@ Runtime 配置位置：
 - `cleanup_joint_vote_mapping` 清理语义
 - 联合投票通过后的执行/失败分叉
 - `retry_failed_execution` 的重试边界
+- `cancel_failed_proposal` 的清理边界
 - `on_joint_vote_finalized` 的映射反查逻辑
 
 ## 9. 测试覆盖
@@ -176,10 +205,14 @@ Runtime 配置位置：
 - 重试成功转为 `Passed`
 - 重试失败增加 `RetryCount`
 - 重试次数达到上限后拒绝
+- 失败提案达到重试上限后可取消并清空 code
+- 未达到重试上限时禁止取消失败提案
 - 非 `ExecutionFailed` 状态禁止重试
 
 本地验证：
 - `cargo test -p runtime-root-upgrade`
+- `cargo check -p gmb-runtime --features runtime-benchmarks`
+- `./target/release/node benchmark pallet --chain mainnet --pallet runtime_root_upgrade --extrinsic '*' --steps 50 --repeat 20 --wasm-execution compiled --heap-pages 4096 --output ./governance/runtime-root-upgrade/src/weights.rs --template ./scripts/benchmark-weight-template.hbs`
 
 ## 10. 文件索引
 - 模块代码：`src/lib.rs`
