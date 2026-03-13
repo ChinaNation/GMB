@@ -56,7 +56,7 @@
   - 返回 `enable_grandpa_validator=true`。
 - `home::home_node::start_node` 在 `enable_grandpa_validator=true` 时追加 `--validator`。
 - `home::home_node::start_node` 启动后调用 `verify_grandpa_after_start`：
-  - 最长等待约 20 秒，校验 `system_nodeRoles` 含 `authority/validator`；
+  - 最长等待约 20 秒，校验 `system_nodeRoles` 精确匹配 `authority` 或 `validator`（不使用子串匹配，避免 `"notauthority"` 等误命中）；
   - 校验本地 keystore 已存在匹配的 `gran` 密钥文件。
 
 ### 4.3 明文私钥生命周期控制

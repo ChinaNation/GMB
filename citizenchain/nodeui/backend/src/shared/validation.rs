@@ -1,6 +1,7 @@
 // 共享输入校验与标准化逻辑。
 use crate::settings::address_utils::decode_ss58_prefix;
 use crate::shared::constants::SS58_PREFIX;
+use unicode_normalization::UnicodeNormalization;
 const SS58_PRE: &[u8] = b"SS58PRE";
 
 #[derive(Debug, thiserror::Error)]
@@ -113,13 +114,16 @@ pub fn normalize_node_name(input: &str) -> Result<String, String> {
     if value.is_empty() {
         return Err(ValidationError::NodeNameEmpty.into());
     }
-    if value.chars().count() > 64 {
+    // Unicode NFC 归一化：将组合字符序列（如 e + ◌́）合并为预组合形式（如 é），
+    // 避免视觉相同但字节不同的名称被视为不同节点。
+    let normalized: String = value.nfc().collect();
+    if normalized.chars().count() > 64 {
         return Err(ValidationError::NodeNameTooLong.into());
     }
-    if value.chars().any(|c| c.is_control()) {
+    if normalized.chars().any(|c| c.is_control()) {
         return Err(ValidationError::NodeNameControlChar.into());
     }
-    Ok(value.to_string())
+    Ok(normalized)
 }
 
 pub fn normalize_grandpa_key(input: &str) -> Result<String, String> {

@@ -27,3 +27,8 @@
 - 白皮书：`https://chinanation.github.io/GMB/GMB_README.html`
 - 公民治理宪法：`https://chinanation.github.io/GMB/FRC_README.html?v=20260310-1`
 - 公民党：占位文本（待接入）
+
+## 5. 安全策略
+
+- 前端渲染 iframe 时应用 `sandbox="allow-scripts allow-same-origin"` 属性，限制嵌入页面的能力。
+- 设置 `referrerPolicy="no-referrer"` 避免向外部页面泄漏来源信息。

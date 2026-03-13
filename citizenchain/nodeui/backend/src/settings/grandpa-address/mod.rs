@@ -298,7 +298,7 @@ fn node_roles() -> Result<Vec<String>, String> {
 fn is_authority_role(roles: &[String]) -> bool {
     roles.iter().any(|role| {
         let lower = role.to_ascii_lowercase();
-        lower.contains("authority") || lower.contains("validator")
+        lower == "authority" || lower == "validator"
     })
 }
 

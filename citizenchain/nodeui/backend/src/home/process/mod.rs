@@ -760,7 +760,8 @@ fn pid_alive(pid: u32) -> bool {
     {
         return false;
     }
-    // 验证进程可执行文件名包含节点二进制名称，防止 PID 复用导致误判。
+    // 验证进程可执行文件名以节点二进制名称开头，防止 PID 复用导致误判。
+    // 使用 starts_with 而非 contains，避免 "fake-citizenchain-node" 等伪造名称通过校验。
     let sys = System::new_with_specifics(
         RefreshKind::nothing()
             .with_processes(ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::Always)),
@@ -770,7 +771,7 @@ fn pid_alive(pid: u32) -> bool {
         .and_then(|p| p.exe())
         .and_then(|exe| exe.file_name())
         .and_then(|name| name.to_str())
-        .map(|name| name.contains(NODE_BIN_BASENAME))
+        .map(|name| name.starts_with(NODE_BIN_BASENAME))
         .unwrap_or(false)
 }
 
