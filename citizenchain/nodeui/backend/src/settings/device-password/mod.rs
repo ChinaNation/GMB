@@ -496,6 +496,8 @@ pub(crate) fn verify_device_login_password(app: &AppHandle, password: &str) -> R
         fn CloseHandle(handle: Handle) -> Bool;
     }
 
+    use zeroize::Zeroizing;
+
     fn wide_null(input: &str) -> Vec<u16> {
         std::ffi::OsStr::new(input)
             .encode_wide()
@@ -508,7 +510,7 @@ pub(crate) fn verify_device_login_password(app: &AppHandle, password: &str) -> R
     enforce_auth_rate_limit(app, &username)?;
     let username_w = wide_null(&username);
     let domain_w = wide_null(&domain);
-    let password_w = wide_null(password);
+    let password_w = Zeroizing::new(wide_null(password));
 
     let mut token: Handle = 0;
     let ok = unsafe {
