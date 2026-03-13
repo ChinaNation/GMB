@@ -12,11 +12,10 @@ use sc_telemetry::{Telemetry, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_api::ProvideRuntimeApi;
 use sp_consensus::NoNetwork;
-use sp_core::{crypto::KeyTypeId, hashing::blake2_256, sr25519, Pair, U256};
+use sp_core::{crypto::KeyTypeId, hashing::blake2_256, U256};
 use sp_keystore::Keystore;
 use sp_runtime::traits::{Block as BlockT, IdentifyAccount};
 use std::{
-    env,
     sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
@@ -45,7 +44,6 @@ pub type Service = sc_service::PartialComponents<
 
 // PoW 作者密钥类型：纯 PoW 链使用独立 key type，避免与 Aura 语义混用。
 const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
-const POWR_MINER_SURI_ENV: &str = "POWR_MINER_SURI";
 const POW_MINING_TIMEOUT_SECS: u64 = 10;
 const POW_PROPOSAL_BUILD_SECS: u64 = 2;
 const GRANDPA_JUSTIFICATION_PERIOD: u32 = 64;
@@ -118,57 +116,21 @@ fn hash_meets_difficulty(hash: &[u8; 32], difficulty: U256) -> bool {
 }
 
 fn author_pre_digest(keystore: &sp_keystore::KeystorePtr) -> Option<Vec<u8>> {
+    // 中文注释：直接从 keystore 获取 powr 密钥，不再读取环境变量，避免明文密钥泄露。
     let keys = keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE);
-    if keys.is_empty() {
-        return None;
-    }
-
-    let author_public = if let Some(suri) = env::var(POWR_MINER_SURI_ENV)
-        .ok()
-        .filter(|v| !v.trim().is_empty())
-    {
-        match sr25519::Pair::from_string(&suri, None) {
-            Ok(pair) => {
-                let target = pair.public();
-                keys.into_iter().find(|k| *k == target).unwrap_or(target)
-            }
-            Err(_) => keys.into_iter().next()?,
-        }
-    } else {
-        keys.into_iter().next()?
-    };
-
+    let author_public = keys.into_iter().next()?;
     let account: gmb_runtime::AccountId =
         sp_runtime::MultiSigner::from(author_public).into_account();
     Some(account.encode())
 }
 
 fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceError> {
+    // 中文注释：密钥仅通过 keystore 管理，不再从环境变量读取，避免明文泄露于 /proc/PID/environ。
     let keys = keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE);
-    let configured_suri = env::var(POWR_MINER_SURI_ENV)
-        .ok()
-        .filter(|v| !v.trim().is_empty());
-
-    if let Some(suri) = configured_suri.as_ref() {
-        let pair = sr25519::Pair::from_string(suri, None)
-            .map_err(|e| ServiceError::Other(format!("invalid {}: {e}", POWR_MINER_SURI_ENV)))?;
-        let configured_public = pair.public();
-        if keys.iter().any(|k| *k == configured_public) {
-            return Ok(());
-        }
-        keystore
-            .sr25519_generate_new(POW_AUTHOR_KEY_TYPE, Some(suri))
-            .map_err(|e| {
-                ServiceError::Other(format!("failed to generate configured powr key: {e}"))
-            })?;
-        return Ok(());
-    }
-
     if !keys.is_empty() {
         return Ok(());
     }
-
-    // 中文注释：节点首启自动生成唯一 powr 密钥，避免“无 key 仅告警继续跑”。
+    // 中文注释：节点首启自动生成唯一 powr 密钥，避免"无 key 仅告警继续跑"。
     keystore
         .sr25519_generate_new(POW_AUTHOR_KEY_TYPE, None)
         .map_err(|e| ServiceError::Other(format!("failed to generate powr key: {e}")))?;
@@ -176,7 +138,7 @@ fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceErr
 }
 
 fn start_cpu_miner<Proof: Send + 'static>(worker: MiningHandle<Block, SimplePow, (), Proof>) {
-    // 中文注释：提交门控，防止“早产块”触发 timestamp inherent 的 future 校验失败。
+    // 中文注释：提交门控，防止"早产块"触发 timestamp inherent 的 future 校验失败。
     let min_submit_interval = Duration::from_millis(primitives::pow_const::MILLISECS_PER_BLOCK);
     thread::spawn(move || loop {
         let Some(metadata) = worker.metadata() else {
@@ -194,7 +156,7 @@ fn start_cpu_miner<Proof: Send + 'static>(worker: MiningHandle<Block, SimplePow,
 
             let hash = pow_hash(metadata.pre_hash.as_ref(), nonce);
             if hash_meets_difficulty(&hash, metadata.difficulty) {
-                // 中文注释：仅限制“提交频率”，挖矿过程仍持续进行。
+                // 中文注释：仅限制"提交频率"，挖矿过程仍持续进行。
                 // 这样可以保证区块时间戳不会持续跑在本地时间之前导致 future 错误。
                 static MINER_GATE: std::sync::OnceLock<std::sync::Mutex<Instant>> =
                     std::sync::OnceLock::new();
@@ -415,7 +377,7 @@ pub fn new_full<
         tracing_execute_block: None,
     })?;
 
-    // 中文注释：本链制度要求“安装全节点软件即可参与挖矿”，不再依赖 authority 角色开关。
+    // 中文注释：本链制度要求"安装全节点软件即可参与挖矿"，不再依赖 authority 角色开关。
     ensure_powr_key(&keystore)?;
 
     let proposer_factory = sc_basic_authorship::ProposerFactory::new(

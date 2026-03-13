@@ -126,6 +126,22 @@ class _MyWalletPageState extends State<MyWalletPage> {
     }
   }
 
+  Future<void> _showColdWalletPlaceholder(String actionTitle) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(actionTitle),
+        content: const Text('当前版本先展示冷钱包入口，私钥不落地的冷钱包流程将在后续接入。'),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<bool?> _confirmBindWallet(WalletProfile wallet) {
     return showDialog<bool>(
       context: context,
@@ -313,6 +329,104 @@ class _MyWalletPageState extends State<MyWalletPage> {
     return balance.toStringAsFixed(2);
   }
 
+  Widget _buildWalletEntryOption({
+    required Color color,
+    required String title,
+    required String description,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.45,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyWalletChoices() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '还没有钱包，请选择一种方式开始。',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 16),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.08,
+          children: [
+            _buildWalletEntryOption(
+              color: const Color(0xFFFFE4E1),
+              title: '创建热钱包',
+              description: '创建私钥存在本机的热钱包',
+              onTap: _openCreatePage,
+            ),
+            _buildWalletEntryOption(
+              color: const Color(0xFFE0FFFF),
+              title: '导入热钱包',
+              description: '导入钱包并将私钥存在本机',
+              onTap: _openImportPage,
+            ),
+            _buildWalletEntryOption(
+              color: const Color(0xFFFFF4CC),
+              title: '创建冷钱包',
+              description: '创建钱包后，自行保管私钥，本机不保存私钥',
+              onTap: () => _showColdWalletPlaceholder('创建冷钱包'),
+            ),
+            _buildWalletEntryOption(
+              color: const Color(0xFFE6E6FA),
+              title: '导入冷钱包',
+              description: '导入钱包，本机不保存私钥',
+              onTap: () => _showColdWalletPlaceholder('导入冷钱包'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -335,20 +449,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
 
             final wallets = walletsSnapshot.data ?? const <WalletProfile>[];
             if (wallets.isEmpty) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '还没有钱包，请先创建或导入钱包。',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: _showWalletEntryChooser,
-                    child: const Text('导入钱包/创建钱包'),
-                  ),
-                ],
-              );
+              return _buildEmptyWalletChoices();
             }
 
             return ListView(

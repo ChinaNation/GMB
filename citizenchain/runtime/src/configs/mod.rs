@@ -24,6 +24,7 @@
 // For more information, please refer to <http://unlicense.org>
 
 // Substrate and Polkadot dependencies
+use alloc::collections::BTreeSet;
 use codec::Decode;
 use codec::Encode;
 use duoqian_transaction_pow::{DuoqianReservedAddressChecker as _, ProtectedSourceChecker as _};
@@ -432,6 +433,118 @@ impl duoqian_transaction_pow::DuoqianAdminAuth<AccountId> for RuntimeDuoqianAdmi
         let public = sr25519::Public::from_raw(*public_key);
         let sig = sr25519::Signature::from_raw(*signature);
         sr25519_verify(&sig, payload, &public)
+    }
+}
+
+fn joint_vote_institution_org(
+    institution: voting_engine_system::InstitutionPalletId,
+) -> Option<u8> {
+    let nrc = primitives::china::china_cb::shenfen_id_to_fixed48(
+        primitives::china::china_cb::CHINA_CB[0].shenfen_id,
+    )?;
+    if institution == nrc {
+        return Some(voting_engine_system::internal_vote::ORG_NRC);
+    }
+
+    if primitives::china::china_cb::CHINA_CB
+        .iter()
+        .skip(1)
+        .filter_map(|n| primitives::china::china_cb::shenfen_id_to_fixed48(n.shenfen_id))
+        .any(|pid| pid == institution)
+    {
+        return Some(voting_engine_system::internal_vote::ORG_PRC);
+    }
+
+    if primitives::china::china_ch::CHINA_CH
+        .iter()
+        .filter_map(|n| primitives::china::china_ch::shenfen_id_to_fixed48(n.shenfen_id))
+        .any(|pid| pid == institution)
+    {
+        return Some(voting_engine_system::internal_vote::ORG_PRB);
+    }
+
+    None
+}
+
+pub struct RuntimeJointInstitutionDecisionVerifier;
+
+impl voting_engine_system::JointInstitutionDecisionVerifier<AccountId, BlockNumberFor<Runtime>>
+    for RuntimeJointInstitutionDecisionVerifier
+{
+    type PublicKey = [u8; 32];
+    type Signature = [u8; 64];
+
+    fn verify_institution_decision(
+        proposal_id: u64,
+        institution: voting_engine_system::InstitutionPalletId,
+        internal_passed: bool,
+        expires_at: BlockNumberFor<Runtime>,
+        approvals: &[voting_engine_system::JointInstitutionApproval<
+            Self::PublicKey,
+            Self::Signature,
+        >],
+    ) -> bool {
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            let _ = (
+                proposal_id,
+                institution,
+                internal_passed,
+                expires_at,
+                approvals,
+            );
+            return true;
+        }
+
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
+            let Some(org) = joint_vote_institution_org(institution) else {
+                return false;
+            };
+            let Some(threshold) = voting_engine_system::internal_vote::org_pass_threshold(org)
+            else {
+                return false;
+            };
+            let Some(admins) = admins_origin_gov::CurrentAdmins::<Runtime>::get(institution) else {
+                return false;
+            };
+            if approvals.is_empty() {
+                return false;
+            }
+
+            let admin_set: BTreeSet<_> = admins.into_inner().into_iter().collect();
+            let payload = (
+                b"GMB_JOINT_DECISION_V1",
+                frame_system::Pallet::<Runtime>::block_hash(0),
+                proposal_id,
+                institution,
+                internal_passed,
+                expires_at,
+            );
+            let message = blake2_256(&payload.encode());
+            let mut approved = BTreeSet::new();
+
+            for approval in approvals {
+                let signer = MultiSigner::from(sr25519::Public::from_raw(approval.public_key));
+                let account = <MultiSigner as IdentifyAccount>::into_account(signer);
+                if !admin_set.contains(&account) {
+                    return false;
+                }
+                let signature = sr25519::Signature::from_raw(approval.signature);
+                if !sr25519_verify(
+                    &signature,
+                    &message,
+                    &sr25519::Public::from_raw(approval.public_key),
+                ) {
+                    return false;
+                }
+                if !approved.insert(account) {
+                    return false;
+                }
+            }
+
+            approved.len() as u32 >= threshold
+        }
     }
 }
 
@@ -970,10 +1083,12 @@ impl voting_engine_system::Config for Runtime {
     type MaxProposalsPerExpiry = ConstU32<2_048>;
     type MaxCleanupStepsPerBlock = ConstU32<8>;
     type CleanupKeysPerStep = ConstU32<256>;
+    type MaxJointDecisionApprovals = MaxAdminsPerInstitution;
     type SfidEligibility = RuntimeSfidEligibility;
     type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
     type InternalAdminProvider = RuntimeInternalAdminProvider;
+    type JointInstitutionDecisionVerifier = RuntimeJointInstitutionDecisionVerifier;
     type WeightInfo = voting_engine_system::weights::SubstrateWeight<Runtime>;
 }
 

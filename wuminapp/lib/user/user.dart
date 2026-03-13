@@ -566,8 +566,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   'assets/icons/contact-round.svg',
                   width: 22,
                   height: 22,
-                  colorFilter:
-                      const ColorFilter.mode(_inkGreen, BlendMode.srcIn),
+                  colorFilter: const ColorFilter.mode(
+                      Color(0xFF008080), BlendMode.srcIn),
                 ),
                 title: '通讯录',
                 onTap: _openContacts,
@@ -580,8 +580,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   'assets/icons/wallet.svg',
                   width: 22,
                   height: 22,
-                  colorFilter:
-                      const ColorFilter.mode(_inkGreen, BlendMode.srcIn),
+                  colorFilter: const ColorFilter.mode(
+                      Color(0xFFDE3163), BlendMode.srcIn),
                 ),
                 title: '钱包',
                 onTap: () {
@@ -596,7 +596,7 @@ class _ProfilePageState extends State<ProfilePage> {
               child: _buildEntryCard(
                 leading: const Icon(
                   Icons.settings_outlined,
-                  color: _inkGreen,
+                  color: Color(0xFF2F4F4F),
                   size: 22,
                 ),
                 title: '设置',
@@ -862,12 +862,6 @@ class _ContactBookPageState extends State<ContactBookPage> {
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade700, height: 1.5),
             ),
-            const SizedBox(height: 18),
-            FilledButton.icon(
-              onPressed: _scanContactQr,
-              icon: const Icon(Icons.qr_code_scanner),
-              label: const Text('扫码添加'),
-            ),
           ],
         ),
       ),
@@ -880,11 +874,16 @@ class _ContactBookPageState extends State<ContactBookPage> {
       appBar: AppBar(
         title: const Text('我的通讯录'),
         centerTitle: true,
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _scanContactQr,
-        icon: const Icon(Icons.qr_code_scanner),
-        label: const Text('扫码添加'),
+        actions: [
+          IconButton(
+            onPressed: _scanContactQr,
+            icon: SvgPicture.asset(
+              'assets/icons/scan-line.svg',
+              width: 20,
+              height: 20,
+            ),
+          ),
+        ],
       ),
       body: FutureBuilder<List<UserContact>>(
         future: _contactsFuture,
@@ -898,7 +897,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
           }
 
           return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             itemCount: contacts.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (context, index) {

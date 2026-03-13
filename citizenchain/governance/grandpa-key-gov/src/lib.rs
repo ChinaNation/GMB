@@ -664,7 +664,8 @@ pub mod pallet {
 mod tests {
     use super::*;
     use frame_support::{
-        assert_noop, assert_ok, derive_impl, parameter_types, traits::{ConstU32, Hooks},
+        assert_noop, assert_ok, derive_impl, parameter_types,
+        traits::{ConstU32, Hooks},
     };
     use frame_system as system;
     use primitives::china::china_cb::CHINA_CB;
@@ -795,10 +796,12 @@ mod tests {
         type MaxProposalsPerExpiry = ConstU32<128>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
+        type MaxJointDecisionApprovals = ConstU32<32>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
+        type JointInstitutionDecisionVerifier = ();
         type WeightInfo = ();
     }
 
@@ -999,12 +1002,10 @@ mod tests {
             let pending_change = Grandpa::pending_change().expect("change should be scheduled");
             assert_eq!(pending_change.scheduled_at, 1);
             assert_eq!(pending_change.delay, GrandpaChangeDelay::get());
-            assert!(
-                pending_change
-                    .next_authorities
-                    .iter()
-                    .any(|(authority, _)| *authority == authority_id_from_key(new_key))
-            );
+            assert!(pending_change
+                .next_authorities
+                .iter()
+                .any(|(authority, _)| *authority == authority_id_from_key(new_key)));
 
             assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(new_key));
             assert!(GrandpaKeyOwnerByKey::<Test>::get(old_key).is_none());
@@ -1182,7 +1183,10 @@ mod tests {
                 Error::<Test>::NewKeyPendingInOtherProposal
             );
 
-            assert_eq!(PendingProposalByNewKey::<Test>::get(shared_new_key), Some(0));
+            assert_eq!(
+                PendingProposalByNewKey::<Test>::get(shared_new_key),
+                Some(0)
+            );
             assert_eq!(
                 ActiveProposalByInstitution::<Test>::get(first_institution),
                 Some(0)
@@ -1222,7 +1226,10 @@ mod tests {
 
             assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(old_key));
             assert_eq!(PendingProposalByNewKey::<Test>::get(new_key), Some(0));
-            assert_eq!(ActiveProposalByInstitution::<Test>::get(institution), Some(0));
+            assert_eq!(
+                ActiveProposalByInstitution::<Test>::get(institution),
+                Some(0)
+            );
             assert!(ProposalActions::<Test>::get(0).is_some());
             assert_eq!(
                 voting_engine_system::Pallet::<Test>::proposals(0)

@@ -173,7 +173,7 @@ App 通过 `ApiClient` 访问外部服务，当前已使用接口：
 | --- | --- | --- | --- | --- |
 | 转账 | 链上转账 extrinsic（由外部网关 prepare/submit 封装） | `lib/trade/onchain` | `onchain_tx` | 已上线（本机签名主链路） |
 | 提案 | 业务治理 pallet `propose_*` | `lib/governance`（规范已定） | `onchain_tx`（交易签名）+ SFID 快照签名字段 | 待开发 |
-| 投票 | 业务治理 `vote_*` / 投票引擎 `submit_joint_institution_vote` / `citizen_vote` | `lib/governance`（规范已定） | `onchain_tx`（交易签名）+ SFID 投票凭证签名字段 | 待开发 |
+| 投票 | 业务治理 `vote_*` / 投票引擎 `submit_joint_institution_vote` / `citizen_vote` | `lib/governance`（规范已定） | `onchain_tx`（交易签名）+ 联合投票管理员门限 proof + SFID 投票凭证签名字段 | 待开发 |
 
 ### 6.2 区块链字段与格式标准（总则）
 

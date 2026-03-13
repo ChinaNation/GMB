@@ -1081,10 +1081,14 @@ pub async fn start_node(app: AppHandle, unlock_password: String) -> Result<NodeS
 }
 
 #[tauri::command]
-pub async fn stop_node(app: AppHandle) -> Result<NodeStatus, String> {
+pub async fn stop_node(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
     super::join_blocking_task(
         "stop_node",
-        tauri::async_runtime::spawn_blocking(move || stop_node_sync(app)),
+        tauri::async_runtime::spawn_blocking(move || {
+            let unlock = security::ensure_unlock_password(&unlock_password)?;
+            device_password::verify_device_login_password(&app, unlock)?;
+            stop_node_sync(app)
+        }),
     )
     .await
 }
