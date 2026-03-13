@@ -40,11 +40,11 @@ export function IdentitySection({ identity, onUpdated, disabled }: Props) {
       onUpdated(next);
       setEditing(false);
       setShowUnlockModal(false);
-      setUnlockPassword('');
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
+      setUnlockPassword('');
       setSaving(false);
     }
   };

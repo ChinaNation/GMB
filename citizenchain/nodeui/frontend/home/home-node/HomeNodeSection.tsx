@@ -113,11 +113,11 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
       const next = await api.startNode(unlockPassword);
       setStatus(next);
       await runLoadHome(false);
-      setStartUnlockPassword('');
       setShowStartUnlockDialog(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
+      setStartUnlockPassword('');
       setStarting(false);
     }
   }, [runLoadHome, starting, stopping]);

@@ -1,5 +1,5 @@
 use crate::{
-    home::home_node,
+    home,
     settings::{address_utils::decode_hex_32_strict, device_password, grandpa_address},
     shared::{security, validation::normalize_node_key},
 };
@@ -126,7 +126,7 @@ pub(crate) fn verify_bootnode_secret_unlock(unlock_password: &str) -> Result<(),
 
 fn wait_peer_id_applied(app: &AppHandle, expected_peer_id: &str) -> Result<(), String> {
     for _ in 0..20 {
-        if let Ok(identity) = home_node::get_node_identity_blocking(app.clone()) {
+        if let Ok(identity) = home::get_node_identity_blocking(app.clone()) {
             if identity.peer_id.as_deref() == Some(expected_peer_id) {
                 return Ok(());
             }
@@ -188,10 +188,10 @@ pub fn set_bootnode_key(
 
     // 若节点当前在运行，保存新私钥后立即重启以应用新的 p2p 身份，
     // 并轮询确认本机 PeerId 已切换到目标引导节点。
-    if home_node::current_status(&app)?.running {
+    if home::current_status(&app)?.running {
         if let Err(err) = (|| -> Result<(), String> {
-            let _ = home_node::stop_node_blocking(app.clone())?;
-            let _ = home_node::start_node_blocking(app.clone(), unlock.to_string())?;
+            let _ = home::stop_node_blocking(app.clone())?;
+            let _ = home::start_node_blocking(app.clone(), unlock.to_string())?;
             wait_peer_id_applied(&app, &derived_peer_id)?;
             Ok(())
         })() {

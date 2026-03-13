@@ -1,7 +1,7 @@
 use crate::{
-    home::home_node,
+    home,
     settings::fee_address,
-    shared::{rpc, security},
+    shared::{constants, keystore, rpc, security},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -10,14 +10,13 @@ use std::{
     cmp,
     collections::{HashMap, VecDeque},
     fs,
-    path::PathBuf,
-    process::Command,
+    path::{Path, PathBuf},
     sync::{Mutex, MutexGuard, OnceLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 use tauri::AppHandle;
 
-const EXPECTED_SS58_PREFIX: u64 = 2027;
 const RECENT_RECORD_LIMIT: usize = 20;
 const MAX_BLOCKS_PER_REFRESH: u64 = 100;
 const DAY_MS: u64 = 86_400_000;
@@ -199,8 +198,8 @@ fn persist_mining_cache(app: &AppHandle, cache: &MiningComputationCache) -> Resu
     let payload =
         serde_json::to_string(cache).map_err(|e| format!("encode mining cache failed: {e}"))?;
     let path = mining_cache_path(app)?;
-    security::write_text_atomic(&path, &format!("{payload}\n"))
-        .map_err(|e| format!("write mining cache failed ({}): {e}", path.display()))
+    security::write_text_atomic_restricted(&path, &format!("{payload}\n"))
+        .map_err(|e| format!("write mining cache failed ({}): {e}", security::sanitize_path(&path)))
 }
 
 // 先更新进程内缓存，再按时间窗口/追赶进度决定是否落盘，兼顾数据连续性与写盘频率。
@@ -243,9 +242,9 @@ fn maybe_load_mining_cache(app: &AppHandle) -> Result<Option<MiningComputationCa
         return Ok(None);
     }
     let raw = fs::read_to_string(&path)
-        .map_err(|e| format!("read mining cache failed ({}): {e}", path.display()))?;
+        .map_err(|e| format!("read mining cache failed ({}): {e}", security::sanitize_path(&path)))?;
     let cache: MiningComputationCache = serde_json::from_str(&raw)
-        .map_err(|e| format!("parse mining cache failed ({}): {e}", path.display()))?;
+        .map_err(|e| format!("parse mining cache failed ({}): {e}", security::sanitize_path(&path)))?;
     if cache.cache_version != MINING_CACHE_VERSION {
         return Err(format!(
             "mining cache version mismatch: expected={}, got={}",
@@ -272,9 +271,7 @@ fn ensure_mining_cache_loaded(app: &AppHandle) {
 }
 
 fn node_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let data = security::app_data_dir(app)?.join("node-data");
-    fs::create_dir_all(&data).map_err(|e| format!("create node data dir failed: {e}"))?;
-    Ok(data)
+    keystore::node_data_dir(app)
 }
 
 fn unix_now_ms() -> Result<u64, String> {
@@ -305,7 +302,7 @@ fn ensure_expected_rpc_node_uncached() -> Result<(), String> {
             }
         })
         .ok_or_else(|| "RPC 节点缺少 ss58Format".to_string())?;
-    if ss58 != EXPECTED_SS58_PREFIX {
+    if ss58 != constants::EXPECTED_SS58_PREFIX {
         return Err(format!("RPC 链前缀不匹配：expected=2027, got={ss58}"));
     }
 
@@ -813,19 +810,29 @@ fn empty_dashboard(resources: ResourceUsage, warning: Option<String>) -> MiningD
     }
 }
 
-fn collect_node_data_size_mb(data_dir: &PathBuf) -> Option<u64> {
-    let out = Command::new("du")
-        .args(["-sk", &data_dir.display().to_string()])
-        .output()
-        .ok()?;
-    if !out.status.success() {
+fn collect_node_data_size_mb(data_dir: &Path) -> Option<u64> {
+    fn dir_size(path: &Path) -> u64 {
+        let Ok(entries) = fs::read_dir(path) else {
+            return 0;
+        };
+        let mut total: u64 = 0;
+        for entry in entries.flatten() {
+            let Ok(meta) = entry.metadata() else {
+                continue;
+            };
+            if meta.is_dir() {
+                total = total.saturating_add(dir_size(&entry.path()));
+            } else {
+                total = total.saturating_add(meta.len());
+            }
+        }
+        total
+    }
+    if !data_dir.exists() {
         return None;
     }
-    let line = String::from_utf8_lossy(&out.stdout);
-    line.split_whitespace()
-        .next()
-        .and_then(|v| v.parse::<u64>().ok())
-        .map(|kb| kb.saturating_add(1023) / 1024)
+    let bytes = dir_size(data_dir);
+    Some(bytes.saturating_add(1024 * 1024 - 1) / (1024 * 1024))
 }
 
 fn node_data_size_mb_with_cache(data_dir: &PathBuf) -> Option<u64> {
@@ -865,23 +872,20 @@ fn collect_resource_usage(app: &AppHandle) -> ResourceUsage {
     let mut disk_usage_percent = None;
     let mut node_data_size_mb = None;
 
-    if let Ok(status) = home_node::current_status(app) {
+    if let Ok(status) = home::current_status(app) {
         if let Some(pid) = status.pid {
-            if let Ok(out) = Command::new("ps")
-                .args(["-p", &pid.to_string(), "-o", "%cpu=,rss="])
-                .output()
-            {
-                if out.status.success() {
-                    let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 2 {
-                        cpu_percent = parts[0].parse::<f64>().ok();
-                        memory_mb = parts[1]
-                            .parse::<u64>()
-                            .ok()
-                            .map(|kb| kb.saturating_add(1023) / 1024);
-                    }
-                }
+            let sys = System::new_with_specifics(
+                RefreshKind::nothing().with_processes(
+                    ProcessRefreshKind::nothing()
+                        .with_cpu()
+                        .with_memory(),
+                ),
+            );
+            let sysinfo_pid = sysinfo::Pid::from_u32(pid);
+            if let Some(proc) = sys.process(sysinfo_pid) {
+                cpu_percent = Some(proc.cpu_usage() as f64);
+                let rss_bytes = proc.memory();
+                memory_mb = Some(rss_bytes.saturating_add(1024 * 1024 - 1) / (1024 * 1024));
             }
         }
     }
@@ -889,21 +893,17 @@ fn collect_resource_usage(app: &AppHandle) -> ResourceUsage {
     if let Ok(data_dir) = node_data_dir(app) {
         node_data_size_mb = node_data_size_mb_with_cache(&data_dir);
 
-        if let Ok(out) = Command::new("df")
-            .args(["-k", &data_dir.display().to_string()])
-            .output()
-        {
-            if out.status.success() {
-                let text = String::from_utf8_lossy(&out.stdout);
-                if let Some(line) = text.lines().nth(1) {
-                    for part in line.split_whitespace() {
-                        if let Some(v) = part.strip_suffix('%') {
-                            if let Ok(p) = v.parse::<f64>() {
-                                disk_usage_percent = Some(p);
-                                break;
-                            }
-                        }
-                    }
+        let disks = sysinfo::Disks::new_with_refreshed_list();
+        let mut best_mount_len = 0;
+        for disk in disks.list() {
+            let mount = disk.mount_point();
+            if data_dir.starts_with(mount) && mount.as_os_str().len() > best_mount_len {
+                best_mount_len = mount.as_os_str().len();
+                let total = disk.total_space();
+                let avail = disk.available_space();
+                if total > 0 {
+                    let used = total.saturating_sub(avail);
+                    disk_usage_percent = Some((used as f64 / total as f64) * 100.0);
                 }
             }
         }

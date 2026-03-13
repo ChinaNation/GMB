@@ -58,8 +58,13 @@
   - 校验 `system_nodeRoles` 含 `authority/validator`；
   - 校验本地 keystore 已存在匹配的 `gran` 密钥文件。
 
-## 5. 对外协作接口（给 home-node）
+## 5. 对外协作接口（给 home/process）
 
 - `verify_grandpa_secret_unlock(unlock_password)`
 - `prepare_grandpa_for_start(app, unlock_password)`
 - `verify_grandpa_after_start(app, unlock_password)`
+
+## 6. 性能优化
+
+- 机构清单使用 `OnceLock<Vec<InstitutionCatalogEntry>>` 惰性缓存，编译期内嵌 JSON 仅解析一次。
+- Keystore 操作委托 `shared/keystore` 通用模块，与 bootnode 模块共享目录扫描和密钥写入逻辑。
