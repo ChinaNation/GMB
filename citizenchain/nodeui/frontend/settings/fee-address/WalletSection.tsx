@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { blake3 } from '@noble/hashes/blake3';
+import { blake3 } from '@noble/hashes/blake3.js';
 import { api } from '../../api';
 import type { RewardWallet } from '../../types';
 
