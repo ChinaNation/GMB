@@ -200,34 +200,14 @@ fn current_unix_username() -> Result<String, String> {
     Ok(validate_system_username(&username)?.to_string())
 }
 
-#[cfg(target_os = "macos")]
+// macOS 和 Linux 统一使用 PAM 校验设备登录密码，避免 macOS dscl 命令将明文密码暴露在进程参数中。
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn verify_device_login_password(app: &AppHandle, password: &str) -> Result<(), String> {
-    // 用户名来自真实 uid 对应账户，而不是进程环境变量，降低启动环境被污染时的歧义。
-    let user = current_unix_username()?;
-    enforce_auth_rate_limit(app, &user)?;
-    let output = std::process::Command::new("dscl")
-        .args(["/Search", "-authonly", &user, password])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .output()
-        .map_err(|e| format!("校验设备密码失败: {e}"))?;
-
-    if output.status.success() {
-        record_auth_attempt(app, &user, true)?;
-        return Ok(());
-    }
-    record_auth_attempt(app, &user, false)?;
-    Err("设备开机密码错误".to_string())
+    unix_pam_auth::verify_with_pam(app, password)
 }
 
-#[cfg(target_os = "linux")]
-pub(crate) fn verify_device_login_password(app: &AppHandle, password: &str) -> Result<(), String> {
-    linux_password_auth::verify_with_pam(app, password)
-}
-
-#[cfg(target_os = "linux")]
-mod linux_password_auth {
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod unix_pam_auth {
     use super::current_unix_username;
     use std::{
         ffi::{c_char, c_int, c_void, CString},
@@ -363,7 +343,12 @@ mod linux_password_auth {
         };
         let mut success = false;
 
-        for service in ["login", "system-auth", "common-auth"] {
+        // macOS PAM 服务配置位于 /etc/pam.d/authorization 和 /etc/pam.d/login
+        #[cfg(target_os = "macos")]
+        let services: &[&str] = &["authorization", "login"];
+        #[cfg(target_os = "linux")]
+        let services: &[&str] = &["login", "system-auth", "common-auth"];
+        for &service in services {
             let service_c = CString::new(service).map_err(|_| "PAM 服务名非法".to_string())?;
             let mut handle: *mut PamHandle = ptr::null_mut();
             let start_status = unsafe {

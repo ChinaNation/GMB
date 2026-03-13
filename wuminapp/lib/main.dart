@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
 import 'package:wuminapp_mobile/user/user.dart';
+import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
 
 void main() {
   runApp(const WuminApp());
@@ -118,7 +119,7 @@ class _AppShellState extends State<AppShell> {
                   BlendMode.srcIn,
                 ),
               ),
-              label: '金融',
+              label: '交易',
             ),
             const NavigationDestination(
                 icon: Icon(Icons.person_outline), label: '我的'),
@@ -170,7 +171,7 @@ class VotingPage extends StatefulWidget {
 }
 
 class _VotingPageState extends State<VotingPage> {
-  int _selectedTab = 0;
+  int _selectedTab = 2;
   static const List<String> _tabs = ['活动', '选举', '机构'];
   static const List<String> _nationalCouncil = ['国家储备委员会'];
   static const List<String> _provincialCouncils = [
@@ -306,8 +307,41 @@ class _VotingPageState extends State<VotingPage> {
   }
 }
 
-class MessagePage extends StatelessWidget {
+class MessagePage extends StatefulWidget {
   const MessagePage({super.key});
+
+  @override
+  State<MessagePage> createState() => _MessagePageState();
+}
+
+class _MessagePageState extends State<MessagePage> {
+  final SfidBindingService _sfidBindingService = SfidBindingService();
+  String _selfAccountPubkeyHex = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSelfAccount();
+  }
+
+  Future<void> _loadSelfAccount() async {
+    final state = await _sfidBindingService.getState();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selfAccountPubkeyHex = state.walletPubkeyHex?.trim() ?? '';
+    });
+  }
+
+  Future<void> _openContactsPage() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            ContactBookPage(selfAccountPubkeyHex: _selfAccountPubkeyHex),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -318,14 +352,7 @@ class MessagePage extends StatelessWidget {
           children: [
             Row(
               children: [
-                IconButton(
-                  onPressed: () {},
-                  icon: SvgPicture.asset(
-                    'assets/icons/contact-round.svg',
-                    width: 20,
-                    height: 20,
-                  ),
-                ),
+                const SizedBox(width: 48),
                 Expanded(
                   child: Center(
                     child: Transform.translate(
@@ -339,8 +366,12 @@ class MessagePage extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.add),
+                  onPressed: _openContactsPage,
+                  icon: SvgPicture.asset(
+                    'assets/icons/contact-round.svg',
+                    width: 20,
+                    height: 20,
+                  ),
                 ),
               ],
             ),

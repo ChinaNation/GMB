@@ -446,7 +446,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('链上交易'),
+        title: const Text('交易'),
         centerTitle: true,
         actions: [
           IconButton(

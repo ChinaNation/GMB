@@ -27,7 +27,8 @@ export const api = {
   getNodeStatus: () => invoke<NodeStatus>('get_node_status'),
   startNode: (unlockPassword: string) =>
     invoke<NodeStatus>('start_node', { unlockPassword }),
-  stopNode: () => invoke<NodeStatus>('stop_node'),
+  stopNode: (unlockPassword: string) =>
+    invoke<NodeStatus>('stop_node', { unlockPassword }),
 
   getRewardWallet: () => invoke<RewardWallet>('get_reward_wallet'),
   setRewardWallet: (address: string, unlockPassword: string) =>

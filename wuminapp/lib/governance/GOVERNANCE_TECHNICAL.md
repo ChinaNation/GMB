@@ -23,7 +23,7 @@
 
 ### 2.2 可直接由交易发起的投票引擎入口
 
-- `submit_joint_institution_vote(proposal_id, institution, internal_passed)`
+- `submit_joint_institution_vote(proposal_id, institution, internal_passed, expires_at, approvals)`
 - `citizen_vote(proposal_id, sfid_hash, nonce, signature, approve)`
 
 ## 3. 通用字段与格式标准
@@ -36,9 +36,17 @@
 | `institution` | `[u8; 48]` | `0x` + 96 hex（机构 pallet id） |
 | `proposal_id` | `u64` | 十进制整数 |
 | `approve/internal_passed` | `bool` | `true/false` |
+| `expires_at` | `BlockNumber` | 十进制整数，必须是链上仍未过期的 proof 截止块 |
 | `nonce` | `BoundedVec<u8, 64>` | `0x` hex，解码后字节长度 `1..64` |
 | `signature` | `BoundedVec<u8, 64>` | `0x` hex，解码后字节长度 `1..64` |
 | `sfid_hash` | `Hash` | `0x` + 64 hex |
+
+联合门限证明项：
+
+| 字段 | 链上类型 | App 传输规范 |
+| --- | --- | --- |
+| `approvals[].public_key` | `[u8; 32]` | `0x` + 64 hex（管理员 `sr25519` 公钥） |
+| `approvals[].signature` | `[u8; 64]` | `0x` + 128 hex（管理员对联合决定 payload 的原始签名） |
 
 ### 3.2 枚举与编码
 
@@ -59,6 +67,10 @@
   - 每个 PRC：`1`
   - 每个 PRB：`1`
   - 总票权：`105`
+- 联合机构提交时，`approvals` 必须达到该机构当前链上管理员门限：
+  - NRC：`13`
+  - PRC：`6`
+  - PRB：`6`
 - 联合投票 `yes >= 105` 立即通过，否则在“全机构结果齐备”或超时后进入公民投票阶段。
 - 公民投票通过规则：`yes * 100 > eligible_total * 50`（严格大于 50%）。
 
@@ -145,10 +157,34 @@ message = blake2_256(SCALE.encode(payload))
 - `proposal_id: u64`
 - `institution: [u8;48]`
 - `internal_passed: bool`（该机构内部投票是否通过）
+- `expires_at: BlockNumber`
+- `approvals: Vec<{ public_key: [u8;32], signature: [u8;64] }>`
 
 权限要求：
 
 - 必须由“该机构多签账户”提交，不能由其他机构或普通管理员代提。
+- 同时必须附带当前机构管理员对本次联合决定的门限签名证明；只有“多签地址提交 + proof 验证通过”两者都满足才会记票。
+
+运行时联合决定验签消息标准：
+
+```text
+payload = (
+  "GMB_JOINT_DECISION_V1",
+  genesis_hash,
+  proposal_id,
+  institution,
+  internal_passed,
+  expires_at
+)
+message = blake2_256(SCALE.encode(payload))
+```
+
+联合 proof 校验要求：
+
+- `approvals` 不能为空，且签名人必须属于该机构当前链上管理员集合。
+- 同一管理员不能重复出现在 `approvals` 里。
+- 签名数量必须达到该机构当前门限。
+- `expires_at` 到期后该 proof 无效，不能重放旧内部决议。
 
 ### 5.3 公民投票（投票引擎）
 
@@ -192,7 +228,7 @@ message = blake2_256(SCALE.encode(payload))
 ### 6.2 投票流程（App 侧）
 
 1. 根据提案类型匹配投票入口（内部/联合/公民）。
-2. 采集投票字段并做本地格式校验。
+2. 采集投票字段并做本地格式校验；若为联合投票，还要收集足够数量的管理员签名 proof。
 3. 发起签名并提交交易。
 4. 监听事件刷新状态：
   - `InternalVoteCast / JointInstitutionVoteCast / CitizenVoteCast`
