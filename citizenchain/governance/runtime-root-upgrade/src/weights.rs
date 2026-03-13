@@ -8,7 +8,7 @@
 //! WASM-EXECUTION: `Compiled`, CHAIN: `Some("mainnet")`, DB CACHE: 1024
 
 // Executed Command:
-// /Users/rhett/GMB/citizenchain/target/release/node
+// ./target/release/node
 // benchmark
 // pallet
 // --chain
@@ -26,9 +26,9 @@
 // --heap-pages
 // 4096
 // --output
-// /Users/rhett/GMB/citizenchain/governance/runtime-root-upgrade/src/weights.rs
+// ./governance/runtime-root-upgrade/src/weights.rs
 // --template
-// /Users/rhett/GMB/citizenchain/scripts/benchmark-weight-template.hbs
+// ./scripts/benchmark-weight-template.hbs
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(unused_parens)]
@@ -44,14 +44,26 @@ use frame_support::{
 /// Weight functions for `runtime_root_upgrade`.
 pub trait WeightInfo {
 	fn propose_runtime_upgrade() -> Weight;
-	fn finalize_joint_vote() -> Weight;
+	fn finalize_joint_vote_approved() -> Weight;
+	fn finalize_joint_vote_rejected() -> Weight;
 	fn retry_failed_execution() -> Weight;
+	fn cancel_failed_proposal() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
+	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `RuntimeRootUpgrade::NextProposalId` (r:1 w:1)
 	/// Proof: `RuntimeRootUpgrade::NextProposalId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::UsedPopulationSnapshotNonce` (r:1 w:1)
+	/// Proof: `VotingEngineSystem::UsedPopulationSnapshotNonce` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::NextProposalId` (r:1 w:1)
+	/// Proof: `VotingEngineSystem::NextProposalId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::ProposalsByExpiry` (r:1 w:1)
+	/// Proof: `VotingEngineSystem::ProposalsByExpiry` (`max_values`: None, `max_size`: Some(16406), added: 18881, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::Proposals` (r:0 w:1)
+	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
 	/// Storage: `RuntimeRootUpgrade::JointVoteToGov` (r:0 w:1)
 	/// Proof: `RuntimeRootUpgrade::JointVoteToGov` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
 	/// Storage: `RuntimeRootUpgrade::GovToJointVote` (r:0 w:1)
@@ -60,18 +72,20 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
 	fn propose_runtime_upgrade() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `109`
-		//  Estimated: `1493`
-		// Minimum execution time: 5_000_000 picoseconds.
-		Weight::from_parts(5_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 1493))
-			.saturating_add(T::DbWeight::get().reads(1))
-			.saturating_add(T::DbWeight::get().writes(4))
+		//  Measured:  `1562`
+		//  Estimated: `19871`
+		// Minimum execution time: 5_419_000_000 picoseconds.
+		Weight::from_parts(5_456_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 19871))
+			.saturating_add(T::DbWeight::get().reads(5))
+			.saturating_add(T::DbWeight::get().writes(8))
 	}
 	/// Storage: `RuntimeRootUpgrade::Proposals` (r:1 w:1)
 	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
 	/// Storage: `RuntimeRootUpgrade::GovToJointVote` (r:1 w:1)
 	/// Proof: `RuntimeRootUpgrade::GovToJointVote` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
+	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::JointTallies` (r:0 w:1)
 	/// Proof: `VotingEngineSystem::JointTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::Proposals` (r:0 w:1)
@@ -82,33 +96,89 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `RuntimeRootUpgrade::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
 	/// Storage: `RuntimeRootUpgrade::JointVoteToGov` (r:0 w:1)
 	/// Proof: `RuntimeRootUpgrade::JointVoteToGov` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	fn finalize_joint_vote() -> Weight {
+	fn finalize_joint_vote_approved() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `500`
+		//  Measured:  `5244203`
 		//  Estimated: `5247464`
-		// Minimum execution time: 18_000_000 picoseconds.
-		Weight::from_parts(19_000_000, 0)
+		// Minimum execution time: 1_724_000_000 picoseconds.
+		Weight::from_parts(1_814_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 5247464))
 			.saturating_add(T::DbWeight::get().reads(2))
-			.saturating_add(T::DbWeight::get().writes(7))
+			.saturating_add(T::DbWeight::get().writes(8))
 	}
+	/// Storage: `RuntimeRootUpgrade::Proposals` (r:1 w:1)
+	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeRootUpgrade::GovToJointVote` (r:1 w:1)
+	/// Proof: `RuntimeRootUpgrade::GovToJointVote` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
+	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::JointTallies` (r:0 w:1)
+	/// Proof: `VotingEngineSystem::JointTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::Proposals` (r:0 w:1)
+	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::CitizenTallies` (r:0 w:1)
+	/// Proof: `VotingEngineSystem::CitizenTallies` (`max_values`: None, `max_size`: Some(40), added: 2515, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeRootUpgrade::RetryCount` (r:0 w:1)
+	/// Proof: `RuntimeRootUpgrade::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeRootUpgrade::JointVoteToGov` (r:0 w:1)
+	/// Proof: `RuntimeRootUpgrade::JointVoteToGov` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
+	fn finalize_joint_vote_rejected() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `5244203`
+		//  Estimated: `5247464`
+		// Minimum execution time: 1_443_000_000 picoseconds.
+		Weight::from_parts(1_502_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 5247464))
+			.saturating_add(T::DbWeight::get().reads(2))
+			.saturating_add(T::DbWeight::get().writes(8))
+	}
+	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeRootUpgrade::Proposals` (r:1 w:1)
+	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
 	/// Storage: `RuntimeRootUpgrade::RetryCount` (r:1 w:1)
 	/// Proof: `RuntimeRootUpgrade::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
 	fn retry_failed_execution() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `196`
-		//  Estimated: `3493`
-		// Minimum execution time: 4_000_000 picoseconds.
-		Weight::from_parts(5_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 3493))
-			.saturating_add(T::DbWeight::get().reads(1))
-			.saturating_add(T::DbWeight::get().writes(1))
+		//  Measured:  `5245598`
+		//  Estimated: `5247464`
+		// Minimum execution time: 1_515_000_000 picoseconds.
+		Weight::from_parts(1_555_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 5247464))
+			.saturating_add(T::DbWeight::get().reads(3))
+			.saturating_add(T::DbWeight::get().writes(2))
+	}
+	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeRootUpgrade::Proposals` (r:1 w:1)
+	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeRootUpgrade::RetryCount` (r:1 w:1)
+	/// Proof: `RuntimeRootUpgrade::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
+	fn cancel_failed_proposal() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `5245598`
+		//  Estimated: `5247464`
+		// Minimum execution time: 1_484_000_000 picoseconds.
+		Weight::from_parts(1_536_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 5247464))
+			.saturating_add(T::DbWeight::get().reads(3))
+			.saturating_add(T::DbWeight::get().writes(2))
 	}
 }
 
 impl WeightInfo for () {
+	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `RuntimeRootUpgrade::NextProposalId` (r:1 w:1)
 	/// Proof: `RuntimeRootUpgrade::NextProposalId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::UsedPopulationSnapshotNonce` (r:1 w:1)
+	/// Proof: `VotingEngineSystem::UsedPopulationSnapshotNonce` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::NextProposalId` (r:1 w:1)
+	/// Proof: `VotingEngineSystem::NextProposalId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::ProposalsByExpiry` (r:1 w:1)
+	/// Proof: `VotingEngineSystem::ProposalsByExpiry` (`max_values`: None, `max_size`: Some(16406), added: 18881, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::Proposals` (r:0 w:1)
+	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
 	/// Storage: `RuntimeRootUpgrade::JointVoteToGov` (r:0 w:1)
 	/// Proof: `RuntimeRootUpgrade::JointVoteToGov` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
 	/// Storage: `RuntimeRootUpgrade::GovToJointVote` (r:0 w:1)
@@ -117,18 +187,20 @@ impl WeightInfo for () {
 	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
 	fn propose_runtime_upgrade() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `109`
-		//  Estimated: `1493`
-		// Minimum execution time: 5_000_000 picoseconds.
-		Weight::from_parts(5_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 1493))
-			.saturating_add(RocksDbWeight::get().reads(1))
-			.saturating_add(RocksDbWeight::get().writes(4))
+		//  Measured:  `1562`
+		//  Estimated: `19871`
+		// Minimum execution time: 5_419_000_000 picoseconds.
+		Weight::from_parts(5_456_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 19871))
+			.saturating_add(RocksDbWeight::get().reads(5))
+			.saturating_add(RocksDbWeight::get().writes(8))
 	}
 	/// Storage: `RuntimeRootUpgrade::Proposals` (r:1 w:1)
 	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
 	/// Storage: `RuntimeRootUpgrade::GovToJointVote` (r:1 w:1)
 	/// Proof: `RuntimeRootUpgrade::GovToJointVote` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
+	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::JointTallies` (r:0 w:1)
 	/// Proof: `VotingEngineSystem::JointTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::Proposals` (r:0 w:1)
@@ -139,26 +211,72 @@ impl WeightInfo for () {
 	/// Proof: `RuntimeRootUpgrade::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
 	/// Storage: `RuntimeRootUpgrade::JointVoteToGov` (r:0 w:1)
 	/// Proof: `RuntimeRootUpgrade::JointVoteToGov` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	fn finalize_joint_vote() -> Weight {
+	fn finalize_joint_vote_approved() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `500`
+		//  Measured:  `5244203`
 		//  Estimated: `5247464`
-		// Minimum execution time: 18_000_000 picoseconds.
-		Weight::from_parts(19_000_000, 0)
+		// Minimum execution time: 1_724_000_000 picoseconds.
+		Weight::from_parts(1_814_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 5247464))
 			.saturating_add(RocksDbWeight::get().reads(2))
-			.saturating_add(RocksDbWeight::get().writes(7))
+			.saturating_add(RocksDbWeight::get().writes(8))
 	}
+	/// Storage: `RuntimeRootUpgrade::Proposals` (r:1 w:1)
+	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeRootUpgrade::GovToJointVote` (r:1 w:1)
+	/// Proof: `RuntimeRootUpgrade::GovToJointVote` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
+	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::JointTallies` (r:0 w:1)
+	/// Proof: `VotingEngineSystem::JointTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::Proposals` (r:0 w:1)
+	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::CitizenTallies` (r:0 w:1)
+	/// Proof: `VotingEngineSystem::CitizenTallies` (`max_values`: None, `max_size`: Some(40), added: 2515, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeRootUpgrade::RetryCount` (r:0 w:1)
+	/// Proof: `RuntimeRootUpgrade::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeRootUpgrade::JointVoteToGov` (r:0 w:1)
+	/// Proof: `RuntimeRootUpgrade::JointVoteToGov` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
+	fn finalize_joint_vote_rejected() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `5244203`
+		//  Estimated: `5247464`
+		// Minimum execution time: 1_443_000_000 picoseconds.
+		Weight::from_parts(1_502_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 5247464))
+			.saturating_add(RocksDbWeight::get().reads(2))
+			.saturating_add(RocksDbWeight::get().writes(8))
+	}
+	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeRootUpgrade::Proposals` (r:1 w:1)
+	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
 	/// Storage: `RuntimeRootUpgrade::RetryCount` (r:1 w:1)
 	/// Proof: `RuntimeRootUpgrade::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
 	fn retry_failed_execution() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `196`
-		//  Estimated: `3493`
-		// Minimum execution time: 4_000_000 picoseconds.
-		Weight::from_parts(5_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 3493))
-			.saturating_add(RocksDbWeight::get().reads(1))
-			.saturating_add(RocksDbWeight::get().writes(1))
+		//  Measured:  `5245598`
+		//  Estimated: `5247464`
+		// Minimum execution time: 1_515_000_000 picoseconds.
+		Weight::from_parts(1_555_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 5247464))
+			.saturating_add(RocksDbWeight::get().reads(3))
+			.saturating_add(RocksDbWeight::get().writes(2))
+	}
+	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeRootUpgrade::Proposals` (r:1 w:1)
+	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeRootUpgrade::RetryCount` (r:1 w:1)
+	/// Proof: `RuntimeRootUpgrade::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
+	fn cancel_failed_proposal() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `5245598`
+		//  Estimated: `5247464`
+		// Minimum execution time: 1_484_000_000 picoseconds.
+		Weight::from_parts(1_536_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 5247464))
+			.saturating_add(RocksDbWeight::get().reads(3))
+			.saturating_add(RocksDbWeight::get().writes(2))
 	}
 }

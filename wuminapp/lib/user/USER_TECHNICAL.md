@@ -1,134 +1,249 @@
-# USER 模块技术文档（当前实现态）
+# USER 模块技术文档
 
-## 1. 模块定位
+## 1. 模块目标
 
-`lib/user/` 负责“我的”模块相关能力：
+`lib/user/` 负责 WuminApp 的“我的 / 用户”模块，当前覆盖以下能力：
 
-- 头像/昵称展示
-- 头像/昵称编辑
-- 用户资料本地持久化
-- 用户二维码展示
-- 观察账户管理（列表、添加、删除、重命名、余额刷新）
+- 用户背景图上传与更换
+- 用户头像上传与更换
+- 用户昵称展示与修改
+- 用户账号绑定状态展示
+- 用户二维码生成与放大展示
+- 通讯录扫码导入与本地昵称修改
 
-当前实现按两份文件收口：
+本次实现同时移除了旧的“观察账户”能力，用户模块不再承载该入口和相关交互。
+
+## 2. 文件结构
 
 - `lib/user/user.dart`
-- `lib/user/observe_accounts.dart`
+  - 用户主页 `ProfilePage`
+  - 二维码页面 `UserQrPage`
+  - 通讯录页面 `ContactBookPage`
+  - 通讯录扫码页 `UserContactScannerPage`
+- `lib/user/user_service.dart`
+  - 用户资料模型与持久化
+  - 用户二维码载荷模型
+  - 通讯录模型与持久化
 
-## 2. 代码结构
+相关协作模块：
 
-### 2.1 `user.dart`
+- `lib/wallet/ui/wallet_page.dart`
+  - 在“绑定身份 / 重新绑定身份”时提供钱包公钥选择
+- `lib/wallet/capabilities/sfid_binding_service.dart`
+  - 保存绑定状态、地址、公钥，并负责向后端发起绑定请求
 
-- `UserProfileState`
-  - 字段：`nickname`、`avatarPath`
-  - 语义：本地用户资料快照
+## 3. 数据模型
 
-- `UserProfileService`
-  - `getState()`：从 `SharedPreferences` 读取用户资料
-  - `saveState(UserProfileState)`：写入用户资料并返回最新状态
+### 3.1 用户资料 `UserProfileState`
 
-- `ProfilePage`
-  - “我的”主页卡片（头像、昵称、绑定状态、编辑入口、二维码入口、观察账户入口）
-- `ProfileEditPage`
-  - 用户资料编辑页（头像选择、昵称输入、保存校验）
-- `UserQrPage`
-  - 用户二维码页（二维码展示 + 内容复制）
+字段：
 
-### 2.2 `observe_accounts.dart`
+- `nickname`
+- `nicknameCustomized`
+- `avatarPath`
+- `backgroundPath`
 
-- `ObservedAccount`
-  - 观察账户模型（`id/orgName/publicKey/address/balance/source`）
-- `ObservedAccountService`
-  - 观察账户增删改查
-  - 余额刷新与失败回退
-  - 账户输入归一化（公钥/SS58）
-- `ObserveAccountsPage`
-  - 观察账户列表页（刷新、添加、删除、进入详情）
-- `ObserveAccountDetailPage`
-  - 观察账户详情页（改名并保存）
+设计说明：
 
-## 3. 关键流程
+- 默认昵称固定展示为 `轻节点`
+- `nicknameCustomized=false` 表示仅展示默认昵称，不能启用二维码
+- 头像和背景图只保存本机文件路径，不做跨设备同步
 
-### 3.1 用户资料首次加载
+### 3.2 用户二维码 `UserQrPayload`
 
-1. `ProfilePage.initState()` 调用 `_loadState()`
-2. 读取 SFID 绑定状态（`SfidBindingService`）
-3. 读取用户资料（`UserProfileService`）
-4. 合并更新页面状态
+协议号：
 
-### 3.2 用户资料编辑
-
-1. 点击编辑箭头进入 `ProfileEditPage`
-2. 可从相册选择头像（`image_picker`）
-3. 可输入昵称（空昵称会阻止保存）
-4. 返回 `UserProfileState` 给 `ProfilePage`
-5. `ProfilePage` 调用 `UserProfileService.saveState()` 持久化
-
-### 3.3 用户二维码
-
-1. 点击“我的”卡片右上角二维码图标
-2. `ProfilePage._openUserQr()` 组装二维码 payload
-3. 跳转 `UserQrPage` 用 `QrImageView` 渲染二维码
-4. 支持一键复制二维码原始内容
-
-### 3.4 观察账户
-
-1. 在“我的”页点击“观察账户”进入 `ObserveAccountsPage`
-2. 添加时支持公钥或 SS58 地址输入，服务层完成归一化
-3. 列表支持下拉刷新余额
-4. 列表项支持左滑删除
-5. 点击列表项进入详情页，可修改观察账户名称
-
-## 4. 存储设计
-
-### 4.1 用户资料（SharedPreferences）
-
-- `user.profile.nickname`
-- `user.profile.avatar_path`
-
-默认值：
-
-- 昵称默认 `公民用户`
-- 头像路径默认 `null`
-
-### 4.2 观察账户（Isar）
-
-- `ObservedAccountEntity`：持久化观察账户清单
-- `AdminRoleCacheEntity`：管理员目录缓存（用于推断组织名称）
-- `AppKvEntity(wallet.admin_catalog.updated_at)`：目录缓存时间戳
-
-## 5. 二维码载荷格式（当前）
-
-协议标识：`WUMINAPP_USER_V1`
+- `WUMINAPP_USER_CARD_V1`
 
 字段：
 
 - `type`
 - `nickname`
-- `avatar_path`
-- `sfid_bind_status`
-- `wallet_address`
+- `account_pubkey`
 
-说明：当前为本地展示与分享口径，尚未引入后端签名或验签流程。
+设计说明：
 
-## 6. 后端依赖接口
+- 二维码只包含“昵称 + 账号公钥”，符合当前通讯录交换需要
+- 二维码内容为明文 JSON，当前阶段不做签名、防篡改和时效控制
+- 后续如果要接入签名或链上校验，可以在保持 `type` 版本化的前提下扩展字段
 
-- `GET /api/v1/wallet/balance`：观察账户余额查询
-- `GET /api/v1/admins/catalog`：管理员目录查询（推断观察账户默认名称）
+### 3.3 通讯录 `UserContact`
 
-## 7. 依赖清单
+字段：
 
-- UI/状态：`flutter/material.dart`
-- 头像选择：`image_picker`
-- 二维码渲染：`qr_flutter`
-- 偏好存储：`shared_preferences`
-- 本地数据库：`isar`
-- 地址编解码：`polkadart_keyring`
-- API 调用：`ApiClient`
-- 身份绑定状态：`SfidBindingService`
+- `accountPubkeyHex`
+- `sourceNickname`
+- `localNickname`
+- `addedAtMillis`
+- `updatedAtMillis`
 
-## 8. 已知限制
+设计说明：
 
-- 头像路径是本地文件路径，跨设备不可迁移。
-- 用户二维码当前是明文 JSON 负载，不具备防篡改能力。
-- 观察账户清单目前仅保存在本地 Isar，不与后端同步。
+- `sourceNickname` 是对方二维码里的原始昵称
+- `localNickname` 是本机自定义显示昵称，只影响当前设备展示
+- 同一公钥只保留一条通讯录记录
+- 重复扫码会更新对方原始昵称，但不覆盖本机自定义昵称
+
+### 3.4 绑定状态 `SfidBindState`
+
+字段：
+
+- `status`
+- `walletAddress`
+- `walletPubkeyHex`
+- `updatedAtMillis`
+
+状态说明：
+
+- `unbound` 未绑定
+- `pending` 已把公钥提交给 SFID，等待系统回执
+- `bound` SFID 确认绑定成功
+
+## 4. 持久化方案
+
+### 4.1 用户资料
+
+存储位置：`SharedPreferences`
+
+键：
+
+- `user.profile.state.v2`
+
+内容：
+
+- JSON 对象，保存昵称、是否已设置昵称、头像路径、背景图路径
+
+### 4.2 通讯录
+
+存储位置：`SharedPreferences`
+
+键：
+
+- `user.contacts.items.v1`
+
+内容：
+
+- JSON 数组，保存通讯录列表
+
+### 4.3 身份绑定
+
+存储位置：`SharedPreferences`
+
+键：
+
+- `sfid.bind.status`
+- `sfid.bind.address`
+- `sfid.bind.pubkey_hex`
+- `sfid.bind.updated_at`
+
+## 5. 页面与交互流程
+
+### 5.1 用户主页
+
+页面元素：
+
+- 顶部背景图
+- 头像
+- 昵称
+- 账号绑定区
+- 用户二维码卡片
+- 通讯录入口
+- 我的钱包入口
+- 设置入口
+
+交互：
+
+1. 点击背景图，调用 `image_picker` 从设备相册选择并替换背景图
+2. 点击头像，调用 `image_picker` 从设备相册选择并替换头像
+3. 点击昵称编辑按钮，弹窗修改昵称
+4. 点击“绑定身份”，跳转钱包页选择一个公钥
+5. 绑定成功前，二维码保持禁用
+6. 点击已启用的二维码卡片，进入放大展示页
+
+### 5.2 身份绑定流程
+
+当前实现流程：
+
+1. 用户在“我的”页点击 `绑定身份`
+2. 跳转 `MyWalletPage(selectForBind: true)`
+3. 用户选择一个钱包后返回 `WalletProfile`
+4. 前端调用 `SfidBindingService.submitBinding(address, pubkeyHex)`
+5. 服务层调用 `ApiClient.requestChainBindByPubkey(pubkeyHex)`
+6. 本地状态切换为 `pending`
+7. 等待后续 SFID 系统回执后调用 `markBound(...)` 进入 `bound`
+
+当前边界：
+
+- 已完成“选钱包 -> 发送公钥 -> 本地 pending 状态切换”
+- `pending -> bound` 的回执触发点已经预留在 `SfidBindingService.markBound(...)`
+- 区块链和 SFID 的最终交互协议、回调入口、重试策略、失败态展示，后续再与业务一起细化
+
+### 5.3 二维码启用规则
+
+二维码只有同时满足以下条件才可操作：
+
+- 用户昵称已明确设置，即 `nicknameCustomized=true`
+- 身份绑定状态为 `bound`
+- 已保存绑定公钥 `walletPubkeyHex`
+
+未满足条件时：
+
+- 用户主页显示禁用态二维码卡片
+- 点击无效
+- 提示“完成昵称设置并绑定身份成功后自动启用”
+
+满足条件时：
+
+- 根据当前昵称和当前绑定公钥实时生成二维码
+- 点击进入 `UserQrPage` 放大展示
+- 修改昵称或重新绑定身份后，二维码随最新状态即时更新
+
+### 5.4 通讯录流程
+
+导入：
+
+1. 用户进入“我的通讯录”
+2. 点击 `扫码添加`
+3. 打开 `UserContactScannerPage`
+4. 扫描到 `WUMINAPP_USER_CARD_V1` 二维码
+5. 解析出昵称与公钥
+6. 写入本地通讯录
+
+编辑：
+
+1. 点击通讯录列表项
+2. 弹窗修改本机显示昵称
+3. 空值表示恢复为对方原始昵称
+
+约束：
+
+- 不允许把自己加入通讯录
+- 重复扫码同一公钥时更新来源昵称和更新时间
+
+## 6. 依赖
+
+- `flutter/material.dart`
+- `image_picker`
+- `mobile_scanner`
+- `qr_flutter`
+- `shared_preferences`
+
+协作依赖：
+
+- `WalletManager`
+- `SfidBindingService`
+- `ApiClient`
+
+## 7. 已知限制与后续扩展
+
+- 背景图和头像仅保存本地路径，应用重装或跨设备不会迁移
+- 二维码当前为本地明文 JSON，不具备验签能力
+- 通讯录仅本地保存，不和后端同步
+- 绑定成功状态目前依赖未来的 SFID 回执接入，当前代码仅完成 pending 前半段与 bound 状态承接点
+
+## 8. 后续推荐扩展
+
+- 为用户二维码增加签名与时间戳，避免被篡改
+- 为通讯录补充头像同步、备注、删除与搜索
+- 增加 SFID 绑定结果轮询或推送回调
+- 把用户资料与通讯录迁移到统一本地数据库，便于后续增量同步

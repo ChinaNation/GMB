@@ -663,7 +663,9 @@ pub mod pallet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types, traits::ConstU32};
+    use frame_support::{
+        assert_noop, assert_ok, derive_impl, parameter_types, traits::{ConstU32, Hooks},
+    };
     use frame_system as system;
     use primitives::china::china_cb::CHINA_CB;
     use sp_core::{Pair, Void};
@@ -842,13 +844,21 @@ mod tests {
         ext
     }
 
+    fn cb_admin(node_index: usize, admin_index: usize) -> AccountId32 {
+        AccountId32::new(CHINA_CB[node_index].admins[admin_index])
+    }
+
+    fn cb_pallet_id(node_index: usize) -> InstitutionPalletId {
+        reserve_pallet_id_to_bytes(CHINA_CB[node_index].shenfen_id)
+            .expect("institution should map to pallet id")
+    }
+
     fn prc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CB[1].admins[index])
+        cb_admin(1, index)
     }
 
     fn prc_pallet_id() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINA_CB[1].shenfen_id)
-            .expect("PRC institution should map to pallet id")
+        cb_pallet_id(1)
     }
 
     fn valid_public_key(seed: u8) -> [u8; 32] {
@@ -861,6 +871,25 @@ mod tests {
         let mut key = [0u8; 32];
         key[0] = 1;
         key
+    }
+
+    fn authority_id_from_key(key: [u8; 32]) -> GrandpaAuthorityId {
+        GrandpaAuthorityId::from(ed25519::Public::from_raw(key))
+    }
+
+    fn pass_prc_proposal(node_index: usize, proposal_id: u64) {
+        for admin_index in 0..6 {
+            assert_ok!(GrandpaKeyGov::vote_replace_grandpa_key(
+                RuntimeOrigin::signed(cb_admin(node_index, admin_index)),
+                proposal_id,
+                true,
+            ));
+        }
+    }
+
+    fn finalize_grandpa_at(block: u64) {
+        System::set_block_number(block);
+        <Grandpa as Hooks<u64>>::on_finalize(block);
     }
 
     #[test]
@@ -947,6 +976,259 @@ mod tests {
             assert_eq!(
                 ActiveProposalByInstitution::<Test>::get(institution),
                 Some(1)
+            );
+        });
+    }
+
+    #[test]
+    fn passed_proposal_executes_and_cleans_up_state() {
+        new_test_ext().execute_with(|| {
+            let institution = prc_pallet_id();
+            let old_key = CurrentGrandpaKeys::<Test>::get(institution)
+                .expect("institution should have an initial key");
+            let new_key = valid_public_key(31);
+
+            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
+                RuntimeOrigin::signed(prc_admin(0)),
+                institution,
+                new_key,
+            ));
+
+            pass_prc_proposal(1, 0);
+
+            let pending_change = Grandpa::pending_change().expect("change should be scheduled");
+            assert_eq!(pending_change.scheduled_at, 1);
+            assert_eq!(pending_change.delay, GrandpaChangeDelay::get());
+            assert!(
+                pending_change
+                    .next_authorities
+                    .iter()
+                    .any(|(authority, _)| *authority == authority_id_from_key(new_key))
+            );
+
+            assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(new_key));
+            assert!(GrandpaKeyOwnerByKey::<Test>::get(old_key).is_none());
+            assert_eq!(
+                GrandpaKeyOwnerByKey::<Test>::get(new_key),
+                Some(institution)
+            );
+            assert!(ProposalActions::<Test>::get(0).is_none());
+            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
+            assert!(PendingProposalByNewKey::<Test>::get(new_key).is_none());
+            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
+            assert!(voting_engine_system::Pallet::<Test>::proposals(0).is_none());
+            assert!(System::events().iter().any(|record| {
+                matches!(
+                    &record.event,
+                    RuntimeEvent::GrandpaKeyGov(Event::<Test>::GrandpaKeyReplaced {
+                        proposal_id,
+                        institution: inst,
+                        old_key: replaced_old_key,
+                        new_key: replaced_new_key,
+                    }) if *proposal_id == 0
+                        && *inst == institution
+                        && *replaced_old_key == old_key
+                        && *replaced_new_key == new_key
+                )
+            }));
+        });
+    }
+
+    #[test]
+    fn passed_proposal_can_be_manually_executed_after_pending_change_clears() {
+        new_test_ext().execute_with(|| {
+            let institution = prc_pallet_id();
+            let old_key = CurrentGrandpaKeys::<Test>::get(institution)
+                .expect("institution should have an initial key");
+            let new_key = valid_public_key(41);
+
+            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
+                RuntimeOrigin::signed(prc_admin(0)),
+                institution,
+                new_key,
+            ));
+            assert_ok!(Grandpa::schedule_change(
+                grandpa_authorities(),
+                GrandpaChangeDelay::get(),
+                None,
+            ));
+
+            pass_prc_proposal(1, 0);
+
+            assert_eq!(
+                voting_engine_system::Pallet::<Test>::proposals(0)
+                    .expect("passed proposal should remain for retries")
+                    .status,
+                STATUS_PASSED
+            );
+            assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(old_key));
+            assert_eq!(PendingProposalByNewKey::<Test>::get(new_key), Some(0));
+            assert!(ProposalActions::<Test>::get(0).is_some());
+            assert!(System::events().iter().any(|record| {
+                matches!(
+                    &record.event,
+                    RuntimeEvent::GrandpaKeyGov(Event::<Test>::GrandpaKeyExecutionFailed {
+                        proposal_id
+                    }) if *proposal_id == 0
+                )
+            }));
+
+            finalize_grandpa_at(1 + GrandpaChangeDelay::get());
+            assert!(Grandpa::pending_change().is_none());
+
+            assert_ok!(GrandpaKeyGov::execute_replace_grandpa_key(
+                RuntimeOrigin::signed(prc_admin(0)),
+                0,
+            ));
+
+            assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(new_key));
+            assert!(GrandpaKeyOwnerByKey::<Test>::get(old_key).is_none());
+            assert_eq!(
+                GrandpaKeyOwnerByKey::<Test>::get(new_key),
+                Some(institution)
+            );
+            assert!(ProposalActions::<Test>::get(0).is_none());
+            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
+            assert!(PendingProposalByNewKey::<Test>::get(new_key).is_none());
+            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
+            assert!(voting_engine_system::Pallet::<Test>::proposals(0).is_none());
+            assert!(Grandpa::pending_change().is_some());
+        });
+    }
+
+    #[test]
+    fn cancel_failed_replace_grandpa_key_cleans_up_passed_but_invalid_proposal() {
+        new_test_ext().execute_with(|| {
+            let institution = prc_pallet_id();
+            let old_key = CurrentGrandpaKeys::<Test>::get(institution)
+                .expect("institution should have an initial key");
+            let new_key = valid_public_key(51);
+            let replacement_authority = valid_public_key(52);
+
+            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
+                RuntimeOrigin::signed(prc_admin(0)),
+                institution,
+                new_key,
+            ));
+            assert_ok!(Grandpa::schedule_change(
+                vec![
+                    (authority_id_from_key(CHINA_CB[0].grandpa_key), 1),
+                    (authority_id_from_key(replacement_authority), 1),
+                ],
+                GrandpaChangeDelay::get(),
+                None,
+            ));
+
+            pass_prc_proposal(1, 0);
+
+            assert_eq!(
+                voting_engine_system::Pallet::<Test>::proposals(0)
+                    .expect("passed proposal should remain for cleanup")
+                    .status,
+                STATUS_PASSED
+            );
+            finalize_grandpa_at(1 + GrandpaChangeDelay::get());
+
+            assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(old_key));
+            assert_eq!(
+                Grandpa::grandpa_authorities(),
+                vec![
+                    (authority_id_from_key(CHINA_CB[0].grandpa_key), 1),
+                    (authority_id_from_key(replacement_authority), 1),
+                ]
+            );
+
+            assert_ok!(GrandpaKeyGov::cancel_failed_replace_grandpa_key(
+                RuntimeOrigin::signed(prc_admin(0)),
+                0,
+            ));
+
+            assert!(ProposalActions::<Test>::get(0).is_none());
+            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
+            assert!(PendingProposalByNewKey::<Test>::get(new_key).is_none());
+            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
+            assert!(voting_engine_system::Pallet::<Test>::proposals(0).is_none());
+            assert!(System::events().iter().any(|record| {
+                matches!(
+                    &record.event,
+                    RuntimeEvent::GrandpaKeyGov(Event::<Test>::FailedProposalCancelled {
+                        proposal_id,
+                        institution: inst,
+                    }) if *proposal_id == 0 && *inst == institution
+                )
+            }));
+        });
+    }
+
+    #[test]
+    fn new_key_conflict_is_rejected_across_institutions() {
+        new_test_ext().execute_with(|| {
+            let first_institution = prc_pallet_id();
+            let second_institution = cb_pallet_id(2);
+            let shared_new_key = valid_public_key(61);
+
+            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
+                RuntimeOrigin::signed(prc_admin(0)),
+                first_institution,
+                shared_new_key,
+            ));
+
+            assert_noop!(
+                GrandpaKeyGov::propose_replace_grandpa_key(
+                    RuntimeOrigin::signed(cb_admin(2, 0)),
+                    second_institution,
+                    shared_new_key,
+                ),
+                Error::<Test>::NewKeyPendingInOtherProposal
+            );
+
+            assert_eq!(PendingProposalByNewKey::<Test>::get(shared_new_key), Some(0));
+            assert_eq!(
+                ActiveProposalByInstitution::<Test>::get(first_institution),
+                Some(0)
+            );
+            assert!(ActiveProposalByInstitution::<Test>::get(second_institution).is_none());
+        });
+    }
+
+    #[test]
+    fn cancel_failed_replace_grandpa_key_rejects_temporarily_blocked_proposal() {
+        new_test_ext().execute_with(|| {
+            let institution = prc_pallet_id();
+            let old_key = CurrentGrandpaKeys::<Test>::get(institution)
+                .expect("institution should have an initial key");
+            let new_key = valid_public_key(71);
+
+            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
+                RuntimeOrigin::signed(prc_admin(0)),
+                institution,
+                new_key,
+            ));
+            assert_ok!(Grandpa::schedule_change(
+                grandpa_authorities(),
+                GrandpaChangeDelay::get(),
+                None,
+            ));
+
+            pass_prc_proposal(1, 0);
+
+            assert_noop!(
+                GrandpaKeyGov::cancel_failed_replace_grandpa_key(
+                    RuntimeOrigin::signed(prc_admin(0)),
+                    0,
+                ),
+                Error::<Test>::GrandpaChangePending
+            );
+
+            assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(old_key));
+            assert_eq!(PendingProposalByNewKey::<Test>::get(new_key), Some(0));
+            assert_eq!(ActiveProposalByInstitution::<Test>::get(institution), Some(0));
+            assert!(ProposalActions::<Test>::get(0).is_some());
+            assert_eq!(
+                voting_engine_system::Pallet::<Test>::proposals(0)
+                    .expect("passed proposal should remain active")
+                    .status,
+                STATUS_PASSED
             );
         });
     }

@@ -254,6 +254,11 @@ pub mod pallet {
             proposal_id: u64,
             institution: InstitutionPalletId,
         },
+        /// 发起新提案时，自动清理了同机构已终结/失活的旧提案
+        InactiveProposalAutoCleaned {
+            proposal_id: u64,
+            institution: InstitutionPalletId,
+        },
     }
 
     #[pallet::error]
@@ -319,6 +324,10 @@ pub mod pallet {
                 // 中文注释：防御性保护，避免极端 proposal_id 回绕时误删新提案。
                 if stale_id != proposal_id {
                     Self::cleanup_inactive_proposal(institution, stale_id);
+                    Self::deposit_event(Event::<T>::InactiveProposalAutoCleaned {
+                        proposal_id: stale_id,
+                        institution,
+                    });
                 }
             }
 
@@ -535,7 +544,6 @@ pub mod pallet {
 
             // 只替换，不增删：列表长度保持不变
             admins[old_pos] = action.new_admin.clone();
-            Self::validate_admin_count(org, admins.len())?;
 
             let bounded: BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> =
                 admins
@@ -743,6 +751,16 @@ mod tests {
 
     fn prb_admin(index: usize) -> AccountId32 {
         AccountId32::new(CHINA_CH[0].admins[index])
+    }
+
+    fn admins_origin_events() -> Vec<Event<Test>> {
+        System::events()
+            .into_iter()
+            .filter_map(|record| match record.event {
+                RuntimeEvent::AdminsOriginGov(event) => Some(event),
+                _ => None,
+            })
+            .collect()
     }
 
     #[test]
@@ -1083,6 +1101,12 @@ mod tests {
             ));
             assert!(ProposalActions::<Test>::get(0).is_none());
             assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
+            assert!(
+                admins_origin_events().contains(&Event::<Test>::StaleProposalCancelled {
+                    proposal_id: 0,
+                    institution,
+                })
+            );
 
             assert_ok!(AdminsOriginGov::propose_admin_replacement(
                 RuntimeOrigin::signed(nrc_admin(0)),
@@ -1201,6 +1225,12 @@ mod tests {
             assert_eq!(
                 ActiveProposalByInstitution::<Test>::get(institution),
                 Some(1)
+            );
+            assert!(
+                admins_origin_events().contains(&Event::<Test>::InactiveProposalAutoCleaned {
+                    proposal_id: 0,
+                    institution,
+                })
             );
         });
     }
@@ -1355,6 +1385,12 @@ mod tests {
             assert_eq!(
                 ActiveProposalByInstitution::<Test>::get(institution),
                 Some(1)
+            );
+            assert!(
+                admins_origin_events().contains(&Event::<Test>::InactiveProposalAutoCleaned {
+                    proposal_id: 0,
+                    institution,
+                })
             );
         });
     }
