@@ -42,11 +42,12 @@
 5. 私钥加密写入系统安全存储。
 6. 保存 `bootnode-meta.json`。
 7. 若节点运行中，执行 `stop_node -> start_node`。
-8. 轮询 `system_localPeerId`，确认重启后 PeerId 与目标一致。
+8. 最长等待约 20 秒，轮询 `system_localPeerId`，确认重启后 PeerId 与目标一致；超时错误会带上最后一次观察到的 PeerId。
 
 ### 4.2 节点启动协同
 
 - `home::home_node::start_node` 内部启动流程会调用 `load_bootnode_node_key` 读取已保存私钥。
+- `load_bootnode_node_key` 解密后返回 `Zeroizing<String>`，节点启动链路不会把明文 node-key 作为裸 `String` 长时间保留。
 - 启动参数通过 `--node-key-file` 注入，避免私钥出现在命令行。
 
 ## 5. 对外协作接口（给 home-node）

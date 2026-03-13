@@ -9,9 +9,7 @@ use serde_json::Value;
 use std::{fs, path::PathBuf};
 use tauri::AppHandle;
 
-use super::process::{
-    refresh_managed_process, trusted_node_process_pids_on_rpc_port, AppState,
-};
+use super::process::{refresh_managed_process, trusted_node_process_pids_on_rpc_port, AppState};
 use super::rpc::{is_expected_rpc_node, rpc_post};
 use tauri::Manager;
 
@@ -65,7 +63,7 @@ fn role_from_peer_id(peer_id: Option<&str>) -> String {
 
 pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
     // 先看本会话托管进程，再看可信监听进程，最后才退化到 RPC 指纹探测，
-    // 减少仅凭 9944 端口连通就误判为"节点在运行"的概率。
+    // 减少仅凭默认 RPC 端口连通就误判为"节点在运行"的概率。
     let (managed_running, managed_pid) = {
         let app_state = app.state::<AppState>();
         let mut state = app_state

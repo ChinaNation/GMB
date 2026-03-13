@@ -51,6 +51,12 @@ pub(crate) fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .app_data_dir()
         .map_err(|e| format!("resolve app data dir failed: {e}"))?;
     fs::create_dir_all(&app_data).map_err(|e| format!("create app data dir failed: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&app_data, fs::Permissions::from_mode(0o700))
+            .map_err(|e| format!("set app data dir permission failed: {e}"))?;
+    }
     Ok(app_data)
 }
 
@@ -112,25 +118,8 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8], secret_mode: bool) -> Result<()
 
     #[cfg(target_os = "windows")]
     if secret_mode {
-        // Windows: 使用 NTFS 只读属性限制访问。
-        // 完整的 ACL 方案需要 windows-sys 依赖，此处用标准库设置只读属性
-        // 作为最低限度保护，并在注释中说明风险。
-        // 注意：只读属性不等同于 Unix 0600，管理员仍可读取。
-        let mut perms = fs::metadata(&temp_path)
-            .map_err(|e| {
-                format!(
-                    "read temp file metadata failed ({}): {e}",
-                    temp_path.display()
-                )
-            })?
-            .permissions();
-        perms.set_readonly(true);
-        fs::set_permissions(&temp_path, perms).map_err(|e| {
-            format!(
-                "set temp file permission failed ({}): {e}",
-                temp_path.display()
-            )
-        })?;
+        set_windows_acl_owner_only(&temp_path)
+            .map_err(|e| format!("set temp file ACL failed ({}): {e}", temp_path.display()))?;
     }
 
     file.write_all(bytes)
@@ -193,6 +182,136 @@ fn replace_file_windows(from: &Path, to: &Path) -> Result<(), String> {
             to.display(),
             std::io::Error::last_os_error()
         ));
+    }
+    Ok(())
+}
+
+/// Windows: 通过 DACL 将文件访问限制为仅当前用户（等效 Unix 0600）。
+/// 获取当前进程 token 中的用户 SID，构建仅含该 SID 的 DACL 并应用到文件。
+#[cfg(target_os = "windows")]
+fn set_windows_acl_owner_only(path: &Path) -> Result<(), String> {
+    use std::{ffi::OsStr, iter::once, os::windows::ffi::OsStrExt, ptr};
+
+    type Handle = *mut std::ffi::c_void;
+    type Psid = *mut std::ffi::c_void;
+    type Pacl = *mut std::ffi::c_void;
+    const TOKEN_QUERY: u32 = 0x0008;
+    const TOKEN_USER_INFO: u32 = 1; // TokenUser
+    const ACL_REVISION: u32 = 2;
+    const FILE_ALL_ACCESS: u32 = 0x001F01FF;
+    const SE_FILE_OBJECT: u32 = 1;
+    const DACL_SECURITY_INFORMATION: u32 = 0x04;
+    const PROTECTED_DACL_SECURITY_INFORMATION: u32 = 0x8000_0000;
+
+    #[repr(C)]
+    struct TokenUser {
+        user: SidAndAttributes,
+    }
+    #[repr(C)]
+    struct SidAndAttributes {
+        sid: Psid,
+        attributes: u32,
+    }
+
+    #[link(name = "Advapi32")]
+    unsafe extern "system" {
+        fn OpenProcessToken(process: Handle, access: u32, token: *mut Handle) -> i32;
+        fn GetTokenInformation(
+            token: Handle,
+            class: u32,
+            info: *mut u8,
+            len: u32,
+            ret_len: *mut u32,
+        ) -> i32;
+        fn GetLengthSid(sid: Psid) -> u32;
+        fn InitializeAcl(acl: *mut u8, len: u32, revision: u32) -> i32;
+        fn AddAccessAllowedAce(acl: *mut u8, revision: u32, mask: u32, sid: Psid) -> i32;
+        fn SetNamedSecurityInfoW(
+            name: *const u16,
+            object_type: u32,
+            info: u32,
+            owner: Psid,
+            group: Psid,
+            dacl: *const u8,
+            sacl: *const u8,
+        ) -> u32;
+    }
+    #[link(name = "Kernel32")]
+    unsafe extern "system" {
+        fn GetCurrentProcess() -> Handle;
+        fn CloseHandle(h: Handle) -> i32;
+    }
+
+    fn wide_null(input: &OsStr) -> Vec<u16> {
+        input.encode_wide().chain(once(0)).collect()
+    }
+
+    unsafe {
+        // 1. 获取当前进程 token
+        let mut token: Handle = ptr::null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
+            return Err(format!(
+                "OpenProcessToken failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+
+        // 2. 获取 token 中的用户 SID
+        let mut needed: u32 = 0;
+        GetTokenInformation(token, TOKEN_USER_INFO, ptr::null_mut(), 0, &mut needed);
+        let mut buf = vec![0u8; needed as usize];
+        if GetTokenInformation(
+            token,
+            TOKEN_USER_INFO,
+            buf.as_mut_ptr(),
+            needed,
+            &mut needed,
+        ) == 0
+        {
+            CloseHandle(token);
+            return Err(format!(
+                "GetTokenInformation failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let token_user = &*(buf.as_ptr() as *const TokenUser);
+        let sid = token_user.user.sid;
+
+        // 3. 构建仅含当前用户 FILE_ALL_ACCESS 的 ACL
+        let sid_len = GetLengthSid(sid);
+        // ACL header (8 bytes) + ACE header (8 bytes) + SID
+        let acl_size = 8 + 8 + sid_len;
+        let mut acl_buf = vec![0u8; acl_size as usize];
+        if InitializeAcl(acl_buf.as_mut_ptr(), acl_size, ACL_REVISION) == 0 {
+            CloseHandle(token);
+            return Err(format!(
+                "InitializeAcl failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        if AddAccessAllowedAce(acl_buf.as_mut_ptr(), ACL_REVISION, FILE_ALL_ACCESS, sid) == 0 {
+            CloseHandle(token);
+            return Err(format!(
+                "AddAccessAllowedAce failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+
+        // 4. 应用 DACL 到文件，PROTECTED 防止从父目录继承
+        let path_w = wide_null(path.as_os_str());
+        let rc = SetNamedSecurityInfoW(
+            path_w.as_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            acl_buf.as_ptr(),
+            ptr::null(),
+        );
+        CloseHandle(token);
+        if rc != 0 {
+            return Err(format!("SetNamedSecurityInfoW failed: error code {rc}"));
+        }
     }
     Ok(())
 }
@@ -297,6 +416,14 @@ pub(crate) fn secure_store_set(account: &str, value: &str) -> Result<(), String>
         .map_err(|e| format!("写入系统安全存储失败: {e}"))
 }
 
+pub(crate) fn secure_store_delete(account: &str) -> Result<(), String> {
+    let entry = secure_store_entry(account)?;
+    match entry.delete_credential() {
+        Ok(_) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!("删除系统安全存储失败: {e}")),
+    }
+}
+
 pub(crate) fn secure_store_get(account: &str) -> Result<Option<String>, String> {
     let entry = secure_store_entry(account)?;
     match entry.get_password() {
@@ -351,7 +478,10 @@ pub(crate) fn encrypt_secret_value(secret: &str, password: &str) -> Result<Strin
     serde_json::to_string(&envelope).map_err(|e| format!("编码加密数据失败: {e}"))
 }
 
-pub(crate) fn decrypt_secret_value(enveloped: &str, password: &str) -> Result<String, String> {
+pub(crate) fn decrypt_secret_value(
+    enveloped: &str,
+    password: &str,
+) -> Result<Zeroizing<String>, String> {
     let unlock = ensure_unlock_password(password)?;
     let unlock_guard = Zeroizing::new(unlock.to_string());
     let envelope: EncryptedSecretEnvelope =
@@ -387,5 +517,5 @@ pub(crate) fn decrypt_secret_value(enveloped: &str, password: &str) -> Result<St
         "私钥内容格式无效".to_string()
     });
     plain.zeroize();
-    decoded
+    decoded.map(Zeroizing::new)
 }

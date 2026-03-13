@@ -30,6 +30,7 @@
   - `MiningDashboard { income, records, resources, warning }`
 - 进程内缓存：
   - `MiningComputationCache`
+    - `cache_version`
     - `chain_genesis_hash`
     - `last_processed_height / last_processed_hash`
     - `total_fee_fen / total_reward_fen`
@@ -58,6 +59,7 @@
   - 缓存高度高于当前链高，或
   - 缓存末块 hash 与链上不一致
   会自动重置缓存后重建。
+- 旧版本地缓存文件不会因为版本号变化直接丢弃；已知旧版本会迁移到当前 `cache_version` 后回写。
 - RPC 链指纹与 genesis hash 按请求实时校验，不跨请求永久缓存，避免节点重启或端口复用后误信任旧结果。
 
 ## 6. 错误与告警策略
@@ -78,6 +80,7 @@
 - 响应读取上限 4MB（含 Content-Length 预检查与流式读取限流）。
 - 检查 HTTP 状态码必须为 200。
 - JSON-RPC `error` 字段统一转错误。
+- 共享 HTTP RPC URL 会复用当前本地 RPC 端口，而不是硬编码到单一端口。
 
 ## 8. 资源采样优化
 

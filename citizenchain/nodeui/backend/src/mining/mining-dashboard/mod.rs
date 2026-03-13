@@ -26,7 +26,6 @@ const INCOME_DAY_KEEP: u64 = 400;
 const MINING_CACHE_VERSION: u32 = 1;
 const MINING_CACHE_FILENAME: &str = "mining-dashboard-cache.json";
 const CACHE_PERSIST_MIN_INTERVAL_MS: u64 = 60_000;
-const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
@@ -198,8 +197,32 @@ fn persist_mining_cache(app: &AppHandle, cache: &MiningComputationCache) -> Resu
     let payload =
         serde_json::to_string(cache).map_err(|e| format!("encode mining cache failed: {e}"))?;
     let path = mining_cache_path(app)?;
-    security::write_text_atomic_restricted(&path, &format!("{payload}\n"))
-        .map_err(|e| format!("write mining cache failed ({}): {e}", security::sanitize_path(&path)))
+    security::write_text_atomic_restricted(&path, &format!("{payload}\n")).map_err(|e| {
+        format!(
+            "write mining cache failed ({}): {e}",
+            security::sanitize_path(&path)
+        )
+    })
+}
+
+fn migrate_mining_cache(
+    mut cache: MiningComputationCache,
+) -> Result<(MiningComputationCache, Option<u32>), String> {
+    match cache.cache_version {
+        MINING_CACHE_VERSION => Ok((cache, None)),
+        0 => {
+            let from = cache.cache_version;
+            cache.cache_version = MINING_CACHE_VERSION;
+            while cache.recent_records.len() > RECENT_RECORD_LIMIT {
+                cache.recent_records.pop_back();
+            }
+            Ok((cache, Some(from)))
+        }
+        other => Err(format!(
+            "mining cache version mismatch: expected={}, got={other}",
+            MINING_CACHE_VERSION
+        )),
+    }
 }
 
 // 先更新进程内缓存，再按时间窗口/追赶进度决定是否落盘，兼顾数据连续性与写盘频率。
@@ -241,15 +264,21 @@ fn maybe_load_mining_cache(app: &AppHandle) -> Result<Option<MiningComputationCa
     if !path.exists() {
         return Ok(None);
     }
-    let raw = fs::read_to_string(&path)
-        .map_err(|e| format!("read mining cache failed ({}): {e}", security::sanitize_path(&path)))?;
-    let cache: MiningComputationCache = serde_json::from_str(&raw)
-        .map_err(|e| format!("parse mining cache failed ({}): {e}", security::sanitize_path(&path)))?;
-    if cache.cache_version != MINING_CACHE_VERSION {
-        return Err(format!(
-            "mining cache version mismatch: expected={}, got={}",
-            MINING_CACHE_VERSION, cache.cache_version
-        ));
+    let raw = fs::read_to_string(&path).map_err(|e| {
+        format!(
+            "read mining cache failed ({}): {e}",
+            security::sanitize_path(&path)
+        )
+    })?;
+    let cache: MiningComputationCache = serde_json::from_str(&raw).map_err(|e| {
+        format!(
+            "parse mining cache failed ({}): {e}",
+            security::sanitize_path(&path)
+        )
+    })?;
+    let (cache, migrated_from) = migrate_mining_cache(cache)?;
+    if migrated_from.is_some() {
+        persist_mining_cache(app, &cache)?;
     }
     Ok(Some(cache))
 }
@@ -287,7 +316,7 @@ fn utc_day(ms: u64) -> u64 {
 }
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
+    rpc::rpc_post(method, params, rpc::RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
 }
 
 fn ensure_expected_rpc_node_uncached() -> Result<(), String> {
@@ -875,11 +904,8 @@ fn collect_resource_usage(app: &AppHandle) -> ResourceUsage {
     if let Ok(status) = home::current_status(app) {
         if let Some(pid) = status.pid {
             let sys = System::new_with_specifics(
-                RefreshKind::nothing().with_processes(
-                    ProcessRefreshKind::nothing()
-                        .with_cpu()
-                        .with_memory(),
-                ),
+                RefreshKind::nothing()
+                    .with_processes(ProcessRefreshKind::nothing().with_cpu().with_memory()),
             );
             let sysinfo_pid = sysinfo::Pid::from_u32(pid);
             if let Some(proc) = sys.process(sysinfo_pid) {
@@ -1039,4 +1065,50 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
         merge_warnings(warnings),
         today_utc,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        migrate_mining_cache, CachedBlockRecord, MiningComputationCache, MINING_CACHE_VERSION,
+    };
+    use std::collections::{HashMap, VecDeque};
+
+    #[test]
+    fn migrate_mining_cache_upgrades_v0_to_current() {
+        let mut recent_records = VecDeque::new();
+        recent_records.push_back(CachedBlockRecord {
+            block_height: 1,
+            timestamp_ms: Some(1),
+            fee_fen: 2,
+            block_reward_fen: 3,
+            author: "miner".to_string(),
+        });
+        let legacy = MiningComputationCache {
+            cache_version: 0,
+            chain_genesis_hash: Some("0x1234".to_string()),
+            tracked_miner_account: Some("miner".to_string()),
+            last_processed_height: 10,
+            last_processed_hash: Some("0xabcd".to_string()),
+            total_fee_fen: 20,
+            total_reward_fen: 30,
+            income_by_utc_day: HashMap::new(),
+            recent_records,
+        };
+
+        let (migrated, migrated_from) = migrate_mining_cache(legacy).unwrap();
+        assert_eq!(migrated.cache_version, MINING_CACHE_VERSION);
+        assert_eq!(migrated_from, Some(0));
+        assert_eq!(migrated.last_processed_height, 10);
+        assert_eq!(migrated.recent_records.len(), 1);
+    }
+
+    #[test]
+    fn migrate_mining_cache_rejects_unknown_future_version() {
+        let future = MiningComputationCache {
+            cache_version: MINING_CACHE_VERSION + 1,
+            ..MiningComputationCache::default()
+        };
+        assert!(migrate_mining_cache(future).is_err());
+    }
 }
