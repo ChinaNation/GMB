@@ -1,20 +1,20 @@
 use crate::{
-    home::home_node,
+    home,
     settings::{address_utils::decode_hex_32_strict, device_password},
-    shared::{rpc, security, validation::normalize_grandpa_key},
+    shared::{keystore, rpc, security, validation::normalize_grandpa_key},
 };
 use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
-    collections::HashSet, fs, io::ErrorKind, path::PathBuf, str::FromStr, thread, time::Duration,
+    collections::HashSet, fs, io::ErrorKind, path::PathBuf, str::FromStr, sync::OnceLock, thread,
+    time::Duration,
 };
 use tauri::AppHandle;
 use zeroize::Zeroizing;
 
 const KEYCHAIN_ACCOUNT_GRANDPA: &str = "grandpa-key";
 const GRANDPA_KEY_TYPE_HEX_PREFIX: &str = "6772616e";
-const DEFAULT_CHAIN_ID: &str = "citizenchain";
 const INSTITUTION_CATALOG_SRC: &str = include_str!("../institution-catalog.json");
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
@@ -41,9 +41,21 @@ pub(crate) struct InstitutionCatalogEntry {
     pub grandpa_pubkey_hex: String,
 }
 
+static INSTITUTION_CATALOG: OnceLock<Vec<InstitutionCatalogEntry>> = OnceLock::new();
+
+/// 获取机构清单（OnceLock 惰性初始化，编译期内嵌 JSON 只解析一次）。
+pub(crate) fn load_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>, String> {
+    if let Some(catalog) = INSTITUTION_CATALOG.get() {
+        return Ok(catalog.clone());
+    }
+    let catalog = parse_institution_catalog()?;
+    let _ = INSTITUTION_CATALOG.set(catalog);
+    Ok(INSTITUTION_CATALOG.get().unwrap().clone())
+}
+
 // 机构清单既被 bootnode 模块用于 PeerId 映射，也被 GRANDPA 模块用于公钥匹配，
 // 加载时统一做 trim / 去重 / 格式校验，避免配置里的空格或脏数据影响运行时判断。
-pub(crate) fn load_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>, String> {
+fn parse_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>, String> {
     let entries: Vec<InstitutionCatalogEntry> = serde_json::from_str(INSTITUTION_CATALOG_SRC)
         .map_err(|e| format!("parse institution-catalog.json failed: {e}"))?;
     if entries.is_empty() {
@@ -125,105 +137,6 @@ fn save_grandpa_meta(app: &AppHandle, institution_name: Option<String>) -> Resul
         .map_err(|e| format!("write grandpa meta failed: {e}"))
 }
 
-fn node_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let path = security::app_data_dir(app)?.join("node-data");
-    fs::create_dir_all(&path).map_err(|e| format!("create node data dir failed: {e}"))?;
-    Ok(path)
-}
-
-fn keystore_dirs_for_grandpa(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
-    let chains_root = node_data_dir(app)?.join("chains");
-    fs::create_dir_all(&chains_root).map_err(|e| format!("create chains dir failed: {e}"))?;
-
-    let mut dirs: Vec<PathBuf> = Vec::new();
-    if chains_root.exists() {
-        let entries =
-            fs::read_dir(&chains_root).map_err(|e| format!("read chains dir failed: {e}"))?;
-        for entry in entries {
-            let entry = entry.map_err(|e| format!("read chain dir entry failed: {e}"))?;
-            let file_type = entry
-                .file_type()
-                .map_err(|e| format!("read chain dir file type failed: {e}"))?;
-            if file_type.is_symlink() || !file_type.is_dir() {
-                continue;
-            }
-            let candidate = entry.path().join("keystore");
-            if let Ok(meta) = fs::symlink_metadata(&candidate) {
-                if meta.file_type().is_symlink() {
-                    continue;
-                }
-            }
-            dirs.push(candidate);
-        }
-    }
-
-    dirs.push(chains_root.join(DEFAULT_CHAIN_ID).join("keystore"));
-
-    dirs.sort();
-    dirs.dedup();
-    for dir in &dirs {
-        fs::create_dir_all(dir).map_err(|e| {
-            format!(
-                "create grandpa keystore dir failed ({}): {e}",
-                dir.display()
-            )
-        })?;
-    }
-
-    Ok(dirs)
-}
-
-fn grandpa_keystore_filename(pubkey_hex: &str) -> String {
-    format!("{GRANDPA_KEY_TYPE_HEX_PREFIX}{pubkey_hex}")
-}
-
-fn collect_grandpa_keystore_files(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
-    let mut files = Vec::new();
-    for dir in keystore_dirs_for_grandpa(app)? {
-        if !dir.is_dir() {
-            continue;
-        }
-        let entries = fs::read_dir(&dir)
-            .map_err(|e| format!("read grandpa keystore dir failed ({}): {e}", dir.display()))?;
-        for entry in entries {
-            let entry = entry.map_err(|e| format!("read grandpa keystore entry failed: {e}"))?;
-            let file_type = entry
-                .file_type()
-                .map_err(|e| format!("read grandpa keystore file type failed: {e}"))?;
-            if file_type.is_symlink() || !file_type.is_file() {
-                continue;
-            }
-            let path = entry.path();
-            let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
-                continue;
-            };
-            if name.starts_with(GRANDPA_KEY_TYPE_HEX_PREFIX) {
-                files.push(path);
-            }
-        }
-    }
-    files.sort();
-    Ok(files)
-}
-
-fn remove_other_grandpa_keys(app: &AppHandle, keep_filename: &str) -> Result<(), String> {
-    for path in collect_grandpa_keystore_files(app)? {
-        let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
-            continue;
-        };
-        if name == keep_filename {
-            continue;
-        }
-        fs::remove_file(&path).map_err(|e| {
-            format!(
-                "remove stale grandpa keystore file failed ({}): {e}",
-                path.display()
-            )
-        })?;
-    }
-    Ok(())
-}
-
 fn write_grandpa_key_to_keystore(
     app: &AppHandle,
     private_hex: &str,
@@ -233,30 +146,14 @@ fn write_grandpa_key_to_keystore(
     let encoded = serde_json::to_string(&secret)
         .map_err(|e| format!("encode grandpa keystore secret failed: {e}"))?;
     let content = format!("{encoded}\n");
-    let filename = grandpa_keystore_filename(pubkey_hex);
-
-    for dir in keystore_dirs_for_grandpa(app)? {
-        let path = dir.join(&filename);
-        security::write_secret_text_atomic(&path, &content).map_err(|e| {
-            format!(
-                "write grandpa keystore file failed ({}): {e}",
-                path.display()
-            )
-        })?;
-    }
+    let dirs = keystore::keystore_dirs(app)?;
     // 始终只保留当前机构对应的一把 gran 密钥，避免旧密钥残留导致节点加载多把 authority key。
-    remove_other_grandpa_keys(app, &filename)?;
-    Ok(())
+    keystore::write_key_to_keystore(&dirs, GRANDPA_KEY_TYPE_HEX_PREFIX, pubkey_hex, &content)
 }
 
 fn has_grandpa_key_in_keystore(app: &AppHandle, pubkey_hex: &str) -> Result<bool, String> {
-    let filename = grandpa_keystore_filename(pubkey_hex);
-    for dir in keystore_dirs_for_grandpa(app)? {
-        if dir.join(&filename).is_file() {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    let dirs = keystore::keystore_dirs(app)?;
+    Ok(keystore::has_key_in_keystore(&dirs, GRANDPA_KEY_TYPE_HEX_PREFIX, pubkey_hex))
 }
 
 fn grandpa_institution_options() -> Result<Vec<(String, String)>, String> {
@@ -410,10 +307,10 @@ pub fn set_grandpa_key(
     write_grandpa_key_to_keystore(&app, &normalized, &pubkey)?;
 
     // 若节点当前在运行，保存后立即重启以 authority 模式加载并参与投票。
-    if home_node::current_status(&app)?.running {
+    if home::current_status(&app)?.running {
         if let Err(err) = (|| -> Result<(), String> {
-            let _ = home_node::stop_node_blocking(app.clone())?;
-            let _ = home_node::start_node_blocking(app.clone(), unlock.to_string())?;
+            let _ = home::stop_node_blocking(app.clone())?;
+            let _ = home::start_node_blocking(app.clone(), unlock.to_string())?;
             verify_grandpa_after_start(&app, unlock)?;
             Ok(())
         })() {

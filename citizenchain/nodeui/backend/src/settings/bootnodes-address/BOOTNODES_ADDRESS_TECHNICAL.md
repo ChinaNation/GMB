@@ -55,3 +55,8 @@
 - `verify_bootnode_secret_unlock(unlock_password)`
 - `genesis_bootnode_options() -> Result<Vec<GenesisBootnodeOption>, String>`
 - `find_genesis_bootnode_name_by_peer_id(peer_id) -> Result<Option<String>, String>`
+
+## 6. 共享模块依赖
+
+- 机构清单解析复用 `grandpa-address::load_institution_catalog()`（OnceLock 缓存）。
+- Keystore 操作委托 `shared/keystore` 通用模块进行目录扫描和密钥写入。

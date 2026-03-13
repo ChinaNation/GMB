@@ -81,10 +81,15 @@
 
 ## 8. 资源采样优化
 
-- 资源采样结果做短 TTL 缓存（5 秒），减少 `ps/top/du/df` 高频执行开销。
+- 资源采样结果做短 TTL 缓存（5 秒），减少高频执行开销。
+- CPU / 内存采样通过 `sysinfo` crate（`System::process(pid)`）直接读取进程统计，不再依赖外部 `ps` 命令。
+- 磁盘占用通过 `sysinfo::Disks` 获取，不再依赖外部 `df` 命令。
+- 节点数据目录大小通过 Rust `fs::metadata` 递归计算，不再依赖外部 `du` 命令。
 - 仍优先读取节点 PID 定向资源；无 PID 时回退整机视角。
 
 ## 9. 依赖关系
 
-- 依赖 `home/home-node` 的 `current_status` 获取节点 PID（用于定向资源统计）。
-- 依赖 `settings/security` 提供应用数据目录路径。
+- 依赖 `home/process` 的 `current_status` 获取节点 PID（用于定向资源统计）。
+- 依赖 `shared/keystore::node_data_dir` 获取节点数据目录路径。
+- 依赖 `shared/security` 提供应用数据目录路径。
+- 依赖 `sysinfo` crate 进行跨平台进程和磁盘资源采样。

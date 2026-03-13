@@ -3,9 +3,8 @@ use crate::{
         address_utils::{decode_hex_32_with_optional_0x, decode_ss58_prefix},
         device_password,
     },
-    shared::{rpc, security, validation::normalize_wallet_address},
+    shared::{constants::{SS58_PREFIX, EXPECTED_SS58_PREFIX}, keystore, rpc, security, validation::normalize_wallet_address},
 };
-use blake2::{Blake2b512, Digest};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -26,8 +25,6 @@ use tauri::AppHandle;
 use twox_hash::XxHash64;
 use zeroize::Zeroizing;
 
-const SS58_PREFIX: u16 = 2027;
-const EXPECTED_SS58_PREFIX: u64 = 2027;
 const POWR_KEY_TYPE_HEX_PREFIX: &str = "706f7772";
 const DEFAULT_CHAIN_WS_URL: &str = "ws://127.0.0.1:9944";
 const DEFAULT_CHAIN_ID: &str = "citizenchain";
@@ -50,9 +47,7 @@ struct StoredWallet {
 }
 
 fn node_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let path = security::app_data_dir(app)?.join("node-data");
-    fs::create_dir_all(&path).map_err(|e| format!("create node data dir failed: {e}"))?;
-    Ok(path)
+    keystore::node_data_dir(app)
 }
 
 fn reward_wallet_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -146,7 +141,7 @@ fn collect_powr_keystore_files(app: &AppHandle) -> Result<Vec<PathBuf>, String> 
             continue;
         }
         let entries = fs::read_dir(&keystore_dir)
-            .map_err(|e| format!("read keystore dir failed ({}): {e}", keystore_dir.display()))?;
+            .map_err(|e| format!("read keystore dir failed ({}): {e}", security::sanitize_path(&keystore_dir)))?;
         for entry in entries {
             let entry = entry.map_err(|e| format!("read keystore file entry failed: {e}"))?;
             let file_type = entry
@@ -222,7 +217,7 @@ fn keystore_dirs_for_powr(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
     dirs.dedup();
     for dir in &dirs {
         fs::create_dir_all(dir)
-            .map_err(|e| format!("create powr keystore dir failed ({}): {e}", dir.display()))?;
+            .map_err(|e| format!("create powr keystore dir failed ({}): {e}", security::sanitize_path(dir)))?;
     }
     Ok(dirs)
 }
@@ -247,7 +242,7 @@ fn write_powr_key_to_keystore(app: &AppHandle, suri: &str, pubkey_hex: &str) -> 
     for dir in keystore_dirs_for_powr(app)? {
         let path = dir.join(&filename);
         security::write_secret_text_atomic(&path, &content)
-            .map_err(|e| format!("write powr keystore file failed ({}): {e}", path.display()))?;
+            .map_err(|e| format!("write powr keystore file failed ({}): {e}", security::sanitize_path(&path)))?;
     }
     Ok(())
 }
@@ -263,7 +258,7 @@ fn remove_other_powr_keys(app: &AppHandle, keep_filename: &str) -> Result<(), St
         fs::remove_file(&path).map_err(|e| {
             format!(
                 "remove stale powr keystore file failed ({}): {e}",
-                path.display()
+                security::sanitize_path(&path)
             )
         })?;
     }
@@ -274,7 +269,7 @@ fn load_powr_suri_from_keystore(app: &AppHandle) -> Result<Option<String>, Strin
     let files = collect_powr_keystore_files(app)?;
     for path in files {
         let raw = fs::read_to_string(&path)
-            .map_err(|e| format!("read powr keystore file failed ({}): {e}", path.display()))?;
+            .map_err(|e| format!("read powr keystore file failed ({}): {e}", security::sanitize_path(&path)))?;
         let suri = parse_keystore_secret(&raw)?;
         if !suri.is_empty() {
             return Ok(Some(suri));
@@ -342,11 +337,11 @@ fn decode_ss58_account_id(address: &str) -> Result<[u8; 32], String> {
     }
 
     let (without_checksum, checksum) = data.split_at(data.len() - 2);
-    let mut hasher = Blake2b512::new();
+    let mut hasher = blake3::Hasher::new();
     hasher.update(b"SS58PRE");
     hasher.update(without_checksum);
     let hash = hasher.finalize();
-    if checksum != &hash[..2] {
+    if checksum != &hash.as_bytes()[..2] {
         return Err("SS58 地址校验和无效".to_string());
     }
 
@@ -383,12 +378,10 @@ fn twox_128(input: &[u8]) -> [u8; 16] {
     out
 }
 
-fn blake2_128(input: &[u8]) -> [u8; 16] {
-    let mut hasher = Blake2b512::new();
-    hasher.update(input);
-    let hash = hasher.finalize();
+fn blake3_128(input: &[u8]) -> [u8; 16] {
+    let hash = blake3::hash(input);
     let mut out = [0u8; 16];
-    out.copy_from_slice(&hash[..16]);
+    out.copy_from_slice(&hash.as_bytes()[..16]);
     out
 }
 
@@ -433,7 +426,7 @@ fn reward_wallet_storage_key(miner_account: &[u8; 32]) -> Vec<u8> {
     let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
     key.extend_from_slice(&twox_128(b"FullnodePowReward"));
     key.extend_from_slice(&twox_128(b"RewardWalletByMiner"));
-    key.extend_from_slice(&blake2_128(miner_account));
+    key.extend_from_slice(&blake3_128(miner_account));
     key.extend_from_slice(miner_account);
     key
 }

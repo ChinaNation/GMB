@@ -1,7 +1,7 @@
 use crate::{
-    home::home_node,
+    home,
     settings::bootnodes_address,
-    shared::{rpc, security},
+    shared::{constants, rpc, security},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -9,17 +9,38 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     path::PathBuf,
-    sync::Mutex,
+    sync::{Mutex, OnceLock},
     time::Duration,
 };
 use tauri::AppHandle;
 
-const EXPECTED_SS58_PREFIX: u64 = 2027;
 const KNOWN_PEERS_MAX: usize = 5000;
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(4);
 const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
-static KNOWN_PEERS_IO_LOCK: Mutex<()> = Mutex::new(());
+struct CachedKnownPeers {
+    peers: Vec<String>,
+    peer_set: HashSet<String>,
+    dirty: bool,
+    loaded: bool,
+}
+
+impl CachedKnownPeers {
+    fn new() -> Self {
+        Self {
+            peers: Vec::new(),
+            peer_set: HashSet::new(),
+            dirty: false,
+            loaded: false,
+        }
+    }
+}
+
+static KNOWN_PEERS_CACHE: OnceLock<Mutex<CachedKnownPeers>> = OnceLock::new();
+
+fn known_peers_cache() -> &'static Mutex<CachedKnownPeers> {
+    KNOWN_PEERS_CACHE.get_or_init(|| Mutex::new(CachedKnownPeers::new()))
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -102,8 +123,8 @@ fn save_known_peers(app: &AppHandle, peer_ids: &[String]) -> Result<(), String> 
     })
     .map_err(|e| format!("encode known peers failed: {e}"))?;
     let path = known_peers_path(app)?;
-    security::write_text_atomic(&path, &format!("{raw}\n"))
-        .map_err(|e| format!("write known peers failed ({}): {e}", path.display()))
+    security::write_text_atomic_restricted(&path, &format!("{raw}\n"))
+        .map_err(|e| format!("write known peers failed ({}): {e}", security::sanitize_path(&path)))
 }
 
 fn trim_known_peers_fifo(peer_ids: &mut Vec<String>) -> bool {
@@ -126,53 +147,60 @@ struct KnownPeersMergeResult {
     warnings: Vec<String>,
 }
 
-// known-peers 既承担“历史已见节点集合”，也承担本地容错缓存；
-// 这里在合并观测结果时顺手把无效/重复旧数据清洗并回写磁盘。
+// known-peers 内存缓存：首次访问时从文件加载，后续在内存操作，
+// 仅当有新 peer 加入（dirty=true）时才回写磁盘。
 fn merge_known_peers(app: &AppHandle, observed_peer_ids: &[String]) -> KnownPeersMergeResult {
-    let _guard = KNOWN_PEERS_IO_LOCK.lock().unwrap_or_else(|err| {
-        eprintln!("KNOWN_PEERS_IO_LOCK poisoned; continuing with recovered lock");
-        err.into_inner()
-    });
+    let mut cache = known_peers_cache()
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
     let mut warnings: Vec<String> = Vec::new();
 
-    let load_result = match load_known_peers(app) {
-        Ok(v) => v,
-        Err(err) => {
-            warnings.push(format!("读取 known-peers 失败，使用空集合: {err}"));
-            LoadKnownPeersResult {
-                peer_ids: Vec::new(),
-                normalized_changed: false,
+    // 首次加载：从文件读取到内存
+    if !cache.loaded {
+        match load_known_peers(app) {
+            Ok(result) => {
+                cache.peers = result.peer_ids;
+                cache.peer_set = cache.peers.iter().cloned().collect();
+                if result.normalized_changed {
+                    cache.dirty = true;
+                }
+            }
+            Err(err) => {
+                warnings.push(format!("读取 known-peers 失败，使用空集合: {err}"));
             }
         }
-    };
-    let mut merged_peer_ids = load_result.peer_ids;
-    let mut changed = false;
-    if load_result.normalized_changed {
-        changed = true;
+        cache.loaded = true;
     }
-    let mut known_set: HashSet<String> = merged_peer_ids.iter().cloned().collect();
+
+    // 合并观测到的新 peer
     for pid in observed_peer_ids {
-        if known_set.insert(pid.clone()) {
-            merged_peer_ids.push(pid.clone());
-            changed = true;
+        if cache.peer_set.insert(pid.clone()) {
+            cache.peers.push(pid.clone());
+            cache.dirty = true;
         }
     }
 
-    let trimmed = trim_known_peers_fifo(&mut merged_peer_ids);
-    if changed || trimmed {
-        if let Err(err) = save_known_peers(app, &merged_peer_ids) {
-            warnings.push(format!("保存 known-peers 失败: {err}"));
-        }
-    }
+    let trimmed = trim_known_peers_fifo(&mut cache.peers);
     if trimmed {
+        cache.peer_set = cache.peers.iter().cloned().collect();
+        cache.dirty = true;
         warnings.push(format!(
             "known-peers 超出上限，已按 FIFO 截断到 {} 条",
             KNOWN_PEERS_MAX
         ));
     }
 
+    // 仅 dirty 时写入文件
+    if cache.dirty {
+        if let Err(err) = save_known_peers(app, &cache.peers) {
+            warnings.push(format!("保存 known-peers 失败: {err}"));
+        } else {
+            cache.dirty = false;
+        }
+    }
+
     KnownPeersMergeResult {
-        peer_ids: merged_peer_ids,
+        peer_ids: cache.peers.clone(),
         warnings,
     }
 }
@@ -181,7 +209,7 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
 }
 
-// 网络统计必须建立在“当前 RPC 确认属于目标链”的前提上，
+// 网络统计必须建立在"当前 RPC 确认属于目标链"的前提上，
 // 否则宁可降级返回告警，也不要继续产出可能误导的网络数据。
 fn ensure_expected_rpc_node() -> Result<(), String> {
     let properties = rpc_post("system_properties", Value::Array(vec![]))?;
@@ -195,7 +223,7 @@ fn ensure_expected_rpc_node() -> Result<(), String> {
             }
         })
         .ok_or_else(|| "RPC 节点缺少 ss58Format".to_string())?;
-    if ss58 != EXPECTED_SS58_PREFIX {
+    if ss58 != constants::EXPECTED_SS58_PREFIX {
         return Err(format!("RPC 链前缀不匹配：expected=2027, got={ss58}"));
     }
 
@@ -234,7 +262,7 @@ pub async fn get_network_overview(app: AppHandle) -> Result<NetworkOverview, Str
 }
 
 fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, String> {
-    // 网络总览是一个“尽量返回”的聚合接口：
+    // 网络总览是一个"尽量返回"的聚合接口：
     // 只要能确认当前 RPC 属于目标链，就尽量返回已知在线节点、历史节点和本机状态。
     let bootnodes = bootnodes_address::genesis_bootnode_options()?;
     let bootnode_map: HashMap<String, String> = bootnodes
@@ -252,7 +280,7 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
         }
     };
 
-    let status = home_node::current_status(&app)?;
+    let status = home::current_status(&app)?;
 
     let mut online_peer_ids: HashSet<String> = HashSet::new();
     let mut known_peer_observed: Vec<String> = Vec::new();
@@ -391,7 +419,7 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
     }
     if uncategorized_bootnodes > 0 {
         warnings.push(format!(
-            "{} 个引导节点名称未命中“国储会/省储会/省储行”，按全节点口径处理",
+            "{} 个引导节点名称未命中\u{201c}国储会/省储会/省储行\u{201d}，按全节点口径处理",
             uncategorized_bootnodes
         ));
     }
@@ -417,4 +445,67 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
             Some(warnings.join("；"))
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_peer_id_valid() {
+        assert_eq!(
+            normalize_peer_id("12D3KooWTest"),
+            Some("12D3KooWTest".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_peer_id_trims_whitespace() {
+        assert_eq!(
+            normalize_peer_id("  12D3KooWTest  "),
+            Some("12D3KooWTest".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_peer_id_empty_rejected() {
+        assert_eq!(normalize_peer_id(""), None);
+        assert_eq!(normalize_peer_id("   "), None);
+    }
+
+    #[test]
+    fn normalize_peer_id_too_long_rejected() {
+        let long = "a".repeat(129);
+        assert_eq!(normalize_peer_id(&long), None);
+    }
+
+    #[test]
+    fn normalize_peer_id_max_length_ok() {
+        let max = "a".repeat(128);
+        assert!(normalize_peer_id(&max).is_some());
+    }
+
+    #[test]
+    fn normalize_peer_id_non_alphanumeric_rejected() {
+        assert_eq!(normalize_peer_id("12D3/KooW"), None);
+        assert_eq!(normalize_peer_id("peer-id"), None);
+    }
+
+    #[test]
+    fn trim_known_peers_fifo_under_limit() {
+        let mut peers: Vec<String> = (0..10).map(|i| format!("peer{i}")).collect();
+        assert!(!trim_known_peers_fifo(&mut peers));
+        assert_eq!(peers.len(), 10);
+    }
+
+    #[test]
+    fn trim_known_peers_fifo_over_limit() {
+        let mut peers: Vec<String> = (0..KNOWN_PEERS_MAX + 5)
+            .map(|i| format!("peer{i}"))
+            .collect();
+        assert!(trim_known_peers_fifo(&mut peers));
+        assert_eq!(peers.len(), KNOWN_PEERS_MAX);
+        // FIFO: earliest entries removed
+        assert_eq!(peers[0], "peer5");
+    }
 }

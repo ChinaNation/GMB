@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { blake3 } from '@noble/hashes/blake3';
 import { api } from '../../api';
 import type { RewardWallet } from '../../types';
 
@@ -87,6 +88,19 @@ function normalizeWalletAddressClient(input: string): string {
   if (payloadLen !== 32) {
     throw new Error('SS58 地址账户长度无效，必须是 32 字节账户地址');
   }
+
+  // Blake3 校验和验证
+  const withoutChecksum = data.slice(0, data.length - 2);
+  const actualChecksum = data.slice(data.length - 2);
+  const ss58Pre = new TextEncoder().encode('SS58PRE');
+  const preimage = new Uint8Array(ss58Pre.length + withoutChecksum.length);
+  preimage.set(ss58Pre);
+  preimage.set(withoutChecksum, ss58Pre.length);
+  const hash = blake3(preimage);
+  if (actualChecksum[0] !== hash[0] || actualChecksum[1] !== hash[1]) {
+    throw new Error('SS58 地址校验和无效');
+  }
+
   return value;
 }
 
@@ -176,12 +190,12 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
                     onUpdated(next);
                     setInput(next.address ?? '');
                     setShowPasswordModal(false);
-                    setUnlockPassword('');
                     setPendingAddress(null);
                     setError(null);
                   } catch (e) {
                     setError(e instanceof Error ? e.message : String(e));
                   } finally {
+                    setUnlockPassword('');
                     setSaving(false);
                   }
                 }}

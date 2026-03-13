@@ -161,11 +161,11 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
                       setInput('');
                       setShowPasswordModal(false);
                       setPendingAction(null);
-                      setUnlockPassword('');
                       setBootnodeError(null);
                     } catch (e) {
                       setBootnodeError(e instanceof Error ? e.message : String(e));
                     } finally {
+                      setUnlockPassword('');
                       setSaving(false);
                     }
                     return;
@@ -179,11 +179,11 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
                       setGrandpaInstitutionName(next.institutionName ?? null);
                       setShowPasswordModal(false);
                       setPendingAction(null);
-                      setUnlockPassword('');
                       setGrandpaError(null);
                     } catch (e) {
                       setGrandpaError(e instanceof Error ? e.message : String(e));
                     } finally {
+                      setUnlockPassword('');
                       setSavingGrandpa(false);
                     }
                     return;

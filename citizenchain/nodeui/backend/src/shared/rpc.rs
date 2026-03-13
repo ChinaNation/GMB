@@ -8,9 +8,12 @@ use std::{
 
 const RPC_HTTP_URL: &str = "http://127.0.0.1:9944/";
 const RPC_CONNECT_TIMEOUT_MS: u64 = 2500;
+const GENESIS_HASH_TIMEOUT: Duration = Duration::from_secs(3);
+const GENESIS_HASH_MAX_BYTES: u64 = 1024;
 
 static RPC_HTTP_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
 static RPC_HTTP_CLIENT_INIT_LOCK: Mutex<()> = Mutex::new(());
+static CACHED_GENESIS_HASH: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
 fn rpc_http_client() -> Result<&'static reqwest::blocking::Client, String> {
     if let Some(client) = RPC_HTTP_CLIENT.get() {
@@ -81,4 +84,61 @@ pub(crate) fn rpc_post(
         return Err(format!("RPC 返回错误: {err}"));
     }
     Ok(json.get("result").cloned().unwrap_or(Value::Null))
+}
+
+/// 获取本地 RPC 节点的 genesis hash 并缓存。
+/// 首次连接时从 `chain_getBlockHash(0)` 获取并存储，后续直接返回缓存。
+pub(crate) fn cached_genesis_hash() -> Result<String, String> {
+    let mutex = CACHED_GENESIS_HASH.get_or_init(|| Mutex::new(None));
+    let mut guard = mutex
+        .lock()
+        .map_err(|_| "genesis hash cache lock poisoned".to_string())?;
+    if let Some(ref hash) = *guard {
+        return Ok(hash.clone());
+    }
+    let hash = rpc_post(
+        "chain_getBlockHash",
+        Value::Array(vec![Value::Number(0.into())]),
+        GENESIS_HASH_TIMEOUT,
+        GENESIS_HASH_MAX_BYTES,
+    )?;
+    let hash_str = hash
+        .as_str()
+        .ok_or_else(|| "chain_getBlockHash(0) 返回值不是字符串".to_string())?
+        .to_string();
+    if hash_str.is_empty() {
+        return Err("chain_getBlockHash(0) 返回空哈希".to_string());
+    }
+    *guard = Some(hash_str.clone());
+    Ok(hash_str)
+}
+
+/// 校验当前连接的 RPC 节点 genesis hash 是否与首次缓存的一致。
+/// 如果尚无缓存，首次调用会自动缓存。
+pub(crate) fn verify_genesis_hash() -> Result<(), String> {
+    let expected = cached_genesis_hash()?;
+    let current = rpc_post(
+        "chain_getBlockHash",
+        Value::Array(vec![Value::Number(0.into())]),
+        GENESIS_HASH_TIMEOUT,
+        GENESIS_HASH_MAX_BYTES,
+    )?;
+    let current_str = current
+        .as_str()
+        .ok_or_else(|| "chain_getBlockHash(0) 返回值不是字符串".to_string())?;
+    if current_str != expected {
+        return Err(format!(
+            "RPC 节点 genesis hash 不匹配（期望 {expected}，实际 {current_str}），可能连接到了错误的链"
+        ));
+    }
+    Ok(())
+}
+
+/// 节点停止后清除 genesis hash 缓存，以便下次启动时重新校验。
+pub(crate) fn clear_genesis_hash_cache() {
+    if let Some(mutex) = CACHED_GENESIS_HASH.get() {
+        if let Ok(mut guard) = mutex.lock() {
+            *guard = None;
+        }
+    }
 }
