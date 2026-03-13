@@ -63,14 +63,14 @@ fn load_auth_rate_limit_store(path: &Path) -> Result<AuthRateLimitStore, String>
         Err(err) => {
             return Err(format!(
                 "read auth rate limit store failed ({}): {err}",
-                path.display()
+                security::sanitize_path(path)
             ));
         }
     };
     serde_json::from_str::<AuthRateLimitStore>(&raw).map_err(|err| {
         format!(
             "parse auth rate limit store failed ({}): {err}",
-            path.display()
+            security::sanitize_path(path)
         )
     })
 }
@@ -78,7 +78,7 @@ fn load_auth_rate_limit_store(path: &Path) -> Result<AuthRateLimitStore, String>
 fn save_auth_rate_limit_store(path: &Path, store: &AuthRateLimitStore) -> Result<(), String> {
     let raw = serde_json::to_string(store)
         .map_err(|err| format!("encode auth rate limit store failed: {err}"))?;
-    security::write_text_atomic(path, &format!("{raw}\n"))
+    security::write_text_atomic_restricted(path, &format!("{raw}\n"))
 }
 
 fn compact_auth_rate_limit_state(

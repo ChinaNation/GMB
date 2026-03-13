@@ -36,6 +36,15 @@ struct EncryptedSecretEnvelope {
     cipher_b64: String,
 }
 
+/// 对路径做脱敏处理：仅保留文件名，去除父目录信息。
+/// 用于返回给前端的错误消息，避免泄露服务器/本地文件系统布局。
+pub(crate) fn sanitize_path(path: &Path) -> String {
+    path.file_name()
+        .and_then(|v| v.to_str())
+        .unwrap_or("<unknown>")
+        .to_string()
+}
+
 pub(crate) fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let app_data = app
         .path()
@@ -50,6 +59,11 @@ pub(crate) fn write_text_atomic(path: &Path, content: &str) -> Result<(), String
 }
 
 pub(crate) fn write_secret_text_atomic(path: &Path, content: &str) -> Result<(), String> {
+    write_bytes_atomic(path, content.as_bytes(), true)
+}
+
+/// 对非密钥但仍需限制读取权限的文件（如缓存、速率限制状态）使用受限写入。
+pub(crate) fn write_text_atomic_restricted(path: &Path, content: &str) -> Result<(), String> {
     write_bytes_atomic(path, content.as_bytes(), true)
 }
 
@@ -89,6 +103,29 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8], secret_mode: bool) -> Result<()
     if secret_mode {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&temp_path, fs::Permissions::from_mode(0o600)).map_err(|e| {
+            format!(
+                "set temp file permission failed ({}): {e}",
+                temp_path.display()
+            )
+        })?;
+    }
+
+    #[cfg(target_os = "windows")]
+    if secret_mode {
+        // Windows: 使用 NTFS 只读属性限制访问。
+        // 完整的 ACL 方案需要 windows-sys 依赖，此处用标准库设置只读属性
+        // 作为最低限度保护，并在注释中说明风险。
+        // 注意：只读属性不等同于 Unix 0600，管理员仍可读取。
+        let mut perms = fs::metadata(&temp_path)
+            .map_err(|e| {
+                format!(
+                    "read temp file metadata failed ({}): {e}",
+                    temp_path.display()
+                )
+            })?
+            .permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(&temp_path, perms).map_err(|e| {
             format!(
                 "set temp file permission failed ({}): {e}",
                 temp_path.display()

@@ -5,7 +5,7 @@ mod other;
 mod settings;
 mod shared;
 
-use home::home_node::{
+use home::{
     cleanup_on_exit, get_chain_status, get_node_identity, get_node_status, set_node_name,
     start_node, stop_node, AppState, RuntimeState,
 };

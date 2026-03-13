@@ -65,8 +65,12 @@
 
 - 存储路径：`<app_data_dir>/known-peers.json`。
 - 仅保留合法 PeerId（ASCII 字母数字，非空，长度 <= 128）。
-- 设置上限 `KNOWN_PEERS_MAX = 5000`，超限时截断。
-- 仅在集合变化时写盘，避免每次查询都落盘。
+- 设置上限 `KNOWN_PEERS_MAX = 5000`，超限时 FIFO 截断。
+- 使用内存缓存 + 脏标记（`CachedKnownPeers`）：
+  - 首次访问从文件加载到内存。
+  - 后续合并新 peers 在内存中操作，设置 `dirty = true`。
+  - 仅 `dirty` 时写入文件，写入后重置标记。
+  - 避免每 5 秒轮询时重复读写文件。
 
 ## 7. RPC 健壮性与链指纹校验
 
@@ -83,6 +87,7 @@
 - 统计前先做链指纹校验：
   - `system_properties.ss58Format == 2027`
   - `system_name` 非空
+  - genesis hash 与首次连接缓存一致（`shared::rpc::verify_genesis_hash`）
 - 任一指纹项校验失败时不信任网络统计，返回告警并降级输出。
 
 ## 8. 告警策略
@@ -98,6 +103,7 @@
 
 ## 9. 依赖关系
 
-- 依赖 `home/home-node` 的 `current_status` 获取本机运行状态。
+- 依赖 `home/process` 的 `current_status` 获取本机运行状态。
 - 依赖 `settings/bootnodes-address` 的创世节点元数据。
-- 依赖 `settings/security` 提供应用数据目录。
+- 依赖 `shared/security` 提供应用数据目录。
+- 依赖 `shared/rpc::verify_genesis_hash` 进行 genesis hash 校验。

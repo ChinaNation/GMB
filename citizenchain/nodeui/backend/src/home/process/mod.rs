@@ -1,9 +1,9 @@
+// 进程管理子模块：节点进程的启动、停止、生命周期管理及二进制文件校验。
+
 use crate::{
     settings::{bootnodes_address, device_password, fee_address, grandpa_address},
-    shared::{rpc, security, validation::normalize_node_name},
+    shared::{keystore, rpc, security},
 };
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
     fs,
@@ -14,12 +14,12 @@ use std::{
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 use tauri::{AppHandle, Manager};
 
-const EXPECTED_SS58_PREFIX: u64 = 2027;
-const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
-const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
-const RPC_RETRY_COUNT: usize = 3;
+use super::identity::{current_status, load_node_name, NodeStatus};
+use super::rpc::is_expected_rpc_node;
+
 const NODE_BIN_BASENAME: &str = "citizenchain-node";
 const RUNTIME_SECRETS_DIR_NAME: &str = "runtime-secrets";
 const NODE_KEY_TEMP_PREFIX: &str = "node-key-";
@@ -39,52 +39,18 @@ pub struct RuntimeState {
 /// Tauri 全局状态，供首页节点相关命令共享。
 pub struct AppState(pub Mutex<RuntimeState>);
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-/// 首页展示的节点运行状态。
-pub struct NodeStatus {
-    pub running: bool,
-    pub state: String,
-    pub pid: Option<u32>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-/// 首页展示的链同步状态。
-pub struct ChainStatus {
-    pub block_height: Option<u64>,
-    pub finalized_height: Option<u64>,
-    pub syncing: Option<bool>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-/// 首页展示的节点身份信息。
-pub struct NodeIdentity {
-    pub node_name: Option<String>,
-    pub peer_id: Option<String>,
-    pub role: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct StoredNodeName {
-    node_name: String,
-}
-
-fn lock_node_lifecycle() -> std::sync::MutexGuard<'static, ()> {
+pub(super) fn lock_node_lifecycle() -> std::sync::MutexGuard<'static, ()> {
     NODE_LIFECYCLE_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
         .unwrap_or_else(|err| err.into_inner())
 }
 
-fn node_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let data = security::app_data_dir(app)?.join("node-data");
-    fs::create_dir_all(&data).map_err(|e| format!("create node data dir failed: {e}"))?;
-    Ok(data)
+pub(super) fn node_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    keystore::node_data_dir(app)
 }
 
-fn runtime_secrets_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub(super) fn runtime_secrets_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let secrets = security::app_data_dir(app)?.join(RUNTIME_SECRETS_DIR_NAME);
     fs::create_dir_all(&secrets).map_err(|e| format!("create runtime secrets dir failed: {e}"))?;
     #[cfg(unix)]
@@ -120,7 +86,7 @@ fn cleanup_stale_node_key_temp_files(app: &AppHandle) -> Result<(), String> {
     let entries = fs::read_dir(&secrets_dir).map_err(|e| {
         format!(
             "read runtime secrets dir failed ({}): {e}",
-            secrets_dir.display()
+            security::sanitize_path(&secrets_dir)
         )
     })?;
     for entry in entries {
@@ -187,7 +153,7 @@ fn cleanup_stale_staged_node_bins(app: &AppHandle, keep: Option<&Path>) -> Resul
     let entries = fs::read_dir(&secrets_dir).map_err(|e| {
         format!(
             "read runtime secrets dir failed ({}): {e}",
-            secrets_dir.display()
+            security::sanitize_path(&secrets_dir)
         )
     })?;
     for entry in entries {
@@ -213,21 +179,7 @@ fn cleanup_stale_staged_node_bins(app: &AppHandle, keep: Option<&Path>) -> Resul
     Ok(())
 }
 
-fn node_name_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(security::app_data_dir(app)?.join("node-name.json"))
-}
-
-// 角色由 bootnode 名称映射得出，未命中时统一按“全节点”展示。
-fn role_from_peer_id(peer_id: Option<&str>) -> String {
-    if let Some(pid) = peer_id {
-        if let Ok(Some(name)) = bootnodes_address::find_genesis_bootnode_name_by_peer_id(pid) {
-            return name;
-        }
-    }
-    "全节点".to_string()
-}
-
-fn refresh_managed_process(state: &mut RuntimeState) -> (bool, Option<u32>) {
+pub(super) fn refresh_managed_process(state: &mut RuntimeState) -> (bool, Option<u32>) {
     if let Some(child) = state.local_node.as_mut() {
         match child.try_wait() {
             Ok(Some(_)) | Err(_) => {
@@ -309,7 +261,7 @@ fn node_bin_hash_candidates(node_bin: &Path) -> Result<Vec<PathBuf>, String> {
         .ok_or_else(|| {
             format!(
                 "resolve node binary filename failed ({})",
-                node_bin.display()
+                security::sanitize_path(node_bin)
             )
         })?;
     let mut paths = vec![node_bin.with_file_name(format!("{file_name}.sha256"))];
@@ -372,7 +324,7 @@ fn resolve_node_bin_hash_path(node_bin: &Path) -> Result<PathBuf, String> {
         .ok_or_else(|| {
             let expected_list = hash_paths
                 .iter()
-                .map(|v| v.display().to_string())
+                .map(|v| security::sanitize_path(v))
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("node binary hash file missing: [{expected_list}]")
@@ -402,14 +354,14 @@ fn staged_node_bin_path(app: &AppHandle, source_bin: &Path) -> Result<PathBuf, S
 }
 
 // 节点二进制先复制到运行时目录并在副本上再次验 hash，
-// 这样可以把“校验通过的文件”和“真正执行的文件”绑定到同一个副本。
+// 这样可以把"校验通过的文件"和"真正执行的文件"绑定到同一个副本。
 fn stage_verified_node_bin(app: &AppHandle) -> Result<PathBuf, String> {
     let source_bin = find_node_bin_source(app)?;
     let hash_path = resolve_node_bin_hash_path(&source_bin)?;
     let expected_raw = fs::read_to_string(&hash_path).map_err(|e| {
         format!(
             "read node binary hash failed ({}): {e}",
-            hash_path.display()
+            security::sanitize_path(&hash_path)
         )
     })?;
     let expected = parse_sha256_hex(&expected_raw)?;
@@ -418,8 +370,8 @@ fn stage_verified_node_bin(app: &AppHandle) -> Result<PathBuf, String> {
         let _ = remove_staged_node_bin_file(&staged_bin);
         return Err(format!(
             "copy staged node binary failed ({} -> {}): {e}",
-            source_bin.display(),
-            staged_bin.display()
+            security::sanitize_path(&source_bin),
+            security::sanitize_path(&staged_bin)
         ));
     }
     if let Err(e) = fs::set_permissions(
@@ -428,7 +380,7 @@ fn stage_verified_node_bin(app: &AppHandle) -> Result<PathBuf, String> {
             .map_err(|err| {
                 format!(
                     "read source node binary metadata failed ({}): {err}",
-                    source_bin.display()
+                    security::sanitize_path(&source_bin)
                 )
             })?
             .permissions(),
@@ -436,7 +388,7 @@ fn stage_verified_node_bin(app: &AppHandle) -> Result<PathBuf, String> {
         let _ = remove_staged_node_bin_file(&staged_bin);
         return Err(format!(
             "set staged node binary permissions failed ({}): {e}",
-            staged_bin.display()
+            security::sanitize_path(&staged_bin)
         ));
     }
     let actual = match file_sha256_hex(&staged_bin) {
@@ -450,9 +402,9 @@ fn stage_verified_node_bin(app: &AppHandle) -> Result<PathBuf, String> {
         let _ = remove_staged_node_bin_file(&staged_bin);
         return Err(format!(
             "staged node binary sha256 mismatch (bin={}, hash_file={}, staged={})",
-            source_bin.display(),
-            hash_path.display(),
-            staged_bin.display()
+            security::sanitize_path(&source_bin),
+            security::sanitize_path(&hash_path),
+            security::sanitize_path(&staged_bin)
         ));
     }
     Ok(staged_bin)
@@ -469,7 +421,7 @@ fn find_node_bin_source(app: &AppHandle) -> Result<PathBuf, String> {
                 "node binary not found. searched: {}",
                 node_bin_candidate_paths(app)
                     .iter()
-                    .map(|v| v.display().to_string())
+                    .map(|v| security::sanitize_path(v))
                     .collect::<Vec<_>>()
                     .join(", ")
             )
@@ -484,82 +436,60 @@ fn find_node_bin_source(app: &AppHandle) -> Result<PathBuf, String> {
     {
         return Err(format!(
             "node binary is outside trusted dirs: {}",
-            canonical_bin.display()
+            security::sanitize_path(&canonical_bin)
         ));
     }
     Ok(canonical_bin)
 }
 
-fn verify_start_unlock_password(app: &AppHandle, unlock_password: &str) -> Result<(), String> {
-    let unlock = security::ensure_unlock_password(unlock_password)?;
-    device_password::verify_device_login_password(app, unlock)?;
-    bootnodes_address::verify_bootnode_secret_unlock(unlock)?;
-    grandpa_address::verify_grandpa_secret_unlock(unlock)?;
-    Ok(())
+/// 判断命令行指向的可执行文件是否位于受信任目录。
+/// 解析命令行第一个 token 作为可执行路径，校验其规范化路径前缀在白名单目录内。
+fn is_trusted_node_process(cmd: &str, trusted_dirs: &[PathBuf]) -> bool {
+    let exe_path = match cmd.split_whitespace().next() {
+        Some(token) => PathBuf::from(token),
+        None => return false,
+    };
+    let canonical = match exe_path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    trusted_dirs.iter().any(|dir| canonical.starts_with(dir))
 }
 
-fn load_node_name(app: &AppHandle) -> Result<Option<String>, String> {
-    let path = node_name_path(app)?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let raw = fs::read_to_string(path).map_err(|e| format!("read node-name failed: {e}"))?;
-    let record: StoredNodeName =
-        serde_json::from_str(&raw).map_err(|e| format!("parse node-name failed: {e}"))?;
-    Ok(Some(record.node_name))
-}
-
-#[cfg(unix)]
-fn process_args(pid: u32) -> Option<String> {
-    let out = Command::new("ps")
-        .args(["-ww", "-p", &pid.to_string(), "-o", "args="])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let args = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if args.is_empty() {
-        None
-    } else {
-        Some(args)
-    }
-}
-
-#[cfg(not(unix))]
-fn process_args(_pid: u32) -> Option<String> {
-    None
-}
-
-#[cfg(unix)]
-fn process_comm(pid: u32) -> Option<String> {
-    let out = Command::new("ps")
-        .args(["-p", &pid.to_string(), "-o", "comm="])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let comm = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if comm.is_empty() {
-        None
-    } else {
-        Some(comm)
-    }
-}
-
-#[cfg(not(unix))]
-fn process_comm(_pid: u32) -> Option<String> {
-    None
-}
-
-fn likely_node_command(cmd: &str) -> bool {
-    let lower = cmd.to_ascii_lowercase();
+/// 宽松兜底匹配，仅用于 lsof 回退路径中 comm 字段（纯进程名，无路径信息）的判断。
+fn likely_node_comm(comm: &str) -> bool {
+    let lower = comm.to_ascii_lowercase();
     lower.contains("citizenchain-node")
-        || lower.contains("/target/debug/node")
-        || lower.contains("/target/release/node")
 }
 
+/// 使用 sysinfo 获取指定进程的完整命令行参数。
+fn process_args(pid: u32) -> Option<String> {
+    let sys = System::new_with_specifics(
+        RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing().with_cmd(sysinfo::UpdateKind::Always)),
+    );
+    let sysinfo_pid = sysinfo::Pid::from_u32(pid);
+    let proc = sys.process(sysinfo_pid)?;
+    let cmd = proc.cmd();
+    if cmd.is_empty() {
+        return None;
+    }
+    let args = cmd.iter().map(|s| s.to_string_lossy().to_string()).collect::<Vec<_>>().join(" ");
+    if args.is_empty() { None } else { Some(args) }
+}
+
+/// 使用 sysinfo 获取指定进程的可执行文件名。
+fn process_comm(pid: u32) -> Option<String> {
+    let sys = System::new_with_specifics(
+        RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing()),
+    );
+    let sysinfo_pid = sysinfo::Pid::from_u32(pid);
+    let proc = sys.process(sysinfo_pid)?;
+    let name = proc.name().to_string_lossy().to_string();
+    if name.is_empty() { None } else { Some(name) }
+}
+
+/// 使用 lsof 获取监听 RPC 端口 9944 的进程 PID 列表。
+/// sysinfo 不提供端口监听信息，保留 lsof 实现。
 #[cfg(unix)]
 fn listener_pids_on_rpc_port_best_effort() -> Vec<u32> {
     let Ok(out) = Command::new("lsof")
@@ -583,53 +513,30 @@ fn listener_pids_on_rpc_port_best_effort() -> Vec<u32> {
     Vec::new()
 }
 
-#[cfg(unix)]
+/// 使用 sysinfo 获取所有进程的 (pid, command_line) 对。
 fn node_pid_command_pairs() -> Result<Vec<(u32, String)>, String> {
-    let out = Command::new("ps")
-        .args(["-ww", "-axo", "pid=,command="])
-        .output()
-        .map_err(|e| format!("execute ps failed: {e}"))?;
-    if !out.status.success() {
-        return Err(format!(
-            "ps failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        ));
-    }
+    let sys = System::new_with_specifics(
+        RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing().with_cmd(sysinfo::UpdateKind::Always)),
+    );
     let mut pairs = Vec::new();
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    for line in stdout.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let mut it = trimmed.split_whitespace();
-        let Some(pid_str) = it.next() else {
-            continue;
-        };
-        let Ok(pid) = pid_str.parse::<u32>() else {
-            continue;
-        };
-        let cmd = trimmed
-            .strip_prefix(pid_str)
-            .map(str::trim_start)
-            .unwrap_or("")
-            .to_string();
+    for (pid, proc) in sys.processes() {
+        let cmd = proc.cmd();
         if cmd.is_empty() {
             continue;
         }
-        pairs.push((pid, cmd));
+        let full_cmd = cmd.iter().map(|s| s.to_string_lossy().to_string()).collect::<Vec<_>>().join(" ");
+        if full_cmd.is_empty() {
+            continue;
+        }
+        pairs.push((pid.as_u32(), full_cmd));
     }
     Ok(pairs)
 }
 
-#[cfg(not(unix))]
-fn node_pid_command_pairs() -> Result<Vec<(u32, String)>, String> {
-    Ok(Vec::new())
-}
-
-// 历史会话可能遗留旧节点进程，这里按“命令行特征 -> lsof -> RPC 指纹”逐层收敛，
+// 历史会话可能遗留旧节点进程，这里按"命令行特征 -> lsof -> RPC 指纹"逐层收敛，
 // 只把高度疑似本应用节点的 PID 作为可信目标返回。
-fn trusted_node_process_pids_on_rpc_port(app: &AppHandle) -> Result<Vec<u32>, String> {
+pub(super) fn trusted_node_process_pids_on_rpc_port(app: &AppHandle) -> Result<Vec<u32>, String> {
+    let trusted_dirs = trusted_node_bin_dirs(app).unwrap_or_default();
     let data_dir_raw = node_data_dir(app)?;
     let mut base_tokens = vec![data_dir_raw.to_string_lossy().to_string()];
     if let Ok(canonical) = data_dir_raw.canonicalize() {
@@ -640,7 +547,7 @@ fn trusted_node_process_pids_on_rpc_port(app: &AppHandle) -> Result<Vec<u32>, St
     let mut candidate: Vec<(u32, String)> = all
         .into_iter()
         .filter(|(_, cmd)| {
-            let has_bin = likely_node_command(cmd);
+            let has_bin = is_trusted_node_process(cmd, &trusted_dirs);
             let has_rpc = cmd.contains("--rpc-port 9944") || cmd.contains("--rpc-port=9944");
             let has_base = base_tokens.iter().any(|token| cmd.contains(token));
             has_bin && (has_rpc || has_base)
@@ -669,7 +576,7 @@ fn trusted_node_process_pids_on_rpc_port(app: &AppHandle) -> Result<Vec<u32>, St
             .iter()
             .filter_map(|(pid, _)| {
                 let args = process_args(*pid)?;
-                if likely_node_command(&args)
+                if is_trusted_node_process(&args, &trusted_dirs)
                     && (args.contains("--rpc-port 9944") || args.contains("--rpc-port=9944"))
                 {
                     Some(*pid)
@@ -686,10 +593,10 @@ fn trusted_node_process_pids_on_rpc_port(app: &AppHandle) -> Result<Vec<u32>, St
             .into_iter()
             .filter(|pid| {
                 process_args(*pid)
-                    .map(|args| likely_node_command(&args))
+                    .map(|args| is_trusted_node_process(&args, &trusted_dirs))
                     .unwrap_or(false)
                     || process_comm(*pid)
-                        .map(|comm| likely_node_command(&comm))
+                        .map(|comm| likely_node_comm(&comm))
                         .unwrap_or(false)
             })
             .collect();
@@ -763,6 +670,14 @@ fn terminate_trusted_listener_nodes(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+fn verify_start_unlock_password(app: &AppHandle, unlock_password: &str) -> Result<(), String> {
+    let unlock = security::ensure_unlock_password(unlock_password)?;
+    device_password::verify_device_login_password(app, unlock)?;
+    bootnodes_address::verify_bootnode_secret_unlock(unlock)?;
+    grandpa_address::verify_grandpa_secret_unlock(unlock)?;
+    Ok(())
+}
+
 // 启动命令只拼接固定参数，敏感密钥通过临时文件或本地 keystore 注入，
 // 避免把明文秘密直接暴露在命令行参数或环境变量里。
 fn spawn_node(
@@ -819,7 +734,7 @@ fn spawn_node(
             }
             Err(format!(
                 "spawn node failed from {}: {e}",
-                node_bin.display()
+                security::sanitize_path(node_bin)
             ))
         }
     }
@@ -857,7 +772,7 @@ fn terminate_child(child: &mut Child) {
 }
 
 // 启动后的关键校验失败时，需要把刚拉起的节点和临时文件一并回滚，
-// 避免前端看到“启动失败”，而本机实际上还有节点继续运行。
+// 避免前端看到"启动失败"，而本机实际上还有节点继续运行。
 fn rollback_started_node(app: &AppHandle) {
     let app_state = app.state::<AppState>();
     let mut state = match app_state.0.lock() {
@@ -869,91 +784,6 @@ fn rollback_started_node(app: &AppHandle) {
     }
     clear_runtime_node_key_file(&mut state);
     clear_runtime_node_bin_file(&mut state);
-}
-
-fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    let mut last_err = String::new();
-    for attempt in 0..RPC_RETRY_COUNT {
-        match rpc::rpc_post(
-            method,
-            params.clone(),
-            RPC_REQUEST_TIMEOUT,
-            MAX_RPC_RESPONSE_BYTES,
-        ) {
-            Ok(v) => return Ok(v),
-            Err(err) => {
-                last_err = err;
-                if attempt + 1 < RPC_RETRY_COUNT {
-                    thread::sleep(Duration::from_millis(250));
-                }
-            }
-        }
-    }
-    Err(last_err)
-}
-
-fn is_expected_rpc_node() -> bool {
-    let Ok(properties) = rpc_post("system_properties", Value::Array(vec![])) else {
-        return false;
-    };
-    let ss58 = properties
-        .get("ss58Format")
-        .and_then(|v| {
-            if let Some(raw) = v.as_u64() {
-                Some(raw)
-            } else {
-                v.as_str().and_then(|s| s.parse::<u64>().ok())
-            }
-        })
-        .unwrap_or(0);
-    if ss58 != EXPECTED_SS58_PREFIX {
-        return false;
-    }
-
-    rpc_post("system_name", Value::Array(vec![]))
-        .ok()
-        .and_then(|v| v.as_str().map(|s| !s.trim().is_empty()))
-        .unwrap_or(false)
-}
-
-fn hex_to_u64(hex: &str) -> Option<u64> {
-    let trimmed = hex.strip_prefix("0x")?;
-    u64::from_str_radix(trimmed, 16).ok()
-}
-
-fn header_block_height(header: &Value) -> Option<u64> {
-    header
-        .get("number")
-        .and_then(Value::as_str)
-        .and_then(hex_to_u64)
-}
-
-fn finalized_block_height() -> Option<u64> {
-    let hash = rpc_post("chain_getFinalizedHead", Value::Array(vec![]))
-        .ok()?
-        .as_str()?
-        .to_string();
-    let header = rpc_post("chain_getHeader", Value::Array(vec![Value::String(hash)])).ok()?;
-    header_block_height(&header)
-}
-
-fn syncing_flag() -> Option<bool> {
-    let health = rpc_post("system_health", Value::Array(vec![])).ok()?;
-    if let Some(v) = health.get("isSyncing") {
-        if let Some(b) = v.as_bool() {
-            return Some(b);
-        }
-        if let Some(s) = v.as_str() {
-            let lowered = s.trim().to_ascii_lowercase();
-            if lowered == "true" {
-                return Some(true);
-            }
-            if lowered == "false" {
-                return Some(false);
-            }
-        }
-    }
-    None
 }
 
 pub(crate) fn cleanup_on_exit(app: &AppHandle) {
@@ -972,60 +802,6 @@ pub(crate) fn cleanup_on_exit(app: &AppHandle) {
     if let Err(err) = cleanup_stale_node_key_temp_files(app) {
         eprintln!("cleanup stale node-key temp files on exit failed: {err}");
     }
-}
-
-pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
-    // 先看本会话托管进程，再看可信监听进程，最后才退化到 RPC 指纹探测，
-    // 减少仅凭 9944 端口连通就误判为“节点在运行”的概率。
-    let (managed_running, managed_pid) = {
-        let app_state = app.state::<AppState>();
-        let mut state = app_state
-            .0
-            .lock()
-            .map_err(|_| "acquire process state failed".to_string())?;
-        refresh_managed_process(&mut state)
-    };
-    if managed_running {
-        return Ok(NodeStatus {
-            running: true,
-            state: "running".to_string(),
-            pid: managed_pid,
-        });
-    }
-
-    let listener_pids = trusted_node_process_pids_on_rpc_port(app)?;
-    if let Some(pid) = listener_pids.into_iter().next() {
-        return Ok(NodeStatus {
-            running: true,
-            state: "running".to_string(),
-            pid: Some(pid),
-        });
-    }
-
-    let fallback_running = is_expected_rpc_node();
-    Ok(NodeStatus {
-        running: fallback_running,
-        state: if fallback_running {
-            "running"
-        } else {
-            "stopped"
-        }
-        .to_string(),
-        pid: None,
-    })
-}
-
-async fn join_blocking_task<T>(
-    task: &'static str,
-    result: tauri::async_runtime::JoinHandle<Result<T, String>>,
-) -> Result<T, String> {
-    result
-        .await
-        .map_err(|e| format!("{task} join failed: {e}"))?
-}
-
-fn get_node_status_sync(app: AppHandle) -> Result<NodeStatus, String> {
-    current_status(&app)
 }
 
 fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
@@ -1119,6 +895,7 @@ fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
         terminate_trusted_listener_nodes(&app)?;
         cleanup_stale_staged_node_bins(&app, None)?;
         cleanup_stale_node_key_temp_files(&app)?;
+        rpc::clear_genesis_hash_cache();
         thread::sleep(Duration::from_millis(250));
         let status = current_status(&app)?;
         if status.running {
@@ -1139,17 +916,8 @@ fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
 }
 
 #[tauri::command]
-pub async fn get_node_status(app: AppHandle) -> Result<NodeStatus, String> {
-    join_blocking_task(
-        "get_node_status",
-        tauri::async_runtime::spawn_blocking(move || get_node_status_sync(app)),
-    )
-    .await
-}
-
-#[tauri::command]
 pub async fn start_node(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
-    join_blocking_task(
+    super::join_blocking_task(
         "start_node",
         tauri::async_runtime::spawn_blocking(move || start_node_sync(app, unlock_password)),
     )
@@ -1158,94 +926,11 @@ pub async fn start_node(app: AppHandle, unlock_password: String) -> Result<NodeS
 
 #[tauri::command]
 pub async fn stop_node(app: AppHandle) -> Result<NodeStatus, String> {
-    join_blocking_task(
+    super::join_blocking_task(
         "stop_node",
         tauri::async_runtime::spawn_blocking(move || stop_node_sync(app)),
     )
     .await
-}
-
-#[tauri::command]
-pub fn set_node_name(
-    app: AppHandle,
-    node_name: String,
-    unlock_password: String,
-) -> Result<NodeIdentity, String> {
-    let unlock = security::ensure_unlock_password(&unlock_password)?;
-    device_password::verify_device_login_password(&app, unlock)?;
-    let normalized = normalize_node_name(&node_name)?;
-    let raw = serde_json::to_string_pretty(&StoredNodeName {
-        node_name: normalized.clone(),
-    })
-    .map_err(|e| format!("encode node-name failed: {e}"))?;
-
-    security::write_text_atomic(&node_name_path(&app)?, &format!("{raw}\n"))
-        .map_err(|e| format!("write node-name failed: {e}"))?;
-
-    let peer_id = rpc_post("system_localPeerId", Value::Array(vec![]))
-        .ok()
-        .and_then(|v| v.as_str().map(|s| s.to_string()));
-    let role = role_from_peer_id(peer_id.as_deref());
-
-    Ok(NodeIdentity {
-        node_name: Some(normalized),
-        peer_id,
-        role: Some(role),
-    })
-}
-
-fn get_chain_status_sync(app: AppHandle) -> Result<ChainStatus, String> {
-    if !current_status(&app)?.running {
-        return Ok(ChainStatus {
-            block_height: None,
-            finalized_height: None,
-            syncing: None,
-        });
-    }
-
-    let block_height = rpc_post("chain_getHeader", Value::Array(vec![]))
-        .ok()
-        .as_ref()
-        .and_then(header_block_height);
-    let finalized_height = finalized_block_height();
-    let syncing = syncing_flag();
-
-    Ok(ChainStatus {
-        block_height,
-        finalized_height,
-        syncing,
-    })
-}
-
-fn get_node_identity_sync(app: AppHandle) -> Result<NodeIdentity, String> {
-    let configured_node_name = load_node_name(&app)?;
-    if !current_status(&app)?.running {
-        return Ok(NodeIdentity {
-            node_name: configured_node_name,
-            peer_id: None,
-            role: Some("全节点".to_string()),
-        });
-    }
-
-    let rpc_node_name = rpc_post("system_name", Value::Array(vec![]))
-        .ok()
-        .and_then(|v| v.as_str().map(|s| s.to_string()));
-    let node_name = configured_node_name.or(rpc_node_name);
-
-    let local_peer_id = rpc_post("system_localPeerId", Value::Array(vec![]))
-        .ok()
-        .and_then(|v| v.as_str().map(|s| s.to_string()));
-    let role = role_from_peer_id(local_peer_id.as_deref());
-
-    Ok(NodeIdentity {
-        node_name,
-        peer_id: local_peer_id,
-        role: Some(role),
-    })
-}
-
-pub(crate) fn get_node_identity_blocking(app: AppHandle) -> Result<NodeIdentity, String> {
-    get_node_identity_sync(app)
 }
 
 pub(crate) fn start_node_blocking(
@@ -1257,22 +942,4 @@ pub(crate) fn start_node_blocking(
 
 pub(crate) fn stop_node_blocking(app: AppHandle) -> Result<NodeStatus, String> {
     stop_node_sync(app)
-}
-
-#[tauri::command]
-pub async fn get_chain_status(app: AppHandle) -> Result<ChainStatus, String> {
-    join_blocking_task(
-        "get_chain_status",
-        tauri::async_runtime::spawn_blocking(move || get_chain_status_sync(app)),
-    )
-    .await
-}
-
-#[tauri::command]
-pub async fn get_node_identity(app: AppHandle) -> Result<NodeIdentity, String> {
-    join_blocking_task(
-        "get_node_identity",
-        tauri::async_runtime::spawn_blocking(move || get_node_identity_sync(app)),
-    )
-    .await
 }

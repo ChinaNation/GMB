@@ -14,7 +14,7 @@ libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 bs58 = "0.5"
-blake2 = "0.10"
+blake3 = "1"
 libp2p-identity = { version = "0.2", features = ["secp256k1", "peerid"] }
 hex = "0.4"
 twox-hash = "2"
@@ -29,6 +29,8 @@ primitives = { path = "../../../primitives" }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 subxt = { version = "0.43.1", default-features = false, features = ["jsonrpsee", "native"] }
 subxt-signer = { version = "0.43.0", default-features = false, features = ["sr25519", "subxt"] }
+sysinfo = "0.34"
+thiserror = "2"
 zeroize = "1"
 tokio = { version = "1", features = ["time"] }
 
