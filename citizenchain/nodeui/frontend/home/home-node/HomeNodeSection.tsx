@@ -18,6 +18,8 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
   const [stopping, setStopping] = useState(false);
   const [showStartUnlockDialog, setShowStartUnlockDialog] = useState(false);
   const [startUnlockPassword, setStartUnlockPassword] = useState('');
+  const [showStopUnlockDialog, setShowStopUnlockDialog] = useState(false);
+  const [stopUnlockPassword, setStopUnlockPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const refreshInFlightRef = useRef(false);
 
@@ -122,17 +124,24 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
     }
   }, [runLoadHome, starting, stopping]);
 
-  const onStop = useCallback(async () => {
+  const onStop = useCallback(async (unlockPasswordInput: string) => {
     if (starting || stopping) return;
+    const unlockPassword = unlockPasswordInput.trim();
+    if (!unlockPassword) {
+      setError('请输入设备开机密码');
+      return;
+    }
     setStopping(true);
     setError(null);
     try {
-      const next = await api.stopNode();
+      const next = await api.stopNode(unlockPassword);
       setStatus(next);
       await runLoadHome(false);
+      setShowStopUnlockDialog(false);
     } catch (e) {
       setError(sanitizeError(e));
     } finally {
+      setStopUnlockPassword('');
       setStopping(false);
     }
   }, [runLoadHome, starting, stopping]);
@@ -140,6 +149,11 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
   const closeStartUnlockDialog = useCallback(() => {
     if (starting || stopping) return;
     setShowStartUnlockDialog(false);
+  }, [starting, stopping]);
+
+  const closeStopUnlockDialog = useCallback(() => {
+    if (starting || stopping) return;
+    setShowStopUnlockDialog(false);
   }, [starting, stopping]);
 
   return (
@@ -159,7 +173,14 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
         >
           {starting ? '启动中...' : '启动节点'}
         </button>
-        <button onClick={onStop} disabled={starting || stopping || !status.running}>
+        <button
+          onClick={() => {
+            setError(null);
+            setStopUnlockPassword('');
+            setShowStopUnlockDialog(true);
+          }}
+          disabled={starting || stopping || !status.running}
+        >
           {stopping ? '停止中...' : '停止节点'}
         </button>
       </div>
@@ -202,6 +223,44 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
                 disabled={starting || stopping || status.running}
               >
                 {starting ? '启动中...' : '确认启动'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showStopUnlockDialog ? (
+        <div className="unlock-modal-mask" onClick={closeStopUnlockDialog}>
+          <div className="unlock-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>停止节点验证</h3>
+            <input
+              className="unlock-password-input"
+              type="password"
+              value={stopUnlockPassword}
+              onChange={(e) => setStopUnlockPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void onStop(stopUnlockPassword);
+                }
+              }}
+              placeholder="请输入设备开机密码"
+              disabled={starting || stopping}
+            />
+            <div className="unlock-modal-actions">
+              <button
+                onClick={closeStopUnlockDialog}
+                disabled={starting || stopping}
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  void onStop(stopUnlockPassword);
+                }}
+                disabled={starting || stopping || !status.running}
+              >
+                {stopping ? '停止中...' : '确认停止'}
               </button>
             </div>
           </div>

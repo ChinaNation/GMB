@@ -9,8 +9,11 @@ pub mod weights;
 pub use citizen_vote::{SfidEligibility, VoteCredentialCleanup};
 pub use pallet::*;
 
-use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::dispatch::DispatchResult;
+use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+use frame_support::{
+    dispatch::DispatchResult,
+    pallet_prelude::{Member, Parameter},
+};
 use scale_info::TypeInfo;
 use sp_runtime::DispatchError;
 
@@ -105,6 +108,36 @@ impl JointVoteResultCallback for () {
     }
 }
 
+/// 中文注释：联合机构投票必须附带当前机构管理员的门限签名证明；
+/// runtime 负责决定“管理员集合/阈值/验签算法”的具体来源。
+pub trait JointInstitutionDecisionVerifier<AccountId, BlockNumber> {
+    type PublicKey: Parameter + Member + MaxEncodedLen + Ord + Clone;
+    type Signature: Parameter + Member + MaxEncodedLen + Clone;
+
+    fn verify_institution_decision(
+        proposal_id: u64,
+        institution: InstitutionPalletId,
+        internal_passed: bool,
+        expires_at: BlockNumber,
+        approvals: &[JointInstitutionApproval<Self::PublicKey, Self::Signature>],
+    ) -> bool;
+}
+
+impl<AccountId, BlockNumber> JointInstitutionDecisionVerifier<AccountId, BlockNumber> for () {
+    type PublicKey = [u8; 32];
+    type Signature = [u8; 64];
+
+    fn verify_institution_decision(
+        _proposal_id: u64,
+        _institution: InstitutionPalletId,
+        _internal_passed: bool,
+        _expires_at: BlockNumber,
+        _approvals: &[JointInstitutionApproval<Self::PublicKey, Self::Signature>],
+    ) -> bool {
+        false
+    }
+}
+
 /// 中文注释：内部管理员动态提供器（可由其他治理模块提供最新管理员集合）。
 pub trait InternalAdminProvider<AccountId> {
     fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId) -> bool;
@@ -114,6 +147,14 @@ impl<AccountId> InternalAdminProvider<AccountId> for () {
     fn is_internal_admin(_org: u8, _institution: InstitutionPalletId, _who: &AccountId) -> bool {
         false
     }
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
+)]
+pub struct JointInstitutionApproval<PublicKey, Signature> {
+    pub public_key: PublicKey,
+    pub signature: Signature,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
@@ -199,6 +240,10 @@ pub mod pallet {
         #[pallet::constant]
         type CleanupKeysPerStep: Get<u32>;
 
+        /// 联合机构门限证明里允许携带的最大签名条目数。
+        #[pallet::constant]
+        type MaxJointDecisionApprovals: Get<u32>;
+
         type SfidEligibility: SfidEligibility<Self::AccountId, Self::Hash>;
         type PopulationSnapshotVerifier: PopulationSnapshotVerifier<
             Self::AccountId,
@@ -208,6 +253,10 @@ pub mod pallet {
 
         type JointVoteResultCallback: JointVoteResultCallback;
         type InternalAdminProvider: InternalAdminProvider<Self::AccountId>;
+        type JointInstitutionDecisionVerifier: JointInstitutionDecisionVerifier<
+            Self::AccountId,
+            BlockNumberFor<Self>,
+        >;
 
         type WeightInfo: crate::weights::WeightInfo;
     }
@@ -216,6 +265,20 @@ pub mod pallet {
 
     pub type VoteNonceOf<T> = BoundedVec<u8, <T as Config>::MaxVoteNonceLength>;
     pub type VoteSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxVoteSignatureLength>;
+    pub type JointDecisionApprovalPublicKeyOf<T> = <<T as Config>::JointInstitutionDecisionVerifier as crate::JointInstitutionDecisionVerifier<
+        <T as frame_system::Config>::AccountId,
+        BlockNumberFor<T>,
+    >>::PublicKey;
+    pub type JointDecisionApprovalSignatureOf<T> = <<T as Config>::JointInstitutionDecisionVerifier as crate::JointInstitutionDecisionVerifier<
+        <T as frame_system::Config>::AccountId,
+        BlockNumberFor<T>,
+    >>::Signature;
+    pub type JointDecisionApprovalOf<T> = crate::JointInstitutionApproval<
+        JointDecisionApprovalPublicKeyOf<T>,
+        JointDecisionApprovalSignatureOf<T>,
+    >;
+    pub type JointDecisionApprovalsOf<T> =
+        BoundedVec<JointDecisionApprovalOf<T>, <T as Config>::MaxJointDecisionApprovals>;
 
     #[pallet::pallet]
     pub struct Pallet<T>(_);
@@ -347,6 +410,8 @@ pub mod pallet {
         InvalidSfidVoteCredential,
         CitizenEligibleTotalNotSet,
         InvalidPopulationSnapshot,
+        JointDecisionProofExpired,
+        InvalidJointInstitutionDecisionProof,
         ProposalAlreadyFinalized,
         ProposalIdOverflow,
         AccountIdEncodingMismatch,
@@ -444,9 +509,18 @@ pub mod pallet {
             proposal_id: u64,
             institution: InstitutionPalletId,
             internal_passed: bool,
+            expires_at: BlockNumberFor<T>,
+            approvals: JointDecisionApprovalsOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_submit_joint_institution_vote(who, proposal_id, institution, internal_passed)
+            Self::do_submit_joint_institution_vote(
+                who,
+                proposal_id,
+                institution,
+                internal_passed,
+                expires_at,
+                approvals,
+            )
         }
 
         #[pallet::call_index(4)]
@@ -843,10 +917,12 @@ mod tests {
         type MaxProposalsPerExpiry = ConstU32<128>;
         type MaxCleanupStepsPerBlock = ConstU32<3>;
         type CleanupKeysPerStep = ConstU32<2>;
+        type MaxJointDecisionApprovals = ConstU32<4>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = TestJointVoteResultCallback;
         type InternalAdminProvider = ();
+        type JointInstitutionDecisionVerifier = TestJointInstitutionDecisionVerifier;
         type WeightInfo = ();
     }
 
@@ -860,6 +936,7 @@ mod tests {
     pub struct TestSfidEligibility;
     pub struct TestPopulationSnapshotVerifier;
     pub struct TestJointVoteResultCallback;
+    pub struct TestJointInstitutionDecisionVerifier;
 
     impl
         PopulationSnapshotVerifier<
@@ -953,6 +1030,48 @@ mod tests {
         }
     }
 
+    impl
+        JointInstitutionDecisionVerifier<
+            AccountId32,
+            frame_system::pallet_prelude::BlockNumberFor<Test>,
+        > for TestJointInstitutionDecisionVerifier
+    {
+        type PublicKey = [u8; 32];
+        type Signature = [u8; 64];
+
+        fn verify_institution_decision(
+            proposal_id: u64,
+            institution: InstitutionPalletId,
+            internal_passed: bool,
+            expires_at: frame_system::pallet_prelude::BlockNumberFor<Test>,
+            approvals: &[JointInstitutionApproval<Self::PublicKey, Self::Signature>],
+        ) -> bool {
+            if approvals.is_empty() {
+                return false;
+            }
+            let Some(expected_pk) = institution_first_admin(institution) else {
+                return false;
+            };
+            let expected_sig = joint_decision_signature(
+                proposal_id,
+                institution,
+                internal_passed,
+                expires_at,
+                expected_pk,
+            );
+            let mut seen = BTreeSet::new();
+            for approval in approvals {
+                if approval.public_key != expected_pk || approval.signature != expected_sig {
+                    return false;
+                }
+                if !seen.insert(approval.public_key) {
+                    return false;
+                }
+            }
+            true
+        }
+    }
+
     fn new_test_ext() -> sp_io::TestExternalities {
         let storage = frame_system::GenesisConfig::<Test>::default()
             .build_storage()
@@ -1026,6 +1145,78 @@ mod tests {
 
     fn prb_admin(index: usize) -> AccountId32 {
         AccountId32::new(CHINA_CH[0].admins[index])
+    }
+
+    fn institution_first_admin(institution: InstitutionPalletId) -> Option<[u8; 32]> {
+        CHINA_CB
+            .iter()
+            .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+            .and_then(|n| n.admins.first().copied())
+            .or_else(|| {
+                CHINA_CH
+                    .iter()
+                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .and_then(|n| n.admins.first().copied())
+            })
+    }
+
+    fn joint_decision_signature(
+        proposal_id: u64,
+        institution: InstitutionPalletId,
+        internal_passed: bool,
+        expires_at: frame_system::pallet_prelude::BlockNumberFor<Test>,
+        public_key: [u8; 32],
+    ) -> [u8; 64] {
+        let digest = <Test as frame_system::Config>::Hashing::hash_of(&(
+            b"TEST_JOINT_DECISION_V1",
+            proposal_id,
+            institution,
+            internal_passed,
+            expires_at,
+            public_key,
+        ));
+        let mut out = [0u8; 64];
+        out[..32].copy_from_slice(digest.as_ref());
+        out[32..].copy_from_slice(digest.as_ref());
+        out
+    }
+
+    fn joint_decision_approvals(
+        proposal_id: u64,
+        institution: InstitutionPalletId,
+        internal_passed: bool,
+        expires_at: frame_system::pallet_prelude::BlockNumberFor<Test>,
+    ) -> pallet::JointDecisionApprovalsOf<Test> {
+        let public_key = institution_first_admin(institution).expect("institution should exist");
+        vec![JointInstitutionApproval {
+            public_key,
+            signature: joint_decision_signature(
+                proposal_id,
+                institution,
+                internal_passed,
+                expires_at,
+                public_key,
+            ),
+        }]
+        .try_into()
+        .expect("joint decision approvals should fit")
+    }
+
+    fn submit_joint_vote(
+        who: AccountId32,
+        proposal_id: u64,
+        institution: InstitutionPalletId,
+        internal_passed: bool,
+    ) -> DispatchResult {
+        let expires_at = System::block_number().saturating_add(50);
+        VotingEngineSystem::submit_joint_institution_vote(
+            RuntimeOrigin::signed(who),
+            proposal_id,
+            institution,
+            internal_passed,
+            expires_at,
+            joint_decision_approvals(proposal_id, institution, internal_passed, expires_at),
+        )
     }
 
     fn sfid_hash_ok() -> <Test as frame_system::Config>::Hash {
@@ -1345,39 +1536,83 @@ mod tests {
             );
 
             assert_noop!(
-                VotingEngineSystem::submit_joint_institution_vote(
-                    RuntimeOrigin::signed(nrc_admin(0)),
-                    0,
-                    nrc_pid(),
-                    true
-                ),
+                submit_joint_vote(nrc_admin(0), 0, nrc_pid(), true),
                 pallet::Error::<Test>::NoPermission
             );
 
-            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
-                RuntimeOrigin::signed(nrc_multisig()),
-                0,
-                nrc_pid(),
-                true
-            ));
+            assert_ok!(submit_joint_vote(nrc_multisig(), 0, nrc_pid(), true));
 
             // 中文注释：国储会多签不能代省储会提交省储会内部投票结果。
+            assert_noop!(
+                submit_joint_vote(nrc_multisig(), 0, prc_pid(), true),
+                pallet::Error::<Test>::NoPermission
+            );
+
+            assert_ok!(submit_joint_vote(prc_multisig(), 0, prc_pid(), true));
+        });
+    }
+
+    #[test]
+    fn joint_vote_submission_rejects_invalid_institution_decision_proof() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
+            );
+
+            let expires_at = System::block_number().saturating_add(50);
+            let mut approvals = joint_decision_approvals(0, nrc_pid(), true, expires_at);
+            approvals[0].signature[0] ^= 0xFF;
+
             assert_noop!(
                 VotingEngineSystem::submit_joint_institution_vote(
                     RuntimeOrigin::signed(nrc_multisig()),
                     0,
-                    prc_pid(),
-                    true
+                    nrc_pid(),
+                    true,
+                    expires_at,
+                    approvals
                 ),
-                pallet::Error::<Test>::NoPermission
+                pallet::Error::<Test>::InvalidJointInstitutionDecisionProof
+            );
+        });
+    }
+
+    #[test]
+    fn joint_vote_submission_rejects_expired_institution_decision_proof() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice()
+                )
             );
 
-            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
-                RuntimeOrigin::signed(prc_multisig()),
-                0,
-                prc_pid(),
-                true
-            ));
+            let expires_at = System::block_number();
+            let approvals = joint_decision_approvals(0, nrc_pid(), true, expires_at);
+            System::set_block_number(expires_at + 1);
+
+            assert_noop!(
+                VotingEngineSystem::submit_joint_institution_vote(
+                    RuntimeOrigin::signed(nrc_multisig()),
+                    0,
+                    nrc_pid(),
+                    true,
+                    expires_at,
+                    approvals
+                ),
+                pallet::Error::<Test>::JointDecisionProofExpired
+            );
         });
     }
 
@@ -1723,28 +1958,13 @@ mod tests {
                 )
             );
 
-            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
-                RuntimeOrigin::signed(nrc_multisig()),
-                0,
-                nrc_pid(),
-                true
-            ));
+            assert_ok!(submit_joint_vote(nrc_multisig(), 0, nrc_pid(), true));
 
             for (institution, multisig) in all_prc_institutions() {
-                assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
-                    RuntimeOrigin::signed(multisig),
-                    0,
-                    institution,
-                    true
-                ));
+                assert_ok!(submit_joint_vote(multisig, 0, institution, true));
             }
             for (institution, multisig) in all_prb_institutions() {
-                assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
-                    RuntimeOrigin::signed(multisig),
-                    0,
-                    institution,
-                    true
-                ));
+                assert_ok!(submit_joint_vote(multisig, 0, institution, true));
             }
 
             let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
@@ -1774,12 +1994,7 @@ mod tests {
                 .expect("proposal should exist")
                 .end;
 
-            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
-                RuntimeOrigin::signed(nrc_multisig()),
-                0,
-                nrc_pid(),
-                true
-            ));
+            assert_ok!(submit_joint_vote(nrc_multisig(), 0, nrc_pid(), true));
 
             let mut all_others = all_prc_institutions();
             all_others.extend(all_prb_institutions());
@@ -1791,32 +2006,17 @@ mod tests {
                 .first()
                 .cloned()
                 .expect("there should be at least one prc institution");
-            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
-                RuntimeOrigin::signed(first_prc.1),
-                0,
-                first_prc.0,
-                false
-            ));
+            assert_ok!(submit_joint_vote(first_prc.1, 0, first_prc.0, false));
 
             for (institution, multisig) in all_others {
                 if institution == first_prc.0 {
                     continue;
                 }
-                assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
-                    RuntimeOrigin::signed(multisig),
-                    0,
-                    institution,
-                    true
-                ));
+                assert_ok!(submit_joint_vote(multisig, 0, institution, true));
             }
 
             System::set_block_number(50);
-            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
-                RuntimeOrigin::signed(last_multisig),
-                0,
-                last_institution,
-                true
-            ));
+            assert_ok!(submit_joint_vote(last_multisig, 0, last_institution, true));
 
             let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
             assert_eq!(proposal.stage, STAGE_CITIZEN);
@@ -1845,12 +2045,7 @@ mod tests {
                 )
             );
 
-            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
-                RuntimeOrigin::signed(nrc_multisig()),
-                0,
-                nrc_pid(),
-                true
-            ));
+            assert_ok!(submit_joint_vote(nrc_multisig(), 0, nrc_pid(), true));
 
             let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
             System::set_block_number(proposal.end + 1);
@@ -1883,12 +2078,7 @@ mod tests {
                 )
             );
 
-            assert_ok!(VotingEngineSystem::submit_joint_institution_vote(
-                RuntimeOrigin::signed(nrc_multisig()),
-                0,
-                nrc_pid(),
-                true
-            ));
+            assert_ok!(submit_joint_vote(nrc_multisig(), 0, nrc_pid(), true));
 
             let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
             let expired_at = proposal.end + 1;

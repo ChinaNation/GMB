@@ -20,11 +20,11 @@ use primitives::count_const::{
 
 use crate::{
     pallet::{
-        Config, Error, Event, JointTallies, JointVotesByInstitution, Pallet, Proposals,
-        UsedPopulationSnapshotNonce,
+        Config, Error, Event, JointDecisionApprovalsOf, JointTallies, JointVotesByInstitution,
+        Pallet, Proposals, UsedPopulationSnapshotNonce,
     },
-    InstitutionPalletId, InternalAdminProvider, PopulationSnapshotVerifier, Proposal,
-    PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
+    InstitutionPalletId, InternalAdminProvider, JointInstitutionDecisionVerifier,
+    PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
 
 fn str_to_pallet_id(s: &str) -> Option<InstitutionPalletId> {
@@ -214,6 +214,8 @@ impl<T: Config> Pallet<T> {
         proposal_id: u64,
         institution: InstitutionPalletId,
         internal_passed: bool,
+        expires_at: frame_system::pallet_prelude::BlockNumberFor<T>,
+        approvals: JointDecisionApprovalsOf<T>,
     ) -> DispatchResult {
         // 中文注释：联合投票结果必须由“对应机构自己的多签地址”提交；
         // 国储会不能代替其他机构提交。
@@ -236,6 +238,20 @@ impl<T: Config> Pallet<T> {
         ensure!(
             proposal.stage == STAGE_JOINT,
             Error::<T>::InvalidProposalStage
+        );
+        ensure!(
+            <frame_system::Pallet<T>>::block_number() <= expires_at,
+            Error::<T>::JointDecisionProofExpired
+        );
+        ensure!(
+            T::JointInstitutionDecisionVerifier::verify_institution_decision(
+                proposal_id,
+                institution,
+                internal_passed,
+                expires_at,
+                approvals.as_slice()
+            ),
+            Error::<T>::InvalidJointInstitutionDecisionProof
         );
         let weight = institution_info(institution).ok_or(Error::<T>::InvalidInstitution)?;
         ensure!(

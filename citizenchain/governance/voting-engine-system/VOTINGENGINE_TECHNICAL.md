@@ -18,6 +18,7 @@
 - 仅允许国储会管理员创建联合提案。
 - 创建提案时必须一次性锁定公民投票总分母及人口快照凭证。
 - 每个机构只能由自己的多签地址提交本机构内部投票结果。
+- 联合投票提交必须附带当前机构管理员的门限签名证明，链上必须校验签名人与阈值。
 - 联合阶段全票通过时立即通过；未全票但已收齐全部机构票权时转入公民投票。
 - 联合阶段超时后，若未全票通过，必须自动进入公民投票阶段。
 
@@ -74,7 +75,10 @@
 
 ### 3.2 联合提案
 1. 通过 `do_create_joint_proposal` 创建提案，阶段为 `STAGE_JOINT`。
-2. `do_submit_joint_institution_vote` 校验机构多签地址后计票。
+2. `do_submit_joint_institution_vote` 先校验机构多签地址，再校验当前机构管理员对本次 `internal_passed` 结果的门限签名证明：
+   - proof 绑定 `proposal_id + institution + internal_passed + expires_at`
+   - proof 只接受当前链上管理员集合
+   - proof 达到对应机构阈值后才允许记票
 3. 联合全票通过则立即 `Passed`。
 4. 联合未全票但已收齐总票权时，立即进入 `STAGE_CITIZEN`。
 5. 联合阶段到期后，`on_initialize` 自动走 `do_finalize_joint_timeout`：
@@ -142,6 +146,31 @@
 - 避免同一过期区块下的提案 ID 列表无界膨胀。
 - 创建提案或阶段切换时若桶已满，会返回显式错误而不是悄悄留下未调度提案。
 
+### 5.9 联合投票门限证明上链校验
+`submit_joint_institution_vote` 不再接受裸的机构自报结果，而是要求同时提交：
+- `expires_at`
+- `approvals[] = { public_key, signature }`
+
+Runtime 必须对以下 payload 验签并验证阈值：
+
+```text
+payload = (
+  "GMB_JOINT_DECISION_V1",
+  genesis_hash,
+  proposal_id,
+  institution,
+  internal_passed,
+  expires_at
+)
+message = blake2_256(SCALE.encode(payload))
+```
+
+验签规则：
+- 签名人必须属于该机构当前链上管理员集合
+- 同一管理员不得重复计数
+- 赞成签名数量必须达到该机构类型对应的内部通过阈值
+- 过期 proof 必须拒绝，避免旧决定被重放
+
 ## 6. Weight 与计费
 ### 6.1 WeightInfo
 模块定义 `WeightInfo`：
@@ -165,7 +194,8 @@
 1. `JointVoteResultCallback` 应保证可恢复、可重放，不依赖脆弱临时映射。
 2. 上层治理模块在消费联合终结结果后应调用 `cleanup_joint_proposal`，避免状态无限增长。
 3. `create_internal_proposal` / `create_joint_proposal` / `internal_vote` 外部 extrinsic 已禁用，统一要求业务模块通过 trait 接入，避免生成无业务映射的悬空提案或绕过上层副作用。
-4. 对生产链建议定期回归 benchmark，避免手工权重与实际执行漂移。
+4. 联合机构线下投票系统必须产出与上面 payload 完全一致的 `sr25519` 签名，否则链上会拒绝联合投票提交。
+5. 对生产链建议定期回归 benchmark，避免手工权重与实际执行漂移。
 
 ## 9. 文件索引
 - 入口与存储定义：`src/lib.rs`

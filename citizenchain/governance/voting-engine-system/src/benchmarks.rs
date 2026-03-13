@@ -8,10 +8,10 @@ use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_
 use sp_runtime::traits::{Hash as HashT, SaturatedConversion, Saturating};
 
 use crate::{
-    CitizenTallies, CitizenVotesBySfid, Config, InstitutionPalletId, JointTallies, NextProposalId,
-    Pallet, Proposal, Proposals, VoteCountU32, VoteCountU64, VoteNonceOf, VoteSignatureOf,
-    PROPOSAL_KIND_INTERNAL, PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STAGE_INTERNAL, STAGE_JOINT,
-    STATUS_VOTING,
+    CitizenTallies, CitizenVotesBySfid, Config, InstitutionPalletId, JointDecisionApprovalsOf,
+    JointTallies, NextProposalId, Pallet, Proposal, Proposals, VoteCountU32, VoteCountU64,
+    VoteNonceOf, VoteSignatureOf, PROPOSAL_KIND_INTERNAL, PROPOSAL_KIND_JOINT, STAGE_CITIZEN,
+    STAGE_INTERNAL, STAGE_JOINT, STATUS_VOTING,
 };
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> Result<T::AccountId, BenchmarkError> {
@@ -76,8 +76,15 @@ mod benchmarks {
 
         #[block]
         {
-            Pallet::<T>::do_submit_joint_institution_vote(who, 1u64, institution, true)
-                .map_err(|_| BenchmarkError::Stop("joint vote should succeed"))?;
+            Pallet::<T>::do_submit_joint_institution_vote(
+                who,
+                1u64,
+                institution,
+                true,
+                end,
+                JointDecisionApprovalsOf::<T>::default(),
+            )
+            .map_err(|_| BenchmarkError::Stop("joint vote should succeed"))?;
         }
 
         Ok(())

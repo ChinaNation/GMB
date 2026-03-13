@@ -701,10 +701,12 @@ mod tests {
         type MaxProposalsPerExpiry = ConstU32<128>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
+        type MaxJointDecisionApprovals = ConstU32<32>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
+        type JointInstitutionDecisionVerifier = ();
         type WeightInfo = ();
     }
 
