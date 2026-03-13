@@ -3721,6 +3721,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "twox-hash 2.1.2",
+ "unicode-normalization",
  "zeroize",
 ]
 

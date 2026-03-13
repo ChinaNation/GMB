@@ -24,7 +24,7 @@ home/
 1. 二进制先复制到运行时目录并在副本上再次验 hash（stage_verified_node_bin）
 2. 进程信任判定只使用 `sysinfo::Process::exe()` 返回的结构化可执行路径，不再从拼接后的命令行字符串反推首个 token，避免带空格路径绕过受信任目录校验
 3. 运行时密钥文件设置 0600 权限，停止后立即删除
-4. `pid_alive` 不仅检测信号返回值，还通过 `sysinfo` 校验进程可执行文件名包含 `citizenchain-node`，防止 PID 复用导致误判或误杀无关进程
+4. `pid_alive` 不仅检测信号返回值，还通过 `sysinfo` 校验进程可执行文件名以 `citizenchain-node` 开头（`starts_with`），防止 PID 复用导致误判或误杀无关进程，同时避免 `contains` 被 `fake-citizenchain-node` 等伪造名称绕过
 5. `cleanup_on_exit` 中对 `terminate_trusted_listener_nodes` 的失败不再静默丢弃，而是通过 `eprintln!` 记录错误日志，便于排查退出时的清理异常
 
 ## rpc/mod.rs
@@ -43,5 +43,5 @@ home/
 
 核心职责：
 - **节点状态查询**：`current_status`（PID、运行标志、PeerId、节点名）
-- **节点名称管理**：`set_node_name`（需设备密码验证）
+- **节点名称管理**：`set_node_name`（需设备密码验证），名称经 Unicode NFC 归一化后存储
 - **PeerId 获取**：从 RPC `system_localPeerId` 获取

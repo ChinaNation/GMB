@@ -6,6 +6,7 @@ use aes_gcm::{
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use keyring::Entry;
 use pbkdf2::pbkdf2_hmac;
+use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -21,7 +22,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 const KEYCHAIN_SERVICE: &str = "org.chinanation.citizenchain.desktop";
 const SECRET_FORMAT_VERSION: u8 = 1;
-const PBKDF2_ROUNDS: u32 = 390_000;
+const PBKDF2_ROUNDS: u32 = 600_000;
 const AUDIT_LOG_FILE_NAME: &str = "security-audit.log";
 const AUDIT_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 const AUDIT_LOG_MAX_BACKUPS: usize = 5;
@@ -461,8 +462,8 @@ pub(crate) fn encrypt_secret_value(secret: &str, password: &str) -> Result<Strin
     let secret_guard = Zeroizing::new(secret.to_string());
     let mut salt = [0u8; 16];
     let mut nonce = [0u8; 12];
-    rand::thread_rng().fill_bytes(&mut salt);
-    rand::thread_rng().fill_bytes(&mut nonce);
+    OsRng.fill_bytes(&mut salt);
+    OsRng.fill_bytes(&mut nonce);
     let mut key = derive_key_from_password(&unlock_guard, &salt);
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("创建加密器失败: {e}"))?;
     let ciphertext = cipher
