@@ -67,7 +67,8 @@
   - 状态：`STATUS_VOTING=0`, `STATUS_PASSED=1`, `STATUS_REJECTED=2`
 - 本模块使用：
   - `InternalVoteEngine::create_internal_proposal`
-  - `Pallet::internal_vote`
+  - `InternalVoteEngine::cast_internal_vote`
+  - `InternalVoteEngine::cleanup_internal_proposal`
   - `Pallet::proposals`
 
 Runtime 配置：
@@ -121,13 +122,14 @@ Runtime 配置：
 3. 校验 `who` 为该机构管理员。
 4. 校验 `old_admin` 在名单、`new_admin` 不在名单。
 5. 调投票引擎创建内部提案，获得真实 `proposal_id`。
-6. 写入 `ProposalActions`、`ProposalCreatedAt`、`ActiveProposalByInstitution`。
+6. 若同机构存在已终结/失活旧提案，则先自动清理旧动作与索引，并发出自动清理事件。
+7. 写入 `ProposalActions`、`ProposalCreatedAt`、`ActiveProposalByInstitution`。
 
 ### 5.2 `vote_admin_replacement`（call index = 1）
 主要流程：
 1. 校验提案动作存在且未执行。
 2. 校验投票人是目标机构管理员。
-3. 代理调用投票引擎 `internal_vote`。
+3. 通过 `InternalVoteEngine::cast_internal_vote` 代理调用投票引擎计票。
 4. 仅当 `approve=true` 且投票引擎状态为 `STATUS_PASSED` 时尝试自动执行。
 
 关键语义：
@@ -146,7 +148,7 @@ Runtime 配置：
 - 任意签名账户可触发。
 - 仅允许清理“未通过且未执行”的 stale 提案。
 - 当 `now >= created_at + StaleProposalLifetime` 时允许清理。
-- 删除 `ProposalActions` / `ProposalCreatedAt` / `ProposalPassedAt` / 机构活跃索引。
+- 删除 `ProposalActions` / `ProposalCreatedAt` / `ProposalPassedAt` / 机构活跃索引，并通过 `InternalVoteEngine::cleanup_internal_proposal` 清理投票引擎内部提案状态。
 
 ---
 
@@ -177,7 +179,8 @@ Runtime 配置：
 
 ## 7. 数据一致性与安全约束
 1. 人数恒定约束
-- 替换前后都会校验管理员数量必须等于该组织固定人数（19/9/9）。
+- 执行前会校验当前管理员数量必须等于该组织固定人数（19/9/9）。
+- 真正的替换是等长元素替换；写回时再受 `BoundedVec` 上限约束，不允许借执行路径增删人数。
 
 2. 替换原子语义
 - 执行路径先完成名单替换写入，再清理提案动作与索引。
@@ -210,13 +213,17 @@ Runtime 配置：
 - `AdminReplacementExecutionFailed`
 - `AdminReplaced`
 - `StaleProposalCancelled`
+- `InactiveProposalAutoCleaned`
 
 关键错误：
+- `InvalidInstitution`
 - `InstitutionOrgMismatch`
+- `InvalidAdminCount`
 - `UnauthorizedAdmin`
 - `OldAdminNotFound`
 - `NewAdminAlreadyExists`
 - `ProposalNotPassed`
+- `ProposalAlreadyExecuted`
 - `ActiveProposalExists`
 - `ProposalNotStale`
 - `ProposalActionNotFound`
@@ -224,21 +231,24 @@ Runtime 配置：
 
 ---
 
-## 9. Weight 策略（当前为保守估算）
+## 9. Weight 策略（benchmark 自动生成）
 - `propose_admin_replacement`  
-  `Weight::from_parts(80_000_000, 4_096) + reads_writes(8, 8)`
+  `Weight::from_parts(36_000_000, 19_871) + reads_writes(6, 12)`
 
 - `vote_admin_replacement`  
-  `Weight::from_parts(200_000_000, 8_192) + reads_writes(12, 10)`
+  `Weight::from_parts(43_000_000, 4_554) + reads_writes(7, 9)`
 
 - `execute_admin_replacement`  
-  `Weight::from_parts(120_000_000, 4_096) + reads_writes(8, 7)`
+  `Weight::from_parts(23_000_000, 4_554) + reads_writes(4, 8)`
 
 - `cancel_stale_proposal`  
-  `Weight::from_parts(60_000_000, 4_096) + reads_writes(4, 4)`
+  `Weight::from_parts(20_000_000, 3_594) + reads_writes(4, 7)`
 
 说明：
-- 目前是手工保守估算，尚未接入 benchmark 生成的 `WeightInfo`。
+- 当前 `weights.rs` 已由 benchmark CLI 自动生成，最近一次生成时间为 2026-03-13。
+- `propose_admin_replacement` benchmark 会预置一个已拒绝旧提案，以覆盖“发起新提案时自动清理旧提案”的分支。
+- `vote_admin_replacement` benchmark 的前置 5 票通过本 pallet 的 `vote_admin_replacement` 路径完成，而不是直调内部投票引擎。
+- `execute_admin_replacement` benchmark 通过真实投票路径预置“已通过但自动执行失败”的状态，再测公开执行入口。
 
 ---
 

@@ -35,7 +35,7 @@ use frame_support::{
         fungible::{Balanced, Credit, Inspect},
         tokens::{Fortitude, Preservation},
         ConstU128, ConstU32, ConstU64, ConstU8, Contains, EnsureOrigin, FindAuthor, OnUnbalanced,
-        UnfilteredDispatchable, VariantCountOf,
+        VariantCountOf,
     },
     weights::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
@@ -50,7 +50,7 @@ use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use sp_core::{sr25519, Void};
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
 use sp_runtime::{
-    traits::{AccountIdConversion, IdentifyAccount, One},
+    traits::{AccountIdConversion, Hash as HashT, IdentifyAccount, One},
     MultiSigner, Perbill,
 };
 use sp_version::RuntimeVersion;
@@ -59,8 +59,8 @@ use sp_version::RuntimeVersion;
 use super::{
     AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance, Hash,
     Nonce, PalletInfo, ResolutionIssuanceIss, Runtime, RuntimeCall, RuntimeEvent,
-    RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
-    VotingEngineSystem, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System, VotingEngineSystem,
+    BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 #[cfg(not(feature = "runtime-benchmarks"))]
 use super::{ResolutionIssuanceGov, RuntimeRootUpgrade};
@@ -633,30 +633,30 @@ impl
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-        let public = match current_sfid_verify_public() {
-            Some(v) => v,
-            None => return false,
-        };
-        let sig_bytes = signature.as_slice();
-        if sig_bytes.len() != 64 {
-            return false;
-        }
+            let public = match current_sfid_verify_public() {
+                Some(v) => v,
+                None => return false,
+            };
+            let sig_bytes = signature.as_slice();
+            if sig_bytes.len() != 64 {
+                return false;
+            }
 
-        let mut sig_raw = [0u8; 64];
-        sig_raw.copy_from_slice(sig_bytes);
-        let signature = sr25519::Signature::from_raw(sig_raw);
+            let mut sig_raw = [0u8; 64];
+            sig_raw.copy_from_slice(sig_bytes);
+            let signature = sr25519::Signature::from_raw(sig_raw);
 
-        let payload = (
-            b"GMB_SFID_VOTE_V2",
-            frame_system::Pallet::<Runtime>::block_hash(0),
-            account,
-            sfid_hash,
-            proposal_id,
-            nonce.as_slice(),
-        );
-        let msg = blake2_256(&payload.encode());
+            let payload = (
+                b"GMB_SFID_VOTE_V2",
+                frame_system::Pallet::<Runtime>::block_hash(0),
+                account,
+                sfid_hash,
+                proposal_id,
+                nonce.as_slice(),
+            );
+            let msg = blake2_256(&payload.encode());
 
-        sr25519_verify(&signature, &msg, &public)
+            sr25519_verify(&signature, &msg, &public)
         }
     }
 }
@@ -901,13 +901,27 @@ pub struct RuntimeSetCodeExecutor;
 
 impl runtime_root_upgrade::RuntimeCodeExecutor for RuntimeSetCodeExecutor {
     fn execute_runtime_code(code: &[u8]) -> DispatchResult {
-        let set_code_call = frame_system::Call::<Runtime>::set_code {
-            code: code.to_vec(),
-        };
-        set_code_call
-            .dispatch_bypass_filter(frame_system::RawOrigin::Root.into())
-            .map(|_| ())
-            .map_err(|e| e.error)
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            // 中文注释：benchmark 需要衡量治理编排本身的真实路径，
+            // 但不应真的改写 runtime :code 存储，因此这里使用成功的 no-op 执行器。
+            return if code.is_empty() {
+                Err(sp_runtime::DispatchError::Other("empty runtime code"))
+            } else {
+                Ok(())
+            };
+        }
+
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
+            let set_code_call = frame_system::Call::<Runtime>::set_code {
+                code: code.to_vec(),
+            };
+            set_code_call
+                .dispatch_bypass_filter(frame_system::RawOrigin::Root.into())
+                .map(|_| ())
+                .map_err(|e| e.error)
+        }
     }
 }
 
@@ -923,24 +937,27 @@ impl voting_engine_system::JointVoteResultCallback for RuntimeJointVoteResultCal
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-        if resolution_issuance_gov::Pallet::<Runtime>::joint_vote_to_gov(vote_proposal_id).is_some()
-        {
-            return <ResolutionIssuanceGov as voting_engine_system::JointVoteResultCallback>::on_joint_vote_finalized(
+            if resolution_issuance_gov::Pallet::<Runtime>::joint_vote_to_gov(vote_proposal_id)
+                .is_some()
+            {
+                return <ResolutionIssuanceGov as voting_engine_system::JointVoteResultCallback>::on_joint_vote_finalized(
                 vote_proposal_id,
                 approved,
             );
-        }
+            }
 
-        if runtime_root_upgrade::Pallet::<Runtime>::joint_vote_to_gov(vote_proposal_id).is_some() {
-            return <RuntimeRootUpgrade as voting_engine_system::JointVoteResultCallback>::on_joint_vote_finalized(
+            if runtime_root_upgrade::Pallet::<Runtime>::joint_vote_to_gov(vote_proposal_id)
+                .is_some()
+            {
+                return <RuntimeRootUpgrade as voting_engine_system::JointVoteResultCallback>::on_joint_vote_finalized(
                 vote_proposal_id,
                 approved,
             );
-        }
+            }
 
-        Err(sp_runtime::DispatchError::Other(
-            "joint vote mapping not found",
-        ))
+            Err(sp_runtime::DispatchError::Other(
+                "joint vote mapping not found",
+            ))
         }
     }
 }
@@ -1588,16 +1605,19 @@ impl voting_engine_system::SfidEligibility<AccountId, Hash> for RuntimeSfidEligi
     fn is_eligible(sfid_hash: &Hash, who: &AccountId) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
-            let _ = (who, sfid_code_auth::pallet::SfidToAccount::<Runtime>::get(sfid_hash));
+            let _ = (
+                who,
+                sfid_code_auth::pallet::SfidToAccount::<Runtime>::get(sfid_hash),
+            );
             true
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-        <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<
-            AccountId,
-            Hash,
-        >>::is_eligible(sfid_hash, who)
+            <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<
+                AccountId,
+                Hash,
+            >>::is_eligible(sfid_hash, who)
         }
     }
 
@@ -1634,10 +1654,12 @@ impl voting_engine_system::SfidEligibility<AccountId, Hash> for RuntimeSfidEligi
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-        <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<
-            AccountId,
-            Hash,
-        >>::verify_and_consume_vote_credential(sfid_hash, who, proposal_id, nonce, signature)
+            <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<
+                AccountId,
+                Hash,
+            >>::verify_and_consume_vote_credential(
+                sfid_hash, who, proposal_id, nonce, signature
+            )
         }
     }
 

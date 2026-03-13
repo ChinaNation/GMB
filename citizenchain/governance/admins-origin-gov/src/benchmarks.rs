@@ -2,18 +2,16 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
+use crate::Pallet as AdminsOriginGov;
+use crate::{
+    reserve_pallet_id_to_bytes, ActiveProposalByInstitution, BlockNumberFor, Call, Config,
+    CurrentAdmins, InstitutionPalletId, Pallet, ProposalActions, CHINA_CB, ORG_PRC,
+};
 use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_support::traits::Get;
 use frame_system::RawOrigin;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
-use voting_engine_system::InternalVoteEngine;
-
-use crate::Pallet as AdminsOriginGov;
-use crate::{
-    reserve_pallet_id_to_bytes, ActiveProposalByInstitution, BlockNumberFor, Call, Config,
-    InstitutionPalletId, Pallet, ProposalActions, CHINA_CB, ORG_PRC,
-};
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
@@ -37,6 +35,27 @@ mod benchmarks {
         let proposer = prc_admin::<T>(0);
         let old_admin = prc_admin::<T>(1);
         let new_admin: T::AccountId = frame_benchmarking::account("new_admin", 0, 0);
+        let stale_new_admin: T::AccountId = frame_benchmarking::account("stale_new_admin", 0, 0);
+
+        assert!(AdminsOriginGov::<T>::propose_admin_replacement(
+            RawOrigin::Signed(proposer.clone()).into(),
+            ORG_PRC,
+            institution,
+            old_admin.clone(),
+            stale_new_admin,
+        )
+        .is_ok());
+
+        let end = voting_engine_system::Pallet::<T>::proposals(0)
+            .expect("stale benchmark proposal should exist")
+            .end;
+        let one: BlockNumberFor<T> = 1u32.saturated_into();
+        frame_system::Pallet::<T>::set_block_number(end.saturating_add(one));
+        assert!(voting_engine_system::Pallet::<T>::finalize_proposal(
+            RawOrigin::Signed(proposer.clone()).into(),
+            0,
+        )
+        .is_ok());
 
         #[extrinsic_call]
         propose_admin_replacement(
@@ -47,8 +66,9 @@ mod benchmarks {
             new_admin,
         );
 
-        assert_eq!(ActiveProposalByInstitution::<T>::get(institution), Some(0));
-        assert!(ProposalActions::<T>::contains_key(0));
+        assert_eq!(ActiveProposalByInstitution::<T>::get(institution), Some(1));
+        assert!(!ProposalActions::<T>::contains_key(0));
+        assert!(ProposalActions::<T>::contains_key(1));
     }
 
     #[benchmark]
@@ -63,14 +83,19 @@ mod benchmarks {
             RawOrigin::Signed(proposer).into(),
             ORG_PRC,
             institution,
-            old_admin,
+            old_admin.clone(),
             new_admin,
         )
         .is_ok());
 
         for i in 0..5 {
             let voter = prc_admin::<T>(i);
-            assert!(T::InternalVoteEngine::cast_internal_vote(voter, 0, true).is_ok());
+            assert!(AdminsOriginGov::<T>::vote_admin_replacement(
+                RawOrigin::Signed(voter).into(),
+                0,
+                true,
+            )
+            .is_ok());
         }
 
         #[extrinsic_call]
@@ -85,21 +110,59 @@ mod benchmarks {
         let proposer = prc_admin::<T>(0);
         let old_admin = prc_admin::<T>(1);
         let caller = prc_admin::<T>(6);
+        let final_voter = prc_admin::<T>(5);
         let new_admin: T::AccountId = frame_benchmarking::account("new_admin", 2, 0);
+        let temp_admin: T::AccountId = frame_benchmarking::account("temp_admin", 0, 0);
 
         assert!(AdminsOriginGov::<T>::propose_admin_replacement(
             RawOrigin::Signed(proposer).into(),
             ORG_PRC,
             institution,
-            old_admin,
+            old_admin.clone(),
             new_admin,
         )
         .is_ok());
 
-        for i in 0..6 {
+        for i in 0..5 {
             let voter = prc_admin::<T>(i);
-            assert!(T::InternalVoteEngine::cast_internal_vote(voter, 0, true).is_ok());
+            assert!(AdminsOriginGov::<T>::vote_admin_replacement(
+                RawOrigin::Signed(voter).into(),
+                0,
+                true,
+            )
+            .is_ok());
         }
+
+        CurrentAdmins::<T>::mutate(institution, |maybe_admins| {
+            let admins = maybe_admins
+                .as_mut()
+                .expect("benchmark institution should exist");
+            let old_pos = admins
+                .iter()
+                .position(|admin| admin == &old_admin)
+                .expect("benchmark old_admin should exist");
+            admins[old_pos] = temp_admin.clone();
+        });
+
+        assert!(AdminsOriginGov::<T>::vote_admin_replacement(
+            RawOrigin::Signed(final_voter).into(),
+            0,
+            true,
+        )
+        .is_ok());
+
+        CurrentAdmins::<T>::mutate(institution, |maybe_admins| {
+            let admins = maybe_admins
+                .as_mut()
+                .expect("benchmark institution should exist");
+            let temp_pos = admins
+                .iter()
+                .position(|admin| admin == &temp_admin)
+                .expect("temporary benchmark admin marker should exist");
+            admins[temp_pos] = old_admin.clone();
+        });
+
+        assert!(ProposalActions::<T>::contains_key(0));
 
         #[extrinsic_call]
         execute_admin_replacement(RawOrigin::Signed(caller), 0);

@@ -131,7 +131,9 @@ class _MyWalletPageState extends State<MyWalletPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('绑定身份'),
-        content: Text('确认使用该钱包绑定身份？\n${wallet.address}'),
+        content: Text(
+          '确认使用该钱包绑定身份？\n\n地址：${wallet.address}\n\n公钥：0x${wallet.pubkeyHex}',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),

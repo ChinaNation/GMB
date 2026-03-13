@@ -45,6 +45,8 @@ pub mod pallet {
         Rejected,
         /// 联合投票已通过，但 runtime code 执行失败，允许后续人工重试。
         ExecutionFailed,
+        /// 执行失败且重试额度已经耗尽，人工确认放弃后清空 code。
+        Cancelled,
     }
 
     #[derive(
@@ -150,6 +152,11 @@ pub mod pallet {
             proposal_id: u64,
             code_hash: T::Hash,
         },
+        RuntimeUpgradeCancelled {
+            proposal_id: u64,
+            code_hash: T::Hash,
+            retry_count: u32,
+        },
     }
 
     #[pallet::error]
@@ -159,6 +166,7 @@ pub mod pallet {
         ProposalNotFound,
         ProposalNotVoting,
         ProposalNotExecutionFailed,
+        ProposalNotRetryExhausted,
         JointVoteCreateFailed,
         JointVoteMappingNotFound,
         ProposalIdOverflow,
@@ -216,7 +224,13 @@ pub mod pallet {
 
         /// 联合投票回调：保持与其他治理模块一致，Root 可手工回放。
         #[pallet::call_index(1)]
-        #[pallet::weight(T::WeightInfo::finalize_joint_vote())]
+        #[pallet::weight(if *approved {
+            T::WeightInfo::finalize_joint_vote_approved().saturating_add(
+                <<T as frame_system::Config>::SystemWeightInfo as frame_system::weights::WeightInfo>::set_code()
+            )
+        } else {
+            T::WeightInfo::finalize_joint_vote_rejected()
+        })]
         pub fn finalize_joint_vote(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -229,10 +243,46 @@ pub mod pallet {
         /// 中文注释：联合投票已经通过但执行 runtime code 失败时，
         /// 允许 NRC 管理员在保留原始 code 的前提下重试执行。
         #[pallet::call_index(2)]
-        #[pallet::weight(T::WeightInfo::retry_failed_execution())]
+        #[pallet::weight(
+            T::WeightInfo::retry_failed_execution().saturating_add(
+                <<T as frame_system::Config>::SystemWeightInfo as frame_system::weights::WeightInfo>::set_code()
+            )
+        )]
         pub fn retry_failed_execution(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let _ = T::NrcProposeOrigin::ensure_origin(origin)?;
             Self::retry_execution(proposal_id)
+        }
+
+        /// 中文注释：当执行失败提案已经用尽全部人工重试额度后，
+        /// 允许 NRC 管理员确认放弃并清空残留 wasm code，释放长期占用的存储。
+        #[pallet::call_index(3)]
+        #[pallet::weight(T::WeightInfo::cancel_failed_proposal())]
+        pub fn cancel_failed_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
+            let _ = T::NrcProposeOrigin::ensure_origin(origin)?;
+
+            let mut proposal =
+                Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
+            ensure!(
+                matches!(proposal.status, ProposalStatus::ExecutionFailed),
+                Error::<T>::ProposalNotExecutionFailed
+            );
+
+            let retry_count = RetryCount::<T>::get(proposal_id);
+            ensure!(
+                retry_count >= T::MaxExecutionRetries::get(),
+                Error::<T>::ProposalNotRetryExhausted
+            );
+
+            proposal.status = ProposalStatus::Cancelled;
+            proposal.code = Default::default();
+            Proposals::<T>::insert(proposal_id, &proposal);
+            RetryCount::<T>::remove(proposal_id);
+            Self::deposit_event(Event::<T>::RuntimeUpgradeCancelled {
+                proposal_id,
+                code_hash: proposal.code_hash,
+                retry_count,
+            });
+            Ok(())
         }
     }
 
@@ -757,6 +807,84 @@ mod tests {
                     0
                 ),
                 pallet::Error::<Test>::MaxRetriesExceeded
+            );
+        });
+    }
+
+    #[test]
+    fn cancel_failed_proposal_clears_code_after_retry_limit() {
+        new_test_ext().execute_with(|| {
+            propose_ok();
+            EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = true);
+
+            let joint_vote_id =
+                RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
+            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
+                joint_vote_id,
+                true
+            ));
+
+            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
+                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                0
+            ));
+            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
+                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                0
+            ));
+            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
+                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                0
+            ));
+            assert_eq!(RuntimeRootUpgrade::retry_count(0), 3);
+
+            assert_ok!(RuntimeRootUpgrade::cancel_failed_proposal(
+                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                0
+            ));
+
+            let p = RuntimeRootUpgrade::proposals(0).expect("proposal should exist");
+            assert!(matches!(p.status, pallet::ProposalStatus::Cancelled));
+            assert!(
+                p.code.is_empty(),
+                "cancel should clear retained runtime code"
+            );
+            assert_eq!(RuntimeRootUpgrade::retry_count(0), 0);
+
+            assert_noop!(
+                RuntimeRootUpgrade::retry_failed_execution(
+                    RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                    0
+                ),
+                pallet::Error::<Test>::ProposalNotExecutionFailed
+            );
+        });
+    }
+
+    #[test]
+    fn cancel_failed_proposal_requires_exhausted_retries() {
+        new_test_ext().execute_with(|| {
+            propose_ok();
+            EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = true);
+
+            let joint_vote_id =
+                RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
+            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
+                joint_vote_id,
+                true
+            ));
+
+            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
+                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                0
+            ));
+
+            assert_noop!(
+                RuntimeRootUpgrade::cancel_failed_proposal(
+                    RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                    0
+                ),
+                pallet::Error::<Test>::ProposalNotRetryExhausted
             );
         });
     }
