@@ -485,34 +485,41 @@ pub mod pallet {
             let next_retry_count = retry_count.saturating_add(1);
 
             let (execute_reason, execute_allocations) =
-                Self::issuance_payload(&proposal.reason, &proposal.allocations);
+                Self::issuance_payload(&proposal.reason, &proposal.allocations)?;
 
-            if T::IssuanceExecutor::execute_resolution_issuance(
-                proposal_id,
-                execute_reason,
-                proposal.total_amount,
-                execute_allocations,
-            )
-            .is_ok()
-            {
-                // 中文注释：重试成功后提案转入终态 Passed，并清空失败次数，
-                // 防止后续重复消耗治理重试额度。
-                // 这里沿用提案原始 allocations，不跟随后续新增的机构集合变化。
-                proposal.status = ProposalStatus::Passed;
-                Proposals::<T>::insert(proposal_id, &proposal);
-                RetryCount::<T>::remove(proposal_id);
-                Self::deposit_event(Event::<T>::IssuanceExecutionTriggered {
+            // 中文注释：重试的执行与状态变更必须在同一事务里提交，
+            // 与 finalize 路径保持一致的原子性风格。
+            let actual_weight: Option<Weight> = with_transaction::<_, DispatchError, _>(|| {
+                if T::IssuanceExecutor::execute_resolution_issuance(
                     proposal_id,
-                    total_amount: proposal.total_amount,
-                });
-                Ok(().into())
-            } else {
-                // 中文注释：失败计数只统计 retry_failed_execution，
-                // 初次 finalize 的执行失败不占用额外重试额度。
-                RetryCount::<T>::insert(proposal_id, next_retry_count);
-                Self::deposit_event(Event::<T>::IssuanceExecutionFailed { proposal_id });
-                Ok(Some(T::DbWeight::get().reads_writes(2, 1)).into())
-            }
+                    execute_reason,
+                    proposal.total_amount,
+                    execute_allocations,
+                )
+                .is_ok()
+                {
+                    // 中文注释：重试成功后提案转入终态 Passed，并清空失败次数，
+                    // 防止后续重复消耗治理重试额度。
+                    // 这里沿用提案原始 allocations，不跟随后续新增的机构集合变化。
+                    proposal.status = ProposalStatus::Passed;
+                    Proposals::<T>::insert(proposal_id, &proposal);
+                    RetryCount::<T>::remove(proposal_id);
+                    Self::deposit_event(Event::<T>::IssuanceExecutionTriggered {
+                        proposal_id,
+                        total_amount: proposal.total_amount,
+                    });
+                    TransactionOutcome::Commit(Ok(None))
+                } else {
+                    // 中文注释：失败计数只统计 retry_failed_execution，
+                    // 初次 finalize 的执行失败不占用额外重试额度。
+                    RetryCount::<T>::insert(proposal_id, next_retry_count);
+                    Self::deposit_event(Event::<T>::IssuanceExecutionFailed { proposal_id });
+                    TransactionOutcome::Commit(Ok(Some(
+                        T::DbWeight::get().reads_writes(2, 1),
+                    )))
+                }
+            })?;
+            Ok(actual_weight.into())
         }
     }
 
@@ -535,7 +542,10 @@ pub mod pallet {
 
                 if approved {
                     let (execute_reason, execute_allocations) =
-                        Self::issuance_payload(&proposal.reason, &proposal.allocations);
+                        match Self::issuance_payload(&proposal.reason, &proposal.allocations) {
+                            Ok(v) => v,
+                            Err(e) => return TransactionOutcome::Rollback(Err(e)),
+                        };
 
                     if T::IssuanceExecutor::execute_resolution_issuance(
                         proposal_id,
@@ -613,11 +623,12 @@ pub mod pallet {
             allocations: &[RecipientAmount<T::AccountId>],
         ) -> DispatchResult {
             ensure!(!allocations.is_empty(), Error::<T>::EmptyAllocations);
+            ensure!(total_amount > 0, Error::<T>::ZeroAmount);
             let expected = AllowedRecipients::<T>::get();
             ensure!(!expected.is_empty(), Error::<T>::RecipientsNotConfigured);
             // 中文注释：治理提案里的收款人集合必须与链上白名单完全一致，
             // 既不能缺人，也不能额外塞入其他账户。
-            let expected_set: BTreeSet<Vec<u8>> = expected.iter().map(|who| who.encode()).collect();
+            let expected_set: BTreeSet<&T::AccountId> = expected.iter().collect();
             ensure!(
                 expected_set.len() == expected.len(),
                 Error::<T>::DuplicateAllowedRecipient
@@ -626,14 +637,16 @@ pub mod pallet {
                 allocations.len() == expected_set.len(),
                 Error::<T>::InvalidAllocationCount
             );
-            let mut seen: BTreeSet<Vec<u8>> = BTreeSet::new();
+            let mut seen: BTreeSet<&T::AccountId> = BTreeSet::new();
 
             let mut sum = 0u128;
             for item in allocations {
                 ensure!(item.amount > 0, Error::<T>::ZeroAmount);
-                let who = item.recipient.encode();
-                ensure!(seen.insert(who.clone()), Error::<T>::DuplicateRecipient);
-                ensure!(expected_set.contains(&who), Error::<T>::InvalidRecipientSet);
+                ensure!(seen.insert(&item.recipient), Error::<T>::DuplicateRecipient);
+                ensure!(
+                    expected_set.contains(&item.recipient),
+                    Error::<T>::InvalidRecipientSet
+                );
                 sum = sum
                     .checked_add(item.amount)
                     .ok_or(Error::<T>::AllocationOverflow)?;
@@ -648,10 +661,13 @@ pub mod pallet {
         fn issuance_payload(
             reason: &ReasonOf<T>,
             allocations: &AllocationOf<T>,
-        ) -> (
-            ResolutionReasonOf<T::MaxReasonLen>,
-            ResolutionAllocationsOf<T::AccountId, u128, T::MaxAllocations>,
-        ) {
+        ) -> Result<
+            (
+                ResolutionReasonOf<T::MaxReasonLen>,
+                ResolutionAllocationsOf<T::AccountId, u128, T::MaxAllocations>,
+            ),
+            DispatchError,
+        > {
             let execute_reason: ResolutionReasonOf<T::MaxReasonLen> = reason.clone();
             let execute_allocations: ResolutionAllocationsOf<
                 T::AccountId,
@@ -662,15 +678,14 @@ pub mod pallet {
                 .map(|x| (x.recipient.clone(), x.amount))
                 .collect::<Vec<_>>()
                 .try_into()
-                .expect("proposal allocations are already bounded by MaxAllocations");
-            (execute_reason, execute_allocations)
+                .map_err(|_| Error::<T>::InvalidAllocationCount)?;
+            Ok((execute_reason, execute_allocations))
         }
 
         fn ensure_unique_recipients(recipients: &[T::AccountId]) -> DispatchResult {
-            let mut seen: BTreeSet<Vec<u8>> = BTreeSet::new();
+            let mut seen: BTreeSet<&T::AccountId> = BTreeSet::new();
             for recipient in recipients {
-                let encoded = recipient.encode();
-                ensure!(seen.insert(encoded), Error::<T>::DuplicateAllowedRecipient);
+                ensure!(seen.insert(recipient), Error::<T>::DuplicateAllowedRecipient);
             }
             Ok(())
         }

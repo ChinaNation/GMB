@@ -137,7 +137,7 @@ Genesis：
 - 重试次数受 `MaxExecutionRetries` 硬上限约束。
 
 ## 7. 权重与计费口径
-`WeightInfo` 当前为手工+线性项估算：
+`WeightInfo` 由 benchmark 自动产出（`weights.rs` 由 `frame-benchmarking-cli` 生成）：
 - `propose_resolution_issuance(allocation_count, reason_len)`
 - `finalize_joint_vote_approved()`：叠加发行执行权重的最大参数。
 - `finalize_joint_vote_rejected()`：`reads_writes(3, 4)`。
