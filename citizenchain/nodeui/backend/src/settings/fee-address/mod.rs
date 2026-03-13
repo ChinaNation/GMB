@@ -606,7 +606,9 @@ pub async fn set_reward_wallet(
     address: String,
     unlock_password: String,
 ) -> Result<RewardWallet, String> {
-    let _ = security::append_audit_log(&app, "set_reward_wallet", "attempt");
+    if let Err(e) = security::append_audit_log(&app, "set_reward_wallet", "attempt") {
+        eprintln!("[审计] set_reward_wallet attempt 日志写入失败: {e}");
+    }
     let unlock = security::ensure_unlock_password(&unlock_password)?;
     device_password::verify_device_login_password(&app, unlock)?;
     let normalized = normalize_wallet_address(&address)?;
@@ -627,16 +629,21 @@ pub async fn set_reward_wallet(
     let sync_result = match sync_result {
         Ok(v) => v,
         Err(_) => {
-            let _ =
-                security::append_audit_log(&app, "set_reward_wallet", "saved_chain_bind_timeout");
+            if let Err(e) = security::append_audit_log(&app, "set_reward_wallet", "saved_chain_bind_timeout") {
+                eprintln!("[审计] set_reward_wallet saved_chain_bind_timeout 日志写入失败: {e}");
+            }
             return Err("地址已保存，但链上绑定超时，请稍后重试".to_string());
         }
     };
     if let Err(err) = sync_result {
-        let _ = security::append_audit_log(&app, "set_reward_wallet", "saved_chain_bind_failed");
+        if let Err(e) = security::append_audit_log(&app, "set_reward_wallet", "saved_chain_bind_failed") {
+            eprintln!("[审计] set_reward_wallet saved_chain_bind_failed 日志写入失败: {e}");
+        }
         return Err(format!("地址已保存，但链上绑定失败：{err}"));
     }
-    let _ = security::append_audit_log(&app, "set_reward_wallet", "success");
+    if let Err(e) = security::append_audit_log(&app, "set_reward_wallet", "success") {
+        eprintln!("[审计] set_reward_wallet success 日志写入失败: {e}");
+    }
 
     Ok(RewardWallet {
         address: Some(normalized),
