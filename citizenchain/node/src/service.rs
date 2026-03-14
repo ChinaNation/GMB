@@ -2,7 +2,7 @@
 
 use codec::{Decode, Encode};
 use futures::FutureExt;
-use gmb_runtime::{self, apis::RuntimeApi, opaque::Block};
+use citizenchain::{self, apis::RuntimeApi, opaque::Block};
 use pow_difficulty_module::PowDifficultyApi;
 use sc_client_api::{Backend, BlockBackend};
 use sc_consensus_pow::{MiningHandle, PowAlgorithm, PowBlockImport};
@@ -89,7 +89,7 @@ impl PowAlgorithm<Block> for SimplePow {
         let Some(pre_digest) = pre_digest else {
             return Ok(false);
         };
-        match gmb_runtime::AccountId::decode(&mut &pre_digest[..]) {
+        match citizenchain::AccountId::decode(&mut &pre_digest[..]) {
             Ok(_) => (),
             Err(_) => return Ok(false),
         };
@@ -119,7 +119,7 @@ fn author_pre_digest(keystore: &sp_keystore::KeystorePtr) -> Option<Vec<u8>> {
     // 中文注释：直接从 keystore 获取 powr 密钥，不再读取环境变量，避免明文密钥泄露。
     let keys = keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE);
     let author_public = keys.into_iter().next()?;
-    let account: gmb_runtime::AccountId =
+    let account: citizenchain::AccountId =
         sp_runtime::MultiSigner::from(author_public).into_account();
     Some(account.encode())
 }
@@ -137,44 +137,62 @@ fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceErr
     Ok(())
 }
 
-fn start_cpu_miner<Proof: Send + 'static>(worker: MiningHandle<Block, SimplePow, (), Proof>) {
+fn start_cpu_miner<Proof: Send + 'static>(
+    worker: MiningHandle<Block, SimplePow, (), Proof>,
+    num_threads: usize,
+) {
     // 中文注释：提交门控，防止"早产块"触发 timestamp inherent 的 future 校验失败。
+    // 所有矿工线程共享同一个门控。
     let min_submit_interval = Duration::from_millis(primitives::pow_const::MILLISECS_PER_BLOCK);
-    thread::spawn(move || loop {
-        let Some(metadata) = worker.metadata() else {
-            thread::sleep(Duration::from_millis(200));
-            continue;
-        };
+    let stride = (num_threads as u64).max(1);
 
-        let build_version = worker.version();
-        let mut nonce = 0u64;
+    for thread_id in 0..num_threads {
+        let worker = worker.clone();
+        thread::spawn(move || loop {
+            let Some(metadata) = worker.metadata() else {
+                thread::sleep(Duration::from_millis(200));
+                continue;
+            };
 
-        loop {
-            if worker.version() != build_version {
-                break;
-            }
+            let build_version = worker.version();
 
-            let hash = pow_hash(metadata.pre_hash.as_ref(), nonce);
-            if hash_meets_difficulty(&hash, metadata.difficulty) {
-                // 中文注释：仅限制"提交频率"，挖矿过程仍持续进行。
-                // 这样可以保证区块时间戳不会持续跑在本地时间之前导致 future 错误。
-                static MINER_GATE: std::sync::OnceLock<std::sync::Mutex<Instant>> =
-                    std::sync::OnceLock::new();
-                let gate =
-                    MINER_GATE.get_or_init(|| Mutex::new(Instant::now() - min_submit_interval));
-                let mut last_submit = gate.lock().expect("miner submit gate mutex poisoned");
-                let elapsed = last_submit.elapsed();
-                if elapsed < min_submit_interval {
-                    thread::sleep(min_submit_interval - elapsed);
+            // 中文注释：共同随机基址（来自 pre_hash 前 8 字节）+ 线程号错位 + stride = 线程数。
+            // 每轮 metadata 变化时基址自动更换；同一轮内各线程搜索的 nonce 集合完全不重叠。
+            let random_base = {
+                let seed_bytes = metadata.pre_hash.as_ref();
+                u64::from_le_bytes(seed_bytes[..8].try_into().unwrap_or([0u8; 8]))
+            };
+            let mut nonce = random_base.wrapping_add(thread_id as u64);
+
+            loop {
+                if worker.version() != build_version {
+                    break;
                 }
-                let _ = futures::executor::block_on(worker.submit(nonce.encode()));
-                *last_submit = Instant::now();
-                break;
-            }
 
-            nonce = nonce.wrapping_add(1);
-        }
-    });
+                let hash = pow_hash(metadata.pre_hash.as_ref(), nonce);
+                if hash_meets_difficulty(&hash, metadata.difficulty) {
+                    // 中文注释：仅限制"提交频率"，挖矿过程仍持续进行。
+                    // 这样可以保证区块时间戳不会持续跑在本地时间之前导致 future 错误。
+                    static MINER_GATE: std::sync::OnceLock<std::sync::Mutex<Instant>> =
+                        std::sync::OnceLock::new();
+                    let gate = MINER_GATE
+                        .get_or_init(|| Mutex::new(Instant::now() - min_submit_interval));
+                    // 中文注释：使用 unwrap_or_else 恢复 poison，避免某线程 panic 后打死其他线程。
+                    let mut last_submit =
+                        gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                    let elapsed = last_submit.elapsed();
+                    if elapsed < min_submit_interval {
+                        thread::sleep(min_submit_interval - elapsed);
+                    }
+                    let _ = futures::executor::block_on(worker.submit(nonce.encode()));
+                    *last_submit = Instant::now();
+                    break;
+                }
+
+                nonce = nonce.wrapping_add(stride);
+            }
+        });
+    }
 }
 
 pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
@@ -264,6 +282,7 @@ pub fn new_full<
     N: sc_network::NetworkBackend<Block, <Block as sp_runtime::traits::Block>::Hash>,
 >(
     config: Configuration,
+    mining_threads: usize,
 ) -> Result<TaskManager, ServiceError> {
     let sc_service::PartialComponents {
         client,
@@ -427,7 +446,7 @@ pub fn new_full<
         worker_task.boxed(),
     );
 
-    start_cpu_miner(worker);
+    start_cpu_miner(worker, mining_threads);
 
     if enable_grandpa {
         let local_grandpa_keys = keystore.ed25519_public_keys(sp_consensus_grandpa::KEY_TYPE);

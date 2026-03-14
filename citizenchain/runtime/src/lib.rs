@@ -70,8 +70,8 @@ pub mod opaque {
 // https://docs.substrate.io/main-docs/build/upgrade#runtime-versioning
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-    spec_name: alloc::borrow::Cow::Borrowed("gmb-runtime"),
-    impl_name: alloc::borrow::Cow::Borrowed("gmb-runtime"),
+    spec_name: alloc::borrow::Cow::Borrowed("citizenchain"),
+    impl_name: alloc::borrow::Cow::Borrowed("citizenchain"),
     authoring_version: 1,
     // The version of the runtime specification. A full node will not attempt to use its native
     //   runtime in substitute for the on-chain Wasm runtime unless all of `spec_name`,
@@ -349,8 +349,8 @@ mod tests {
 
     #[test]
     fn runtime_version_and_block_types_are_sane() {
-        assert_eq!(VERSION.spec_name.as_ref(), "gmb-runtime");
-        assert_eq!(VERSION.impl_name.as_ref(), "gmb-runtime");
+        assert_eq!(VERSION.spec_name.as_ref(), "citizenchain");
+        assert_eq!(VERSION.impl_name.as_ref(), "citizenchain");
         assert!(VERSION.spec_version >= 1);
 
         let _opaque_block_id: opaque::BlockId = generic::BlockId::Number(0);

@@ -90,7 +90,7 @@ citizenchain/
 ## 7. Runtime（`runtime/`）
 
 ### 7.1 定位
-- `gmb-runtime` 是 `citizenchain` 的统一链上状态机。
+- `citizenchain` 是统一链上状态机。
 - 账户体系、交易扩展、链上 pallet 装配、runtime API、创世配置都由这里统一编译到 wasm。
 
 ### 7.2 当前实现特征

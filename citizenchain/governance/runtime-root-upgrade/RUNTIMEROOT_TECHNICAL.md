@@ -211,7 +211,7 @@ Runtime 配置位置：
 
 本地验证：
 - `cargo test -p runtime-root-upgrade`
-- `cargo check -p gmb-runtime --features runtime-benchmarks`
+- `cargo check -p citizenchain --features runtime-benchmarks`
 - `./target/release/node benchmark pallet --chain mainnet --pallet runtime_root_upgrade --extrinsic '*' --steps 50 --repeat 20 --wasm-execution compiled --heap-pages 4096 --output ./governance/runtime-root-upgrade/src/weights.rs --template ./scripts/benchmark-weight-template.hbs`
 
 ## 10. 文件索引

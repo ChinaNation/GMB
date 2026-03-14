@@ -341,10 +341,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 国储会提案：创建“决议发行”联合投票提案。
         #[pallet::call_index(0)]
-        #[pallet::weight(T::WeightInfo::propose_resolution_issuance(
-            allocations.len() as u32,
-            reason.len() as u32
-        ))]
+        #[pallet::weight(T::WeightInfo::propose_resolution_issuance())]
         pub fn propose_resolution_issuance(
             origin: OriginFor<T>,
             reason: ReasonOf<T>,
@@ -439,7 +436,7 @@ pub mod pallet {
 
         /// 更新链上合法收款账户集合。
         #[pallet::call_index(2)]
-        #[pallet::weight(T::WeightInfo::set_allowed_recipients(recipients.len() as u32))]
+        #[pallet::weight(T::WeightInfo::set_allowed_recipients())]
         pub fn set_allowed_recipients(
             origin: OriginFor<T>,
             recipients: BoundedVec<T::AccountId, T::MaxAllocations>,

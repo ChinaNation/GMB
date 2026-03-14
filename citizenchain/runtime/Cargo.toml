@@ -1,5 +1,5 @@
 [package]
-name = "gmb-runtime"  # 运行时状态模块
+name = "citizenchain"  # 运行时状态模块
 description = "A solochain runtime template built with Substrate, part of Polkadot Sdk."
 homepage.workspace = true
 publish = false
