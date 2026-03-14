@@ -1104,7 +1104,7 @@ mod tests {
     use crate::ResolutionDestroGov;
     use duoqian_transaction_pow::DuoqianReservedAddressChecker;
     use frame_support::assert_ok;
-    use frame_support::traits::Currency;
+    use frame_support::traits::{Currency, Hooks};
     use primitives::china::china_cb::{
         shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
     };
@@ -1193,6 +1193,11 @@ mod tests {
                 resolution_issuance_gov::pallet::JointVoteToGov::<Runtime>::get(joint_vote_id)
                     .is_none()
             );
+            // 推进区块，让 on_initialize 执行 PendingProposalCleanups 清理 UsedVoteNonce
+            let next_block = System::block_number() + 1;
+            System::set_block_number(next_block);
+            <crate::VotingEngineSystem as Hooks<BlockNumber>>::on_initialize(next_block);
+
             assert!(!sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::get(
                 joint_vote_id,
                 (sfid_hash, nonce_hash)
