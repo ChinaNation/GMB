@@ -43,6 +43,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}, wasm32v1-none
+          components: rust-src
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -70,7 +71,8 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            protobuf-compiler
 
       - name: Configure libclang env (Linux)
         if: runner.os == 'Linux'
@@ -79,6 +81,7 @@ jobs:
           set -euo pipefail
           echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
           echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
+          echo "PROTOC=$(command -v protoc)" >> "$GITHUB_ENV"
 
       - name: Prepare bundled node binary (Unix)
         if: runner.os != 'Windows'
