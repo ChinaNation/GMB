@@ -4570,7 +4570,7 @@ dependencies = [
 
 [[package]]
 name = "primitives"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "hex-literal",
  "parity-scale-codec",
