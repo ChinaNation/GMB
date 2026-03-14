@@ -45,6 +45,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32v1-none
+          components: rust-src
 
       - name: 安装 LLVM/Clang 依赖
         run: |
