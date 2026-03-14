@@ -5,6 +5,10 @@ pub struct Cli {
 
     #[clap(flatten)]
     pub run: sc_cli::RunCmd,
+
+    /// PoW 挖矿线程数。默认使用 CPU 可用并行度。设为 0 禁用挖矿。
+    #[arg(long, value_name = "COUNT")]
+    pub mining_threads: Option<usize>,
 }
 
 #[derive(Debug, clap::Subcommand)]

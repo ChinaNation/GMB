@@ -44,7 +44,7 @@ todo = "warn"
 
 [workspace.dependencies]
 # 本地
-gmb-runtime = { path = "runtime" }
+citizenchain = { path = "runtime" }
 
 # 工具
 codec      = { package = "parity-scale-codec", version = "3.6.1", default-features = false, features = ["derive"] }
