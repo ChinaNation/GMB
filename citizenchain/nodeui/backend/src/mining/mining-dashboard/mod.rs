@@ -919,17 +919,20 @@ fn collect_resource_usage(app: &AppHandle) -> ResourceUsage {
     if let Ok(data_dir) = node_data_dir(app) {
         node_data_size_mb = node_data_size_mb_with_cache(&data_dir);
 
-        let disks = sysinfo::Disks::new_with_refreshed_list();
-        let mut best_mount_len = 0;
-        for disk in disks.list() {
-            let mount = disk.mount_point();
-            if data_dir.starts_with(mount) && mount.as_os_str().len() > best_mount_len {
-                best_mount_len = mount.as_os_str().len();
-                let total = disk.total_space();
-                let avail = disk.available_space();
-                if total > 0 {
-                    let used = total.saturating_sub(avail);
-                    disk_usage_percent = Some((used as f64 / total as f64) * 100.0);
+        // 节点专属磁盘占用：node_data_size / 磁盘总容量 * 100%
+        if let Some(size_mb) = node_data_size_mb {
+            let disks = sysinfo::Disks::new_with_refreshed_list();
+            let mut best_mount_len = 0;
+            for disk in disks.list() {
+                let mount = disk.mount_point();
+                if data_dir.starts_with(mount) && mount.as_os_str().len() > best_mount_len {
+                    best_mount_len = mount.as_os_str().len();
+                    let total = disk.total_space();
+                    if total > 0 {
+                        let node_bytes = (size_mb as u64) * 1024 * 1024;
+                        disk_usage_percent =
+                            Some((node_bytes as f64 / total as f64) * 100.0);
+                    }
                 }
             }
         }
@@ -996,6 +999,10 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
     let resources = resource_usage(&app);
     let today_utc = utc_day(unix_now_ms().unwrap_or(0));
     let mut warnings: Vec<String> = Vec::new();
+
+    if !home::current_status(&app)?.running {
+        return Ok(empty_dashboard(resources, None));
+    }
 
     if let Err(err) = ensure_expected_rpc_node() {
         let warning = format!("挖矿统计不可用：{err}");

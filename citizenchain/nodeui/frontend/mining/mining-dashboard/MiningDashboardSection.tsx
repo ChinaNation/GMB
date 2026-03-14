@@ -131,7 +131,7 @@ export function MiningDashboardSection() {
           <div className="metric-card">
             <div className="metric-label">CPU 占用</div>
             <div className="metric-value">
-              {loading ? '加载中...' : (mining.resources.cpuPercent == null ? '未知' : `${mining.resources.cpuPercent.toFixed(1)}%`)}
+              {loading ? '加载中...' : (mining.resources.cpuPercent == null ? '未知' : `${mining.resources.cpuPercent.toFixed(5)}%`)}
             </div>
           </div>
           <div className="metric-card">
@@ -143,7 +143,7 @@ export function MiningDashboardSection() {
           <div className="metric-card">
             <div className="metric-label">磁盘占用</div>
             <div className="metric-value">
-              {loading ? '加载中...' : (mining.resources.diskUsagePercent == null ? '未知' : `${mining.resources.diskUsagePercent.toFixed(1)}%`)}
+              {loading ? '加载中...' : (mining.resources.diskUsagePercent == null ? '未知' : `${mining.resources.diskUsagePercent.toFixed(5)}%`)}
             </div>
           </div>
           <div className="metric-card">
