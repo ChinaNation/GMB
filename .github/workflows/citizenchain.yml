@@ -58,6 +58,16 @@ jobs:
           workspaces: |
             citizenchain/nodeui -> target
 
+      - name: Install protobuf (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install protobuf
+          echo "PROTOC=$(command -v protoc)" >> "$GITHUB_ENV"
+
+      - name: Install protobuf (Windows)
+        if: runner.os == 'Windows'
+        run: choco install protoc -y
+
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -72,7 +82,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf \
-            protobuf-compiler
+            protobuf-compiler \
+            libpam0g-dev
 
       - name: Configure libclang env (Linux)
         if: runner.os == 'Linux'
