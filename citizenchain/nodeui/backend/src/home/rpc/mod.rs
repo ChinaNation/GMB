@@ -3,6 +3,8 @@
 use crate::shared::{constants::EXPECTED_SS58_PREFIX, rpc};
 use serde::Serialize;
 use serde_json::Value;
+use std::hash::Hasher;
+use std::sync::OnceLock;
 use std::{thread, time::Duration};
 use tauri::AppHandle;
 
@@ -143,6 +145,112 @@ pub async fn get_chain_status(app: AppHandle) -> Result<ChainStatus, String> {
     super::join_blocking_task(
         "get_chain_status",
         tauri::async_runtime::spawn_blocking(move || get_chain_status_sync(app)),
+    )
+    .await
+}
+
+// ── 全链发行总额（Balances.TotalIssuance）──
+
+static TOTAL_ISSUANCE_STORAGE_KEY_CACHE: OnceLock<String> = OnceLock::new();
+
+fn twox_128(input: &[u8]) -> [u8; 16] {
+    let mut h1 = twox_hash::XxHash64::with_seed(0);
+    h1.write(input);
+    let mut h2 = twox_hash::XxHash64::with_seed(1);
+    h2.write(input);
+
+    let mut out = [0u8; 16];
+    out[..8].copy_from_slice(&h1.finish().to_le_bytes());
+    out[8..].copy_from_slice(&h2.finish().to_le_bytes());
+    out
+}
+
+fn total_issuance_storage_key() -> String {
+    TOTAL_ISSUANCE_STORAGE_KEY_CACHE
+        .get_or_init(|| {
+            let mut key = Vec::with_capacity(32);
+            key.extend_from_slice(&twox_128(b"Balances"));
+            key.extend_from_slice(&twox_128(b"TotalIssuance"));
+            format!("0x{}", hex::encode(key))
+        })
+        .clone()
+}
+
+fn hex_to_bytes(hex: &str) -> Option<Vec<u8>> {
+    let trimmed = hex.strip_prefix("0x").unwrap_or(hex);
+    if trimmed.len() % 2 != 0 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(trimmed.len() / 2);
+    for i in (0..trimmed.len()).step_by(2) {
+        let byte = u8::from_str_radix(&trimmed[i..i + 2], 16).ok()?;
+        out.push(byte);
+    }
+    Some(out)
+}
+
+fn scale_u128_from_storage_hex(hex: &str) -> Option<u128> {
+    let bytes = hex_to_bytes(hex)?;
+    if bytes.len() < 16 {
+        return None;
+    }
+    let mut raw = [0u8; 16];
+    raw.copy_from_slice(&bytes[..16]);
+    Some(u128::from_le_bytes(raw))
+}
+
+/// 将分（u128）格式化为带千分位分隔符和两位小数的元字符串。
+fn format_fen_to_yuan(amount_fen: u128) -> String {
+    let major = amount_fen / 100;
+    let minor = (amount_fen % 100) as u32;
+
+    // 千分位分隔
+    let major_str = major.to_string();
+    let mut result = String::with_capacity(major_str.len() + major_str.len() / 3 + 3);
+    for (i, ch) in major_str.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            result.push(',');
+        }
+        result.push(ch);
+    }
+    let result: String = result.chars().rev().collect();
+    format!("{result}.{minor:02}")
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+/// 全链发行总额。
+pub struct TotalIssuance {
+    pub total_issuance: Option<String>,
+}
+
+fn get_total_issuance_sync(app: AppHandle) -> Result<TotalIssuance, String> {
+    if !current_status(&app)?.running {
+        return Ok(TotalIssuance {
+            total_issuance: None,
+        });
+    }
+
+    let key = total_issuance_storage_key();
+    let raw = rpc_post(
+        "state_getStorage",
+        Value::Array(vec![Value::String(key)]),
+    )?;
+    let amount = raw
+        .as_str()
+        .and_then(scale_u128_from_storage_hex)
+        .map(format_fen_to_yuan);
+
+    Ok(TotalIssuance {
+        total_issuance: amount,
+    })
+}
+
+#[tauri::command]
+pub async fn get_total_issuance(app: AppHandle) -> Result<TotalIssuance, String> {
+    super::join_blocking_task(
+        "get_total_issuance",
+        tauri::async_runtime::spawn_blocking(move || get_total_issuance_sync(app)),
     )
     .await
 }
