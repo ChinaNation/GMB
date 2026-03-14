@@ -290,6 +290,20 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
         .collect();
     let genesis_peer_ids: HashSet<String> = bootnode_map.keys().cloned().collect();
 
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Ok(NetworkOverview {
+            total_nodes: 0,
+            online_nodes: 0,
+            guochuhui_nodes: 0,
+            shengchuhui_nodes: 0,
+            shengchuhang_nodes: 0,
+            full_nodes: 0,
+            light_nodes: 0,
+            warning: None,
+        });
+    }
+
     let mut warnings: Vec<String> = Vec::new();
     let rpc_ready = match ensure_expected_rpc_node() {
         Ok(()) => true,
@@ -298,8 +312,6 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
             false
         }
     };
-
-    let status = home::current_status(&app)?;
 
     let mut online_peer_ids: HashSet<String> = HashSet::new();
     let mut known_peer_observed: Vec<String> = Vec::new();

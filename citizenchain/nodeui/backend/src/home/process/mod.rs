@@ -289,6 +289,15 @@ fn trusted_node_bin_dirs(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
             dirs.push(canonical_resource_dir);
         }
     }
+    // staged binary 在 runtime-secrets 目录，也要纳入信任范围，
+    // 否则 cleanup 找不到从 staged binary 启动的残留进程。
+    if let Ok(secrets_dir) = runtime_secrets_dir(app) {
+        if let Ok(canonical_secrets_dir) = secrets_dir.canonicalize() {
+            if !dirs.contains(&canonical_secrets_dir) {
+                dirs.push(canonical_secrets_dir);
+            }
+        }
+    }
     if dirs.is_empty() {
         return Err("resolve trusted node binary dirs failed".to_string());
     }
@@ -809,7 +818,11 @@ fn terminate_pid(pid: u32) {
 }
 
 fn terminate_trusted_listener_nodes(app: &AppHandle) -> Result<(), String> {
+    let my_pid = std::process::id();
     for pid in trusted_node_process_pids_on_rpc_port(app)? {
+        if pid == my_pid {
+            continue;
+        }
         terminate_pid(pid);
     }
     Ok(())
@@ -932,6 +945,20 @@ fn rollback_started_node(app: &AppHandle) {
     clear_runtime_node_bin_file(&mut state);
 }
 
+/// 启动时清理上次异常退出可能残留的节点进程和临时文件。
+pub(crate) fn cleanup_on_startup(app: &AppHandle) {
+    if let Err(err) = terminate_trusted_listener_nodes(app) {
+        eprintln!("startup cleanup: terminate residual nodes failed: {err}");
+    }
+    if let Err(err) = cleanup_stale_staged_node_bins(app, None) {
+        eprintln!("startup cleanup: stale staged bins failed: {err}");
+    }
+    if let Err(err) = cleanup_stale_node_key_temp_files(app) {
+        eprintln!("startup cleanup: stale node-key temps failed: {err}");
+    }
+    rpc::clear_genesis_hash_cache();
+}
+
 pub(crate) fn cleanup_on_exit(app: &AppHandle) {
     let _lifecycle_guard = lock_node_lifecycle();
     if let Ok(mut state) = app.state::<AppState>().0.lock() {
@@ -1006,6 +1033,33 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
         }
 
         thread::sleep(Duration::from_millis(800));
+
+        // 检查节点是否在启动后立即退出
+        {
+            let app_state = app.state::<AppState>();
+            let mut state = app_state
+                .0
+                .lock()
+                .map_err(|_| "acquire process state failed".to_string())?;
+            if let Some(child) = state.local_node.as_mut() {
+                match child.try_wait() {
+                    Ok(Some(_exit_status)) => {
+                        state.local_node = None;
+                        clear_runtime_node_key_file(&mut state);
+                        clear_runtime_node_bin_file(&mut state);
+                        return Err("节点启动失败，请稍后重试".to_string());
+                    }
+                    Ok(None) => { /* 节点正在运行，继续 */ }
+                    Err(_) => {
+                        state.local_node = None;
+                        clear_runtime_node_key_file(&mut state);
+                        clear_runtime_node_bin_file(&mut state);
+                        return Err("节点启动失败，请稍后重试".to_string());
+                    }
+                }
+            }
+        }
+
         if let Err(err) = fee_address::sync_saved_reward_wallet_binding(&app, &unlock_password) {
             eprintln!("sync reward wallet binding skipped: {err}");
         }

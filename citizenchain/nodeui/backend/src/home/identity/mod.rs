@@ -9,8 +9,8 @@ use serde_json::Value;
 use std::{fs, path::PathBuf};
 use tauri::AppHandle;
 
-use super::process::{refresh_managed_process, trusted_node_process_pids_on_rpc_port, AppState};
-use super::rpc::{is_expected_rpc_node, rpc_post};
+use super::process::{refresh_managed_process, AppState};
+use super::rpc::rpc_post;
 use tauri::Manager;
 
 #[derive(Debug, Serialize)]
@@ -62,8 +62,8 @@ fn role_from_peer_id(peer_id: Option<&str>) -> String {
 }
 
 pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
-    // 先看本会话托管进程，再看可信监听进程，最后才退化到 RPC 指纹探测，
-    // 减少仅凭默认 RPC 端口连通就误判为"节点在运行"的概率。
+    // 只看本会话通过密码验证后启动的托管进程。
+    // 不做端口扫描或 RPC 探测，避免绕过密码验证流程。
     let (managed_running, managed_pid) = {
         let app_state = app.state::<AppState>();
         let mut state = app_state
@@ -72,33 +72,10 @@ pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
             .map_err(|_| "acquire process state failed".to_string())?;
         refresh_managed_process(&mut state)
     };
-    if managed_running {
-        return Ok(NodeStatus {
-            running: true,
-            state: "running".to_string(),
-            pid: managed_pid,
-        });
-    }
-
-    let listener_pids = trusted_node_process_pids_on_rpc_port(app)?;
-    if let Some(pid) = listener_pids.into_iter().next() {
-        return Ok(NodeStatus {
-            running: true,
-            state: "running".to_string(),
-            pid: Some(pid),
-        });
-    }
-
-    let fallback_running = is_expected_rpc_node();
     Ok(NodeStatus {
-        running: fallback_running,
-        state: if fallback_running {
-            "running"
-        } else {
-            "stopped"
-        }
-        .to_string(),
-        pid: None,
+        running: managed_running,
+        state: if managed_running { "running" } else { "stopped" }.to_string(),
+        pid: managed_pid,
     })
 }
 
