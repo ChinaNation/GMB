@@ -1383,6 +1383,61 @@ dependencies = [
 ]
 
 [[package]]
+name = "citizenchain"
+version = "0.0.1"
+dependencies = [
+ "admins-origin-gov",
+ "citizen-lightnode-issuance",
+ "duoqian-transaction-pow",
+ "ed25519-dalek",
+ "frame-benchmarking",
+ "frame-executive",
+ "frame-metadata-hash-extension",
+ "frame-support",
+ "frame-system",
+ "frame-system-benchmarking",
+ "frame-system-rpc-runtime-api",
+ "frame-try-runtime",
+ "fullnode-pow-reward",
+ "grandpa-key-gov",
+ "hex",
+ "hex-literal",
+ "onchain-transaction-pow",
+ "pallet-balances",
+ "pallet-grandpa",
+ "pallet-timestamp",
+ "pallet-transaction-payment",
+ "pallet-transaction-payment-rpc-runtime-api",
+ "parity-scale-codec",
+ "pow-difficulty-module",
+ "primitives",
+ "resolution-destro-gov",
+ "resolution-issuance-gov",
+ "resolution-issuance-iss",
+ "runtime-root-upgrade",
+ "scale-info",
+ "serde_json",
+ "sfid-code-auth",
+ "shengbank-stake-interest",
+ "sp-api",
+ "sp-block-builder",
+ "sp-consensus-grandpa",
+ "sp-consensus-pow",
+ "sp-core",
+ "sp-genesis-builder",
+ "sp-inherents",
+ "sp-io",
+ "sp-offchain",
+ "sp-runtime",
+ "sp-session",
+ "sp-storage",
+ "sp-transaction-pool",
+ "sp-version",
+ "substrate-wasm-builder",
+ "voting-engine-system",
+]
+
+[[package]]
 name = "clang-sys"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3708,61 +3763,6 @@ name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
-
-[[package]]
-name = "gmb-runtime"
-version = "0.0.1"
-dependencies = [
- "admins-origin-gov",
- "citizen-lightnode-issuance",
- "duoqian-transaction-pow",
- "ed25519-dalek",
- "frame-benchmarking",
- "frame-executive",
- "frame-metadata-hash-extension",
- "frame-support",
- "frame-system",
- "frame-system-benchmarking",
- "frame-system-rpc-runtime-api",
- "frame-try-runtime",
- "fullnode-pow-reward",
- "grandpa-key-gov",
- "hex",
- "hex-literal",
- "onchain-transaction-pow",
- "pallet-balances",
- "pallet-grandpa",
- "pallet-timestamp",
- "pallet-transaction-payment",
- "pallet-transaction-payment-rpc-runtime-api",
- "parity-scale-codec",
- "pow-difficulty-module",
- "primitives",
- "resolution-destro-gov",
- "resolution-issuance-gov",
- "resolution-issuance-iss",
- "runtime-root-upgrade",
- "scale-info",
- "serde_json",
- "sfid-code-auth",
- "shengbank-stake-interest",
- "sp-api",
- "sp-block-builder",
- "sp-consensus-grandpa",
- "sp-consensus-pow",
- "sp-core",
- "sp-genesis-builder",
- "sp-inherents",
- "sp-io",
- "sp-offchain",
- "sp-runtime",
- "sp-session",
- "sp-storage",
- "sp-transaction-pool",
- "sp-version",
- "substrate-wasm-builder",
- "voting-engine-system",
-]
 
 [[package]]
 name = "governor"
@@ -6138,12 +6138,12 @@ checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
 name = "node"
 version = "0.0.1"
 dependencies = [
+ "citizenchain",
  "clap",
  "frame-benchmarking-cli",
  "frame-metadata-hash-extension",
  "frame-system",
  "futures",
- "gmb-runtime",
  "hex",
  "hex-literal",
  "jsonrpsee",
