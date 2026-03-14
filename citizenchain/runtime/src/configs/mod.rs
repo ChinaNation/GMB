@@ -24,7 +24,6 @@
 // For more information, please refer to <http://unlicense.org>
 
 // Substrate and Polkadot dependencies
-use alloc::collections::BTreeSet;
 use codec::Decode;
 use codec::Encode;
 use duoqian_transaction_pow::{DuoqianReservedAddressChecker as _, ProtectedSourceChecker as _};
@@ -36,7 +35,7 @@ use frame_support::{
         fungible::{Balanced, Credit, Inspect},
         tokens::{Fortitude, Preservation},
         ConstU128, ConstU32, ConstU64, ConstU8, Contains, EnsureOrigin, FindAuthor, OnUnbalanced,
-        UnfilteredDispatchable, VariantCountOf,
+        VariantCountOf,
     },
     weights::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
@@ -51,7 +50,7 @@ use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use sp_core::{sr25519, Void};
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
 use sp_runtime::{
-    traits::{AccountIdConversion, IdentifyAccount, One},
+    traits::{AccountIdConversion, Hash as _, IdentifyAccount, One},
     MultiSigner, Perbill,
 };
 use sp_version::RuntimeVersion;
