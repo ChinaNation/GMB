@@ -41,6 +41,11 @@ export type NodeIdentity = {
   role: string | null;
 };
 
+// 全链发行总额
+export type TotalIssuance = {
+  totalIssuance: string | null;
+};
+
 export type MiningIncome = {
   totalIncome: string;
   totalFeeIncome: string;

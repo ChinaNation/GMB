@@ -7,7 +7,7 @@ mod shared;
 
 use home::{
     cleanup_on_exit, cleanup_on_startup, get_chain_status, get_node_identity, get_node_status,
-    set_node_name, start_node, stop_node, AppState, RuntimeState,
+    get_total_issuance, set_node_name, start_node, stop_node, AppState, RuntimeState,
 };
 use mining::mining_dashboard::get_mining_dashboard;
 use network::network_overview::get_network_overview;
@@ -41,6 +41,7 @@ fn main() {
             set_node_name,
             get_chain_status,
             get_node_identity,
+            get_total_issuance,
             get_mining_dashboard,
             get_network_overview,
             get_other_tabs_content

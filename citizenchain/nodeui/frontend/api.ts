@@ -10,6 +10,7 @@ import type {
   NodeStatus,
   OtherTabsPayload,
   RewardWallet,
+  TotalIssuance,
 } from './types';
 
 const ERROR_MAX_LENGTH = 500;
@@ -45,6 +46,7 @@ export const api = {
 
   getChainStatus: () => invoke<ChainStatus>('get_chain_status'),
   getNodeIdentity: () => invoke<NodeIdentity>('get_node_identity'),
+  getTotalIssuance: () => invoke<TotalIssuance>('get_total_issuance'),
   setNodeName: (nodeName: string, unlockPassword: string) =>
     invoke<NodeIdentity>('set_node_name', { nodeName, unlockPassword }),
   getMiningDashboard: () => invoke<MiningDashboard>('get_mining_dashboard'),

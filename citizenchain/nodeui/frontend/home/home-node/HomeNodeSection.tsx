@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, sanitizeError } from '../../api';
 import { ChainSection } from './components/ChainSection';
 import { IdentitySection } from './components/IdentitySection';
-import type { ChainStatus, NodeIdentity, NodeStatus } from '../../types';
+import { IssuanceSection } from './components/IssuanceSection';
+import type { ChainStatus, NodeIdentity, NodeStatus, TotalIssuance } from '../../types';
 
 const PARTIAL_REFRESH_ERROR_PREFIX = '部分数据刷新失败：';
 
@@ -14,6 +15,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
   const [status, setStatus] = useState<NodeStatus>({ running: false, state: 'stopped', pid: null });
   const [chain, setChain] = useState<ChainStatus>({ blockHeight: null, finalizedHeight: null, syncing: null });
   const [identity, setIdentity] = useState<NodeIdentity>({ nodeName: null, peerId: null, role: null });
+  const [issuance, setIssuance] = useState<TotalIssuance>({ totalIssuance: null });
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [showStartUnlockDialog, setShowStartUnlockDialog] = useState(false);
@@ -24,10 +26,11 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
   const refreshInFlightRef = useRef(false);
 
   const loadHome = useCallback(async (silent: boolean) => {
-    const [s, c, i] = await Promise.allSettled([
+    const [s, c, i, t] = await Promise.allSettled([
       api.getNodeStatus(),
       api.getChainStatus(),
       api.getNodeIdentity(),
+      api.getTotalIssuance(),
     ]);
     let successCount = 0;
     const failures: string[] = [];
@@ -46,6 +49,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
     applyResult(s, setStatus);
     applyResult(c, setChain);
     applyResult(i, setIdentity);
+    applyResult(t, setIssuance);
 
     if (successCount === 0) {
       throw new Error(failures[0] ?? '首页数据加载失败');
@@ -190,6 +194,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
         onUpdated={setIdentity}
         disabled={starting || stopping}
       />
+      <IssuanceSection issuance={issuance} />
 
       {showStartUnlockDialog ? (
         <div className="unlock-modal-mask" onClick={closeStartUnlockDialog}>

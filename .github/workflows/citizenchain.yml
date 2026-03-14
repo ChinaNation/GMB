@@ -56,17 +56,24 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
+            citizenchain -> target
             citizenchain/nodeui -> target
 
-      - name: Install protobuf (macOS)
+      - name: Install macOS dependencies
         if: runner.os == 'macOS'
         run: |
-          brew install protobuf
+          brew install protobuf llvm
           echo "PROTOC=$(command -v protoc)" >> "$GITHUB_ENV"
+          echo "LLVM_CONFIG_PATH=$(brew --prefix llvm)/bin/llvm-config" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
 
-      - name: Install protobuf (Windows)
+      - name: Install Windows dependencies
         if: runner.os == 'Windows'
-        run: choco install protoc -y
+        run: |
+          choco install protoc -y
+          choco install llvm -y
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\lib" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+          echo "PROTOC=$(where.exe protoc | Select-Object -First 1)" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
