@@ -4,7 +4,7 @@
 //! THIS FILE WAS AUTO-GENERATED USING THE SUBSTRATE BENCHMARK CLI VERSION 53.0.0
 //! DATE: 2026-03-14, STEPS: `50`, REPEAT: `20`, LOW RANGE: `[]`, HIGH RANGE: `[]`
 //! WORST CASE MAP SIZE: `1000000`
-//! HOSTNAME: `runnervm46oaq`, CPU: `AMD EPYC 7763 64-Core Processor`
+//! HOSTNAME: `runnervm0kj6c`, CPU: `AMD EPYC 7763 64-Core Processor`
 //! WASM-EXECUTION: `Compiled`, CHAIN: `Some("mainnet")`, DB CACHE: 1024
 
 // Executed Command:
@@ -60,8 +60,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `114`
 		//  Estimated: `3593`
-		// Minimum execution time: 41_608_000 picoseconds.
-		Weight::from_parts(43_301_000, 0)
+		// Minimum execution time: 43_070_000 picoseconds.
+		Weight::from_parts(43_952_000, 0)
 			.saturating_add(Weight::from_parts(0, 3593))
 			.saturating_add(T::DbWeight::get().reads(4))
 			.saturating_add(T::DbWeight::get().writes(4))
@@ -81,8 +81,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `114`
 		//  Estimated: `3593`
-		// Minimum execution time: 41_608_000 picoseconds.
-		Weight::from_parts(43_301_000, 0)
+		// Minimum execution time: 43_070_000 picoseconds.
+		Weight::from_parts(43_952_000, 0)
 			.saturating_add(Weight::from_parts(0, 3593))
 			.saturating_add(RocksDbWeight::get().reads(4))
 			.saturating_add(RocksDbWeight::get().writes(4))
