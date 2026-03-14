@@ -194,7 +194,7 @@ new_difficulty_raw = old_difficulty * target_window_ms / actual_window_ms
 - `runtime_integrity_tests`
 
 另外做过 runtime 侧回归：
-- `cargo test -p gmb-runtime pow`
+- `cargo test -p citizenchain pow`
 
 ---
 

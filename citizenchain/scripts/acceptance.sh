@@ -63,7 +63,7 @@ case "$MODE" in
     ;;
 
   full)
-    run_step "cargo test runtime package" cargo test -p gmb-runtime -q
+    run_step "cargo test runtime package" cargo test -p citizenchain -q
     run_step "cargo test voting-engine-system package" cargo test -p voting-engine-system -q
     run_step "cargo test sfid-code-auth package" cargo test -p sfid-code-auth -q
     run_step "cargo test onchain-transaction-pow package" cargo test -p onchain-transaction-pow -q

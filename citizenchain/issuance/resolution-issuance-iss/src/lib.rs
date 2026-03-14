@@ -195,6 +195,10 @@ pub mod pallet {
                 T::MaxReasonLen::get() > 0,
                 "MaxReasonLen must be greater than 0"
             );
+            assert!(
+                T::MaxSingleIssuance::get() <= T::MaxTotalIssuance::get(),
+                "MaxSingleIssuance must not exceed MaxTotalIssuance"
+            );
         }
     }
 
@@ -448,7 +452,7 @@ mod tests {
         type MaintenanceOrigin = frame_system::EnsureRoot<AccountId>;
         type MaxReasonLen = ConstU32<128>;
         type MaxAllocations = ConstU32<4>;
-        type MaxTotalIssuance = ConstU128<1_000_000>;
+        type MaxTotalIssuance = ConstU128<14_434_973_780_000>;
         type MaxSingleIssuance = ConstU128<14_434_973_780_000>;
         type WeightInfo = ();
     }
@@ -609,7 +613,7 @@ mod tests {
     #[test]
     fn cap_exceeded_is_rejected_before_mint() {
         new_test_ext().execute_with(|| {
-            pallet::TotalIssued::<Test>::put(1_000_000 - 5);
+            pallet::TotalIssued::<Test>::put(14_434_973_780_000 - 5);
             assert_noop!(
                 execute_via_trait(8, b"x".to_vec(), 10, vec![(10, 10)]),
                 pallet::Error::<Test>::ExceedsTotalIssuanceCap
@@ -617,7 +621,7 @@ mod tests {
 
             assert_eq!(pallet_balances::Pallet::<Test>::free_balance(10), 0);
             assert_eq!(pallet::Executed::<Test>::get(8), None);
-            assert_eq!(pallet::TotalIssued::<Test>::get(), 1_000_000 - 5);
+            assert_eq!(pallet::TotalIssued::<Test>::get(), 14_434_973_780_000 - 5);
         });
     }
 
@@ -895,9 +899,9 @@ mod tests {
     #[test]
     fn cap_boundary_exactly_reached_is_allowed() {
         new_test_ext().execute_with(|| {
-            pallet::TotalIssued::<Test>::put(1_000_000 - 20);
+            pallet::TotalIssued::<Test>::put(14_434_973_780_000 - 20);
             assert_ok!(execute_via_trait(19, b"ok".to_vec(), 20, vec![(10, 20)]));
-            assert_eq!(pallet::TotalIssued::<Test>::get(), 1_000_000);
+            assert_eq!(pallet::TotalIssued::<Test>::get(), 14_434_973_780_000);
         });
     }
 

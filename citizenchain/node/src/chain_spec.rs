@@ -1,6 +1,6 @@
 //! Chain specification for CitizenChain.
 
-use gmb_runtime::{genesis_config_presets, WASM_BINARY};
+use citizenchain::{genesis_config_presets, WASM_BINARY};
 use primitives::core_const::{CHAIN_ID, CHAIN_NAME, SS58_FORMAT, TOKEN_DECIMALS, TOKEN_SYMBOL};
 use sc_chain_spec::NoExtension;
 use sc_service::ChainType;

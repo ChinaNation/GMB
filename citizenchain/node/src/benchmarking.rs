@@ -4,7 +4,7 @@
 
 use crate::service::FullClient;
 
-use gmb_runtime as runtime;
+use citizenchain as runtime;
 use runtime::{AccountId, Balance, BalancesCall, SystemCall};
 use sc_cli::Result;
 use sc_client_api::BlockBackend;

@@ -71,7 +71,7 @@ codec = { workspace = true, default-features = true }
 frame-benchmarking-cli = { workspace = true, default-features = true }
 
 # Local Dependencies
-gmb-runtime = { workspace = true }
+citizenchain = { workspace = true }
 pow-difficulty-module = { path = "../otherpallet/pow-difficulty-module", default-features = true }
 
 [build-dependencies]
@@ -79,17 +79,17 @@ substrate-build-script-utils = { workspace = true, default-features = true }
 
 [features]
 default = ["std"]
-std = ["gmb-runtime/std"]
+std = ["citizenchain/std"]
 # Dependencies that are only required if runtime benchmarking should be build.
 runtime-benchmarks = [
     "frame-benchmarking-cli/runtime-benchmarks",
-	"gmb-runtime/runtime-benchmarks",
+	"citizenchain/runtime-benchmarks",
 ]
 # Enable features that allow the runtime to be tried and debugged. Name might be subject to change
 # in the near future.
 try-runtime = [
 	"frame-system/try-runtime",
 	"pallet-transaction-payment/try-runtime",
-	"gmb-runtime/try-runtime",
+	"citizenchain/try-runtime",
 	"sp-runtime/try-runtime",
 ]

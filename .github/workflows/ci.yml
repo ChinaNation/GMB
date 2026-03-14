@@ -136,7 +136,7 @@ jobs:
 
       - name: 构建生产 WASM
         working-directory: citizenchain
-        run: cargo build --release -p gmb-runtime
+        run: cargo build --release -p citizenchain
 
       - name: 检查 WASM 不含 benchmark feature
         working-directory: citizenchain
