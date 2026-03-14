@@ -44,7 +44,7 @@ jobs:
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
+          targets: wasm32v1-none
 
       - name: 安装 LLVM/Clang 依赖
         run: |
@@ -56,9 +56,6 @@ jobs:
           echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
           echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
           echo "PROTOC=$(command -v protoc)" >> "$GITHUB_ENV"
-
-      - name: 安装额外 wasm target（兼容新版 runtime 构建）
-        run: rustup target add wasm32v1-none
 
       - name: 缓存依赖
         uses: Swatinem/rust-cache@v2
