@@ -25,6 +25,7 @@ futures = { workspace = true }
 jsonrpsee = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 primitives = { path = "../../primitives" }
+ocl = { version = "0.19", optional = true }
 
 # substrate client
 sc-basic-authorship = { workspace = true, default-features = true }
@@ -80,6 +81,7 @@ substrate-build-script-utils = { workspace = true, default-features = true }
 [features]
 default = ["std"]
 std = ["citizenchain/std"]
+gpu-mining = ["ocl"]
 # Dependencies that are only required if runtime benchmarking should be build.
 runtime-benchmarks = [
     "frame-benchmarking-cli/runtime-benchmarks",

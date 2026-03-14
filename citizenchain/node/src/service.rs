@@ -16,10 +16,21 @@ use sp_core::{crypto::KeyTypeId, hashing::blake2_256, U256};
 use sp_keystore::Keystore;
 use sp_runtime::traits::{Block as BlockT, IdentifyAccount};
 use std::{
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
     thread,
     time::{Duration, Instant},
 };
+
+/// CPU 全线程合计哈希率（hashes/sec），以 f64 bits 存入 AtomicU64。
+static CPU_HASHRATE: AtomicU64 = AtomicU64::new(0);
+
+/// 获取当前 CPU 哈希率（hashes/sec）。
+pub(crate) fn cpu_hashrate() -> f64 {
+    f64::from_bits(CPU_HASHRATE.load(Ordering::Relaxed))
+}
 
 pub(crate) type FullClient = sc_service::TFullClient<
     Block,
@@ -49,7 +60,7 @@ const POW_PROPOSAL_BUILD_SECS: u64 = 2;
 const GRANDPA_JUSTIFICATION_PERIOD: u32 = 64;
 
 #[derive(Clone)]
-struct SimplePow {
+pub(crate) struct SimplePow {
     /// 持有 client 引用，用于通过 Runtime API 读取链上最新难度值。
     client: Arc<FullClient>,
 }
@@ -148,48 +159,75 @@ fn start_cpu_miner<Proof: Send + 'static>(
 
     for thread_id in 0..num_threads {
         let worker = worker.clone();
-        thread::spawn(move || loop {
-            let Some(metadata) = worker.metadata() else {
-                thread::sleep(Duration::from_millis(200));
-                continue;
-            };
-
-            let build_version = worker.version();
-
-            // 中文注释：共同随机基址（来自 pre_hash 前 8 字节）+ 线程号错位 + stride = 线程数。
-            // 每轮 metadata 变化时基址自动更换；同一轮内各线程搜索的 nonce 集合完全不重叠。
-            let random_base = {
-                let seed_bytes = metadata.pre_hash.as_ref();
-                u64::from_le_bytes(seed_bytes[..8].try_into().unwrap_or([0u8; 8]))
-            };
-            let mut nonce = random_base.wrapping_add(thread_id as u64);
+        thread::spawn(move || {
+            // 哈希率采样：仅 thread 0 每 SAMPLE_INTERVAL 次哈希统计一次，乘以线程数得到总哈希率。
+            // 声明在外层循环之外，避免每次 metadata 变化时计数器被重置。
+            const SAMPLE_INTERVAL: u64 = 100_000;
+            let mut sample_count: u64 = 0;
+            let mut sample_start = Instant::now();
 
             loop {
-                if worker.version() != build_version {
-                    break;
-                }
+                let Some(metadata) = worker.metadata() else {
+                    thread::sleep(Duration::from_millis(200));
+                    continue;
+                };
 
-                let hash = pow_hash(metadata.pre_hash.as_ref(), nonce);
-                if hash_meets_difficulty(&hash, metadata.difficulty) {
-                    // 中文注释：仅限制"提交频率"，挖矿过程仍持续进行。
-                    // 这样可以保证区块时间戳不会持续跑在本地时间之前导致 future 错误。
-                    static MINER_GATE: std::sync::OnceLock<std::sync::Mutex<Instant>> =
-                        std::sync::OnceLock::new();
-                    let gate = MINER_GATE
-                        .get_or_init(|| Mutex::new(Instant::now() - min_submit_interval));
-                    // 中文注释：使用 unwrap_or_else 恢复 poison，避免某线程 panic 后打死其他线程。
-                    let mut last_submit =
-                        gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-                    let elapsed = last_submit.elapsed();
-                    if elapsed < min_submit_interval {
-                        thread::sleep(min_submit_interval - elapsed);
+                let build_version = worker.version();
+
+                // 共同随机基址（来自 pre_hash 前 8 字节）+ 线程号错位 + stride = 线程数。
+                // 每轮 metadata 变化时基址自动更换；同一轮内各线程搜索的 nonce 集合完全不重叠。
+                let random_base = {
+                    let seed_bytes = metadata.pre_hash.as_ref();
+                    let seed =
+                        u64::from_le_bytes(seed_bytes[..8].try_into().unwrap_or([0u8; 8]));
+                    // CPU 使用低半区 nonce（bit 63 = 0），高半区留给 GPU。
+                    seed & 0x7FFFFFFFFFFFFFFF
+                };
+                let mut nonce = random_base.wrapping_add(thread_id as u64);
+
+                loop {
+                    if worker.version() != build_version {
+                        break;
                     }
-                    let _ = futures::executor::block_on(worker.submit(nonce.encode()));
-                    *last_submit = Instant::now();
-                    break;
-                }
 
-                nonce = nonce.wrapping_add(stride);
+                    // thread 0 负责采样更新全局哈希率。
+                    if thread_id == 0 {
+                        sample_count += 1;
+                        if sample_count >= SAMPLE_INTERVAL {
+                            let elapsed = sample_start.elapsed();
+                            if elapsed.as_nanos() > 0 {
+                                let per_thread =
+                                    sample_count as f64 / elapsed.as_secs_f64();
+                                let total = per_thread * stride as f64;
+                                CPU_HASHRATE.store(total.to_bits(), Ordering::Relaxed);
+                            }
+                            sample_count = 0;
+                            sample_start = Instant::now();
+                        }
+                    }
+
+                    let hash = pow_hash(metadata.pre_hash.as_ref(), nonce);
+                    if hash_meets_difficulty(&hash, metadata.difficulty) {
+                        // 仅限制"提交频率"，挖矿过程仍持续进行。
+                        // 这样可以保证区块时间戳不会持续跑在本地时间之前导致 future 错误。
+                        static MINER_GATE: std::sync::OnceLock<std::sync::Mutex<Instant>> =
+                            std::sync::OnceLock::new();
+                        let gate = MINER_GATE
+                            .get_or_init(|| Mutex::new(Instant::now() - min_submit_interval));
+                        // 使用 unwrap_or_else 恢复 poison，避免某线程 panic 后打死其他线程。
+                        let mut last_submit =
+                            gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                        let elapsed = last_submit.elapsed();
+                        if elapsed < min_submit_interval {
+                            thread::sleep(min_submit_interval - elapsed);
+                        }
+                        let _ = futures::executor::block_on(worker.submit(nonce.encode()));
+                        *last_submit = Instant::now();
+                        break;
+                    }
+
+                    nonce = nonce.wrapping_add(stride);
+                }
             }
         });
     }
@@ -283,6 +321,7 @@ pub fn new_full<
 >(
     config: Configuration,
     mining_threads: usize,
+    gpu_device: Option<usize>,
 ) -> Result<TaskManager, ServiceError> {
     let sc_service::PartialComponents {
         client,
@@ -366,6 +405,22 @@ pub fn new_full<
     let enable_grandpa = !config.disable_grandpa;
     let prometheus_registry = config.prometheus_registry().cloned();
 
+    // GPU 哈希率函数指针：仅在 gpu-mining feature 且用户启用 GPU 时传入。
+    let gpu_hashrate_fn: Option<fn() -> f64> = {
+        #[cfg(feature = "gpu-mining")]
+        {
+            if gpu_device.is_some() {
+                Some(crate::gpu_miner::gpu_hashrate as fn() -> f64)
+            } else {
+                None
+            }
+        }
+        #[cfg(not(feature = "gpu-mining"))]
+        {
+            None
+        }
+    };
+
     let rpc_extensions_builder = {
         let client = client.clone();
         let pool = transaction_pool.clone();
@@ -374,6 +429,8 @@ pub fn new_full<
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: pool.clone(),
+                cpu_hashrate_fn: cpu_hashrate as fn() -> f64,
+                gpu_hashrate_fn,
             };
             crate::rpc::create_full(deps).map_err(Into::into)
         })
@@ -446,7 +503,24 @@ pub fn new_full<
         worker_task.boxed(),
     );
 
-    start_cpu_miner(worker, mining_threads);
+    if mining_threads > 0 {
+        start_cpu_miner(worker.clone(), mining_threads);
+    }
+
+    // GPU 矿工（仅在 gpu-mining feature 编译时可用）。
+    #[cfg(feature = "gpu-mining")]
+    if let Some(device) = gpu_device {
+        match crate::gpu_miner::try_start(worker.clone(), device) {
+            Ok(()) => log::info!("GPU miner started on device {}", device),
+            Err(e) => log::warn!("GPU not available, CPU only: {}", e),
+        }
+    }
+
+    // 避免 unused 警告（无 gpu-mining feature 时 gpu_device 未使用）。
+    #[cfg(not(feature = "gpu-mining"))]
+    let _ = gpu_device;
+
+    drop(worker);
 
     if enable_grandpa {
         let local_grandpa_keys = keystore.ed25519_public_keys(sp_consensus_grandpa::KEY_TYPE);
