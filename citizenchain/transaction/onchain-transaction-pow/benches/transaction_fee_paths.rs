@@ -135,12 +135,6 @@ fn new_test_ext() -> sp_io::TestExternalities {
         balances: vec![
             (account(1), 1_000_000),
             (account(2), 1_000_000),
-            (account(8), 0),
-            (account(9), 0),
-            (
-                AccountId32::new(primitives::china::china_cb::CHINA_CB[0].duoqian_address),
-                0,
-            ),
         ],
         dev_accounts: None,
     }
