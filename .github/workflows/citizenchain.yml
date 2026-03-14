@@ -117,6 +117,7 @@ jobs:
         shell: pwsh
         run: |
           $binDir = "citizenchain/nodeui/backend/binaries"
+          New-Item -ItemType Directory -Force -Path $binDir | Out-Null
           $src = "citizenchain/target/${{ matrix.target }}/release/node.exe"
           $side = "$binDir/${{ matrix.sidecar_name }}"
           $plain = "$binDir/${{ matrix.plain_name }}"
