@@ -1,6 +1,6 @@
 [package]
 name = "node"
-description = "A solochain node template built with Substrate, part of Polkadot Sdk."
+description = "CitizenChain node built with Substrate."
 homepage.workspace = true
 publish = false
 edition.workspace = true   # 默认 Rust 版本

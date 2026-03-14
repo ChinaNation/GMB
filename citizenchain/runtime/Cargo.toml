@@ -1,6 +1,6 @@
 [package]
 name = "citizenchain"  # 运行时状态模块
-description = "A solochain runtime template built with Substrate, part of Polkadot Sdk."
+description = "CitizenChain runtime built with Substrate."
 homepage.workspace = true
 publish = false
 edition.workspace = true   # 默认 Rust 版本
