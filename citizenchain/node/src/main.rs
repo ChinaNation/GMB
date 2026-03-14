@@ -5,6 +5,8 @@ mod benchmarking;
 mod chain_spec;
 mod cli;
 mod command;
+#[cfg(feature = "gpu-mining")]
+mod gpu_miner;
 mod rpc;
 mod service;
 

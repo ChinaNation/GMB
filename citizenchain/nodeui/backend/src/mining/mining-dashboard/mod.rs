@@ -53,9 +53,9 @@ pub struct MiningBlockRecord {
 #[serde(rename_all = "camelCase")]
 /// 资源监控面板展示的节点资源占用。
 pub struct ResourceUsage {
-    pub cpu_percent: Option<f64>,
+    pub cpu_hashrate_mhs: Option<f64>,
+    pub gpu_hashrate_mhs: Option<f64>,
     pub memory_mb: Option<u64>,
-    pub disk_usage_percent: Option<f64>,
     pub node_data_size_mb: Option<u64>,
 }
 
@@ -896,20 +896,17 @@ fn node_data_size_mb_with_cache(data_dir: &PathBuf) -> Option<u64> {
 }
 
 fn collect_resource_usage(app: &AppHandle) -> ResourceUsage {
-    let mut cpu_percent = None;
     let mut memory_mb = None;
-    let mut disk_usage_percent = None;
     let mut node_data_size_mb = None;
 
     if let Ok(status) = home::current_status(app) {
         if let Some(pid) = status.pid {
             let sys = System::new_with_specifics(
                 RefreshKind::nothing()
-                    .with_processes(ProcessRefreshKind::nothing().with_cpu().with_memory()),
+                    .with_processes(ProcessRefreshKind::nothing().with_memory()),
             );
             let sysinfo_pid = sysinfo::Pid::from_u32(pid);
             if let Some(proc) = sys.process(sysinfo_pid) {
-                cpu_percent = Some(proc.cpu_usage() as f64);
                 let rss_bytes = proc.memory();
                 memory_mb = Some(rss_bytes.saturating_add(1024 * 1024 - 1) / (1024 * 1024));
             }
@@ -918,30 +915,32 @@ fn collect_resource_usage(app: &AppHandle) -> ResourceUsage {
 
     if let Ok(data_dir) = node_data_dir(app) {
         node_data_size_mb = node_data_size_mb_with_cache(&data_dir);
-
-        // 节点专属磁盘占用：node_data_size / 磁盘总容量 * 100%
-        if let Some(size_mb) = node_data_size_mb {
-            let disks = sysinfo::Disks::new_with_refreshed_list();
-            let mut best_mount_len = 0;
-            for disk in disks.list() {
-                let mount = disk.mount_point();
-                if data_dir.starts_with(mount) && mount.as_os_str().len() > best_mount_len {
-                    best_mount_len = mount.as_os_str().len();
-                    let total = disk.total_space();
-                    if total > 0 {
-                        let node_bytes = (size_mb as u64) * 1024 * 1024;
-                        disk_usage_percent =
-                            Some((node_bytes as f64 / total as f64) * 100.0);
-                    }
-                }
-            }
-        }
     }
 
+    // CPU 哈希率：通过节点 RPC 获取（mining_cpuHashrate 返回 H/s，u64 整数）。
+    let cpu_hashrate_mhs: Option<f64> =
+        match rpc_post("mining_cpuHashrate", Value::Array(vec![])) {
+            Ok(val) => {
+                let hs = val.as_u64().unwrap_or(0) as f64;
+                Some(hs / 1_000_000.0) // H/s → MH/s
+            }
+            Err(_) => None,
+        };
+
+    // GPU 哈希率：通过节点 RPC 获取（mining_gpuHashrate 返回 H/s，u64 整数）。
+    let gpu_hashrate_mhs: Option<f64> =
+        match rpc_post("mining_gpuHashrate", Value::Array(vec![])) {
+            Ok(val) => {
+                let hs = val.as_u64().unwrap_or(0) as f64;
+                Some(hs / 1_000_000.0) // H/s → MH/s
+            }
+            Err(_) => None, // 节点未启用 GPU 或 RPC 不可用
+        };
+
     ResourceUsage {
-        cpu_percent,
+        cpu_hashrate_mhs,
+        gpu_hashrate_mhs,
         memory_mb,
-        disk_usage_percent,
         node_data_size_mb,
     }
 }

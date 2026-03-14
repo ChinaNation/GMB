@@ -20,6 +20,10 @@ pub struct FullDeps<C, P> {
     pub client: Arc<C>,
     /// Transaction pool instance.
     pub pool: Arc<P>,
+    /// CPU 哈希率查询函数（hashes/sec）。
+    pub cpu_hashrate_fn: fn() -> f64,
+    /// GPU 哈希率查询函数（仅在 gpu-mining feature 启用且有 GPU 时为 Some）。
+    pub gpu_hashrate_fn: Option<fn() -> f64>,
 }
 
 /// Instantiate all full RPC extensions.
@@ -39,22 +43,29 @@ where
     use substrate_frame_rpc_system::{System, SystemApiServer};
 
     let mut module = RpcModule::new(());
-    let FullDeps { client, pool } = deps;
+    let FullDeps {
+        client,
+        pool,
+        cpu_hashrate_fn,
+        gpu_hashrate_fn,
+    } = deps;
 
     module.merge(System::new(client.clone(), pool).into_rpc())?;
     module.merge(TransactionPayment::new(client).into_rpc())?;
 
-    // Extend this RPC with a custom API by using the following syntax.
-    // `YourRpcStruct` should have a reference to a client, which is needed
-    // to call into the runtime.
-    // `module.merge(YourRpcTrait::into_rpc(YourRpcStruct::new(ReferenceToClient, ...)))?;`
+    // CPU 哈希率 RPC：mining_cpuHashrate
+    // 返回值：当前 CPU 全线程合计哈希率（hashes/sec），u64 整数。
+    module.register_method("mining_cpuHashrate", move |_, _, _| {
+        cpu_hashrate_fn() as u64
+    })?;
 
-    // You probably want to enable the `rpc v2 chainSpec` API as well
-    //
-    // let chain_name = chain_spec.name().to_string();
-    // let genesis_hash = client.block_hash(0).ok().flatten().expect("Genesis block exists; qed");
-    // let properties = chain_spec.properties();
-    // module.merge(ChainSpec::new(chain_name, genesis_hash, properties).into_rpc())?;
+    // GPU 哈希率 RPC：mining_gpuHashrate
+    // 返回值：当前 GPU 哈希率（hashes/sec），u64 整数。
+    if let Some(get_hashrate) = gpu_hashrate_fn {
+        module.register_method("mining_gpuHashrate", move |_, _, _| {
+            get_hashrate() as u64
+        })?;
+    }
 
     Ok(module)
 }

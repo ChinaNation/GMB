@@ -23,7 +23,7 @@ export function MiningDashboardSection() {
       todayIncome: '0.00',
     },
     records: [],
-    resources: { cpuPercent: null, memoryMb: null, diskUsagePercent: null, nodeDataSizeMb: null },
+    resources: { cpuHashrateMhs: null, gpuHashrateMhs: null, memoryMb: null, nodeDataSizeMb: null },
     warning: null,
   });
   const [error, setError] = useState<string | null>(null);
@@ -129,21 +129,21 @@ export function MiningDashboardSection() {
         <h2>资源监控</h2>
         <div className="mining-income-grid">
           <div className="metric-card">
-            <div className="metric-label">CPU 占用</div>
+            <div className="metric-label">CPU 哈希率</div>
             <div className="metric-value">
-              {loading ? '加载中...' : (mining.resources.cpuPercent == null ? '未知' : `${mining.resources.cpuPercent.toFixed(5)}%`)}
+              {loading ? '加载中...' : (mining.resources.cpuHashrateMhs == null ? '未启用' : `${mining.resources.cpuHashrateMhs.toFixed(2)} MH/s`)}
+            </div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">GPU 哈希率</div>
+            <div className="metric-value">
+              {loading ? '加载中...' : (mining.resources.gpuHashrateMhs == null ? '未启用' : `${mining.resources.gpuHashrateMhs.toFixed(2)} MH/s`)}
             </div>
           </div>
           <div className="metric-card">
             <div className="metric-label">内存占用</div>
             <div className="metric-value">
               {loading ? '加载中...' : (mining.resources.memoryMb == null ? '未知' : `${mining.resources.memoryMb} MB`)}
-            </div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-label">磁盘占用</div>
-            <div className="metric-value">
-              {loading ? '加载中...' : (mining.resources.diskUsagePercent == null ? '未知' : `${mining.resources.diskUsagePercent.toFixed(5)}%`)}
             </div>
           </div>
           <div className="metric-card">

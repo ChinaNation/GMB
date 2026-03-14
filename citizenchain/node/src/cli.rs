@@ -9,6 +9,14 @@ pub struct Cli {
     /// PoW 挖矿线程数。默认使用 CPU 可用并行度。设为 0 禁用挖矿。
     #[arg(long, value_name = "COUNT")]
     pub mining_threads: Option<usize>,
+
+    /// GPU 挖矿设备编号（默认 0）。需编译时启用 gpu-mining feature。
+    #[arg(long, value_name = "INDEX")]
+    pub gpu_device: Option<usize>,
+
+    /// 强制禁用 GPU 挖矿，即使编译了 gpu-mining feature。
+    #[arg(long)]
+    pub no_gpu: bool,
 }
 
 #[derive(Debug, clap::Subcommand)]

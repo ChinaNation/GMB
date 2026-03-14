@@ -57,9 +57,9 @@ export type MiningBlockRecord = {
 };
 
 export type ResourceUsage = {
-  cpuPercent: number | null;
+  cpuHashrateMhs: number | null;
+  gpuHashrateMhs: number | null;
   memoryMb: number | null;
-  diskUsagePercent: number | null;
   nodeDataSizeMb: number | null;
 };
 
