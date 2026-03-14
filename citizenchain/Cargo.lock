@@ -38,7 +38,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "admins-origin-gov"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -1367,7 +1367,7 @@ dependencies = [
 
 [[package]]
 name = "citizen-lightnode-issuance"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -1384,7 +1384,7 @@ dependencies = [
 
 [[package]]
 name = "citizenchain"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "admins-origin-gov",
  "citizen-lightnode-issuance",
@@ -2682,7 +2682,7 @@ checksum = "4c3cf4824e2d5f025c7b531afcb2325364084a16806f6d47fbc1f5fbd9960590"
 
 [[package]]
 name = "duoqian-transaction-pow"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "frame-benchmarking",
@@ -3512,7 +3512,7 @@ dependencies = [
 
 [[package]]
 name = "fullnode-pow-reward"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -3823,7 +3823,7 @@ dependencies = [
 
 [[package]]
 name = "grandpa-key-gov"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "curve25519-dalek",
  "frame-benchmarking",
@@ -6173,7 +6173,7 @@ checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
 
 [[package]]
 name = "node"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "citizenchain",
  "clap",
@@ -6431,7 +6431,7 @@ dependencies = [
 
 [[package]]
 name = "offchain-transaction-pos"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6483,7 +6483,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "onchain-transaction-pow"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "criterion",
  "frame-support",
@@ -7600,7 +7600,7 @@ dependencies = [
 
 [[package]]
 name = "pow-difficulty-module"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -7682,7 +7682,7 @@ dependencies = [
 
 [[package]]
 name = "primitives"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "hex-literal",
  "parity-scale-codec",
@@ -8367,7 +8367,7 @@ checksum = "a96887878f22d7bad8a3b6dc5b7440e0ada9a245242924394987b21cf2210a4c"
 
 [[package]]
 name = "resolution-destro-gov"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8384,7 +8384,7 @@ dependencies = [
 
 [[package]]
 name = "resolution-issuance-gov"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8401,7 +8401,7 @@ dependencies = [
 
 [[package]]
 name = "resolution-issuance-iss"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8525,7 +8525,7 @@ dependencies = [
 
 [[package]]
 name = "runtime-root-upgrade"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -10221,7 +10221,7 @@ dependencies = [
 
 [[package]]
 name = "sfid-code-auth"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -10291,7 +10291,7 @@ dependencies = [
 
 [[package]]
 name = "shengbank-stake-interest"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -12649,7 +12649,7 @@ checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
 name = "voting-engine-system"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
