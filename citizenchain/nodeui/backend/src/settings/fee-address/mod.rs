@@ -9,7 +9,6 @@ use crate::{
         validation::normalize_wallet_address,
     },
 };
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -29,7 +28,6 @@ use twox_hash::XxHash64;
 use zeroize::Zeroizing;
 
 const POWR_KEY_TYPE_HEX_PREFIX: &str = "706f7772";
-const DEFAULT_CHAIN_ID: &str = "citizenchain";
 const REWARD_BIND_TIMEOUT_SECS: u64 = 45;
 const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -171,93 +169,6 @@ pub(crate) fn local_powr_miner_account_hex(app: &AppHandle) -> Result<Option<Str
     Ok(None)
 }
 
-fn keystore_dirs_for_powr(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
-    let chains_root = node_data_dir(app)?.join("chains");
-    fs::create_dir_all(&chains_root).map_err(|e| format!("create chains dir failed: {e}"))?;
-
-    let mut dirs: Vec<PathBuf> = Vec::new();
-    if chains_root.exists() {
-        let entries =
-            fs::read_dir(&chains_root).map_err(|e| format!("read chains dir failed: {e}"))?;
-        for entry in entries {
-            let entry = entry.map_err(|e| format!("read chain dir entry failed: {e}"))?;
-            let file_type = entry
-                .file_type()
-                .map_err(|e| format!("read chain dir file type failed: {e}"))?;
-            if file_type.is_symlink() || !file_type.is_dir() {
-                continue;
-            }
-            let candidate = entry.path().join("keystore");
-            if let Ok(meta) = fs::symlink_metadata(&candidate) {
-                if meta.file_type().is_symlink() {
-                    continue;
-                }
-            }
-            dirs.push(candidate);
-        }
-    }
-
-    dirs.push(chains_root.join(DEFAULT_CHAIN_ID).join("keystore"));
-    dirs.sort();
-    dirs.dedup();
-    for dir in &dirs {
-        fs::create_dir_all(dir).map_err(|e| {
-            format!(
-                "create powr keystore dir failed ({}): {e}",
-                security::sanitize_path(dir)
-            )
-        })?;
-    }
-    Ok(dirs)
-}
-
-fn powr_keystore_filename(pubkey_hex: &str) -> String {
-    format!("{POWR_KEY_TYPE_HEX_PREFIX}{pubkey_hex}")
-}
-
-fn powr_pubkey_hex_from_suri(suri: &str) -> Result<String, String> {
-    let secret_uri = SecretUri::from_str(suri).map_err(|e| format!("矿工签名密钥解析失败: {e}"))?;
-    let signer =
-        Sr25519Keypair::from_uri(&secret_uri).map_err(|e| format!("矿工签名密钥加载失败: {e}"))?;
-    Ok(hex::encode(signer.public_key().0))
-}
-
-fn write_powr_key_to_keystore(app: &AppHandle, suri: &str, pubkey_hex: &str) -> Result<(), String> {
-    let normalized = suri.trim();
-    let encoded = serde_json::to_string(normalized)
-        .map_err(|e| format!("encode powr keystore secret failed: {e}"))?;
-    let content = format!("{encoded}\n");
-    let filename = powr_keystore_filename(pubkey_hex);
-    for dir in keystore_dirs_for_powr(app)? {
-        let path = dir.join(&filename);
-        security::write_secret_text_atomic(&path, &content).map_err(|e| {
-            format!(
-                "write powr keystore file failed ({}): {e}",
-                security::sanitize_path(&path)
-            )
-        })?;
-    }
-    Ok(())
-}
-
-fn remove_other_powr_keys(app: &AppHandle, keep_filename: &str) -> Result<(), String> {
-    for path in collect_powr_keystore_files(app)? {
-        let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
-            continue;
-        };
-        if name == keep_filename {
-            continue;
-        }
-        fs::remove_file(&path).map_err(|e| {
-            format!(
-                "remove stale powr keystore file failed ({}): {e}",
-                security::sanitize_path(&path)
-            )
-        })?;
-    }
-    Ok(())
-}
-
 fn load_powr_suri_from_keystore(app: &AppHandle) -> Result<Option<String>, String> {
     let files = collect_powr_keystore_files(app)?;
     for path in files {
@@ -315,7 +226,7 @@ fn account_id_from_address(address: &str) -> Result<[u8; 32], String> {
 }
 
 fn miner_account_id(app: &AppHandle) -> Result<[u8; 32], String> {
-    let miner_suri = ensure_miner_suri(app)?;
+    let miner_suri = load_miner_suri(app)?;
     let secret_uri =
         SecretUri::from_str(&miner_suri).map_err(|e| format!("矿工签名密钥解析失败: {e}"))?;
     let signer =
@@ -399,32 +310,12 @@ fn decode_storage_account_id(raw: &[u8]) -> Result<[u8; 32], String> {
     Ok(out)
 }
 
-fn generate_random_hex_suri() -> String {
-    let mut seed = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut seed);
-    format!("0x{}", hex::encode(seed))
-}
-
-/// 矿工密钥有且仅有一把，唯一来源是 keystore 文件。
-/// 有就直接用，没有就生成一把写入 keystore。
-pub(crate) fn ensure_miner_suri(app: &AppHandle) -> Result<Zeroizing<String>, String> {
+/// 从 keystore 读取矿工密钥。密钥由 node 进程（Substrate 框架）生成，nodeui 只读取。
+fn load_miner_suri(app: &AppHandle) -> Result<Zeroizing<String>, String> {
     if let Some(suri) = load_powr_suri_from_keystore(app)? {
         return Ok(Zeroizing::new(suri));
     }
-    let suri = generate_random_hex_suri();
-    let pubkey_hex = powr_pubkey_hex_from_suri(&suri)?;
-    write_powr_key_to_keystore(app, &suri, &pubkey_hex)?;
-    Ok(Zeroizing::new(suri))
-}
-
-pub(crate) fn ensure_powr_keystore_key(app: &AppHandle) -> Result<(), String> {
-    // `powr` 只保留当前矿工账户对应的一把密钥，避免旧 key 残留导致收益归属漂移。
-    let suri = ensure_miner_suri(app)?;
-    let pubkey_hex = powr_pubkey_hex_from_suri(&suri)?;
-    write_powr_key_to_keystore(app, &suri, &pubkey_hex)?;
-    let keep_filename = powr_keystore_filename(&pubkey_hex);
-    remove_other_powr_keys(app, &keep_filename)?;
-    Ok(())
+    Err("未找到矿工密钥，请先启动节点".to_string())
 }
 
 async fn sync_saved_reward_wallet_inner(app: &AppHandle) -> Result<(), String> {
@@ -438,13 +329,33 @@ async fn sync_saved_reward_wallet_inner(app: &AppHandle) -> Result<(), String> {
         ensure_expected_reward_wallet_rpc_node()?;
         let normalized = normalize_wallet_address(&saved_address)?;
         let target_wallet = account_id_from_address(&normalized)?;
-        let miner_suri = ensure_miner_suri(&app_clone)?;
+        let miner_suri = load_miner_suri(&app_clone)?;
 
         let secret_uri = SecretUri::from_str(&miner_suri)
             .map_err(|e| format!("矿工签名密钥解析失败: {e}"))?;
         let signer = Sr25519Keypair::from_uri(&secret_uri)
             .map_err(|e| format!("矿工签名密钥加载失败: {e}"))?;
         let signer_account = AccountId32(signer.public_key().0);
+
+        // 诊断：比较从 SURI 推导的公钥和 keystore 文件名中的公钥
+        let derived_hex = hex::encode(signer_account.0);
+        let filename_hex = local_powr_miner_account_hex(&app_clone)?;
+        eprintln!(
+            "[reward-wallet-bind] derived_pubkey=0x{}, keystore_filename_pubkey={:?}",
+            derived_hex,
+            filename_hex,
+        );
+        if let Some(ref fh) = filename_hex {
+            let fh_lower = fh.to_ascii_lowercase();
+            let derived_lower = format!("0x{}", derived_hex.to_ascii_lowercase());
+            if fh_lower != derived_lower {
+                return Err(format!(
+                    "密钥推导不一致：keystore 文件名公钥={}, SURI 推导公钥=0x{}，可能是 sp_core 与 subxt_signer 对助记词推导不兼容",
+                    fh, derived_hex,
+                ));
+            }
+        }
+
         if target_wallet == signer_account.0 {
             return Err("奖励钱包不能与矿工签名账户相同，请使用独立收款钱包".to_string());
         }
@@ -500,21 +411,30 @@ async fn sync_saved_reward_wallet_inner(app: &AppHandle) -> Result<(), String> {
     let tx = partial
         .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
 
+    // 诊断：提交前检查签名账户余额
+    let balance_key = {
+        let mut k = Vec::new();
+        k.extend_from_slice(&twox_128(b"System"));
+        k.extend_from_slice(&twox_128(b"Account"));
+        k.extend_from_slice(&blake2b_128(&signer_account.0));
+        k.extend_from_slice(&signer_account.0);
+        k
+    };
+    let account_raw = storage
+        .fetch_raw(balance_key)
+        .await
+        .map_err(|e| format!("查询签名账户信息失败: {e}"))?;
+    eprintln!(
+        "[reward-wallet-bind] signer=0x{}, account_exists={}, account_data_len={}",
+        hex::encode(signer_account.0),
+        account_raw.is_some(),
+        account_raw.as_ref().map(|v| v.len()).unwrap_or(0),
+    );
+
     tx.submit()
         .await
         .map_err(|e| format!("提交 {} 交易失败: {e}", call_name))?;
     Ok(())
-}
-
-pub(crate) async fn sync_saved_reward_wallet_binding(
-    app: &AppHandle,
-) -> Result<(), String> {
-    tokio::time::timeout(
-        std::time::Duration::from_secs(REWARD_BIND_TIMEOUT_SECS),
-        sync_saved_reward_wallet_inner(app),
-    )
-    .await
-    .map_err(|_| "链上奖励地址同步超时，请稍后重试".to_string())?
 }
 
 #[tauri::command]

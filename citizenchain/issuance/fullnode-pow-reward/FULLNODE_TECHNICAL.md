@@ -152,7 +152,48 @@ Runtime 注入配置：
   - 需要将收益发到独立钱包时，通过 `bind_reward_wallet` 绑定。
   - 钱包迁移/风险处置时使用 `rebind_reward_wallet` 主动切换收款地址。
 
-## 10. 审查结论与建议
+## 10. 矿工密钥架构
+
+### 10.1 设计原则
+矿工密钥有且仅有一把，唯一来源是 keystore 文件。
+
+- **node 进程**（Substrate 框架）：唯一生成密钥的地方
+- **keystore**：唯一存储密钥的地方
+- **nodeui**：只读取 keystore 中的密钥，不生成、不写入
+
+### 10.2 密钥生成（node 进程）
+代码位置：`node/src/service.rs` → `ensure_powr_key()`
+
+节点启动时自检 keystore 中是否已有 `powr` 类型密钥：
+- 有 → 直接使用，不再生成
+- 没有 → 调用 `sr25519_generate_new(POW_AUTHOR_KEY_TYPE, None)`
+
+Substrate 框架的 `sr25519_generate_new(key_type, None)` 行为：
+1. 生成 12 个单词的 BIP39 助记词
+2. 从助记词推导 sr25519 密钥对
+3. 将助记词写入 keystore 磁盘文件（JSON 编码字符串）
+4. 文件名格式：`{key_type_hex}{pubkey_hex}`
+
+注意：`sr25519_generate_new(key_type, Some(suri))` 只存内存不写磁盘，进程退出后丢失，不可用。
+
+### 10.3 密钥读取（nodeui）
+代码位置：`nodeui/backend/src/settings/fee-address/mod.rs` → `load_miner_suri()`
+
+nodeui 绑定收款地址时，从 keystore 文件读取助记词，用 `subxt_signer` 推导出同一把密钥对并签名 `bind_reward_wallet` / `rebind_reward_wallet` 链上交易。
+
+如果 keystore 中没有密钥（节点从未启动过），返回错误"请先启动节点"。
+
+### 10.4 密钥使用流程
+1. 用户首次启动节点 → node 的 `ensure_powr_key()` 生成密钥并写入 keystore
+2. 节点出块 → `author_pre_digest()` 从 keystore 读取公钥作为区块作者
+3. 用户绑定收款地址 → nodeui 的 `load_miner_suri()` 从 keystore 读取助记词，推导同一把密钥签名绑定交易
+4. 链上 `bind_reward_wallet` 以矿工身份记录映射 → 后续奖励发到绑定的收款地址
+
+由于出块和绑定使用的是同一把密钥（从同一个助记词推导），`RewardWalletByMiner` 映射的 key 与出块作者一致，奖励能正确发到绑定的收款地址。
+
+---
+
+## 11. 审查结论与建议
 本轮没有发现新的高风险权限绕过或重复发奖漏洞。
 
 当前状态：
