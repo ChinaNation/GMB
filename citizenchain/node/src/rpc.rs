@@ -8,8 +8,9 @@
 use std::sync::Arc;
 
 use citizenchain::{self as runtime, opaque::Block, AccountId, Balance, Nonce};
-use codec::Encode;
+use codec::{Decode, Encode};
 use jsonrpsee::RpcModule;
+use sc_client_api::StorageProvider;
 use sc_transaction_pool_api::{TransactionPool, TransactionSource};
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
@@ -169,6 +170,7 @@ pub fn create_full<C, P>(
 where
     C: ProvideRuntimeApi<Block>,
     C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError> + 'static,
+    C: StorageProvider<Block, sc_service::TFullBackend<Block>> + 'static,
     C: Send + Sync + 'static,
     C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
     C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
@@ -235,6 +237,55 @@ where
             );
             submit_reward_wallet_tx(&client, &pool, &keystore, call)?;
             Ok::<&str, jsonrpsee::types::ErrorObjectOwned>("ok")
+        })?;
+    }
+
+    // fee_blockFees(block_hash_hex: String) -> u128
+    // 读取指定区块的 System::Events，累加所有 FeePaid 事件的手续费。
+    {
+        let client = client.clone();
+        module.register_method("fee_blockFees", move |params, _, _| {
+            use jsonrpsee::types::error::ErrorObject;
+
+            let hash_hex: String = params.one()?;
+            let hash_bytes = hex::decode(hash_hex.trim_start_matches("0x"))
+                .map_err(|e| ErrorObject::owned(-1, format!("无效区块哈希: {e}"), None::<()>))?;
+            if hash_bytes.len() != 32 {
+                return Err(ErrorObject::owned(-1, "区块哈希长度错误", None::<()>));
+            }
+            let block_hash =
+                sp_core::H256::from_slice(&hash_bytes);
+
+            // System::Events 的 storage key = twox_128("System") ++ twox_128("Events")
+            let key = {
+                let mut k = Vec::with_capacity(32);
+                k.extend_from_slice(&sp_io::hashing::twox_128(b"System"));
+                k.extend_from_slice(&sp_io::hashing::twox_128(b"Events"));
+                k
+            };
+            let storage = client
+                .storage(block_hash, &sp_storage::StorageKey(key))
+                .map_err(|e| ErrorObject::owned(-1, format!("读取存储失败: {e}"), None::<()>))?;
+
+            let Some(data) = storage else {
+                return Ok(0u128);
+            };
+
+            type EventRecord = frame_system::EventRecord<runtime::RuntimeEvent, sp_core::H256>;
+            let events: Vec<EventRecord> = Decode::decode(&mut &data.0[..])
+                .map_err(|e| ErrorObject::owned(-1, format!("解码事件失败: {e}"), None::<()>))?;
+
+            let mut total_fee: u128 = 0;
+            for record in &events {
+                if let runtime::RuntimeEvent::OnchainTransactionPow(
+                    onchain_transaction_pow::pallet::Event::FeePaid { fee, .. },
+                ) = &record.event
+                {
+                    total_fee = total_fee.saturating_add(*fee);
+                }
+            }
+
+            Ok(total_fee)
         })?;
     }
 

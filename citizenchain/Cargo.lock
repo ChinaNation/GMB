@@ -6185,6 +6185,7 @@ dependencies = [
  "hex-literal",
  "jsonrpsee",
  "ocl",
+ "onchain-transaction-pow",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",
