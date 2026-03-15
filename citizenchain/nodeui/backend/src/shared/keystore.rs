@@ -1,6 +1,7 @@
 // 通用 keystore 操作：扫描链目录、写入/删除/检测密钥文件。
 use crate::shared::security;
 use std::{
+    ffi::OsString,
     fs,
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -9,7 +10,7 @@ use tauri::AppHandle;
 
 #[cfg(unix)]
 use std::{
-    ffi::{CStr, CString, OsStr, OsString},
+    ffi::{CStr, CString, OsStr},
     io::Write,
     os::{
         fd::{AsRawFd, FromRawFd, OwnedFd, RawFd},
