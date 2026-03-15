@@ -136,7 +136,13 @@ jobs:
       - name: Build installer bundles (Windows)
         if: runner.os == 'Windows'
         working-directory: citizenchain/nodeui/frontend
-        run: npx tauri build -c ../backend/tauri.conf.json --bundles ${{ matrix.bundles }}
+        shell: pwsh
+        run: |
+          # 验证 sidecar 二进制已就位
+          $sidecar = "../backend/binaries/${{ matrix.sidecar_name }}"
+          if (-not (Test-Path $sidecar)) { throw "Sidecar binary not found: $sidecar" }
+          # 直接调用 tauri CLI（绕过 npm pre 钩子中的 bash 脚本）
+          npx @tauri-apps/cli build -c ../backend/tauri.conf.json --bundles ${{ matrix.bundles }}
 
       - name: Build DMG from .app (macOS)
         if: runner.os == 'macOS'
