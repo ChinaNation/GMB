@@ -393,8 +393,6 @@ mod unix_pam_auth {
 
 #[cfg(target_os = "windows")]
 fn current_windows_account() -> Result<(String, String), String> {
-    use std::os::windows::ffi::OsStrExt;
-
     type Bool = i32;
     type Dword = u32;
     const NAME_SAM_COMPATIBLE: Dword = 2;
@@ -481,6 +479,7 @@ pub(crate) fn verify_device_login_password(app: &AppHandle, password: &str) -> R
         fn CloseHandle(handle: Handle) -> Bool;
     }
 
+    use std::os::windows::ffi::OsStrExt;
     use zeroize::Zeroizing;
 
     fn wide_null(input: &str) -> Vec<u16> {

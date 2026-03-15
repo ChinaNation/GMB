@@ -98,8 +98,6 @@ pub mod pallet {
         },
         /// 本区块奖励跳过：未能从 digest 识别出作者。
         PowRewardSkippedNoAuthor { block: u32 },
-        /// 本区块奖励跳过：作者未绑定奖励钱包。
-        PowRewardSkippedNoBoundWallet { block: u32, miner: T::AccountId },
         /// 矿工身份钱包重新绑定。
         RewardWalletRebound {
             miner: T::AccountId,
@@ -216,27 +214,19 @@ pub mod pallet {
                 } // 理论上不应发生，发生则不发奖励
             };
 
-            // 仅向已绑定钱包的矿工发放奖励；未绑定则不发放。
-            let wallet = match RewardWalletByMiner::<T>::get(&author) {
-                Some(w) => w,
-                None => {
-                    Self::deposit_event(Event::<T>::PowRewardSkippedNoBoundWallet {
-                        block: block_number,
-                        miner: author,
-                    });
-                    return;
-                }
-            };
+            // 已绑定钱包则发到钱包，未绑定则默认发到矿工自身账户。
+            let recipient = RewardWalletByMiner::<T>::get(&author)
+                .unwrap_or_else(|| author.clone());
 
             // 发放固定的全节点 PoW 铸块奖励
-            // 中文注释：奖励金额完全由制度常量决定，绑定表只决定“发给谁”，不影响“发多少”。
+            // 中文注释：奖励金额完全由制度常量决定，绑定表只决定”发给谁”，不影响”发多少”。
             let reward: BalanceOf<T> = FULLNODE_BLOCK_REWARD.saturated_into();
             // 中文注释：deposit_creating 会在钱包尚未建户时自动建户，并同步增加总发行量。
-            let _imbalance = T::Currency::deposit_creating(&wallet, reward);
+            let _imbalance = T::Currency::deposit_creating(&recipient, reward);
             Self::deposit_event(Event::<T>::PowRewardIssued {
                 block: block_number,
                 miner: author,
-                wallet,
+                wallet: recipient,
                 amount: reward,
             });
         }
@@ -404,14 +394,17 @@ mod tests {
     }
 
     #[test]
-    fn no_reward_when_not_bound() {
+    fn reward_to_miner_when_not_bound() {
         new_test_ext().execute_with(|| {
             let miner = account(33);
-            let wallet = account(44);
-            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
 
             <FullnodePowReward as Hooks<u32>>::on_finalize(1);
-            assert_eq!(Balances::free_balance(wallet), 0);
+            // 未绑定钱包时，奖励默认发到矿工自身账户
+            assert_eq!(
+                Balances::free_balance(miner),
+                primitives::pow_const::FULLNODE_BLOCK_REWARD
+            );
         });
     }
 
@@ -514,20 +507,27 @@ mod tests {
     }
 
     #[test]
-    fn skip_event_emitted_when_wallet_not_bound() {
+    fn reward_issued_to_miner_when_wallet_not_bound() {
         new_test_ext().execute_with(|| {
             let miner = account(101);
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
 
             <FullnodePowReward as Hooks<u32>>::on_finalize(1);
 
+            // 未绑定时奖励发到矿工，并 emit PowRewardIssued（wallet = miner）
+            assert_eq!(
+                Balances::free_balance(miner.clone()),
+                primitives::pow_const::FULLNODE_BLOCK_REWARD
+            );
             let has_event = System::events().iter().any(|r| {
                 matches!(
                     r.event,
-                    RuntimeEvent::FullnodePowReward(Event::PowRewardSkippedNoBoundWallet {
+                    RuntimeEvent::FullnodePowReward(Event::PowRewardIssued {
                         block: 1,
-                        miner: ref m
-                    }) if m == &miner
+                        miner: ref m,
+                        wallet: ref w,
+                        ..
+                    }) if m == &miner && w == &miner
                 )
             });
             assert!(has_event);

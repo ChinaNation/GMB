@@ -1060,9 +1060,6 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
             }
         }
 
-        if let Err(err) = fee_address::sync_saved_reward_wallet_binding(&app, &unlock_password) {
-            eprintln!("sync reward wallet binding skipped: {err}");
-        }
         if let Err(err) = grandpa_address::verify_grandpa_after_start(&app, &unlock_password) {
             rollback_started_node(&app);
             let _ = cleanup_stale_staged_node_bins(&app, None);
@@ -1127,11 +1124,20 @@ fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
 
 #[tauri::command]
 pub async fn start_node(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
-    super::join_blocking_task(
+    let app2 = app.clone();
+    let pw2 = unlock_password.clone();
+    let status = super::join_blocking_task(
         "start_node",
         tauri::async_runtime::spawn_blocking(move || start_node_sync(app, unlock_password)),
     )
-    .await
+    .await?;
+    // 后台异步同步奖励钱包绑定，不阻塞 start_node 返回
+    tauri::async_runtime::spawn(async move {
+        if let Err(err) = fee_address::sync_saved_reward_wallet_binding(&app2, &pw2).await {
+            eprintln!("sync reward wallet binding skipped: {err}");
+        }
+    });
+    Ok(status)
 }
 
 #[tauri::command]
