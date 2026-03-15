@@ -424,14 +424,6 @@ fn scale_u64_from_storage_hex(hex: &str) -> Option<u64> {
     Some(u64::from_le_bytes(raw))
 }
 
-fn parse_partial_fee(result: &Value) -> Option<u128> {
-    let raw = result.get("partialFee")?;
-    if let Some(s) = raw.as_str() {
-        return s.parse::<u128>().ok();
-    }
-    raw.as_u64().map(u128::from)
-}
-
 fn twox_128(input: &[u8]) -> [u8; 16] {
     let mut h1 = twox_hash::XxHash64::with_seed(0);
     h1.write(input);
@@ -532,33 +524,20 @@ fn author_from_pow_digest_logs(logs: &[Value]) -> Option<String> {
     None
 }
 
-// 手续费按区块内所有非 coinbase extrinsic 的 payment_queryInfo 累加；
-// 单条失败不终止整块处理，而是累计失败计数并在 warning 中提示。
-fn block_fee_fen(block_hash: &str, extrinsics: &[Value]) -> (u128, u32) {
-    let mut total_fee: u128 = 0;
-    let mut failures: u32 = 0;
-
-    for xt in extrinsics.iter().skip(1) {
-        let Some(xt_hex) = xt.as_str() else {
-            failures = failures.saturating_add(1);
-            continue;
-        };
-        let params = Value::Array(vec![
-            Value::String(xt_hex.to_string()),
-            Value::String(block_hash.to_string()),
-        ]);
-        let Ok(v) = rpc_post("payment_queryInfo", params) else {
-            failures = failures.saturating_add(1);
-            continue;
-        };
-        let Some(fee) = parse_partial_fee(&v) else {
-            failures = failures.saturating_add(1);
-            continue;
-        };
-        total_fee = total_fee.saturating_add(fee);
+// 通过自定义 RPC fee_blockFees 读取区块真实手续费（链上 FeePaid 事件累加）。
+fn block_fee_fen(block_hash: &str) -> (u128, u32) {
+    let params = Value::Array(vec![Value::String(block_hash.to_string())]);
+    match rpc_post("fee_blockFees", params) {
+        Ok(v) => {
+            let fee = v
+                .as_u64()
+                .map(u128::from)
+                .or_else(|| v.as_str().and_then(|s| s.parse::<u128>().ok()))
+                .unwrap_or(0);
+            (fee, 0)
+        }
+        Err(_) => (0, 1),
     }
-
-    (total_fee, failures)
 }
 
 // 单块处理负责把链上原始数据转换成统计友好的结构，
@@ -571,14 +550,7 @@ fn process_block(height: u64, ts_key: &str) -> Result<ProcessedBlock, String> {
     )
     .map_err(|e| format!("load block {height} failed: {e}"))?;
 
-    let extrinsics = block
-        .get("block")
-        .and_then(|b| b.get("extrinsics"))
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-
-    let (fee_fen, fee_query_failures) = block_fee_fen(&block_hash, &extrinsics);
+    let (fee_fen, fee_query_failures) = block_fee_fen(&block_hash);
 
     let (timestamp_ms, timestamp_query_failed) = match maybe_block_timestamp_ms(ts_key, &block_hash)
     {

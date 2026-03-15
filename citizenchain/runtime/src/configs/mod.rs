@@ -40,7 +40,7 @@ use frame_support::{
     },
     weights::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
-        IdentityFee, Weight,
+        ConstantMultiplier, Weight,
     },
     PalletId,
 };
@@ -232,11 +232,13 @@ impl pallet_transaction_payment::Config for Runtime {
         RuntimeFeePayerExtractor,
     >;
     type OperationalFeeMultiplier = ConstU8<{ primitives::core_const::OPERATIONAL_FEE_MULTIPLIER }>;
-    type WeightToFee = IdentityFee<Balance>;
-    type LengthToFee = IdentityFee<Balance>;
+    type WeightToFee = ConstantMultiplier<Balance, ConstU128<0>>;
+    type LengthToFee = ConstantMultiplier<Balance, ConstU128<0>>;
     type FeeMultiplierUpdate = ConstFeeMultiplier<FeeMultiplier>;
     type WeightInfo = pallet_transaction_payment::weights::SubstrateWeight<Runtime>;
 }
+
+impl onchain_transaction_pow::pallet::Config for Runtime {}
 
 pub struct RuntimeNrcAccountProvider;
 

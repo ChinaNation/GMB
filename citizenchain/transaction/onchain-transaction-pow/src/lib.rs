@@ -16,6 +16,23 @@ use sp_runtime::{
 };
 use sp_std::{marker::PhantomData, prelude::*};
 
+/// 最小 pallet：仅承载手续费事件，无 storage、无 call、无 hooks。
+#[frame_support::pallet]
+pub mod pallet {
+    #[pallet::pallet]
+    pub struct Pallet<T>(_);
+
+    #[pallet::config]
+    pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {}
+
+    #[pallet::event]
+    #[pallet::generate_deposit(pub(crate) fn deposit_event)]
+    pub enum Event<T: Config> {
+        /// 交易手续费已收取。
+        FeePaid { who: T::AccountId, fee: u128 },
+    }
+}
+
 const EXPECTED_FEE_PERCENT_TOTAL: u32 = 100;
 
 const _: () = {
@@ -100,7 +117,7 @@ pub struct PowOnchainChargeAdapter<Currency, Router, AmountExtractor, FeePayerEx
 impl<T, Currency, Router, AmountExtractor, FeePayerExtractor> OnChargeTransaction<T>
     for PowOnchainChargeAdapter<Currency, Router, AmountExtractor, FeePayerExtractor>
 where
-    T: TxPaymentConfig + fullnode_pow_reward::Config,
+    T: TxPaymentConfig + fullnode_pow_reward::Config + pallet::Config,
     Currency: Balanced<T::AccountId> + 'static,
     Router: OnUnbalanced<Credit<T::AccountId, Currency>>,
     AmountExtractor:
@@ -143,6 +160,14 @@ where
         // 中文注释：tip 会单独拆出来，但后续仍和基础费一起交给 Router，
         // 这样可以保留 tip 语义，同时复用统一分账路径。
         let (tip_credit, inclusion_fee) = credit.split(tip);
+
+        // 发出链上手续费事件，供手机端 / 浏览器 / nodeui 读取真实手续费。
+        let base_fee: u128 = fee_with_tip.saturating_sub(tip).saturated_into();
+        pallet::Pallet::<T>::deposit_event(pallet::Event::FeePaid {
+            who: payer.clone(),
+            fee: base_fee,
+        });
+
         Ok(Some((inclusion_fee, tip_credit)))
     }
 
@@ -376,6 +401,8 @@ mod tests {
         pub type TransactionPayment = pallet_transaction_payment;
         #[runtime::pallet_index(3)]
         pub type FullnodePowReward = fullnode_pow_reward;
+        #[runtime::pallet_index(4)]
+        pub type OnchainTransactionPow = crate::pallet;
     }
 
     #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -433,6 +460,8 @@ mod tests {
         type FindAuthor = MockFindAuthor;
         type WeightInfo = ();
     }
+
+    impl crate::pallet::Config for Test {}
 
     struct MockNrcAccountProvider;
     impl NrcAccountProvider<AccountId32> for MockNrcAccountProvider {
