@@ -7,12 +7,24 @@
 
 use std::sync::Arc;
 
-use citizenchain::{opaque::Block, AccountId, Balance, Nonce};
+use citizenchain::{self as runtime, opaque::Block, AccountId, Balance, Nonce};
+use codec::Encode;
 use jsonrpsee::RpcModule;
-use sc_transaction_pool_api::TransactionPool;
+use sc_transaction_pool_api::{TransactionPool, TransactionSource};
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
+use sp_core::crypto::KeyTypeId;
+use sp_keystore::Keystore;
+use sp_runtime::{
+    generic::Era,
+    traits::IdentifyAccount,
+    MultiSigner, OpaqueExtrinsic, SaturatedConversion,
+};
+use substrate_frame_rpc_system::AccountNonceApi;
+
+/// PoW 矿工密钥类型（与 service.rs 中 POW_AUTHOR_KEY_TYPE 一致）。
+const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
 
 /// Full client dependencies.
 pub struct FullDeps<C, P> {
@@ -20,10 +32,134 @@ pub struct FullDeps<C, P> {
     pub client: Arc<C>,
     /// Transaction pool instance.
     pub pool: Arc<P>,
+    /// Keystore（用于签名奖励钱包绑定交易）。
+    pub keystore: sp_keystore::KeystorePtr,
     /// CPU 哈希率查询函数（hashes/sec）。
     pub cpu_hashrate_fn: fn() -> f64,
     /// GPU 哈希率查询函数（仅在 gpu-mining feature 启用且有 GPU 时为 Some）。
     pub gpu_hashrate_fn: Option<fn() -> f64>,
+}
+
+/// 构造并签名一笔交易，提交到交易池。
+fn submit_reward_wallet_tx<C, P>(
+    client: &Arc<C>,
+    pool: &Arc<P>,
+    keystore: &sp_keystore::KeystorePtr,
+    call: runtime::RuntimeCall,
+) -> Result<(), jsonrpsee::types::ErrorObjectOwned>
+where
+    C: ProvideRuntimeApi<Block>,
+    C: HeaderBackend<Block> + 'static,
+    C::Api: AccountNonceApi<Block, AccountId, Nonce>,
+    P: TransactionPool<Block = Block> + 'static,
+{
+    use jsonrpsee::types::error::ErrorObject;
+
+    // 1. 从 keystore 取 powr 公钥
+    let keys = keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE);
+    let public = keys
+        .first()
+        .copied()
+        .ok_or_else(|| ErrorObject::owned(-1, "未找到矿工密钥，请先启动节点", None::<()>))?;
+
+    // 2. 推导 AccountId
+    let miner_account: AccountId =
+        MultiSigner::from(sp_core::sr25519::Public::from(public)).into_account();
+
+    // 3. 查询链信息
+    let info = (*client).info();
+    let best_hash = info.best_hash;
+    let best_number = info.best_number;
+    let genesis_hash = client
+        .hash(0)
+        .map_err(|e| ErrorObject::owned(-1, format!("查询创世块哈希失败: {e}"), None::<()>))?
+        .ok_or_else(|| ErrorObject::owned(-1, "创世块不存在", None::<()>))?;
+
+    // 4. 查询 nonce
+    let nonce = client
+        .runtime_api()
+        .account_nonce(best_hash, miner_account.clone())
+        .map_err(|e| ErrorObject::owned(-1, format!("查询账户 nonce 失败: {e}"), None::<()>))?;
+
+    // 5. 构造 TxExtension（与 benchmarking.rs 完全一致）
+    let period = runtime::configs::BlockHashCount::get()
+        .checked_next_power_of_two()
+        .map(|c| c / 2)
+        .unwrap_or(2) as u64;
+    let tx_ext: runtime::TxExtension = (
+        frame_system::AuthorizeCall::<runtime::Runtime>::new(),
+        frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
+        runtime::CheckNonKeylessSender,
+        frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
+        frame_system::CheckTxVersion::<runtime::Runtime>::new(),
+        frame_system::CheckGenesis::<runtime::Runtime>::new(),
+        frame_system::CheckEra::<runtime::Runtime>::from(Era::mortal(
+            period,
+            best_number.saturated_into(),
+        )),
+        frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
+        frame_system::CheckWeight::<runtime::Runtime>::new(),
+        pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
+        frame_metadata_hash_extension::CheckMetadataHash::<runtime::Runtime>::new(false),
+        frame_system::WeightReclaim::<runtime::Runtime>::new(),
+    );
+
+    // 6. 签名
+    let raw_payload = runtime::SignedPayload::from_raw(
+        call.clone(),
+        tx_ext.clone(),
+        (
+            (),
+            (),
+            (),
+            runtime::VERSION.spec_version,
+            runtime::VERSION.transaction_version,
+            genesis_hash,
+            best_hash,
+            (),
+            (),
+            (),
+            None,
+            (),
+        ),
+    );
+    let signature = raw_payload.using_encoded(|payload| {
+        keystore.sr25519_sign(POW_AUTHOR_KEY_TYPE, &public, payload)
+    });
+    let signature = signature
+        .map_err(|e| ErrorObject::owned(-1, format!("keystore 签名失败: {e}"), None::<()>))?
+        .ok_or_else(|| ErrorObject::owned(-1, "keystore 未返回签名", None::<()>))?;
+
+    // 7. 构造 UncheckedExtrinsic
+    let extrinsic = runtime::UncheckedExtrinsic::new_signed(
+        call,
+        sp_runtime::MultiAddress::Id(miner_account),
+        runtime::Signature::Sr25519(signature),
+        tx_ext,
+    );
+
+    // 8. 编码并提交到交易池
+    let encoded = extrinsic.encode();
+    let opaque = OpaqueExtrinsic::try_from_encoded_extrinsic(&encoded)
+        .map_err(|_| ErrorObject::owned(-1, "交易编码失败", None::<()>))?;
+
+    // submit_one 是 async，但我们在同步上下文中，使用 futures::executor::block_on
+    futures::executor::block_on(pool.submit_one(best_hash, TransactionSource::Local, opaque))
+        .map_err(|e| ErrorObject::owned(-1, format!("提交交易到交易池失败: {e}"), None::<()>))?;
+
+    Ok(())
+}
+
+/// 从 SS58 地址解析 AccountId。
+fn parse_ss58_account(address: &str) -> Result<AccountId, jsonrpsee::types::ErrorObjectOwned> {
+    use sp_core::crypto::Ss58Codec;
+    sp_runtime::AccountId32::from_ss58check(address).map_err(|e| {
+        jsonrpsee::types::error::ErrorObject::owned(
+            -1,
+            format!("SS58 地址解析失败: {e:?}"),
+            None::<()>,
+        )
+    })
 }
 
 /// Instantiate all full RPC extensions.
@@ -37,7 +173,7 @@ where
     C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
     C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
     C::Api: BlockBuilder<Block>,
-    P: TransactionPool + 'static,
+    P: TransactionPool<Block = Block> + 'static,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
     use substrate_frame_rpc_system::{System, SystemApiServer};
@@ -46,12 +182,13 @@ where
     let FullDeps {
         client,
         pool,
+        keystore,
         cpu_hashrate_fn,
         gpu_hashrate_fn,
     } = deps;
 
-    module.merge(System::new(client.clone(), pool).into_rpc())?;
-    module.merge(TransactionPayment::new(client).into_rpc())?;
+    module.merge(System::new(client.clone(), pool.clone()).into_rpc())?;
+    module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
     // CPU 哈希率 RPC：mining_cpuHashrate
     // 返回值：当前 CPU 全线程合计哈希率（hashes/sec），u64 整数。
@@ -64,6 +201,40 @@ where
     if let Some(get_hashrate) = gpu_hashrate_fn {
         module.register_method("mining_gpuHashrate", move |_, _, _| {
             get_hashrate() as u64
+        })?;
+    }
+
+    // reward_bindWallet(wallet_ss58: String)
+    // 由 node 端签名并提交 bind_reward_wallet 交易。
+    {
+        let client = client.clone();
+        let pool = pool.clone();
+        let keystore = keystore.clone();
+        module.register_method("reward_bindWallet", move |params, _, _| {
+            let wallet_ss58: String = params.one()?;
+            let wallet = parse_ss58_account(&wallet_ss58)?;
+            let call = runtime::RuntimeCall::FullnodePowReward(
+                fullnode_pow_reward::pallet::Call::bind_reward_wallet { wallet },
+            );
+            submit_reward_wallet_tx(&client, &pool, &keystore, call)?;
+            Ok::<&str, jsonrpsee::types::ErrorObjectOwned>("ok")
+        })?;
+    }
+
+    // reward_rebindWallet(new_wallet_ss58: String)
+    // 由 node 端签名并提交 rebind_reward_wallet 交易。
+    {
+        let client = client.clone();
+        let pool = pool.clone();
+        let keystore = keystore.clone();
+        module.register_method("reward_rebindWallet", move |params, _, _| {
+            let wallet_ss58: String = params.one()?;
+            let new_wallet = parse_ss58_account(&wallet_ss58)?;
+            let call = runtime::RuntimeCall::FullnodePowReward(
+                fullnode_pow_reward::pallet::Call::rebind_reward_wallet { new_wallet },
+            );
+            submit_reward_wallet_tx(&client, &pool, &keystore, call)?;
+            Ok::<&str, jsonrpsee::types::ErrorObjectOwned>("ok")
         })?;
     }
 
