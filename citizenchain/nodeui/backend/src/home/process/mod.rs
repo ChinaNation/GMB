@@ -1097,11 +1097,26 @@ fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
 
 #[tauri::command]
 pub async fn start_node(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
+    let app2 = app.clone();
     let status = super::join_blocking_task(
         "start_node",
         tauri::async_runtime::spawn_blocking(move || start_node_sync(app, unlock_password)),
     )
     .await?;
+
+    // 节点启动成功后，异步同步本地已保存的奖励钱包绑定到链上。
+    // 场景：用户清链后重启节点，reward-wallet.json 仍存在但链上绑定已丢失，
+    // 需要自动重新提交 bind_reward_wallet 交易，确保奖励发到绑定钱包。
+    tauri::async_runtime::spawn(async move {
+        // 等待 RPC 就绪（节点刚启动可能还未开始监听）
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        if let Err(err) =
+            crate::settings::fee_address::sync_saved_reward_wallet_inner(&app2).await
+        {
+            eprintln!("[reward-wallet] 启动后自动同步链上绑定失败: {err}");
+        }
+    });
+
     Ok(status)
 }
 

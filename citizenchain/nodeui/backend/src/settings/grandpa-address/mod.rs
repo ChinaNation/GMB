@@ -354,8 +354,11 @@ pub(crate) fn prepare_grandpa_for_start(
     }
 
     // 确认 keystore 文件存在（set_grandpa_key 时已写入）。
+    // 若 keystore 缺失（如链数据被清除），自动清除过期的 meta，以普通节点启动。
     if !has_grandpa_key_in_keystore(app, pubkey)? {
-        return Err("GRANDPA keystore 文件缺失，请重新绑定投票私钥".to_string());
+        eprintln!("[GRANDPA] keystore 缺失，自动清除 grandpa-meta.json，以普通节点启动");
+        clear_grandpa_meta(app)?;
+        return Ok(false);
     }
     Ok(true)
 }
@@ -382,12 +385,25 @@ pub(crate) fn verify_grandpa_after_start(
 
 #[tauri::command]
 pub fn get_grandpa_key(app: AppHandle) -> Result<GrandpaKey, String> {
-    let institution_name = load_grandpa_meta(&app)?.and_then(|v| v.institution_name);
+    let meta = load_grandpa_meta(&app)?;
+    let institution_name = meta.as_ref().and_then(|v| v.institution_name.clone());
     if institution_name.is_none() {
         return Ok(GrandpaKey {
             key: None,
             institution_name: None,
         });
+    }
+    // 若 meta 记录了机构但 keystore 文件已不存在（如链数据被清除），
+    // 自动清除过期 meta，返回空状态（等同全新安装）。
+    if let Some(pubkey) = meta.as_ref().and_then(|v| v.pubkey_hex.as_deref()) {
+        if !has_grandpa_key_in_keystore(&app, pubkey)? {
+            eprintln!("[GRANDPA] get_grandpa_key: keystore 缺失，自动清除 grandpa-meta.json");
+            clear_grandpa_meta(&app)?;
+            return Ok(GrandpaKey {
+                key: None,
+                institution_name: None,
+            });
+        }
     }
     Ok(GrandpaKey {
         // 私钥不回传给前端，避免二次暴露。

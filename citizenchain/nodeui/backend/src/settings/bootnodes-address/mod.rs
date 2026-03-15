@@ -74,6 +74,23 @@ fn save_bootnode_meta(
         .map_err(|e| format!("write bootnode meta failed: {e}"))
 }
 
+fn clear_bootnode_meta(app: &AppHandle) -> Result<(), String> {
+    match fs::remove_file(bootnode_meta_path(app)?) {
+        Ok(_) => Ok(()),
+        Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(format!("remove bootnode meta failed: {err}")),
+    }
+}
+
+fn has_secret_ed25519(app: &AppHandle) -> Result<bool, String> {
+    let secret_path = crate::shared::keystore::node_data_dir(app)?
+        .join("chains")
+        .join(SUBSTRATE_CHAIN_ID)
+        .join("network")
+        .join(SUBSTRATE_SECRET_ED25519);
+    Ok(secret_path.is_file())
+}
+
 pub(crate) fn genesis_bootnode_options() -> Result<Vec<GenesisBootnodeOption>, String> {
     let options = grandpa_address::load_institution_catalog()?
         .into_iter()
@@ -156,12 +173,25 @@ fn wait_peer_id_applied(app: &AppHandle, expected_peer_id: &str) -> Result<(), S
 #[tauri::command]
 pub fn get_bootnode_key(app: AppHandle) -> Result<BootnodeKey, String> {
     match load_bootnode_meta(&app)? {
-        Some(meta) => Ok(BootnodeKey {
-            // 私钥不回传给前端，避免二次暴露。
-            node_key: None,
-            peer_id: Some(meta.peer_id),
-            institution_name: meta.institution_name,
-        }),
+        Some(meta) => {
+            // 若 meta 存在但 secret_ed25519 文件已不存在（如链数据被清除），
+            // 自动清除过期 meta，返回空状态（等同全新安装）。
+            if !has_secret_ed25519(&app)? {
+                eprintln!("[bootnode] secret_ed25519 缺失，自动清除 bootnode-meta.json");
+                clear_bootnode_meta(&app)?;
+                return Ok(BootnodeKey {
+                    node_key: None,
+                    peer_id: None,
+                    institution_name: None,
+                });
+            }
+            Ok(BootnodeKey {
+                // 私钥不回传给前端，避免二次暴露。
+                node_key: None,
+                peer_id: Some(meta.peer_id),
+                institution_name: meta.institution_name,
+            })
+        }
         None => Ok(BootnodeKey {
             node_key: None,
             peer_id: None,
