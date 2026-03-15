@@ -256,7 +256,12 @@ fn decode_storage_account_id(raw: &[u8]) -> Result<[u8; 32], String> {
 
 /// 通过 node 端自定义 RPC 绑定或重绑奖励钱包。
 /// node 端使用 keystore 中的矿工密钥直接签名并提交交易。
-async fn sync_saved_reward_wallet_inner(app: &AppHandle) -> Result<(), String> {
+///
+/// 本函数在以下两种场景被调用：
+/// 1. 用户主动设置奖励钱包（`set_reward_wallet`）；
+/// 2. 节点启动后自动同步（`start_node` 成功后），确保清链/重装后
+///    本地已保存的钱包地址能重新绑定到链上。
+pub(crate) async fn sync_saved_reward_wallet_inner(app: &AppHandle) -> Result<(), String> {
     let app_clone = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let Some(saved_address) = load_reward_wallet(&app_clone)? else {
