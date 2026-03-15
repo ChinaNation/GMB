@@ -129,8 +129,15 @@ jobs:
       - name: Install frontend dependencies
         run: npm --prefix citizenchain/nodeui/frontend ci
 
-      - name: Build installer bundles
+      - name: Build installer bundles (Unix)
+        if: runner.os != 'Windows'
         run: npm --prefix citizenchain/nodeui/frontend run tauri:build -- --bundles ${{ matrix.bundles }}
+
+      - name: Build installer bundles (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd citizenchain/nodeui
+          npx tauri build -c backend/tauri.conf.json --bundles ${{ matrix.bundles }}
 
       - name: Build DMG from .app (macOS)
         if: runner.os == 'macOS'
