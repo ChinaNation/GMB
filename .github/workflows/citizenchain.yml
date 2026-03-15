@@ -72,7 +72,7 @@ jobs:
         run: |
           choco install protoc -y
           choco install llvm -y
-          echo "LIBCLANG_PATH=C:\Program Files\LLVM\lib" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
           echo "PROTOC=$(where.exe protoc | Select-Object -First 1)" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
 
       - name: Install Linux dependencies
@@ -142,8 +142,8 @@ jobs:
           $sidecar = "backend/binaries/${{ matrix.sidecar_name }}"
           if (-not (Test-Path $sidecar)) { throw "Sidecar binary not found: $sidecar" }
           # 从 nodeui/ 运行（Tauri 需要在子目录找到 tauri.conf.json）
-          # 用 frontend/node_modules 中的 tauri CLI（绕过 npm pre 钩子中的 bash 脚本）
-          node frontend/node_modules/@tauri-apps/cli/bin/tauri.js build -c backend/tauri.conf.json --bundles ${{ matrix.bundles }}
+          # 用 npx 调用 tauri CLI（绕过 npm pre 钩子中的 bash 脚本）
+          npx --prefix frontend tauri build -c backend/tauri.conf.json --bundles ${{ matrix.bundles }}
 
       - name: Build DMG from .app (macOS)
         if: runner.os == 'macOS'
