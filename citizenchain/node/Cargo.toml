@@ -75,6 +75,7 @@ frame-benchmarking-cli = { workspace = true, default-features = true }
 citizenchain = { workspace = true }
 pow-difficulty-module = { path = "../otherpallet/pow-difficulty-module", default-features = true }
 fullnode-pow-reward = { path = "../issuance/fullnode-pow-reward", default-features = true }
+onchain-transaction-pow = { path = "../transaction/onchain-transaction-pow", default-features = true }
 
 [build-dependencies]
 substrate-build-script-utils = { workspace = true, default-features = true }
