@@ -8,7 +8,7 @@ mod rpc;
 pub use identity::{get_node_identity, get_node_status, set_node_name};
 pub(crate) use process::{cleanup_on_exit, cleanup_on_startup};
 pub use process::{start_node, stop_node, AppState, RuntimeState};
-pub use rpc::{get_chain_status, get_total_issuance};
+pub use rpc::{get_chain_status, get_total_issuance, get_total_stake};
 
 // crate 内部使用的阻塞版本函数。
 pub(crate) use identity::{current_status, get_node_identity_blocking};
