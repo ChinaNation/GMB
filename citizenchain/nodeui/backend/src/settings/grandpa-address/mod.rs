@@ -18,8 +18,6 @@ use std::{
 };
 use tauri::AppHandle;
 use zeroize::Zeroizing;
-
-const KEYCHAIN_ACCOUNT_GRANDPA: &str = "grandpa-key";
 const GRANDPA_KEY_TYPE_HEX_PREFIX: &str = "6772616e";
 const INSTITUTION_CATALOG_SRC: &str = include_str!("../institution-catalog.json");
 const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
@@ -38,6 +36,8 @@ pub struct GrandpaKey {
 struct StoredGrandpaMeta {
     #[serde(default)]
     institution_name: Option<String>,
+    #[serde(default)]
+    pubkey_hex: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +48,6 @@ struct GrandpaKeystoreBackupEntry {
 
 #[derive(Debug, Clone)]
 struct GrandpaPersistedStateBackup {
-    secure_store_envelope: Option<String>,
     meta: Option<StoredGrandpaMeta>,
     keystore_files: Vec<GrandpaKeystoreBackupEntry>,
 }
@@ -57,6 +56,9 @@ struct GrandpaPersistedStateBackup {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct InstitutionCatalogEntry {
     pub name: String,
+    /// 机构角色：`guochuhui` | `shengchuhui` | `shengchuhang`
+    #[serde(default)]
+    pub role: String,
     pub peer_id: String,
     pub grandpa_pubkey_hex: String,
 }
@@ -126,6 +128,7 @@ fn parse_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>, String> {
 
         normalized_entries.push(InstitutionCatalogEntry {
             name: name.to_string(),
+            role: entry.role.clone(),
             peer_id: peer_id.to_string(),
             grandpa_pubkey_hex: grandpa.to_ascii_lowercase(),
         });
@@ -150,9 +153,16 @@ fn load_grandpa_meta(app: &AppHandle) -> Result<Option<StoredGrandpaMeta>, Strin
     Ok(Some(record))
 }
 
-fn save_grandpa_meta(app: &AppHandle, institution_name: Option<String>) -> Result<(), String> {
-    let raw = serde_json::to_string_pretty(&StoredGrandpaMeta { institution_name })
-        .map_err(|e| format!("encode grandpa meta failed: {e}"))?;
+fn save_grandpa_meta(
+    app: &AppHandle,
+    institution_name: Option<String>,
+    pubkey_hex: Option<String>,
+) -> Result<(), String> {
+    let raw = serde_json::to_string_pretty(&StoredGrandpaMeta {
+        institution_name,
+        pubkey_hex,
+    })
+    .map_err(|e| format!("encode grandpa meta failed: {e}"))?;
     security::write_text_atomic(&grandpa_meta_path(app)?, &format!("{raw}\n"))
         .map_err(|e| format!("write grandpa meta failed: {e}"))
 }
@@ -168,7 +178,6 @@ fn clear_grandpa_meta(app: &AppHandle) -> Result<(), String> {
 fn snapshot_grandpa_persisted_state(
     app: &AppHandle,
 ) -> Result<GrandpaPersistedStateBackup, String> {
-    let secure_store_envelope = security::secure_store_get(KEYCHAIN_ACCOUNT_GRANDPA)?;
     let meta = load_grandpa_meta(app)?;
     let dirs = keystore::keystore_dirs(app)?;
     let mut keystore_files = Vec::new();
@@ -182,7 +191,6 @@ fn snapshot_grandpa_persisted_state(
         keystore_files.push(GrandpaKeystoreBackupEntry { path, content });
     }
     Ok(GrandpaPersistedStateBackup {
-        secure_store_envelope,
         meta,
         keystore_files,
     })
@@ -209,13 +217,12 @@ fn restore_grandpa_persisted_state(
     app: &AppHandle,
     backup: &GrandpaPersistedStateBackup,
 ) -> Result<(), String> {
-    match backup.secure_store_envelope.as_deref() {
-        Some(value) => security::secure_store_set(KEYCHAIN_ACCOUNT_GRANDPA, value)?,
-        None => security::secure_store_delete(KEYCHAIN_ACCOUNT_GRANDPA)?,
-    }
-
     match &backup.meta {
-        Some(meta) => save_grandpa_meta(app, meta.institution_name.clone())?,
+        Some(meta) => save_grandpa_meta(
+            app,
+            meta.institution_name.clone(),
+            meta.pubkey_hex.clone(),
+        )?,
         None => clear_grandpa_meta(app)?,
     }
 
@@ -325,54 +332,47 @@ fn wait_for_authority_role() -> Result<(), String> {
     ))
 }
 
-fn load_saved_grandpa_private_hex(
-    unlock_password: &str,
-) -> Result<Option<Zeroizing<String>>, String> {
-    let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_GRANDPA)? else {
-        return Ok(None);
-    };
-    let key = security::decrypt_secret_value(&enveloped, unlock_password)?;
-    Ok(Some(key))
-}
-
-pub(crate) fn verify_grandpa_secret_unlock(unlock_password: &str) -> Result<(), String> {
-    if let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_GRANDPA)? {
-        let _key = security::decrypt_secret_value(&enveloped, unlock_password)?;
-    }
-    Ok(())
-}
-
 pub(crate) fn prepare_grandpa_for_start(
     app: &AppHandle,
-    unlock_password: &str,
+    _unlock_password: &str,
 ) -> Result<bool, String> {
-    // 启动前再次校验“私钥 -> 公钥 -> 机构清单”关系，防止历史配置和当前清单漂移后误启动 validator。
-    let Some(private_hex) = load_saved_grandpa_private_hex(unlock_password)? else {
+    let Some(meta) = load_grandpa_meta(app)? else {
+        return Ok(false);
+    };
+    if meta.institution_name.is_none() {
+        return Ok(false);
+    }
+    let Some(pubkey) = meta.pubkey_hex.as_deref() else {
         return Ok(false);
     };
 
-    let pubkey = grandpa_pubkey_from_private_hex(&private_hex)?;
-    if institution_name_by_grandpa_pubkey(&pubkey)?.is_none() {
+    // 校验公钥仍在当前机构清单中，防止清单更新后误启动 validator。
+    if institution_name_by_grandpa_pubkey(pubkey)?.is_none() {
         return Err(format!(
-            "已保存的投票私钥不在当前 GRANDPA 权威列表中（推导公钥: 0x{pubkey}）"
+            "已保存的投票公钥不在当前 GRANDPA 权威列表中（公钥: 0x{pubkey}）"
         ));
     }
 
-    write_grandpa_key_to_keystore(app, &private_hex, &pubkey)?;
+    // 确认 keystore 文件存在（set_grandpa_key 时已写入）。
+    if !has_grandpa_key_in_keystore(app, pubkey)? {
+        return Err("GRANDPA keystore 文件缺失，请重新绑定投票私钥".to_string());
+    }
     Ok(true)
 }
 
 pub(crate) fn verify_grandpa_after_start(
     app: &AppHandle,
-    unlock_password: &str,
+    _unlock_password: &str,
 ) -> Result<(), String> {
-    let Some(private_hex) = load_saved_grandpa_private_hex(unlock_password)? else {
+    let Some(meta) = load_grandpa_meta(app)? else {
         return Ok(());
     };
-    let pubkey = grandpa_pubkey_from_private_hex(&private_hex)?;
+    let Some(pubkey) = meta.pubkey_hex.as_deref() else {
+        return Ok(());
+    };
 
     wait_for_authority_role()?;
-    if !has_grandpa_key_in_keystore(app, &pubkey)? {
+    if !has_grandpa_key_in_keystore(app, pubkey)? {
         return Err(format!(
             "未在本地 keystore 检测到 GRANDPA 密钥文件（pubkey=0x{pubkey}）"
         ));
@@ -382,14 +382,13 @@ pub(crate) fn verify_grandpa_after_start(
 
 #[tauri::command]
 pub fn get_grandpa_key(app: AppHandle) -> Result<GrandpaKey, String> {
-    if security::secure_store_get(KEYCHAIN_ACCOUNT_GRANDPA)?.is_none() {
+    let institution_name = load_grandpa_meta(&app)?.and_then(|v| v.institution_name);
+    if institution_name.is_none() {
         return Ok(GrandpaKey {
             key: None,
             institution_name: None,
         });
     }
-
-    let institution_name = load_grandpa_meta(&app)?.and_then(|v| v.institution_name);
     Ok(GrandpaKey {
         // 私钥不回传给前端，避免二次暴露。
         key: None,
@@ -416,12 +415,10 @@ pub fn set_grandpa_key(
         .ok_or_else(|| format!("私钥与任何机构 GRANDPA 公钥不匹配（推导公钥: 0x{pubkey}）"))?;
 
     let normalized = Zeroizing::new(normalized);
-    let encrypted = security::encrypt_secret_value(&normalized, unlock)?;
     let mut node_stopped_for_restart = false;
     let mut new_node_started = false;
     let apply_result = (|| -> Result<(), String> {
-        security::secure_store_set(KEYCHAIN_ACCOUNT_GRANDPA, &encrypted)?;
-        save_grandpa_meta(&app, Some(institution_name.clone()))?;
+        save_grandpa_meta(&app, Some(institution_name.clone()), Some(pubkey.clone()))?;
         write_grandpa_key_to_keystore(&app, &normalized, &pubkey)?;
 
         // 若节点当前在运行，保存后立即重启以 authority 模式加载并参与投票。
@@ -465,7 +462,7 @@ pub fn set_grandpa_key(
         if let Some(restore_err) = restore_err {
             detail.push_str(&format!("；回滚旧配置失败：{restore_err}"));
         } else {
-            detail.push_str("；已回滚到旧的安全存储、元数据和 keystore");
+            detail.push_str("；已回滚到旧的元数据和 keystore");
         }
         if let Some(restart_restore_err) = restart_restore_err {
             detail.push_str(&format!(

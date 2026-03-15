@@ -1,7 +1,7 @@
 // 进程管理子模块：节点进程的启动、停止、生命周期管理及二进制文件校验。
 
 use crate::{
-    settings::{bootnodes_address, device_password, grandpa_address},
+    settings::{device_password, grandpa_address},
     shared::{keystore, rpc, security},
 };
 use sha2::{Digest, Sha256};
@@ -117,25 +117,9 @@ fn cleanup_stale_node_key_temp_files(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn write_node_key_temp_file(app: &AppHandle, node_key: &str) -> Result<PathBuf, String> {
-    let secrets_dir = runtime_secrets_dir(app)?;
-    let pid = std::process::id();
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|v| v.as_nanos())
-        .unwrap_or(0);
-    for seq in 0..8u8 {
-        let path = secrets_dir.join(format!(
-            "{NODE_KEY_TEMP_PREFIX}{pid}-{stamp}-{seq}{NODE_KEY_TEMP_SUFFIX}"
-        ));
-        if path.exists() {
-            continue;
-        }
-        security::write_secret_text_atomic(&path, node_key)?;
-        return Ok(path);
-    }
-    Err("create node-key temp file failed: exhausted retries".to_string())
-}
+// 引导节点密钥在 set_bootnode_key 时已直接写入 secret_ed25519，
+// 节点启动无需额外注入。
+// cleanup_stale_node_key_temp_files 保留用于清理旧版本遗留的临时文件。
 
 fn remove_staged_node_bin_file(path: &Path) -> Result<(), String> {
     match fs::remove_file(path) {
@@ -831,13 +815,15 @@ fn terminate_trusted_listener_nodes(app: &AppHandle) -> Result<(), String> {
 fn verify_start_unlock_password(app: &AppHandle, unlock_password: &str) -> Result<(), String> {
     let unlock = security::ensure_unlock_password(unlock_password)?;
     device_password::verify_device_login_password(app, unlock)?;
-    bootnodes_address::verify_bootnode_secret_unlock(unlock)?;
-    grandpa_address::verify_grandpa_secret_unlock(unlock)?;
     Ok(())
 }
 
-// 启动命令只拼接固定参数，敏感密钥通过临时文件或本地 keystore 注入，
+// 启动命令只拼接固定参数，敏感密钥通过本地文件或 keystore 注入，
 // 避免把明文秘密直接暴露在命令行参数或环境变量里。
+//
+// 引导节点密钥：直接写入 Substrate 标准路径
+// `<base-path>/chains/citizenchain/network/secret_ed25519`（原始 32 字节二进制），
+// 节点启动时自动加载，无需 `--node-key-file` 参数。
 fn spawn_node(
     app: &AppHandle,
     node_bin: &Path,
@@ -845,7 +831,6 @@ fn spawn_node(
 ) -> Result<(Child, Option<PathBuf>), String> {
     let rpc_port = rpc::current_rpc_port();
     let base_path = node_data_dir(app)?;
-    let bootnode_key = bootnodes_address::load_bootnode_node_key(app, unlock_password)?;
     let enable_grandpa_validator =
         grandpa_address::prepare_grandpa_for_start(app, unlock_password)?;
     let node_name = load_node_name(app)?;
@@ -860,12 +845,6 @@ fn spawn_node(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
-    let mut node_key_file: Option<PathBuf> = None;
-    if let Some(node_key) = bootnode_key {
-        let temp_file = write_node_key_temp_file(app, &node_key)?;
-        cmd.arg("--node-key-file").arg(&temp_file);
-        node_key_file = Some(temp_file);
-    }
     if let Some(name) = node_name {
         cmd.arg("--name").arg(name);
     }
@@ -885,16 +864,11 @@ fn spawn_node(
     }
 
     match cmd.spawn() {
-        Ok(child) => Ok((child, node_key_file)),
-        Err(e) => {
-            if let Some(path) = node_key_file.as_ref() {
-                let _ = remove_node_key_file(path);
-            }
-            Err(format!(
-                "spawn node failed from {}: {e}",
-                security::sanitize_path(node_bin)
-            ))
-        }
+        Ok(child) => Ok((child, None)),
+        Err(e) => Err(format!(
+            "spawn node failed from {}: {e}",
+            security::sanitize_path(node_bin)
+        )),
     }
 }
 
