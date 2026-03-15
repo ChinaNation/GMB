@@ -134,6 +134,13 @@ def recompute_zb(
     for addr in all_addresses:
         lines.append(f'    hex!("{addr}"),')
     lines.append('];')
+    lines.append('')
+    lines.append('/// 检查给定地址是否属于制度保留 duoqian_address。')
+    lines.append('pub fn is_reserved_duoqian_address(addr: &[u8; 32]) -> bool {')
+    lines.append('    CHINA_RESERVED_DUOQIAN_ADDRESSES')
+    lines.append('        .binary_search(addr)')
+    lines.append('        .is_ok()')
+    lines.append('}')
     lines.append('')  # trailing newline
 
     new_content = '\n'.join(lines)
