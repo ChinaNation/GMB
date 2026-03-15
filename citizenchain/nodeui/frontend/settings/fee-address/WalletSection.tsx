@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { blake3 } from '@noble/hashes/blake3.js';
+import { blake2b } from '@noble/hashes/blake2b.js';
 import { api, sanitizeError } from '../../api';
 import type { RewardWallet } from '../../types';
 
@@ -89,14 +89,14 @@ function normalizeWalletAddressClient(input: string): string {
     throw new Error('SS58 地址账户长度无效，必须是 32 字节账户地址');
   }
 
-  // Blake3 校验和验证
+  // Blake2b-512 校验和验证（Substrate 标准）
   const withoutChecksum = data.slice(0, data.length - 2);
   const actualChecksum = data.slice(data.length - 2);
   const ss58Pre = new TextEncoder().encode('SS58PRE');
   const preimage = new Uint8Array(ss58Pre.length + withoutChecksum.length);
   preimage.set(ss58Pre);
   preimage.set(withoutChecksum, ss58Pre.length);
-  const hash = blake3(preimage);
+  const hash = blake2b(preimage, { dkLen: 64 });
   if (actualChecksum[0] !== hash[0] || actualChecksum[1] !== hash[1]) {
     throw new Error('SS58 地址校验和无效');
   }

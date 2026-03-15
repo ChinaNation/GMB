@@ -1,7 +1,11 @@
+use blake2::{Blake2b, Digest};
+use blake2::digest::consts::U32;
 use chrono::Utc;
 pub(crate) mod admin;
 pub mod province;
 use province::{city_code_by_name, province_code_by_name};
+
+type Blake2b256 = Blake2b<U32>;
 
 const ALPHABET: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -15,9 +19,9 @@ pub struct GenerateSfidInput<'a> {
 }
 
 fn hash_text(input: &str) -> u32 {
-    let digest = blake3::hash(input.as_bytes());
+    let digest = Blake2b256::digest(input.as_bytes());
     let mut out = [0_u8; 4];
-    out.copy_from_slice(&digest.as_bytes()[..4]);
+    out.copy_from_slice(&digest[..4]);
     u32::from_le_bytes(out)
 }
 
