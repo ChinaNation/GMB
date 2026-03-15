@@ -282,3 +282,10 @@ pub const CHINA_RESERVED_DUOQIAN_ADDRESSES: &[[u8; 32]; 277] = &[
     hex!("ff04bd49e347b0c918f6b9d1d0677b21a688c029e11b1f291952b0ee3155a5ea"),
     hex!("ff834ef7c34bc9f53ac5c4cb121c0d869fe3428cc5f9bba89180e9a07a37b81d"),
 ];
+
+/// 检查给定地址是否属于制度保留 duoqian_address。
+pub fn is_reserved_duoqian_address(addr: &[u8; 32]) -> bool {
+    CHINA_RESERVED_DUOQIAN_ADDRESSES
+        .binary_search(addr)
+        .is_ok()
+}
