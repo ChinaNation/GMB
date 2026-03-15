@@ -176,20 +176,28 @@ Substrate 框架的 `sr25519_generate_new(key_type, None)` 行为：
 
 注意：`sr25519_generate_new(key_type, Some(suri))` 只存内存不写磁盘，进程退出后丢失，不可用。
 
-### 10.3 密钥读取（nodeui）
-代码位置：`nodeui/backend/src/settings/fee-address/mod.rs` → `load_miner_suri()`
+### 10.3 奖励钱包绑定（node 自定义 RPC）
+代码位置：`node/src/rpc.rs` → `reward_bindWallet` / `reward_rebindWallet`
 
-nodeui 绑定收款地址时，从 keystore 文件读取助记词，用 `subxt_signer` 推导出同一把密钥对并签名 `bind_reward_wallet` / `rebind_reward_wallet` 链上交易。
+绑定/重绑奖励钱包完全由 node 端完成：
+1. nodeui 调用 node 的自定义 RPC `reward_bindWallet(wallet_ss58)` 或 `reward_rebindWallet(new_wallet_ss58)`
+2. node 从 keystore 读取 `powr` 公钥，使用 `keystore.sr25519_sign()` 签名交易
+3. 构造完整的 `UncheckedExtrinsic` 并提交到交易池
 
-如果 keystore 中没有密钥（节点从未启动过），返回错误"请先启动节点"。
+nodeui **不读取私钥、不签名**，仅传入收款钱包的 SS58 地址。签名使用与出块相同的 `sp_core` 密钥推导路径，确保签名身份与出块作者身份一致。
 
-### 10.4 密钥使用流程
+### 10.4 nodeui 的角色
+- 只读取 keystore 文件名中的公钥（`local_powr_miner_account_hex`），用于前端展示矿工身份
+- 通过 `state_getStorage` 查询链上 `RewardWalletByMiner` 状态，判断是否需要 bind 或 rebind
+- 所有签名和交易提交委托给 node 端 RPC
+
+### 10.5 密钥使用流程
 1. 用户首次启动节点 → node 的 `ensure_powr_key()` 生成密钥并写入 keystore
 2. 节点出块 → `author_pre_digest()` 从 keystore 读取公钥作为区块作者
-3. 用户绑定收款地址 → nodeui 的 `load_miner_suri()` 从 keystore 读取助记词，推导同一把密钥签名绑定交易
+3. 用户绑定收款地址 → nodeui 调用 node RPC `reward_bindWallet` → node 用 keystore 密钥签名并提交
 4. 链上 `bind_reward_wallet` 以矿工身份记录映射 → 后续奖励发到绑定的收款地址
 
-由于出块和绑定使用的是同一把密钥（从同一个助记词推导），`RewardWalletByMiner` 映射的 key 与出块作者一致，奖励能正确发到绑定的收款地址。
+由于出块和绑定使用的是同一把 keystore 密钥（同一个 `sr25519_sign` 路径），`RewardWalletByMiner` 映射的 key 与出块作者一致，奖励能正确发到绑定的收款地址。
 
 ---
 
