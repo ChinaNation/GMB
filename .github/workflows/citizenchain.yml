@@ -135,9 +135,8 @@ jobs:
 
       - name: Build installer bundles (Windows)
         if: runner.os == 'Windows'
-        run: |
-          cd citizenchain/nodeui
-          npx tauri build -c backend/tauri.conf.json --bundles ${{ matrix.bundles }}
+        working-directory: citizenchain/nodeui/frontend
+        run: npx tauri build -c ../backend/tauri.conf.json --bundles ${{ matrix.bundles }}
 
       - name: Build DMG from .app (macOS)
         if: runner.os == 'macOS'
