@@ -246,6 +246,12 @@ body {
   color: #b91c1c;
 }
 
+.section-inline-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #2563eb;
+}
+
 button {
   border: 0;
   border-radius: 8px;

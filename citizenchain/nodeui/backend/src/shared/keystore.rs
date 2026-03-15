@@ -2,20 +2,23 @@
 use crate::shared::security;
 use std::{
     fs,
-    io::{ErrorKind, Write},
+    io::ErrorKind,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::AppHandle;
 
 #[cfg(unix)]
 use std::{
     ffi::{CStr, CString, OsStr, OsString},
+    io::Write,
     os::{
         fd::{AsRawFd, FromRawFd, OwnedFd, RawFd},
         unix::ffi::{OsStrExt, OsStringExt},
     },
+    time::{SystemTime, UNIX_EPOCH},
 };
+#[cfg(not(unix))]
+use std::ffi::OsString;
 
 const DEFAULT_CHAIN_ID: &str = "citizenchain";
 

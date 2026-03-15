@@ -12,7 +12,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{Mutex, MutexGuard, OnceLock},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 use tauri::AppHandle;

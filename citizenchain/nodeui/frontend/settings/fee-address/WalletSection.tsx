@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { blake2b } from '@noble/hashes/blake2';
+import { useState, useEffect, useCallback } from 'react';
+import { blake2b } from '@noble/hashes/blake2.js';
 import { api, sanitizeError } from '../../api';
 import type { RewardWallet } from '../../types';
 
@@ -110,6 +110,8 @@ type Props = {
   disabled: boolean;
 };
 
+type BindStatus = null | 'binding' | 'success' | 'failed' | 'timeout';
+
 export function WalletSection({ wallet, onUpdated, disabled }: Props) {
   const [input, setInput] = useState(wallet.address ?? '');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -117,8 +119,75 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
   const [pendingAddress, setPendingAddress] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bindStatus, setBindStatus] = useState<BindStatus>(null);
   const hasBoundAddress = Boolean(wallet.address);
   const actionText = hasBoundAddress ? '变更地址' : '绑定地址';
+
+  // 监听后台链上绑定结果事件
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        unlisten = await listen<{ status: string; detail: string }>(
+          'reward-wallet-bind-result',
+          (event) => {
+            if (cancelled) return;
+            const { status } = event.payload;
+            if (status === 'success') {
+              setBindStatus('success');
+            } else if (status === 'timeout') {
+              setBindStatus('timeout');
+              setError('地址已保存，但链上绑定超时，将在下次启动时重试');
+            } else {
+              setBindStatus('failed');
+              setError(`地址已保存，但链上绑定失败：${event.payload.detail}`);
+            }
+          },
+        );
+      } catch {
+        // listen 不可用时静默降级
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  const onSubmit = useCallback(async () => {
+    const password = unlockPassword.trim();
+    if (!password) {
+      setError('请输入设备开机密码');
+      return;
+    }
+    if (!pendingAddress) {
+      setError('地址为空，请重新输入');
+      return;
+    }
+    setSaving(true);
+    try {
+      const next = await api.setRewardWallet(pendingAddress, password);
+      onUpdated(next);
+      setInput(next.address ?? '');
+      setShowPasswordModal(false);
+      setPendingAddress(null);
+      setError(null);
+      setBindStatus('binding');
+    } catch (e) {
+      setError(sanitizeError(e));
+    } finally {
+      setUnlockPassword('');
+      setSaving(false);
+    }
+  }, [unlockPassword, pendingAddress, onUpdated]);
+
+  const bindHint = bindStatus === 'binding'
+    ? '链上绑定中，请稍候...'
+    : bindStatus === 'success'
+      ? '链上绑定成功'
+      : null;
 
   return (
     <section className="section settings-wallet-section">
@@ -152,6 +221,7 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
           {saving ? '保存中...' : actionText}
         </button>
       </div>
+      {bindHint ? <p className="section-inline-hint">{bindHint}</p> : null}
       {error ? <p className="section-inline-error">{error}</p> : null}
 
       {showPasswordModal ? (
@@ -174,31 +244,7 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
                 取消
               </button>
               <button
-                onClick={async () => {
-                  const password = unlockPassword.trim();
-                  if (!password) {
-                    setError('请输入设备开机密码');
-                    return;
-                  }
-                  if (!pendingAddress) {
-                    setError('地址为空，请重新输入');
-                    return;
-                  }
-                  setSaving(true);
-                  try {
-                    const next = await api.setRewardWallet(pendingAddress, password);
-                    onUpdated(next);
-                    setInput(next.address ?? '');
-                    setShowPasswordModal(false);
-                    setPendingAddress(null);
-                    setError(null);
-                  } catch (e) {
-                    setError(sanitizeError(e));
-                  } finally {
-                    setUnlockPassword('');
-                    setSaving(false);
-                  }
-                }}
+                onClick={onSubmit}
                 disabled={saving || disabled}
               >
                 {saving ? '验证中...' : actionText}
