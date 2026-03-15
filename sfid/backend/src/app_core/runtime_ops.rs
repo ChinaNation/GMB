@@ -9,10 +9,15 @@ use std::{
 };
 use tracing::warn;
 
+use blake2::{Blake2b, Digest};
+use blake2::digest::consts::U32;
+
 use crate::key_admins;
 use crate::key_admins::chain_proof::SignatureEnvelope;
 use crate::sfid::province::provinces;
 use crate::*;
+
+type Blake2b256 = Blake2b<U32>;
 
 pub(crate) fn seed_super_admins(state: &AppState) {
     let mut store = match state.store.write() {
@@ -528,8 +533,8 @@ pub(crate) fn deterministic_sfid_code(
     payload.extend_from_slice(archive_index.as_bytes());
     payload.extend_from_slice(b"|");
     payload.extend_from_slice(account_pubkey.as_bytes());
-    let digest = blake3::hash(&payload);
-    let digest_bytes = digest.as_bytes();
+    let digest = Blake2b256::digest(&payload);
+    let digest_bytes = digest.as_slice();
 
     let core = hex::encode_upper(&digest_bytes[..12]);
     let checksum = digest_bytes

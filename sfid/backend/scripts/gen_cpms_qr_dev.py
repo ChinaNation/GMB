@@ -3,8 +3,8 @@
 Generate CPMS QR payloads for SFID local/dev integration.
 
 This script follows the current dev verification logic in backend/src/main.rs:
-- Citizen/status QR signature: hex(blake3("{pubkey}|{canonical_text}"))
-- Register checksum: hex(blake3(register_canonical_text))
+- Citizen/status QR signature: hex(blake2b_256("{pubkey}|{canonical_text}"))
+- Register checksum: hex(blake2b_256(register_canonical_text))
 """
 
 import argparse
@@ -14,14 +14,9 @@ import time
 import uuid
 
 
-def blake3_hex(text: str) -> str:
-    try:
-        import blake3  # type: ignore
-    except Exception as exc:  # pragma: no cover
-        raise RuntimeError(
-            "python package 'blake3' is required. Install via: pip install blake3"
-        ) from exc
-    return blake3.blake3(text.encode("utf-8")).hexdigest()
+def blake2b_256_hex(text: str) -> str:
+    import hashlib
+    return hashlib.blake2b(text.encode("utf-8"), digest_size=32).hexdigest()
 
 
 def canonical_citizen(payload: dict) -> str:
@@ -73,7 +68,7 @@ def cmd_citizen(args: argparse.Namespace) -> int:
         "status": args.status.upper(),
     }
     canonical = canonical_citizen(payload)
-    payload["signature"] = blake3_hex(f"{args.sign_pubkey}|{canonical}")
+    payload["signature"] = blake2b_256_hex(f"{args.sign_pubkey}|{canonical}")
     print_payload(payload, canonical)
     return 0
 
@@ -92,7 +87,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         "sig_alg": "sr25519",
     }
     canonical = canonical_status(payload)
-    payload["signature"] = blake3_hex(f"{args.sign_pubkey}|{canonical}")
+    payload["signature"] = blake2b_256_hex(f"{args.sign_pubkey}|{canonical}")
     print_payload(payload, canonical)
     return 0
 
@@ -107,7 +102,7 @@ def cmd_register(args: argparse.Namespace) -> int:
         "issued_at": args.issued_at or now,
     }
     canonical = canonical_register(payload)
-    payload["checksum_or_signature"] = blake3_hex(canonical)
+    payload["checksum_or_signature"] = blake2b_256_hex(canonical)
     print_payload(payload, canonical)
     return 0
 

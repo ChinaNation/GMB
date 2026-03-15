@@ -367,8 +367,10 @@ class WalletManager {
     final keyring = Keyring.sr25519;
     final pair = await keyring.fromMnemonic(mnemonic);
     pair.ss58Format = _ss58Format;
-    final pubkeyHex = _toHex(pair.bytes().toList(growable: false));
-    return _DerivedWallet(address: pair.address, pubkeyHex: pubkeyHex);
+    final pubkeyBytes = pair.bytes().toList(growable: false);
+    final pubkeyHex = _toHex(pubkeyBytes);
+    final address = pair.address;
+    return _DerivedWallet(address: address, pubkeyHex: pubkeyHex);
   }
 
   String _toHex(List<int> bytes) {

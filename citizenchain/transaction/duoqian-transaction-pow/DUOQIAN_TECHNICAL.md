@@ -11,8 +11,8 @@
 - 对创建和注销操作执行管理员多签校验，并要求提交者本人属于管理员集合。
 
 ### 0.2 地址与域隔离需求
-- `duoqian_address` 必须由链上按 `BLAKE3("DUOQIAN_SFID_V1" || chain_domain_hash || sfid_id)` 派生。
-- `chain_domain_hash` 必须固定绑定本链 genesis hash，并持久化复用，不能随区块变化。
+- `duoqian_address` 必须由链上按 `BLAKE2b("DUOQIAN_SFID_V1" || ss58_prefix_le || sfid_id)` 派生。
+- `ss58_prefix_le` 为 SS58 前缀 2027 的小端 u16 字节，用于链域隔离。
 - 派生地址必须通过地址合法性校验，且不能落入制度保留地址或受保护地址集合。
 
 ### 0.3 创建流程需求
@@ -34,7 +34,7 @@
 
 ### 0.5 防重放与签名需求
 - 创建和注销必须共用同一个机构 nonce。
-- 签名 payload 必须绑定：操作类型版本、链域哈希、nonce、过期高度、提交者 `who` 以及关键业务参数。
+- 签名 payload 必须绑定：操作类型版本、SS58 前缀、nonce、过期高度、提交者 `who` 以及关键业务参数。
 - `expires_at` 过期后必须拒绝交易，旧签名在 nonce 变化后必须无法重放。
 
 ### 0.6 存储与制度边界
@@ -57,24 +57,23 @@
 
 地址派生公式（当前）：
 
-`duoqian_address = BLAKE3("DUOQIAN_SFID_V1" || chain_domain_hash || sfid_id_bytes)`
+`duoqian_address = Blake2b256("DUOQIAN_SFID_V1" || ss58_prefix_le || sfid_id_bytes)`
 
 说明：
-1. `chain_domain_hash` 持久化存储在 `ChainDomainHash`，用于链域隔离。
-2. 派生函数前置条件：`ChainDomainHash` 已初始化；否则返回 `ChainDomainHashUnavailable`。
-3. 该派生逻辑是兼容性关键规则，已部署链上不可随意变更。
+1. `ss58_prefix_le` 为 SS58 前缀 2027 的小端 u16 字节（`[0xEB, 0x07]`），用于链域隔离。
+2. 该派生逻辑是兼容性关键规则，已部署链上不可随意变更。
 
 ## 3. 链上存储
 
 1. `SfidRegisteredAddress<sfid_id, duoqian_address>`
 2. `AddressRegisteredSfid<duoqian_address, RegisteredInstitution { sfid_id, nonce }>`
 3. `DuoqianAccounts<duoqian_address, DuoqianAccount>`
-4. `ChainDomainHash<Option<Hash>>`
-5. `StorageVersion = 1`
+4. `StorageVersion = 1`
 
 补充：
 1. `nonce` 跟随 `duoqian_address` 存储，用于 create/close 统一防重放。
 2. `SfidRegisteredAddress`/`AddressRegisteredSfid` 按当前制度设计不在本链解绑，解绑由 SFID 系统侧完成。
+3. 链域隔离使用 SS58 前缀 2027 的小端 u16 字节（`ss58_prefix_le`），不再使用 genesis hash。
 
 ## 4. Extrinsic 规则
 
@@ -108,7 +107,7 @@
 
 Create 签名 payload（当前版本）：
 
-`"DUOQIAN_CREATE_V3", domain_hash, nonce, expires_at, sfid_id, duoqian_address, who, admin_count, admins, threshold, amount`
+`"DUOQIAN_CREATE_V3", ss58_prefix_le, nonce, expires_at, sfid_id, duoqian_address, who, admin_count, admins, threshold, amount`
 
 执行后：
 1. 转账 `who -> duoqian_address`。
@@ -132,7 +131,7 @@ Create 签名 payload（当前版本）：
 
 Close 签名 payload（当前版本）：
 
-`"DUOQIAN_CLOSE_V3", domain_hash, nonce, expires_at, duoqian_address, beneficiary, who, admins, admin_count, threshold, min_balance`
+`"DUOQIAN_CLOSE_V3", ss58_prefix_le, nonce, expires_at, duoqian_address, beneficiary, who, admins, admin_count, threshold, min_balance`
 
 执行后：
 1. `duoqian_address` 全额转出至 `beneficiary`（`AllowDeath`）。
@@ -148,13 +147,13 @@ Close 签名 payload（当前版本）：
 3. 参数相关：`InvalidAdminCount`、`AdminCountMismatch`、`InvalidThreshold`、`DuplicatePublicKey`
 4. 权限签名：`PermissionDenied`、`InvalidAdminPublicKey`、`InvalidAdminSignature`、`InsufficientSignatures`、`SignatureExpired`
 5. 余额相关（细分）：`CreateAmountBelowMinimum`、`CloseBalanceBelowMinimum`、`CloseBalanceBelowRequested`、`ReservedBalanceRemaining`
-6. 域与防重放：`ChainDomainHashUnavailable`、`NonceOverflow`
+6. 域与防重放：`NonceOverflow`
 7. 运行时防御：`InvalidRuntimeConfig`
 
 ## 6. 安全属性
 
 1. 地址不可前端伪造：必须先登记再创建。
-2. 链域隔离：签名域与地址派生都绑定 `chain_domain_hash`。
+2. 链域隔离：签名域与地址派生都绑定 `ss58_prefix_le`。
 3. 操作防重放：create/close 共用 nonce，且每次成功后递增。
 4. 提交者绑定：create/close payload 都绑定 `who`。
 5. 审计可追踪：事件 + 映射 + payload 域分离。
@@ -167,4 +166,4 @@ Close 签名 payload（当前版本）：
    1. create：`DUOQIAN_CREATE_V3`
    2. close：`DUOQIAN_CLOSE_V3`
 4. payload 中必须包含提交者 `who` 与 `expires_at`。
-5. 提交前应再次读取链上 nonce 与域哈希，避免离线签名过期/失配。
+5. 提交前应再次读取链上 nonce，避免离线签名过期/失配。

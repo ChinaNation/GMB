@@ -329,7 +329,7 @@
     - `nonce=<x-chain-nonce>`
     - `timestamp=<x-chain-timestamp>`
     - `fingerprint=<request_fingerprint>`
-  - 签名值：`hex(blake3_keyed_hash(blake3(SFID_CHAIN_SIGNING_SECRET), payload))`
+  - 签名值：`hex(blake2b_mac_256(blake2b_256(SFID_CHAIN_SIGNING_SECRET), payload))`
 - 幂等与防重放：
   - 进程内：`chain_requests_by_key + chain_nonce_seen`（24 小时窗口）。
   - 数据库：`chain_idempotency_requests(route_key, request_id|nonce)` 双唯一约束。
@@ -451,7 +451,7 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 4. 校验挑战固定 `90` 秒时效：`expires_at - issued_at == 90` 且当前未过期。
 5. 按固定拼串 `WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at` 重建签名原文并执行 `sr25519` 验签。
 6. 校验 `request_id` 未消费后一次性消费，再做管理员授权判定（是管理员登录，不是管理员拒绝）。
-- `archive_no` 校验位算法与 SFID `sfid_code` 统一：`BLAKE3` 摘要字节和 `mod 10`。
+- `archive_no` 校验位算法与 SFID `sfid_code` 统一：`BLAKE2b` 摘要字节和 `mod 10`。
 - 投票资格最终以 CPMS 二维码状态为准（`NORMAL` 可投票，`ABNORMAL` 不可投票）。
 
 ### 11.3 验签规则

@@ -5,7 +5,6 @@ use axum::{
     routing::{get, post, put},
     Json, Router,
 };
-use blake3;
 use chrono::{DateTime, NaiveDate, Utc};
 use postgres::config::Host;
 use redis::Client as RedisClient;

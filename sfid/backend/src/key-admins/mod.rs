@@ -23,7 +23,12 @@ use tokio::sync::Mutex as TokioMutex;
 use tracing::warn;
 use uuid::Uuid;
 
+use blake2::{Blake2b, Digest};
+use blake2::digest::consts::U32;
+
 use crate::*;
+
+type Blake2b256 = Blake2b<U32>;
 
 #[derive(Debug, Clone)]
 struct BackupSlotMaterial {
@@ -1051,9 +1056,9 @@ fn resolve_backup_slot(
     if is_production_mode() {
         panic!("{seed_env} or {pubkey_env} must be configured in production mode (SFID_ENV=prod)");
     }
-    let digest = blake3::hash(fallback_label.as_bytes());
+    let digest = Blake2b256::digest(fallback_label.as_bytes());
     BackupSlotMaterial {
-        pubkey: format!("0x{}", hex::encode(digest.as_bytes())),
+        pubkey: format!("0x{}", hex::encode(digest)),
         seed_hex: None,
     }
 }

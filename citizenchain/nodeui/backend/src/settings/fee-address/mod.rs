@@ -359,10 +359,12 @@ fn decode_ss58_account_id(address: &str) -> Result<[u8; 32], String> {
     }
 
     let (without_checksum, checksum) = data.split_at(data.len() - 2);
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(b"SS58PRE");
-    hasher.update(without_checksum);
-    let hash = hasher.finalize();
+    let hash = blake2b_simd::Params::new()
+        .hash_length(64)
+        .to_state()
+        .update(b"SS58PRE")
+        .update(without_checksum)
+        .finalize();
     if checksum != &hash.as_bytes()[..2] {
         return Err("SS58 地址校验和无效".to_string());
     }
@@ -400,10 +402,12 @@ fn twox_128(input: &[u8]) -> [u8; 16] {
     out
 }
 
-fn blake3_128(input: &[u8]) -> [u8; 16] {
-    let hash = blake3::hash(input);
+fn blake2b_128(input: &[u8]) -> [u8; 16] {
+    let hash = blake2b_simd::Params::new()
+        .hash_length(16)
+        .hash(input);
     let mut out = [0u8; 16];
-    out.copy_from_slice(&hash.as_bytes()[..16]);
+    out.copy_from_slice(hash.as_bytes());
     out
 }
 
@@ -448,7 +452,7 @@ fn reward_wallet_storage_key(miner_account: &[u8; 32]) -> Vec<u8> {
     let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
     key.extend_from_slice(&twox_128(b"FullnodePowReward"));
     key.extend_from_slice(&twox_128(b"RewardWalletByMiner"));
-    key.extend_from_slice(&blake3_128(miner_account));
+    key.extend_from_slice(&blake2b_128(miner_account));
     key.extend_from_slice(miner_account);
     key
 }

@@ -17,8 +17,16 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::warn;
 use uuid::Uuid;
 
+use blake2::{Blake2b, Digest};
+use blake2::digest::consts::U32;
+use blake2::Blake2bMac;
+use blake2::digest::Mac;
+
 use crate::key_admins::chain_proof::build_public_key_output;
 use crate::*;
+
+type Blake2b256 = Blake2b<U32>;
+type Blake2bMac256 = Blake2bMac<U32>;
 
 static TRUSTED_PROXY_IPS: OnceLock<Vec<IpAddr>> = OnceLock::new();
 static RATE_LIMIT_SCRIPT: OnceLock<Script> = OnceLock::new();
@@ -56,7 +64,7 @@ async fn consume_rate_limit_slot_redis(
     if limit_per_min == 0 {
         return Ok(false);
     }
-    let actor_hash = blake3::hash(actor.as_bytes()).to_hex().to_string();
+    let actor_hash = hex::encode(Blake2b256::digest(actor.as_bytes()));
     let key = format!("sfid:rate_limit:{actor_hash}");
     let member = format!("{now_ms}:{}", Uuid::new_v4().simple());
     let mut conn = state
@@ -520,9 +528,11 @@ pub(crate) fn chain_signature_payload(
 }
 
 pub(crate) fn chain_signature_hex(secret: &str, payload: &str) -> String {
-    let key_digest = blake3::hash(secret.as_bytes());
-    let hash = blake3::keyed_hash(key_digest.as_bytes(), payload.as_bytes());
-    hex::encode(hash.as_bytes())
+    let key_digest = Blake2b256::digest(secret.as_bytes());
+    let mut mac = Blake2bMac256::new_from_slice(&key_digest)
+        .expect("Blake2bMac256 accepts any key length");
+    mac.update(payload.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
 }
 
 pub(crate) fn constant_time_eq_hex(a: &str, b: &str) -> bool {
@@ -575,7 +585,7 @@ pub(crate) fn request_fingerprint<T: Serialize>(input: &T) -> Result<String, Res
             "fingerprint serialization failed",
         )
     })?;
-    Ok(hex::encode(blake3::hash(&payload).as_bytes()))
+    Ok(hex::encode(Blake2b256::digest(&payload)))
 }
 
 pub(crate) fn cleanup_chain_auth_tracking(store: &mut Store, now: DateTime<Utc>) {

@@ -145,7 +145,7 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 
 ### 9.2 校验位算法
 - 输入串：`cpms-archive-v3|{province2}{city3}{random9}{created_date8}`
-- 算法：`BLAKE3` 摘要后做字节和，再 `mod 10` 得 1 位数字。
+- 算法：`BLAKE2b` 摘要后做字节和，再 `mod 10` 得 1 位数字。
 
 ### 9.3 随机 9 位生成
 - 输入因子：`timestamp_ms + terminal_id + admin_pubkey + nonce`
