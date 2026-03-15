@@ -18,7 +18,7 @@ use sp_runtime::traits::{Block as BlockT, IdentifyAccount};
 use std::{
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
+        Arc,
     },
     thread,
     time::{Duration, Instant},
@@ -26,6 +26,11 @@ use std::{
 
 /// CPU 全线程合计哈希率（hashes/sec），以 f64 bits 存入 AtomicU64。
 static CPU_HASHRATE: AtomicU64 = AtomicU64::new(0);
+
+/// 上次成功提交区块的时刻（自 epoch 起的纳秒数）。
+/// CPU 和 GPU 矿工共享此门控，防止出块频率超过 MILLISECS_PER_BLOCK。
+/// 初始值 u64::MAX 表示"从未提交过"，首次提交直接放行。
+pub static LAST_SUBMIT_NS: AtomicU64 = AtomicU64::new(u64::MAX);
 
 /// 获取当前 CPU 哈希率（hashes/sec）。
 pub(crate) fn cpu_hashrate() -> f64 {
@@ -152,17 +157,19 @@ fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceErr
 fn start_cpu_miner<Proof: Send + 'static>(
     worker: MiningHandle<Block, SimplePow, (), Proof>,
     num_threads: usize,
+    epoch: Instant,
 ) {
-    // 中文注释：提交门控，防止"早产块"触发 timestamp inherent 的 future 校验失败。
-    // 所有矿工线程共享同一个门控。
+    // 提交门控，防止"早产块"触发 timestamp inherent 的 future 校验失败。
+    // 使用全局 AtomicU64 (LAST_SUBMIT_NS) 存储上次成功提交的时刻（自 epoch 的纳秒数），
+    // 避免 Mutex 在 sleep 期间持锁阻塞其他线程。CPU 和 GPU 矿工共享此门控。
     let min_submit_interval = Duration::from_millis(primitives::pow_const::MILLISECS_PER_BLOCK);
     let stride = (num_threads as u64).max(1);
 
     for thread_id in 0..num_threads {
         let worker = worker.clone();
+        let epoch = epoch;
         thread::spawn(move || {
             // 哈希率采样：仅 thread 0 每 SAMPLE_INTERVAL 次哈希统计一次，乘以线程数得到总哈希率。
-            // 声明在外层循环之外，避免每次 metadata 变化时计数器被重置。
             const SAMPLE_INTERVAL: u64 = 100_000;
             let mut sample_count: u64 = 0;
             let mut sample_start = Instant::now();
@@ -209,21 +216,33 @@ fn start_cpu_miner<Proof: Send + 'static>(
 
                     let hash = pow_hash(metadata.pre_hash.as_ref(), nonce);
                     if hash_meets_difficulty(&hash, metadata.difficulty) {
-                        // 仅限制"提交频率"，挖矿过程仍持续进行。
-                        // 这样可以保证区块时间戳不会持续跑在本地时间之前导致 future 错误。
-                        static MINER_GATE: std::sync::OnceLock<std::sync::Mutex<Instant>> =
-                            std::sync::OnceLock::new();
-                        let gate = MINER_GATE
-                            .get_or_init(|| Mutex::new(Instant::now() - min_submit_interval));
-                        // 使用 unwrap_or_else 恢复 poison，避免某线程 panic 后打死其他线程。
-                        let mut last_submit =
-                            gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-                        let elapsed = last_submit.elapsed();
-                        if elapsed < min_submit_interval {
-                            thread::sleep(min_submit_interval - elapsed);
+                        // ── 提交门控（无锁版）──────────────────────────────
+                        // 读取上次成功提交的时刻，不足间隔则 sleep 补齐（不持锁）。
+                        // u64::MAX 表示"从未提交过"，首次直接放行。
+                        let last_ns = LAST_SUBMIT_NS.load(Ordering::Acquire);
+                        if last_ns != u64::MAX {
+                            let now_ns = epoch.elapsed().as_nanos() as u64;
+                            let interval_ns = min_submit_interval.as_nanos() as u64;
+                            let deadline_ns = last_ns.saturating_add(interval_ns);
+                            if now_ns < deadline_ns {
+                                let wait = Duration::from_nanos(deadline_ns - now_ns);
+                                thread::sleep(wait);
+                            }
                         }
-                        let _ = futures::executor::block_on(worker.submit(nonce.encode()));
-                        *last_submit = Instant::now();
+
+                        // sleep 后 build 可能已更新，先检查版本是否仍匹配。
+                        if worker.version() != build_version {
+                            break; // nonce 已过期，回外层重新获取 metadata
+                        }
+
+                        let submitted = futures::executor::block_on(worker.submit(nonce.encode()));
+
+                        if submitted {
+                            // 只有成功出块才更新门控时刻，防止失败的提交
+                            // 不断重置计时器导致后续线程永远等 6 分钟。
+                            let submit_ns = epoch.elapsed().as_nanos() as u64;
+                            LAST_SUBMIT_NS.store(submit_ns, Ordering::Release);
+                        }
                         break;
                     }
 
@@ -425,11 +444,13 @@ pub fn new_full<
     let rpc_extensions_builder = {
         let client = client.clone();
         let pool = transaction_pool.clone();
+        let keystore = keystore_container.keystore();
 
         Box::new(move |_| {
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: pool.clone(),
+                keystore: keystore.clone(),
                 cpu_hashrate_fn: cpu_hashrate as fn() -> f64,
                 gpu_hashrate_fn,
             };
@@ -504,14 +525,17 @@ pub fn new_full<
         worker_task.boxed(),
     );
 
+    // 所有矿工线程共享的时间基准，用于无锁提交门控。
+    let miner_epoch = Instant::now();
+
     if mining_threads > 0 {
-        start_cpu_miner(worker.clone(), mining_threads);
+        start_cpu_miner(worker.clone(), mining_threads, miner_epoch);
     }
 
     // GPU 矿工（仅在 gpu-mining feature 编译时可用）。
     #[cfg(feature = "gpu-mining")]
     if let Some(device) = gpu_device {
-        match crate::gpu_miner::try_start(worker.clone(), device) {
+        match crate::gpu_miner::try_start(worker.clone(), device, miner_epoch) {
             Ok(()) => log::info!("GPU miner started on device {}", device),
             Err(e) => log::warn!("GPU not available, CPU only: {}", e),
         }

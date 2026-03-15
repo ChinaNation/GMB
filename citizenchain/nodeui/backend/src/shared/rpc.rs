@@ -64,10 +64,6 @@ pub(crate) fn local_rpc_http_url() -> String {
     format!("http://127.0.0.1:{}/", current_rpc_port())
 }
 
-pub(crate) fn local_rpc_ws_url() -> String {
-    format!("ws://127.0.0.1:{}", current_rpc_port())
-}
-
 fn normalize_genesis_hash(raw: &str) -> Result<String, String> {
     let value = raw.trim();
     let Some(hex_part) = value.strip_prefix("0x") else {

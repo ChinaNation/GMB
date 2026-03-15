@@ -384,6 +384,12 @@ select option:checked {
   color: #9ca3af;
 }
 
+.metric-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  font-weight: 400;
+}
+
 .table-wrap {
   overflow-x: auto;
 }

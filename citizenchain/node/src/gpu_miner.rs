@@ -11,10 +11,7 @@ use ocl::{Buffer, Kernel, MemFlags, ProQue, Queue};
 use sc_consensus_pow::MiningHandle;
 use sp_core::U256;
 use std::{
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Mutex, OnceLock,
-    },
+    sync::atomic::{AtomicU64, Ordering},
     thread,
     time::{Duration, Instant},
 };
@@ -213,11 +210,16 @@ fn difficulty_to_target_be(difficulty: U256) -> [u64; 4] {
     words
 }
 
+/// CPU 矿工的提交门控时刻（纳秒），GPU 矿工共享同一个门控。
+/// 在 service.rs 中由 start_cpu_miner 定义和更新。
+use crate::service::LAST_SUBMIT_NS;
+
 /// Try to start the GPU miner. Spawns a background thread.
 /// Returns Ok(()) if GPU initialization succeeded, Err otherwise.
 pub fn try_start<Proof: Send + 'static>(
     worker: MiningHandle<Block, SimplePow, (), Proof>,
     device_index: usize,
+    epoch: Instant,
 ) -> Result<(), String> {
     let miner = GpuMiner::try_init(device_index)?;
 
@@ -258,18 +260,30 @@ pub fn try_start<Proof: Send + 'static>(
                             let hr = batch_size as f64 / elapsed.as_secs_f64();
                             GPU_HASHRATE.store(hr.to_bits(), Ordering::Relaxed);
                         }
-                        // Use the shared submit gate (same as CPU miner).
-                        static MINER_GATE: OnceLock<Mutex<Instant>> = OnceLock::new();
-                        let gate = MINER_GATE
-                            .get_or_init(|| Mutex::new(Instant::now() - min_submit_interval));
-                        let mut last_submit =
-                            gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-                        let elapsed = last_submit.elapsed();
-                        if elapsed < min_submit_interval {
-                            thread::sleep(min_submit_interval - elapsed);
+                        // 无锁提交门控，与 CPU 矿工共享 LAST_SUBMIT_NS。
+                        // u64::MAX 表示"从未提交过"，首次直接放行。
+                        let last_ns = LAST_SUBMIT_NS.load(Ordering::Acquire);
+                        if last_ns != u64::MAX {
+                            let now_ns = epoch.elapsed().as_nanos() as u64;
+                            let interval_ns = min_submit_interval.as_nanos() as u64;
+                            let deadline_ns = last_ns.saturating_add(interval_ns);
+                            if now_ns < deadline_ns {
+                                let wait = Duration::from_nanos(deadline_ns - now_ns);
+                                thread::sleep(wait);
+                            }
                         }
-                        let _ = futures::executor::block_on(worker.submit(nonce.encode()));
-                        *last_submit = Instant::now();
+
+                        // sleep 后检查 build 是否仍有效。
+                        if worker.version() != build_version {
+                            break;
+                        }
+
+                        let submitted =
+                            futures::executor::block_on(worker.submit(nonce.encode()));
+                        if submitted {
+                            let submit_ns = epoch.elapsed().as_nanos() as u64;
+                            LAST_SUBMIT_NS.store(submit_ns, Ordering::Release);
+                        }
                         break;
                     }
                     Ok(None) => {

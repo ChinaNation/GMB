@@ -1,7 +1,7 @@
 // 进程管理子模块：节点进程的启动、停止、生命周期管理及二进制文件校验。
 
 use crate::{
-    settings::{bootnodes_address, device_password, fee_address, grandpa_address},
+    settings::{bootnodes_address, device_password, grandpa_address},
     shared::{keystore, rpc, security},
 };
 use sha2::{Digest, Sha256};

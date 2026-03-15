@@ -11,7 +11,7 @@ export function IssuanceSection({ issuance, stake }: Props) {
       <h2>发行</h2>
       <div className="mining-income-grid">
         <div className="metric-card">
-          <div className="metric-label">全链发行总额</div>
+          <div className="metric-label">全链发行总额 <span className="metric-hint">（含永久质押金额）</span></div>
           <div className="metric-value">
             {issuance.totalIssuance ? (
               <>
@@ -24,7 +24,7 @@ export function IssuanceSection({ issuance, stake }: Props) {
           </div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">永久质押金额</div>
+          <div className="metric-label">永久质押金额 <span className="metric-hint">（成立43个省储行的创立发行总额，永久质押于各省储行质押地址）</span></div>
           <div className="metric-value">
             {stake.totalStake ? (
               <>
