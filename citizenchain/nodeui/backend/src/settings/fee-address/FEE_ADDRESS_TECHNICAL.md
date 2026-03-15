@@ -38,10 +38,7 @@
 ## 4. 存储设计
 
 - 地址配置：`<app_data_dir>/reward-wallet.json`
-- 矿工签名 URI：系统安全存储（Keychain/Keyring）键 `powr-miner-suri`
-  - 以 `nodeui/backend/src/shared/security.rs` 的 AES-GCM 密文封装保存。
-  - 首次缺失时，尝试从本地链 keystore 的 `powr` key 文件提取；仍不存在则生成随机 `0x<32bytes>` seed 并写入安全存储。
-  - 旧版明文文件 `<app_data_dir>/miner-suri.txt` 仅用于一次性迁移；安全优先：先删除明文旧文件，再写入安全存储，即使安全存储写入失败也不会在磁盘上残留明文密钥。
+- 矿工签名 URI：存储在本地链 keystore 的 `powr` key 文件中。
 
 ## 5. 命令流程
 

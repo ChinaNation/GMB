@@ -13,11 +13,11 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::AppHandle;
-use zeroize::Zeroizing;
 
-const KEYCHAIN_ACCOUNT_BOOTNODE: &str = "bootnode-node-key";
 const PEER_ID_WAIT_TIMEOUT: Duration = Duration::from_secs(20);
 const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(250);
+const SUBSTRATE_CHAIN_ID: &str = "citizenchain";
+const SUBSTRATE_SECRET_ED25519: &str = "secret_ed25519";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +33,7 @@ pub struct BootnodeKey {
 /// 创世引导节点选项，供前端/首页做 PeerId 到机构名映射。
 pub struct GenesisBootnodeOption {
     pub name: String,
+    pub role: String,
     pub peer_id: String,
 }
 
@@ -78,6 +79,7 @@ pub(crate) fn genesis_bootnode_options() -> Result<Vec<GenesisBootnodeOption>, S
         .into_iter()
         .map(|entry| GenesisBootnodeOption {
             name: entry.name,
+            role: entry.role,
             peer_id: entry.peer_id,
         })
         .collect::<Vec<GenesisBootnodeOption>>();
@@ -105,31 +107,31 @@ fn is_genesis_bootnode_peer_id(peer_id: &str) -> Result<bool, String> {
 fn peer_id_from_node_key_hex(node_key_hex: &str) -> Result<String, String> {
     let secret_bytes =
         decode_hex_32_strict(node_key_hex).map_err(|_| "node-key 格式无效".to_string())?;
-    let secret = libp2p_identity::secp256k1::SecretKey::try_from_bytes(secret_bytes)
-        .map_err(|_| "无效 node-key，无法生成 secp256k1 私钥".to_string())?;
-    let keypair = libp2p_identity::secp256k1::Keypair::from(secret);
-    let public = libp2p_identity::PublicKey::from(keypair.public().clone());
+    let secret = libp2p_identity::ed25519::SecretKey::try_from_bytes(secret_bytes)
+        .map_err(|_| "无效 node-key，无法生成 ed25519 私钥".to_string())?;
+    let keypair = libp2p_identity::ed25519::Keypair::from(secret);
+    let public = libp2p_identity::PublicKey::from(keypair.public());
     let peer_id: PeerId = public.to_peer_id();
     Ok(peer_id.to_string())
 }
 
-// node-key 只在本地安全存储中保存，真正启动节点时再临时解密注入。
-pub(crate) fn load_bootnode_node_key(
-    _app: &AppHandle,
-    unlock_password: &str,
-) -> Result<Option<Zeroizing<String>>, String> {
-    let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_BOOTNODE)? else {
-        return Ok(None);
-    };
-    let key = security::decrypt_secret_value(&enveloped, unlock_password)?;
-    Ok(Some(key))
-}
-
-pub(crate) fn verify_bootnode_secret_unlock(unlock_password: &str) -> Result<(), String> {
-    if let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_BOOTNODE)? {
-        let _key = security::decrypt_secret_value(&enveloped, unlock_password)?;
+/// 将引导节点私钥以原始 32 字节写入 Substrate 的 `secret_ed25519` 文件。
+fn write_secret_ed25519(app: &AppHandle, secret_bytes: &[u8]) -> Result<(), String> {
+    let network_dir = crate::shared::keystore::node_data_dir(app)?
+        .join("chains")
+        .join(SUBSTRATE_CHAIN_ID)
+        .join("network");
+    fs::create_dir_all(&network_dir)
+        .map_err(|e| format!("create network dir failed ({}): {e}", network_dir.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&network_dir, fs::Permissions::from_mode(0o700))
+            .map_err(|e| format!("set network dir permission failed: {e}"))?;
     }
-    Ok(())
+    let secret_path = network_dir.join(SUBSTRATE_SECRET_ED25519);
+    security::write_secret_bytes_atomic(&secret_path, secret_bytes)
+        .map_err(|e| format!("write secret_ed25519 failed: {e}"))
 }
 
 fn wait_peer_id_applied(app: &AppHandle, expected_peer_id: &str) -> Result<(), String> {
@@ -153,14 +155,6 @@ fn wait_peer_id_applied(app: &AppHandle, expected_peer_id: &str) -> Result<(), S
 
 #[tauri::command]
 pub fn get_bootnode_key(app: AppHandle) -> Result<BootnodeKey, String> {
-    if security::secure_store_get(KEYCHAIN_ACCOUNT_BOOTNODE)?.is_none() {
-        return Ok(BootnodeKey {
-            node_key: None,
-            peer_id: None,
-            institution_name: None,
-        });
-    }
-
     match load_bootnode_meta(&app)? {
         Some(meta) => Ok(BootnodeKey {
             // 私钥不回传给前端，避免二次暴露。
@@ -196,9 +190,9 @@ pub fn set_bootnode_key(
     }
     let institution_name = find_genesis_bootnode_name_by_peer_id(&derived_peer_id)?;
 
-    let normalized = Zeroizing::new(normalized);
-    let encrypted = security::encrypt_secret_value(&normalized, unlock)?;
-    security::secure_store_set(KEYCHAIN_ACCOUNT_BOOTNODE, &encrypted)?;
+    let secret_bytes = decode_hex_32_strict(&normalized)
+        .map_err(|_| "node-key hex decode failed".to_string())?;
+    write_secret_ed25519(&app, &secret_bytes)?;
     save_bootnode_meta(&app, &derived_peer_id, institution_name.clone())?;
 
     // 若节点当前在运行，保存新私钥后立即重启以应用新的 p2p 身份，

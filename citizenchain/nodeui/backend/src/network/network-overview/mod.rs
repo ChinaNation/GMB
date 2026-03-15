@@ -284,11 +284,15 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
     // 网络总览是一个"尽量返回"的聚合接口：
     // 只要能确认当前 RPC 属于目标链，就尽量返回已知在线节点、历史节点和本机状态。
     let bootnodes = bootnodes_address::genesis_bootnode_options()?;
-    let bootnode_map: HashMap<String, String> = bootnodes
+    let bootnode_name_map: HashMap<String, String> = bootnodes
         .iter()
         .map(|n| (n.peer_id.clone(), n.name.clone()))
         .collect();
-    let genesis_peer_ids: HashSet<String> = bootnode_map.keys().cloned().collect();
+    let bootnode_role_map: HashMap<String, String> = bootnodes
+        .iter()
+        .map(|n| (n.peer_id.clone(), n.role.clone()))
+        .collect();
+    let genesis_peer_ids: HashSet<String> = bootnode_name_map.keys().cloned().collect();
 
     let status = home::current_status(&app)?;
     if !status.running {
@@ -436,15 +440,12 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
     let mut shengchuhang_nodes = 0u64;
     let mut uncategorized_bootnodes = 0u64;
     for pid in &online_peer_ids {
-        if let Some(name) = bootnode_map.get(pid) {
-            if name.starts_with("国储会") {
-                guochuhui_nodes = guochuhui_nodes.saturating_add(1);
-            } else if name.starts_with("省储会") {
-                shengchuhui_nodes = shengchuhui_nodes.saturating_add(1);
-            } else if name.starts_with("省储行") {
-                shengchuhang_nodes = shengchuhang_nodes.saturating_add(1);
-            } else {
-                uncategorized_bootnodes = uncategorized_bootnodes.saturating_add(1);
+        if let Some(role) = bootnode_role_map.get(pid) {
+            match role.as_str() {
+                "guochuhui" => guochuhui_nodes = guochuhui_nodes.saturating_add(1),
+                "shengchuhui" => shengchuhui_nodes = shengchuhui_nodes.saturating_add(1),
+                "shengchuhang" => shengchuhang_nodes = shengchuhang_nodes.saturating_add(1),
+                _ => uncategorized_bootnodes = uncategorized_bootnodes.saturating_add(1),
             }
         }
     }
