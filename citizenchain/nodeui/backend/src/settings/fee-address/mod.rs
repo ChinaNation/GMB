@@ -15,7 +15,7 @@ use std::{
     fs,
     hash::Hasher,
     io::ErrorKind,
-    path::{Path, PathBuf},
+    path::PathBuf,
     str::FromStr,
 };
 use subxt::{
@@ -30,8 +30,6 @@ use zeroize::Zeroizing;
 
 const POWR_KEY_TYPE_HEX_PREFIX: &str = "706f7772";
 const DEFAULT_CHAIN_ID: &str = "citizenchain";
-const LEGACY_MINER_SURI_FILENAME: &str = "miner-suri.txt";
-const KEYCHAIN_ACCOUNT_MINER_SURI: &str = "powr-miner-suri";
 const REWARD_BIND_TIMEOUT_SECS: u64 = 45;
 const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -53,10 +51,6 @@ fn node_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn reward_wallet_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(security::app_data_dir(app)?.join("reward-wallet.json"))
-}
-
-fn legacy_miner_suri_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(security::app_data_dir(app)?.join(LEGACY_MINER_SURI_FILENAME))
 }
 
 pub(crate) fn load_reward_wallet(app: &AppHandle) -> Result<Option<String>, String> {
@@ -82,20 +76,6 @@ fn save_reward_wallet(app: &AppHandle, address: &str) -> Result<(), String> {
     .map_err(|e| format!("encode reward wallet failed: {e}"))?;
     security::write_text_atomic(&reward_wallet_path(app)?, &format!("{raw}\n"))
         .map_err(|e| format!("write reward wallet failed: {e}"))
-}
-
-// 迁移旧明文文件时只做一次性读取，然后立即删除，避免继续保留历史明文秘密。
-fn load_legacy_miner_suri_file(path: &Path) -> Result<Option<String>, String> {
-    let raw = match fs::read_to_string(path) {
-        Ok(v) => v,
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(format!("read legacy miner suri failed: {e}")),
-    };
-    let suri = raw.trim().to_string();
-    if suri.is_empty() {
-        return Ok(None);
-    }
-    Ok(Some(suri))
 }
 
 fn parse_keystore_secret(raw: &str) -> Result<String, String> {
@@ -295,52 +275,6 @@ fn load_powr_suri_from_keystore(app: &AppHandle) -> Result<Option<String>, Strin
     Ok(None)
 }
 
-fn load_miner_suri_secure(unlock_password: &str) -> Result<Option<Zeroizing<String>>, String> {
-    let Some(enveloped) = security::secure_store_get(KEYCHAIN_ACCOUNT_MINER_SURI)? else {
-        return Ok(None);
-    };
-    let suri = security::decrypt_secret_value(&enveloped, unlock_password)?;
-    let normalized = suri.trim();
-    if normalized.is_empty() {
-        return Ok(None);
-    }
-    if normalized.len() == suri.len() {
-        return Ok(Some(suri));
-    }
-    Ok(Some(Zeroizing::new(normalized.to_string())))
-}
-
-fn save_miner_suri_secure(suri: &str, unlock_password: &str) -> Result<(), String> {
-    let normalized = suri.trim();
-    if normalized.is_empty() {
-        return Err("矿工签名密钥不能为空".to_string());
-    }
-    let encrypted = security::encrypt_secret_value(normalized, unlock_password)?;
-    security::secure_store_set(KEYCHAIN_ACCOUNT_MINER_SURI, &encrypted)
-}
-
-fn migrate_legacy_miner_suri_file(app: &AppHandle, unlock_password: &str) -> Result<(), String> {
-    let legacy_path = legacy_miner_suri_path(app)?;
-    let legacy = load_legacy_miner_suri_file(&legacy_path)?;
-    let Some(suri) = legacy else {
-        return Ok(());
-    };
-
-    // 安全优先：无论后续安全存储操作是否成功，都先删除明文旧文件，
-    // 避免 save_miner_suri_secure 失败时明文密钥继续残留在磁盘。
-    if let Err(e) = fs::remove_file(&legacy_path) {
-        if e.kind() != ErrorKind::NotFound {
-            return Err(format!("remove legacy miner suri file failed: {e}"));
-        }
-    }
-
-    let has_secure = security::secure_store_get(KEYCHAIN_ACCOUNT_MINER_SURI)?.is_some();
-    if !has_secure {
-        save_miner_suri_secure(&suri, unlock_password)?;
-    }
-    Ok(())
-}
-
 fn decode_ss58_account_id(address: &str) -> Result<[u8; 32], String> {
     let data = bs58::decode(address)
         .into_vec()
@@ -380,8 +314,8 @@ fn account_id_from_address(address: &str) -> Result<[u8; 32], String> {
     decode_ss58_account_id(address)
 }
 
-fn miner_account_id(app: &AppHandle, unlock_password: &str) -> Result<[u8; 32], String> {
-    let miner_suri = ensure_miner_suri(app, unlock_password)?;
+fn miner_account_id(app: &AppHandle) -> Result<[u8; 32], String> {
+    let miner_suri = ensure_miner_suri(app)?;
     let secret_uri =
         SecretUri::from_str(&miner_suri).map_err(|e| format!("矿工签名密钥解析失败: {e}"))?;
     let signer =
@@ -471,33 +405,21 @@ fn generate_random_hex_suri() -> String {
     format!("0x{}", hex::encode(seed))
 }
 
-pub(crate) fn ensure_miner_suri(
-    app: &AppHandle,
-    unlock_password: &str,
-) -> Result<Zeroizing<String>, String> {
-    let unlock = security::ensure_unlock_password(unlock_password)?;
-    migrate_legacy_miner_suri_file(app, unlock)?;
-
-    // 迁移优先级：安全存储 -> 现有 keystore -> 新生成随机 seed。
-    // 这样既兼容历史数据，又尽量保持矿工账户稳定不漂移。
-    if let Some(suri) = load_miner_suri_secure(unlock)? {
-        return Ok(suri);
-    }
+/// 矿工密钥有且仅有一把，唯一来源是 keystore 文件。
+/// 有就直接用，没有就生成一把写入 keystore。
+pub(crate) fn ensure_miner_suri(app: &AppHandle) -> Result<Zeroizing<String>, String> {
     if let Some(suri) = load_powr_suri_from_keystore(app)? {
-        save_miner_suri_secure(&suri, unlock)?;
         return Ok(Zeroizing::new(suri));
     }
     let suri = generate_random_hex_suri();
-    save_miner_suri_secure(&suri, unlock)?;
+    let pubkey_hex = powr_pubkey_hex_from_suri(&suri)?;
+    write_powr_key_to_keystore(app, &suri, &pubkey_hex)?;
     Ok(Zeroizing::new(suri))
 }
 
-pub(crate) fn ensure_powr_keystore_key(
-    app: &AppHandle,
-    unlock_password: &str,
-) -> Result<(), String> {
+pub(crate) fn ensure_powr_keystore_key(app: &AppHandle) -> Result<(), String> {
     // `powr` 只保留当前矿工账户对应的一把密钥，避免旧 key 残留导致收益归属漂移。
-    let suri = ensure_miner_suri(app, unlock_password)?;
+    let suri = ensure_miner_suri(app)?;
     let pubkey_hex = powr_pubkey_hex_from_suri(&suri)?;
     write_powr_key_to_keystore(app, &suri, &pubkey_hex)?;
     let keep_filename = powr_keystore_filename(&pubkey_hex);
@@ -505,14 +427,10 @@ pub(crate) fn ensure_powr_keystore_key(
     Ok(())
 }
 
-async fn sync_saved_reward_wallet_inner(
-    app: &AppHandle,
-    unlock_password: &str,
-) -> Result<(), String> {
+async fn sync_saved_reward_wallet_inner(app: &AppHandle) -> Result<(), String> {
     // 同步阻塞操作（reqwest::blocking、文件读取、密钥计算）必须在 spawn_blocking 中执行，
     // 避免在 async 上下文中 drop reqwest::blocking 内部的 tokio runtime 导致 panic。
     let app_clone = app.clone();
-    let unlock_owned = unlock_password.to_string();
     let prep = tauri::async_runtime::spawn_blocking(move || {
         let Some(saved_address) = load_reward_wallet(&app_clone)? else {
             return Ok(None);
@@ -520,7 +438,7 @@ async fn sync_saved_reward_wallet_inner(
         ensure_expected_reward_wallet_rpc_node()?;
         let normalized = normalize_wallet_address(&saved_address)?;
         let target_wallet = account_id_from_address(&normalized)?;
-        let miner_suri = ensure_miner_suri(&app_clone, &unlock_owned)?;
+        let miner_suri = ensure_miner_suri(&app_clone)?;
 
         let secret_uri = SecretUri::from_str(&miner_suri)
             .map_err(|e| format!("矿工签名密钥解析失败: {e}"))?;
@@ -582,24 +500,18 @@ async fn sync_saved_reward_wallet_inner(
     let tx = partial
         .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
 
-    let progress = tx
-        .submit_and_watch()
+    tx.submit()
         .await
         .map_err(|e| format!("提交 {} 交易失败: {e}", call_name))?;
-    progress
-        .wait_for_finalized_success()
-        .await
-        .map_err(|e| format!("{} 交易执行失败: {e}", call_name))?;
     Ok(())
 }
 
 pub(crate) async fn sync_saved_reward_wallet_binding(
     app: &AppHandle,
-    unlock_password: &str,
 ) -> Result<(), String> {
     tokio::time::timeout(
         std::time::Duration::from_secs(REWARD_BIND_TIMEOUT_SECS),
-        sync_saved_reward_wallet_inner(app, unlock_password),
+        sync_saved_reward_wallet_inner(app),
     )
     .await
     .map_err(|_| "链上奖励地址同步超时，请稍后重试".to_string())?
@@ -625,21 +537,19 @@ pub async fn set_reward_wallet(
     device_password::verify_device_login_password(&app, unlock)?;
     let normalized = normalize_wallet_address(&address)?;
     let target_wallet = account_id_from_address(&normalized)?;
-    let miner_account = miner_account_id(&app, unlock)?;
+    let miner_account = miner_account_id(&app)?;
     if target_wallet == miner_account {
         return Err("奖励钱包不能与矿工签名账户相同，请使用独立收款钱包".to_string());
     }
 
     save_reward_wallet(&app, &normalized)?;
-    ensure_powr_keystore_key(&app, unlock)?;
 
     // 链上绑定在后台异步执行，通过事件通知前端结果
     let app2 = app.clone();
-    let unlock2 = unlock.to_string();
     tauri::async_runtime::spawn(async move {
         let sync_result = tokio::time::timeout(
             std::time::Duration::from_secs(REWARD_BIND_TIMEOUT_SECS),
-            sync_saved_reward_wallet_inner(&app2, &unlock2),
+            sync_saved_reward_wallet_inner(&app2),
         )
         .await;
         let (status, detail) = match sync_result {
