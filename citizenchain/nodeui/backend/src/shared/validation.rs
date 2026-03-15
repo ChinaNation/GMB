@@ -64,10 +64,12 @@ fn validate_ss58_address(input: &str) -> Result<(), ValidationError> {
     }
 
     let (without_checksum, checksum) = data.split_at(data.len() - 2);
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(SS58_PRE);
-    hasher.update(without_checksum);
-    let hash = hasher.finalize();
+    let hash = blake2b_simd::Params::new()
+        .hash_length(64)
+        .to_state()
+        .update(SS58_PRE)
+        .update(without_checksum)
+        .finalize();
     if checksum != &hash.as_bytes()[..2] {
         return Err(ValidationError::Ss58InvalidChecksum);
     }

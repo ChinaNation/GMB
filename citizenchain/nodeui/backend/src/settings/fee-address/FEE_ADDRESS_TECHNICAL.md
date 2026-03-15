@@ -77,4 +77,4 @@
 - `home::process::start_node` 会调用本模块同步函数，节点启动后自动补齐链上绑定。
 - 节点数据目录通过 `shared/keystore::node_data_dir` 获取，避免重复定义路径逻辑。
 - 返回前端的错误消息使用 `security::sanitize_path` 脱敏，仅保留文件名。
-- SS58 地址校验和验证及链上 storage key 派生使用 blake3（而非 Substrate 默认的 blake2b），因本模块仅需本地计算校验和与 storage map 键，不涉及链上状态证明兼容性，blake3 性能更优且无需额外依赖。
+- SS58 地址校验和验证使用 blake2b-512（Substrate 标准），链上 storage key 派生使用 blake2b_128（与链上 Blake2_128Concat hasher 对齐）。

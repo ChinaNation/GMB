@@ -158,7 +158,7 @@ curl http://127.0.0.1:8899/api/v1/health
 - 档案号 `archive_no` 作为唯一用户标识。
 - `archive_no` 结构固定：`省2 + 市3 + 校验1 + 随机9 + 日期8(YYYYMMDD)`。
 - 省市代码来源：与 CPMS 同步使用 `sheng_cities` 数据。
-- 校验位算法与 SFID `sfid_code` 一致：`BLAKE3` 摘要字节和 `mod 10`。
+- 校验位算法与 SFID `sfid_code` 一致：`BLAKE2b` 摘要字节和 `mod 10`。
 - `issuer_id` 固定为 `cpms`。
 - 签名算法固定 `sr25519`。
 - 机构初始化必须先由 SFID 超级管理员在机构页生成机构身份识别码（`site_sfid`）及 SFID 签名初始化二维码。
@@ -209,7 +209,7 @@ curl http://127.0.0.1:8899/api/v1/health
   - `nonce=<x-chain-nonce>`
   - `timestamp=<x-chain-timestamp>`
   - `fingerprint=<request_fingerprint>`
-  - 签名算法：`hex(blake3_keyed_hash(blake3(SFID_CHAIN_SIGNING_SECRET), payload))`
+  - 签名算法：`hex(blake2b_mac_256(blake2b_256(SFID_CHAIN_SIGNING_SECRET), payload))`
 
 ### 绑定成功回调（新增）
 - `POST /api/v1/bind/request` 可选字段：

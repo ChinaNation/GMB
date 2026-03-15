@@ -13,9 +13,14 @@ use subxt::{
     OnlineClient, PolkadotConfig,
 };
 
+use blake2::{Blake2b, Digest};
+use blake2::digest::consts::U32;
+
 use crate::business::pubkey::{normalize_cpms_pubkey, same_cpms_pubkey};
 use crate::sfid::{generate_sfid_code, GenerateSfidInput};
 use crate::*;
+
+type Blake2b256 = Blake2b<U32>;
 
 #[derive(Debug, Clone, Serialize)]
 struct CpmsInstitutionInitClaims {
@@ -233,7 +238,7 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
                 city,
                 institution,
                 issued_at,
-                hex::encode(blake3::hash(claims_text.as_bytes()).as_bytes()),
+                hex::encode(Blake2b256::digest(claims_text.as_bytes())),
             ),
         );
         drop(store);
@@ -1156,15 +1161,15 @@ fn compute_cpms_register_checksum(
     issued_at: i64,
     init_qr_payload: &str,
 ) -> String {
-    let init_hash = hex::encode(blake3::hash(init_qr_payload.as_bytes()).as_bytes());
+    let init_hash = hex::encode(Blake2b256::digest(init_qr_payload.as_bytes()));
     let payload = format!(
         "site_sfid={site_sfid}&pubkey_1={pubkey_1}&pubkey_2={pubkey_2}&pubkey_3={pubkey_3}&issued_at={issued_at}&init_qr_hash={init_hash}"
     );
-    hex::encode(blake3::hash(payload.as_bytes()).as_bytes())
+    hex::encode(Blake2b256::digest(payload.as_bytes()))
 }
 
 fn compute_cpms_register_replay_token(raw_payload: &str) -> String {
-    hex::encode(blake3::hash(raw_payload.trim().as_bytes()).as_bytes())
+    hex::encode(Blake2b256::digest(raw_payload.trim().as_bytes()))
 }
 
 fn cleanup_consumed_cpms_register_tokens(store: &mut Store, now: chrono::DateTime<Utc>) {

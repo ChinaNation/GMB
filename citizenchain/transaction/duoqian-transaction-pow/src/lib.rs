@@ -14,7 +14,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
-use sp_runtime::traits::Zero;
+use sp_runtime::traits::{Hash, Zero};
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 
 type BalanceOf<T> =
@@ -207,7 +207,7 @@ pub mod pallet {
     pub type DuoqianAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, DuoqianAccountOf<T>, OptionQuery>;
 
-    /// SFID 机构登记：sfid_id -> duoqian_address（由 blake3 派生）
+    /// SFID 机构登记：sfid_id -> duoqian_address（由 blake2b_256 派生）
     /// 注：本映射按制度设计不在链上解绑，解绑/迁移由 SFID 系统侧完成并重新登记。
     #[pallet::storage]
     #[pallet::getter(fn sfid_registered_address)]
@@ -225,11 +225,6 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// 持久化的链域哈希（固定为 genesis hash），用于签名域隔离。
-    #[pallet::storage]
-    #[pallet::getter(fn chain_domain_hash)]
-    pub type ChainDomainHash<T: Config> = StorageValue<_, T::Hash, OptionQuery>;
-
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub _phantom: core::marker::PhantomData<T>,
@@ -245,12 +240,7 @@ pub mod pallet {
 
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-        fn build(&self) {
-            let genesis_hash = frame_system::Pallet::<T>::block_hash(BlockNumberFor::<T>::zero());
-            if genesis_hash != T::Hash::default() {
-                ChainDomainHash::<T>::put(genesis_hash);
-            }
-        }
+        fn build(&self) {}
     }
 
     #[pallet::hooks]
@@ -261,23 +251,8 @@ pub mod pallet {
             if on_chain >= STORAGE_VERSION {
                 return db.reads(1);
             }
-
-            let mut reads = 2u64;
-            let mut writes = 0u64;
-
-            if ChainDomainHash::<T>::get().is_none() {
-                let genesis_hash =
-                    frame_system::Pallet::<T>::block_hash(BlockNumberFor::<T>::zero());
-                reads = reads.saturating_add(1);
-                if genesis_hash != T::Hash::default() {
-                    ChainDomainHash::<T>::put(genesis_hash);
-                    writes = writes.saturating_add(1);
-                }
-            }
-
             STORAGE_VERSION.put::<Pallet<T>>();
-            writes = writes.saturating_add(1);
-            db.reads_writes(reads, writes)
+            db.reads_writes(1, 1)
         }
     }
 
@@ -358,8 +333,6 @@ pub mod pallet {
         DerivedAddressDecodeFailed,
         /// 管理员签名已过期
         SignatureExpired,
-        /// 链域哈希暂不可用（等待初始化）
-        ChainDomainHashUnavailable,
         /// 账户仍有保留余额，不允许注销
         ReservedBalanceRemaining,
         /// nonce 已耗尽
@@ -374,7 +347,7 @@ pub mod pallet {
         // Function declaration order is kept compatible with existing deployments.
         /// SFID 系统登记机构：
         /// - 仅 SFID 系统授权账户可调用；
-        /// - 地址按 blake3("DUOQIAN_SFID_V1" || chain_domain_hash || sfid_id) 固定派生；
+        /// - 地址按 blake2b_256("DUOQIAN_SFID_V1" || ss58_prefix_le || sfid_id) 固定派生；
         /// - 同一 sfid_id 只能登记一次。
         #[pallet::call_index(2)]
         #[pallet::weight(T::WeightInfo::register_sfid_institution())]
@@ -383,9 +356,6 @@ pub mod pallet {
             sfid_id: SfidIdOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            // 中文注释：链域哈希既参与地址派生，也参与后续 create/close 的签名域隔离，
-            // 因此机构登记前必须先确保它已经被初始化。
-            Self::ensure_chain_domain_hash_initialized()?;
             ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
             ensure!(
                 T::SfidRegistryOperator::can_register(&who),
@@ -516,13 +486,12 @@ pub mod pallet {
             });
             ensure!(caller_is_admin, Error::<T>::PermissionDenied);
 
-            Self::ensure_chain_domain_hash_initialized()?;
             let nonce = registered.nonce;
             // 提前检查，避免签名验证后才发现溢出浪费计算量。
             ensure!(nonce < u64::MAX, Error::<T>::NonceOverflow);
             let payload = (
                 b"DUOQIAN_CREATE_V3".to_vec(),
-                Self::signature_domain_hash_value()?,
+                Self::chain_domain_prefix(),
                 nonce,
                 expires_at,
                 &sfid_id,
@@ -638,7 +607,6 @@ pub mod pallet {
                 Error::<T>::ReservedBalanceRemaining
             );
 
-            Self::ensure_chain_domain_hash_initialized()?;
             let mut registered = AddressRegisteredSfid::<T>::get(&duoqian_address)
                 .ok_or(Error::<T>::InstitutionNotRegistered)?;
             let nonce = registered.nonce;
@@ -646,7 +614,7 @@ pub mod pallet {
             ensure!(nonce < u64::MAX, Error::<T>::NonceOverflow);
             let payload = (
                 b"DUOQIAN_CLOSE_V3".to_vec(),
-                Self::signature_domain_hash_value()?,
+                Self::chain_domain_prefix(),
                 nonce,
                 expires_at,
                 &duoqian_address,
@@ -685,41 +653,24 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn ensure_chain_domain_hash_initialized() -> DispatchResult {
-            if ChainDomainHash::<T>::get().is_some() {
-                return Ok(());
-            }
-            // 中文注释：新链会在创世阶段直接写入链域哈希；
-            // 这里保留旧链/测试环境兜底，确保地址派生和签名域始终绑定 genesis hash。
-            let genesis_hash = frame_system::Pallet::<T>::block_hash(BlockNumberFor::<T>::zero());
-            ensure!(
-                genesis_hash != T::Hash::default(),
-                Error::<T>::ChainDomainHashUnavailable
-            );
-            ChainDomainHash::<T>::put(genesis_hash);
-            Ok(())
-        }
-
-        fn signature_domain_hash_value() -> Result<T::Hash, DispatchError> {
-            ChainDomainHash::<T>::get().ok_or(Error::<T>::ChainDomainHashUnavailable.into())
+        /// 返回链域前缀（SS58 前缀的小端 u16 字节），用于签名域隔离和地址派生。
+        /// 不同链使用不同 SS58 前缀，保证签名和地址不会跨链碰撞。
+        fn chain_domain_prefix() -> [u8; 2] {
+            T::SS58Prefix::get().to_le_bytes()
         }
 
         /// 从 sfid_id 派生 duoqian 地址。
         ///
-        /// # 前置条件
-        /// 必须先确保 `ChainDomainHash` 已初始化（例如先调用
-        /// `ensure_chain_domain_hash_initialized()`），否则会返回
-        /// `ChainDomainHashUnavailable`。
+        /// 算法：blake2b_256("DUOQIAN_SFID_V1" || ss58_prefix_le || sfid_id)
+        /// 编译时确定，不依赖任何链上运行时状态。
         pub fn derive_duoqian_address_from_sfid_id(
             sfid_id: &[u8],
         ) -> Result<T::AccountId, DispatchError> {
-            // 中文注释：地址派生必须包含固定版本前缀和链域哈希，
-            // 否则不同链、不同规则版本之间可能出现同一 sfid_id 派生到同一地址的冲突。
             let mut input = b"DUOQIAN_SFID_V1".to_vec();
-            input.extend_from_slice(Self::signature_domain_hash_value()?.encode().as_slice());
+            input.extend_from_slice(&Self::chain_domain_prefix());
             input.extend_from_slice(sfid_id);
-            let digest = blake3::hash(input.as_slice());
-            T::AccountId::decode(&mut &digest.as_bytes()[..])
+            let digest = sp_runtime::traits::BlakeTwo256::hash(input.as_slice());
+            T::AccountId::decode(&mut digest.as_ref())
                 .map_err(|_| Error::<T>::DerivedAddressDecodeFailed.into())
         }
 
@@ -995,7 +946,7 @@ mod tests {
         let nonce = Duoqian::address_registered_sfid(duoqian)
             .map(|r| r.nonce)
             .unwrap_or(0);
-        let domain = Duoqian::chain_domain_hash().expect("chain domain hash should be initialized");
+        let domain: [u8; 2] = <<Test as frame_system::Config>::SS58Prefix as sp_runtime::traits::Get<u16>>::get().to_le_bytes();
         (
             b"DUOQIAN_CREATE_V3".to_vec(),
             domain,
@@ -1050,7 +1001,7 @@ mod tests {
         let nonce = Duoqian::address_registered_sfid(duoqian)
             .map(|r| r.nonce)
             .unwrap_or(0);
-        let domain = Duoqian::chain_domain_hash().expect("chain domain hash should be initialized");
+        let domain: [u8; 2] = <<Test as frame_system::Config>::SS58Prefix as sp_runtime::traits::Get<u16>>::get().to_le_bytes();
         (
             b"DUOQIAN_CLOSE_V3".to_vec(),
             domain,
@@ -2918,14 +2869,7 @@ mod tests {
     }
 
     #[test]
-    fn chain_domain_hash_is_initialized_in_genesis() {
-        new_test_ext().execute_with(|| {
-            assert_eq!(Duoqian::chain_domain_hash(), Some(System::block_hash(0)));
-        });
-    }
-
-    #[test]
-    fn register_sfid_institution_derives_blake3_address_and_blocks_duplicate_sfid() {
+    fn register_sfid_institution_derives_blake2b_address_and_blocks_duplicate_sfid() {
         new_test_ext().execute_with(|| {
             let sfid: SfidIdOf<Test> = b"GFR-LN001-CB0C-617776487-20260222"
                 .to_vec()

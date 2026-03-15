@@ -136,8 +136,11 @@ pub(crate) fn archive_checksum_digit(
         "cpms-archive-v3|{}{}{}{}",
         province_code, city_code, random9, created_date_yyyymmdd
     );
-    let digest = blake3::hash(payload.as_bytes());
-    let sum: u32 = digest.as_bytes().iter().map(|&b| b as u32).sum();
+    use blake2::{Blake2b, Digest};
+    use blake2::digest::consts::U32;
+    type Blake2b256 = Blake2b<U32>;
+    let digest = Blake2b256::digest(payload.as_bytes());
+    let sum: u32 = digest.iter().map(|&b| b as u32).sum();
     let n = (sum % 10) as u8;
     char::from(b'0' + n)
 }

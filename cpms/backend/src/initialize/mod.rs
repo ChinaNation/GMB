@@ -538,8 +538,11 @@ fn super_admin_bind_nonce(site_sfid: &str, key_id: &str, sign_key_pubkey: &str) 
         "cpms-super-admin-bind-nonce-v1|{}|{}|{}",
         site_sfid, key_id, sign_key_pubkey
     );
-    let digest = blake3::hash(source.as_bytes());
-    hex::encode(&digest.as_bytes()[..16])
+    use blake2::{Blake2b, Digest};
+    use blake2::digest::consts::U32;
+    type Blake2b256 = Blake2b<U32>;
+    let digest = Blake2b256::digest(source.as_bytes());
+    hex::encode(&digest[..16])
 }
 
 fn super_admin_bind_sign_source(

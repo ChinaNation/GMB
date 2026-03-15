@@ -294,14 +294,16 @@ class _FakeWalletService extends WalletManager {
   }) async {
     final pair = await Keyring.sr25519.fromMnemonic(mnemonic);
     pair.ss58Format = _ss58;
-    final pubkeyHex = _toHex(pair.bytes().toList(growable: false));
+    final pubkeyBytes = pair.bytes().toList(growable: false);
+    final pubkeyHex = _toHex(pubkeyBytes);
+    final address = pair.address;
     return _WalletFixture(
       profile: WalletProfile(
         walletIndex: index,
         walletName: '测试钱包$index',
         walletIcon: 'wallet.svg',
         balance: 0,
-        address: pair.address,
+        address: address,
         pubkeyHex: pubkeyHex,
         alg: 'sr25519',
         ss58: _ss58,
