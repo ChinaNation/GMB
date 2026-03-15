@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { blake2b } from '@noble/hashes/blake2b.js';
+import { blake2b } from '@noble/hashes/blake2';
 import { api, sanitizeError } from '../../api';
 import type { RewardWallet } from '../../types';
 
