@@ -23,6 +23,7 @@ use sp_runtime::{
     MultiSigner, OpaqueExtrinsic, SaturatedConversion,
 };
 use substrate_frame_rpc_system::AccountNonceApi;
+use sp_api::Core as CoreApi;
 
 /// PoW 矿工密钥类型（与 service.rs 中 POW_AUTHOR_KEY_TYPE 一致）。
 const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
@@ -51,7 +52,7 @@ fn submit_reward_wallet_tx<C, P>(
 where
     C: ProvideRuntimeApi<Block>,
     C: HeaderBackend<Block> + 'static,
-    C::Api: AccountNonceApi<Block, AccountId, Nonce>,
+    C::Api: AccountNonceApi<Block, AccountId, Nonce> + CoreApi<Block>,
     P: TransactionPool<Block = Block> + 'static,
 {
     use jsonrpsee::types::error::ErrorObject;
@@ -81,6 +82,13 @@ where
         .runtime_api()
         .account_nonce(best_hash, miner_account.clone())
         .map_err(|e| ErrorObject::owned(-1, format!("查询账户 nonce 失败: {e}"), None::<()>))?;
+
+    // 4b. 查询链上 WASM 运行时的版本号（不使用 native 编译时常量，
+    //     避免 spec_version 升级后 native 与链上 WASM 不一致导致 BadProof）
+    let on_chain_version = client
+        .runtime_api()
+        .version(best_hash)
+        .map_err(|e| ErrorObject::owned(-1, format!("查询运行时版本失败: {e}"), None::<()>))?;
 
     // 5. 构造 TxExtension（与 benchmarking.rs 完全一致）
     let period = runtime::configs::BlockHashCount::get()
@@ -113,8 +121,8 @@ where
             (),
             (),
             (),
-            runtime::VERSION.spec_version,
-            runtime::VERSION.transaction_version,
+            on_chain_version.spec_version,
+            on_chain_version.transaction_version,
             genesis_hash,
             best_hash,
             (),
@@ -175,6 +183,7 @@ where
     C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
     C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
     C::Api: BlockBuilder<Block>,
+    C::Api: CoreApi<Block>,
     P: TransactionPool<Block = Block> + 'static,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
