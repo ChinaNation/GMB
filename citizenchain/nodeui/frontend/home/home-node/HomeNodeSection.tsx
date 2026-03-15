@@ -128,6 +128,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
     } finally {
       setStartUnlockPassword('');
       setStarting(false);
+      setShowStartUnlockDialog(false);
     }
   }, [runLoadHome, starting, stopping]);
 
@@ -150,6 +151,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
     } finally {
       setStopUnlockPassword('');
       setStopping(false);
+      setShowStopUnlockDialog(false);
     }
   }, [runLoadHome, starting, stopping]);
 

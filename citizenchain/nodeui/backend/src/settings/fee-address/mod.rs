@@ -17,7 +17,6 @@ use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
     str::FromStr,
-    time::Duration,
 };
 use subxt::{
     config::substrate::{AccountId32, MultiSignature},
@@ -25,7 +24,7 @@ use subxt::{
     OnlineClient, PolkadotConfig,
 };
 use subxt_signer::{sr25519::Keypair as Sr25519Keypair, SecretUri};
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use twox_hash::XxHash64;
 use zeroize::Zeroizing;
 
@@ -510,24 +509,35 @@ async fn sync_saved_reward_wallet_inner(
     app: &AppHandle,
     unlock_password: &str,
 ) -> Result<(), String> {
-    let Some(saved_address) = load_reward_wallet(app)? else {
+    // 同步阻塞操作（reqwest::blocking、文件读取、密钥计算）必须在 spawn_blocking 中执行，
+    // 避免在 async 上下文中 drop reqwest::blocking 内部的 tokio runtime 导致 panic。
+    let app_clone = app.clone();
+    let unlock_owned = unlock_password.to_string();
+    let prep = tauri::async_runtime::spawn_blocking(move || {
+        let Some(saved_address) = load_reward_wallet(&app_clone)? else {
+            return Ok(None);
+        };
+        ensure_expected_reward_wallet_rpc_node()?;
+        let normalized = normalize_wallet_address(&saved_address)?;
+        let target_wallet = account_id_from_address(&normalized)?;
+        let miner_suri = ensure_miner_suri(&app_clone, &unlock_owned)?;
+
+        let secret_uri = SecretUri::from_str(&miner_suri)
+            .map_err(|e| format!("矿工签名密钥解析失败: {e}"))?;
+        let signer = Sr25519Keypair::from_uri(&secret_uri)
+            .map_err(|e| format!("矿工签名密钥加载失败: {e}"))?;
+        let signer_account = AccountId32(signer.public_key().0);
+        if target_wallet == signer_account.0 {
+            return Err("奖励钱包不能与矿工签名账户相同，请使用独立收款钱包".to_string());
+        }
+        Ok(Some((target_wallet, signer_account, signer)))
+    })
+    .await
+    .map_err(|e| format!("sync prep task failed: {e}"))??;
+
+    let Some((target_wallet, signer_account, signer)) = prep else {
         return Ok(());
     };
-    // 在提交链上绑定交易前，先确认当前本地 RPC 端口确实属于目标链，
-    // 避免把奖励地址绑定误发到错误节点或错误网络。
-    ensure_expected_reward_wallet_rpc_node()?;
-    let normalized = normalize_wallet_address(&saved_address)?;
-    let target_wallet = account_id_from_address(&normalized)?;
-    let miner_suri = ensure_miner_suri(app, unlock_password)?;
-
-    let secret_uri =
-        SecretUri::from_str(&miner_suri).map_err(|e| format!("矿工签名密钥解析失败: {e}"))?;
-    let signer =
-        Sr25519Keypair::from_uri(&secret_uri).map_err(|e| format!("矿工签名密钥加载失败: {e}"))?;
-    let signer_account = AccountId32(signer.public_key().0);
-    if target_wallet == signer_account.0 {
-        return Err("奖励钱包不能与矿工签名账户相同，请使用独立收款钱包".to_string());
-    }
 
     let client = OnlineClient::<PolkadotConfig>::from_url(rpc::local_rpc_ws_url())
         .await
@@ -583,18 +593,16 @@ async fn sync_saved_reward_wallet_inner(
     Ok(())
 }
 
-pub(crate) fn sync_saved_reward_wallet_binding(
+pub(crate) async fn sync_saved_reward_wallet_binding(
     app: &AppHandle,
     unlock_password: &str,
 ) -> Result<(), String> {
-    tauri::async_runtime::block_on(async {
-        tokio::time::timeout(
-            std::time::Duration::from_secs(REWARD_BIND_TIMEOUT_SECS),
-            sync_saved_reward_wallet_inner(app, unlock_password),
-        )
-        .await
-        .map_err(|_| "链上奖励地址同步超时，请稍后重试".to_string())?
-    })
+    tokio::time::timeout(
+        std::time::Duration::from_secs(REWARD_BIND_TIMEOUT_SECS),
+        sync_saved_reward_wallet_inner(app, unlock_password),
+    )
+    .await
+    .map_err(|_| "链上奖励地址同步超时，请稍后重试".to_string())?
 }
 
 #[tauri::command]
@@ -625,29 +633,32 @@ pub async fn set_reward_wallet(
     save_reward_wallet(&app, &normalized)?;
     ensure_powr_keystore_key(&app, unlock)?;
 
-    let sync_result = tokio::time::timeout(
-        std::time::Duration::from_secs(REWARD_BIND_TIMEOUT_SECS),
-        sync_saved_reward_wallet_inner(&app, unlock),
-    )
-    .await;
-    let sync_result = match sync_result {
-        Ok(v) => v,
-        Err(_) => {
-            if let Err(e) = security::append_audit_log(&app, "set_reward_wallet", "saved_chain_bind_timeout") {
-                eprintln!("[审计] set_reward_wallet saved_chain_bind_timeout 日志写入失败: {e}");
-            }
-            return Err("地址已保存，但链上绑定超时，请稍后重试".to_string());
+    // 链上绑定在后台异步执行，通过事件通知前端结果
+    let app2 = app.clone();
+    let unlock2 = unlock.to_string();
+    tauri::async_runtime::spawn(async move {
+        let sync_result = tokio::time::timeout(
+            std::time::Duration::from_secs(REWARD_BIND_TIMEOUT_SECS),
+            sync_saved_reward_wallet_inner(&app2, &unlock2),
+        )
+        .await;
+        let (status, detail) = match sync_result {
+            Ok(Ok(())) => ("success", String::new()),
+            Ok(Err(err)) => ("failed", err),
+            Err(_) => ("timeout", "链上绑定超时".to_string()),
+        };
+        if let Err(e) = security::append_audit_log(
+            &app2,
+            "set_reward_wallet",
+            &format!("chain_bind_{status}"),
+        ) {
+            eprintln!("[审计] set_reward_wallet chain_bind_{status} 日志写入失败: {e}");
         }
-    };
-    if let Err(err) = sync_result {
-        if let Err(e) = security::append_audit_log(&app, "set_reward_wallet", "saved_chain_bind_failed") {
-            eprintln!("[审计] set_reward_wallet saved_chain_bind_failed 日志写入失败: {e}");
-        }
-        return Err(format!("地址已保存，但链上绑定失败：{err}"));
-    }
-    if let Err(e) = security::append_audit_log(&app, "set_reward_wallet", "success") {
-        eprintln!("[审计] set_reward_wallet success 日志写入失败: {e}");
-    }
+        let _ = app2.emit(
+            "reward-wallet-bind-result",
+            serde_json::json!({ "status": status, "detail": detail }),
+        );
+    });
 
     Ok(RewardWallet {
         address: Some(normalized),
