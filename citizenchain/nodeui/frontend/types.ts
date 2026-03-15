@@ -46,6 +46,11 @@ export type TotalIssuance = {
   totalIssuance: string | null;
 };
 
+// 永久质押金额
+export type TotalStake = {
+  totalStake: string | null;
+};
+
 export type MiningIncome = {
   totalIncome: string;
   totalFeeIncome: string;

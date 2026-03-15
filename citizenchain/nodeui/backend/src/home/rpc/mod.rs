@@ -1,6 +1,7 @@
 // RPC 子模块：节点 RPC 调用、链同步状态查询。
 
 use crate::shared::{constants::EXPECTED_SS58_PREFIX, rpc};
+use primitives::china::china_ch::CHINA_CH;
 use serde::Serialize;
 use serde_json::Value;
 use std::hash::Hasher;
@@ -251,6 +252,91 @@ pub async fn get_total_issuance(app: AppHandle) -> Result<TotalIssuance, String>
     super::join_blocking_task(
         "get_total_issuance",
         tauri::async_runtime::spawn_blocking(move || get_total_issuance_sync(app)),
+    )
+    .await
+}
+
+// ── 永久质押金额（43 个省储行 keyless 地址余额之和）──
+
+/// Substrate 标准 Blake2_128Concat：blake2b_128(data) ++ data。
+fn blake2b_128(input: &[u8]) -> [u8; 16] {
+    let hash = blake2b_simd::Params::new()
+        .hash_length(16)
+        .hash(input);
+    let mut out = [0u8; 16];
+    out.copy_from_slice(hash.as_bytes());
+    out
+}
+
+/// 构造 System.Account 的完整 storage key（Blake2_128Concat hasher）。
+fn system_account_storage_key(account_id: &[u8; 32]) -> String {
+    let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
+    key.extend_from_slice(&twox_128(b"System"));
+    key.extend_from_slice(&twox_128(b"Account"));
+    // Blake2_128Concat = blake2b_128(account) ++ account
+    key.extend_from_slice(&blake2b_128(account_id));
+    key.extend_from_slice(account_id);
+    format!("0x{}", hex::encode(key))
+}
+
+/// 从 System.Account SCALE 编码中提取 free balance（u128，小端，偏移 16 字节）。
+/// AccountInfo<Nonce, AccountData> 布局：
+///   nonce: u32 (4 bytes)
+///   consumers: u32 (4 bytes)
+///   providers: u32 (4 bytes)
+///   sufficients: u32 (4 bytes)
+///   data.free: u128 (16 bytes)  ← offset 16
+fn extract_free_balance(storage_hex: &str) -> Option<u128> {
+    let bytes = hex_to_bytes(storage_hex)?;
+    // free balance 起始于偏移 16 字节处
+    if bytes.len() < 32 {
+        return None;
+    }
+    let mut raw = [0u8; 16];
+    raw.copy_from_slice(&bytes[16..32]);
+    Some(u128::from_le_bytes(raw))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+/// 永久质押金额。
+pub struct TotalStake {
+    pub total_stake: Option<String>,
+}
+
+fn get_total_stake_sync(app: AppHandle) -> Result<TotalStake, String> {
+    if !current_status(&app)?.running {
+        return Ok(TotalStake { total_stake: None });
+    }
+
+    let mut total: u128 = 0;
+
+    // 批量构造 43 个存储键，逐个查询。
+    for bank in CHINA_CH.iter() {
+        let key = system_account_storage_key(&bank.keyless_address);
+        let raw = match rpc_post(
+            "state_getStorage",
+            Value::Array(vec![Value::String(key)]),
+        ) {
+            Ok(v) => v,
+            Err(_) => continue, // 单个查询失败跳过，不中断
+        };
+
+        if let Some(balance) = raw.as_str().and_then(extract_free_balance) {
+            total = total.saturating_add(balance);
+        }
+    }
+
+    Ok(TotalStake {
+        total_stake: Some(format_fen_to_yuan(total)),
+    })
+}
+
+#[tauri::command]
+pub async fn get_total_stake(app: AppHandle) -> Result<TotalStake, String> {
+    super::join_blocking_task(
+        "get_total_stake",
+        tauri::async_runtime::spawn_blocking(move || get_total_stake_sync(app)),
     )
     .await
 }

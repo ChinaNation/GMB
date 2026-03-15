@@ -3,7 +3,7 @@ import { api, sanitizeError } from '../../api';
 import { ChainSection } from './components/ChainSection';
 import { IdentitySection } from './components/IdentitySection';
 import { IssuanceSection } from './components/IssuanceSection';
-import type { ChainStatus, NodeIdentity, NodeStatus, TotalIssuance } from '../../types';
+import type { ChainStatus, NodeIdentity, NodeStatus, TotalIssuance, TotalStake } from '../../types';
 
 const PARTIAL_REFRESH_ERROR_PREFIX = '部分数据刷新失败：';
 
@@ -16,6 +16,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
   const [chain, setChain] = useState<ChainStatus>({ blockHeight: null, finalizedHeight: null, syncing: null });
   const [identity, setIdentity] = useState<NodeIdentity>({ nodeName: null, peerId: null, role: null });
   const [issuance, setIssuance] = useState<TotalIssuance>({ totalIssuance: null });
+  const [stake, setStake] = useState<TotalStake>({ totalStake: null });
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [showStartUnlockDialog, setShowStartUnlockDialog] = useState(false);
@@ -26,11 +27,12 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
   const refreshInFlightRef = useRef(false);
 
   const loadHome = useCallback(async (silent: boolean) => {
-    const [s, c, i, t] = await Promise.allSettled([
+    const [s, c, i, t, k] = await Promise.allSettled([
       api.getNodeStatus(),
       api.getChainStatus(),
       api.getNodeIdentity(),
       api.getTotalIssuance(),
+      api.getTotalStake(),
     ]);
     let successCount = 0;
     const failures: string[] = [];
@@ -50,6 +52,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
     applyResult(c, setChain);
     applyResult(i, setIdentity);
     applyResult(t, setIssuance);
+    applyResult(k, setStake);
 
     if (successCount === 0) {
       throw new Error(failures[0] ?? '首页数据加载失败');
@@ -194,7 +197,7 @@ export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
         onUpdated={setIdentity}
         disabled={starting || stopping}
       />
-      <IssuanceSection issuance={issuance} />
+      <IssuanceSection issuance={issuance} stake={stake} />
 
       {showStartUnlockDialog ? (
         <div className="unlock-modal-mask" onClick={closeStartUnlockDialog}>
