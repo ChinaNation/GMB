@@ -123,7 +123,7 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
   const hasBoundAddress = Boolean(wallet.address);
   const actionText = hasBoundAddress ? '变更地址' : '绑定地址';
 
-  // 监听后台链上绑定结果事件
+  // 监听后台链上绑定结果事件（仅在用户主动发起绑定后才响应）
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
@@ -134,16 +134,19 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
           'reward-wallet-bind-result',
           (event) => {
             if (cancelled) return;
-            const { status } = event.payload;
-            if (status === 'success') {
-              setBindStatus('success');
-            } else if (status === 'timeout') {
-              setBindStatus('timeout');
-              setError('地址已保存，但链上绑定超时，将在下次启动时重试');
-            } else {
-              setBindStatus('failed');
-              setError(`地址已保存，但链上绑定失败：${event.payload.detail}`);
-            }
+            setBindStatus((prev) => {
+              if (prev !== 'binding') return prev;
+              const { status } = event.payload;
+              if (status === 'success') {
+                return 'success';
+              } else if (status === 'timeout') {
+                setError('地址已保存，但链上绑定超时，将在下次启动时重试');
+                return 'timeout';
+              } else {
+                setError(`地址已保存，但链上绑定失败：${event.payload.detail}`);
+                return 'failed';
+              }
+            });
           },
         );
       } catch {
@@ -186,7 +189,7 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
   const bindHint = bindStatus === 'binding'
     ? '链上绑定中，请稍候...'
     : bindStatus === 'success'
-      ? '链上绑定成功'
+      ? '已绑定'
       : null;
 
   return (

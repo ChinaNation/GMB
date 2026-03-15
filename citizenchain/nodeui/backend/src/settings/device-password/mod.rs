@@ -213,7 +213,7 @@ mod unix_pam_auth {
         ffi::{c_char, c_int, c_void, CString},
         ptr,
     };
-    use zeroize::{Zeroize, Zeroizing};
+    use zeroize::Zeroizing;
 
     const PAM_SUCCESS: c_int = 0;
     const PAM_BUF_ERR: c_int = 5;
@@ -479,10 +479,10 @@ pub(crate) fn verify_device_login_password(app: &AppHandle, password: &str) -> R
         fn CloseHandle(handle: Handle) -> Bool;
     }
 
-    use std::os::windows::ffi::OsStrExt;
     use zeroize::Zeroizing;
 
     fn wide_null(input: &str) -> Vec<u16> {
+        use std::os::windows::ffi::OsStrExt;
         std::ffi::OsStr::new(input)
             .encode_wide()
             .chain(std::iter::once(0))

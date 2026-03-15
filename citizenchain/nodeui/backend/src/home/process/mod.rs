@@ -851,7 +851,6 @@ fn spawn_node(
     let node_name = load_node_name(app)?;
 
     let mut cmd = Command::new(node_bin);
-    fee_address::ensure_powr_keystore_key(app)?;
     cmd.arg("--base-path")
         .arg(base_path)
         .arg("--rpc-port")
@@ -1124,18 +1123,11 @@ fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
 
 #[tauri::command]
 pub async fn start_node(app: AppHandle, unlock_password: String) -> Result<NodeStatus, String> {
-    let app2 = app.clone();
     let status = super::join_blocking_task(
         "start_node",
         tauri::async_runtime::spawn_blocking(move || start_node_sync(app, unlock_password)),
     )
     .await?;
-    // 后台异步同步奖励钱包绑定，不阻塞 start_node 返回
-    tauri::async_runtime::spawn(async move {
-        if let Err(err) = fee_address::sync_saved_reward_wallet_binding(&app2).await {
-            eprintln!("sync reward wallet binding skipped: {err}");
-        }
-    });
     Ok(status)
 }
 

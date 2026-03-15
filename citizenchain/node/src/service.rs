@@ -136,12 +136,13 @@ fn author_pre_digest(keystore: &sp_keystore::KeystorePtr) -> Option<Vec<u8>> {
 }
 
 fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceError> {
-    // 中文注释：密钥仅通过 keystore 管理，不再从环境变量读取，避免明文泄露于 /proc/PID/environ。
     let keys = keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE);
     if !keys.is_empty() {
         return Ok(());
     }
-    // 中文注释：节点首启自动生成唯一 powr 密钥，避免"无 key 仅告警继续跑"。
+    // 传 None 让 Substrate 生成 BIP39 助记词并写入 keystore 磁盘文件，
+    // nodeui 后续能读取同一把密钥来签名绑定交易。
+    // 注意：传 Some(suri) 只存内存不写磁盘，重启后丢失。
     keystore
         .sr25519_generate_new(POW_AUTHOR_KEY_TYPE, None)
         .map_err(|e| ServiceError::Other(format!("failed to generate powr key: {e}")))?;
