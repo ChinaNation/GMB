@@ -53,20 +53,6 @@ class TxStatusResponse {
   final String? failureReason;
 }
 
-class WalletBalanceResponse {
-  const WalletBalanceResponse({
-    required this.account,
-    required this.balance,
-    required this.symbol,
-    required this.updatedAt,
-  });
-
-  final String account;
-  final double balance;
-  final String symbol;
-  final int updatedAt;
-}
-
 class AdminCatalogEntryResponse {
   const AdminCatalogEntryResponse({
     required this.pubkeyHex,
@@ -252,51 +238,6 @@ class ApiClient {
       updatedAt: data['updated_at'] as int? ?? 0,
       failureReason:
           data['failure_reason']?.toString() ?? (code == 0 ? null : message),
-    );
-  }
-
-  Future<WalletBalanceResponse> fetchWalletBalance(
-    String account, {
-    String? pubkeyHex,
-  }) async {
-    final encoded = Uri.encodeQueryComponent(account);
-    final pubkeyParam = (pubkeyHex != null && pubkeyHex.trim().isNotEmpty)
-        ? '&pubkey_hex=${Uri.encodeQueryComponent(pubkeyHex)}'
-        : '';
-    final uri = Uri.parse(
-      '$_baseUrl/api/v1/wallet/balance?account=$encoded$pubkeyParam',
-    );
-    final response = await http.get(
-      uri,
-      headers: _headers(requireAuth: true),
-    );
-    if (response.statusCode != 200) {
-      throw Exception('wallet balance failed: ${response.statusCode}');
-    }
-
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final code = payload['code'] as int? ?? -1;
-    final message = payload['message']?.toString() ?? 'unknown';
-    if (code != 0) {
-      throw Exception('wallet balance rejected: code=$code message=$message');
-    }
-
-    final data = payload['data'];
-    if (data is! Map<String, dynamic>) {
-      throw Exception('wallet balance invalid response: missing data');
-    }
-    final rawBalance = data['balance'];
-    final balance = switch (rawBalance) {
-      num v => v.toDouble(),
-      String v => double.tryParse(v) ?? 0.0,
-      _ => 0.0,
-    };
-
-    return WalletBalanceResponse(
-      account: data['account']?.toString() ?? account,
-      balance: balance,
-      symbol: data['symbol']?.toString() ?? 'CIT',
-      updatedAt: data['updated_at'] as int? ?? 0,
     );
   }
 

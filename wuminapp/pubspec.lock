@@ -873,7 +873,7 @@ packages:
     source: hosted
     version: "3.9.1"
   polkadart:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: polkadart
       sha256: b2369eeb33ee155dcdf2a7af18de8961037b9cc28640e200f1475cea497bc3ab
