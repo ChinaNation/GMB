@@ -163,7 +163,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: ${{ startsWith(github.ref, 'refs/tags/') && always() }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -175,8 +175,21 @@ jobs:
           pattern: citizenchain-*
           path: release-assets
           merge-multiple: true
+          if-no-artifact-found: ignore
+
+      - name: Check whether any release assets were downloaded
+        id: assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find release-assets -type f | grep -q .; then
+            echo "has_files=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_files=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Publish release assets
+        if: steps.assets.outputs.has_files == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: release-assets/**/*
