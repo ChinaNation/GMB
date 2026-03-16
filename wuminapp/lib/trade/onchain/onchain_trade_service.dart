@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
@@ -112,8 +111,8 @@ class OnchainTradeService {
           final updated = record.copyWith(status: OnchainTxStatus.confirmed);
           await _repository.upsert(updated);
         }
-      } catch (e) {
-        debugPrint('[refreshPending] isTxConfirmed 异常: $e');
+      } catch (_) {
+        // 节点不可达时跳过，下次轮询重试
       }
     }
     return listRecentRecords();
