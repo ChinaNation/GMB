@@ -30,7 +30,7 @@ use primitives::{
     china::china_cb::CHINA_CB,
     china::china_ch::CHINA_CH,
     core_const::SS58_FORMAT,
-    genesis::{GENESIS_DEV_ACCOUNT_SS58, GENESIS_DEV_ALLOCATION, GENESIS_ISSUANCE},
+    genesis::GENESIS_ISSUANCE,
 };
 #[cfg(feature = "std")]
 use serde_json::{json, Value};
@@ -112,41 +112,24 @@ fn json_amount_to_u128(v: &Value) -> Option<u128> {
     v.as_str().and_then(|s| s.parse::<u128>().ok())
 }
 
-// Returns the genesis config presets populated with given parameters.
+// Returns the genesis config presets.
 #[cfg(feature = "std")]
-fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value {
+fn build_genesis() -> Value {
     // 中文注释：国储会信息统一从常量数组入口读取。
     let nrc_account = CHINA_CB
         .first()
         .and_then(|n| AccountId::decode(&mut &n.duoqian_address[..]).ok())
         .expect("NRC pallet_address must decode to AccountId");
 
-    // 中文注释：开发/测试附加账户在创世时从国储会创世发行中划拨固定金额。
-    let dev_accounts: Vec<AccountId> = endowed_accounts
-        .into_iter()
-        .filter(|a| a != &nrc_account)
-        .collect();
-    let dev_total_allocation = GENESIS_DEV_ALLOCATION
-        .checked_mul(dev_accounts.len() as u128)
-        .expect("development allocation total should not overflow");
-    let nrc_genesis_balance = GENESIS_ISSUANCE
-        .checked_sub(dev_total_allocation)
-        .expect("development allocation must not exceed genesis issuance");
+    // 中文注释：创世发行全额存入国储会多签地址。
     let mut genesis_balances: Vec<(AccountId, u128)> =
-        vec![(nrc_account.clone(), nrc_genesis_balance)];
+        vec![(nrc_account.clone(), GENESIS_ISSUANCE)];
 
     // 中文注释：省储行创立发行在创世时直接预置到各自 keyless_address（无私钥永久质押地址）。
     genesis_balances.extend(
         CHINA_CH
             .iter()
             .map(|bank| (AccountId::new(bank.keyless_address), bank.stake_amount)),
-    );
-
-    // 中文注释：开发/测试附加账户继续保留；其余额来自国储会创世发行切分。
-    genesis_balances.extend(
-        dev_accounts
-            .into_iter()
-            .map(|account| (account, GENESIS_DEV_ALLOCATION)),
     );
 
     // 中文注释：创世账户统一输出为链 SS58 地址（前缀 2027）。
@@ -223,13 +206,10 @@ fn testnet_genesis(endowed_accounts: Vec<AccountId>, _root: AccountId) -> Value 
     genesis
 }
 
-/// Return the development genesis config.
+/// Return the mainnet genesis config.
 #[cfg(feature = "std")]
 pub fn mainnet_config_genesis() -> Value {
-    // 开发账户
-    let development_account = AccountId::from_ss58check(GENESIS_DEV_ACCOUNT_SS58)
-        .expect("development account ss58 must be valid");
-    testnet_genesis(vec![development_account], AccountId::new([0u8; 32]))
+    build_genesis()
 }
 
 /// Provides the JSON representation of predefined genesis config for given `id`.
@@ -278,12 +258,12 @@ mod tests {
             .as_array()
             .expect("balances.balances should be an array");
 
-        // 中文注释：创世包含 1 个国储会地址 + 43 个省储行 keyless 质押地址 + 1 个开发地址。
-        assert_eq!(balances.len(), 1 + CHINA_CH.len() + 1);
+        // 中文注释：创世包含 1 个国储会地址 + 43 个省储行 keyless 质押地址。
+        assert_eq!(balances.len(), 1 + CHINA_CH.len());
     }
 
     #[test]
-    fn mainnet_genesis_issuance_split_is_correct() {
+    fn mainnet_genesis_issuance_goes_entirely_to_nrc() {
         let patch = mainnet_config_genesis();
         let balances = patch["balances"]["balances"]
             .as_array()
@@ -308,25 +288,8 @@ mod tests {
             })
             .expect("NRC balance entry should exist");
 
-        let development_account = AccountId::from_ss58check(GENESIS_DEV_ACCOUNT_SS58)
-            .expect("development account ss58 must be valid");
-        let dev_ss58 = account_to_genesis_ss58(&development_account);
-        let dev_amount = balances
-            .iter()
-            .find_map(|entry| {
-                let arr = entry.as_array()?;
-                let account = arr.first()?.as_str()?;
-                if account == dev_ss58 {
-                    arr.get(1).and_then(json_amount_to_u128)
-                } else {
-                    None
-                }
-            })
-            .expect("development balance entry should exist");
-
-        // 中文注释：创世发行先入国储会，再从国储会划拨开发账户固定金额。
-        assert_eq!(nrc_amount, GENESIS_ISSUANCE - GENESIS_DEV_ALLOCATION);
-        assert_eq!(dev_amount, GENESIS_DEV_ALLOCATION);
+        // 中文注释：创世发行全额存入国储会。
+        assert_eq!(nrc_amount, GENESIS_ISSUANCE);
 
         let total_in_patch: u128 = balances
             .iter()
@@ -340,7 +303,7 @@ mod tests {
             .sum();
         let total_shengbank_stake: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
 
-        // 中文注释：创世总注入 = 创世发行 + 省储行创立发行（开发账户余额来自国储会切分）。
+        // 中文注释：创世总注入 = 创世发行 + 省储行创立发行。
         assert_eq!(total_in_patch, GENESIS_ISSUANCE + total_shengbank_stake);
     }
 
