@@ -50,6 +50,8 @@ mod runtime {
     pub type TransactionPayment = pallet_transaction_payment;
     #[runtime::pallet_index(3)]
     pub type FullnodePowReward = fullnode_pow_reward;
+    #[runtime::pallet_index(4)]
+    pub type OnchainTransactionPow = onchain_transaction_pow::pallet;
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -103,6 +105,8 @@ impl fullnode_pow_reward::Config for Test {
     type FindAuthor = MockFindAuthor;
     type WeightInfo = ();
 }
+
+impl onchain_transaction_pow::pallet::Config for Test {}
 
 struct MockNrcAccountProvider;
 impl NrcAccountProvider<AccountId32> for MockNrcAccountProvider {
