@@ -1,0 +1,189 @@
+import 'dart:async';
+import 'dart:math';
+
+import 'package:flutter/foundation.dart';
+import 'package:polkadart/polkadart.dart' show HttpProvider, Hasher;
+
+class ChainRpc {
+  ChainRpc({String? rpcUrl}) {
+    if (rpcUrl != null && rpcUrl.isNotEmpty) {
+      _nodes = [rpcUrl];
+    } else {
+      const fromDefine = String.fromEnvironment('WUMINAPP_RPC_URL');
+      if (fromDefine.isNotEmpty) {
+        _nodes = [fromDefine];
+      } else {
+        // 本地节点放最前，其余节点随机打乱
+        final remote = List.of(_defaultNodes.skip(1))..shuffle(Random());
+        _nodes = [_defaultNodes.first, ...remote];
+      }
+    }
+  }
+
+  late final List<String> _nodes;
+  HttpProvider? _provider;
+  int _currentIndex = 0;
+
+  static const _defaultNodes = [
+    'http://127.0.0.1:9944',
+    'http://nrcgch.wuminapp.com:9944',
+    'http://prczss.wuminapp.com:9944',
+    'http://prclns.wuminapp.com:9944',
+    'http://prcgds.wuminapp.com:9944',
+    'http://prcgxs.wuminapp.com:9944',
+    'http://prcfjs.wuminapp.com:9944',
+    'http://prchns.wuminapp.com:9944',
+    'http://prcyns.wuminapp.com:9944',
+    'http://prcgzs.wuminapp.com:9944',
+    'http://prchus.wuminapp.com:9944',
+    'http://prcjxs.wuminapp.com:9944',
+    'http://prczjs.wuminapp.com:9944',
+    'http://prcjss.wuminapp.com:9944',
+    'http://prcsds.wuminapp.com:9944',
+    'http://prcsxs.wuminapp.com:9944',
+    'http://prches.wuminapp.com:9944',
+    'http://prchbs.wuminapp.com:9944',
+    'http://prchis.wuminapp.com:9944',
+    'http://prcsis.wuminapp.com:9944',
+    'http://prccqs.wuminapp.com:9944',
+    'http://prcscs.wuminapp.com:9944',
+    'http://prcgss.wuminapp.com:9944',
+    'http://prcbps.wuminapp.com:9944',
+    'http://prchas.wuminapp.com:9944',
+    'http://prcsjs.wuminapp.com:9944',
+    'http://prcljs.wuminapp.com:9944',
+    'http://prcjls.wuminapp.com:9944',
+    'http://prclis.wuminapp.com:9944',
+    'http://prcnxs.wuminapp.com:9944',
+    'http://prcqhs.wuminapp.com:9944',
+    'http://prcahs.wuminapp.com:9944',
+    'http://prctws.wuminapp.com:9944',
+    'http://prcxzs.wuminapp.com:9944',
+    'http://prcxjs.wuminapp.com:9944',
+    'http://prcxks.wuminapp.com:9944',
+    'http://prcals.wuminapp.com:9944',
+    'http://prccls.wuminapp.com:9944',
+    'http://prctss.wuminapp.com:9944',
+    'http://prchxs.wuminapp.com:9944',
+    'http://prckls.wuminapp.com:9944',
+    'http://prchts.wuminapp.com:9944',
+    'http://prcrhs.wuminapp.com:9944',
+    'http://prcxas.wuminapp.com:9944',
+    'http://prchjs.wuminapp.com:9944',
+  ];
+
+  // twox_128("System") + twox_128("Account")
+  static final Uint8List _systemAccountPrefix = _hexDecode(
+    '26aa394eea5630e07c48ae0c9558cef7'
+    'b99d880ec681799c0cf30e8886371da9',
+  );
+
+  /// 查询链上余额，返回元（yuan）。账户不存在返回 0.0。
+  Future<double> fetchBalance(String pubkeyHex) async {
+    final accountId = _pubkeyHexToBytes(pubkeyHex);
+    final storageKey = _buildSystemAccountKey(accountId);
+    final keyHex = '0x${_hexEncode(storageKey)}';
+
+    final result = await _rpcCall('state_getStorage', [keyHex]);
+    if (result == null) {
+      return 0.0;
+    }
+
+    final bytes = _hexDecode((result as String).substring(2));
+    return _decodeFreeBalance(bytes);
+  }
+
+  /// 构造 System.Account(accountId) 的 storage key。
+  Uint8List _buildSystemAccountKey(Uint8List accountId) {
+    // blake2_128_concat = blake2b_128(data) + data
+    final blake2Hash = Hasher.blake2b128.hash(accountId);
+
+    final key = Uint8List(
+      _systemAccountPrefix.length + blake2Hash.length + accountId.length,
+    );
+    var offset = 0;
+    key.setAll(offset, _systemAccountPrefix);
+    offset += _systemAccountPrefix.length;
+    key.setAll(offset, blake2Hash);
+    offset += blake2Hash.length;
+    key.setAll(offset, accountId);
+    return key;
+  }
+
+  /// 从 SCALE 编码的 AccountInfo 中提取 free 余额，转换为元。
+  double _decodeFreeBalance(Uint8List data) {
+    // AccountInfo 布局：
+    // [0..3]   nonce u32
+    // [4..7]   consumers u32
+    // [8..11]  providers u32
+    // [12..15] sufficients u32
+    // [16..31] free u128 (LE)
+    if (data.length < 32) {
+      return 0.0;
+    }
+    final freeFen = _readU128LE(data, 16);
+    // 100 fen = 1 yuan, TOKEN_DECIMALS = 2
+    return freeFen.toDouble() / 100.0;
+  }
+
+  /// 读取 16 字节小端序 u128。
+  BigInt _readU128LE(Uint8List bytes, int offset) {
+    var value = BigInt.zero;
+    for (var i = 15; i >= 0; i--) {
+      value = (value << 8) | BigInt.from(bytes[offset + i]);
+    }
+    return value;
+  }
+
+  static const _maxRetries = 3;
+  static const _requestTimeout = Duration(seconds: 8);
+
+  /// 发送 JSON-RPC 请求，自动故障切换（最多尝试 3 个节点）。
+  Future<dynamic> _rpcCall(String method, List<dynamic> params) async {
+    final maxAttempts = _nodes.length < _maxRetries ? _nodes.length : _maxRetries;
+    final tried = <int>{};
+    while (tried.length < maxAttempts) {
+      final provider = _getProvider();
+      tried.add(_currentIndex);
+      try {
+        final response = await provider
+            .send(method, params)
+            .timeout(_requestTimeout);
+        if (response.error != null) {
+          throw Exception('RPC error: ${response.error}');
+        }
+        return response.result;
+      } catch (e) {
+        debugPrint('RPC node ${_nodes[_currentIndex]} failed: $e');
+        _provider = null;
+        _currentIndex = (_currentIndex + 1) % _nodes.length;
+      }
+    }
+    throw Exception('RPC 节点不可达（已尝试 $maxAttempts 个节点）');
+  }
+
+  HttpProvider _getProvider() {
+    _provider ??= HttpProvider(Uri.parse(_nodes[_currentIndex]));
+    return _provider!;
+  }
+
+  static Uint8List _pubkeyHexToBytes(String hex) {
+    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
+    if (clean.length != 64) {
+      throw ArgumentError('pubkeyHex 应为 32 字节（64 hex），实际: ${clean.length}');
+    }
+    return _hexDecode(clean);
+  }
+
+  static Uint8List _hexDecode(String hex) {
+    final result = Uint8List(hex.length ~/ 2);
+    for (var i = 0; i < result.length; i++) {
+      result[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
+    }
+    return result;
+  }
+
+  static String _hexEncode(Uint8List bytes) {
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+}

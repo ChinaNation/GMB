@@ -8,7 +8,7 @@
 - 收款码扫码解析
 - 交易模型定义
 - 本地交易记录持久化
-- 后端 `prepare/submit/status` 网关调用
+- 后端 `prepare/submit/status` 网关调用（过渡期，规划迁移至 `lib/rpc/` 直连 RPC）
 - 交易编排（签名、提交、状态刷新）
 
 ## 2. 文件结构
@@ -154,6 +154,14 @@ onchain/
 
 ## 9. 与治理模块边界
 
-- 本模块只处理“资产转账”。
+- 本模块只处理”资产转账”。
 - 提案/投票字段与流程规范由 `lib/governance/GOVERNANCE_TECHNICAL.md` 定义。
 - 治理交易若复用同一签名器，仍必须保持签名域隔离。
+
+## 10. 迁移规划：直连 RPC
+
+当前转账流程通过外部网关 API（`prepare/submit/status`）完成。规划迁移至 `lib/rpc/` 直连链上节点：
+
+- 使用 `ChainRpc` 查询 nonce、构造 extrinsic、提交签名交易
+- 移除对 `ApiClient.prepareTx / submitTx / fetchTxStatus` 的依赖
+- `OnchainTradeGateway` 接口保持不变，仅替换实现为 `RpcOnchainTradeGateway`

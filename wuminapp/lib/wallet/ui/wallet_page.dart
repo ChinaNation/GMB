@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wuminapp_mobile/login/pages/qr_scan_page.dart';
-import 'package:wuminapp_mobile/wallet/capabilities/api_client.dart';
+import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 class MyWalletPage extends StatefulWidget {
@@ -21,10 +21,11 @@ class MyWalletPage extends StatefulWidget {
 
 class _MyWalletPageState extends State<MyWalletPage> {
   final WalletManager _walletService = WalletManager();
-  final ApiClient _apiClient = ApiClient();
+  final ChainRpc _chainRpc = ChainRpc();
   static const double _actionIconSize = 20;
   late Future<List<WalletProfile>> _walletsFuture;
   int? _activeWalletIndex;
+  bool _balanceRefreshing = false;
 
   bool get _isSelectionMode => widget.selectForTrade || widget.selectForBind;
 
@@ -45,26 +46,35 @@ class _MyWalletPageState extends State<MyWalletPage> {
   }
 
   Future<void> _refreshBalancesFromChain() async {
-    final wallets = await _walletService.getWallets();
-    bool updated = false;
-    for (final wallet in wallets) {
-      try {
-        final result = await _apiClient.fetchWalletBalance(wallet.address);
-        if (result.balance != wallet.balance) {
-          await _walletService.setWalletBalance(
-              wallet.walletIndex, result.balance);
-          updated = true;
+    if (_balanceRefreshing) return;
+    setState(() { _balanceRefreshing = true; });
+    try {
+      final wallets = await _walletService.getWallets();
+      bool updated = false;
+      for (final wallet in wallets) {
+        try {
+          final balance = await _chainRpc.fetchBalance(wallet.pubkeyHex);
+          if (balance != wallet.balance) {
+            await _walletService.setWalletBalance(
+                wallet.walletIndex, balance);
+            updated = true;
+          }
+        } catch (e) {
+          debugPrint(
+              'wallet balance refresh failed: ${wallet.address}, err=$e');
         }
-      } catch (e) {
-        debugPrint('wallet balance refresh failed: ${wallet.address}, err=$e');
+      }
+      if (!mounted) return;
+      if (updated) {
+        setState(() {
+          _walletsFuture = _walletService.getWallets();
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() { _balanceRefreshing = false; });
       }
     }
-    if (!mounted || !updated) {
-      return;
-    }
-    setState(() {
-      _walletsFuture = _walletService.getWallets();
-    });
   }
 
   Future<void> _loadActiveWallet() async {
@@ -289,6 +299,16 @@ class _MyWalletPageState extends State<MyWalletPage> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
+                        if (_balanceRefreshing) ...[
+                          const SizedBox(width: 8),
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -326,7 +346,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
   }
 
   String _formatBalance(double balance) {
-    return balance.toStringAsFixed(2);
+    return '${balance.toStringAsFixed(2)} GMB';
   }
 
   Widget _buildWalletEntryOption({
@@ -452,46 +472,50 @@ class _MyWalletPageState extends State<MyWalletPage> {
               return _buildEmptyWalletChoices();
             }
 
-            return ListView(
-              children: [
-                for (int i = 0; i < wallets.length; i++) ...[
-                  (_isSelectionMode
-                      ? _buildWalletCard(
-                          wallets[i],
-                          isLast: i == wallets.length - 1,
-                        )
-                      : Dismissible(
-                          key: ValueKey(wallets[i].walletIndex),
-                          direction: DismissDirection.endToStart,
-                          confirmDismiss: (_) => _confirmDelete(wallets[i]),
-                          onDismissed: (_) => _deleteWallet(wallets[i]),
-                          background: Container(
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade400,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.white,
-                            ),
-                          ),
-                          child: _buildWalletCard(
+            return RefreshIndicator(
+              onRefresh: _refreshBalancesFromChain,
+              child: ListView(
+                children: [
+                  for (int i = 0; i < wallets.length; i++) ...[
+                    (_isSelectionMode
+                        ? _buildWalletCard(
                             wallets[i],
                             isLast: i == wallets.length - 1,
-                          ),
-                        )),
-                  const SizedBox(height: 10),
+                          )
+                        : Dismissible(
+                            key: ValueKey(wallets[i].walletIndex),
+                            direction: DismissDirection.endToStart,
+                            confirmDismiss: (_) => _confirmDelete(wallets[i]),
+                            onDismissed: (_) => _deleteWallet(wallets[i]),
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 20),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade400,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.white,
+                              ),
+                            ),
+                            child: _buildWalletCard(
+                              wallets[i],
+                              isLast: i == wallets.length - 1,
+                            ),
+                          )),
+                    const SizedBox(height: 10),
+                  ],
+                  if (!_isSelectionMode) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: _showWalletEntryChooser,
+                      child: const Text('导入钱包/创建钱包'),
+                    ),
+                  ],
                 ],
-                if (!_isSelectionMode) ...[
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: _showWalletEntryChooser,
-                    child: const Text('导入钱包/创建钱包'),
-                  ),
-                ],
-              ],
+              ),
             );
           },
         ),
@@ -625,6 +649,32 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                   },
                 ),
             ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE9F5EF),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                const Text(
+                  '余额',
+                  style: TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${widget.wallet.balance.toStringAsFixed(2)} GMB',
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0B3D2E),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           const Text(
