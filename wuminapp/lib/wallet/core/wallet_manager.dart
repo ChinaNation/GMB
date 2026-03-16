@@ -1,6 +1,8 @@
 import 'package:bip39/bip39.dart' as bip39;
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:isar/isar.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_secure_keys.dart';
@@ -48,9 +50,18 @@ class WalletSecret {
   final String mnemonic;
 }
 
+class WalletAuthException implements Exception {
+  const WalletAuthException(this.message);
+  final String message;
+
+  @override
+  String toString() => 'WalletAuthException: $message';
+}
+
 class WalletManager {
   static const int _ss58Format = 2027;
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static final LocalAuthentication _localAuth = LocalAuthentication();
 
   Future<List<WalletProfile>> getWallets() async {
     final isar = await WalletIsar.instance.db();
@@ -340,7 +351,6 @@ class WalletManager {
 
     final created = WalletSettingsEntity()
       ..id = 0
-      ..faceAuthEnabled = true
       ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
     await isar.writeTxn(() async {
       await isar.walletSettingsEntitys.put(created);
@@ -356,7 +366,29 @@ class WalletManager {
   }
 
   Future<String?> _readMnemonic(int walletIndex) async {
+    await _authenticateIfSupported();
     return _secureStorage.read(key: _mnemonicKey(walletIndex));
+  }
+
+  static Future<void> _authenticateIfSupported() async {
+    try {
+      final supported = await _localAuth.isDeviceSupported();
+      if (!supported) return;
+
+      final ok = await _localAuth.authenticate(
+        localizedReason: '请验证身份以访问钱包密钥',
+        options: const AuthenticationOptions(
+          biometricOnly: false,
+          stickyAuth: true,
+          useErrorDialogs: true,
+        ),
+      );
+      if (!ok) {
+        throw const WalletAuthException('未通过身份验证');
+      }
+    } on PlatformException catch (e) {
+      throw WalletAuthException('身份验证不可用：${e.message ?? e.code}');
+    }
   }
 
   Future<void> _deleteMnemonic(int walletIndex) async {

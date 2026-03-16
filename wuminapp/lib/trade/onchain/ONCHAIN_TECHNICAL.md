@@ -8,8 +8,9 @@
 - 收款码扫码解析
 - 交易模型定义
 - 本地交易记录持久化
-- 后端 `prepare/submit/status` 网关调用（过渡期，规划迁移至 `lib/rpc/` 直连 RPC）
 - 交易编排（签名、提交、状态刷新）
+
+链上通信（extrinsic 构造、签名、提交）由 `lib/rpc/onchain.dart` 统一实现，本模块通过 `OnchainRpc` 调用。
 
 ## 2. 文件结构
 
@@ -19,7 +20,6 @@ onchain/
 ├── trade_qr_scan_page.dart
 ├── onchain_trade_models.dart
 ├── onchain_trade_repository.dart
-├── onchain_trade_gateway.dart
 ├── onchain_trade_service.dart
 └── ONCHAIN_TECHNICAL.md
 ```
@@ -29,19 +29,20 @@ onchain/
 ### 3.1 交易提交
 
 1. 页面收集 `toAddress/amount/symbol`
-2. 调用 `UserIdentificationService.confirmBeforeSign()` 做签名前验证
-3. `OnchainTradeService.submitTransfer()`：
-   - 读取当前钱包与助记词
-   - 调 `gateway.prepareTransfer()` 获取 signer payload
-   - 调用 `LocalSigner` 做本机 `sr25519` 签名
-   - 调 `gateway.submitTransfer()` 广播交易
-   - 写入 `OnchainTradeRepository`
+2. `OnchainTradeService.submitTransfer()`：
+   - 读取当前钱包与助记词（自动触发生物识别/设备密码验证）
+   - 调用 `OnchainRpc.transferKeepAlive()` 直连链上节点完成转账
+     - 签名通过回调传入：`Keyring.sr25519.fromMnemonic()` → `pair.sign(payload)`
+     - 内部自动完成：获取 nonce、构造 extrinsic、提交到节点
+   - 返回 `({String txHash, int usedNonce})`，连同 nonce 一起写入 `OnchainTradeRepository`
 
 ### 3.2 交易状态刷新
 
 1. 页面定时（6 秒）和下拉刷新触发 `refreshPendingRecords()`
-2. 仅对未终态记录轮询 `gateway.queryStatus(txHash)`
-3. 更新本地记录并回显统计与列表
+2. 仅对未终态且有 `usedNonce` 的记录调用 `OnchainRpc.isTxConfirmed(address, usedNonce)` 通过 nonce 对比判断确认状态
+3. 确认后调用 `repository.upsert()` 将状态更新为 `confirmed`
+4. 节点不可达时跳过，下次轮询重试
+5. 返回更新后的记录列表回显统计与 UI
 
 ### 3.3 收款码扫码
 
@@ -56,8 +57,7 @@ onchain/
 
 - 本地存储：Isar `TxRecordEntity`
 - 钱包来源：`WalletManager`
-- 签名入口：`LocalSigner`
-- API 调用：`ApiClient`
+- 链上操作：`OnchainRpc`（`lib/rpc/onchain.dart`）
 - 签名算法：`sr25519`（`polkadart_keyring`）
 
 扫码签名扩展：
@@ -84,84 +84,36 @@ onchain/
 | `amount` | `double` | `> 0` |
 | `symbol` | `String` | 非空，提交前转大写 |
 
-### 6.2 Prepare 请求字段（App -> 网关）
+### 6.2 链上转账参数
 
-`POST /api/v1/tx/prepare`
+转账通过 `OnchainRpc.transferKeepAlive()` 直连节点完成，参数：
 
-| 字段 | 类型 | 规则 |
+| 参数 | 类型 | 说明 |
 | --- | --- | --- |
-| `from_address` | `String` | 当前激活钱包地址 |
-| `pubkey_hex` | `String` | `0x` + 64 hex（sr25519 公钥） |
-| `to_address` | `String` | 收款地址 |
-| `amount` | `number` | 当前实现为 number；后续建议升级为 decimal string |
-| `symbol` | `String` | 大写币种代码（如 `GMB`） |
+| `fromAddress` | `String` | 当前激活钱包 SS58 地址 |
+| `signerPubkey` | `Uint8List` | sr25519 公钥 32 字节 |
+| `toAddress` | `String` | 收款 SS58 地址 |
+| `amountYuan` | `double` | 转账金额（元） |
+| `sign` | `Function` | 签名回调，接收 payload 返回 64 字节签名 |
 
-返回字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `prepared_id` | `String` | 预处理交易 ID |
-| `signer_payload_hex` | `String` | 待签名 payload（`0x` hex） |
-| `expires_at` | `int` | 预处理过期时间（epoch 秒） |
-
-### 6.3 Submit 请求字段（App -> 网关）
-
-`POST /api/v1/tx/submit`
-
-| 字段 | 类型 | 规则 |
-| --- | --- | --- |
-| `prepared_id` | `String` | 来自 prepare |
-| `pubkey_hex` | `String` | 签名钱包公钥 |
-| `signature_hex` | `String` | `0x` + 128 hex（sr25519 64 字节签名） |
-
-返回字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `tx_hash` | `String` | 链上交易哈希 |
-| `status` | `String` | `pending/confirmed/failed` |
-| `failure_reason` | `String?` | 失败原因（可空） |
-
-### 6.4 状态查询字段（App -> 网关）
-
-`GET /api/v1/tx/status/:tx_hash`
-
-返回字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `tx_hash` | `String` | 交易哈希 |
-| `status` | `String` | `pending/confirmed/failed` |
-| `updated_at` | `int` | 更新时间（epoch 秒） |
-| `failure_reason` | `String?` | 失败原因 |
+返回值：`({String txHash, int usedNonce})` — 交易哈希（`0x` + 64 hex）+ 提交时使用的 nonce
 
 ## 7. 格式与校验标准
 
-- `signer_payload_hex` 必须为偶数字节 hex，解码后非空。
-- `signature_hex` 必须与当前钱包公钥匹配（防错签）。
 - 交易状态仅允许：`pending`、`confirmed`、`failed`。
 - 终态规则：`confirmed/failed` 为终态，终态后停止轮询。
 - 签名算法固定 `sr25519`，不支持算法协商。
+- 金额精度：`BigInt.from((amountYuan * 100).round())`，避免浮点误差。
 
 ## 8. 转账流程标准
 
 1. 输入校验：`toAddress/symbol/amount`。
-2. 预处理：调用 `tx/prepare` 获取 `prepared_id + signer_payload_hex`。
-3. 签名：对 `signer_payload_hex` 原始字节做 `sr25519` 签名。
-4. 广播：提交 `prepared_id + signature_hex` 到 `tx/submit`。
-5. 落库：写入 `TxRecordEntity`，状态默认按返回值。
-6. 轮询：仅轮询未终态记录，收到终态后停止。
+2. 直连链上节点：`OnchainRpc.transferKeepAlive()` 一步完成 extrinsic 构造、签名、提交（读取助记词时自动触发生物识别/设备密码验证）。
+4. 落库：写入 `TxRecordEntity`（含 `usedNonce`），状态默认 `pending`。
+5. 轮询：仅轮询未终态且有 `usedNonce` 的记录，通过 `isTxConfirmed(address, usedNonce)` 对比链上当前 nonce，确认后更新状态并停止轮询。
 
 ## 9. 与治理模块边界
 
-- 本模块只处理”资产转账”。
+- 本模块只处理"资产转账"。
 - 提案/投票字段与流程规范由 `lib/governance/GOVERNANCE_TECHNICAL.md` 定义。
 - 治理交易若复用同一签名器，仍必须保持签名域隔离。
-
-## 10. 迁移规划：直连 RPC
-
-当前转账流程通过外部网关 API（`prepare/submit/status`）完成。规划迁移至 `lib/rpc/` 直连链上节点：
-
-- 使用 `ChainRpc` 查询 nonce、构造 extrinsic、提交签名交易
-- 移除对 `ApiClient.prepareTx / submitTx / fetchTxStatus` 的依赖
-- `OnchainTradeGateway` 接口保持不变，仅替换实现为 `RpcOnchainTradeGateway`

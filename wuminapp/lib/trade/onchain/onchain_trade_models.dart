@@ -63,58 +63,6 @@ class OnchainTransferDraft {
   final String symbol;
 }
 
-class OnchainPrepareRequest {
-  const OnchainPrepareRequest({
-    required this.fromAddress,
-    required this.pubkeyHex,
-    required this.toAddress,
-    required this.amount,
-    required this.symbol,
-  });
-
-  final String fromAddress;
-  final String pubkeyHex;
-  final String toAddress;
-  final double amount;
-  final String symbol;
-}
-
-class OnchainPrepareResult {
-  const OnchainPrepareResult({
-    required this.preparedId,
-    required this.signerPayloadHex,
-    required this.expiresAt,
-  });
-
-  final String preparedId;
-  final String signerPayloadHex;
-  final int expiresAt;
-}
-
-class OnchainSignedPreparedTransfer {
-  const OnchainSignedPreparedTransfer({
-    required this.preparedId,
-    required this.pubkeyHex,
-    required this.signatureHex,
-  });
-
-  final String preparedId;
-  final String pubkeyHex;
-  final String signatureHex;
-}
-
-class OnchainSubmitResult {
-  const OnchainSubmitResult({
-    required this.txHash,
-    required this.status,
-    this.failureReason,
-  });
-
-  final String txHash;
-  final OnchainTxStatus status;
-  final String? failureReason;
-}
-
 class OnchainTxRecord {
   const OnchainTxRecord({
     required this.txHash,
@@ -125,6 +73,7 @@ class OnchainTxRecord {
     required this.createdAt,
     required this.status,
     this.failureReason,
+    this.usedNonce,
   });
 
   final String txHash;
@@ -135,6 +84,7 @@ class OnchainTxRecord {
   final DateTime createdAt;
   final OnchainTxStatus status;
   final String? failureReason;
+  final int? usedNonce;
 
   OnchainTxRecord copyWith({
     String? txHash,
@@ -146,6 +96,7 @@ class OnchainTxRecord {
     OnchainTxStatus? status,
     String? failureReason,
     bool clearFailureReason = false,
+    int? usedNonce,
   }) {
     return OnchainTxRecord(
       txHash: txHash ?? this.txHash,
@@ -157,6 +108,7 @@ class OnchainTxRecord {
       status: status ?? this.status,
       failureReason:
           clearFailureReason ? null : (failureReason ?? this.failureReason),
+      usedNonce: usedNonce ?? this.usedNonce,
     );
   }
 
@@ -170,6 +122,7 @@ class OnchainTxRecord {
       'createdAtMillis': createdAt.millisecondsSinceEpoch,
       'status': onchainTxStatusToString(status),
       'failureReason': failureReason,
+      'usedNonce': usedNonce,
     };
   }
 
@@ -187,6 +140,7 @@ class OnchainTxRecord {
       status:
           onchainTxStatusFromString(json['status']?.toString() ?? 'pending'),
       failureReason: json['failureReason']?.toString(),
+      usedNonce: (json['usedNonce'] as num?)?.toInt(),
     );
   }
 }

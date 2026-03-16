@@ -44,7 +44,8 @@ class LocalOnchainTradeRepository implements OnchainTradeRepository {
       ..symbol = model.symbol
       ..createdAtMillis = model.createdAt.millisecondsSinceEpoch
       ..status = onchainTxStatusToString(model.status)
-      ..failureReason = model.failureReason;
+      ..failureReason = model.failureReason
+      ..usedNonce = model.usedNonce;
   }
 
   OnchainTxRecord _toModel(TxRecordEntity entity) {
@@ -57,6 +58,7 @@ class LocalOnchainTradeRepository implements OnchainTradeRepository {
       createdAt: DateTime.fromMillisecondsSinceEpoch(entity.createdAtMillis),
       status: onchainTxStatusFromString(entity.status),
       failureReason: entity.failureReason,
+      usedNonce: entity.usedNonce,
     );
   }
 }
