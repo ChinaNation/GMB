@@ -1,4 +1,4 @@
-name: citizenchain-multi-platform-installer
+name: citizenchain-installer
 
 on:
   workflow_dispatch:
@@ -177,12 +177,14 @@ jobs:
           merge-multiple: true
           if-no-artifact-found: ignore
 
-      - name: Check whether any release assets were downloaded
+      - name: Collect installer packages for release
         id: assets
         shell: bash
         run: |
           set -euo pipefail
-          if find release-assets -type f | grep -q .; then
+          mkdir -p release-packages
+          find release-assets -type f \( -name '*.deb' -o -name '*.dmg' -o -name '*.msi' \) -exec cp {} release-packages/ \;
+          if find release-packages -type f | grep -q .; then
             echo "has_files=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_files=false" >> "$GITHUB_OUTPUT"
@@ -192,4 +194,5 @@ jobs:
         if: steps.assets.outputs.has_files == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          files: release-assets/**/*
+          files: release-packages/*
+          overwrite_files: true
