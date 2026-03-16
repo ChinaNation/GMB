@@ -8,7 +8,7 @@
 - 本地机密材料读取（助记词）
 - 登录签名编排（签名执行由 `lib/signer` 负责）
 - 转账/提案/投票所需钱包上下文输出（地址、公钥、算法、机构角色）
-- 钱包相关后端 API 调用
+- 余额查询（通过 `lib/rpc/` 直连链上节点）
 - 管理员目录、观察账户、证明态等钱包周边能力
 
 约束：钱包相关代码只应从 `wallet/...` 引用。
@@ -20,6 +20,10 @@ lib/
 ├── Isar/
 │   ├── wallet_isar.dart
 │   └── wallet_isar.g.dart
+├── rpc/
+│   ├── chain_rpc.dart          ← 链上 RPC 公共模块（余额查询等）
+│   ├── rpc.dart
+│   └── RPC_TECHNICAL.md
 ├── signer/
 │   ├── local_signer.dart
 │   ├── qr_signer.dart
@@ -31,7 +35,7 @@ lib/
     │   ├── user_identification.dart
     │   └── user_identification_settings.dart
     ├── capabilities/
-    │   ├── api_client.dart
+    │   ├── api_client.dart         ← SFID 绑定、管理员目录等非链上查询
     │   ├── sign_service.dart
     │   ├── sfid_binding_service.dart
     │   ├── attestation_service.dart
@@ -67,7 +71,7 @@ lib/
   - 复用 `LocalSigner` 执行 `sr25519` 签名
   - 白名单校验、防重放校验
 - `api_client.dart`
-  - 钱包相关后端接口统一入口
+  - 非链上查询的外部服务接口（SFID 绑定、管理员目录、交易 prepare/submit 过渡期）
 - `wallet_type_service.dart`
   - 管理员目录缓存与角色识别
 - `attestation_service.dart`
@@ -79,6 +83,7 @@ lib/
 
 - `wallet_page.dart`
   - 钱包列表、创建、导入、删除、激活、地址复制
+  - 余额显示与刷新（通过 `lib/rpc/ChainRpc.fetchBalance()` 直连节点）
 
 ## 4. 关键流程
 
@@ -96,21 +101,31 @@ lib/
 3. 按新钱包写入 Isar + secure storage
 4. 设为当前激活钱包
 
-### 4.3 登录签名
+### 4.3 余额查询
+
+1. 页面 `initState` 和下拉刷新触发 `_refreshBalancesFromChain()`
+2. 遍历所有本地钱包，对每个钱包：
+   - 调用 `ChainRpc.fetchBalance(wallet.pubkeyHex)` 直连链上节点
+   - RPC 方法：`state_getStorage`（`System.Account` storage key）
+   - 解码 SCALE 编码的 `AccountInfo`，提取 `free` 余额（分），转换为元
+3. 若余额有变化，更新 Isar 中的 `WalletProfileEntity.balance`
+4. 刷新 UI 显示
+
+### 4.4 登录签名
 
 1. 登录模块解析挑战并完成白名单/防重放
 2. 钱包模块读取当前钱包助记词
 3. 调用 `LocalSigner` 完成 `sr25519` 签名并回传回执 payload
 
-### 4.4 链上交易签名（由 trade/onchain + signer 调用）
+### 4.5 链上交易签名（由 trade/onchain + signer 调用）
 
-1. 请求后端 `tx/prepare`
+1. 请求后端 `tx/prepare`（过渡期，规划迁移至 `lib/rpc/` 直连 RPC）
 2. 读取当前钱包密钥材料
 3. `LocalSigner` 签 signer payload
 4. 请求后端 `tx/submit`
 5. 本地 Isar 记录交易状态并轮询刷新
 
-### 4.5 治理提案/投票签名（由 governance + signer 调用，规划）
+### 4.6 治理提案/投票签名（由 governance + signer 调用，规划）
 
 1. 治理模块按业务类型组装提案/投票字段。
 2. 钱包模块输出当前激活钱包上下文（`address/pubkeyHex/alg/ss58`）。
@@ -184,6 +199,8 @@ lib/
   - `signUtf8 / signBytes`
 - `UserIdentificationService`
   - `confirmBeforeSign`
+- `ChainRpc`（`lib/rpc/chain_rpc.dart`）
+  - `fetchBalance` — 直连节点查询链上余额
 
 ## 9. 测试覆盖（当前）
 
@@ -223,7 +240,7 @@ lib/
 
 ### 10.3 规划中的元数据扩展
 
-为支持“本机签名 + 扫码签名”长期并存，建议在钱包元数据新增：
+为支持"本机签名 + 扫码签名"长期并存，建议在钱包元数据新增：
 
 - `signMode: local | external`
 - `externalSignerHint`（可选，外部签名设备标识）
@@ -236,4 +253,4 @@ lib/
 - 联合提案必须包含 `eligible_total/snapshot_nonce/snapshot_signature` 三元组。
 - 公民投票必须包含 `sfid_hash/nonce/signature` 三元组。
 - 钱包模块负责提供签名账户上下文，不负责生成 SFID 凭证签名。
-- 钱包模块必须保证“登录签名”和“转账/治理签名”使用不同签名 payload。
+- 钱包模块必须保证"登录签名"和"转账/治理签名"使用不同签名 payload。
