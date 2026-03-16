@@ -2,11 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:wuminapp_mobile/login/models/login_exception.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_service.dart';
 import 'package:wuminapp_mobile/trade/onchain/trade_qr_scan_page.dart';
-import 'package:wuminapp_mobile/wallet/core/user_identification.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
 
@@ -23,8 +21,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   static const Color _cardBgColor = Color(0xFFF5F5F5);
   static const Color _inputTextColor = Colors.black87;
   final OnchainTradeService _tradeService = OnchainTradeService();
-  final UserIdentificationService _signConfirmService =
-      UserIdentificationService();
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   static const List<String> _symbols = ['GMB'];
@@ -169,10 +165,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       _submitting = true;
     });
     try {
-      await _signConfirmService.confirmBeforeSign(
-        localizedReason: '请验证身份后执行交易签名',
-      );
-
       final record = await _tradeService.submitTransfer(
         OnchainTransferDraft(
           toAddress: toAddress,
@@ -189,12 +181,12 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       _toController.clear();
       _amountController.clear();
       await _reloadRecords(syncPending: true);
-    } on LoginException catch (e) {
+    } on WalletAuthException catch (e) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('签名失败：${e.message}')),
+        SnackBar(content: Text(e.message)),
       );
     } on OnchainTradeException catch (e) {
       if (!mounted) {

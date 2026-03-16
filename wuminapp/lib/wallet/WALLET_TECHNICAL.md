@@ -21,7 +21,8 @@ lib/
 │   ├── wallet_isar.dart
 │   └── wallet_isar.g.dart
 ├── rpc/
-│   ├── chain_rpc.dart          ← 链上 RPC 公共模块（余额查询等）
+│   ├── chain_rpc.dart          ← 底层 RPC 通信（节点管理、JSON-RPC 方法）
+│   ├── onchain.dart            ← onchain 模块 RPC 功能（转账、状态查询）
 │   ├── rpc.dart
 │   └── RPC_TECHNICAL.md
 ├── signer/
@@ -30,10 +31,8 @@ lib/
 │   └── SIGNER_TECHNICAL.md
 └── wallet/
     ├── core/
-    │   ├── wallet_manager.dart
-    │   ├── wallet_secure_keys.dart
-    │   ├── user_identification.dart
-    │   └── user_identification_settings.dart
+    │   ├── wallet_manager.dart         ← 钱包生命周期 + 助记词读取守卫
+    │   └── wallet_secure_keys.dart
     ├── capabilities/
     │   ├── api_client.dart         ← SFID 绑定、管理员目录等非链上查询
     │   ├── sign_service.dart
@@ -53,16 +52,13 @@ lib/
 - `wallet_manager.dart`
   - 钱包生命周期与地址派生
   - 助记词写入 secure storage
+  - 助记词读取时强制生物识别/设备密码验证（`_authenticateIfSupported()`）
   - 钱包元数据写入 Isar
 - `Isar/wallet_isar.dart`
   - Isar 集合定义与启动迁移
   - schema 升级与历史键清理（当前 `v4`）
 - `wallet_secure_keys.dart`
   - 机密 key 命名规范
-- `user_identification.dart`
-  - 签名前生物识别守卫
-- `user_identification_settings.dart`
-  - 生物识别开关持久化（Isar）
 
 ### 3.2 `capabilities`
 
@@ -71,7 +67,7 @@ lib/
   - 复用 `LocalSigner` 执行 `sr25519` 签名
   - 白名单校验、防重放校验
 - `api_client.dart`
-  - 非链上查询的外部服务接口（SFID 绑定、管理员目录、交易 prepare/submit 过渡期）
+  - 非链上查询的外部服务接口（SFID 绑定、管理员目录）
 - `wallet_type_service.dart`
   - 管理员目录缓存与角色识别
 - `attestation_service.dart`
@@ -117,13 +113,12 @@ lib/
 2. 钱包模块读取当前钱包助记词
 3. 调用 `LocalSigner` 完成 `sr25519` 签名并回传回执 payload
 
-### 4.5 链上交易签名（由 trade/onchain + signer 调用）
+### 4.5 链上交易签名（由 trade/onchain 调用）
 
-1. 请求后端 `tx/prepare`（过渡期，规划迁移至 `lib/rpc/` 直连 RPC）
-2. 读取当前钱包密钥材料
-3. `LocalSigner` 签 signer payload
-4. 请求后端 `tx/submit`
-5. 本地 Isar 记录交易状态并轮询刷新
+1. `OnchainTradeService` 读取当前钱包助记词
+2. 调用 `OnchainRpc.transferKeepAlive()` 直连链上节点
+3. 签名通过回调传入：`Keyring.sr25519.fromMnemonic()` → `pair.sign(payload)`
+4. 本地 Isar 记录交易状态并轮询刷新
 
 ### 4.6 治理提案/投票签名（由 governance + signer 调用，规划）
 
@@ -149,9 +144,9 @@ lib/
 - `WalletProfileEntity`
   - `walletIndex, walletName, walletIcon, balance, address, pubkeyHex, alg, ss58, createdAtMillis, source`
 - `WalletSettingsEntity`
-  - `activeWalletIndex, faceAuthEnabled, updatedAtMillis`
+  - `activeWalletIndex, updatedAtMillis`
 - `TxRecordEntity`
-  - `txHash, fromAddress, toAddress, amount, symbol, createdAtMillis, status, failureReason`
+  - `txHash, fromAddress, toAddress, amount, symbol, createdAtMillis, status, failureReason, usedNonce`
 - `AdminRoleCacheEntity`
   - `pubkeyHex, roleName, updatedAt`
 - `ObservedAccountEntity`
@@ -167,7 +162,7 @@ lib/
 
 ## 6. 迁移与清理策略
 
-当前 schema：`wallet.data.schema.version = 4`。
+当前 schema：`wallet.data.schema.version = 5`。
 
 启动迁移行为：
 
@@ -186,7 +181,8 @@ lib/
 - 助记词不写入 Isar/Postgres/日志
 - 钱包模块不直接实现签名算法，统一走 `lib/signer`
 - 本机签名在本地完成，私钥材料不出端
-- 登录签名与交易签名前都可触发生物识别守卫
+- 助记词读取强制生物识别/设备密码验证（`WalletManager._authenticateIfSupported()`），在存储层统一守卫，业务层无需单独处理
+- 设备无生物识别也无密码时自动跳过验证
 - `wallet.secret.*` 与 `wallet.session.*` 统一命名，避免散落硬编码
 
 ## 8. 主要接口（对外）
@@ -197,8 +193,6 @@ lib/
   - `parseChallenge / buildReceiptPayloadForChallenge`
 - `LocalSigner`（`lib/signer/local_signer.dart`）
   - `signUtf8 / signBytes`
-- `UserIdentificationService`
-  - `confirmBeforeSign`
 - `ChainRpc`（`lib/rpc/chain_rpc.dart`）
   - `fetchBalance` — 直连节点查询链上余额
 
@@ -212,10 +206,6 @@ lib/
   - attestation 元信息落 Isar
 - `test/wallet/sign_service_test.dart`
   - 挑战解析、签名、防重放、钱包匹配
-- `test/wallet/user_identification_settings_test.dart`
-  - 生物识别开关持久化
-- `test/wallet/user_identification_service_test.dart`
-  - 生物识别守卫分支
 
 ## 10. 钱包模式规范（转账 / 提案 / 投票）
 

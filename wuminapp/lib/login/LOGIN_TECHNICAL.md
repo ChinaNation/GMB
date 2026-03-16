@@ -74,7 +74,7 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 1. `QrScanPage` 扫码，识别 `proto`
 2. `SignService.parseChallenge()` 校验字段、时效、TTL（固定 90 秒）
 3. `LoginWhitelistPolicy.assertAllowed()` 校验 `aud` 白名单
-4. `UserIdentificationService.confirmBeforeSign()`（开启时）
+4. `WalletManager._readMnemonic()` 自动触发生物识别/设备密码验证
 5. `LoginReplayGuard.assertNotConsumed(request_id)`
 6. `LocalSigner` 执行 `sr25519` 签名
 7. 生成并展示回执二维码

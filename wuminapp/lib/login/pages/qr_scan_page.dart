@@ -6,7 +6,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wuminapp_mobile/login/models/login_models.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sign_service.dart';
-import 'package:wuminapp_mobile/wallet/core/user_identification.dart';
+import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 class QrScanPage extends StatefulWidget {
   const QrScanPage({
@@ -25,8 +25,6 @@ class QrScanPage extends StatefulWidget {
 class _QrScanPageState extends State<QrScanPage> {
   final MobileScannerController _controller = MobileScannerController();
   final SignService _loginService = SignService();
-  final UserIdentificationService _signConfirmService =
-      UserIdentificationService();
   bool _handled = false;
 
   @override
@@ -158,8 +156,6 @@ class _QrScanPageState extends State<QrScanPage> {
       if (challenge.isExpired) {
         throw Exception('登录挑战已过期，请重新扫码');
       }
-      await _signConfirmService.confirmBeforeSign();
-
       final result = await _loginService.buildReceiptPayloadForChallenge(
         challenge,
         walletIndex: widget.walletIndex,
@@ -182,6 +178,23 @@ class _QrScanPageState extends State<QrScanPage> {
       if (goWallet == true && mounted) {
         Navigator.of(context).pop();
       }
+    } on WalletAuthException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('身份验证'),
+          content: Text(e.message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      );
     } catch (e) {
       if (!mounted) {
         return;

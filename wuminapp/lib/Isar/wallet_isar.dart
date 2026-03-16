@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:isar/isar.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_secure_keys.dart';
 
@@ -39,7 +40,6 @@ class WalletSettingsEntity {
   Id id = 0;
 
   int? activeWalletIndex;
-  bool faceAuthEnabled = true;
   int updatedAtMillis = 0;
 }
 
@@ -60,6 +60,8 @@ class TxRecordEntity {
 
   late String status;
   String? failureReason;
+
+  int? usedNonce;
 }
 
 @collection
@@ -144,7 +146,7 @@ class WalletIsar {
 
   Future<Isar> _openAndMigrate() async {
     await ensureTestCoreInitialized();
-    final dir = _resolveDirectory();
+    final dir = await _resolveDirectory();
     final schemas = [
       WalletProfileEntitySchema,
       WalletSettingsEntitySchema,
@@ -203,14 +205,15 @@ class WalletIsar {
     _opening = null;
   }
 
-  String _resolveDirectory() {
+  Future<String> _resolveDirectory() async {
     if (kIsWeb) {
       return '.';
     }
     if (_isFlutterTest()) {
       return Directory.systemTemp.path;
     }
-    return Directory.systemTemp.path;
+    final appDir = await getApplicationSupportDirectory();
+    return appDir.path;
   }
 
   bool _isFlutterTest() {
@@ -285,7 +288,6 @@ class WalletIsarMigration {
   static const String _kLegacySource = 'wallet.source';
   static const String _kLegacyMnemonic = 'wallet.mnemonic';
 
-  static const String _kFaceAuth = 'settings.face_auth_enabled';
   static const String _kOnchainRecords = 'trade.onchain.records';
   static const String _kRoleMap = 'wallet.admin_catalog.role_map';
   static const String _kRoleMapUpdatedAt = 'wallet.admin_catalog.updated_at';
@@ -303,7 +305,7 @@ class WalletIsarMigration {
         .findFirst();
     if (marker?.boolValue == true) {
       await _ensureSettingsRow(isar);
-      await _upgradeToV4AndCleanup(isar);
+      await _upgradeToLatestSchema(isar);
       await _cleanupLegacyPrefs();
       await _cleanupLegacySecureKeys(isar);
       return;
@@ -314,7 +316,6 @@ class WalletIsarMigration {
 
     final wallets = await _readWalletProfilesFromPrefs(prefs);
     final activeWalletIndex = _resolveActiveWalletIndex(prefs, wallets);
-    final faceAuthEnabled = prefs.getBool(_kFaceAuth) ?? true;
     final txRecords = _readTxRecordsFromPrefs(prefs);
     final roleMap = _readRoleMapFromPrefs(prefs);
     final roleMapUpdatedAt = prefs.getInt(_kRoleMapUpdatedAt) ?? (now ~/ 1000);
@@ -329,7 +330,6 @@ class WalletIsarMigration {
       final settings = await isar.walletSettingsEntitys.get(0) ??
           (WalletSettingsEntity()..id = 0);
       settings.activeWalletIndex = activeWalletIndex;
-      settings.faceAuthEnabled = faceAuthEnabled;
       settings.updatedAtMillis = now;
       await isar.walletSettingsEntitys.put(settings);
 
@@ -352,7 +352,7 @@ class WalletIsarMigration {
       }
 
       await _putKvBool(isar, _kMigrationMarker, true);
-      await _putKvInt(isar, _kSchemaVersion, 4);
+      await _putKvInt(isar, _kSchemaVersion, 5);
       await _putKvInt(isar, _kAdminUpdatedAtKey, roleMapUpdatedAt);
     });
 
@@ -360,16 +360,18 @@ class WalletIsarMigration {
     await _cleanupLegacySecureKeys(isar);
   }
 
-  static Future<void> _upgradeToV4AndCleanup(Isar isar) async {
+  static Future<void> _upgradeToLatestSchema(Isar isar) async {
     final current = await _schemaVersion(isar);
-    if (current >= 4) {
-      return;
+    if (current < 4) {
+      await _cleanupLegacyPrefs();
+      await _cleanupLegacySecureKeys(isar);
     }
-    await _cleanupLegacyPrefs();
-    await _cleanupLegacySecureKeys(isar);
-    await isar.writeTxn(() async {
-      await _putKvInt(isar, _kSchemaVersion, 4);
-    });
+    if (current < 5) {
+      // v5: TxRecordEntity 新增 usedNonce 字段（nullable，无需数据迁移）
+      await isar.writeTxn(() async {
+        await _putKvInt(isar, _kSchemaVersion, 5);
+      });
+    }
   }
 
   static Future<int> _schemaVersion(Isar isar) async {
@@ -389,7 +391,6 @@ class WalletIsarMigration {
       await isar.walletSettingsEntitys.put(
         WalletSettingsEntity()
           ..id = 0
-          ..faceAuthEnabled = true
           ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch,
       );
     });
@@ -576,7 +577,7 @@ class WalletIsarMigration {
     await prefs.remove(_kLegacyCreatedAt);
     await prefs.remove(_kLegacySource);
     await prefs.remove(_kLegacyMnemonic);
-    await prefs.remove(_kFaceAuth);
+    await prefs.remove('settings.face_auth_enabled');
     await prefs.remove(_kOnchainRecords);
     await prefs.remove(_kRoleMap);
     await prefs.remove(_kRoleMapUpdatedAt);

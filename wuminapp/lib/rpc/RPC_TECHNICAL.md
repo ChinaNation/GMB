@@ -9,7 +9,8 @@
 - 维护 44 个引导节点的 RPC 地址列表
 - 节点自动选择与故障切换
 - 提供底层 JSON-RPC 调用能力
-- 链上状态查询（余额、账户信息等）
+- 链上状态查询（余额、nonce、metadata 等）
+- 链上交易构造与提交（转账、未来的投票/提案）
 
 约束：所有链上通信必须通过本模块，业务模块不直接建立 RPC 连接。
 
@@ -17,7 +18,8 @@
 
 ```text
 lib/rpc/
-├── chain_rpc.dart       ← 核心：节点连接管理 + 链上查询方法
+├── chain_rpc.dart       ← 底层：节点连接管理 + JSON-RPC 方法
+├── onchain.dart         ← 业务：extrinsic 构造 + 转账 + 交易确认
 ├── rpc.dart             ← barrel export
 └── RPC_TECHNICAL.md
 ```
@@ -52,27 +54,50 @@ flutter run --dart-define=WUMINAPP_RPC_URL=http://127.0.0.1:9944
 
 ## 5. 节点选择策略
 
-1. 启动时随机打乱 44 个节点的顺序
+1. 本地节点（`127.0.0.1:9944`）放最前，其余 43 个节点随机打乱
 2. 依次尝试连接，使用第一个可达的节点
 3. 缓存当前可用节点，后续请求复用
 4. 当前节点请求失败时，标记为不可用，自动切换到下一个
-5. 全部节点不可达时抛出异常
+5. 最多尝试 3 个节点，全部不可达时抛出异常
+6. 单节点超时：8 秒
 
-## 6. 链上查询能力
+## 6. chain_rpc.dart — 底层 RPC 方法
 
 ### 6.1 余额查询
 
-入口方法：`ChainRpc.fetchBalance(String pubkeyHex)`
+`ChainRpc.fetchBalance(String pubkeyHex) → Future<double>`
 
-技术流程：
-
-1. 将 `pubkeyHex`（`0x` + 64 hex）转为 32 字节 AccountId
-2. 构造 `System.Account` 的 storage key
-3. 调用 `state_getStorage` JSON-RPC
+1. 将 `pubkeyHex` 转为 32 字节 AccountId
+2. 构造 `System.Account` storage key（见 6.5）
+3. 调用 `state_getStorage`
 4. 解码 SCALE 编码的 `AccountInfo`，提取 `free` 余额
-5. 将分（fen）转换为元（yuan），返回 `double`
+5. 分 → 元，返回 `double`
 
-### 6.2 Storage Key 计算
+### 6.2 Nonce 查询
+
+`ChainRpc.fetchNonce(String ss58Address) → Future<int>`
+
+调用 `system_accountNextIndex`，返回下一个可用 nonce（含交易池 pending）。
+
+### 6.3 运行时版本
+
+`ChainRpc.fetchRuntimeVersion() → Future<RuntimeVersion>`
+
+调用 `state_getRuntimeVersion`，返回 `specVersion` + `transactionVersion`。
+
+### 6.4 链信息查询
+
+- `fetchGenesisHash() → Future<Uint8List>` — 创世块哈希（缓存）
+- `fetchLatestBlock() → Future<({Uint8List blockHash, int blockNumber})>` — 最新块
+- `fetchMetadata() → Future<RuntimeMetadata>` — 运行时 metadata（缓存，含 registry）
+
+### 6.5 Extrinsic 提交
+
+`ChainRpc.submitExtrinsic(Uint8List encoded) → Future<Uint8List>`
+
+调用 `author_submitExtrinsic`，返回交易哈希 32 字节。
+
+### 6.6 Storage Key 计算
 
 `System.Account` 存储映射的 key 结构：
 
@@ -84,9 +109,7 @@ fullKey    = prefix + accountKey                            // 80 字节
 
 前缀常量（hex）：`26aa394eea5630e07c48ae0c9558cef7b99d880ec681799c0cf30e8886371da9`
 
-### 6.3 AccountInfo SCALE 解码
-
-`AccountInfo` 结构体的字节布局：
+### 6.7 AccountInfo SCALE 解码
 
 ```text
 偏移 0-3:   nonce (u32)
@@ -99,7 +122,7 @@ fullKey    = prefix + accountKey                            // 80 字节
 偏移 64-79: flags (u128)
 ```
 
-### 6.4 币种单位
+### 6.8 币种单位
 
 - 链上最小单位：分（fen），`Balance = u128`
 - 显示单位：元（yuan），`100 fen = 1 yuan`
@@ -107,37 +130,57 @@ fullKey    = prefix + accountKey                            // 80 字节
 - `TOKEN_SYMBOL = "GMB"`
 - `EXISTENTIAL_DEPOSIT = 111 fen`（1.11 元）
 
-转换公式：`显示余额(元) = 链上余额(fen) / 100`
+## 7. onchain.dart — 链上交易操作
 
-## 7. 依赖
+### 7.1 OnchainRpc 类
 
-- `polkadart`：Substrate RPC Provider、Hasher（`twoxx128`、`blake2b128`）
-- `http`：HTTP 传输层
+onchain 模块所有需要 RPC 的功能集中于此，供 `trade/onchain` 和未来的 `governance` 模块使用。
 
-`polkadart` 已作为 `polkadart_keyring` 的传递依赖存在，提升为直接依赖。
+### 7.2 转账
 
-## 8. 错误处理
+`OnchainRpc.transferKeepAlive(...)` — 完成完整转账流程：
+
+1. 获取/缓存 metadata、genesisHash
+2. 并行获取 runtimeVersion、nonce、latestBlock
+3. 解码目标 SS58 地址为 32 字节 accountId
+4. 转换金额：`BigInt.from((amountYuan * 100).round())`
+5. 构造 `Balances::transfer_keep_alive` call data（pallet_index=2）
+6. 用 polkadart `SigningPayload` 构造签名载荷
+7. 通过回调获取 sr25519 签名（rpc 模块与钱包模块解耦）
+8. 用 polkadart `ExtrinsicPayload` 构造最终 extrinsic
+9. 提交到节点，返回 tx hash
+
+### 7.3 Extrinsic 编码
+
+利用 polkadart 0.7.1 内置的 `SigningPayload` 和 `ExtrinsicPayload`，通过 metadata 中的 registry 自动处理所有 signed extensions。
+
+citizenchain 12 个 TxExtension：
+- 标准扩展（`CheckMortality`/`CheckNonce`/`ChargeTransactionPayment`/`CheckMetadataHash`/`CheckSpecVersion`/`CheckTxVersion`/`CheckGenesis`）：polkadart 内置处理
+- 自定义扩展（`AuthorizeCall`/`CheckNonZeroSender`/`CheckNonKeylessSender`/`CheckWeight`/`WeightReclaim`）：metadata 中为 NullCodec，自动跳过
+
+Call data 格式：`[pallet_index=2] [call_index=3] [0x00 + dest_32bytes] [compact_u128(fen)]`
+
+### 7.4 交易确认
+
+`OnchainRpc.isTxConfirmed(address, usedNonce)` — 通过 nonce 对比判断交易是否已被打包。
+
+## 8. 依赖
+
+- `polkadart`：RPC Provider、Hasher、SigningPayload、ExtrinsicPayload、RuntimeMetadata
+- `polkadart_keyring`：SR25519 签名、SS58 地址解码
+- `polkadart_scale_codec`：CompactBigIntCodec、ByteOutput
+
+## 9. 错误处理
 
 - 单节点请求失败：静默切换下一节点，不中断业务
 - 全部节点不可达：抛出异常，由调用方 UI 展示错误提示
 - 账户不存在（`state_getStorage` 返回 `null`）：返回余额 `0.0`，不报错
+- 交易提交失败（`author_submitExtrinsic` 返回错误）：抛出异常，由 service 层包装为 `OnchainTradeException`
 
-## 9. 调用方
+## 10. 调用方
 
 | 模块 | 用途 | 状态 |
 | --- | --- | --- |
-| `wallet` | 余额查询 | 已实现 |
-| `trade/onchain` | 转账（构造/提交 extrinsic） | 规划中 |
+| `wallet` | 余额查询（`ChainRpc.fetchBalance`） | 已实现 |
+| `trade/onchain` | 转账（`OnchainRpc.transferKeepAlive`） | 已实现 |
 | `governance` | 提案/投票 | 规划中 |
-
-## 10. 规划扩展
-
-后续 `chain_rpc.dart` 将新增：
-
-- `submitExtrinsic(hex)` — 提交已签名的 extrinsic
-- `getNonce(pubkeyHex)` — 查询账户 nonce（构造交易用）
-- `getRuntimeVersion()` — 查询运行时版本（构造交易用）
-- `getGenesisHash()` — 查询创世区块哈希（构造交易用）
-- `queryStorage(palletName, storageName, key)` — 通用 storage 查询
-
-这些方法将在转账/提案/投票直连 RPC 时逐步实现。

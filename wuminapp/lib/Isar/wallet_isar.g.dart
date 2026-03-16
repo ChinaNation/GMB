@@ -2242,13 +2242,8 @@ const WalletSettingsEntitySchema = CollectionSchema(
       name: r'activeWalletIndex',
       type: IsarType.long,
     ),
-    r'faceAuthEnabled': PropertySchema(
-      id: 1,
-      name: r'faceAuthEnabled',
-      type: IsarType.bool,
-    ),
     r'updatedAtMillis': PropertySchema(
-      id: 2,
+      id: 1,
       name: r'updatedAtMillis',
       type: IsarType.long,
     )
@@ -2283,8 +2278,7 @@ void _walletSettingsEntitySerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeLong(offsets[0], object.activeWalletIndex);
-  writer.writeBool(offsets[1], object.faceAuthEnabled);
-  writer.writeLong(offsets[2], object.updatedAtMillis);
+  writer.writeLong(offsets[1], object.updatedAtMillis);
 }
 
 WalletSettingsEntity _walletSettingsEntityDeserialize(
@@ -2295,9 +2289,8 @@ WalletSettingsEntity _walletSettingsEntityDeserialize(
 ) {
   final object = WalletSettingsEntity();
   object.activeWalletIndex = reader.readLongOrNull(offsets[0]);
-  object.faceAuthEnabled = reader.readBool(offsets[1]);
   object.id = id;
-  object.updatedAtMillis = reader.readLong(offsets[2]);
+  object.updatedAtMillis = reader.readLong(offsets[1]);
   return object;
 }
 
@@ -2311,8 +2304,6 @@ P _walletSettingsEntityDeserializeProp<P>(
     case 0:
       return (reader.readLongOrNull(offset)) as P;
     case 1:
-      return (reader.readBool(offset)) as P;
-    case 2:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -2491,16 +2482,6 @@ extension WalletSettingsEntityQueryFilter on QueryBuilder<WalletSettingsEntity,
   }
 
   QueryBuilder<WalletSettingsEntity, WalletSettingsEntity,
-      QAfterFilterCondition> faceAuthEnabledEqualTo(bool value) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'faceAuthEnabled',
-        value: value,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletSettingsEntity, WalletSettingsEntity,
       QAfterFilterCondition> idEqualTo(Id value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -2636,20 +2617,6 @@ extension WalletSettingsEntityQuerySortBy
   }
 
   QueryBuilder<WalletSettingsEntity, WalletSettingsEntity, QAfterSortBy>
-      sortByFaceAuthEnabled() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'faceAuthEnabled', Sort.asc);
-    });
-  }
-
-  QueryBuilder<WalletSettingsEntity, WalletSettingsEntity, QAfterSortBy>
-      sortByFaceAuthEnabledDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'faceAuthEnabled', Sort.desc);
-    });
-  }
-
-  QueryBuilder<WalletSettingsEntity, WalletSettingsEntity, QAfterSortBy>
       sortByUpdatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAtMillis', Sort.asc);
@@ -2677,20 +2644,6 @@ extension WalletSettingsEntityQuerySortThenBy
       thenByActiveWalletIndexDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'activeWalletIndex', Sort.desc);
-    });
-  }
-
-  QueryBuilder<WalletSettingsEntity, WalletSettingsEntity, QAfterSortBy>
-      thenByFaceAuthEnabled() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'faceAuthEnabled', Sort.asc);
-    });
-  }
-
-  QueryBuilder<WalletSettingsEntity, WalletSettingsEntity, QAfterSortBy>
-      thenByFaceAuthEnabledDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'faceAuthEnabled', Sort.desc);
     });
   }
 
@@ -2733,13 +2686,6 @@ extension WalletSettingsEntityQueryWhereDistinct
   }
 
   QueryBuilder<WalletSettingsEntity, WalletSettingsEntity, QDistinct>
-      distinctByFaceAuthEnabled() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'faceAuthEnabled');
-    });
-  }
-
-  QueryBuilder<WalletSettingsEntity, WalletSettingsEntity, QDistinct>
       distinctByUpdatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'updatedAtMillis');
@@ -2759,13 +2705,6 @@ extension WalletSettingsEntityQueryProperty on QueryBuilder<
       activeWalletIndexProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'activeWalletIndex');
-    });
-  }
-
-  QueryBuilder<WalletSettingsEntity, bool, QQueryOperations>
-      faceAuthEnabledProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'faceAuthEnabled');
     });
   }
 
@@ -2827,6 +2766,11 @@ const TxRecordEntitySchema = CollectionSchema(
       id: 7,
       name: r'txHash',
       type: IsarType.string,
+    ),
+    r'usedNonce': PropertySchema(
+      id: 8,
+      name: r'usedNonce',
+      type: IsarType.long,
     )
   },
   estimateSize: _txRecordEntityEstimateSize,
@@ -2904,6 +2848,7 @@ void _txRecordEntitySerialize(
   writer.writeString(offsets[5], object.symbol);
   writer.writeString(offsets[6], object.toAddress);
   writer.writeString(offsets[7], object.txHash);
+  writer.writeLong(offsets[8], object.usedNonce);
 }
 
 TxRecordEntity _txRecordEntityDeserialize(
@@ -2922,6 +2867,7 @@ TxRecordEntity _txRecordEntityDeserialize(
   object.symbol = reader.readString(offsets[5]);
   object.toAddress = reader.readString(offsets[6]);
   object.txHash = reader.readString(offsets[7]);
+  object.usedNonce = reader.readLongOrNull(offsets[8]);
   return object;
 }
 
@@ -2948,6 +2894,8 @@ P _txRecordEntityDeserializeProp<P>(
       return (reader.readString(offset)) as P;
     case 7:
       return (reader.readString(offset)) as P;
+    case 8:
+      return (reader.readLongOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
   }
@@ -4261,6 +4209,80 @@ extension TxRecordEntityQueryFilter
       ));
     });
   }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterFilterCondition>
+      usedNonceIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'usedNonce',
+      ));
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterFilterCondition>
+      usedNonceIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'usedNonce',
+      ));
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterFilterCondition>
+      usedNonceEqualTo(int? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'usedNonce',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterFilterCondition>
+      usedNonceGreaterThan(
+    int? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'usedNonce',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterFilterCondition>
+      usedNonceLessThan(
+    int? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'usedNonce',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterFilterCondition>
+      usedNonceBetween(
+    int? lower,
+    int? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'usedNonce',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
 }
 
 extension TxRecordEntityQueryObject
@@ -4375,6 +4397,19 @@ extension TxRecordEntityQuerySortBy
       sortByTxHashDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'txHash', Sort.desc);
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterSortBy> sortByUsedNonce() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'usedNonce', Sort.asc);
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterSortBy>
+      sortByUsedNonceDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'usedNonce', Sort.desc);
     });
   }
 }
@@ -4499,6 +4534,19 @@ extension TxRecordEntityQuerySortThenBy
       return query.addSortBy(r'txHash', Sort.desc);
     });
   }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterSortBy> thenByUsedNonce() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'usedNonce', Sort.asc);
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterSortBy>
+      thenByUsedNonceDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'usedNonce', Sort.desc);
+    });
+  }
 }
 
 extension TxRecordEntityQueryWhereDistinct
@@ -4558,6 +4606,13 @@ extension TxRecordEntityQueryWhereDistinct
       return query.addDistinctBy(r'txHash', caseSensitive: caseSensitive);
     });
   }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QDistinct>
+      distinctByUsedNonce() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'usedNonce');
+    });
+  }
 }
 
 extension TxRecordEntityQueryProperty
@@ -4615,6 +4670,12 @@ extension TxRecordEntityQueryProperty
   QueryBuilder<TxRecordEntity, String, QQueryOperations> txHashProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'txHash');
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, int?, QQueryOperations> usedNonceProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'usedNonce');
     });
   }
 }
