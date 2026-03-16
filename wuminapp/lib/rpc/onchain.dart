@@ -95,15 +95,16 @@ class OnchainRpc {
     return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
   }
 
-  /// 通过 nonce 对比判断交易是否已确认。
+  /// 通过链上已打包的 nonce 判断交易是否已确认。
   ///
-  /// 转账时使用的 nonce 为 N，若链上 nonce 已 >= N+1 则交易已被打包。
+  /// 转账时使用的 nonce 为 N，若链上已确认 nonce > N 则交易已被打包。
+  /// 注意：使用 state_getStorage 读取链上状态，不含交易池中的 pending 交易。
   Future<bool> isTxConfirmed({
-    required String address,
+    required String pubkeyHex,
     required int usedNonce,
   }) async {
-    final currentNonce = await _rpc.fetchNonce(address);
-    return currentNonce > usedNonce;
+    final confirmedNonce = await _rpc.fetchConfirmedNonce(pubkeyHex);
+    return confirmedNonce > usedNonce;
   }
 
   // ──── 内部：extrinsic 编码 ────

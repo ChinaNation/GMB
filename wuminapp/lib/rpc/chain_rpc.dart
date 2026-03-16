@@ -130,7 +130,22 @@ class ChainRpc {
     return _hexDecode((result as String).substring(2));
   }
 
-  // ──── 余额查询 ────
+  // ──── 链上状态查询 ────
+
+  /// 查询链上已打包的 nonce（不含交易池），账户不存在返回 0。
+  Future<int> fetchConfirmedNonce(String pubkeyHex) async {
+    final accountId = _pubkeyHexToBytes(pubkeyHex);
+    final storageKey = _buildSystemAccountKey(accountId);
+    final keyHex = '0x${_hexEncode(storageKey)}';
+
+    final result = await _rpcCall('state_getStorage', [keyHex]);
+    if (result == null) return 0;
+
+    final bytes = _hexDecode((result as String).substring(2));
+    if (bytes.length < 4) return 0;
+    // AccountInfo[0..3] = nonce u32 LE
+    return bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24);
+  }
 
   /// 查询链上余额，返回元（yuan）。账户不存在返回 0.0。
   Future<double> fetchBalance(String pubkeyHex) async {
