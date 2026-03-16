@@ -2,14 +2,10 @@ use clap::{Parser, Subcommand};
 use primitives::{
     china::china_cb::CHINA_CB,
     china::china_ch::CHINA_CH,
-    genesis::{GENESIS_DEV_ACCOUNT_SS58, GENESIS_DEV_ALLOCATION, GENESIS_ISSUANCE},
+    genesis::GENESIS_ISSUANCE,
 };
 use serde_json::{json, Value};
-use sp_core::{
-    blake2_128,
-    crypto::{AccountId32, Ss58Codec},
-    twox_128,
-};
+use sp_core::{blake2_128, twox_128};
 use std::{
     error::Error,
     process::{Child, Command, Stdio},
@@ -105,25 +101,12 @@ fn do_audit(rpc_url: &str, timeout_secs: u64) -> Result<(), Box<dyn Error>> {
     wait_rpc_ready(rpc_url, timeout_secs)?;
 
     let nrc = CHINA_CB.first().ok_or("未找到国储会节点")?;
-    let development_account = AccountId32::from_ss58check(GENESIS_DEV_ACCOUNT_SS58)?;
-    let development_account_bytes: [u8; 32] = development_account.into();
-    let expected_nrc_balance = GENESIS_ISSUANCE
-        .checked_sub(GENESIS_DEV_ALLOCATION)
-        .ok_or("开发账户创世划拨金额不能大于创世发行总量")?;
 
     let nrc_balance = read_free_balance(rpc_url, &nrc.duoqian_address)?;
-    if nrc_balance != expected_nrc_balance {
+    if nrc_balance != GENESIS_ISSUANCE {
         return Err(format!(
             "国储会创世发行不匹配: on-chain={}, expected={}",
-            nrc_balance, expected_nrc_balance
-        )
-        .into());
-    }
-    let dev_balance = read_free_balance(rpc_url, &development_account_bytes)?;
-    if dev_balance != GENESIS_DEV_ALLOCATION {
-        return Err(format!(
-            "开发账户创世划拨不匹配: on-chain={}, expected={}",
-            dev_balance, GENESIS_DEV_ALLOCATION
+            nrc_balance, GENESIS_ISSUANCE
         )
         .into());
     }
@@ -147,9 +130,7 @@ fn do_audit(rpc_url: &str, timeout_secs: u64) -> Result<(), Box<dyn Error>> {
             .map(|b| b.stake_amount)
             .fold(0u128, |acc, v| acc.saturating_add(v)),
     );
-    let onchain_total = nrc_balance
-        .saturating_add(dev_balance)
-        .saturating_add(shengbank_sum);
+    let onchain_total = nrc_balance.saturating_add(shengbank_sum);
     if onchain_total != expected_total {
         return Err(format!(
             "总额不匹配: on-chain={}, expected={}",
@@ -160,7 +141,6 @@ fn do_audit(rpc_url: &str, timeout_secs: u64) -> Result<(), Box<dyn Error>> {
 
     println!("创世验收通过");
     println!("nrc_genesis_issuance={}", nrc_balance);
-    println!("dev_genesis_allocation={}", dev_balance);
     println!("shengbank_stake_sum={}", shengbank_sum);
     println!("total_checked={}", onchain_total);
     Ok(())
