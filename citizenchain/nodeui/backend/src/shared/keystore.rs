@@ -18,8 +18,6 @@ use std::{
     },
     time::{SystemTime, UNIX_EPOCH},
 };
-#[cfg(not(unix))]
-use std::ffi::OsString;
 
 const DEFAULT_CHAIN_ID: &str = "citizenchain";
 
