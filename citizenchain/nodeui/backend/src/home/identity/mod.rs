@@ -93,10 +93,7 @@ fn get_node_identity_sync(app: AppHandle) -> Result<NodeIdentity, String> {
         });
     }
 
-    let rpc_node_name = rpc_post("system_name", Value::Array(vec![]))
-        .ok()
-        .and_then(|v| v.as_str().map(|s| s.to_string()));
-    let node_name = configured_node_name.or(rpc_node_name);
+    let node_name = configured_node_name;
 
     let local_peer_id = rpc_post("system_localPeerId", Value::Array(vec![]))
         .ok()
