@@ -11,14 +11,14 @@ use schnorrkel::{ExpansionMode, Keypair, MiniSecretKey};
 use sfid_code_auth::SfidMainAccount;
 use sp_core::sr25519;
 use sp_runtime::{
-    traits::{Hash, IdentifyAccount, SaturatedConversion, Saturating, Zero},
+    traits::{IdentifyAccount, SaturatedConversion, Saturating, Zero},
     MultiSigner,
 };
 use sp_std::vec::Vec;
 
 use crate::{
     pallet::{AddressRegisteredSfid, DuoqianAccounts, SfidRegisteredAddress},
-    AdminApproval, AdminApprovalsOf, BalanceOf, BlockNumberFor, Call, ChainDomainHash, Config,
+    AdminApproval, AdminApprovalsOf, BalanceOf, Call, Config,
     DuoqianAddressValidator, DuoqianAdminAuth, DuoqianAdminsOf, DuoqianReservedAddressChecker,
     Pallet, ProtectedSourceChecker, SfidIdOf,
 };
@@ -36,18 +36,8 @@ struct GeneratedAdmin<T: Config> {
     account: T::AccountId,
 }
 
-fn seed_chain_domain_hash<T: Config>() {
-    if ChainDomainHash::<T>::get().is_some() {
-        return;
-    }
-
-    let genesis_hash = frame_system::Pallet::<T>::block_hash(BlockNumberFor::<T>::zero());
-    let domain_hash = if genesis_hash == T::Hash::default() {
-        T::Hashing::hash(b"duoqian-benchmark-domain")
-    } else {
-        genesis_hash
-    };
-    ChainDomainHash::<T>::put(domain_hash);
+fn chain_domain_prefix<T: Config>() -> [u8; 2] {
+    T::SS58Prefix::get().to_le_bytes()
 }
 
 fn account_from_public<T: Config>(public: sr25519::Public) -> T::AccountId
@@ -102,7 +92,7 @@ fn sign_payload(keypair: &Keypair, payload: &[u8]) -> [u8; 64] {
 }
 
 fn find_safe_sfid<T: Config>() -> Result<(SfidIdOf<T>, T::AccountId), BenchmarkError> {
-    seed_chain_domain_hash::<T>();
+    let _domain = chain_domain_prefix::<T>();
 
     for candidate in 0..2_048u32 {
         let mut raw = b"duoqian-benchmark-sfid-".to_vec();
@@ -257,7 +247,7 @@ mod benchmarks {
 
     #[benchmark]
     fn register_sfid_institution() -> Result<(), BenchmarkError> {
-        seed_chain_domain_hash::<T>();
+        let _domain = chain_domain_prefix::<T>();
         let operator: T::AccountId = frame_benchmarking::account("operator", 0, 0);
         SfidMainAccount::<T>::put(&operator);
 
@@ -279,7 +269,7 @@ mod benchmarks {
         a: Linear<2, { T::MaxAdmins::get() }>,
         s: Linear<2, { T::MaxAdmins::get() }>,
     ) -> Result<(), BenchmarkError> {
-        seed_chain_domain_hash::<T>();
+        let _domain = chain_domain_prefix::<T>();
         let operator: T::AccountId = frame_benchmarking::account("operator", 1, 0);
         SfidMainAccount::<T>::put(&operator);
 
@@ -316,9 +306,7 @@ mod benchmarks {
 
         let payload = (
             b"DUOQIAN_CREATE_V3".to_vec(),
-            ChainDomainHash::<T>::get().ok_or(BenchmarkError::Stop(
-                "benchmark chain domain hash must be initialized",
-            ))?,
+            chain_domain_prefix::<T>(),
             0u64,
             expires_at,
             &sfid_id,
@@ -363,7 +351,7 @@ mod benchmarks {
         a: Linear<2, { T::MaxAdmins::get() }>,
         s: Linear<2, { T::MaxAdmins::get() }>,
     ) -> Result<(), BenchmarkError> {
-        seed_chain_domain_hash::<T>();
+        let _domain = chain_domain_prefix::<T>();
         let operator: T::AccountId = frame_benchmarking::account("operator", 2, 0);
         SfidMainAccount::<T>::put(&operator);
 
@@ -399,9 +387,7 @@ mod benchmarks {
 
         let create_payload = (
             b"DUOQIAN_CREATE_V3".to_vec(),
-            ChainDomainHash::<T>::get().ok_or(BenchmarkError::Stop(
-                "benchmark chain domain hash must be initialized",
-            ))?,
+            chain_domain_prefix::<T>(),
             0u64,
             expires_at,
             &sfid_id,
@@ -434,9 +420,7 @@ mod benchmarks {
         let min_balance: BalanceOf<T> = Zero::zero();
         let close_payload = (
             b"DUOQIAN_CLOSE_V3".to_vec(),
-            ChainDomainHash::<T>::get().ok_or(BenchmarkError::Stop(
-                "benchmark chain domain hash must be initialized",
-            ))?,
+            chain_domain_prefix::<T>(),
             1u64,
             expires_at,
             &duoqian_address,

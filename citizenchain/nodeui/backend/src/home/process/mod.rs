@@ -841,6 +841,8 @@ fn spawn_node(
         .arg("--rpc-port")
         .arg(rpc_port.to_string())
         .arg("--unsafe-rpc-external")
+        .arg("--rpc-methods")
+        .arg("Unsafe")
         .arg("--rpc-cors")
         .arg("all")
         .arg("--no-prometheus")
