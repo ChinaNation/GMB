@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
-import 'package:polkadart/polkadart.dart' show HttpProvider, Hasher;
+import 'package:polkadart/polkadart.dart'
+    show HttpProvider, Hasher, RuntimeMetadata, RuntimeVersion;
 
 class ChainRpc {
   ChainRpc({String? rpcUrl}) {
@@ -77,6 +78,59 @@ class ChainRpc {
     '26aa394eea5630e07c48ae0c9558cef7'
     'b99d880ec681799c0cf30e8886371da9',
   );
+
+  // ──── 转账相关 RPC ────
+
+  /// 查询账户下一个可用 nonce（含交易池中的 pending 交易）。
+  Future<int> fetchNonce(String ss58Address) async {
+    final result = await _rpcCall('system_accountNextIndex', [ss58Address]);
+    return result as int;
+  }
+
+  /// 获取运行时版本（specVersion、transactionVersion）。
+  Future<RuntimeVersion> fetchRuntimeVersion() async {
+    final result = await _rpcCall('state_getRuntimeVersion', []);
+    return RuntimeVersion.fromJson(result as Map<String, dynamic>);
+  }
+
+  /// 获取创世块哈希（32 字节）。结果缓存，同一实例只查一次。
+  Future<Uint8List> fetchGenesisHash() async {
+    if (_cachedGenesisHash != null) return _cachedGenesisHash!;
+    final result = await _rpcCall('chain_getBlockHash', [0]);
+    _cachedGenesisHash = _hexDecode((result as String).substring(2));
+    return _cachedGenesisHash!;
+  }
+
+  Uint8List? _cachedGenesisHash;
+
+  /// 获取最新区块的哈希和块号（用于 mortal era 计算）。
+  Future<({Uint8List blockHash, int blockNumber})> fetchLatestBlock() async {
+    final hashHex = await _rpcCall('chain_getBlockHash', []) as String;
+    final blockHash = _hexDecode(hashHex.substring(2));
+    final header =
+        await _rpcCall('chain_getHeader', [hashHex]) as Map<String, dynamic>;
+    final blockNumber = int.parse(header['number'] as String);
+    return (blockHash: blockHash, blockNumber: blockNumber);
+  }
+
+  /// 获取运行时 metadata（含 registry，用于 extrinsic 编码）。结果缓存。
+  Future<RuntimeMetadata> fetchMetadata() async {
+    if (_cachedMetadata != null) return _cachedMetadata!;
+    final result = await _rpcCall('state_getMetadata', []) as String;
+    _cachedMetadata = RuntimeMetadata.fromHex(result);
+    return _cachedMetadata!;
+  }
+
+  RuntimeMetadata? _cachedMetadata;
+
+  /// 提交已签名的 extrinsic，返回交易哈希（32 字节）。
+  Future<Uint8List> submitExtrinsic(Uint8List encoded) async {
+    final hex = '0x${_hexEncode(encoded)}';
+    final result = await _rpcCall('author_submitExtrinsic', [hex]);
+    return _hexDecode((result as String).substring(2));
+  }
+
+  // ──── 余额查询 ────
 
   /// 查询链上余额，返回元（yuan）。账户不存在返回 0.0。
   Future<double> fetchBalance(String pubkeyHex) async {

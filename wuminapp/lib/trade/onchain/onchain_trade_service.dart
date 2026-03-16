@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:wuminapp_mobile/signer/local_signer.dart';
-import 'package:wuminapp_mobile/trade/onchain/onchain_trade_gateway.dart';
+import 'package:polkadart_keyring/polkadart_keyring.dart';
+import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_repository.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -10,17 +10,14 @@ class OnchainTradeService {
   OnchainTradeService({
     WalletManager? walletManager,
     OnchainTradeRepository? repository,
-    OnchainTradeGateway? gateway,
-    LocalSigner? localSigner,
+    OnchainRpc? onchainRpc,
   })  : _walletManager = walletManager ?? WalletManager(),
         _repository = repository ?? LocalOnchainTradeRepository(),
-        _gateway = gateway ?? HttpOnchainTradeGateway(),
-        _localSigner = localSigner ?? LocalSigner();
+        _onchainRpc = onchainRpc ?? OnchainRpc();
 
   final WalletManager _walletManager;
   final OnchainTradeRepository _repository;
-  final OnchainTradeGateway _gateway;
-  final LocalSigner _localSigner;
+  final OnchainRpc _onchainRpc;
 
   Future<WalletProfile?> getCurrentWallet() {
     return _walletManager.getWallet();
@@ -45,86 +42,41 @@ class OnchainTradeService {
     }
 
     final wallet = walletSecret.profile;
+    final pubkeyBytes = _hexToBytes(wallet.pubkeyHex);
 
-    OnchainPrepareResult prepared;
+    ({String txHash, int usedNonce}) result;
     try {
-      prepared = await _gateway.prepareTransfer(
-        OnchainPrepareRequest(
-          fromAddress: wallet.address,
-          pubkeyHex: '0x${wallet.pubkeyHex}',
-          toAddress: toAddress,
-          amount: draft.amount,
-          symbol: symbol,
-        ),
+      result = await _onchainRpc.transferKeepAlive(
+        fromAddress: wallet.address,
+        signerPubkey: Uint8List.fromList(pubkeyBytes),
+        toAddress: toAddress,
+        amountYuan: draft.amount,
+        sign: (payload) async {
+          final pair =
+              await Keyring.sr25519.fromMnemonic(walletSecret.mnemonic);
+          return Uint8List.fromList(pair.sign(payload));
+        },
       );
-    } catch (_) {
-      throw const OnchainTradeException(
-        OnchainTradeErrorCode.broadcastFailed,
-        '交易预处理失败，请检查节点和后端服务',
-      );
-    }
-
-    final signerPayloadBytes = _hexToBytes(prepared.signerPayloadHex);
-    if (signerPayloadBytes.isEmpty) {
-      throw const OnchainTradeException(
-        OnchainTradeErrorCode.broadcastFailed,
-        '签名负载为空，无法提交交易',
-      );
-    }
-
-    late LocalSignResult signed;
-    try {
-      signed = await _localSigner.signBytes(
-        walletSecret: walletSecret,
-        payload: Uint8List.fromList(signerPayloadBytes),
-      );
-    } on LocalSignerException catch (e) {
-      if (e.code == LocalSignerErrorCode.walletMismatch) {
-        throw const OnchainTradeException(
-          OnchainTradeErrorCode.walletMismatch,
-          '钱包密钥与地址不匹配，请重新导入钱包',
-        );
-      }
+    } catch (e) {
+      if (e is OnchainTradeException) rethrow;
       throw OnchainTradeException(
         OnchainTradeErrorCode.broadcastFailed,
-        e.message,
-      );
-    }
-    final signedTransfer = OnchainSignedPreparedTransfer(
-      preparedId: prepared.preparedId,
-      pubkeyHex: signed.pubkeyHex,
-      signatureHex: signed.signatureHex,
-    );
-
-    OnchainSubmitResult submitResult;
-    try {
-      submitResult = await _gateway.submitTransfer(signedTransfer);
-    } catch (_) {
-      throw const OnchainTradeException(
-        OnchainTradeErrorCode.broadcastFailed,
-        '交易广播失败，请稍后重试',
+        '交易提交失败: $e',
       );
     }
 
     final now = DateTime.now();
     final record = OnchainTxRecord(
-      txHash: submitResult.txHash,
+      txHash: result.txHash,
       fromAddress: wallet.address,
       toAddress: toAddress,
       amount: draft.amount,
       symbol: symbol,
       createdAt: now,
-      status: submitResult.status,
-      failureReason: submitResult.failureReason,
+      status: OnchainTxStatus.pending,
+      usedNonce: result.usedNonce,
     );
     await _repository.save(record);
-
-    if (record.status == OnchainTxStatus.failed) {
-      throw OnchainTradeException(
-        OnchainTradeErrorCode.broadcastFailed,
-        submitResult.failureReason ?? '交易广播失败，请稍后重试',
-      );
-    }
     return record;
   }
 
@@ -140,19 +92,19 @@ class OnchainTradeService {
   Future<List<OnchainTxRecord>> refreshPendingRecords() async {
     final records = await _repository.listRecent();
     for (final record in records) {
-      if (onchainTxStatusIsFinal(record.status)) {
-        continue;
-      }
+      if (onchainTxStatusIsFinal(record.status)) continue;
+      if (record.usedNonce == null) continue;
       try {
-        final status = await _gateway.queryStatus(record.txHash);
-        final updated = record.copyWith(
-          status: status.status,
-          failureReason: status.failureReason,
-          clearFailureReason: status.failureReason == null,
+        final confirmed = await _onchainRpc.isTxConfirmed(
+          address: record.fromAddress,
+          usedNonce: record.usedNonce!,
         );
-        await _repository.upsert(updated);
+        if (confirmed) {
+          final updated = record.copyWith(status: OnchainTxStatus.confirmed);
+          await _repository.upsert(updated);
+        }
       } catch (_) {
-        // Keep the previous status when polling fails.
+        // 节点不可达时跳过，下次轮询重试
       }
     }
     return listRecentRecords();
@@ -160,31 +112,11 @@ class OnchainTradeService {
 
   List<int> _hexToBytes(String input) {
     final text = input.startsWith('0x') ? input.substring(2) : input;
-    if (text.isEmpty || text.length.isOdd) {
-      return const <int>[];
-    }
+    if (text.isEmpty || text.length.isOdd) return const <int>[];
     final out = <int>[];
     for (var i = 0; i < text.length; i += 2) {
-      final hi = _fromHexNibble(text.codeUnitAt(i));
-      final lo = _fromHexNibble(text.codeUnitAt(i + 1));
-      if (hi < 0 || lo < 0) {
-        return const <int>[];
-      }
-      out.add((hi << 4) | lo);
+      out.add(int.parse(text.substring(i, i + 2), radix: 16));
     }
     return out;
-  }
-
-  int _fromHexNibble(int c) {
-    if (c >= 48 && c <= 57) {
-      return c - 48;
-    }
-    if (c >= 65 && c <= 70) {
-      return c - 55;
-    }
-    if (c >= 97 && c <= 102) {
-      return c - 87;
-    }
-    return -1;
   }
 }
