@@ -127,7 +127,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
 
   Future<void> _scanToAddress() async {
     final result = await Navigator.of(context).push<QrScanTransferResult>(
-      MaterialPageRoute(builder: (_) => const QrScanPage()),
+      MaterialPageRoute(
+          builder: (_) => const QrScanPage(mode: QrScanMode.transfer)),
     );
     if (result == null || !mounted) {
       return;

@@ -1,11 +1,12 @@
 import 'dart:ui' as ui;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:saver_gallery/saver_gallery.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -272,7 +273,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
         borderRadius: BorderRadius.circular(12),
         onTap: () => _openWalletDetail(wallet),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          padding: const EdgeInsets.fromLTRB(14, 4, 6, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -324,8 +325,8 @@ class _MyWalletPageState extends State<MyWalletPage> {
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => QrScanPage(
+                                mode: QrScanMode.login,
                                 walletIndex: wallet.walletIndex,
-                                enableContact: false,
                               ),
                             ),
                           );
@@ -350,7 +351,15 @@ class _MyWalletPageState extends State<MyWalletPage> {
                     Text(
                       wallet.balance.toStringAsFixed(2),
                       style: const TextStyle(
-                        fontSize: 24,
+                        fontSize: 30,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0B3D2E),
+                      ),
+                    ),
+                    Text(
+                      '元',
+                      style: const TextStyle(
+                        fontSize: 20,
                         fontWeight: FontWeight.w700,
                         color: Color(0xFF0B3D2E),
                       ),
@@ -631,13 +640,14 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       );
       if (byteData == null) return;
       final pngBytes = byteData.buffer.asUint8List();
-      final result = await ImageGallerySaver.saveImage(
+      final fileName = 'wallet_qr_${DateTime.now().millisecondsSinceEpoch}.png';
+      final result = await SaverGallery.saveImage(
         Uint8List.fromList(pngBytes),
-        quality: 100,
-        name: 'wallet_qr_${DateTime.now().millisecondsSinceEpoch}',
+        fileName: fileName,
+        skipIfExists: false,
       );
       if (!mounted) return;
-      final success = result is Map && result['isSuccess'] == true;
+      final success = result.isSuccess;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(success ? '二维码已保存到相册' : '保存失败，请检查相册权限'),
@@ -745,7 +755,15 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                     Text(
                       widget.wallet.balance.toStringAsFixed(2),
                       style: const TextStyle(
-                        fontSize: 28,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0B3D2E),
+                      ),
+                    ),
+                    const Text(
+                      '元',
+                      style: TextStyle(
+                        fontSize: 22,
                         fontWeight: FontWeight.w700,
                         color: Color(0xFF0B3D2E),
                       ),

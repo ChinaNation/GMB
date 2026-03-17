@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
 import 'package:wuminapp_mobile/user/user.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
@@ -20,7 +22,111 @@ class WuminApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const AppShell(),
+      home: const _AppLockGate(),
+    );
+  }
+}
+
+/// 应用锁入口：检查是否需要认证才能进入主界面。
+class _AppLockGate extends StatefulWidget {
+  const _AppLockGate();
+
+  @override
+  State<_AppLockGate> createState() => _AppLockGateState();
+}
+
+class _AppLockGateState extends State<_AppLockGate> {
+  final LocalAuthentication _localAuth = LocalAuthentication();
+  bool _authenticated = false;
+  bool _checking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAppLock();
+  }
+
+  Future<void> _checkAppLock() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lockEnabled = prefs.getBool('app_lock_enabled') ?? false;
+
+    if (!lockEnabled) {
+      if (!mounted) return;
+      setState(() {
+        _authenticated = true;
+        _checking = false;
+      });
+      return;
+    }
+
+    // 应用锁已开启，需要认证
+    if (!mounted) return;
+    setState(() => _checking = false);
+    _authenticate();
+  }
+
+  Future<void> _authenticate() async {
+    try {
+      final success = await _localAuth.authenticate(
+        localizedReason: '请验证身份以进入应用',
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: false,
+        ),
+      );
+      if (!mounted) return;
+      if (success) {
+        setState(() => _authenticated = true);
+      }
+    } catch (_) {
+      // 认证失败，保持锁定状态
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_checking) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_authenticated) {
+      return const AppShell();
+    }
+
+    // 锁定界面
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.lock_outline, size: 64, color: Color(0xFF007A74)),
+            const SizedBox(height: 24),
+            const Text(
+              '应用已锁定',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '请验证身份以继续',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: _authenticate,
+              icon: const Icon(Icons.fingerprint),
+              label: const Text('验证身份'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF007A74),
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -476,21 +582,28 @@ class _InstitutionSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: institutions.length,
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 360,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: 2.9,
-          ),
-          itemBuilder: (context, index) {
-            return _InstitutionCard(
-              title: institutions[index],
-              icon: icon,
-              badgeColor: badgeColor,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth <= 0) {
+              return const SizedBox.shrink();
+            }
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: institutions.length,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 360,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 2.9,
+              ),
+              itemBuilder: (context, index) {
+                return _InstitutionCard(
+                  title: institutions[index],
+                  icon: icon,
+                  badgeColor: badgeColor,
+                );
+              },
             );
           },
         ),
