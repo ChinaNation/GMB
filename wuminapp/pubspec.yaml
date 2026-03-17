@@ -25,6 +25,7 @@ dependencies:
   isar: ^3.1.0+1
   isar_flutter_libs: ^3.1.0+1
   path_provider: ^2.1.4
+  image_gallery_saver: ^2.0.3
 
 dev_dependencies:
   flutter_test:
@@ -44,3 +45,4 @@ flutter:
     - assets/icons/message-square-text.svg
     - assets/icons/scale.svg
     - assets/icons/contact-round.svg
+    - assets/icons/download.svg

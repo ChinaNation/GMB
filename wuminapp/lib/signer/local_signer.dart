@@ -4,6 +4,17 @@ import 'dart:typed_data';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
+/// hex 字符串 → 字节列表。
+List<int> _hexToBytes(String input) {
+  final text = input.startsWith('0x') ? input.substring(2) : input;
+  if (text.isEmpty || text.length.isOdd) return const <int>[];
+  final out = <int>[];
+  for (var i = 0; i < text.length; i += 2) {
+    out.add(int.parse(text.substring(i, i + 2), radix: 16));
+  }
+  return out;
+}
+
 enum LocalSignerErrorCode {
   emptyPayload,
   unsupportedAlgorithm,
@@ -62,7 +73,8 @@ class LocalSigner {
       );
     }
 
-    final pair = await Keyring.sr25519.fromMnemonic(walletSecret.mnemonic);
+    final seedBytes = _hexToBytes(walletSecret.seedHex);
+    final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(seedBytes));
     pair.ss58Format = wallet.ss58;
     final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
     if (localPubkeyHex.toLowerCase() != wallet.pubkeyHex.toLowerCase()) {

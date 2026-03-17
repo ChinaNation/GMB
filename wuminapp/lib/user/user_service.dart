@@ -58,19 +58,20 @@ class UserProfileState {
 class UserQrPayload {
   const UserQrPayload({
     required this.nickname,
-    required this.accountPubkeyHex,
+    required this.address,
   });
 
-  static const String protocol = 'WUMINAPP_USER_CARD_V1';
+  static const String protocol = 'WUMINAPP_CONTACT_V1';
+  static const String legacyProtocol = 'WUMINAPP_USER_CARD_V1';
 
   final String nickname;
-  final String accountPubkeyHex;
+  final String address;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
-      'type': protocol,
-      'nickname': nickname,
-      'account_pubkey': accountPubkeyHex,
+      'proto': protocol,
+      'address': address,
+      'name': nickname,
     };
   }
 
@@ -82,22 +83,31 @@ class UserQrPayload {
       throw const FormatException('二维码数据格式错误');
     }
 
-    final type = decoded['type']?.toString() ?? '';
-    if (type != protocol) {
+    final proto = (decoded['proto'] ?? decoded['type'] ?? '').toString();
+
+    // 兼容旧版 WUMINAPP_USER_CARD_V1 格式。
+    if (proto == legacyProtocol) {
+      final nickname = decoded['nickname']?.toString().trim() ?? '';
+      final accountPubkeyHex = UserContactService.normalizePubkeyHex(
+          decoded['account_pubkey']?.toString() ?? '');
+      if (nickname.isEmpty || accountPubkeyHex.isEmpty) {
+        throw const FormatException('二维码缺少昵称或账号信息');
+      }
+      return UserQrPayload(nickname: nickname, address: accountPubkeyHex);
+    }
+
+    // 新版 WUMINAPP_CONTACT_V1 格式。
+    if (proto != protocol) {
       throw const FormatException('不是用户通讯录二维码');
     }
 
-    final nickname = decoded['nickname']?.toString().trim() ?? '';
-    final accountPubkeyHex = UserContactService.normalizePubkeyHex(
-        decoded['account_pubkey']?.toString() ?? '');
-    if (nickname.isEmpty || accountPubkeyHex.isEmpty) {
-      throw const FormatException('二维码缺少昵称或账号信息');
+    final name = decoded['name']?.toString().trim() ?? '';
+    final address = decoded['address']?.toString().trim() ?? '';
+    if (name.isEmpty || address.isEmpty) {
+      throw const FormatException('二维码缺少昵称或地址信息');
     }
 
-    return UserQrPayload(
-      nickname: nickname,
-      accountPubkeyHex: accountPubkeyHex,
-    );
+    return UserQrPayload(nickname: name, address: address);
   }
 }
 
@@ -289,7 +299,7 @@ class UserContactService {
     String? selfAccountPubkeyHex,
   }) async {
     final payload = UserQrPayload.parse(rawPayload);
-    final incomingAccount = normalizePubkeyHex(payload.accountPubkeyHex);
+    final incomingAccount = payload.address.trim();
     final selfAccount = normalizePubkeyHex(selfAccountPubkeyHex ?? '');
     if (selfAccount.isNotEmpty && incomingAccount == selfAccount) {
       throw const FormatException('不能把自己加入通讯录');

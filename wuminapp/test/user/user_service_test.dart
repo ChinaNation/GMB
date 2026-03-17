@@ -38,7 +38,7 @@ void main() {
       final service = UserContactService();
       final payload = const UserQrPayload(
         nickname: '轻节点A',
-        accountPubkeyHex:
+        address:
             '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
       ).toRawJson();
 
@@ -62,7 +62,7 @@ void main() {
       await service.addFromQrPayload(
         const UserQrPayload(
           nickname: '旧昵称',
-          accountPubkeyHex: account,
+          address: account,
         ).toRawJson(),
       );
       await service.renameContact(account, '本地昵称');
@@ -70,7 +70,7 @@ void main() {
       final updated = await service.addFromQrPayload(
         const UserQrPayload(
           nickname: '新昵称',
-          accountPubkeyHex: account,
+          address: account,
         ).toRawJson(),
       );
 
@@ -83,7 +83,7 @@ void main() {
       final service = UserContactService();
       final payload = const UserQrPayload(
         nickname: '自己',
-        accountPubkeyHex:
+        address:
             '0x1111111111111111111111111111111111111111111111111111111111111111',
       ).toRawJson();
 

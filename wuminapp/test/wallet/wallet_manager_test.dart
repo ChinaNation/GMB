@@ -56,7 +56,7 @@ void main() {
         .setMockMethodCallHandler(secureStorageChannel, null);
   });
 
-  group('WalletManager', () {
+  group('WalletManager — 热钱包', () {
     test(
         'create/import/delete wallet should keep profile and secure data synced',
         () async {
@@ -66,34 +66,39 @@ void main() {
       expect(created.profile.walletIndex, 1);
       expect(created.profile.alg, 'sr25519');
       expect(created.profile.ss58, 2027);
+      expect(created.profile.signMode, 'local');
       expect(created.mnemonic.trim().split(RegExp(r'\s+')).length, 12);
 
       var wallets = await manager.getWallets();
       expect(wallets.length, 1);
       expect(await manager.getActiveWalletIndex(), 1);
-      expect(secureStorage[WalletSecureKeys.mnemonicV1(1)], isNotEmpty);
+      // 热钱包应存储 seedHex（非助记词）。
+      expect(secureStorage[WalletSecureKeys.seedHexV1(1)], isNotEmpty);
 
       final imported = await manager.importWallet(
         'legal winner thank year wave sausage worth useful legal winner thank yellow',
       );
       expect(imported.walletIndex, 2);
       expect(imported.alg, 'sr25519');
+      expect(imported.signMode, 'local');
 
       wallets = await manager.getWallets();
       expect(wallets.length, 2);
       expect(await manager.getActiveWalletIndex(), 2);
-      expect(secureStorage[WalletSecureKeys.mnemonicV1(2)], isNotEmpty);
+      expect(secureStorage[WalletSecureKeys.seedHexV1(2)], isNotEmpty);
 
       final latestSecret = await manager.getLatestWalletSecret();
       expect(latestSecret, isNotNull);
       expect(latestSecret!.profile.walletIndex, 2);
+      // seedHex 应为 64 个 hex 字符（32 字节）。
+      expect(latestSecret.seedHex.length, 64);
 
       await manager.deleteWallet(2);
       wallets = await manager.getWallets();
       expect(wallets.length, 1);
       expect(await manager.getActiveWalletIndex(), 1);
       expect(
-          secureStorage.containsKey(WalletSecureKeys.mnemonicV1(2)), isFalse);
+          secureStorage.containsKey(WalletSecureKeys.seedHexV1(2)), isFalse);
 
       await manager.deleteWallet(1);
       expect(await manager.getWallet(), isNull);
@@ -115,20 +120,68 @@ void main() {
       );
     });
 
-    test('should not read removed legacy mnemonic key', () async {
+    test('should not read removed seed key', () async {
       final manager = WalletManager();
       final imported = await manager.importWallet(
         'legal winner thank year wave sausage worth useful legal winner thank yellow',
       );
       final walletIndex = imported.walletIndex;
-      final v1Key = WalletSecureKeys.mnemonicV1(walletIndex);
-      final mnemonic = secureStorage[v1Key]!;
+      final seedKey = WalletSecureKeys.seedHexV1(walletIndex);
 
-      secureStorage.remove(v1Key);
-      secureStorage['wallet.mnemonic.$walletIndex'] = mnemonic;
+      secureStorage.remove(seedKey);
 
       final secret = await manager.getWalletSecretByIndex(walletIndex);
       expect(secret, isNull);
+    });
+  });
+
+  group('WalletManager — 冷钱包', () {
+    test('importColdWallet should store only public key, no seed', () async {
+      final manager = WalletManager();
+
+      // 先创建一个热钱包获取有效地址。
+      final hot = await manager.createWallet();
+      final address = hot.profile.address;
+
+      final cold = await manager.importColdWallet(address: address);
+      expect(cold.signMode, 'external');
+      expect(cold.address, address);
+
+      // 冷钱包不存 seed。
+      expect(
+        secureStorage.containsKey(WalletSecureKeys.seedHexV1(cold.walletIndex)),
+        isFalse,
+      );
+
+      // getLatestWalletSecret 返回 null（冷钱包无密钥）。
+      await manager.setActiveWallet(cold.walletIndex);
+      final secret = await manager.getLatestWalletSecret();
+      expect(secret, isNull);
+    });
+
+    test('createColdWallet should return mnemonic but not store seed',
+        () async {
+      final manager = WalletManager();
+
+      final result = await manager.createColdWallet();
+      expect(result.profile.signMode, 'external');
+      expect(result.mnemonic.trim().split(RegExp(r'\s+')).length, 12);
+
+      // 冷钱包不在 secure storage 存任何东西。
+      expect(
+        secureStorage.containsKey(
+            WalletSecureKeys.seedHexV1(result.profile.walletIndex)),
+        isFalse,
+      );
+    });
+
+    test('deleteColdWallet should not touch secure storage', () async {
+      final manager = WalletManager();
+      final result = await manager.createColdWallet();
+      final walletIndex = result.profile.walletIndex;
+
+      await manager.deleteWallet(walletIndex);
+      expect(await manager.getWallets(), isEmpty);
     });
   });
 }

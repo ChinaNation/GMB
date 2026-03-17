@@ -29,7 +29,7 @@ lib/signer/
 
 职责：
 
-- 使用 `WalletSecret`（钱包资料 + 助记词）执行 `sr25519` 签名
+- 使用 `WalletSecret`（钱包资料 + seed hex）执行 `sr25519` 签名
 - 校验本地派生公钥与钱包记录公钥一致，防止错签
 - 返回统一签名结果：
   - `account`
@@ -90,7 +90,6 @@ lib/signer/
 - `proto = WUMINAPP_QR_SIGN_V1`
 - `type = sign_response`
 - `request_id`
-- `account`
 - `pubkey`
 - `sig_alg = sr25519`
 - `signature`
@@ -101,8 +100,8 @@ lib/signer/
 - `wallet`：
   - 负责 `WalletSecret` 来源与钱包激活态
   - 不再直接实现签名算法细节
-- `login`：
-  - 负责挑战解析、防重放、白名单、签名前确认
+- `qr/login`：
+  - 负责挑战解析、防重放、系统签名验证、签名前确认
   - 通过 `LocalSigner` 获取签名回执
 - `trade/onchain`：
   - 负责交易草稿校验、prepare/submit/status 编排
@@ -119,7 +118,7 @@ lib/signer/
 - 固定拼串：
 
 ```text
-WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
+WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 ```
 
 ### 7.2 转账/治理交易签名域
@@ -149,7 +148,7 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 - 私钥/助记词仅在本地机密存储，不经二维码传输
 - 登录签名与交易签名必须保持域隔离（不同签名消息）
 - 转账签名与治理签名必须保持域隔离（不同 scope、不同 payload 来源）
-- 扫码回执必须校验 `request_id` 与 `account`，拒绝错配签名
+- 扫码回执必须校验 `request_id`，拒绝错配签名
 - 仅支持 `sr25519`，避免算法混淆
 - 治理相关 `nonce/signature` 字段必须校验字节长度上限（当前 64）
 

@@ -53,19 +53,22 @@
 
 协议号：
 
-- `WUMINAPP_USER_CARD_V1`
+- `WUMINAPP_CONTACT_V1`（新版）
+- `WUMINAPP_USER_CARD_V1`（旧版，解析兼容）
 
-字段：
+字段（新版）：
 
-- `type`
-- `nickname`
-- `account_pubkey`
+- `proto` — 协议标识
+- `address` — SS58 地址
+- `name` — 用户昵称
 
 设计说明：
 
-- 二维码只包含“昵称 + 账号公钥”，符合当前通讯录交换需要
+- 生成二维码统一使用新版 `WUMINAPP_CONTACT_V1` 格式
+- 解析二维码同时兼容旧版 `WUMINAPP_USER_CARD_V1`（`account_pubkey` → `address`，`nickname` → `name`）
+- 新版使用 SS58 地址替代裸公钥，更安全且用户可读
 - 二维码内容为明文 JSON，当前阶段不做签名、防篡改和时效控制
-- 后续如果要接入签名或链上校验，可以在保持 `type` 版本化的前提下扩展字段
+- 二维码模型定义已迁移到 `lib/qr/contact/contact_qr_models.dart`
 
 ### 3.3 通讯录 `UserContact`
 
@@ -205,7 +208,7 @@
 1. 用户进入“我的通讯录”
 2. 点击 `扫码添加`
 3. 打开 `UserContactScannerPage`
-4. 扫描到 `WUMINAPP_USER_CARD_V1` 二维码
+4. 扫描到 `WUMINAPP_CONTACT_V1`（或旧版 `WUMINAPP_USER_CARD_V1`）二维码
 5. 解析出昵称与公钥
 6. 写入本地通讯录
 

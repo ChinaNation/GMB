@@ -164,6 +164,17 @@ Call data 格式：`[pallet_index=2] [call_index=3] [0x00 + dest_32bytes] [compa
 
 `OnchainRpc.isTxConfirmed(address, usedNonce)` — 通过 nonce 对比判断交易是否已被打包。
 
+### 7.5 手续费估算
+
+`OnchainRpc.estimateTransferFeeYuan(double amountYuan)` — 纯客户端静态方法，无需 RPC。
+
+citizenchain 使用自定义 `PowOnchainChargeAdapter`，标准 `payment_queryInfo` 返回 0。客户端按链上相同逻辑计算：
+
+- 费率：`Perbill(1_000_000)` = 0.1%
+- 最低手续费：10 fen = 0.10 元
+- 公式：`fee = max(amount_fen × 0.001, 10 fen)`
+- 舍入：half-up 到 fen 精度（与 Rust `mul_perbill_round` 一致）
+
 ## 8. 依赖
 
 - `polkadart`：RPC Provider、Hasher、SigningPayload、ExtrinsicPayload、RuntimeMetadata
