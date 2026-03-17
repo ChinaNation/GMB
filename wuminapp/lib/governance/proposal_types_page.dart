@@ -1,0 +1,237 @@
+import 'package:flutter/material.dart';
+
+import 'institution_data.dart';
+
+/// 提案类型选择页。
+///
+/// 根据机构类型条件显示可发起的提案类型：
+/// - 所有机构：转账、换管理员、决议销毁
+/// - 仅国储会（NRC）：决议发行、验证密钥、状态升级
+class ProposalTypesPage extends StatelessWidget {
+  const ProposalTypesPage({
+    super.key,
+    required this.institution,
+    required this.icon,
+    required this.badgeColor,
+  });
+
+  final InstitutionInfo institution;
+  final IconData icon;
+  final Color badgeColor;
+
+  static const Color _inkGreen = Color(0xFF0B3D2E);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text(
+          '发起提案',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        foregroundColor: _inkGreen,
+        elevation: 0,
+        scrolledUnderElevation: 0.5,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          // 机构信息
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: badgeColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 18, color: badgeColor),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    institution.name,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: _inkGreen,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    OrgType.label(institution.orgType),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: badgeColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ──── 通用提案类型（所有机构） ────
+          _buildSectionTitle('通用提案'),
+          const SizedBox(height: 8),
+          _ProposalTypeCard(
+            icon: Icons.send_outlined,
+            title: '转账',
+            subtitle: '从机构多签账户发起转账',
+            color: const Color(0xFF176650),
+            onTap: () => _showDeveloping(context, '转账'),
+          ),
+          const SizedBox(height: 8),
+          _ProposalTypeCard(
+            icon: Icons.swap_horiz,
+            title: '换管理员',
+            subtitle: '提议更换本机构管理员',
+            color: const Color(0xFF2E7D5B),
+            onTap: () => _showDeveloping(context, '换管理员'),
+          ),
+          const SizedBox(height: 8),
+          _ProposalTypeCard(
+            icon: Icons.delete_outline,
+            title: '决议销毁',
+            subtitle: '提议销毁机构持有的资产',
+            color: const Color(0xFFB71C1C),
+            onTap: () => _showDeveloping(context, '决议销毁'),
+          ),
+
+          // ──── 国储会专属提案类型 ────
+          if (institution.orgType == OrgType.nrc) ...[
+            const SizedBox(height: 20),
+            _buildSectionTitle('国储会专属提案'),
+            const SizedBox(height: 8),
+            _ProposalTypeCard(
+              icon: Icons.account_balance,
+              title: '决议发行',
+              subtitle: '发起公民币发行决议，需联合投票+公民投票',
+              color: _inkGreen,
+              onTap: () => _showDeveloping(context, '决议发行'),
+            ),
+            const SizedBox(height: 8),
+            _ProposalTypeCard(
+              icon: Icons.vpn_key_outlined,
+              title: '验证密钥',
+              subtitle: '更换 GRANDPA 共识验证密钥',
+              color: const Color(0xFF4527A0),
+              onTap: () => _showDeveloping(context, '验证密钥'),
+            ),
+            const SizedBox(height: 8),
+            _ProposalTypeCard(
+              icon: Icons.system_update_alt,
+              title: '状态升级',
+              subtitle: 'Runtime 升级，需联合投票+公民投票',
+              color: const Color(0xFF1565C0),
+              onTap: () => _showDeveloping(context, '状态升级'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: Colors.grey,
+      ),
+    );
+  }
+
+  void _showDeveloping(BuildContext context, String name) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$name功能开发中')),
+    );
+  }
+}
+
+class _ProposalTypeCard extends StatelessWidget {
+  const _ProposalTypeCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: color.withValues(alpha: 0.15)),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 20, color: color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, size: 20, color: Colors.grey[400]),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
