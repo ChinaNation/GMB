@@ -20,6 +20,7 @@ members = [
     "transaction/offchain-transaction-pos",  # 交易-链下交易手续费模块 pallet
     "transaction/onchain-transaction-pow",   # 交易-链上交易手续费模块 pallet
     "transaction/duoqian-transaction-pow",   # 交易-多签交易模块 pallet
+    "transaction/duoqian-transfer-pow",    # 交易-机构多签名地址转账模块 pallet
 
 ]
 resolver = "2"

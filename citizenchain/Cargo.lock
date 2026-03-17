@@ -1389,6 +1389,7 @@ dependencies = [
  "admins-origin-gov",
  "citizen-lightnode-issuance",
  "duoqian-transaction-pow",
+ "duoqian-transfer-pow",
  "ed25519-dalek",
  "frame-benchmarking",
  "frame-executive",
@@ -2697,6 +2698,24 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
+]
+
+[[package]]
+name = "duoqian-transfer-pow"
+version = "1.0.0"
+dependencies = [
+ "duoqian-transaction-pow",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+ "voting-engine-system",
 ]
 
 [[package]]
