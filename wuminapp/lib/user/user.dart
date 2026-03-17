@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/user/user_service.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
@@ -71,106 +72,25 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _pickBackgroundImage() async {
-    await _pickImage(
-      onSaved: (path) => _userProfileService.updateBackgroundPath(path),
-      onApplied: (state) {
-        _userProfile = state;
-      },
-      failurePrefix: '设置背景图失败',
-    );
-  }
-
-  Future<void> _pickAvatarImage() async {
-    await _pickImage(
-      onSaved: (path) => _userProfileService.updateAvatarPath(path),
-      onApplied: (state) {
-        _userProfile = state;
-      },
-      failurePrefix: '设置头像失败',
-    );
-  }
-
-  Future<void> _pickImage({
-    required Future<UserProfileState> Function(String? path) onSaved,
-    required void Function(UserProfileState state) onApplied,
-    required String failurePrefix,
-  }) async {
     try {
       final picked = await _imagePicker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1600,
         maxHeight: 1600,
       );
-      if (picked == null) {
-        return;
-      }
-      final saved = await onSaved(picked.path);
-      if (!mounted) {
-        return;
-      }
+      if (picked == null) return;
+      final saved =
+          await _userProfileService.updateBackgroundPath(picked.path);
+      if (!mounted) return;
       setState(() {
-        onApplied(saved);
+        _userProfile = saved;
       });
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$failurePrefix：$e')),
+        SnackBar(content: Text('设置背景图失败：$e')),
       );
     }
-  }
-
-  Future<void> _editNickname() async {
-    final controller = TextEditingController(text: _userProfile.nickname);
-    final nickname = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('修改昵称'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLength: 20,
-            decoration: const InputDecoration(
-              hintText: '请输入昵称',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(context).pop(controller.text.trim());
-              },
-              child: const Text('保存'),
-            ),
-          ],
-        );
-      },
-    );
-    controller.dispose();
-
-    if (!mounted || nickname == null) {
-      return;
-    }
-    if (nickname.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('昵称不能为空')),
-      );
-      return;
-    }
-
-    final saved = await _userProfileService.updateNickname(nickname);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _userProfile = saved;
-    });
   }
 
   Future<void> _handleBindIdentity() async {
@@ -385,10 +305,7 @@ class _ProfilePageState extends State<ProfilePage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GestureDetector(
-            onTap: _pickAvatarImage,
-            child: _SquareAvatar(path: _userProfile.avatarPath, size: 84),
-          ),
+          _SquareAvatar(path: _userProfile.avatarPath, size: 84),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -400,22 +317,19 @@ class _ProfilePageState extends State<ProfilePage> {
                     Expanded(
                       child: Transform.translate(
                         offset: const Offset(0, -2),
-                        child: GestureDetector(
-                          onTap: _editNickname,
-                          child: Text(
-                            _userProfile.nickname,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 19,
-                              fontWeight: FontWeight.w600,
-                              shadows: [
-                                Shadow(
-                                  color: Color(0x80000000),
-                                  blurRadius: 10,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
+                        child: Text(
+                          _userProfile.nickname,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 19,
+                            fontWeight: FontWeight.w600,
+                            shadows: [
+                              Shadow(
+                                color: Color(0x80000000),
+                                blurRadius: 10,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -602,7 +516,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 title: '设置',
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const _SettingsPlaceholderPage()),
+                    MaterialPageRoute(builder: (_) => const _SettingsPage()),
                   );
                 },
               ),
@@ -758,26 +672,16 @@ class _ContactBookPageState extends State<ContactBookPage> {
   }
 
   Future<void> _scanContactQr() async {
-    final result = await Navigator.of(context).push<ContactImportResult>(
+    await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => UserContactScannerPage(
+        builder: (_) => QrScanPage(
+          mode: QrScanMode.contact,
           selfAccountPubkeyHex: widget.selfAccountPubkeyHex,
         ),
       ),
     );
-    if (!mounted || result == null) {
-      return;
-    }
+    if (!mounted) return;
     _reload();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result.created
-              ? '已加入通讯录：${result.contact.displayNickname}'
-              : '已更新通讯录：${result.contact.displayNickname}',
-        ),
-      ),
-    );
   }
 
   Future<void> _renameContact(UserContact contact) async {
@@ -948,115 +852,6 @@ class _ContactBookPageState extends State<ContactBookPage> {
             },
           );
         },
-      ),
-    );
-  }
-}
-
-class UserContactScannerPage extends StatefulWidget {
-  const UserContactScannerPage({
-    super.key,
-    required this.selfAccountPubkeyHex,
-  });
-
-  final String selfAccountPubkeyHex;
-
-  @override
-  State<UserContactScannerPage> createState() => _UserContactScannerPageState();
-}
-
-class _UserContactScannerPageState extends State<UserContactScannerPage> {
-  final MobileScannerController _controller = MobileScannerController();
-  final UserContactService _userContactService = UserContactService();
-  bool _handling = false;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleRawValue(String raw) async {
-    if (_handling) {
-      return;
-    }
-    _handling = true;
-    await _controller.stop();
-
-    var shouldRestart = true;
-    try {
-      final result = await _userContactService.addFromQrPayload(
-        raw,
-        selfAccountPubkeyHex: widget.selfAccountPubkeyHex,
-      );
-      shouldRestart = false;
-      if (!mounted) {
-        return;
-      }
-      Navigator.of(context).pop(result);
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      await showDialog<void>(
-        context: context,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('无法识别通讯录二维码'),
-            content: Text('$e'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('继续扫描'),
-              ),
-            ],
-          );
-        },
-      );
-    } finally {
-      _handling = false;
-      if (shouldRestart && mounted) {
-        await _controller.start();
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('扫描用户二维码'),
-        centerTitle: true,
-      ),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: (capture) async {
-              final raw = capture.barcodes.first.rawValue;
-              if (raw == null || raw.isEmpty) {
-                return;
-              }
-              await _handleRawValue(raw);
-            },
-          ),
-          Align(
-            alignment: Alignment.topCenter,
-            child: Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Text(
-                '扫描用户二维码后加入通讯录',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1260,8 +1055,73 @@ class _SquareAvatar extends StatelessWidget {
   }
 }
 
-class _SettingsPlaceholderPage extends StatelessWidget {
-  const _SettingsPlaceholderPage();
+class _SettingsPage extends StatefulWidget {
+  const _SettingsPage();
+
+  @override
+  State<_SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<_SettingsPage> {
+  static const String _appLockKey = 'app_lock_enabled';
+  final LocalAuthentication _localAuth = LocalAuthentication();
+  bool _appLockEnabled = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _appLockEnabled = prefs.getBool(_appLockKey) ?? false;
+      _loading = false;
+    });
+  }
+
+  Future<void> _toggleAppLock(bool value) async {
+    if (value) {
+      // 开启前先检查设备是否支持生物识别或设备密码
+      final canCheck = await _localAuth.canCheckBiometrics;
+      final isDeviceSupported = await _localAuth.isDeviceSupported();
+      if (!canCheck && !isDeviceSupported) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('您的设备不支持生物识别或设备密码，无法开启应用锁')),
+        );
+        return;
+      }
+
+      // 验证一次身份，确认用户可以通过认证
+      try {
+        final authenticated = await _localAuth.authenticate(
+          localizedReason: '验证身份以开启应用锁',
+          options: const AuthenticationOptions(
+            stickyAuth: true,
+            biometricOnly: false,
+          ),
+        );
+        if (!authenticated) return;
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('身份验证失败：$e')),
+        );
+        return;
+      }
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_appLockKey, value);
+    if (!mounted) return;
+    setState(() {
+      _appLockEnabled = value;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1270,9 +1130,21 @@ class _SettingsPlaceholderPage extends StatelessWidget {
         title: const Text('设置'),
         centerTitle: true,
       ),
-      body: const Center(
-        child: Text('暂无可配置项'),
-      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              children: [
+                SwitchListTile(
+                  title: const Text('应用锁'),
+                  subtitle: const Text('启动应用时需要生物识别或设备密码'),
+                  value: _appLockEnabled,
+                  onChanged: _toggleAppLock,
+                  activeThumbColor: Colors.white,
+                  activeTrackColor: const Color(0xFF007A74),
+                  secondary: const Icon(Icons.lock_outline),
+                ),
+              ],
+            ),
     );
   }
 }
