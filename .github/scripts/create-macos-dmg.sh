@@ -23,6 +23,7 @@ mkdir -p "$(dirname "${dmg_path}")"
 trap 'rm -rf "${stage_dir}"' EXIT
 
 cp -R "${app_path}" "${stage_dir}/"
+ln -s /Applications "${stage_dir}/Applications"
 hdiutil create \
   -volname "${volume_name}" \
   -srcfolder "${stage_dir}" \
