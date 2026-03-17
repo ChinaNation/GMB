@@ -50,23 +50,27 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     try {
       final results = await Future.wait([
         _adminService.fetchAdmins(widget.institution.shenfenId),
-        _walletManager.getWallet(),
+        _walletManager.getWallets(),
       ]);
       final admins = results[0] as List<String>;
-      final wallet = results[1] as WalletProfile?;
+      final wallets = results[1] as List<WalletProfile>;
 
       var isAdmin = false;
-      String? pubkey;
-      if (wallet != null) {
-        pubkey = wallet.pubkeyHex.toLowerCase();
+      String? matchedPubkey;
+      for (final wallet in wallets) {
+        var pubkey = wallet.pubkeyHex.toLowerCase();
         if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
-        isAdmin = admins.contains(pubkey);
+        if (admins.contains(pubkey)) {
+          isAdmin = true;
+          matchedPubkey = pubkey;
+          break;
+        }
       }
 
       if (!mounted) return;
       setState(() {
         _admins = admins;
-        _currentPubkey = pubkey;
+        _currentPubkey = matchedPubkey;
         _isCurrentUserAdmin = isAdmin;
         _loading = false;
       });

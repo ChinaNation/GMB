@@ -20,34 +20,29 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
+const Color _inkGreen = Color(0xFF0B3D2E);
+
 class _ProfilePageState extends State<ProfilePage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
   final ImagePicker _imagePicker = ImagePicker();
-  final SfidBindingService _sfidBindingService = SfidBindingService();
   final UserProfileService _userProfileService = UserProfileService();
 
-  bool _bindingSubmitting = false;
-  SfidBindState _bindState =
-      const SfidBindState(status: SfidBindStatus.unbound);
   UserProfileState _userProfile = const UserProfileState(
     nickname: UserProfileService.defaultNickname,
     nicknameCustomized: false,
   );
 
   bool get _isQrEnabled {
-    return _userProfileService.isNicknameReady(_userProfile) &&
-        _bindState.status == SfidBindStatus.bound &&
-        _currentAccountPubkey.isNotEmpty;
+    return _communicationAddress.isNotEmpty;
   }
 
-  String get _currentAccountPubkey {
-    return _bindState.walletPubkeyHex?.trim() ?? '';
+  String get _communicationAddress {
+    return _userProfile.communicationAddress?.trim() ?? '';
   }
 
   String get _userQrPayload {
     return UserQrPayload(
       nickname: _userProfile.nickname,
-      address: _currentAccountPubkey,
+      address: _communicationAddress,
     ).toRawJson();
   }
 
@@ -58,15 +53,11 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadState() async {
-    final bindFuture = _sfidBindingService.getState();
-    final profileFuture = _userProfileService.getState();
-    final bindState = await bindFuture;
-    final profile = await profileFuture;
+    final profile = await _userProfileService.getState();
     if (!mounted) {
       return;
     }
     setState(() {
-      _bindState = bindState;
       _userProfile = profile;
     });
   }
@@ -93,53 +84,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _handleBindIdentity() async {
-    if (_bindingSubmitting || _bindState.status == SfidBindStatus.pending) {
-      return;
-    }
-
-    final wallet = await Navigator.of(context).push<WalletProfile>(
-      MaterialPageRoute(
-        builder: (_) => const MyWalletPage(selectForBind: true),
-      ),
-    );
-    if (!mounted || wallet == null) {
-      return;
-    }
-
-    setState(() {
-      _bindingSubmitting = true;
-    });
-    try {
-      final state = await _sfidBindingService.submitBinding(
-        wallet.address,
-        wallet.pubkeyHex,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _bindState = state;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已将所选公钥提交到 SFID 系统，等待绑定结果')),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('身份绑定提交失败：$e')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _bindingSubmitting = false;
-        });
-      }
-    }
-  }
-
   Future<void> _openUserQr() async {
     if (!_isQrEnabled) {
       return;
@@ -149,7 +93,7 @@ class _ProfilePageState extends State<ProfilePage> {
         builder: (_) => UserQrPage(
           nickname: _userProfile.nickname,
           avatarPath: _userProfile.avatarPath,
-          accountPubkeyHex: _currentAccountPubkey,
+          accountPubkeyHex: _communicationAddress,
           qrPayload: _userQrPayload,
         ),
       ),
@@ -160,7 +104,7 @@ class _ProfilePageState extends State<ProfilePage> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => ContactBookPage(
-          selfAccountPubkeyHex: _currentAccountPubkey,
+          selfAccountPubkeyHex: _communicationAddress,
         ),
       ),
     );
@@ -168,134 +112,13 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _openProfileEdit() async {
-    final result = await Navigator.of(context).push<UserProfileState>(
+    await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => ProfileEditPage(initialState: _userProfile),
       ),
     );
-    if (!mounted || result == null) {
-      return;
-    }
-    final saved = await _userProfileService.saveState(result);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _userProfile = saved;
-    });
-  }
-
-  Widget _buildExpandedTapArea({
-    required Widget child,
-    VoidCallback? onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: SizedBox(
-          height: 36,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: IgnorePointer(
-              child: child,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBindAction() {
-    if (_bindState.status == SfidBindStatus.pending) {
-      return _buildExpandedTapArea(
-        child: const SizedBox(
-          height: 20,
-          child: FilledButton(
-            onPressed: null,
-            style: ButtonStyle(
-              padding: WidgetStatePropertyAll(
-                EdgeInsets.symmetric(horizontal: 6),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.schedule, size: 4),
-                SizedBox(width: 2),
-                Text('等待绑定', style: TextStyle(fontSize: 9)),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    if (_bindState.status == SfidBindStatus.bound) {
-      return _buildExpandedTapArea(
-        onTap: _handleBindIdentity,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFFE9F5EF),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  _currentAccountPubkey,
-                  softWrap: true,
-                  style: const TextStyle(
-                    color: _inkGreen,
-                    fontSize: 12,
-                    height: 1.4,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              const Padding(
-                padding: EdgeInsets.only(top: 2),
-                child: Icon(Icons.verified, size: 13, color: _inkGreen),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    return _buildExpandedTapArea(
-      onTap: _bindingSubmitting ? null : _handleBindIdentity,
-      child: SizedBox(
-        height: 20,
-        child: FilledButton(
-          onPressed: () {},
-          style: const ButtonStyle(
-            padding: WidgetStatePropertyAll(
-              EdgeInsets.symmetric(horizontal: 6),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _bindingSubmitting
-                    ? Icons.hourglass_top_outlined
-                    : Icons.verified_user_outlined,
-                size: 4,
-              ),
-              const SizedBox(width: 2),
-              Text(
-                _bindingSubmitting ? '提交中' : '绑定身份',
-                style: const TextStyle(fontSize: 9),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    if (!mounted) return;
+    await _loadState();
   }
 
   Widget _buildProfileCard() {
@@ -362,34 +185,28 @@ class _ProfilePageState extends State<ProfilePage> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                Row(
-                  crossAxisAlignment: _bindState.status == SfidBindStatus.bound
-                      ? CrossAxisAlignment.start
-                      : CrossAxisAlignment.center,
-                  children: [
-                    Expanded(child: _buildBindAction()),
-                    const SizedBox(width: 8),
-                    InkWell(
-                      onTap: _openProfileEdit,
-                      borderRadius: BorderRadius.circular(8),
-                      child: const SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Icon(
-                          Icons.chevron_right,
-                          size: 24,
-                          color: Colors.white,
-                          shadows: [
-                            Shadow(
-                              color: Color(0x80000000),
-                              blurRadius: 10,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: InkWell(
+                    onTap: _openProfileEdit,
+                    borderRadius: BorderRadius.circular(8),
+                    child: const SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: Icon(
+                        Icons.chevron_right,
+                        size: 24,
+                        color: Colors.white,
+                        shadows: [
+                          Shadow(
+                            color: Color(0x80000000),
+                            blurRadius: 10,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -543,59 +360,218 @@ class ProfileEditPage extends StatefulWidget {
 
 class _ProfileEditPageState extends State<ProfileEditPage> {
   final ImagePicker _imagePicker = ImagePicker();
-  late final TextEditingController _nicknameController;
-  String? _avatarPath;
+  final UserProfileService _profileService = UserProfileService();
+  final SfidBindingService _sfidBindingService = SfidBindingService();
+
+  late UserProfileState _profile;
+  SfidBindState _voteBindState =
+      const SfidBindState(status: SfidBindStatus.unbound);
+  bool _voteSubmitting = false;
 
   @override
   void initState() {
     super.initState();
-    _nicknameController =
-        TextEditingController(text: widget.initialState.nickname);
-    _avatarPath = widget.initialState.avatarPath;
+    _profile = widget.initialState;
+    _loadVoteState();
   }
 
-  @override
-  void dispose() {
-    _nicknameController.dispose();
-    super.dispose();
+  Future<void> _loadVoteState() async {
+    final state = await _sfidBindingService.getState();
+    if (!mounted) return;
+    setState(() {
+      _voteBindState = state;
+    });
   }
 
-  Future<void> _pickAvatarFromGallery() async {
+  // ---- 二维码数据 ----
+
+  bool get _isQrReady {
+    return (_profile.communicationAddress?.trim().isNotEmpty ?? false);
+  }
+
+  String get _qrPayload {
+    return UserQrPayload(
+      nickname: _profile.nickname,
+      address: _profile.communicationAddress?.trim() ?? '',
+    ).toRawJson();
+  }
+
+  // ---- 头像 ----
+
+  Future<void> _pickAvatar() async {
     try {
       final picked = await _imagePicker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1024,
         maxHeight: 1024,
       );
-      if (picked == null || !mounted) {
-        return;
-      }
+      if (picked == null || !mounted) return;
+      final saved = await _profileService.updateAvatarPath(picked.path);
+      if (!mounted) return;
       setState(() {
-        _avatarPath = picked.path;
+        _profile = saved;
       });
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('访问相册失败：$e')),
       );
     }
   }
 
-  void _save() {
-    final nickname = _nicknameController.text.trim();
-    if (nickname.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('用户昵称不能为空')),
+  // ---- 昵称 ----
+
+  Future<void> _editNickname() async {
+    final controller = TextEditingController(text: _profile.nickname);
+    final nickname = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('修改昵称'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 20,
+            decoration: const InputDecoration(
+              hintText: '请输入昵称',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(controller.text.trim()),
+              child: const Text('保存'),
+            ),
+          ],
+        );
+      },
+    );
+    await WidgetsBinding.instance.endOfFrame;
+    controller.dispose();
+    if (!mounted || nickname == null || nickname.trim().isEmpty) return;
+    final saved = await _profileService.updateNickname(nickname);
+    if (!mounted) return;
+    setState(() {
+      _profile = saved;
+    });
+  }
+
+  // ---- 通信账户 ----
+
+  Future<void> _selectCommunicationWallet() async {
+    final wallet = await Navigator.of(context).push<WalletProfile>(
+      MaterialPageRoute(
+        builder: (_) => const MyWalletPage(selectForBind: true),
+      ),
+    );
+    if (!mounted || wallet == null) return;
+    final saved =
+        await _profileService.updateCommunicationAddress(wallet.address);
+    if (!mounted) return;
+    setState(() {
+      _profile = saved;
+    });
+  }
+
+  // ---- 投票账户 ----
+
+  Future<void> _selectVoteWallet() async {
+    if (_voteSubmitting) return;
+    final wallet = await Navigator.of(context).push<WalletProfile>(
+      MaterialPageRoute(
+        builder: (_) => const MyWalletPage(selectForBind: true),
+      ),
+    );
+    if (!mounted || wallet == null) return;
+    setState(() {
+      _voteSubmitting = true;
+    });
+    try {
+      final state = await _sfidBindingService.submitBinding(
+        wallet.address,
+        wallet.pubkeyHex,
       );
-      return;
+      if (!mounted) return;
+      setState(() {
+        _voteBindState = state;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已提交到 SFID 系统，等待绑定结果')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('投票账户绑定失败：$e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _voteSubmitting = false;
+        });
+      }
     }
-    Navigator.of(context).pop(
-      widget.initialState.copyWith(
-        nickname: nickname,
-        nicknameCustomized: true,
-        avatarPath: _avatarPath,
+  }
+
+  String _voteStatusLabel() {
+    return switch (_voteBindState.status) {
+      SfidBindStatus.unbound => '未设置',
+      SfidBindStatus.pending => '绑定中',
+      SfidBindStatus.bound => '已绑定',
+    };
+  }
+
+  Color _voteStatusColor() {
+    return switch (_voteBindState.status) {
+      SfidBindStatus.unbound => Colors.grey,
+      SfidBindStatus.pending => Colors.orange,
+      SfidBindStatus.bound => _inkGreen,
+    };
+  }
+
+  // ---- 通用行构建 ----
+
+  Widget _buildSettingRow({
+    required String label,
+    String? value,
+    Widget? trailing,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                value ?? '',
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: 4),
+              trailing,
+            ],
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, size: 20, color: Colors.grey.shade400),
+          ],
+        ),
       ),
     );
   }
@@ -604,40 +580,95 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('修改用户资料'),
+        title: const Text('用户资料'),
         centerTitle: true,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _SquareAvatar(path: _avatarPath, size: 84),
-                const SizedBox(width: 14),
-                OutlinedButton(
-                  onPressed: _pickAvatarFromGallery,
-                  child: const Text('设置头像'),
-                ),
-              ],
+      body: ListView(
+        children: [
+          // ---- 用户二维码 ----
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Center(
+              child: _isQrReady
+                  ? QrImageView(
+                      data: _qrPayload,
+                      version: QrVersions.auto,
+                      size: 180,
+                    )
+                  : Container(
+                      width: 180,
+                      height: 180,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          '请设置通信账户后\n生成二维码',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    ),
             ),
-            const SizedBox(height: 18),
-            TextField(
-              controller: _nicknameController,
-              decoration: const InputDecoration(
-                labelText: '用户昵称',
-                hintText: '请输入用户昵称',
-                border: OutlineInputBorder(),
+          ),
+          const Divider(height: 1),
+          // ---- 用户头像 ----
+          InkWell(
+            onTap: _pickAvatar,
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  _SquareAvatar(path: _profile.avatarPath, size: 44),
+                  const Spacer(),
+                  Icon(Icons.chevron_right,
+                      size: 20, color: Colors.grey.shade400),
+                ],
               ),
             ),
-            const SizedBox(height: 18),
-            FilledButton(
-              onPressed: _save,
-              child: const Text('保存'),
-            ),
-          ],
-        ),
+          ),
+          const Divider(height: 1),
+          // ---- 用户昵称 ----
+          _buildSettingRow(
+            label: _profile.nickname,
+            onTap: _editNickname,
+          ),
+          const Divider(height: 1),
+          // ---- 通信账户 ----
+          _buildSettingRow(
+            label: '通信账户',
+            value: _profile.communicationAddress ?? '未设置',
+            onTap: _selectCommunicationWallet,
+          ),
+          const Divider(height: 1),
+          // ---- 投票账户 ----
+          _buildSettingRow(
+            label: '投票账户',
+            value: _voteBindState.walletAddress ?? '未设置',
+            trailing: _voteBindState.status != SfidBindStatus.unbound
+                ? Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _voteStatusColor().withAlpha(25),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _voteStatusLabel(),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: _voteStatusColor(),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  )
+                : null,
+            onTap: _voteSubmitting ? null : _selectVoteWallet,
+          ),
+          const Divider(height: 1),
+        ],
       ),
     );
   }
@@ -815,7 +846,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
                     child: Text(
                       contact.displayNickname.characters.first,
                       style: const TextStyle(
-                        color: _ProfilePageState._inkGreen,
+                        color: _inkGreen,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1048,7 +1079,7 @@ class _SquareAvatar extends StatelessWidget {
             : const Icon(
                 Icons.person,
                 size: 40,
-                color: _ProfilePageState._inkGreen,
+                color: _inkGreen,
               ),
       ),
     );
