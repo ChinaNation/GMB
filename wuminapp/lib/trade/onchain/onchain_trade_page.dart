@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_service.dart';
-import 'package:wuminapp_mobile/trade/onchain/trade_qr_scan_page.dart';
+import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
+import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
+import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
 
@@ -20,6 +24,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   static const Color _inputFieldColor = Color(0xFFF7F7F7);
   static const Color _cardBgColor = Color(0xFFF5F5F5);
   static const Color _inputTextColor = Colors.black87;
+  static const Color _inputBorderColor = Color(0xFFD0D0D0);
   final OnchainTradeService _tradeService = OnchainTradeService();
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
@@ -121,14 +126,20 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   }
 
   Future<void> _scanToAddress() async {
-    final scanned = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const TradeQrScanPage()),
+    final result = await Navigator.of(context).push<QrScanTransferResult>(
+      MaterialPageRoute(builder: (_) => const QrScanPage()),
     );
-    if (scanned == null || scanned.isEmpty || !mounted) {
+    if (result == null || !mounted) {
       return;
     }
     setState(() {
-      _toController.text = scanned;
+      _toController.text = result.toAddress;
+      if (result.amount != null && result.amount!.isNotEmpty) {
+        _amountController.text = result.amount!;
+      }
+      if (result.symbol != null && result.symbol!.isNotEmpty) {
+        _selectedSymbol = result.symbol!;
+      }
     });
   }
 
@@ -161,16 +172,91 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       return;
     }
 
+    // 预估手续费，展示确认对话框
+    final estimatedFee = OnchainRpc.estimateTransferFeeYuan(amount);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('确认交易'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('转账金额：$amount $_selectedSymbol'),
+            const SizedBox(height: 4),
+            Text('预估手续费：$estimatedFee $_selectedSymbol'),
+            const Divider(height: 16),
+            Text(
+              '合计：${(amount + estimatedFee).toStringAsFixed(2)} $_selectedSymbol',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(_, true),
+            child: const Text('确认'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     setState(() {
       _submitting = true;
     });
     try {
+      final wallet = _currentWallet!;
+      final Future<Uint8List> Function(Uint8List payload) signCallback;
+
+      if (wallet.isHotWallet) {
+        // 热钱包：通过 WalletManager 签名，seed 不出类。
+        final walletManager = WalletManager();
+        signCallback = (payload) =>
+            walletManager.signWithWallet(wallet.walletIndex, payload);
+      } else {
+        // 冷钱包：扫码签名。
+        signCallback = (Uint8List payload) async {
+          final qrSigner = QrSigner();
+          final requestId = 'tx-${DateTime.now().millisecondsSinceEpoch}';
+          final request = qrSigner.buildRequest(
+            scope: QrSignScope.onchainTx,
+            requestId: requestId,
+            account: wallet.address,
+            pubkey: '0x${wallet.pubkeyHex}',
+            payloadHex: '0x${_toHex(payload)}',
+          );
+          final requestJson = qrSigner.encodeRequest(request);
+
+          final response = await Navigator.push<QrSignResponse>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => QrSignSessionPage(
+                request: request,
+                requestJson: requestJson,
+              ),
+            ),
+          );
+
+          if (response == null) {
+            throw Exception('签名已取消');
+          }
+
+          return Uint8List.fromList(_hexToBytes(response.signature));
+        };
+      }
+
       final record = await _tradeService.submitTransfer(
         OnchainTransferDraft(
           toAddress: toAddress,
           amount: amount,
           symbol: _selectedSymbol,
         ),
+        sign: signCallback,
       );
       if (!mounted) {
         return;
@@ -248,37 +334,43 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                       ),
                     ],
                   )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                : Row(
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
+                            Padding(
+                              padding: const EdgeInsets.only(left: 4, top: 2, bottom: 2),
                               child: Text(
-                                '付款钱包：${_currentWallet!.walletName}',
+                                _currentWallet!.walletName,
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.w700),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 17,
+                                ),
                               ),
                             ),
-                            InkWell(
-                              onTap: _openMyWalletPage,
-                              borderRadius: BorderRadius.circular(6),
-                              child: Padding(
-                                padding: const EdgeInsets.all(6),
-                                child: SvgPicture.asset(
-                                  'assets/icons/arrow-right-left.svg',
-                                  width: 20,
-                                  height: 20,
-                                  fit: BoxFit.contain,
+                            Padding(
+                              padding: const EdgeInsets.only(left: 4),
+                              child: Text(
+                                _currentWallet!.address,
+                                style: const TextStyle(
+                                  color: Colors.black45,
+                                  fontSize: 13,
                                 ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                      Text(_currentWallet!.address),
+                      InkWell(
+                        onTap: _openMyWalletPage,
+                        borderRadius: BorderRadius.circular(8),
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Icon(Icons.chevron_right, size: 22),
+                        ),
+                      ),
                     ],
                   ),
       ),
@@ -296,7 +388,12 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             TextField(
               controller: _toController,
               decoration: InputDecoration(
-                border: const OutlineInputBorder(),
+                enabledBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: _inputBorderColor),
+                ),
+                focusedBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: _brandPrimaryColor),
+                ),
                 labelText: '收款地址',
                 filled: true,
                 fillColor: _inputFieldColor,
@@ -320,7 +417,12 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                     keyboardType: TextInputType.number,
                     style: const TextStyle(color: _inputTextColor),
                     decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: _inputBorderColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: _brandPrimaryColor),
+                      ),
                       labelText: '金额',
                       filled: true,
                       fillColor: _inputFieldColor,
@@ -330,35 +432,24 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                 const SizedBox(width: 10),
                 SizedBox(
                   width: 120,
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _selectedSymbol,
-                    style: const TextStyle(color: _inputTextColor),
-                    iconEnabledColor: _inputTextColor,
+                  child: InputDecorator(
                     decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: _inputBorderColor),
+                      ),
                       labelText: '币种',
                       filled: true,
                       fillColor: _inputFieldColor,
+                      contentPadding: EdgeInsets.symmetric(vertical: 16),
                     ),
-                    items: _symbols
-                        .map(
-                          (symbol) => DropdownMenuItem<String>(
-                            value: symbol,
-                            child: Text(
-                              symbol,
-                              style: const TextStyle(color: _inputTextColor),
-                            ),
-                          ),
-                        )
-                        .toList(growable: false),
-                    onChanged: (value) {
-                      if (value == null) {
-                        return;
-                      }
-                      setState(() {
-                        _selectedSymbol = value;
-                      });
-                    },
+                    child: Text(
+                      _selectedSymbol,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.black45,
+                        fontSize: 16,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -681,6 +772,17 @@ class _TradeRecordsPageState extends State<TradeRecordsPage> {
                         ),
                       ],
                     ),
+                    if (item.estimatedFee != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '手续费：${item.estimatedFee} ${item.symbol}',
+                          style: const TextStyle(
+                            color: Colors.black54,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 8),
                     Text('from: ${_shortAddress(item.fromAddress)}'),
                     Text('to: ${_shortAddress(item.toAddress)}'),
@@ -815,6 +917,11 @@ class TradeRecordDetailPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildDetailRow('金额', '${record.amount} ${record.symbol}'),
+                  if (record.estimatedFee != null)
+                    _buildDetailRow(
+                      '手续费',
+                      '${record.estimatedFee} ${record.symbol}',
+                    ),
                   _buildDetailRow(
                     '状态',
                     _statusLabel(record.status),
@@ -838,6 +945,27 @@ class TradeRecordDetailPage extends StatelessWidget {
       ),
     );
   }
+}
+
+String _toHex(List<int> bytes) {
+  const chars = '0123456789abcdef';
+  final buf = StringBuffer();
+  for (final b in bytes) {
+    buf
+      ..write(chars[(b >> 4) & 0x0f])
+      ..write(chars[b & 0x0f]);
+  }
+  return buf.toString();
+}
+
+List<int> _hexToBytes(String input) {
+  final text = input.startsWith('0x') ? input.substring(2) : input;
+  if (text.isEmpty || text.length.isOdd) return const <int>[];
+  final out = <int>[];
+  for (var i = 0; i < text.length; i += 2) {
+    out.add(int.parse(text.substring(i, i + 2), radix: 16));
+  }
+  return out;
 }
 
 class _ContactsPlaceholderPage extends StatelessWidget {

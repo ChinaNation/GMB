@@ -74,6 +74,7 @@ class OnchainTxRecord {
     required this.status,
     this.failureReason,
     this.usedNonce,
+    this.estimatedFee,
   });
 
   final String txHash;
@@ -85,6 +86,7 @@ class OnchainTxRecord {
   final OnchainTxStatus status;
   final String? failureReason;
   final int? usedNonce;
+  final double? estimatedFee;
 
   OnchainTxRecord copyWith({
     String? txHash,
@@ -97,6 +99,7 @@ class OnchainTxRecord {
     String? failureReason,
     bool clearFailureReason = false,
     int? usedNonce,
+    double? estimatedFee,
   }) {
     return OnchainTxRecord(
       txHash: txHash ?? this.txHash,
@@ -109,6 +112,7 @@ class OnchainTxRecord {
       failureReason:
           clearFailureReason ? null : (failureReason ?? this.failureReason),
       usedNonce: usedNonce ?? this.usedNonce,
+      estimatedFee: estimatedFee ?? this.estimatedFee,
     );
   }
 
@@ -123,6 +127,7 @@ class OnchainTxRecord {
       'status': onchainTxStatusToString(status),
       'failureReason': failureReason,
       'usedNonce': usedNonce,
+      'estimatedFee': estimatedFee,
     };
   }
 
@@ -141,6 +146,7 @@ class OnchainTxRecord {
           onchainTxStatusFromString(json['status']?.toString() ?? 'pending'),
       failureReason: json['failureReason']?.toString(),
       usedNonce: (json['usedNonce'] as num?)?.toInt(),
+      estimatedFee: (json['estimatedFee'] as num?)?.toDouble(),
     );
   }
 }

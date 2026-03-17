@@ -76,7 +76,6 @@ class QrSignResponse {
   const QrSignResponse({
     required this.proto,
     required this.requestId,
-    required this.account,
     required this.pubkey,
     required this.sigAlg,
     required this.signature,
@@ -85,7 +84,6 @@ class QrSignResponse {
 
   final String proto;
   final String requestId;
-  final String account;
   final String pubkey;
   final String sigAlg;
   final String signature;
@@ -95,7 +93,6 @@ class QrSignResponse {
         'proto': proto,
         'type': 'sign_response',
         'request_id': requestId,
-        'account': account,
         'pubkey': pubkey,
         'sig_alg': sigAlg,
         'signature': signature,
@@ -187,7 +184,6 @@ class QrSigner {
   QrSignResponse parseResponse(
     String raw, {
     required String expectedRequestId,
-    required String expectedAccount,
   }) {
     final data = _parseJson(raw);
     final proto = _requiredString(data, 'proto');
@@ -200,14 +196,12 @@ class QrSigner {
       throw const QrSignException(QrSignErrorCode.invalidField, '二维码类型不是签名回执');
     }
     final requestId = _requiredString(data, 'request_id');
-    final account = _requiredString(data, 'account');
     final pubkey = _requiredString(data, 'pubkey');
     final sigAlg = _requiredString(data, 'sig_alg');
     final signature = _requiredString(data, 'signature');
     final signedAt = _requiredInt(data, 'signed_at');
 
     _validateRequestId(requestId);
-    _validateAddress(account);
     _validateHexField(pubkey, 'pubkey');
     _validateHexField(signature, 'signature');
     _validateSigAlg(sigAlg);
@@ -219,17 +213,10 @@ class QrSigner {
         '签名回执 request_id 与请求不一致',
       );
     }
-    if (account != expectedAccount) {
-      throw const QrSignException(
-        QrSignErrorCode.mismatchedAccount,
-        '签名回执账户与当前钱包不一致',
-      );
-    }
 
     return QrSignResponse(
       proto: proto,
       requestId: requestId,
-      account: account,
       pubkey: pubkey,
       sigAlg: sigAlg,
       signature: signature,

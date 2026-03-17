@@ -58,7 +58,6 @@ void main() {
       final response = QrSignResponse(
         proto: QrSigner.protocol,
         requestId: 'req-other',
-        account: account,
         pubkey: pubkey,
         sigAlg: 'sr25519',
         signature:
@@ -71,7 +70,6 @@ void main() {
         () => signer.parseResponse(
           encoded,
           expectedRequestId: 'req-expected',
-          expectedAccount: account,
         ),
         throwsA(
           isA<QrSignException>().having(
@@ -81,6 +79,28 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('parseResponse should accept matching request id', () {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final response = QrSignResponse(
+        proto: QrSigner.protocol,
+        requestId: 'req-match',
+        pubkey: pubkey,
+        sigAlg: 'sr25519',
+        signature:
+            '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        signedAt: now,
+      );
+
+      final encoded = signer.encodeResponse(response);
+      final parsed = signer.parseResponse(
+        encoded,
+        expectedRequestId: 'req-match',
+      );
+      expect(parsed.requestId, 'req-match');
+      expect(parsed.pubkey, pubkey);
+      // 回执码不再包含 account 字段。
     });
   });
 }
