@@ -336,6 +336,10 @@ mod runtime {
     // PoW 动态难度调整模块：每 600 块根据实际出块速度自动调整挖矿难度
     #[runtime::pallet_index(18)]
     pub type PowDifficulty = pow_difficulty_module;
+
+    // 机构多签名地址转账模块：治理机构内部投票通过后从 duoqian_address 转账
+    #[runtime::pallet_index(19)]
+    pub type DuoqianTransferPow = duoqian_transfer_pow;
 }
 
 #[cfg(test)]
