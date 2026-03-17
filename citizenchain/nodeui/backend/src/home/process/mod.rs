@@ -191,6 +191,12 @@ fn node_bin_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries")
 }
 
+fn current_executable_dir() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+}
+
 fn node_bin_filename_candidates() -> Vec<String> {
     let mut names = vec![NODE_BIN_BASENAME.to_string()];
 
@@ -230,6 +236,9 @@ fn node_bin_filename_candidates() -> Vec<String> {
 
 fn node_bin_candidate_paths(app: &AppHandle) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = vec![node_bin_dir()];
+    if let Some(exe_dir) = current_executable_dir() {
+        dirs.push(exe_dir);
+    }
     if let Ok(resource_dir) = app.path().resource_dir() {
         dirs.push(resource_dir);
     }
@@ -267,6 +276,13 @@ fn trusted_node_bin_dirs(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
     let mut dirs = Vec::new();
     if let Ok(node_dir) = node_bin_dir().canonicalize() {
         dirs.push(node_dir);
+    }
+    if let Some(exe_dir) = current_executable_dir() {
+        if let Ok(canonical_exe_dir) = exe_dir.canonicalize() {
+            if !dirs.contains(&canonical_exe_dir) {
+                dirs.push(canonical_exe_dir);
+            }
+        }
     }
     if let Ok(resource_dir) = app.path().resource_dir() {
         if let Ok(canonical_resource_dir) = resource_dir.canonicalize() {
