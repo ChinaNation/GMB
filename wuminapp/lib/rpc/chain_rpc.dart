@@ -132,6 +132,14 @@ class ChainRpc {
 
   // ──── 链上状态查询 ────
 
+  /// 通用 storage 查询：传入完整的 storage key（含 0x 前缀），
+  /// 返回原始 SCALE 编码字节。key 不存在时返回 null。
+  Future<Uint8List?> fetchStorage(String storageKeyHex) async {
+    final result = await _rpcCall('state_getStorage', [storageKeyHex]);
+    if (result == null) return null;
+    return _hexDecode((result as String).substring(2));
+  }
+
   /// 查询链上已打包的 nonce（不含交易池），账户不存在返回 0。
   Future<int> fetchConfirmedNonce(String pubkeyHex) async {
     final accountId = _pubkeyHexToBytes(pubkeyHex);

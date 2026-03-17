@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wuminapp_mobile/governance/institution_data.dart';
+import 'package:wuminapp_mobile/governance/institution_detail_page.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
 import 'package:wuminapp_mobile/user/user.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
@@ -279,97 +281,6 @@ class VotingPage extends StatefulWidget {
 class _VotingPageState extends State<VotingPage> {
   int _selectedTab = 2;
   static const List<String> _tabs = ['活动', '选举', '机构'];
-  static const List<String> _nationalCouncil = ['国家储备委员会'];
-  static const List<String> _provincialCouncils = [
-    '中枢省储备委员会',
-    '岭南省储备委员会',
-    '广东省储备委员会',
-    '广西省储备委员会',
-    '福建省储备委员会',
-    '海南省储备委员会',
-    '云南省储备委员会',
-    '贵州省储备委员会',
-    '湖南省储备委员会',
-    '江西省储备委员会',
-    '浙江省储备委员会',
-    '江苏省储备委员会',
-    '山东省储备委员会',
-    '山西省储备委员会',
-    '河南省储备委员会',
-    '河北省储备委员会',
-    '湖北省储备委员会',
-    '陕西省储备委员会',
-    '重庆省储备委员会',
-    '四川省储备委员会',
-    '甘肃省储备委员会',
-    '北平省储备委员会',
-    '海滨省储备委员会',
-    '松江省储备委员会',
-    '龙江省储备委员会',
-    '吉林省储备委员会',
-    '辽宁省储备委员会',
-    '宁夏省储备委员会',
-    '青海省储备委员会',
-    '安徽省储备委员会',
-    '台湾省储备委员会',
-    '西藏省储备委员会',
-    '新疆省储备委员会',
-    '西康省储备委员会',
-    '阿里省储备委员会',
-    '葱岭省储备委员会',
-    '天山省储备委员会',
-    '河西省储备委员会',
-    '昆仑省储备委员会',
-    '河套省储备委员会',
-    '热河省储备委员会',
-    '兴安省储备委员会',
-    '合江省储备委员会',
-  ];
-  static const List<String> _provincialBanks = [
-    '中枢省公民储备银行',
-    '岭南省公民储备银行',
-    '广东省公民储备银行',
-    '广西省公民储备银行',
-    '福建省公民储备银行',
-    '海南省公民储备银行',
-    '云南省公民储备银行',
-    '贵州省公民储备银行',
-    '湖南省公民储备银行',
-    '江西省公民储备银行',
-    '浙江省公民储备银行',
-    '江苏省公民储备银行',
-    '山东省公民储备银行',
-    '山西省公民储备银行',
-    '河南省公民储备银行',
-    '河北省公民储备银行',
-    '湖北省公民储备银行',
-    '陕西省公民储备银行',
-    '重庆省公民储备银行',
-    '四川省公民储备银行',
-    '甘肃省公民储备银行',
-    '北平省公民储备银行',
-    '滨海省公民储备银行',
-    '松江省公民储备银行',
-    '龙江省公民储备银行',
-    '吉林省公民储备银行',
-    '辽宁省公民储备银行',
-    '宁夏省公民储备银行',
-    '青海省公民储备银行',
-    '安徽省公民储备银行',
-    '台湾省公民储备银行',
-    '西藏省公民储备银行',
-    '新疆省公民储备银行',
-    '西康省公民储备银行',
-    '阿里省公民储备银行',
-    '葱岭省公民储备银行',
-    '天山省公民储备银行',
-    '河西省公民储备银行',
-    '昆仑省公民储备银行',
-    '河套省公民储备银行',
-    '热河省公民储备银行',
-    '兴安省公民储备银行',
-    '合江省公民储备银行',
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -393,8 +304,8 @@ class _VotingPageState extends State<VotingPage> {
   }
 
   Widget _buildVotingTabContent() {
-    assert(_provincialCouncils.length == 43);
-    assert(_provincialBanks.length == 43);
+    assert(kProvincialCouncils.length == 43);
+    assert(kProvincialBanks.length == 43);
 
     switch (_selectedTab) {
       case 0:
@@ -403,9 +314,9 @@ class _VotingPageState extends State<VotingPage> {
         return const Center(child: Text('选举页面（开发中）'));
       case 2:
         return const _InstitutionCategoryView(
-          nationalCouncil: _nationalCouncil,
-          provincialCouncils: _provincialCouncils,
-          provincialBanks: _provincialBanks,
+          nationalCouncil: kNationalCouncil,
+          provincialCouncils: kProvincialCouncils,
+          provincialBanks: kProvincialBanks,
         );
       default:
         return const SizedBox.shrink();
@@ -511,9 +422,9 @@ class _InstitutionCategoryView extends StatelessWidget {
     required this.provincialBanks,
   });
 
-  final List<String> nationalCouncil;
-  final List<String> provincialCouncils;
-  final List<String> provincialBanks;
+  final List<InstitutionInfo> nationalCouncil;
+  final List<InstitutionInfo> provincialCouncils;
+  final List<InstitutionInfo> provincialBanks;
 
   @override
   Widget build(BuildContext context) {
@@ -564,7 +475,7 @@ class _InstitutionSection extends StatelessWidget {
   final String title;
   final IconData icon;
   final Color badgeColor;
-  final List<String> institutions;
+  final List<InstitutionInfo> institutions;
 
   @override
   Widget build(BuildContext context) {
@@ -599,7 +510,7 @@ class _InstitutionSection extends StatelessWidget {
               ),
               itemBuilder: (context, index) {
                 return _InstitutionCard(
-                  title: institutions[index],
+                  institution: institutions[index],
                   icon: icon,
                   badgeColor: badgeColor,
                 );
@@ -615,12 +526,12 @@ class _InstitutionSection extends StatelessWidget {
 
 class _InstitutionCard extends StatelessWidget {
   const _InstitutionCard({
-    required this.title,
+    required this.institution,
     required this.icon,
     required this.badgeColor,
   });
 
-  final String title;
+  final InstitutionInfo institution;
   final IconData icon;
   final Color badgeColor;
 
@@ -633,29 +544,48 @@ class _InstitutionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: badgeColor.withValues(alpha: 0.18)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Row(
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: badgeColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(icon, size: 14, color: badgeColor),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13),
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => InstitutionDetailPage(
+                institution: institution,
+                icon: icon,
+                badgeColor: badgeColor,
               ),
             ),
-          ],
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(icon, size: 14, color: badgeColor),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  institution.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: Colors.grey[400],
+              ),
+            ],
+          ),
         ),
       ),
     );

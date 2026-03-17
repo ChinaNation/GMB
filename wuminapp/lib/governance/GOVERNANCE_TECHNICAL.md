@@ -241,8 +241,84 @@ message = blake2_256(SCALE.encode(payload))
 - 业务 pallet 允许在部分场景手动执行或重试（如执行失败补偿）。
 - App 端必须支持“最终状态后停止轮询”，避免重复提交。
 
-## 7. 源码对齐基线
+## 7. App 侧管理员权限检测与机构详情
 
+### 7.1 管理员身份检测流程
+
+1. 用户打开机构详情页，App 并行加载管理员列表和当前钱包信息。
+2. 通过 `state_getStorage` 查询链上 `AdminsOriginGov.CurrentAdmins(institution_id)` 存储。
+3. Storage key 格式：`twox_128("AdminsOriginGov") + twox_128("CurrentAdmins") + blake2_128(institution_48bytes) + institution_48bytes`。
+4. 返回 SCALE 编码的 `BoundedVec<AccountId32, MaxAdminsPerInstitution>`（Compact 长度前缀 + N×32 字节公钥）。
+5. 比对当前钱包 `pubkeyHex`（去 0x 前缀、小写）是否在列表中，确定管理员身份。
+6. 查询结果内存缓存，下拉刷新时清除缓存重新查询。
+
+### 7.2 机构详情页结构
+
+机构详情页（`InstitutionDetailPage`）自上而下包含以下区域：
+
+1. **顶部机构卡片**：左侧机构图标 + 中间机构类型标签与管理员/阈值信息。
+   - 管理员用户：卡片可点击，显示右箭头，点击进入提案类型页面。
+   - 非管理员用户：卡片不可点击，不显示右箭头。
+2. **管理员身份标识**（仅管理员可见）：绿色提示条"你是本机构管理员，点击上方卡片可发起提案"。
+3. **管理员列表入口**：所有用户可见，点击进入管理员列表页。
+4. **投票事件列表**：所有用户可见，展示该机构的提案投票事件（当前为占位状态）。
+
+### 7.3 权限控制规则
+
+| 用户身份 | 可访问页面/功能 |
+| --- | --- |
+| 管理员 | 机构详情页、管理员列表、投票事件列表、提案类型页面（发起提案） |
+| 非管理员 | 机构详情页、管理员列表、投票事件列表 |
+
+核心原则：**只有管理员才能进入提案类型页面发起提案**，非管理员用户只能查看机构信息、管理员列表和投票事件。
+
+### 7.4 提案类型页面
+
+提案类型页面（`ProposalTypesPage`）根据机构类型条件展示可发起的提案：
+
+**通用提案（所有机构类型）：**
+- 转账：从机构多签账户发起转账
+- 换管理员：提议更换本机构管理员
+- 决议销毁：提议销毁机构持有的资产
+
+**国储会专属提案（仅 NRC）：**
+- 决议发行：发起公民币发行决议，需联合投票+公民投票
+- 验证密钥：更换 GRANDPA 共识验证密钥
+- 状态升级：Runtime 升级，需联合投票+公民投票
+
+### 7.5 管理员列表页面
+
+管理员列表页面（`AdminListPage`）展示：
+- 机构名称与类型标签
+- 管理员总数与通过阈值
+- 每位管理员的完整 SS58 地址（format 2027），当前用户标记"我"
+- 地址一键复制功能
+
+### 7.6 机构标识编码
+
+shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitives/china/china_ch.rs`（PRB），
+编码为 48 字节固定长度（UTF-8 右补零），与链上 `InstitutionPalletId` 一致。
+
+### 7.7 关键文件
+
+| 文件 | 说明 |
+| --- | --- |
+| `lib/governance/institution_data.dart` | 87 个机构静态注册表（name、shenfenId、orgType） |
+| `lib/governance/institution_admin_service.dart` | 链上管理员查询服务（RPC + SCALE 解码 + 缓存） |
+| `lib/governance/institution_detail_page.dart` | 机构详情页（管理员检测 + 条件 UI） |
+| `lib/governance/proposal_types_page.dart` | 提案类型选择页（按机构类型过滤） |
+| `lib/governance/admin_list_page.dart` | 管理员列表页（SS58 地址展示） |
+| `lib/rpc/chain_rpc.dart` | RPC 服务（含 `fetchStorage` 公开方法） |
+| `lib/main.dart` | 机构列表结构化（`InstitutionInfo`）+ 卡片点击跳转 |
+
+## 8. 源码对齐基线
+
+- `lib/governance/institution_data.dart`
+- `lib/governance/institution_admin_service.dart`
+- `lib/governance/institution_detail_page.dart`
+- `lib/governance/proposal_types_page.dart`
+- `lib/governance/admin_list_page.dart`
+- `lib/rpc/chain_rpc.dart`
 - `citizenchain/governance/voting-engine-system/src/lib.rs`
 - `citizenchain/governance/voting-engine-system/src/joint_vote.rs`
 - `citizenchain/governance/voting-engine-system/src/citizen_vote.rs`
