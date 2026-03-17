@@ -352,7 +352,15 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::DuoqianTransactionPow(_) => {
                 onchain_transaction_pow::AmountExtractResult::NoAmount
             }
-            // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免“有金额但漏提取”。
+            // 机构转账提案：按转账金额计费
+            RuntimeCall::DuoqianTransferPow(
+                duoqian_transfer_pow::Call::propose_transfer { amount, .. },
+            ) => onchain_transaction_pow::AmountExtractResult::Amount(*amount),
+            // 机构转账投票：无金额，不收费
+            RuntimeCall::DuoqianTransferPow(_) => {
+                onchain_transaction_pow::AmountExtractResult::NoAmount
+            }
+            // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免”有金额但漏提取”。
             RuntimeCall::Balances(_) => onchain_transaction_pow::AmountExtractResult::Unknown,
             _ => onchain_transaction_pow::AmountExtractResult::Unknown,
         }
@@ -364,9 +372,43 @@ pub struct RuntimeFeePayerExtractor;
 impl onchain_transaction_pow::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
     fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
         match call {
+            // 机构转账提案：手续费从机构 duoqian_address 扣取
+            RuntimeCall::DuoqianTransferPow(
+                duoqian_transfer_pow::Call::propose_transfer { institution, .. },
+            ) => transfer_institution_duoqian_address(institution),
+            // 机构转账投票：手续费从机构 duoqian_address 扣取
+            RuntimeCall::DuoqianTransferPow(
+                duoqian_transfer_pow::Call::vote_transfer { proposal_id, .. },
+            ) => duoqian_transfer_pow::ProposalActions::<Runtime>::get(proposal_id)
+                .and_then(|action| transfer_institution_duoqian_address(&action.institution)),
             _ => None,
         }
     }
+}
+
+/// 通过机构 pallet id 查找 duoqian_address 并解码为 AccountId。
+fn transfer_institution_duoqian_address(
+    institution: &voting_engine_system::InstitutionPalletId,
+) -> Option<AccountId> {
+    use codec::Decode;
+    use primitives::china::china_cb::{
+        shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
+    };
+    use primitives::china::china_ch::{
+        shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
+    };
+
+    if let Some(node) = CHINA_CB
+        .iter()
+        .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(*institution))
+    {
+        return AccountId::decode(&mut &node.duoqian_address[..]).ok();
+    }
+
+    CHINA_CH
+        .iter()
+        .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(*institution))
+        .and_then(|n| AccountId::decode(&mut &n.duoqian_address[..]).ok())
 }
 
 /// 省储行质押利息模块配置：
@@ -894,6 +936,15 @@ impl grandpa_key_gov::Config for Runtime {
     type GrandpaChangeDelay = GrandpaAuthoritySetChangeDelay;
     type InternalVoteEngine = VotingEngineSystem;
     type WeightInfo = grandpa_key_gov::weights::SubstrateWeight<Runtime>;
+}
+
+impl duoqian_transfer_pow::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type MaxRemarkLen = ConstU32<256>;
+    type InternalVoteEngine = VotingEngineSystem;
+    type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
+    type WeightInfo = duoqian_transfer_pow::weights::SubstrateWeight<Runtime>;
 }
 
 /// 禁用特权原点：始终拒绝任何 Origin，确保不存在可被调用的特权入口。
