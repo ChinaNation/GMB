@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>WuminApp</string>
+	<string>公民</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>wuminapp_mobile</string>
+	<string>公民</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -67,12 +67,12 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 		<key>NSCameraUsageDescription</key>
-		<string>WuminApp 需要使用摄像头扫描二维码登录和转账。</string>
+	<string>公民 需要使用摄像头扫描二维码登录和转账。</string>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>WuminApp 需要访问相册以设置用户头像。</string>
+	<string>公民 需要访问相册以设置用户头像。</string>
 		<key>NSPhotoLibraryAddUsageDescription</key>
-		<string>WuminApp 需要保存二维码或头像到相册。</string>
+	<string>公民 需要保存二维码或头像到相册。</string>
 		<key>NSFaceIDUsageDescription</key>
-		<string>WuminApp 使用 Face ID 确认登录签名操作。</string>
+	<string>公民 使用 Face ID 确认登录签名操作。</string>
 </dict>
 </plist>
