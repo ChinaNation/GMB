@@ -43,28 +43,33 @@ const WalletProfileEntitySchema = CollectionSchema(
       name: r'pubkeyHex',
       type: IsarType.string,
     ),
-    r'source': PropertySchema(
+    r'signMode': PropertySchema(
       id: 5,
+      name: r'signMode',
+      type: IsarType.string,
+    ),
+    r'source': PropertySchema(
+      id: 6,
       name: r'source',
       type: IsarType.string,
     ),
     r'ss58': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'ss58',
       type: IsarType.long,
     ),
     r'walletIcon': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'walletIcon',
       type: IsarType.string,
     ),
     r'walletIndex': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'walletIndex',
       type: IsarType.long,
     ),
     r'walletName': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'walletName',
       type: IsarType.string,
     )
@@ -132,6 +137,7 @@ int _walletProfileEntityEstimateSize(
   bytesCount += 3 + object.address.length * 3;
   bytesCount += 3 + object.alg.length * 3;
   bytesCount += 3 + object.pubkeyHex.length * 3;
+  bytesCount += 3 + object.signMode.length * 3;
   bytesCount += 3 + object.source.length * 3;
   bytesCount += 3 + object.walletIcon.length * 3;
   bytesCount += 3 + object.walletName.length * 3;
@@ -149,11 +155,12 @@ void _walletProfileEntitySerialize(
   writer.writeDouble(offsets[2], object.balance);
   writer.writeLong(offsets[3], object.createdAtMillis);
   writer.writeString(offsets[4], object.pubkeyHex);
-  writer.writeString(offsets[5], object.source);
-  writer.writeLong(offsets[6], object.ss58);
-  writer.writeString(offsets[7], object.walletIcon);
-  writer.writeLong(offsets[8], object.walletIndex);
-  writer.writeString(offsets[9], object.walletName);
+  writer.writeString(offsets[5], object.signMode);
+  writer.writeString(offsets[6], object.source);
+  writer.writeLong(offsets[7], object.ss58);
+  writer.writeString(offsets[8], object.walletIcon);
+  writer.writeLong(offsets[9], object.walletIndex);
+  writer.writeString(offsets[10], object.walletName);
 }
 
 WalletProfileEntity _walletProfileEntityDeserialize(
@@ -169,11 +176,12 @@ WalletProfileEntity _walletProfileEntityDeserialize(
   object.createdAtMillis = reader.readLong(offsets[3]);
   object.id = id;
   object.pubkeyHex = reader.readString(offsets[4]);
-  object.source = reader.readString(offsets[5]);
-  object.ss58 = reader.readLong(offsets[6]);
-  object.walletIcon = reader.readString(offsets[7]);
-  object.walletIndex = reader.readLong(offsets[8]);
-  object.walletName = reader.readString(offsets[9]);
+  object.signMode = reader.readString(offsets[5]);
+  object.source = reader.readString(offsets[6]);
+  object.ss58 = reader.readLong(offsets[7]);
+  object.walletIcon = reader.readString(offsets[8]);
+  object.walletIndex = reader.readLong(offsets[9]);
+  object.walletName = reader.readString(offsets[10]);
   return object;
 }
 
@@ -197,12 +205,14 @@ P _walletProfileEntityDeserializeProp<P>(
     case 5:
       return (reader.readString(offset)) as P;
     case 6:
-      return (reader.readLong(offset)) as P;
-    case 7:
       return (reader.readString(offset)) as P;
-    case 8:
+    case 7:
       return (reader.readLong(offset)) as P;
+    case 8:
+      return (reader.readString(offset)) as P;
     case 9:
+      return (reader.readLong(offset)) as P;
+    case 10:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1250,6 +1260,142 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      signModeEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'signMode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      signModeGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'signMode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      signModeLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'signMode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      signModeBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'signMode',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      signModeStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'signMode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      signModeEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'signMode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      signModeContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'signMode',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      signModeMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'signMode',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      signModeIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'signMode',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      signModeIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'signMode',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
       sourceEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -1849,6 +1995,20 @@ extension WalletProfileEntityQuerySortBy
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      sortBySignMode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'signMode', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      sortBySignModeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'signMode', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
       sortBySource() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'source', Sort.asc);
@@ -2006,6 +2166,20 @@ extension WalletProfileEntityQuerySortThenBy
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      thenBySignMode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'signMode', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      thenBySignModeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'signMode', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
       thenBySource() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'source', Sort.asc);
@@ -2114,6 +2288,13 @@ extension WalletProfileEntityQueryWhereDistinct
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
+      distinctBySignMode({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'signMode', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
       distinctBySource({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'source', caseSensitive: caseSensitive);
@@ -2188,6 +2369,13 @@ extension WalletProfileEntityQueryProperty
       pubkeyHexProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'pubkeyHex');
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, String, QQueryOperations>
+      signModeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'signMode');
     });
   }
 
@@ -2737,38 +2925,43 @@ const TxRecordEntitySchema = CollectionSchema(
       name: r'createdAtMillis',
       type: IsarType.long,
     ),
-    r'failureReason': PropertySchema(
+    r'estimatedFee': PropertySchema(
       id: 2,
+      name: r'estimatedFee',
+      type: IsarType.double,
+    ),
+    r'failureReason': PropertySchema(
+      id: 3,
       name: r'failureReason',
       type: IsarType.string,
     ),
     r'fromAddress': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'fromAddress',
       type: IsarType.string,
     ),
     r'status': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'status',
       type: IsarType.string,
     ),
     r'symbol': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'symbol',
       type: IsarType.string,
     ),
     r'toAddress': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'toAddress',
       type: IsarType.string,
     ),
     r'txHash': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'txHash',
       type: IsarType.string,
     ),
     r'usedNonce': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'usedNonce',
       type: IsarType.long,
     )
@@ -2842,13 +3035,14 @@ void _txRecordEntitySerialize(
 ) {
   writer.writeDouble(offsets[0], object.amount);
   writer.writeLong(offsets[1], object.createdAtMillis);
-  writer.writeString(offsets[2], object.failureReason);
-  writer.writeString(offsets[3], object.fromAddress);
-  writer.writeString(offsets[4], object.status);
-  writer.writeString(offsets[5], object.symbol);
-  writer.writeString(offsets[6], object.toAddress);
-  writer.writeString(offsets[7], object.txHash);
-  writer.writeLong(offsets[8], object.usedNonce);
+  writer.writeDouble(offsets[2], object.estimatedFee);
+  writer.writeString(offsets[3], object.failureReason);
+  writer.writeString(offsets[4], object.fromAddress);
+  writer.writeString(offsets[5], object.status);
+  writer.writeString(offsets[6], object.symbol);
+  writer.writeString(offsets[7], object.toAddress);
+  writer.writeString(offsets[8], object.txHash);
+  writer.writeLong(offsets[9], object.usedNonce);
 }
 
 TxRecordEntity _txRecordEntityDeserialize(
@@ -2860,14 +3054,15 @@ TxRecordEntity _txRecordEntityDeserialize(
   final object = TxRecordEntity();
   object.amount = reader.readDouble(offsets[0]);
   object.createdAtMillis = reader.readLong(offsets[1]);
-  object.failureReason = reader.readStringOrNull(offsets[2]);
-  object.fromAddress = reader.readString(offsets[3]);
+  object.estimatedFee = reader.readDoubleOrNull(offsets[2]);
+  object.failureReason = reader.readStringOrNull(offsets[3]);
+  object.fromAddress = reader.readString(offsets[4]);
   object.id = id;
-  object.status = reader.readString(offsets[4]);
-  object.symbol = reader.readString(offsets[5]);
-  object.toAddress = reader.readString(offsets[6]);
-  object.txHash = reader.readString(offsets[7]);
-  object.usedNonce = reader.readLongOrNull(offsets[8]);
+  object.status = reader.readString(offsets[5]);
+  object.symbol = reader.readString(offsets[6]);
+  object.toAddress = reader.readString(offsets[7]);
+  object.txHash = reader.readString(offsets[8]);
+  object.usedNonce = reader.readLongOrNull(offsets[9]);
   return object;
 }
 
@@ -2883,9 +3078,9 @@ P _txRecordEntityDeserializeProp<P>(
     case 1:
       return (reader.readLong(offset)) as P;
     case 2:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 3:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 4:
       return (reader.readString(offset)) as P;
     case 5:
@@ -2895,6 +3090,8 @@ P _txRecordEntityDeserializeProp<P>(
     case 7:
       return (reader.readString(offset)) as P;
     case 8:
+      return (reader.readString(offset)) as P;
+    case 9:
       return (reader.readLongOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -3317,6 +3514,90 @@ extension TxRecordEntityQueryFilter
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterFilterCondition>
+      estimatedFeeIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'estimatedFee',
+      ));
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterFilterCondition>
+      estimatedFeeIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'estimatedFee',
+      ));
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterFilterCondition>
+      estimatedFeeEqualTo(
+    double? value, {
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'estimatedFee',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterFilterCondition>
+      estimatedFeeGreaterThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'estimatedFee',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterFilterCondition>
+      estimatedFeeLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'estimatedFee',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterFilterCondition>
+      estimatedFeeBetween(
+    double? lower,
+    double? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'estimatedFee',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        epsilon: epsilon,
       ));
     });
   }
@@ -4321,6 +4602,20 @@ extension TxRecordEntityQuerySortBy
   }
 
   QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterSortBy>
+      sortByEstimatedFee() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'estimatedFee', Sort.asc);
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterSortBy>
+      sortByEstimatedFeeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'estimatedFee', Sort.desc);
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterSortBy>
       sortByFailureReason() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'failureReason', Sort.asc);
@@ -4440,6 +4735,20 @@ extension TxRecordEntityQuerySortThenBy
       thenByCreatedAtMillisDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAtMillis', Sort.desc);
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterSortBy>
+      thenByEstimatedFee() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'estimatedFee', Sort.asc);
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QAfterSortBy>
+      thenByEstimatedFeeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'estimatedFee', Sort.desc);
     });
   }
 
@@ -4565,6 +4874,13 @@ extension TxRecordEntityQueryWhereDistinct
   }
 
   QueryBuilder<TxRecordEntity, TxRecordEntity, QDistinct>
+      distinctByEstimatedFee() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'estimatedFee');
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, TxRecordEntity, QDistinct>
       distinctByFailureReason({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'failureReason',
@@ -4633,6 +4949,13 @@ extension TxRecordEntityQueryProperty
       createdAtMillisProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'createdAtMillis');
+    });
+  }
+
+  QueryBuilder<TxRecordEntity, double?, QQueryOperations>
+      estimatedFeeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'estimatedFee');
     });
   }
 

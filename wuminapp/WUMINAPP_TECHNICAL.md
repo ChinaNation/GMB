@@ -30,7 +30,7 @@ wuminapp/
 │   ├── Isar/
 │   ├── rpc/                ← 链上 RPC 公共模块
 │   ├── governance/
-│   ├── login/
+│   ├── qr/                 ← 二维码统一模块（登录/收款/用户码）
 │   ├── signer/
 │   ├── user/
 │   ├── wallet/
@@ -94,25 +94,28 @@ wuminapp/
 
 签名前守卫：`WalletManager._readMnemonic()` 内置生物识别/设备密码验证，所有读取助记词的路径自动触发。
 
-### 4.5 登录模块
+### 4.5 二维码模块
 
-登录模块在 `lib/login/`，负责：
+二维码模块在 `lib/qr/`，统一管理所有扫码能力：
 
-- 扫码识别挑战码
-- 协议校验
-- `aud` 白名单校验
-- 防重放（`request_id`）
-- 展示回执二维码
+- 协议定义与路由分发（`QrRouter`）
+- 登录码：挑战解析、系统签名验证、防重放、回执生成
+- 收款码：生成与解析，预填转账表单
+- 用户码：通讯录交换，兼容旧版格式
 
 关键口径：
 
-- 协议：`WUMINAPP_LOGIN_V1`
-- 当前系统白名单：`cpms`、`sfid`
-- 签名串：
+- 登录协议：`WUMINAPP_LOGIN_V1`
+- 收款协议：`WUMINAPP_TRANSFER_V1`
+- 用户协议：`WUMINAPP_CONTACT_V1`
+- 系统身份：通过 `sys_pubkey`/`sys_sig`/`sys_cert` 密码学验证（不再使用 `aud` 白名单）
+- 登录签名串：
 
 ```text
-WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
+WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 ```
+
+详细技术文档见：`lib/qr/QR_TECHNICAL.md`
 
 ### 4.6 双签名模式（技术方案）
 
@@ -152,7 +155,6 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 
 仍有少量非机密配置使用（按模块逐步收口）：
 
-- 登录白名单配置：`login.whitelist_config.v1`
 - 登录防重放记录：`login.used_request_ids`
 - SFID 绑定状态：`sfid.bind.*`
 - 用户资料：
@@ -297,7 +299,7 @@ App 通过 `ApiClient` 访问非链上外部服务，当前已使用接口：
 - 私钥/助记词不落 Isar 与远端服务
 - 助记词读取强制生物识别/设备密码验证（存储层统一守卫，不可关闭）
 - 设备无生物识别也无密码时自动跳过验证
-- 登录白名单配置有本地 HMAC 完整性保护
+- 登录系统身份通过密码学签名验证（`sys_pubkey`/`sys_sig`/`sys_cert`）
 - 绑定请求与交易状态依赖外部服务返回
 
 ## 9. 已知限制
@@ -325,7 +327,7 @@ flutter run \
 ## 11. 关联模块文档
 
 - RPC 模块：`lib/rpc/RPC_TECHNICAL.md`
-- 登录模块：`lib/login/LOGIN_TECHNICAL.md`
+- 二维码模块：`lib/qr/QR_TECHNICAL.md`
 - 签名模块：`lib/signer/SIGNER_TECHNICAL.md`
 - 治理模块：`lib/governance/GOVERNANCE_TECHNICAL.md`
 - 用户模块：`lib/user/USER_TECHNICAL.md`

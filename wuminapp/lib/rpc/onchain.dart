@@ -107,6 +107,31 @@ class OnchainRpc {
     return confirmedNonce > usedNonce;
   }
 
+  // ──── 手续费估算 ────
+
+  /// 预估转账手续费（元）。
+  ///
+  /// 与链上 `onchain_transaction_pow` 计算逻辑一致：
+  /// `fee = max(amount_fen * Perbill(1_000_000), 10 fen)`
+  ///
+  /// - 费率 0.1%（`Perbill::from_parts(1_000_000)`）
+  /// - 最低手续费 10 fen（0.10 元）
+  /// - half-up 舍入到 fen 精度
+  static double estimateTransferFeeYuan(double amountYuan) {
+    const int perbillParts = 1000000;
+    const int perbillDenom = 1000000000;
+    const int minFeeFen = 10;
+
+    final amountFen = BigInt.from((amountYuan * 100).round());
+    // half-up rounding: (amount * parts + denom/2) ~/ denom
+    final byRate = (amountFen * BigInt.from(perbillParts) +
+            BigInt.from(perbillDenom ~/ 2)) ~/
+        BigInt.from(perbillDenom);
+    final feeFen =
+        byRate < BigInt.from(minFeeFen) ? BigInt.from(minFeeFen) : byRate;
+    return feeFen.toDouble() / 100.0;
+  }
+
   // ──── 内部：extrinsic 编码 ────
 
   static String _hexEncode(Uint8List bytes) {

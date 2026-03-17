@@ -1,26 +1,27 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
-import 'package:wuminapp_mobile/login/models/login_models.dart';
-import 'package:wuminapp_mobile/login/services/login_replay_guard.dart';
-import 'package:wuminapp_mobile/login/services/login_whitelist_policy.dart';
-import 'package:wuminapp_mobile/wallet/capabilities/sign_service.dart';
+import 'package:substrate_bip39/crypto_scheme.dart';
+import 'package:wuminapp_mobile/qr/login/login_models.dart';
+import 'package:wuminapp_mobile/qr/login/login_replay_guard.dart';
+import 'package:wuminapp_mobile/qr/login/login_service.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 void main() {
-  group('SignService', () {
+  group('LoginService', () {
     late _FakeWalletService walletService;
     late _FakeReplayGuard replayGuard;
-    late _FakeWhitelistPolicy whitelistPolicy;
-    late SignService service;
+    late LoginService service;
 
     setUp(() {
       walletService = _FakeWalletService();
       replayGuard = _FakeReplayGuard();
-      whitelistPolicy = _FakeWhitelistPolicy();
-      service = SignService(
+      service = LoginService(
         walletManager: walletService,
         replayGuard: replayGuard,
-        whitelistPolicy: whitelistPolicy,
       );
     });
 
@@ -31,10 +32,12 @@ void main() {
       );
       final challenge = service.parseChallenge(raw);
 
-      expect(challenge.proto, SignService.protocol);
+      expect(challenge.proto, 'WUMINAPP_LOGIN_V1');
       expect(challenge.system, 'cpms');
       expect(challenge.requestId, 'req-1');
-      expect(challenge.aud, 'cpms-local-app');
+      expect(challenge.sysPubkey, startsWith('0x'));
+      expect(challenge.sysSig, startsWith('0x'));
+      expect(challenge.sysCert, startsWith('0x'));
     });
 
     test('parseChallenge should reject expired challenge', () {
@@ -109,11 +112,11 @@ void main() {
     });
 
     test('parseChallenge should reject issued_at too far in future', () {
-      final issuedAt = _nowSec() + SignService.maxClockSkewSeconds + 10;
+      final issuedAt = _nowSec() + LoginService.maxClockSkewSeconds + 10;
       final raw = _challengeJson(
         requestId: 'req-future-issued-at',
         issuedAt: issuedAt,
-        expiresAt: issuedAt + SignService.challengeTtlSeconds,
+        expiresAt: issuedAt + LoginService.challengeTtlSeconds,
       );
       expect(
         () => service.parseChallenge(raw),
@@ -127,7 +130,47 @@ void main() {
       );
     });
 
-    test('buildSignPreviewForChallenge should follow canonical format', () {
+    test('parseChallenge should require sys_cert for cpms system', () {
+      final expiresAt = _nowSec() + 90;
+      final iat = expiresAt - 90;
+      final raw = '''
+{
+  "proto": "WUMINAPP_LOGIN_V1",
+  "system": "cpms",
+  "request_id": "req-no-cert",
+  "challenge": "base64-rand",
+  "nonce": "nonce-1",
+  "issued_at": $iat,
+  "expires_at": $expiresAt,
+  "sys_pubkey": "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+  "sys_sig": "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+}
+''';
+      expect(
+        () => service.parseChallenge(raw),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('sys_cert'),
+          ),
+        ),
+      );
+    });
+
+    test('parseChallenge should allow sfid without sys_cert', () {
+      final raw = _challengeJson(
+        requestId: 'req-sfid-no-cert',
+        system: 'sfid',
+        expiresAt: _nowSec() + 90,
+        includeSysCert: false,
+      );
+      final challenge = service.parseChallenge(raw);
+      expect(challenge.system, 'sfid');
+      expect(challenge.sysCert, isNull);
+    });
+
+    test('buildSignMessage should follow canonical format without aud', () {
       final expiresAt = _nowSec() + 90;
       final raw = _challengeJson(
         requestId: 'req-preview',
@@ -136,50 +179,48 @@ void main() {
         expiresAt: expiresAt,
       );
       final challenge = service.parseChallenge(raw);
-      final signPreview = service.buildSignPreviewForChallenge(challenge);
+      final signMessage = service.buildSignMessage(challenge);
 
       expect(
-        signPreview,
-        'WUMINAPP_LOGIN_V1|cpms|cpms-local-app|req-preview|abc123|nonce-xyz|$expiresAt',
+        signMessage,
+        'WUMINAPP_LOGIN_V1|cpms|req-preview|abc123|nonce-xyz|$expiresAt',
       );
     });
 
-    test('buildReceiptPayloadForChallenge should sign with selected wallet',
-        () async {
+    test('buildReceiptPayload should sign with selected wallet', () async {
       final raw = _challengeJson(
         requestId: 'req-wallet-2',
         system: 'sfid',
-        aud: 'sfid-local-app',
         expiresAt: _nowSec() + 90,
+        includeSysCert: false,
       );
       final challenge = service.parseChallenge(raw);
 
-      final receipt = await service.buildReceiptPayloadForChallenge(
+      final receipt = await service.buildReceiptPayload(
         challenge,
         walletIndex: 2,
       );
 
       final wallet2 = await walletService.getWalletSecretByIndex(2);
       expect(wallet2, isNotNull);
-      expect(receipt['account'], wallet2!.profile.address);
-      expect(receipt['pubkey'], '0x${wallet2.profile.pubkeyHex}');
-      expect(receipt['proto'], SignService.protocol);
+      expect(receipt['pubkey'], '0x${wallet2!.profile.pubkeyHex}');
+      expect(receipt['proto'], 'WUMINAPP_LOGIN_V1');
       expect(receipt['sig_alg'], 'sr25519');
       expect(receipt['signature'], startsWith('0x'));
+      // 回执码不再包含 account 字段。
+      expect(receipt.containsKey('account'), isFalse);
     });
 
-    test('buildReceiptPayloadForChallenge should block replay request_id',
-        () async {
+    test('buildReceiptPayload should block replay request_id', () async {
       final raw = _challengeJson(
         requestId: 'req-replay',
         expiresAt: _nowSec() + 90,
       );
       final challenge = service.parseChallenge(raw);
 
-      await service.buildReceiptPayloadForChallenge(challenge, walletIndex: 1);
+      await service.buildReceiptPayload(challenge, walletIndex: 1);
       expect(
-        () =>
-            service.buildReceiptPayloadForChallenge(challenge, walletIndex: 1),
+        () => service.buildReceiptPayload(challenge, walletIndex: 1),
         throwsA(
           isA<Exception>().having(
             (e) => e.toString(),
@@ -190,8 +231,7 @@ void main() {
       );
     });
 
-    test(
-        'buildReceiptPayloadForChallenge should fail when walletIndex not found',
+    test('buildReceiptPayload should fail when walletIndex not found',
         () async {
       final raw = _challengeJson(
         requestId: 'req-wallet-missing',
@@ -200,8 +240,7 @@ void main() {
       final challenge = service.parseChallenge(raw);
 
       expect(
-        () =>
-            service.buildReceiptPayloadForChallenge(challenge, walletIndex: 99),
+        () => service.buildReceiptPayload(challenge, walletIndex: 99),
         throwsA(
           isA<Exception>().having(
             (e) => e.toString(),
@@ -216,6 +255,13 @@ void main() {
 
 int _nowSec() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
+const String _fakeSysPubkey =
+    '0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+const String _fakeSysSig =
+    '0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+const String _fakeSysCert =
+    '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
+
 String _challengeJson({
   required String requestId,
   String system = 'cpms',
@@ -223,9 +269,11 @@ String _challengeJson({
   String nonce = 'nonce-1',
   int? issuedAt,
   required int expiresAt,
-  String aud = 'cpms-local-app',
+  bool includeSysCert = true,
 }) {
-  final iat = issuedAt ?? (expiresAt - SignService.challengeTtlSeconds);
+  final iat = issuedAt ?? (expiresAt - LoginService.challengeTtlSeconds);
+  final certLine =
+      includeSysCert ? '"sys_cert": "$_fakeSysCert",' : '';
   return '''
 {
   "proto": "WUMINAPP_LOGIN_V1",
@@ -235,18 +283,12 @@ String _challengeJson({
   "nonce": "$nonce",
   "issued_at": $iat,
   "expires_at": $expiresAt,
-  "aud": "$aud"
+  "sys_pubkey": "$_fakeSysPubkey",
+  "sys_sig": "$_fakeSysSig",
+  $certLine
+  "_pad": true
 }
 ''';
-}
-
-class _FakeWhitelistPolicy extends LoginWhitelistPolicy {
-  _FakeWhitelistPolicy();
-
-  @override
-  Future<void> assertAllowed(WuminLoginChallenge challenge) async {
-    return;
-  }
 }
 
 class _FakeReplayGuard extends LoginReplayGuard {
@@ -292,11 +334,18 @@ class _FakeWalletService extends WalletManager {
     required int index,
     required String mnemonic,
   }) async {
-    final pair = await Keyring.sr25519.fromMnemonic(mnemonic);
+    // 使用与 WalletManager 相同的派生链。
+    final entropy =
+        bip39m.Mnemonic.fromSentence(mnemonic, bip39m.Language.english)
+            .entropy;
+    final miniSecret = await CryptoScheme.miniSecretFromEntropy(entropy);
+
+    final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(miniSecret));
     pair.ss58Format = _ss58;
     final pubkeyBytes = pair.bytes().toList(growable: false);
     final pubkeyHex = _toHex(pubkeyBytes);
     final address = pair.address;
+    final seedHex = _toHex(miniSecret);
     return _WalletFixture(
       profile: WalletProfile(
         walletIndex: index,
@@ -309,27 +358,70 @@ class _FakeWalletService extends WalletManager {
         ss58: _ss58,
         createdAtMillis: DateTime.now().millisecondsSinceEpoch,
         source: 'test',
+        signMode: 'local',
       ),
-      mnemonic: mnemonic,
+      seedHex: seedHex,
     );
   }
 
   @override
+  // ignore: deprecated_member_use_from_same_package
   Future<WalletSecret?> getLatestWalletSecret() async {
     final fixtures = await _ensureFixtures();
     final f = fixtures.last;
-    return WalletSecret(profile: f.profile, mnemonic: f.mnemonic);
+    return WalletSecret(profile: f.profile, seedHex: f.seedHex);
   }
 
   @override
+  // ignore: deprecated_member_use_from_same_package
   Future<WalletSecret?> getWalletSecretByIndex(int walletIndex) async {
     final fixtures = await _ensureFixtures();
     for (final f in fixtures) {
       if (f.profile.walletIndex == walletIndex) {
-        return WalletSecret(profile: f.profile, mnemonic: f.mnemonic);
+        return WalletSecret(profile: f.profile, seedHex: f.seedHex);
       }
     }
     return null;
+  }
+
+  @override
+  Future<WalletProfile?> getWallet() async {
+    final fixtures = await _ensureFixtures();
+    return fixtures.last.profile;
+  }
+
+  @override
+  Future<WalletSignResult> signUtf8WithWallet(
+    int walletIndex,
+    String message,
+  ) async {
+    final fixtures = await _ensureFixtures();
+    for (final f in fixtures) {
+      if (f.profile.walletIndex == walletIndex) {
+        final seedBytes = _hexToBytes(f.seedHex);
+        final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(seedBytes));
+        pair.ss58Format = _ss58;
+        final payload = Uint8List.fromList(utf8.encode(message));
+        final signature = pair.sign(payload);
+        return WalletSignResult(
+          account: f.profile.address,
+          pubkeyHex: '0x${f.profile.pubkeyHex}',
+          sigAlg: 'sr25519',
+          signatureHex: '0x${_toHex(signature.toList(growable: false))}',
+        );
+      }
+    }
+    throw const WalletAuthException('未找到指定钱包');
+  }
+
+  List<int> _hexToBytes(String input) {
+    final text = input.startsWith('0x') ? input.substring(2) : input;
+    if (text.isEmpty || text.length.isOdd) return const <int>[];
+    final out = <int>[];
+    for (var i = 0; i < text.length; i += 2) {
+      out.add(int.parse(text.substring(i, i + 2), radix: 16));
+    }
+    return out;
   }
 
   String _toHex(List<int> bytes) {
@@ -347,9 +439,9 @@ class _FakeWalletService extends WalletManager {
 class _WalletFixture {
   const _WalletFixture({
     required this.profile,
-    required this.mnemonic,
+    required this.seedHex,
   });
 
   final WalletProfile profile;
-  final String mnemonic;
+  final String seedHex;
 }

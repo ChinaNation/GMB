@@ -1,5 +1,9 @@
+import 'dart:typed_data';
+
+import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
+import 'package:substrate_bip39/crypto_scheme.dart';
 import 'package:wuminapp_mobile/signer/local_signer.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
@@ -51,16 +55,24 @@ void main() {
   });
 }
 
+/// 从助记词派生 seed → 构建 WalletSecret（与 WalletManager 使用相同的派生链）。
 Future<WalletSecret> _buildWalletSecret({
   required String mnemonic,
   required int ss58,
   bool mismatchPubkey = false,
 }) async {
-  final pair = await Keyring.sr25519.fromMnemonic(mnemonic);
+  // mnemonic → entropy → miniSecret (32 bytes)
+  final entropy =
+      bip39m.Mnemonic.fromSentence(mnemonic, bip39m.Language.english).entropy;
+  final miniSecret = await CryptoScheme.miniSecretFromEntropy(entropy);
+
+  final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(miniSecret));
   pair.ss58Format = ss58;
   final pubkeyBytes = pair.bytes().toList(growable: false);
   final pubkeyHex = _toHex(pubkeyBytes);
   final address = pair.address;
+  final seedHex = _toHex(miniSecret);
+
   final profile = WalletProfile(
     walletIndex: 1,
     walletName: 'test-wallet',
@@ -72,8 +84,9 @@ Future<WalletSecret> _buildWalletSecret({
     ss58: ss58,
     createdAtMillis: DateTime.now().millisecondsSinceEpoch,
     source: 'test',
+    signMode: 'local',
   );
-  return WalletSecret(profile: profile, mnemonic: mnemonic);
+  return WalletSecret(profile: profile, seedHex: seedHex);
 }
 
 String _toHex(List<int> bytes) {

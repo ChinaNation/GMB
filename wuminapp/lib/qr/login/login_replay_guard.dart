@@ -1,8 +1,11 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wuminapp_mobile/login/models/login_exception.dart';
+import 'package:wuminapp_mobile/qr/login/login_models.dart';
 
+/// 登录请求防重放守卫。
+///
+/// 基于 `request_id` 做一次性消费，过期条目自动清理。
 class LoginReplayGuard {
   static const String _kUsedRequestIds = 'login.used_request_ids';
 
@@ -25,7 +28,10 @@ class LoginReplayGuard {
   Future<void> assertNotConsumed(String requestId) async {
     final consumed = await isConsumed(requestId);
     if (consumed) {
-      throw const LoginException(LoginErrorCode.replay, '登录挑战已使用，请刷新二维码后重试');
+      throw const LoginException(
+        LoginErrorCode.replay,
+        '登录挑战已使用，请刷新二维码后重试',
+      );
     }
   }
 

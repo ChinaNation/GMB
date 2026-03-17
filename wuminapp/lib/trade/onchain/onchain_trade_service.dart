@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_repository.dart';
@@ -23,7 +22,15 @@ class OnchainTradeService {
     return _walletManager.getWallet();
   }
 
-  Future<OnchainTxRecord> submitTransfer(OnchainTransferDraft draft) async {
+  /// 提交转账交易。
+  ///
+  /// [sign] 回调由调用方根据钱包模式提供：
+  /// - 热钱包：从 seed 派生密钥对，本机签名
+  /// - 冷钱包：构造 QR 签名请求，由外部设备签名后回传
+  Future<OnchainTxRecord> submitTransfer(
+    OnchainTransferDraft draft, {
+    required Future<Uint8List> Function(Uint8List payload) sign,
+  }) async {
     final toAddress = draft.toAddress.trim();
     final symbol = draft.symbol.trim().toUpperCase();
     if (toAddress.isEmpty || symbol.isEmpty || draft.amount <= 0) {
@@ -33,15 +40,14 @@ class OnchainTradeService {
       );
     }
 
-    final walletSecret = await _walletManager.getLatestWalletSecret();
-    if (walletSecret == null) {
+    final wallet = await _walletManager.getWallet();
+    if (wallet == null) {
       throw const OnchainTradeException(
         OnchainTradeErrorCode.walletMissing,
         '请先创建或导入钱包，再进行链上交易',
       );
     }
 
-    final wallet = walletSecret.profile;
     final pubkeyBytes = _hexToBytes(wallet.pubkeyHex);
 
     ({String txHash, int usedNonce}) result;
@@ -51,11 +57,7 @@ class OnchainTradeService {
         signerPubkey: Uint8List.fromList(pubkeyBytes),
         toAddress: toAddress,
         amountYuan: draft.amount,
-        sign: (payload) async {
-          final pair =
-              await Keyring.sr25519.fromMnemonic(walletSecret.mnemonic);
-          return Uint8List.fromList(pair.sign(payload));
-        },
+        sign: sign,
       );
     } catch (e) {
       if (e is OnchainTradeException) rethrow;
@@ -65,6 +67,7 @@ class OnchainTradeService {
       );
     }
 
+    final estimatedFee = OnchainRpc.estimateTransferFeeYuan(draft.amount);
     final now = DateTime.now();
     final record = OnchainTxRecord(
       txHash: result.txHash,
@@ -75,6 +78,7 @@ class OnchainTradeService {
       createdAt: now,
       status: OnchainTxStatus.pending,
       usedNonce: result.usedNonce,
+      estimatedFee: estimatedFee,
     );
     await _repository.save(record);
     return record;

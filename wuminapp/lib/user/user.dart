@@ -6,7 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:wuminapp_mobile/login/pages/settings_page.dart';
+import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/user/user_service.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -46,7 +46,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String get _userQrPayload {
     return UserQrPayload(
       nickname: _userProfile.nickname,
-      accountPubkeyHex: _currentAccountPubkey,
+      address: _currentAccountPubkey,
     ).toRawJson();
   }
 
@@ -602,7 +602,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 title: '设置',
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SettingsPage()),
+                    MaterialPageRoute(builder: (_) => const _SettingsPlaceholderPage()),
                   );
                 },
               ),
@@ -1255,6 +1255,23 @@ class _SquareAvatar extends StatelessWidget {
                 size: 40,
                 color: _ProfilePageState._inkGreen,
               ),
+      ),
+    );
+  }
+}
+
+class _SettingsPlaceholderPage extends StatelessWidget {
+  const _SettingsPlaceholderPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('设置'),
+        centerTitle: true,
+      ),
+      body: const Center(
+        child: Text('暂无可配置项'),
       ),
     );
   }

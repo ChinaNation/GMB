@@ -30,11 +30,13 @@ onchain/
 
 1. 页面收集 `toAddress/amount/symbol`
 2. `OnchainTradeService.submitTransfer()`：
-   - 读取当前钱包与助记词（自动触发生物识别/设备密码验证）
+   - 接受外部注入的 `sign` 回调（由 UI 层根据热/冷钱包模式提供）
    - 调用 `OnchainRpc.transferKeepAlive()` 直连链上节点完成转账
-     - 签名通过回调传入：`Keyring.sr25519.fromMnemonic()` → `pair.sign(payload)`
+     - 热钱包：`Keyring.sr25519.fromSeed(seed)` → `pair.sign(payload)`
+     - 冷钱包：构建 `QrSignRequest` → 导航到 `QrSignSessionPage` 展示请求二维码 → 用户用离线设备扫码签名 → 扫描回执二维码 → `QrSigner.parseResponse()` 解析签名 → 返回签名字节
      - 内部自动完成：获取 nonce、构造 extrinsic、提交到节点
-   - 返回 `({String txHash, int usedNonce})`，连同 nonce 一起写入 `OnchainTradeRepository`
+   - 计算预估手续费 `OnchainRpc.estimateTransferFeeYuan(amount)`，随交易记录一起写入
+   - 返回 `({String txHash, int usedNonce})`，连同 nonce 和 estimatedFee 一起写入 `OnchainTradeRepository`
 
 ### 3.2 交易状态刷新
 
@@ -46,12 +48,13 @@ onchain/
 
 ### 3.3 收款码扫码
 
-`trade_qr_scan_page.dart` 支持两类输入：
+扫码功能已迁移到统一扫码页面 `lib/qr/pages/qr_scan_page.dart`，支持三类输入：
 
-- `gmb://account/<address>`
-- 直接 SS58 地址
+- `WUMINAPP_TRANSFER_V1` JSON 格式 → 完整解析（收款地址 + 金额 + 币种）
+- `gmb://account/<address>` → 仅填充收款地址
+- 直接 SS58 地址 → 仅填充收款地址
 
-解析成功后返回给交易页面填入收款地址框。
+扫码结果通过 `QrScanTransferResult` 返回，交易页面自动预填收款地址、金额和币种。
 
 ## 4. 存储与依赖
 
@@ -63,7 +66,7 @@ onchain/
 扫码签名扩展：
 
 - 协议层由 `QrSigner` 提供（`WUMINAPP_QR_SIGN_V1`）
-- 当前链上交易 UI 仍以本机签名为主
+- 签名会话页面由 `QrSignSessionPage`（`lib/qr/pages/qr_sign_session_page.dart`）提供
 
 ## 5. 错误处理
 
@@ -105,14 +108,48 @@ onchain/
 - 签名算法固定 `sr25519`，不支持算法协商。
 - 金额精度：`BigInt.from((amountYuan * 100).round())`，避免浮点误差。
 
-## 8. 转账流程标准
+## 8. 手续费
+
+### 8.1 费率模型
+
+链上使用自定义 `PowOnchainChargeAdapter`，标准 Substrate `payment_queryInfo` 不适用（weight/length 费用均为 0）。
+
+- **费率**：`Perbill::from_parts(1_000_000)` = **0.1%**
+- **最低手续费**：`10 fen` = **0.10 元**
+- **公式**：`fee = max(amount_fen × 0.001, 10 fen)`
+- **tip**：当前硬编码为 0
+- **舍入**：half-up 到 fen 精度（与链上 `mul_perbill_round` 一致）
+
+### 8.2 客户端计算
+
+`OnchainRpc.estimateTransferFeeYuan(double amountYuan)` 纯客户端静态方法，无需 RPC 调用。
+
+### 8.3 用户体验
+
+- **提交前**：弹出确认对话框，显示转账金额、预估手续费、合计
+- **交易记录列表**：每条记录显示手续费
+- **交易详情页**：显示手续费行
+
+### 8.4 存储
+
+`OnchainTxRecord.estimatedFee`（`double?`），提交时写入，旧记录为 `null`。
+
+| 转账金额 | 按费率计算 | 实际手续费 |
+|---------|-----------|-----------|
+| 1 元 | 0 fen | **0.10 元**（最低） |
+| 100 元 | 10 fen | **0.10 元** |
+| 500 元 | 50 fen | **0.50 元** |
+| 10000 元 | 1000 fen | **10.00 元** |
+
+## 9. 转账流程标准
 
 1. 输入校验：`toAddress/symbol/amount`。
-2. 直连链上节点：`OnchainRpc.transferKeepAlive()` 一步完成 extrinsic 构造、签名、提交（读取助记词时自动触发生物识别/设备密码验证）。
-4. 落库：写入 `TxRecordEntity`（含 `usedNonce`），状态默认 `pending`。
+2. 预估手续费并展示确认对话框，用户确认后继续。
+3. 直连链上节点：`OnchainRpc.transferKeepAlive()` 一步完成 extrinsic 构造、签名、提交。签名回调由 UI 层根据 `signMode` 注入（热钱包读 seed 后本机签名，冷钱包通过 QrSigner 协议）。
+4. 落库：写入 `TxRecordEntity`（含 `usedNonce` + `estimatedFee`），状态默认 `pending`。
 5. 轮询：仅轮询未终态且有 `usedNonce` 的记录，通过 `isTxConfirmed(address, usedNonce)` 对比链上当前 nonce，确认后更新状态并停止轮询。
 
-## 9. 与治理模块边界
+## 10. 与治理模块边界
 
 - 本模块只处理"资产转账"。
 - 提案/投票字段与流程规范由 `lib/governance/GOVERNANCE_TECHNICAL.md` 定义。

@@ -71,7 +71,7 @@
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>WuminApp 需要访问相册以设置用户头像。</string>
 		<key>NSPhotoLibraryAddUsageDescription</key>
-		<string>WuminApp 可能需要保存头像编辑结果到相册。</string>
+		<string>WuminApp 需要保存二维码或头像到相册。</string>
 		<key>NSFaceIDUsageDescription</key>
 		<string>WuminApp 使用 Face ID 确认登录签名操作。</string>
 </dict>

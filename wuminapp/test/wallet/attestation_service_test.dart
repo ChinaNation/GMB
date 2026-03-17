@@ -111,5 +111,6 @@ WalletProfile _walletFixture({required int walletIndex}) {
     ss58: 2027,
     createdAtMillis: DateTime.now().millisecondsSinceEpoch,
     source: 'created',
+    signMode: 'local',
   );
 }
