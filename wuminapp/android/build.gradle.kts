@@ -20,7 +20,7 @@ subprojects {
 }
 
 // AGP 8+ requires namespace for every Android module.
-// Some transitive plugins (e.g. isar_flutter_libs 3.1.0+1) still omit it.
+// Some transitive plugins still omit it, so patch them here until upstream catches up.
 subprojects {
     if (name == "isar_flutter_libs") {
         plugins.withId("com.android.library") {
