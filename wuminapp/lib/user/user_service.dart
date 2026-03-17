@@ -8,18 +8,21 @@ class UserProfileState {
     required this.nicknameCustomized,
     this.avatarPath,
     this.backgroundPath,
+    this.communicationAddress,
   });
 
   final String nickname;
   final bool nicknameCustomized;
   final String? avatarPath;
   final String? backgroundPath;
+  final String? communicationAddress;
 
   UserProfileState copyWith({
     String? nickname,
     bool? nicknameCustomized,
     Object? avatarPath = _sentinel,
     Object? backgroundPath = _sentinel,
+    Object? communicationAddress = _sentinel,
   }) {
     return UserProfileState(
       nickname: nickname ?? this.nickname,
@@ -30,6 +33,9 @@ class UserProfileState {
       backgroundPath: identical(backgroundPath, _sentinel)
           ? this.backgroundPath
           : backgroundPath as String?,
+      communicationAddress: identical(communicationAddress, _sentinel)
+          ? this.communicationAddress
+          : communicationAddress as String?,
     );
   }
 
@@ -39,6 +45,7 @@ class UserProfileState {
       'nickname_customized': nicknameCustomized,
       'avatar_path': avatarPath,
       'background_path': backgroundPath,
+      'communication_address': communicationAddress,
     };
   }
 
@@ -51,6 +58,8 @@ class UserProfileState {
       nicknameCustomized: json['nickname_customized'] as bool? ?? false,
       avatarPath: _normalizeOptionalString(json['avatar_path']),
       backgroundPath: _normalizeOptionalString(json['background_path']),
+      communicationAddress:
+          _normalizeOptionalString(json['communication_address']),
     );
   }
 }
@@ -253,6 +262,12 @@ class UserProfileService {
   Future<UserProfileState> updateBackgroundPath(String? backgroundPath) async {
     final current = await getState();
     return saveState(current.copyWith(backgroundPath: backgroundPath));
+  }
+
+  Future<UserProfileState> updateCommunicationAddress(
+      String? address) async {
+    final current = await getState();
+    return saveState(current.copyWith(communicationAddress: address));
   }
 
   bool isNicknameReady(UserProfileState state) {
