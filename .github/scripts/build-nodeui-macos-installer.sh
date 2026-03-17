@@ -11,14 +11,13 @@ fi
 
 target="${TARGET_TRIPLE:-aarch64-apple-darwin}"
 frontend_dir="${repo_root}/citizenchain/nodeui/frontend"
-app_path="${repo_root}/citizenchain/nodeui/target/release/bundle/macos/citizenchain.app"
 dmg_path="${repo_root}/citizenchain/nodeui/target/release/bundle/dmg/citizenchain-${target}.dmg"
 
 "${script_dir}/prepare-nodeui-sidecar.sh" "${target}"
 npm --prefix "${frontend_dir}" ci
 npm --prefix "${frontend_dir}" run tauri:build -- --bundles app
-"${script_dir}/create-macos-dmg.sh" "${app_path}" "${dmg_path}" "citizenchain"
+"${script_dir}/create-macos-dmg.sh" "" "${dmg_path}" "citizenchain"
 
 echo "Installer outputs:"
-echo "  app=${app_path}"
+echo "  app=$(find "${repo_root}/citizenchain/nodeui/target/release/bundle/macos" -maxdepth 1 -type d -name '*.app' | head -n 1)"
 echo "  dmg=${dmg_path}"

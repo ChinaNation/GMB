@@ -3,8 +3,29 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
+default_bundle_dir="${repo_root}/citizenchain/nodeui/target/release/bundle/macos"
 
-app_path="${1:-${repo_root}/citizenchain/nodeui/target/release/bundle/macos/citizenchain.app}"
+resolve_default_app_path() {
+  local matches=()
+  shopt -s nullglob
+  matches=("${default_bundle_dir}"/*.app)
+  shopt -u nullglob
+
+  if [[ "${#matches[@]}" -eq 1 ]]; then
+    printf '%s\n' "${matches[0]}"
+    return 0
+  fi
+
+  if [[ "${#matches[@]}" -eq 0 ]]; then
+    echo "No .app bundle found in ${default_bundle_dir}" >&2
+  else
+    echo "Multiple .app bundles found in ${default_bundle_dir}; pass the app path explicitly" >&2
+    printf '  %s\n' "${matches[@]}" >&2
+  fi
+  return 1
+}
+
+app_path="${1:-$(resolve_default_app_path)}"
 dmg_path="${2:-${repo_root}/citizenchain/nodeui/target/release/bundle/dmg/citizenchain-macos-arm64.dmg}"
 volume_name="${3:-citizenchain}"
 
