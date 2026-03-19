@@ -228,39 +228,39 @@ pub mod pallet {
             if approved {
                 let code_to_execute = proposal.code.clone();
                 // 中文注释：只有真正 set_code 成功，提案才允许进入 Passed；
-                // 否则进入 ExecutionFailed，不再支持重试。
-                if T::RuntimeCodeExecutor::execute_runtime_code(code_to_execute.as_slice()).is_ok()
-                {
+                // 否则进入 ExecutionFailed。两种情况都清空 code 释放存储，
+                // 因为当前不支持重试——失败后需重新提案。
+                let exec_ok =
+                    T::RuntimeCodeExecutor::execute_runtime_code(code_to_execute.as_slice())
+                        .is_ok();
+
+                if exec_ok {
                     proposal.status = ProposalStatus::Passed;
-                    proposal.code = Default::default();
-                    Self::save_proposal(proposal_id, &proposal)?;
-                    // 将投票引擎状态设为 EXECUTED，标记提案已终结（不经 set_status_and_emit 以避免回调重入）。
-                    voting_engine_system::pallet::Proposals::<T>::mutate(proposal_id, |maybe| {
-                        if let Some(p) = maybe {
-                            p.status = STATUS_EXECUTED;
-                        }
-                    });
-                    Self::deposit_event(Event::<T>::JointVoteFinalized {
-                        proposal_id,
-                        approved: true,
-                    });
+                } else {
+                    proposal.status = ProposalStatus::ExecutionFailed;
+                }
+                // 无论成功/失败，都清空 code 释放存储（不支持重试）
+                proposal.code = Default::default();
+                Self::save_proposal(proposal_id, &proposal)?;
+
+                // 将投票引擎状态设为 EXECUTED，标记提案已终结。
+                // 直接修改存储而非调用 set_status_and_emit，以避免回调重入。
+                voting_engine_system::pallet::Proposals::<T>::mutate(proposal_id, |maybe| {
+                    if let Some(p) = maybe {
+                        p.status = STATUS_EXECUTED;
+                    }
+                });
+
+                Self::deposit_event(Event::<T>::JointVoteFinalized {
+                    proposal_id,
+                    approved: true,
+                });
+                if exec_ok {
                     Self::deposit_event(Event::<T>::RuntimeUpgradeExecuted {
                         proposal_id,
                         code_hash: proposal.code_hash,
                     });
                 } else {
-                    proposal.status = ProposalStatus::ExecutionFailed;
-                    Self::save_proposal(proposal_id, &proposal)?;
-                    // 执行失败也是终态（不再支持重试），将投票引擎状态设为 EXECUTED 防止重入。
-                    voting_engine_system::pallet::Proposals::<T>::mutate(proposal_id, |maybe| {
-                        if let Some(p) = maybe {
-                            p.status = STATUS_EXECUTED;
-                        }
-                    });
-                    Self::deposit_event(Event::<T>::JointVoteFinalized {
-                        proposal_id,
-                        approved: true,
-                    });
                     Self::deposit_event(Event::<T>::RuntimeUpgradeExecutionFailed {
                         proposal_id,
                         code_hash: proposal.code_hash,
@@ -271,6 +271,14 @@ pub mod pallet {
                 proposal.status = ProposalStatus::Rejected;
                 proposal.code = Default::default();
                 Self::save_proposal(proposal_id, &proposal)?;
+
+                // 将投票引擎状态设为 EXECUTED，与 approved 路径保持一致，
+                // 防止投票引擎侧对已终结提案的误操作。
+                voting_engine_system::pallet::Proposals::<T>::mutate(proposal_id, |maybe| {
+                    if let Some(p) = maybe {
+                        p.status = STATUS_EXECUTED;
+                    }
+                });
 
                 Self::deposit_event(Event::<T>::JointVoteFinalized {
                     proposal_id,
@@ -572,6 +580,10 @@ mod tests {
             let p = pallet::Proposal::<Test>::decode(&mut &raw[..])
                 .expect("should decode");
             assert!(matches!(p.status, pallet::ProposalStatus::ExecutionFailed));
+            assert!(
+                p.code.is_empty(),
+                "execution failed should also clear code (no retry support)"
+            );
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
             assert!(
                 !code_executed,

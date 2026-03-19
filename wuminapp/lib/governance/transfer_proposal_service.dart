@@ -9,6 +9,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import '../rpc/chain_rpc.dart';
 import 'institution_data.dart';
 import 'proposal_cache.dart';
+import 'runtime_upgrade_service.dart';
 
 /// 机构转账提案链上交互服务。
 ///
@@ -217,16 +218,26 @@ class TransferProposalService {
       if (meta == null) continue;
 
       // 尝试获取业务详情（ProposalData）
-      TransferProposalInfo? detail;
-      try {
-        detail = await fetchProposalAction(meta.proposalId);
-      } catch (_) {
-        // 非转账提案或解码失败，detail 保持 null
+      TransferProposalInfo? transferDetail;
+      RuntimeUpgradeProposalInfo? runtimeUpgradeDetail;
+      if (meta.kind == 0) {
+        // 内部投票提案 → 尝试解码为转账提案
+        try {
+          transferDetail = await fetchProposalAction(meta.proposalId);
+        } catch (_) {}
+      } else if (meta.kind == 1) {
+        // 联合投票提案 → 尝试解码为 runtime 升级提案
+        try {
+          final upgradeService = RuntimeUpgradeService(chainRpc: _rpc);
+          runtimeUpgradeDetail =
+              await upgradeService.fetchRuntimeUpgradeProposal(meta.proposalId);
+        } catch (_) {}
       }
 
       results.add(ProposalWithDetail(
         meta: meta,
-        transferDetail: detail?.copyWithStatus(meta.status),
+        transferDetail: transferDetail?.copyWithStatus(meta.status),
+        runtimeUpgradeDetail: runtimeUpgradeDetail,
       ));
     }
 
@@ -847,9 +858,12 @@ class ProposalWithDetail {
   const ProposalWithDetail({
     required this.meta,
     this.transferDetail,
+    this.runtimeUpgradeDetail,
   });
 
   final ProposalMeta meta;
   /// 转账提案详情（非转账提案为 null）。
   final TransferProposalInfo? transferDetail;
+  /// Runtime 升级提案详情（非升级提案为 null）。
+  final RuntimeUpgradeProposalInfo? runtimeUpgradeDetail;
 }
