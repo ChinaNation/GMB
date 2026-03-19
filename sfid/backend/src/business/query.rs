@@ -145,9 +145,8 @@ pub(crate) async fn public_identity_search(
     headers: HeaderMap,
     Query(query): Query<PublicIdentitySearchQuery>,
 ) -> impl IntoResponse {
-    if let Err(resp) = require_public_search_auth(&headers) {
-        return resp;
-    }
+    // 查询结果仅含公开信息（SFID 码、档案号等），无需 token 认证。
+    // 全局 rate limiter 已防滥用。
     let archive_no = query.archive_no.as_deref().map(str::trim).unwrap_or("");
     let identity_code = query.identity_code.as_deref().map(str::trim).unwrap_or("");
     let account_pubkey = query.account_pubkey.as_deref().map(str::trim).unwrap_or("");
