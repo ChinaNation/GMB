@@ -25,30 +25,7 @@ pub mod pallet {
     pub type SnapshotNonceOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotNonceLength>;
     pub type SnapshotSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotSignatureLength>;
 
-    #[derive(
-        Encode,
-        Decode,
-        DecodeWithMemTracking,
-        Clone,
-        RuntimeDebug,
-        TypeInfo,
-        MaxEncodedLen,
-        PartialEq,
-        Eq,
-    )]
-    pub enum ProposalStatus {
-        /// 联合投票进行中，尚未得到最终治理结果。
-        Voting,
-        /// 联合投票已通过，且 runtime code 已执行成功。
-        Passed,
-        /// 联合投票被拒绝，治理流程结束。
-        Rejected,
-        /// 联合投票已通过，但 runtime code 执行失败，允许后续人工重试。
-        ExecutionFailed,
-        /// 执行失败且重试额度已经耗尽，人工确认放弃后清空 code。
-        Cancelled,
-    }
-
+    /// 提案业务数据：序列化后存入 voting-engine-system 的 ProposalData。
     #[derive(
         Encode,
         Decode,
@@ -74,10 +51,32 @@ pub mod pallet {
         pub status: ProposalStatus,
     }
 
+    #[derive(
+        Encode,
+        Decode,
+        DecodeWithMemTracking,
+        Clone,
+        RuntimeDebug,
+        TypeInfo,
+        MaxEncodedLen,
+        PartialEq,
+        Eq,
+    )]
+    pub enum ProposalStatus {
+        /// 联合投票进行中，尚未得到最终治理结果。
+        Voting,
+        /// 联合投票已通过，且 runtime code 已执行成功。
+        Passed,
+        /// 联合投票被拒绝，治理流程结束。
+        Rejected,
+        /// 联合投票已通过，但 runtime code 执行失败。
+        ExecutionFailed,
+    }
+
     use crate::weights::WeightInfo;
 
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config: frame_system::Config + voting_engine_system::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -99,44 +98,19 @@ pub mod pallet {
         #[pallet::constant]
         type MaxSnapshotSignatureLength: Get<u32>;
 
-        #[pallet::constant]
-        type MaxExecutionRetries: Get<u32>;
-
         type WeightInfo: crate::weights::WeightInfo;
     }
 
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    #[pallet::storage]
-    #[pallet::getter(fn next_proposal_id)]
-    pub type NextProposalId<T> = StorageValue<_, u64, ValueQuery>;
-
-    #[pallet::storage]
-    #[pallet::getter(fn proposals)]
-    pub type Proposals<T: Config> = StorageMap<_, Blake2_128Concat, u64, Proposal<T>, OptionQuery>;
-
-    /// 本模块提案ID -> 联合投票提案ID
-    #[pallet::storage]
-    #[pallet::getter(fn gov_to_joint_vote)]
-    pub type GovToJointVote<T> = StorageMap<_, Blake2_128Concat, u64, u64, OptionQuery>;
-
-    /// 联合投票提案ID -> 本模块提案ID
-    #[pallet::storage]
-    #[pallet::getter(fn joint_vote_to_gov)]
-    pub type JointVoteToGov<T> = StorageMap<_, Blake2_128Concat, u64, u64, OptionQuery>;
-
-    /// 执行失败后的重试次数；只统计手动 retry_failed_execution。
-    #[pallet::storage]
-    #[pallet::getter(fn retry_count)]
-    pub type RetryCount<T> = StorageMap<_, Blake2_128Concat, u64, u32, ValueQuery>;
+    // 提案数据、元数据均已移至 voting-engine-system 统一管控，本模块不再持有任何 Storage。
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         RuntimeUpgradeProposed {
             proposal_id: u64,
-            joint_vote_id: u64,
             proposer: T::AccountId,
             code_hash: T::Hash,
         },
@@ -152,11 +126,6 @@ pub mod pallet {
             proposal_id: u64,
             code_hash: T::Hash,
         },
-        RuntimeUpgradeCancelled {
-            proposal_id: u64,
-            code_hash: T::Hash,
-            retry_count: u32,
-        },
     }
 
     #[pallet::error]
@@ -165,19 +134,14 @@ pub mod pallet {
         EmptyRuntimeCode,
         ProposalNotFound,
         ProposalNotVoting,
-        ProposalNotExecutionFailed,
-        ProposalNotRetryExhausted,
         JointVoteCreateFailed,
-        JointVoteMappingNotFound,
-        ProposalIdOverflow,
-        MaxRetriesExceeded,
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// 国储会管理员发起 runtime 升级提案，升级流程走联合投票。
         #[pallet::call_index(0)]
-        #[pallet::weight(T::WeightInfo::propose_runtime_upgrade())]
+        #[pallet::weight(<T as Config>::WeightInfo::propose_runtime_upgrade())]
         pub fn propose_runtime_upgrade(
             origin: OriginFor<T>,
             reason: ReasonOf<T>,
@@ -191,9 +155,7 @@ pub mod pallet {
             ensure!(!reason.is_empty(), Error::<T>::EmptyReason);
             ensure!(!code.is_empty(), Error::<T>::EmptyRuntimeCode);
 
-            let proposal_id = Self::allocate_proposal_id()?;
-
-            let joint_vote_id = T::JointVoteEngine::create_joint_proposal(
+            let proposal_id = T::JointVoteEngine::create_joint_proposal(
                 proposer.clone(),
                 eligible_total,
                 snapshot_nonce.as_slice(),
@@ -206,16 +168,18 @@ pub mod pallet {
                 proposer: proposer.clone(),
                 reason,
                 code_hash,
-                code: code.clone(),
+                code,
                 status: ProposalStatus::Voting,
             };
-            Proposals::<T>::insert(proposal_id, proposal);
-            GovToJointVote::<T>::insert(proposal_id, joint_vote_id);
-            JointVoteToGov::<T>::insert(joint_vote_id, proposal_id);
+            let data = proposal.encode();
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            voting_engine_system::Pallet::<T>::store_proposal_meta(
+                proposal_id,
+                frame_system::Pallet::<T>::block_number(),
+            );
 
             Self::deposit_event(Event::<T>::RuntimeUpgradeProposed {
                 proposal_id,
-                joint_vote_id,
                 proposer,
                 code_hash,
             });
@@ -225,11 +189,11 @@ pub mod pallet {
         /// 联合投票回调：保持与其他治理模块一致，Root 可手工回放。
         #[pallet::call_index(1)]
         #[pallet::weight(if *approved {
-            T::WeightInfo::finalize_joint_vote_approved().saturating_add(
+            <T as Config>::WeightInfo::finalize_joint_vote_approved().saturating_add(
                 <<T as frame_system::Config>::SystemWeightInfo as frame_system::weights::WeightInfo>::set_code()
             )
         } else {
-            T::WeightInfo::finalize_joint_vote_rejected()
+            <T as Config>::WeightInfo::finalize_joint_vote_rejected()
         })]
         pub fn finalize_joint_vote(
             origin: OriginFor<T>,
@@ -239,93 +203,37 @@ pub mod pallet {
             ensure_root(origin)?;
             Self::apply_joint_vote_result(proposal_id, approved)
         }
-
-        /// 中文注释：联合投票已经通过但执行 runtime code 失败时，
-        /// 允许 NRC 管理员在保留原始 code 的前提下重试执行。
-        #[pallet::call_index(2)]
-        #[pallet::weight(
-            T::WeightInfo::retry_failed_execution().saturating_add(
-                <<T as frame_system::Config>::SystemWeightInfo as frame_system::weights::WeightInfo>::set_code()
-            )
-        )]
-        pub fn retry_failed_execution(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            let _ = T::NrcProposeOrigin::ensure_origin(origin)?;
-            Self::retry_execution(proposal_id)
-        }
-
-        /// 中文注释：当执行失败提案已经用尽全部人工重试额度后，
-        /// 允许 NRC 管理员确认放弃并清空残留 wasm code，释放长期占用的存储。
-        #[pallet::call_index(3)]
-        #[pallet::weight(T::WeightInfo::cancel_failed_proposal())]
-        pub fn cancel_failed_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            let _ = T::NrcProposeOrigin::ensure_origin(origin)?;
-
-            let mut proposal =
-                Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
-            ensure!(
-                matches!(proposal.status, ProposalStatus::ExecutionFailed),
-                Error::<T>::ProposalNotExecutionFailed
-            );
-
-            let retry_count = RetryCount::<T>::get(proposal_id);
-            ensure!(
-                retry_count >= T::MaxExecutionRetries::get(),
-                Error::<T>::ProposalNotRetryExhausted
-            );
-
-            proposal.status = ProposalStatus::Cancelled;
-            proposal.code = Default::default();
-            Proposals::<T>::insert(proposal_id, &proposal);
-            RetryCount::<T>::remove(proposal_id);
-            Self::deposit_event(Event::<T>::RuntimeUpgradeCancelled {
-                proposal_id,
-                code_hash: proposal.code_hash,
-                retry_count,
-            });
-            Ok(())
-        }
     }
 
     impl<T: Config> Pallet<T> {
-        fn allocate_proposal_id() -> Result<u64, DispatchError> {
-            // 中文注释：必须使用 checked_add，避免 u64::MAX 时回绕覆盖旧提案。
-            let proposal_id = NextProposalId::<T>::get();
-            let next = proposal_id
-                .checked_add(1)
-                .ok_or(Error::<T>::ProposalIdOverflow)?;
-            NextProposalId::<T>::put(next);
-            Ok(proposal_id)
+        fn load_proposal(proposal_id: u64) -> Result<Proposal<T>, DispatchError> {
+            let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+                .ok_or(Error::<T>::ProposalNotFound)?;
+            Proposal::<T>::decode(&mut &raw[..])
+                .map_err(|_| Error::<T>::ProposalNotFound.into())
         }
 
-        fn cleanup_joint_vote_mapping(proposal_id: u64) {
-            // 中文注释：联合投票一旦结束，就释放双向映射并清理投票引擎侧计票状态。
-            if let Some(joint_vote_id) = GovToJointVote::<T>::take(proposal_id) {
-                JointVoteToGov::<T>::remove(joint_vote_id);
-                T::JointVoteEngine::cleanup_joint_proposal(joint_vote_id);
-            }
+        fn save_proposal(proposal_id: u64, proposal: &Proposal<T>) -> DispatchResult {
+            let data = proposal.encode();
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)
         }
 
         pub(crate) fn apply_joint_vote_result(proposal_id: u64, approved: bool) -> DispatchResult {
-            let mut proposal =
-                Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
+            let mut proposal = Self::load_proposal(proposal_id)?;
             ensure!(
                 matches!(proposal.status, ProposalStatus::Voting),
                 Error::<T>::ProposalNotVoting
             );
 
             if approved {
-                // 中文注释：联合投票一旦给出“通过”，联合阶段就结束，因此映射与投票快照可以先清理。
-                Self::cleanup_joint_vote_mapping(proposal_id);
-
                 let code_to_execute = proposal.code.clone();
                 // 中文注释：只有真正 set_code 成功，提案才允许进入 Passed；
-                // 否则必须保留 code 进入 ExecutionFailed，便于后续重试。
+                // 否则进入 ExecutionFailed，不再支持重试。
                 if T::RuntimeCodeExecutor::execute_runtime_code(code_to_execute.as_slice()).is_ok()
                 {
                     proposal.status = ProposalStatus::Passed;
                     proposal.code = Default::default();
-                    RetryCount::<T>::remove(proposal_id);
-                    Proposals::<T>::insert(proposal_id, &proposal);
+                    Self::save_proposal(proposal_id, &proposal)?;
                     Self::deposit_event(Event::<T>::JointVoteFinalized {
                         proposal_id,
                         approved: true,
@@ -336,8 +244,7 @@ pub mod pallet {
                     });
                 } else {
                     proposal.status = ProposalStatus::ExecutionFailed;
-                    RetryCount::<T>::insert(proposal_id, 0);
-                    Proposals::<T>::insert(proposal_id, &proposal);
+                    Self::save_proposal(proposal_id, &proposal)?;
                     Self::deposit_event(Event::<T>::JointVoteFinalized {
                         proposal_id,
                         approved: true,
@@ -347,65 +254,26 @@ pub mod pallet {
                         code_hash: proposal.code_hash,
                     });
                 }
-                return Ok(());
+                Ok(())
             } else {
                 proposal.status = ProposalStatus::Rejected;
                 proposal.code = Default::default();
-                Proposals::<T>::insert(proposal_id, &proposal);
-                RetryCount::<T>::remove(proposal_id);
-                Self::cleanup_joint_vote_mapping(proposal_id);
+                Self::save_proposal(proposal_id, &proposal)?;
 
                 Self::deposit_event(Event::<T>::JointVoteFinalized {
                     proposal_id,
                     approved: false,
                 });
-                return Ok(());
+                Ok(())
             }
-        }
-
-        fn retry_execution(proposal_id: u64) -> DispatchResult {
-            let mut proposal =
-                Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
-            ensure!(
-                matches!(proposal.status, ProposalStatus::ExecutionFailed),
-                Error::<T>::ProposalNotExecutionFailed
-            );
-
-            let retries = RetryCount::<T>::get(proposal_id);
-            ensure!(
-                retries < T::MaxExecutionRetries::get(),
-                Error::<T>::MaxRetriesExceeded
-            );
-
-            // 中文注释：重试不会重新走联合投票，只对已经批准的同一份 code 再执行一次。
-            if T::RuntimeCodeExecutor::execute_runtime_code(proposal.code.as_slice()).is_ok() {
-                proposal.status = ProposalStatus::Passed;
-                proposal.code = Default::default();
-                Proposals::<T>::insert(proposal_id, &proposal);
-                RetryCount::<T>::remove(proposal_id);
-                Self::deposit_event(Event::<T>::RuntimeUpgradeExecuted {
-                    proposal_id,
-                    code_hash: proposal.code_hash,
-                });
-            } else {
-                RetryCount::<T>::insert(proposal_id, retries.saturating_add(1));
-                Self::deposit_event(Event::<T>::RuntimeUpgradeExecutionFailed {
-                    proposal_id,
-                    code_hash: proposal.code_hash,
-                });
-            }
-
-            Ok(())
         }
     }
 }
 
 impl<T: pallet::Config> JointVoteResultCallback for pallet::Pallet<T> {
     fn on_joint_vote_finalized(vote_proposal_id: u64, approved: bool) -> DispatchResult {
-        // 中文注释：投票引擎只认识 joint_vote_id，本模块需先反查自己的 proposal_id。
-        let gov_id = pallet::JointVoteToGov::<T>::get(vote_proposal_id)
-            .ok_or(pallet::Error::<T>::JointVoteMappingNotFound)?;
-        pallet::Pallet::<T>::apply_joint_vote_result(gov_id, approved)
+        // 中文注释：统一使用 voting engine 的 proposal_id，不再需要反查映射。
+        pallet::Pallet::<T>::apply_joint_vote_result(vote_proposal_id, approved)
     }
 }
 
@@ -440,6 +308,9 @@ mod tests {
         pub type System = frame_system;
 
         #[runtime::pallet_index(1)]
+        pub type VotingEngine = voting_engine_system;
+
+        #[runtime::pallet_index(2)]
         pub type RuntimeRootUpgrade = super;
     }
 
@@ -496,6 +367,33 @@ mod tests {
         }
     }
 
+    pub struct TestTimeProvider;
+    impl frame_support::traits::UnixTime for TestTimeProvider {
+        fn now() -> core::time::Duration {
+            core::time::Duration::from_secs(1_782_864_000) // 2026-07-01
+        }
+    }
+
+    impl voting_engine_system::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type MaxVoteNonceLength = ConstU32<64>;
+        type MaxVoteSignatureLength = ConstU32<64>;
+        type MaxAutoFinalizePerBlock = ConstU32<64>;
+        type MaxProposalsPerExpiry = ConstU32<128>;
+        type MaxCleanupStepsPerBlock = ConstU32<8>;
+        type CleanupKeysPerStep = ConstU32<64>;
+        type MaxProposalDataLen = ConstU32<{ 6 * 1024 * 1024 }>;
+        type MaxJointDecisionApprovals = ConstU32<32>;
+        type SfidEligibility = ();
+        type PopulationSnapshotVerifier = ();
+        type JointVoteResultCallback = ();
+        type InternalAdminProvider = ();
+        type InternalThresholdProvider = ();
+        type JointInstitutionDecisionVerifier = ();
+        type TimeProvider = TestTimeProvider;
+        type WeightInfo = ();
+    }
+
     impl pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type NrcProposeOrigin = EnsureNrcAdminForTest;
@@ -505,7 +403,6 @@ mod tests {
         type MaxRuntimeCodeSize = ConstU32<1024>;
         type MaxSnapshotNonceLength = ConstU32<64>;
         type MaxSnapshotSignatureLength = ConstU32<64>;
-        type MaxExecutionRetries = ConstU32<3>;
         type WeightInfo = ();
     }
 
@@ -603,31 +500,15 @@ mod tests {
     }
 
     #[test]
-    fn joint_vote_callback_rejects_when_mapping_missing() {
+    fn proposal_data_stored_in_voting_engine() {
         new_test_ext().execute_with(|| {
-            assert_noop!(
-                RuntimeRootUpgrade::on_joint_vote_finalized(999, true),
-                pallet::Error::<Test>::JointVoteMappingNotFound
-            );
-        });
-    }
-
-    #[test]
-    fn proposal_id_overflow_is_rejected() {
-        new_test_ext().execute_with(|| {
-            NextProposalId::<Test>::put(u64::MAX);
-
-            assert_noop!(
-                RuntimeRootUpgrade::propose_runtime_upgrade(
-                    RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                    reason_ok(),
-                    code_ok(),
-                    10,
-                    nonce_ok(),
-                    sig_ok()
-                ),
-                pallet::Error::<Test>::ProposalIdOverflow
-            );
+            propose_ok();
+            // proposal_id comes from NEXT_JOINT_ID which starts at 100
+            let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100);
+            assert!(raw.is_some(), "proposal data should be stored in voting engine");
+            let proposal = pallet::Proposal::<Test>::decode(&mut &raw.unwrap()[..])
+                .expect("should decode proposal");
+            assert!(matches!(proposal.status, pallet::ProposalStatus::Voting));
         });
     }
 
@@ -635,17 +516,13 @@ mod tests {
     fn rejected_joint_vote_marks_proposal_rejected() {
         new_test_ext().execute_with(|| {
             propose_ok();
-
-            let joint_vote_id =
-                RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
-            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
-                joint_vote_id,
-                false
-            ));
-            let p = RuntimeRootUpgrade::proposals(0).expect("proposal should exist");
+            // proposal_id == joint_vote_id == 100
+            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, false));
+            let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100)
+                .expect("proposal data should exist");
+            let p = pallet::Proposal::<Test>::decode(&mut &raw[..])
+                .expect("should decode");
             assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
-            assert!(RuntimeRootUpgrade::gov_to_joint_vote(0).is_none());
-            assert!(RuntimeRootUpgrade::joint_vote_to_gov(joint_vote_id).is_none());
         });
     }
 
@@ -653,15 +530,12 @@ mod tests {
     fn approved_joint_vote_executes_runtime_upgrade() {
         new_test_ext().execute_with(|| {
             propose_ok();
+            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, true));
 
-            let joint_vote_id =
-                RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
-            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
-                joint_vote_id,
-                true
-            ));
-
-            let p = RuntimeRootUpgrade::proposals(0).expect("proposal should exist");
+            let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100)
+                .expect("proposal data should exist");
+            let p = pallet::Proposal::<Test>::decode(&mut &raw[..])
+                .expect("should decode");
             assert!(matches!(p.status, pallet::ProposalStatus::Passed));
             assert!(
                 p.code.is_empty(),
@@ -669,38 +543,27 @@ mod tests {
             );
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
             assert!(code_executed, "runtime code executor should be called");
-            assert!(RuntimeRootUpgrade::gov_to_joint_vote(0).is_none());
-            assert!(RuntimeRootUpgrade::joint_vote_to_gov(joint_vote_id).is_none());
         });
     }
 
     #[test]
-    fn approved_joint_vote_execution_failure_enters_retryable_state() {
+    fn approved_joint_vote_execution_failure_emits_event() {
         new_test_ext().execute_with(|| {
             propose_ok();
             EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = true);
 
-            let joint_vote_id =
-                RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
-            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
-                joint_vote_id,
-                true
-            ));
+            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, true));
 
-            let p = RuntimeRootUpgrade::proposals(0).expect("proposal should exist");
+            let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100)
+                .expect("proposal data should exist");
+            let p = pallet::Proposal::<Test>::decode(&mut &raw[..])
+                .expect("should decode");
             assert!(matches!(p.status, pallet::ProposalStatus::ExecutionFailed));
-            assert!(
-                !p.code.is_empty(),
-                "proposal code should be retained for retry"
-            );
-            assert_eq!(RuntimeRootUpgrade::retry_count(0), 0);
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
             assert!(
                 !code_executed,
                 "runtime code executor should fail in this test"
             );
-            assert!(RuntimeRootUpgrade::gov_to_joint_vote(0).is_none());
-            assert!(RuntimeRootUpgrade::joint_vote_to_gov(joint_vote_id).is_none());
         });
     }
 
@@ -708,14 +571,12 @@ mod tests {
     fn rejected_joint_vote_clears_runtime_code() {
         new_test_ext().execute_with(|| {
             propose_ok();
+            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, false));
 
-            let joint_vote_id =
-                RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
-            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
-                joint_vote_id,
-                false
-            ));
-            let p = RuntimeRootUpgrade::proposals(0).expect("proposal should exist");
+            let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100)
+                .expect("proposal data should exist");
+            let p = pallet::Proposal::<Test>::decode(&mut &raw[..])
+                .expect("should decode");
             assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
             assert!(
                 p.code.is_empty(),
@@ -725,181 +586,25 @@ mod tests {
     }
 
     #[test]
-    fn retry_failed_execution_succeeds_and_clears_code() {
+    fn finalize_joint_vote_requires_voting_status() {
         new_test_ext().execute_with(|| {
             propose_ok();
-            EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = true);
-
-            let joint_vote_id =
-                RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
-            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
-                joint_vote_id,
-                true
-            ));
-
-            EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = false);
-            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
-                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                0
-            ));
-
-            let p = RuntimeRootUpgrade::proposals(0).expect("proposal should exist");
-            assert!(matches!(p.status, pallet::ProposalStatus::Passed));
-            assert!(p.code.is_empty());
-            assert_eq!(RuntimeRootUpgrade::retry_count(0), 0);
-        });
-    }
-
-    #[test]
-    fn retry_failed_execution_failure_increments_retry_count() {
-        new_test_ext().execute_with(|| {
-            propose_ok();
-            EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = true);
-
-            let joint_vote_id =
-                RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
-            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
-                joint_vote_id,
-                true
-            ));
-
-            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
-                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                0
-            ));
-            assert_eq!(RuntimeRootUpgrade::retry_count(0), 1);
-            let p = RuntimeRootUpgrade::proposals(0).expect("proposal should exist");
-            assert!(matches!(p.status, pallet::ProposalStatus::ExecutionFailed));
-            assert!(!p.code.is_empty());
-        });
-    }
-
-    #[test]
-    fn retry_failed_execution_respects_retry_limit() {
-        new_test_ext().execute_with(|| {
-            propose_ok();
-            EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = true);
-
-            let joint_vote_id =
-                RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
-            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
-                joint_vote_id,
-                true
-            ));
-
-            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
-                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                0
-            ));
-            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
-                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                0
-            ));
-            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
-                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                0
-            ));
-            assert_eq!(RuntimeRootUpgrade::retry_count(0), 3);
-
+            // First finalize
+            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, true));
+            // Second finalize should fail - no longer voting
             assert_noop!(
-                RuntimeRootUpgrade::retry_failed_execution(
-                    RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                    0
-                ),
-                pallet::Error::<Test>::MaxRetriesExceeded
+                RuntimeRootUpgrade::on_joint_vote_finalized(100, true),
+                pallet::Error::<Test>::ProposalNotVoting
             );
         });
     }
 
     #[test]
-    fn cancel_failed_proposal_clears_code_after_retry_limit() {
+    fn finalize_nonexistent_proposal_fails() {
         new_test_ext().execute_with(|| {
-            propose_ok();
-            EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = true);
-
-            let joint_vote_id =
-                RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
-            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
-                joint_vote_id,
-                true
-            ));
-
-            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
-                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                0
-            ));
-            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
-                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                0
-            ));
-            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
-                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                0
-            ));
-            assert_eq!(RuntimeRootUpgrade::retry_count(0), 3);
-
-            assert_ok!(RuntimeRootUpgrade::cancel_failed_proposal(
-                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                0
-            ));
-
-            let p = RuntimeRootUpgrade::proposals(0).expect("proposal should exist");
-            assert!(matches!(p.status, pallet::ProposalStatus::Cancelled));
-            assert!(
-                p.code.is_empty(),
-                "cancel should clear retained runtime code"
-            );
-            assert_eq!(RuntimeRootUpgrade::retry_count(0), 0);
-
             assert_noop!(
-                RuntimeRootUpgrade::retry_failed_execution(
-                    RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                    0
-                ),
-                pallet::Error::<Test>::ProposalNotExecutionFailed
-            );
-        });
-    }
-
-    #[test]
-    fn cancel_failed_proposal_requires_exhausted_retries() {
-        new_test_ext().execute_with(|| {
-            propose_ok();
-            EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = true);
-
-            let joint_vote_id =
-                RuntimeRootUpgrade::gov_to_joint_vote(0).expect("joint vote id should exist");
-            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(
-                joint_vote_id,
-                true
-            ));
-
-            assert_ok!(RuntimeRootUpgrade::retry_failed_execution(
-                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                0
-            ));
-
-            assert_noop!(
-                RuntimeRootUpgrade::cancel_failed_proposal(
-                    RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                    0
-                ),
-                pallet::Error::<Test>::ProposalNotRetryExhausted
-            );
-        });
-    }
-
-    #[test]
-    fn retry_failed_execution_requires_failed_state() {
-        new_test_ext().execute_with(|| {
-            propose_ok();
-
-            assert_noop!(
-                RuntimeRootUpgrade::retry_failed_execution(
-                    RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
-                    0
-                ),
-                pallet::Error::<Test>::ProposalNotExecutionFailed
+                RuntimeRootUpgrade::on_joint_vote_finalized(999, true),
+                pallet::Error::<Test>::ProposalNotFound
             );
         });
     }

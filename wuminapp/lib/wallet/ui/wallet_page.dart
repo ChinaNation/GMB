@@ -5,11 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:qr/qr.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
+import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
+import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
+import 'package:wuminapp_mobile/trade/onchain/onchain_trade_repository.dart';
+import 'package:wuminapp_mobile/user/user_service.dart' show UserProfileService;
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
+import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
 
 class MyWalletPage extends StatefulWidget {
   const MyWalletPage({
@@ -164,9 +170,9 @@ class _MyWalletPageState extends State<MyWalletPage> {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('绑定身份'),
+        title: const Text('设置账户'),
         content: Text(
-          '确认使用该钱包绑定身份？\n\n地址：${wallet.address}\n\n公钥：0x${wallet.pubkeyHex}',
+          '确定使用「${wallet.walletName}」作为通信账户吗？',
         ),
         actions: [
           TextButton(
@@ -267,33 +273,42 @@ class _MyWalletPageState extends State<MyWalletPage> {
         : (_activeWalletIndex == wallet.walletIndex
             ? const Color(0xFFE9F5EF)
             : null);
+
+    // 根据金额长度自动选择字号
+    final balanceStr = wallet.balance.toStringAsFixed(2);
+    final balanceFontSize = balanceStr.length > 10
+        ? 16.0
+        : balanceStr.length > 7
+            ? 20.0
+            : 24.0;
+
     return Card(
       color: cardColor,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => _openWalletDetail(wallet),
         child: Padding(
-          padding: EdgeInsets.fromLTRB(14, _isSelectionMode ? 10 : 4, 6, 12),
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 第一行：热/冷标识 + 钱包名称 + 扫码图标
+              // 顶部：冷热图标 + 钱包名称
               Row(
                 children: [
                   Container(
-                    width: 28,
-                    height: 28,
+                    width: 20,
+                    height: 20,
                     decoration: BoxDecoration(
                       color: wallet.isHotWallet
                           ? const Color(0xFFFFE0B2)
                           : const Color(0xFFB3E5FC),
-                      borderRadius: BorderRadius.circular(7),
+                      borderRadius: BorderRadius.circular(5),
                     ),
                     child: Center(
                       child: Text(
                         wallet.isHotWallet ? '热' : '冷',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 9,
                           fontWeight: FontWeight.w700,
                           color: wallet.isHotWallet
                               ? const Color(0xFFE65100)
@@ -302,91 +317,74 @@ class _MyWalletPageState extends State<MyWalletPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       wallet.walletName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                  if (!_isSelectionMode)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 0),
-                      child: IconButton(
-                        tooltip: '扫码',
-                        constraints: const BoxConstraints(),
-                        padding: const EdgeInsets.all(4),
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => QrScanPage(
-                                mode: QrScanMode.login,
-                                walletIndex: wallet.walletIndex,
-                              ),
-                            ),
-                          );
-                        },
-                        icon: SvgPicture.asset(
-                          'assets/icons/scan-line.svg',
-                          width: _actionIconSize,
-                          height: _actionIconSize,
-                        ),
-                      ),
-                    ),
                 ],
               ),
-              const SizedBox(height: 12),
-              // 第二行：余额居中，GMB 缩小减淡
-              Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      wallet.balance.toStringAsFixed(2),
-                      style: const TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF0B3D2E),
-                      ),
-                    ),
-                    Text(
-                      '元',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF0B3D2E),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'GMB',
+              // 中间：余额（自适应字号）
+              Expanded(
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      balanceStr,
                       style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black38,
+                        fontSize: balanceFontSize,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0B3D2E),
                       ),
                     ),
-                    if (_balanceRefreshing) ...[
-                      const SizedBox(width: 8),
-                      const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 4),
+              // 底部：扫码图标左下 + GMB 右下
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (!_isSelectionMode)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => QrScanPage(
+                              mode: QrScanMode.login,
+                              walletIndex: wallet.walletIndex,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 8, 12, 0),
+                        child: SvgPicture.asset(
+                          'assets/icons/scan-line.svg',
+                          width: 16,
+                          height: 16,
+                        ),
+                      ),
+                    )
+                  else
+                    const SizedBox(width: 16),
+                  const Text(
+                    'GMB',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black38,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -502,6 +500,14 @@ class _MyWalletPageState extends State<MyWalletPage> {
               : (widget.selectForBind ? '选择绑定钱包' : '我的钱包'),
         ),
         centerTitle: true,
+        actions: [
+          if (!_isSelectionMode)
+            IconButton(
+              tooltip: '创建/导入钱包',
+              onPressed: _showWalletEntryChooser,
+              icon: const Icon(Icons.add, size: 26),
+            ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -520,45 +526,48 @@ class _MyWalletPageState extends State<MyWalletPage> {
             return RefreshIndicator(
               onRefresh: _refreshBalancesFromChain,
               child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 children: [
-                  for (int i = 0; i < wallets.length; i++) ...[
-                    (_isSelectionMode
-                        ? _buildWalletCard(
-                            wallets[i],
-                            isLast: i == wallets.length - 1,
-                          )
-                        : Dismissible(
-                            key: ValueKey(wallets[i].walletIndex),
-                            direction: DismissDirection.endToStart,
-                            confirmDismiss: (_) => _confirmDelete(wallets[i]),
-                            onDismissed: (_) => _deleteWallet(wallets[i]),
-                            background: Container(
-                              alignment: Alignment.centerRight,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 20),
-                              decoration: BoxDecoration(
-                                color: Colors.red.shade400,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.white,
-                              ),
-                            ),
-                            child: _buildWalletCard(
-                              wallets[i],
-                              isLast: i == wallets.length - 1,
-                            ),
-                          )),
-                    const SizedBox(height: 10),
-                  ],
-                  if (!_isSelectionMode) ...[
-                    const SizedBox(height: 12),
-                    OutlinedButton(
-                      onPressed: _showWalletEntryChooser,
-                      child: const Text('导入钱包/创建钱包'),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                      childAspectRatio: 1.3,
                     ),
-                  ],
+                    itemCount: wallets.length,
+                    itemBuilder: (context, i) {
+                      final card = _buildWalletCard(
+                        wallets[i],
+                        isLast: i == wallets.length - 1,
+                      );
+                      if (_isSelectionMode) return card;
+                      return Dismissible(
+                        key: ValueKey(wallets[i].walletIndex),
+                        direction: DismissDirection.endToStart,
+                        confirmDismiss: (_) => _confirmDelete(wallets[i]),
+                        onDismissed: (_) => _deleteWallet(wallets[i]),
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 20),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade400,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.white,
+                          ),
+                        ),
+                        child: card,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
                 ],
               ),
             );
@@ -566,6 +575,59 @@ class _MyWalletPageState extends State<MyWalletPage> {
         ),
       ),
     );
+  }
+}
+
+/// 自绘二维码，中央 [hollowSize] 像素区域不绘制任何模块（真正留白）。
+class _HollowQrPainter extends CustomPainter {
+  _HollowQrPainter({required this.data, required this.hollowSize});
+
+  final String data;
+  final double hollowSize;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final qrCode = QrCode.fromData(
+      data: data,
+      errorCorrectLevel: QrErrorCorrectLevel.H,
+    );
+    final qrImage = QrImage(qrCode);
+    final moduleCount = qrImage.moduleCount;
+    final moduleSize = size.width / moduleCount;
+    final paint = Paint()..color = const Color(0xFF000000);
+
+    // 中央留白区域（以像素为单位转换为模块范围）
+    final hollowModules = (hollowSize / moduleSize).ceil();
+    final hollowStart = (moduleCount - hollowModules) ~/ 2;
+    final hollowEnd = hollowStart + hollowModules;
+
+    for (var row = 0; row < moduleCount; row++) {
+      for (var col = 0; col < moduleCount; col++) {
+        if (qrImage.isDark(row, col)) {
+          // 跳过中央区域
+          if (row >= hollowStart &&
+              row < hollowEnd &&
+              col >= hollowStart &&
+              col < hollowEnd) {
+            continue;
+          }
+          canvas.drawRect(
+            Rect.fromLTWH(
+              col * moduleSize,
+              row * moduleSize,
+              moduleSize,
+              moduleSize,
+            ),
+            paint,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HollowQrPainter oldDelegate) {
+    return oldDelegate.data != data || oldDelegate.hollowSize != hollowSize;
   }
 }
 
@@ -580,18 +642,36 @@ class WalletDetailPage extends StatefulWidget {
 
 class _WalletDetailPageState extends State<WalletDetailPage> {
   final WalletManager _walletService = WalletManager();
+  final OnchainTradeRepository _txRepo = LocalOnchainTradeRepository();
   final GlobalKey _qrKey = GlobalKey();
   late String _walletName;
   bool _isEditingName = false;
   bool _hasChanged = false;
   bool _isSavingQr = false;
   late final TextEditingController _nameEditController;
+  List<OnchainTxRecord> _recentRecords = const [];
 
   @override
   void initState() {
     super.initState();
     _walletName = widget.wallet.walletName;
     _nameEditController = TextEditingController(text: _walletName);
+    _loadRecentRecords();
+  }
+
+  Future<void> _loadRecentRecords() async {
+    final all = await _txRepo.listRecent();
+    final addr = widget.wallet.address.toLowerCase();
+    final filtered = all
+        .where((r) =>
+            r.fromAddress.toLowerCase() == addr ||
+            r.toAddress.toLowerCase() == addr)
+        .take(5)
+        .toList(growable: false);
+    if (!mounted) return;
+    setState(() {
+      _recentRecords = filtered;
+    });
   }
 
   @override
@@ -615,6 +695,13 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         walletName: trimmed,
         walletIcon: widget.wallet.walletIcon,
       );
+      // 双向同步：如果该钱包是通信账户，同步更新用户资料中的昵称
+      final profileService = UserProfileService();
+      final profileState = await profileService.getState();
+      if (profileState.communicationWalletIndex ==
+          widget.wallet.walletIndex) {
+        await profileService.updateCommunicationWalletName(trimmed);
+      }
       if (!mounted) return;
       setState(() {
         _walletName = trimmed;
@@ -689,141 +776,157 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // 钱包名称（点击可编辑）
-          Center(
-            child: _isEditingName
-                ? SizedBox(
-                    width: 200,
-                    child: TextField(
-                      controller: _nameEditController,
-                      autofocus: true,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      decoration: const InputDecoration(
-                        border: UnderlineInputBorder(),
-                        isDense: true,
-                        contentPadding:
-                            EdgeInsets.symmetric(vertical: 6),
-                      ),
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: _saveWalletName,
-                      onTapOutside: (_) {
-                        _saveWalletName(_nameEditController.text);
-                      },
-                    ),
-                  )
-                : GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _isEditingName = true;
-                        _nameEditController.text = _walletName;
-                      });
-                    },
-                    child: Text(
-                      _walletName,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-          ),
-          const SizedBox(height: 16),
-          // 余额
+          // 余额卡片（含钱包名称）
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
             decoration: BoxDecoration(
               color: const Color(0xFFE9F5EF),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '余额',
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      widget.wallet.balance.toStringAsFixed(2),
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF0B3D2E),
+                // 钱包名称（左上角，点击可编辑）
+                _isEditingName
+                    ? SizedBox(
+                        width: 180,
+                        child: TextField(
+                          controller: _nameEditController,
+                          autofocus: true,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF0B3D2E),
+                          ),
+                          decoration: const InputDecoration(
+                            border: UnderlineInputBorder(),
+                            isDense: true,
+                            contentPadding:
+                                EdgeInsets.symmetric(vertical: 4),
+                          ),
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: _saveWalletName,
+                          onTapOutside: (_) {
+                            _saveWalletName(_nameEditController.text);
+                          },
+                        ),
+                      )
+                    : GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _isEditingName = true;
+                            _nameEditController.text = _walletName;
+                          });
+                        },
+                        child: Text(
+                          _walletName,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF0B3D2E),
+                          ),
+                        ),
                       ),
-                    ),
-                    const Text(
-                      '元',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF0B3D2E),
+                const SizedBox(height: 8),
+                Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        widget.wallet.balance.toStringAsFixed(2),
+                        style: const TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0B3D2E),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'GMB',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black38,
+                      const Text(
+                        '元',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0B3D2E),
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 6),
+                      const Text(
+                        'GMB',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black38,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 20),
-          // 钱包二维码
+          // 钱包二维码（中央真正留白 + 下载按钮）
           Center(
-            child: RepaintBoundary(
-              key: _qrKey,
-              child: Container(
-                color: Colors.white,
-                padding: const EdgeInsets.all(8),
-                child: QrImageView(
-                  data: 'gmb://account/${widget.wallet.address}',
-                  version: QrVersions.auto,
-                  size: 240,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          // 下载图标
-          Center(
-            child: IconButton(
-              tooltip: '保存二维码到相册',
-              constraints: const BoxConstraints(),
-              padding: const EdgeInsets.all(4),
-              onPressed: _isSavingQr ? null : _saveQrToGallery,
-              icon: _isSavingQr
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : SvgPicture.asset(
-                      'assets/icons/download.svg',
-                      width: 22,
-                      height: 22,
-                      colorFilter: const ColorFilter.mode(
-                        Colors.black54,
-                        BlendMode.srcIn,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                RepaintBoundary(
+                  key: _qrKey,
+                  child: Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.all(8),
+                    child: CustomPaint(
+                      size: const Size(240, 240),
+                      painter: _HollowQrPainter(
+                        data: TransferQrPayload(
+                          to: widget.wallet.address,
+                          name: _walletName,
+                        ).toRawJson(),
+                        hollowSize: 48,
                       ),
                     ),
+                  ),
+                ),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: Colors.grey.shade300,
+                      width: 1,
+                    ),
+                  ),
+                  child: IconButton(
+                    tooltip: '保存二维码到相册',
+                    constraints: const BoxConstraints(),
+                    padding: EdgeInsets.zero,
+                    onPressed: _isSavingQr ? null : _saveQrToGallery,
+                    icon: _isSavingQr
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child:
+                                CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : SvgPicture.asset(
+                            'assets/icons/download.svg',
+                            width: 18,
+                            height: 18,
+                            colorFilter: const ColorFilter.mode(
+                              Colors.black54,
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           // 钱包地址居中 + 复制图标在右侧
           Stack(
             alignment: Alignment.center,
@@ -870,6 +973,72 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
               ),
             ],
           ),
+          const SizedBox(height: 24),
+          // 交易记录标题行
+          InkWell(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => TransactionHistoryPage(
+                    walletAddress: widget.wallet.address,
+                  ),
+                ),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  const Text(
+                    '交易记录',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.chevron_right,
+                      size: 20, color: Colors.grey.shade400),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          // 最近交易记录
+          if (_recentRecords.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: Text(
+                  '暂无交易记录',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            )
+          else
+            ...List.generate(_recentRecords.length, (index) {
+              final record = _recentRecords[index];
+              return Column(
+                children: [
+                  TxRecordTile(
+                    record: record,
+                    selfAddress: widget.wallet.address,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => TxRecordDetailPage(
+                            record: record,
+                            selfAddress: widget.wallet.address,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  if (index < _recentRecords.length - 1)
+                    const Divider(height: 1),
+                ],
+              );
+            }),
         ],
       ),
     ),
@@ -1222,17 +1391,17 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('请输入 SS58 格式的钱包地址：'),
+            const Text('请输入钱包地址：'),
             const SizedBox(height: 8),
             const Text(
-              '冷钱包仅存储公钥，交易和登录需通过扫码签名。',
+              '支持 SS58 地址或 0x 开头的账户地址（公钥）。\n冷钱包仅存储公钥，交易和登录需通过扫码签名。',
               style: TextStyle(color: Colors.black54),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _addressController,
               decoration: const InputDecoration(
-                hintText: '例如：5GrwvaEF5zXb26Fz9rcQpDWS...',
+                hintText: 'SS58 地址或 0x 账户地址',
                 border: OutlineInputBorder(),
               ),
             ),

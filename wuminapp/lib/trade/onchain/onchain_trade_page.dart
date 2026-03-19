@@ -3,17 +3,23 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_service.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
+import 'package:wuminapp_mobile/user/user.dart' show ContactBookPage;
+import 'package:wuminapp_mobile/user/user_service.dart' show UserContact;
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
 
 class OnchainTradePage extends StatefulWidget {
-  const OnchainTradePage({super.key});
+  const OnchainTradePage({super.key, this.initialToAddress});
+
+  /// 预填收款地址（从通讯录等入口跳转时使用）。
+  final String? initialToAddress;
 
   @override
   State<OnchainTradePage> createState() => _OnchainTradePageState();
@@ -25,6 +31,11 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   static const Color _cardBgColor = Color(0xFFF5F5F5);
   static const Color _inputTextColor = Colors.black87;
   static const Color _inputBorderColor = Color(0xFFD0D0D0);
+  /// 链的 SS58 地址前缀。
+  static const int _ss58Prefix = 2027;
+  /// 链上存在性保证金（Existential Deposit）= 111 分 = 1.11 元。
+  /// 来源：primitives::core_const::ACCOUNT_EXISTENTIAL_DEPOSIT = 111
+  static const double _edYuan = 1.11;
   final OnchainTradeService _tradeService = OnchainTradeService();
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
@@ -42,6 +53,9 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialToAddress != null) {
+      _toController.text = widget.initialToAddress!;
+    }
     _bootstrap();
     _syncTimer = Timer.periodic(
       const Duration(seconds: 6),
@@ -109,9 +123,19 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   }
 
   Future<void> _openContactsPage() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const _ContactsPlaceholderPage()),
+    final contact = await Navigator.of(context).push<UserContact>(
+      MaterialPageRoute(
+        builder: (_) => ContactBookPage(
+          selfAccountPubkeyHex:
+              _currentWallet?.pubkeyHex ?? '',
+          selectForTrade: true,
+        ),
+      ),
     );
+    if (!mounted || contact == null) return;
+    setState(() {
+      _toController.text = contact.accountPubkeyHex;
+    });
   }
 
   Future<void> _openTradeRecordsPage() async {
@@ -165,6 +189,24 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       return;
     }
 
+    // SS58 地址校验（prefix 2027）
+    try {
+      final decoded = Keyring().decodeAddress(toAddress);
+      // 验证 prefix：重新编码后比对
+      final reEncoded = Keyring().encodeAddress(decoded, _ss58Prefix);
+      if (reEncoded != toAddress) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('收款地址不是本链地址（SS58 前缀不匹配）')),
+        );
+        return;
+      }
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('收款地址格式错误，请输入有效的 SS58 地址')),
+      );
+      return;
+    }
+
     final amount = double.tryParse(amountText);
     if (amount == null || amount <= 0) {
       ScaffoldMessenger.of(
@@ -175,6 +217,20 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
 
     // 预估手续费，展示确认对话框
     final estimatedFee = OnchainRpc.estimateTransferFeeYuan(amount);
+
+    // 余额校验：转账金额 + 手续费 ≤ 可用余额（余额 - ED）
+    final availableBalance = _currentWallet!.balance - _edYuan;
+    if (amount + estimatedFee > availableBalance) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '余额不足，可用余额：${availableBalance.toStringAsFixed(2)} 元'
+            '（已扣除 ED ${_edYuan.toStringAsFixed(2)} 元）',
+          ),
+        ),
+      );
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -316,68 +372,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
     return _records.where((it) => it.status == status).length;
   }
 
-  Widget _buildWalletCard() {
-    return Card(
-      color: _cardBgColor,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-        child: _loadingWallet
-            ? const Text('加载当前钱包中...')
-            : _currentWallet == null
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('未检测到钱包，无法执行链上签名与交易广播'),
-                      const SizedBox(height: 8),
-                      FilledButton(
-                        onPressed: _openMyWalletPage,
-                        child: const Text('去创建/导入钱包'),
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(left: 4, top: 2, bottom: 2),
-                              child: Text(
-                                _currentWallet!.walletName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 17,
-                                ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 4),
-                              child: Text(
-                                _currentWallet!.address,
-                                style: const TextStyle(
-                                  color: Colors.black45,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      InkWell(
-                        onTap: _openMyWalletPage,
-                        borderRadius: BorderRadius.circular(8),
-                        child: const Padding(
-                          padding: EdgeInsets.all(6),
-                          child: Icon(Icons.chevron_right, size: 22),
-                        ),
-                      ),
-                    ],
-                  ),
-      ),
-    );
-  }
-
   Widget _buildSubmitCard() {
     return Card(
       color: _cardBgColor,
@@ -386,6 +380,42 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_currentWallet != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      '可用余额：${_currentWallet!.balance.toStringAsFixed(2)} 元',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      width: 32,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        color: _brandPrimaryColor,
+                        borderRadius: BorderRadius.circular(100),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          '链上',
+                          style: TextStyle(
+                            fontSize: 8,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            height: 1.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             TextField(
               controller: _toController,
               decoration: InputDecoration(
@@ -529,31 +559,106 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('交易'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            tooltip: '我的通讯录',
-            onPressed: _openContactsPage,
-            icon: SvgPicture.asset(
-              'assets/icons/contact-round.svg',
-              width: 20,
-              height: 20,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: '我的通讯录',
+                    onPressed: _openContactsPage,
+                    icon: SvgPicture.asset(
+                      'assets/icons/contact-round.svg',
+                      width: 22,
+                      height: 22,
+                    ),
+                  ),
+                  const Expanded(
+                    child: Center(
+                      child: Text(
+                        '交易',
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '选择交易钱包',
+                    onPressed: _openMyWalletPage,
+                    icon: SvgPicture.asset(
+                      'assets/icons/wallet.svg',
+                      width: 22,
+                      height: 22,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
+            Expanded(
+              child: RefreshIndicator(
         onRefresh: () => _reloadRecords(syncPending: true),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
-            _buildWalletCard(),
+            // 多签交易入口
+            Card(
+              color: _cardBgColor,
+              child: InkWell(
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('多签交易功能开发中')),
+                  );
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+                  child: Row(
+                    children: [
+                      const Text(
+                        '多签交易',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.chevron_right, size: 22),
+                    ],
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: 12),
+            if (_currentWallet == null && !_loadingWallet)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Card(
+                  color: _cardBgColor,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('未检测到钱包，无法执行链上签名与交易广播'),
+                        const SizedBox(height: 8),
+                        FilledButton(
+                          onPressed: _openMyWalletPage,
+                          child: const Text('去创建/导入钱包'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             _buildSubmitCard(),
             const SizedBox(height: 24),
+          ],
+        ),
+      ),
+            ),
           ],
         ),
       ),
@@ -969,19 +1074,3 @@ List<int> _hexToBytes(String input) {
   return out;
 }
 
-class _ContactsPlaceholderPage extends StatelessWidget {
-  const _ContactsPlaceholderPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('我的通讯录'),
-        centerTitle: true,
-      ),
-      body: const Center(
-        child: Text('我的通讯录（开发中）'),
-      ),
-    );
-  }
-}

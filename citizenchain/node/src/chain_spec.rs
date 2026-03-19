@@ -93,3 +93,16 @@ pub fn mainnet_config() -> Result<ChainSpec, String> {
         .with_properties(chain_properties())
         .build())
 }
+
+/// 开发链配置：单节点、无 bootnodes、快速出块（需 `dev-chain` feature 编译）。
+pub fn dev_config() -> Result<ChainSpec, String> {
+    let wasm_binary = WASM_BINARY.ok_or_else(|| "WASM binary was not built".to_string())?;
+    Ok(ChainSpec::builder(wasm_binary, NoExtension::default())
+        .with_name(&format!("{} (Dev)", CHAIN_NAME))
+        .with_id("dev")
+        .with_chain_type(ChainType::Development)
+        // 无 bootnodes，单机运行
+        .with_genesis_config_patch(genesis_config_presets::mainnet_config_genesis())
+        .with_properties(chain_properties())
+        .build())
+}

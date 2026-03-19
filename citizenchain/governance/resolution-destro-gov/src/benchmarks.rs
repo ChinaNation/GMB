@@ -4,15 +4,15 @@
 
 use codec::Decode;
 use frame_benchmarking::v2::*;
-use frame_support::traits::{Currency, Get};
+use frame_support::traits::Currency;
 use frame_system::RawOrigin;
-use sp_runtime::traits::{SaturatedConversion, Saturating};
+use sp_runtime::traits::SaturatedConversion;
 use voting_engine_system::InternalVoteEngine;
 
 use crate::Pallet as ResolutionDestroGov;
 use crate::{
-    institution_pallet_address, reserve_pallet_id_to_bytes, ActiveProposalByInstitution, BalanceOf,
-    BlockNumberFor, Call, Config, InstitutionPalletId, Pallet, ProposalActions, CHINA_CB, ORG_PRC,
+    institution_pallet_address, reserve_pallet_id_to_bytes, BalanceOf,
+    Call, Config, InstitutionPalletId, Pallet, CHINA_CB, ORG_PRC,
 };
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
@@ -50,8 +50,7 @@ mod benchmarks {
             amount,
         );
 
-        assert_eq!(ActiveProposalByInstitution::<T>::get(institution), Some(0));
-        assert!(ProposalActions::<T>::contains_key(0));
+        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(0).is_some());
     }
 
     #[benchmark]
@@ -81,7 +80,7 @@ mod benchmarks {
         #[extrinsic_call]
         vote_destroy(RawOrigin::Signed(final_voter), 0, true);
 
-        assert!(!ProposalActions::<T>::contains_key(0));
+        // 执行完成后提案数据仍在 voting-engine-system 中（由统一清理流程处理）。
     }
 
     #[benchmark]
@@ -111,31 +110,6 @@ mod benchmarks {
         #[extrinsic_call]
         execute_destroy(RawOrigin::Signed(caller), 0);
 
-        assert!(!ProposalActions::<T>::contains_key(0));
-    }
-
-    #[benchmark]
-    fn cancel_stale_destroy() {
-        let institution = prc_institution();
-        let proposer = prc_admin::<T>(0);
-        let caller = prc_admin::<T>(1);
-        let amount: BalanceOf<T> = 100u128.saturated_into();
-
-        assert!(ResolutionDestroGov::<T>::propose_destroy(
-            RawOrigin::Signed(proposer).into(),
-            ORG_PRC,
-            institution,
-            amount,
-        )
-        .is_ok());
-
-        let one: BlockNumberFor<T> = 1u32.saturated_into();
-        let stale_block = T::StaleProposalLifetime::get().saturating_add(one);
-        frame_system::Pallet::<T>::set_block_number(stale_block);
-
-        #[extrinsic_call]
-        cancel_stale_destroy(RawOrigin::Signed(caller), 0);
-
-        assert!(!ProposalActions::<T>::contains_key(0));
+        // 执行完成后提案数据仍在 voting-engine-system 中（由统一清理流程处理）。
     }
 }

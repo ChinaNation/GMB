@@ -12,13 +12,14 @@ class AdminListPage extends StatelessWidget {
     super.key,
     required this.institution,
     required this.admins,
-    required this.currentPubkey,
+    required this.adminPubkeys,
     required this.badgeColor,
   });
 
   final InstitutionInfo institution;
   final List<String> admins;
-  final String? currentPubkey;
+  /// 当前用户导入的所有管理员公钥（小写 hex）。
+  final Set<String> adminPubkeys;
   final Color badgeColor;
 
   static const Color _inkGreen = Color(0xFF0B3D2E);
@@ -64,7 +65,7 @@ class AdminListPage extends StatelessWidget {
           else
             ...List.generate(admins.length, (index) {
               final pubkey = admins[index];
-              final isSelf = pubkey == currentPubkey;
+              final isSelf = adminPubkeys.contains(pubkey);
               return _AdminTile(
                 index: index + 1,
                 pubkeyHex: pubkey,
