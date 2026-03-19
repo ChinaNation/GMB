@@ -308,7 +308,13 @@ pub(crate) fn require_public_search_auth(
             "public search auth required",
         ));
     }
-    let expected = required_env("SFID_PUBLIC_SEARCH_TOKEN");
+    let Some(expected) = optional_env("SFID_PUBLIC_SEARCH_TOKEN") else {
+        return Err(api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            1004,
+            "public search auth not configured",
+        ));
+    };
     if !constant_time_eq(incoming.as_str(), expected.as_str()) {
         return Err(api_error(
             StatusCode::FORBIDDEN,
@@ -333,7 +339,13 @@ pub(crate) fn require_chain_auth(headers: &HeaderMap) -> Result<(), axum::respon
             "chain auth required",
         ));
     }
-    let expected = required_env("SFID_CHAIN_TOKEN");
+    let Some(expected) = optional_env("SFID_CHAIN_TOKEN") else {
+        return Err(api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            1004,
+            "chain auth not configured",
+        ));
+    };
     if !constant_time_eq(incoming.as_str(), expected.as_str()) {
         return Err(api_error(StatusCode::FORBIDDEN, 1008, "chain auth invalid"));
     }

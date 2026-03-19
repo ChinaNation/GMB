@@ -607,9 +607,6 @@ fn main() {
         .init();
     disable_core_dumps();
 
-    let _ = required_env("SFID_CHAIN_TOKEN");
-    let _ = required_env("SFID_CHAIN_SIGNING_SECRET");
-    let _ = required_env("SFID_PUBLIC_SEARCH_TOKEN");
     let _ = required_env("SFID_RUNTIME_META_KEY");
     let redis_url = required_env("SFID_REDIS_URL");
     let redis_client = RedisClient::open(redis_url.as_str())

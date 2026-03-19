@@ -38,6 +38,8 @@ chown -R sfid:sfid "${APP_HOME}"
 # 同步迁移脚本到部署目录
 cp -f "${PROJECT_ROOT}/backend/db/migrations/"*.sql "${APP_HOME}/backend/db/migrations/"
 install -m 755 "${SCRIPT_DIR}/backup_to_standby.sh" "${APP_HOME}/scripts/backup_to_standby.sh"
+install -m 755 "${SCRIPT_DIR}/apply_sfid_migrations.sh" "${APP_HOME}/scripts/apply_sfid_migrations.sh"
+install -m 755 "${SCRIPT_DIR}/update_sfid_app.sh" "${APP_HOME}/scripts/update_sfid_app.sh"
 
 # 生成环境变量模板（首次创建）
 if [[ ! -f /etc/sfid/sfid.env ]]; then
@@ -48,20 +50,25 @@ SFID_BIND_ADDR=127.0.0.1:8899
 # 生产请指向主库（不要写备库），并使用 verify-full
 DATABASE_URL=postgres://sfid_app:CHANGE_ME_APP_PASSWORD@PRIMARY_DB_FQDN:5432/sfid_prod?sslmode=verify-full
 
-# 区块链接口鉴权（必须替换）
-SFID_CHAIN_TOKEN=CHANGE_ME_CHAIN_TOKEN
-SFID_CHAIN_SIGNING_SECRET=CHANGE_ME_CHAIN_SIGNING_SECRET_AT_LEAST_32_CHARS
+# Redis（限流 / 防重放 / 短缓存）
+SFID_REDIS_URL=redis://127.0.0.1:6379/0
 
-# 公共身份查询鉴权（必须替换）
-SFID_PUBLIC_SEARCH_TOKEN=CHANGE_ME_PUBLIC_SEARCH_TOKEN
+# 链对接相关（基础站点部署可先留空，后续接链时再补）
+SFID_CHAIN_TOKEN=
+SFID_CHAIN_SIGNING_SECRET=
+SFID_CHAIN_WS_URL=
+SFID_CHAIN_GENESIS_HASH=
+
+# 公共身份查询鉴权（基础站点部署可先留空，启用公开查询时再补）
+SFID_PUBLIC_SEARCH_TOKEN=
 
 # 主签名密钥和 key id（必须替换）
 SFID_SIGNING_SEED_HEX=CHANGE_ME_SIGNING_SEED_HEX
 SFID_KEY_ID=sfid-master-v1
 SFID_RUNTIME_META_KEY=CHANGE_ME_RUNTIME_META_KEY
 
-# PII 列加密密钥（用于 archive_bindings 加密列）
-SFID_PII_KEY=CHANGE_ME_PII_KEY
+# PII 列加密密钥（兼容保留，基础站点部署可先留空）
+SFID_PII_KEY=
 ENVEOF
   chmod 600 /etc/sfid/sfid.env
   echo "已创建 /etc/sfid/sfid.env，请先修改后再启动服务。"
@@ -74,13 +81,10 @@ set +a
 
 required_vars=(
   DATABASE_URL
-  SFID_CHAIN_TOKEN
-  SFID_CHAIN_SIGNING_SECRET
-  SFID_PUBLIC_SEARCH_TOKEN
+  SFID_REDIS_URL
   SFID_SIGNING_SEED_HEX
   SFID_KEY_ID
   SFID_RUNTIME_META_KEY
-  SFID_PII_KEY
 )
 
 for key in "${required_vars[@]}"; do
@@ -100,23 +104,8 @@ install -m 644 "${DEPLOY_ROOT}/systemd/sfid-backend.service" /etc/systemd/system
 install -m 644 "${DEPLOY_ROOT}/systemd/sfid-backup.service" /etc/systemd/system/sfid-backup.service
 install -m 644 "${DEPLOY_ROOT}/systemd/sfid-backup.timer" /etc/systemd/system/sfid-backup.timer
 
-# 执行数据库迁移（按顺序）
-for f in \
-  001_init_sfid.sql \
-  002_runtime_store.sql \
-  003_admin_role_partition.sql \
-  004_finalize_no_runtime_store.sql \
-  005_drop_sfid_prefix.sql \
-  006_super_admin_catalog.sql \
-  007_refresh_admin_views.sql \
-  008_chain_idempotency_reward_state.sql \
-  009_runtime_cache_and_pii_encryption.sql \
-  010_drop_plaintext_pii_columns.sql
-
-do
-  echo "执行迁移: ${f}"
-  psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f "${APP_HOME}/backend/db/migrations/${f}"
-done
+# 执行数据库迁移（自动跳过已执行项）
+"${APP_HOME}/scripts/apply_sfid_migrations.sh" "${DATABASE_URL}" "${APP_HOME}/backend/db/migrations"
 
 # 收敛应用角色 DELETE 权限：仅允许必要运行时表，禁止删除审计日志
 psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 <<'SQL'
