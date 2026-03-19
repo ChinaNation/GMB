@@ -858,6 +858,12 @@ fn main() {
             .layer(build_cors_layer())
             .with_state(state);
 
+        // 启动时从区块链获取创世哈希（非阻塞：失败只打日志，不影响启动）
+        match chain::runtime_align::init_genesis_hash_from_chain().await {
+            Ok(()) => info!("chain genesis hash initialized"),
+            Err(e) => warn!("chain genesis hash init skipped: {e}"),
+        }
+
         let addr = SocketAddr::from(([127, 0, 0, 1], 8899));
         info!("sfid-backend listening on http://{}", addr);
         let listener = tokio::net::TcpListener::bind(addr)
