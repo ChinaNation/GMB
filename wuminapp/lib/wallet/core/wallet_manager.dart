@@ -293,19 +293,32 @@ class WalletManager {
     return WalletCreationResult(profile: profile, mnemonic: mnemonic);
   }
 
-  /// 导入冷钱包：接受 SS58 地址 → 解码公钥 → 只存公钥。
+  /// 导入冷钱包：接受 SS58 地址或 0x 开头的 hex 公钥 → 解码公钥 → 只存公钥。
   Future<WalletProfile> importColdWallet({required String address}) async {
     final trimmed = address.trim();
     if (trimmed.isEmpty) {
       throw Exception('地址不能为空');
     }
 
-    // 解码 SS58 地址获取公钥。
     final List<int> pubkeyBytes;
-    try {
-      pubkeyBytes = Keyring().decodeAddress(trimmed);
-    } catch (_) {
-      throw Exception('无效的 SS58 地址，请检查格式');
+    final String ss58Address;
+
+    if (_isHexPubkey(trimmed)) {
+      // 输入的是 hex 公钥（0x 开头或纯 64 位 hex）
+      final hex = trimmed.startsWith('0x') ? trimmed.substring(2) : trimmed;
+      if (hex.length != 64 || !_isValidHex(hex)) {
+        throw Exception('无效的账户地址，公钥应为 64 位十六进制（32 字节）');
+      }
+      pubkeyBytes = List.generate(32, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16));
+      ss58Address = Keyring().encodeAddress(pubkeyBytes, _ss58Format);
+    } else {
+      // 输入的是 SS58 地址
+      try {
+        pubkeyBytes = Keyring().decodeAddress(trimmed);
+      } catch (_) {
+        throw Exception('无效的地址格式，请输入 SS58 地址或 0x 开头的账户地址');
+      }
+      ss58Address = trimmed;
     }
 
     final pubkeyHex = _toHex(pubkeyBytes);
@@ -316,7 +329,7 @@ class WalletManager {
       walletName: _defaultWalletName(walletIndex),
       walletIcon: _defaultWalletIcon(),
       balance: 0,
-      address: trimmed,
+      address: ss58Address,
       pubkeyHex: pubkeyHex,
       alg: 'sr25519',
       ss58: _ss58Format,
@@ -587,10 +600,19 @@ class WalletManager {
       final supported = await _localAuth.isDeviceSupported();
       if (!supported) return;
 
+      // 按优先级选择认证方式：人脸 > 指纹 > 设备密码
+      final biometrics = await _localAuth.getAvailableBiometrics();
+      final hasFace = biometrics.contains(BiometricType.face);
+      final hasFingerprint = biometrics.contains(BiometricType.fingerprint) ||
+          biometrics.contains(BiometricType.strong);
+      // 有生物识别（人脸或指纹）时只用生物识别，系统自动选优先级最高的；
+      // 都没有时回退到设备密码。
+      final biometricOnly = hasFace || hasFingerprint;
+
       final ok = await _localAuth.authenticate(
         localizedReason: '请验证身份以访问钱包密钥',
-        options: const AuthenticationOptions(
-          biometricOnly: false,
+        options: AuthenticationOptions(
+          biometricOnly: biometricOnly,
           stickyAuth: true,
           useErrorDialogs: true,
         ),
@@ -678,6 +700,19 @@ class WalletManager {
         ..write(chars[b & 0x0f]);
     }
     return buf.toString();
+  }
+
+  /// 判断输入是否为 hex 公钥格式（0x 开头或纯 64 位 hex）。
+  bool _isHexPubkey(String input) {
+    if (input.startsWith('0x') || input.startsWith('0X')) return true;
+    // 纯 64 位 hex 也视为公钥
+    if (input.length == 64 && _isValidHex(input)) return true;
+    return false;
+  }
+
+  bool _isValidHex(String hex) {
+    final regex = RegExp(r'^[0-9a-fA-F]+$');
+    return regex.hasMatch(hex);
   }
 
   String _defaultWalletName(int walletIndex) {

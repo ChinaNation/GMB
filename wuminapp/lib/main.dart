@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wuminapp_mobile/governance/all_proposals_view.dart';
 import 'package:wuminapp_mobile/governance/institution_data.dart';
 import 'package:wuminapp_mobile/governance/institution_detail_page.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
@@ -144,12 +145,17 @@ class _AppShellState extends State<AppShell> {
   static const Color _navSelectedColor = Color(0xFF007A74);
   static const Color _navUnselectedColor = Color(0xFF111111);
   int _currentIndex = 0;
+  int _pendingVoteCount = 0;
 
-  final List<Widget> _pages = const [
-    VotingPage(),
-    MessagePage(),
-    OnchainTradePage(),
-    ProfilePage(),
+  late final List<Widget> _pages = [
+    VotingPage(onPendingVoteCountChanged: (count) {
+      if (mounted && count != _pendingVoteCount) {
+        setState(() => _pendingVoteCount = count);
+      }
+    }),
+    const MessagePage(),
+    const OnchainTradePage(),
+    const ProfilePage(),
   ];
 
   @override
@@ -185,8 +191,13 @@ class _AppShellState extends State<AppShell> {
             });
           },
           destinations: [
-            const NavigationDestination(
-                icon: Icon(Icons.how_to_vote_outlined), label: '公民'),
+            NavigationDestination(
+                icon: Badge(
+                  isLabelVisible: _pendingVoteCount > 0,
+                  label: Text('$_pendingVoteCount', style: const TextStyle(fontSize: 10)),
+                  child: const Icon(Icons.how_to_vote_outlined),
+                ),
+                label: '公民'),
             NavigationDestination(
               icon: SvgPicture.asset(
                 'assets/icons/message-square-text.svg',
@@ -272,15 +283,17 @@ class _HomePageState extends State<HomePage> {
 }
 
 class VotingPage extends StatefulWidget {
-  const VotingPage({super.key});
+  const VotingPage({super.key, this.onPendingVoteCountChanged});
+
+  final ValueChanged<int>? onPendingVoteCountChanged;
 
   @override
   State<VotingPage> createState() => _VotingPageState();
 }
 
 class _VotingPageState extends State<VotingPage> {
-  int _selectedTab = 2;
-  static const List<String> _tabs = ['活动', '选举', '机构'];
+  int _selectedTab = 0;
+  static const List<String> _tabs = ['投票', '机构'];
 
   @override
   Widget build(BuildContext context) {
@@ -309,10 +322,10 @@ class _VotingPageState extends State<VotingPage> {
 
     switch (_selectedTab) {
       case 0:
-        return const Center(child: Text('活动页面（开发中）'));
+        return AllProposalsView(
+          onPendingVoteCountChanged: widget.onPendingVoteCountChanged,
+        );
       case 1:
-        return const Center(child: Text('选举页面（开发中）'));
-      case 2:
         return const _InstitutionCategoryView(
           nationalCouncil: kNationalCouncil,
           provincialCouncils: kProvincialCouncils,
@@ -363,36 +376,36 @@ class _MessagePageState extends State<MessagePage> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-        child: Column(
-          children: [
-            Row(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
+            child: Row(
               children: [
-                const SizedBox(width: 48),
-                Expanded(
-                  child: Center(
-                    child: Transform.translate(
-                      offset: const Offset(0, -3),
-                      child: const Text(
-                        '消息',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-                ),
                 IconButton(
                   onPressed: _openContactsPage,
                   icon: SvgPicture.asset(
                     'assets/icons/contact-round.svg',
-                    width: 20,
-                    height: 20,
+                    width: 22,
+                    height: 22,
                   ),
                 ),
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      '消息',
+                      style: TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 48),
               ],
             ),
-            Container(
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
               height: 40,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
@@ -407,9 +420,9 @@ class _MessagePageState extends State<MessagePage> {
                 ],
               ),
             ),
-            const Expanded(child: Center(child: Text('消息页面（开发中）'))),
-          ],
-        ),
+          ),
+          const Expanded(child: Center(child: Text('消息页面（开发中）'))),
+        ],
       ),
     );
   }
@@ -614,7 +627,7 @@ class _PipeTabs extends StatelessWidget {
             child: Text(
               tabs[i],
               style: TextStyle(
-                fontSize: 17,
+                fontSize: 20,
                 fontWeight:
                     i == selectedIndex ? FontWeight.w700 : FontWeight.w400,
                 color: i == selectedIndex

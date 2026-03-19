@@ -5,6 +5,8 @@ import 'admin_list_page.dart';
 import 'institution_admin_service.dart';
 import 'institution_data.dart';
 import 'proposal_types_page.dart';
+import 'transfer_proposal_detail_page.dart';
+import 'transfer_proposal_service.dart';
 
 /// 机构详情页。
 class InstitutionDetailPage extends StatefulWidget {
@@ -28,12 +30,18 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   final InstitutionAdminService _adminService = InstitutionAdminService();
   final WalletManager _walletManager = WalletManager();
+  final TransferProposalService _transferService = TransferProposalService();
 
   List<String> _admins = const [];
   bool _isCurrentUserAdmin = false;
   bool _loading = true;
   String? _error;
-  String? _currentPubkey;
+  /// 当前用户导入的所有管理员钱包（pubkeyHex → WalletProfile）。
+  List<WalletProfile> _adminWallets = const [];
+  /// 所有匹配的管理员公钥（小写 hex，不含 0x）。
+  Set<String> _adminPubkeys = const {};
+  /// 该机构的所有转账提案（按 ID 倒序）。
+  List<TransferProposalInfo> _transferProposals = const [];
 
   @override
   void initState() {
@@ -51,27 +59,32 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       final results = await Future.wait([
         _adminService.fetchAdmins(widget.institution.shenfenId),
         _walletManager.getWallets(),
+        _transferService
+            .fetchAllInstitutionProposals(widget.institution.shenfenId),
       ]);
       final admins = results[0] as List<String>;
       final wallets = results[1] as List<WalletProfile>;
+      final proposals = results[2] as List<TransferProposalInfo>;
 
-      var isAdmin = false;
-      String? matchedPubkey;
+      // 收集所有匹配的管理员钱包
+      final matchedWallets = <WalletProfile>[];
+      final matchedPubkeys = <String>{};
       for (final wallet in wallets) {
         var pubkey = wallet.pubkeyHex.toLowerCase();
         if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
         if (admins.contains(pubkey)) {
-          isAdmin = true;
-          matchedPubkey = pubkey;
-          break;
+          matchedWallets.add(wallet);
+          matchedPubkeys.add(pubkey);
         }
       }
 
       if (!mounted) return;
       setState(() {
         _admins = admins;
-        _currentPubkey = matchedPubkey;
-        _isCurrentUserAdmin = isAdmin;
+        _adminWallets = matchedWallets;
+        _adminPubkeys = matchedPubkeys;
+        _isCurrentUserAdmin = matchedWallets.isNotEmpty;
+        _transferProposals = proposals;
         _loading = false;
       });
     } catch (e) {
@@ -325,46 +338,175 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           ),
         ),
         const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey[200]!),
-          ),
-          child: Column(
+        if (_transferProposals.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[200]!),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.ballot_outlined, size: 40, color: Colors.grey[400]),
+                const SizedBox(height: 8),
+                Text(
+                  '暂无投票事件',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '本机构的提案投票事件将在此显示',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                ),
+              ],
+            ),
+          )
+        else
+          ...List.generate(_transferProposals.length, (index) {
+            final proposal = _transferProposals[index];
+            return Padding(
+              padding: EdgeInsets.only(bottom: index < _transferProposals.length - 1 ? 8 : 0),
+              child: _buildTransferProposalCard(proposal),
+            );
+          }),
+      ],
+    );
+  }
+
+  String _statusLabel(int? status) {
+    switch (status) {
+      case 0:
+        return '投票中';
+      case 1:
+        return '已通过';
+      case 2:
+        return '已拒绝';
+      default:
+        return '未知';
+    }
+  }
+
+  Color _statusColor(int? status) {
+    switch (status) {
+      case 0:
+        return Colors.blue;
+      case 1:
+        return Colors.green;
+      case 2:
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Widget _buildTransferProposalCard(TransferProposalInfo proposal) {
+    final statusColor = _statusColor(proposal.status);
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: statusColor.withValues(alpha: 0.2)),
+      ),
+      child: InkWell(
+        onTap: () => _openTransferProposalDetail(proposal.proposalId),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
             children: [
-              Icon(Icons.ballot_outlined, size: 40, color: Colors.grey[400]),
-              const SizedBox(height: 8),
-              Text(
-                '暂无投票事件',
-                style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.send_outlined, size: 18, color: statusColor),
               ),
-              const SizedBox(height: 4),
-              Text(
-                '本机构的提案投票事件将在此显示',
-                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '转账提案 ${formatProposalId(proposal.proposalId)}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: _inkGreen,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${proposal.amountYuan.toStringAsFixed(2)} 元 · ${_statusLabel(proposal.status)}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                  ],
+                ),
               ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  _statusLabel(proposal.status),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, size: 20, color: Colors.grey[400]),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 
   // ──── 导航 ────
 
-  void _openProposalTypes() {
-    Navigator.of(context).push(
+  Future<void> _openProposalTypes() async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ProposalTypesPage(
           institution: widget.institution,
           icon: widget.icon,
           badgeColor: widget.badgeColor,
+          adminWallets: _adminWallets,
         ),
       ),
     );
+    // 返回后刷新（可能新建了提案）
+    if (mounted) {
+      _adminService.clearCache(widget.institution.shenfenId);
+      _load();
+    }
+  }
+
+  Future<void> _openTransferProposalDetail(int proposalId) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TransferProposalDetailPage(
+          institution: widget.institution,
+          proposalId: proposalId,
+          adminWallets: _adminWallets,
+        ),
+      ),
+    );
+    // 返回后刷新（投票状态可能变化）
+    if (mounted) {
+      _adminService.clearCache(widget.institution.shenfenId);
+      _load();
+    }
   }
 
   void _openAdminList() {
@@ -373,7 +515,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         builder: (_) => AdminListPage(
           institution: widget.institution,
           admins: _admins,
-          currentPubkey: _currentPubkey,
+          adminPubkeys: _adminPubkeys,
           badgeColor: widget.badgeColor,
         ),
       ),

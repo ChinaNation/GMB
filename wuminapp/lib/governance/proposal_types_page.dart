@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'institution_data.dart';
+import 'transfer_proposal_page.dart';
+import 'transfer_proposal_service.dart';
+import '../wallet/core/wallet_manager.dart';
 
 /// 提案类型选择页。
 ///
@@ -13,11 +16,14 @@ class ProposalTypesPage extends StatelessWidget {
     required this.institution,
     required this.icon,
     required this.badgeColor,
+    required this.adminWallets,
   });
 
   final InstitutionInfo institution;
   final IconData icon;
   final Color badgeColor;
+  /// 当前用户导入的、属于此机构的管理员钱包列表。
+  final List<WalletProfile> adminWallets;
 
   static const Color _inkGreen = Color(0xFF0B3D2E);
 
@@ -92,7 +98,12 @@ class ProposalTypesPage extends StatelessWidget {
             title: '转账',
             subtitle: '从机构多签账户发起转账',
             color: const Color(0xFF176650),
-            onTap: () => _showDeveloping(context, '转账'),
+            onTap: () => _checkAndOpenProposal(context, () => TransferProposalPage(
+              institution: institution,
+              icon: icon,
+              badgeColor: badgeColor,
+              adminWallets: adminWallets,
+            )),
           ),
           const SizedBox(height: 8),
           _ProposalTypeCard(
@@ -100,7 +111,7 @@ class ProposalTypesPage extends StatelessWidget {
             title: '换管理员',
             subtitle: '提议更换本机构管理员',
             color: const Color(0xFF2E7D5B),
-            onTap: () => _showDeveloping(context, '换管理员'),
+            onTap: () => _checkAndOpenProposal(context, null, name: '换管理员'),
           ),
           const SizedBox(height: 8),
           _ProposalTypeCard(
@@ -108,7 +119,7 @@ class ProposalTypesPage extends StatelessWidget {
             title: '决议销毁',
             subtitle: '提议销毁机构持有的资产',
             color: const Color(0xFFB71C1C),
-            onTap: () => _showDeveloping(context, '决议销毁'),
+            onTap: () => _checkAndOpenProposal(context, null, name: '决议销毁'),
           ),
 
           // ──── 国储会专属提案类型 ────
@@ -121,7 +132,7 @@ class ProposalTypesPage extends StatelessWidget {
               title: '决议发行',
               subtitle: '发起公民币发行决议，需联合投票+公民投票',
               color: _inkGreen,
-              onTap: () => _showDeveloping(context, '决议发行'),
+              onTap: () => _checkAndOpenProposal(context, null, name: '决议发行'),
             ),
             const SizedBox(height: 8),
             _ProposalTypeCard(
@@ -129,7 +140,7 @@ class ProposalTypesPage extends StatelessWidget {
               title: '验证密钥',
               subtitle: '更换 GRANDPA 共识验证密钥',
               color: const Color(0xFF4527A0),
-              onTap: () => _showDeveloping(context, '验证密钥'),
+              onTap: () => _checkAndOpenProposal(context, null, name: '验证密钥'),
             ),
             const SizedBox(height: 8),
             _ProposalTypeCard(
@@ -137,7 +148,7 @@ class ProposalTypesPage extends StatelessWidget {
               title: '状态升级',
               subtitle: 'Runtime 升级，需联合投票+公民投票',
               color: const Color(0xFF1565C0),
-              onTap: () => _showDeveloping(context, '状态升级'),
+              onTap: () => _checkAndOpenProposal(context, null, name: '状态升级'),
             ),
           ],
         ],
@@ -156,10 +167,57 @@ class ProposalTypesPage extends StatelessWidget {
     );
   }
 
-  void _showDeveloping(BuildContext context, String name) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$name功能开发中')),
-    );
+  /// 检查活跃提案数，未达上限则打开页面，达上限则弹窗提示。
+  /// [pageBuilder] 为 null 时表示该功能开发中。
+  Future<void> _checkAndOpenProposal(
+    BuildContext context,
+    Widget Function()? pageBuilder, {
+    String? name,
+  }) async {
+    try {
+      final service = TransferProposalService();
+      final activeIds =
+          await service.fetchActiveProposalIds(institution.shenfenId);
+      if (!context.mounted) return;
+
+      if (activeIds.length >=
+          TransferProposalService.maxActiveProposalsPerInstitution) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('提案数量已达上限'),
+            content: Text(
+              '本机构当前有 ${activeIds.length} 个活跃提案，'
+              '已达上限 ${TransferProposalService.maxActiveProposalsPerInstitution} 个。'
+              '请等待现有提案完成后再发起新提案。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('知道了'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      if (pageBuilder != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => pageBuilder()),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${name ?? "该"}功能开发中')),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('查询失败：$e')),
+      );
+    }
   }
 }
 

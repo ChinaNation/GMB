@@ -79,6 +79,39 @@ class ChainRpc {
     'b99d880ec681799c0cf30e8886371da9',
   );
 
+  /// 当前活跃节点的 HTTP URL（可用于推导 WebSocket URL）。
+  String get currentNodeUrl => _nodes[_currentIndex];
+
+  // ──── 批量查询 ────
+
+  /// 批量查询多个 storage key，一次 RPC 调用返回所有结果。
+  /// 使用 state_queryStorageAt([keys]) RPC 方法。
+  Future<Map<String, Uint8List?>> fetchStorageBatch(
+      List<String> storageKeyHexList) async {
+    if (storageKeyHexList.isEmpty) return {};
+    final result =
+        await _rpcCall('state_queryStorageAt', [storageKeyHexList]);
+    // result 格式: [{ block: "0x...", changes: [["0xkey1", "0xvalue1"], ...] }]
+    final map = <String, Uint8List?>{};
+    // 先初始化所有 key 为 null（未返回的 key 表示不存在）
+    for (final k in storageKeyHexList) {
+      map[k] = null;
+    }
+    if (result is List && result.isNotEmpty) {
+      final entry = result[0] as Map<String, dynamic>;
+      final changes = entry['changes'] as List<dynamic>? ?? [];
+      for (final change in changes) {
+        final pair = change as List<dynamic>;
+        final key = pair[0] as String;
+        final value = pair.length > 1 ? pair[1] : null;
+        if (value != null && value is String && value.length > 2) {
+          map[key] = _hexDecode((value).substring(2));
+        }
+      }
+    }
+    return map;
+  }
+
   // ──── 转账相关 RPC ────
 
   /// 查询账户下一个可用 nonce（含交易池中的 pending 交易）。
@@ -216,6 +249,10 @@ class ChainRpc {
   static const _requestTimeout = Duration(seconds: 8);
 
   /// 发送 JSON-RPC 请求，自动故障切换（最多尝试 3 个节点）。
+  ///
+  /// 区分两类错误：
+  /// - 网络错误（超时、连接拒绝）：切换节点重试
+  /// - RPC 业务错误（链返回 error）：直接抛出，不重试
   Future<dynamic> _rpcCall(String method, List<dynamic> params) async {
     final maxAttempts = _nodes.length < _maxRetries ? _nodes.length : _maxRetries;
     final tried = <int>{};
@@ -227,11 +264,19 @@ class ChainRpc {
             .send(method, params)
             .timeout(_requestTimeout);
         if (response.error != null) {
-          throw Exception('RPC error: ${response.error}');
+          // RPC 业务错误：链收到了请求但拒绝了，不需要重试其他节点
+          throw Exception('${response.error}');
         }
         return response.result;
-      } catch (e) {
-        debugPrint('RPC node ${_nodes[_currentIndex]} failed: $e');
+      } on Exception catch (e) {
+        final msg = e.toString();
+        // 如果是链返回的业务错误（非网络问题），直接抛出不重试
+        if (msg.contains('code') || msg.contains('1010') || msg.contains('1012') || msg.contains('Extrinsic') || msg.contains('decode')) {
+          debugPrint('RPC business error on ${_nodes[_currentIndex]}: $e');
+          rethrow;
+        }
+        // 网络错误：切换节点重试
+        debugPrint('RPC node ${_nodes[_currentIndex]} network error: $e');
         _provider = null;
         _currentIndex = (_currentIndex + 1) % _nodes.length;
       }

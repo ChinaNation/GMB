@@ -2,7 +2,7 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
-use codec::Decode;
+use codec::{Decode, Encode};
 use frame_benchmarking::v2::*;
 use frame_support::{traits::Get, BoundedVec};
 use frame_system::RawOrigin;
@@ -10,8 +10,7 @@ use primitives::china::china_cb::CHINA_CB;
 use sp_std::{vec, vec::Vec};
 
 use crate::{
-    pallet, AllowedRecipients, Call, Config, GovToJointVote, JointVoteToGov, Pallet, Proposals,
-    RetryCount, VotingProposalCount,
+    pallet, AllowedRecipients, Call, Config, Pallet, VotingProposalCount,
 };
 
 fn decode_account<T: pallet::Config>(raw: [u8; 32]) -> T::AccountId {
@@ -90,6 +89,30 @@ fn snapshot_sig_ok<T: pallet::Config>() -> pallet::SnapshotSignatureOf<T> {
         .expect("benchmark signature should fit")
 }
 
+/// 在投票引擎 ProposalData 中直接写入带 MODULE_TAG 前缀的业务数据，用于 benchmark setup。
+fn insert_proposal_data_for_benchmark<T: pallet::Config>(
+    proposal_id: u64,
+    proposer: T::AccountId,
+    reason: &pallet::ReasonOf<T>,
+    total_amount: u128,
+    allocations: &pallet::AllocationOf<T>,
+) {
+    let data = pallet::IssuanceProposalData {
+        proposer,
+        reason: reason.to_vec(),
+        total_amount,
+        allocations: allocations.to_vec(),
+    };
+    let mut encoded = Vec::from(crate::MODULE_TAG);
+    encoded.extend_from_slice(&data.encode());
+    voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, encoded)
+        .expect("benchmark store_proposal_data should succeed");
+    voting_engine_system::Pallet::<T>::store_proposal_meta(
+        proposal_id,
+        frame_system::Pallet::<T>::block_number(),
+    );
+}
+
 #[benchmarks]
 mod benchmarks {
     use super::*;
@@ -128,7 +151,6 @@ mod benchmarks {
             signature,
         );
 
-        assert!(Proposals::<T>::contains_key(0u64));
         assert_eq!(VotingProposalCount::<T>::get(), 1u32);
     }
 
@@ -138,26 +160,18 @@ mod benchmarks {
         let proposer = nrc_admin::<T>();
         let reason = reason_max::<T>();
         let (allocations, total_amount) = full_allocations::<T>();
-        let proposal = pallet::Proposal::<T> {
+        insert_proposal_data_for_benchmark::<T>(
+            proposal_id,
             proposer,
-            reason,
+            &reason,
             total_amount,
-            allocations,
-            vote_kind: pallet::VoteKind::Joint,
-            status: pallet::ProposalStatus::Voting,
-        };
-        Proposals::<T>::insert(proposal_id, proposal);
-        GovToJointVote::<T>::insert(proposal_id, 111u64);
-        JointVoteToGov::<T>::insert(111u64, proposal_id);
+            &allocations,
+        );
         VotingProposalCount::<T>::put(1u32);
 
         #[extrinsic_call]
         finalize_joint_vote(RawOrigin::Root, proposal_id, true);
 
-        assert!(matches!(
-            Proposals::<T>::get(proposal_id).map(|p| p.status),
-            Some(pallet::ProposalStatus::Passed | pallet::ProposalStatus::ExecutionFailed)
-        ));
         assert_eq!(VotingProposalCount::<T>::get(), 0u32);
     }
 
@@ -167,52 +181,18 @@ mod benchmarks {
         let proposer = nrc_admin::<T>();
         let reason = reason_ok::<T>();
         let allocations = one_allocation::<T>();
-        let proposal = pallet::Proposal::<T> {
+        insert_proposal_data_for_benchmark::<T>(
+            proposal_id,
             proposer,
-            reason,
-            total_amount: 1_000_000u128,
-            allocations,
-            vote_kind: pallet::VoteKind::Joint,
-            status: pallet::ProposalStatus::Voting,
-        };
-        Proposals::<T>::insert(proposal_id, proposal);
-        GovToJointVote::<T>::insert(proposal_id, 112u64);
-        JointVoteToGov::<T>::insert(112u64, proposal_id);
+            &reason,
+            1_000_000u128,
+            &allocations,
+        );
         VotingProposalCount::<T>::put(1u32);
 
         #[extrinsic_call]
         finalize_joint_vote(RawOrigin::Root, proposal_id, false);
 
-        assert!(matches!(
-            Proposals::<T>::get(proposal_id).map(|p| p.status),
-            Some(pallet::ProposalStatus::Rejected)
-        ));
         assert_eq!(VotingProposalCount::<T>::get(), 0u32);
-    }
-
-    #[benchmark]
-    fn retry_failed_execution() {
-        let proposal_id = 7u64;
-        let proposer = nrc_admin::<T>();
-        let reason = reason_max::<T>();
-        let (allocations, total_amount) = full_allocations::<T>();
-        let proposal = pallet::Proposal::<T> {
-            proposer: proposer.clone(),
-            reason,
-            total_amount,
-            allocations,
-            vote_kind: pallet::VoteKind::Joint,
-            status: pallet::ProposalStatus::ExecutionFailed,
-        };
-        Proposals::<T>::insert(proposal_id, proposal);
-        RetryCount::<T>::insert(proposal_id, 0u32);
-
-        #[extrinsic_call]
-        retry_failed_execution(RawOrigin::Signed(proposer), proposal_id);
-
-        assert!(matches!(
-            Proposals::<T>::get(proposal_id).map(|p| p.status),
-            Some(pallet::ProposalStatus::Passed)
-        ));
     }
 }

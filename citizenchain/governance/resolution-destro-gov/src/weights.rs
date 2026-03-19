@@ -46,7 +46,6 @@ pub trait WeightInfo {
 	fn propose_destroy() -> Weight;
 	fn vote_destroy() -> Weight;
 	fn execute_destroy() -> Weight;
-	fn cancel_stale_destroy() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -131,30 +130,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(4))
 			.saturating_add(T::DbWeight::get().writes(8))
 	}
-	/// Storage: `ResolutionDestroGov::ProposalActions` (r:1 w:1)
-	/// Proof: `ResolutionDestroGov::ProposalActions` (`max_values`: None, `max_size`: Some(88), added: 2563, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestroGov::ProposalCreatedAt` (r:1 w:1)
-	/// Proof: `ResolutionDestroGov::ProposalCreatedAt` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestroGov::ActiveProposalByInstitution` (r:1 w:1)
-	/// Proof: `ResolutionDestroGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalTallies` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::InternalTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestroGov::ProposalPassedAt` (r:0 w:1)
-	/// Proof: `ResolutionDestroGov::ProposalPassedAt` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	fn cancel_stale_destroy() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `593`
-		//  Estimated: `3559`
-		// Minimum execution time: 47_348_000 picoseconds.
-		Weight::from_parts(48_510_000, 0)
-			.saturating_add(Weight::from_parts(0, 3559))
-			.saturating_add(T::DbWeight::get().reads(4))
-			.saturating_add(T::DbWeight::get().writes(7))
-	}
 }
 
 impl WeightInfo for () {
@@ -237,29 +212,5 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 3593))
 			.saturating_add(RocksDbWeight::get().reads(4))
 			.saturating_add(RocksDbWeight::get().writes(8))
-	}
-	/// Storage: `ResolutionDestroGov::ProposalActions` (r:1 w:1)
-	/// Proof: `ResolutionDestroGov::ProposalActions` (`max_values`: None, `max_size`: Some(88), added: 2563, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestroGov::ProposalCreatedAt` (r:1 w:1)
-	/// Proof: `ResolutionDestroGov::ProposalCreatedAt` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestroGov::ActiveProposalByInstitution` (r:1 w:1)
-	/// Proof: `ResolutionDestroGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalTallies` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::InternalTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestroGov::ProposalPassedAt` (r:0 w:1)
-	/// Proof: `ResolutionDestroGov::ProposalPassedAt` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	fn cancel_stale_destroy() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `593`
-		//  Estimated: `3559`
-		// Minimum execution time: 47_348_000 picoseconds.
-		Weight::from_parts(48_510_000, 0)
-			.saturating_add(Weight::from_parts(0, 3559))
-			.saturating_add(RocksDbWeight::get().reads(4))
-			.saturating_add(RocksDbWeight::get().writes(7))
 	}
 }

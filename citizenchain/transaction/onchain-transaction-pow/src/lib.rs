@@ -147,7 +147,7 @@ where
         }
         let payer = FeePayerExtractor::fee_payer(who, call).unwrap_or_else(|| who.clone());
 
-        // 中文注释：扣费使用 Exact，避免“只扣到一部分也继续执行”。
+        // 中文注释：扣费使用 Exact，避免”只扣到一部分也继续执行”。
         let credit = Currency::withdraw(
             &payer,
             fee_with_tip,
@@ -340,6 +340,19 @@ where
     let base_fee: <Currency as Inspect<T::AccountId>>::Balance =
         by_rate.max(min_fee).saturated_into();
     Ok(base_fee.saturating_add(tip))
+}
+
+/// 使用旧版 `Currency` trait 从指定账户扣取手续费并按制度分账。
+///
+/// 分账规则：全节点矿工奖励钱包 80% / 国储会 10% / 销毁 10%。
+/// `miner_wallet`：当前区块矿工绑定的奖励钱包；`nrc_account`：国储会账户。
+/// 按交易金额计算链上手续费（对外公开，供其他 pallet 复用）。
+///
+/// 公式：`max(amount × ONCHAIN_FEE_RATE, ONCHAIN_MIN_FEE)`
+/// 返回值单位为"分"。
+pub fn calculate_onchain_fee(amount: u128) -> u128 {
+    let by_rate = mul_perbill_round(amount, primitives::core_const::ONCHAIN_FEE_RATE);
+    by_rate.max(primitives::core_const::ONCHAIN_MIN_FEE)
 }
 
 fn mul_perbill_round(amount: u128, rate: sp_runtime::Perbill) -> u128 {

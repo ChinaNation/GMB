@@ -43,10 +43,14 @@ mod benchmarks {
             citizen_eligible_total: 0,
         };
 
+        let institution = nrc_institution()?;
+
         #[block]
         {
             let id = Pallet::<T>::allocate_proposal_id()
                 .map_err(|_| BenchmarkError::Stop("id should allocate"))?;
+            crate::active_proposal_limit::try_add_active_proposal::<T>(institution, id)
+                .map_err(|_| BenchmarkError::Stop("active proposal limit"))?;
             Proposals::<T>::insert(id, proposal);
         }
 

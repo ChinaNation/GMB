@@ -32,3 +32,5 @@ tokio = { version = "1", features = ["time"] }
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+## 开发链模式：启动节点时传 --chain dev
+dev-chain = []

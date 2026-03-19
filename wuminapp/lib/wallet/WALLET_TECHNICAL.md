@@ -40,7 +40,8 @@ lib/
     │   ├── attestation_service.dart
     │   └── wallet_type_service.dart
     ├── ui/
-    │   └── wallet_page.dart
+    │   ├── wallet_page.dart
+    │   └── transaction_history_page.dart
     ├── wallet.dart
     └── WALLET_TECHNICAL.md
 ```
@@ -82,6 +83,10 @@ lib/
   - 热钱包创建/导入（`CreateWalletPage` / `ImportWalletPage`）
   - 冷钱包创建/导入（`CreateColdWalletPage` / `ImportColdWalletPage`）
   - 余额显示与刷新（通过 `lib/rpc/ChainRpc.fetchBalance()` 直连节点）
+  - 钱包详情页（`WalletDetailPage`）：余额卡片（含钱包名称）、二维码（含下载按钮）、地址、交易记录入口+最近记录
+- `transaction_history_page.dart`
+  - 交易记录列表页（`TransactionHistoryPage`）：按 walletIndex 过滤，显示转入/转出、金额、状态
+  - 交易记录详情页（`TransactionDetailPage`）：txHash、金额、发送方、接收方、时间、状态、备注
 
 ## 4. 关键流程
 
@@ -176,6 +181,24 @@ lib/
 ### 5.3 其他 SharedPreferences（尚未迁移）
 
 - `sfid.bind.*`（`SfidBindingService`）
+
+### 5.4 钱包详情页布局 `WalletDetailPage`
+
+页面元素（自上而下）：
+
+1. 余额卡片：左上角钱包名称（可点击编辑），居中余额数字+元+GMB
+2. 二维码：`gmb://account/{address}`，下载按钮浮在二维码正中间（半透明圆形背景）
+3. 地址+复制：地址居中两行显示，复制图标在右侧
+4. 交易记录标题行：左侧"交易记录"，右侧箭头，点击进入完整交易记录列表
+5. 最近交易记录：最多显示 5 条，点击进入交易详情
+
+### 5.5 交易记录数据来源
+
+钱包详情页和交易记录页面直接复用 `OnchainTradeRepository`（Isar `TxRecordEntity`），按钱包地址（fromAddress / toAddress）过滤。
+
+- 数据在交易页面 `OnchainTradeService.submitTransfer()` 成功时自动写入 Isar
+- 钱包详情页展示最近 5 条，点击"交易记录"进入完整列表
+- 状态同步（pending→confirmed）由交易页面定时轮询 `refreshPendingRecords()` 完成
 
 ## 6. 迁移与清理策略
 

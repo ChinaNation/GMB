@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use codec::Encode;
 use frame_support::{
     ensure,
@@ -27,21 +25,9 @@ use crate::{
     PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
 
-fn str_to_pallet_id(s: &str) -> Option<InstitutionPalletId> {
-    reserve_pallet_id_to_bytes(s)
-}
+use crate::nrc_pallet_id_bytes;
 
-fn str_to_shengbank_pallet_id(s: &str) -> Option<InstitutionPalletId> {
-    shengbank_pallet_id_to_bytes(s)
-}
-
-fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
-    // 中文注释：国储会ID统一从常量数组读取并转码。
-    CHINA_CB
-        .first()
-        .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
-}
-
+#[cfg(test)]
 fn is_nrc_admin_account(who: &[u8; 32]) -> bool {
     CHINA_CB
         .first()
@@ -107,7 +93,7 @@ pub fn institution_info(id: InstitutionPalletId) -> Option<u32> {
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| str_to_pallet_id(n.shenfen_id))
+        .filter_map(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
         .any(|pid| pid == id)
     {
         return Some(PRC_JOINT_VOTE_WEIGHT);
@@ -115,7 +101,7 @@ pub fn institution_info(id: InstitutionPalletId) -> Option<u32> {
 
     if CHINA_CH
         .iter()
-        .filter_map(|n| str_to_shengbank_pallet_id(n.shenfen_id))
+        .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
         .any(|pid| pid == id)
     {
         return Some(PRB_JOINT_VOTE_WEIGHT);

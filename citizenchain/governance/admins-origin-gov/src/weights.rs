@@ -46,7 +46,6 @@ pub trait WeightInfo {
 	fn propose_admin_replacement() -> Weight;
 	fn vote_admin_replacement() -> Weight;
 	fn execute_admin_replacement() -> Weight;
-	fn cancel_stale_proposal() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -135,30 +134,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(4))
 			.saturating_add(T::DbWeight::get().writes(8))
 	}
-	/// Storage: `AdminsOriginGov::ProposalActions` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::ProposalActions` (`max_values`: None, `max_size`: Some(129), added: 2604, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::ProposalCreatedAt` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::ProposalCreatedAt` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::ActiveProposalByInstitution` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::ProposalPassedAt` (r:0 w:1)
-	/// Proof: `AdminsOriginGov::ProposalPassedAt` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalTallies` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::InternalTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	fn cancel_stale_proposal() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `558`
-		//  Estimated: `3594`
-		// Minimum execution time: 46_768_000 picoseconds.
-		Weight::from_parts(47_588_000, 0)
-			.saturating_add(Weight::from_parts(0, 3594))
-			.saturating_add(T::DbWeight::get().reads(4))
-			.saturating_add(T::DbWeight::get().writes(7))
-	}
 }
 
 impl WeightInfo for () {
@@ -245,29 +220,5 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 4554))
 			.saturating_add(RocksDbWeight::get().reads(4))
 			.saturating_add(RocksDbWeight::get().writes(8))
-	}
-	/// Storage: `AdminsOriginGov::ProposalActions` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::ProposalActions` (`max_values`: None, `max_size`: Some(129), added: 2604, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::ProposalCreatedAt` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::ProposalCreatedAt` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::ActiveProposalByInstitution` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::ProposalPassedAt` (r:0 w:1)
-	/// Proof: `AdminsOriginGov::ProposalPassedAt` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalTallies` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::InternalTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	fn cancel_stale_proposal() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `558`
-		//  Estimated: `3594`
-		// Minimum execution time: 46_768_000 picoseconds.
-		Weight::from_parts(47_588_000, 0)
-			.saturating_add(Weight::from_parts(0, 3594))
-			.saturating_add(RocksDbWeight::get().reads(4))
-			.saturating_add(RocksDbWeight::get().writes(7))
 	}
 }

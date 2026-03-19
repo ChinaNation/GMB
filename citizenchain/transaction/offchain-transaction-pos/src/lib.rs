@@ -3096,6 +3096,13 @@ mod tests {
         }
     }
 
+    pub struct TestTimeProvider;
+    impl frame_support::traits::UnixTime for TestTimeProvider {
+        fn now() -> core::time::Duration {
+            core::time::Duration::from_secs(1_782_864_000) // 2026-07-01
+        }
+    }
+
     impl voting_engine_system::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
@@ -3105,11 +3112,14 @@ mod tests {
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxJointDecisionApprovals = ConstU32<32>;
+        type MaxProposalDataLen = ConstU32<256>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
+        type InternalThresholdProvider = ();
         type JointInstitutionDecisionVerifier = ();
+        type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
 

@@ -356,6 +356,36 @@ mod tests {
     }
 
     #[test]
+    fn fee_payer_returns_institution_for_propose_transfer() {
+        use codec::Encode;
+        use configs::RuntimeFeePayerExtractor;
+        use frame_support::BoundedVec;
+        use onchain_transaction_pow::CallFeePayer;
+        use primitives::china::china_cb::{shenfen_id_to_fixed48, CHINA_CB};
+
+        let institution =
+            shenfen_id_to_fixed48(CHINA_CB[0].shenfen_id).expect("NRC shenfen_id must be valid");
+        let beneficiary = AccountId::new([99u8; 32]);
+        let call = RuntimeCall::DuoqianTransferPow(
+            duoqian_transfer_pow::pallet::Call::propose_transfer {
+                org: 0,
+                institution,
+                beneficiary,
+                amount: 10000,
+                remark: BoundedVec::default(),
+            },
+        );
+        let signer = AccountId::new([1u8; 32]);
+        let payer = RuntimeFeePayerExtractor::fee_payer(&signer, &call);
+        assert!(
+            payer.is_some(),
+            "fee_payer must return Some for propose_transfer"
+        );
+        let expected = AccountId::new(CHINA_CB[0].duoqian_address);
+        assert_eq!(payer.unwrap(), expected);
+    }
+
+    #[test]
     fn runtime_version_and_block_types_are_sane() {
         assert_eq!(VERSION.spec_name.as_ref(), "citizenchain");
         assert_eq!(VERSION.impl_name.as_ref(), "citizenchain");

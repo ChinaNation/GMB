@@ -4,119 +4,74 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class UserProfileState {
   const UserProfileState({
-    required this.nickname,
-    required this.nicknameCustomized,
     this.avatarPath,
     this.backgroundPath,
+    this.communicationWalletIndex,
     this.communicationAddress,
+    this.communicationWalletName,
   });
 
-  final String nickname;
-  final bool nicknameCustomized;
   final String? avatarPath;
   final String? backgroundPath;
+  /// 通信账户钱包 index（对应 WalletProfile.walletIndex）。
+  final int? communicationWalletIndex;
+  /// 通信账户钱包地址（SS58）。
   final String? communicationAddress;
+  /// 通信账户钱包名称（= 用户昵称）。
+  final String? communicationWalletName;
+
+  /// 用户昵称 = 通信钱包名称，未设置时显示默认值。
+  String get nickname =>
+      communicationWalletName?.trim().isNotEmpty == true
+          ? communicationWalletName!
+          : UserProfileService.defaultNickname;
 
   UserProfileState copyWith({
-    String? nickname,
-    bool? nicknameCustomized,
     Object? avatarPath = _sentinel,
     Object? backgroundPath = _sentinel,
+    Object? communicationWalletIndex = _sentinel,
     Object? communicationAddress = _sentinel,
+    Object? communicationWalletName = _sentinel,
   }) {
     return UserProfileState(
-      nickname: nickname ?? this.nickname,
-      nicknameCustomized: nicknameCustomized ?? this.nicknameCustomized,
       avatarPath: identical(avatarPath, _sentinel)
           ? this.avatarPath
           : avatarPath as String?,
       backgroundPath: identical(backgroundPath, _sentinel)
           ? this.backgroundPath
           : backgroundPath as String?,
+      communicationWalletIndex: identical(communicationWalletIndex, _sentinel)
+          ? this.communicationWalletIndex
+          : communicationWalletIndex as int?,
       communicationAddress: identical(communicationAddress, _sentinel)
           ? this.communicationAddress
           : communicationAddress as String?,
+      communicationWalletName: identical(communicationWalletName, _sentinel)
+          ? this.communicationWalletName
+          : communicationWalletName as String?,
     );
   }
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
-      'nickname': nickname,
-      'nickname_customized': nicknameCustomized,
       'avatar_path': avatarPath,
       'background_path': backgroundPath,
+      'communication_wallet_index': communicationWalletIndex,
       'communication_address': communicationAddress,
+      'communication_wallet_name': communicationWalletName,
     };
   }
 
   static UserProfileState fromJson(Map<String, dynamic> json) {
-    final rawNickname = json['nickname']?.toString().trim() ?? '';
     return UserProfileState(
-      nickname: rawNickname.isEmpty
-          ? UserProfileService.defaultNickname
-          : rawNickname,
-      nicknameCustomized: json['nickname_customized'] as bool? ?? false,
       avatarPath: _normalizeOptionalString(json['avatar_path']),
       backgroundPath: _normalizeOptionalString(json['background_path']),
+      communicationWalletIndex: json['communication_wallet_index'] as int?,
       communicationAddress:
           _normalizeOptionalString(json['communication_address']),
+      communicationWalletName:
+          _normalizeOptionalString(json['communication_wallet_name']),
     );
-  }
-}
-
-class UserQrPayload {
-  const UserQrPayload({
-    required this.nickname,
-    required this.address,
-  });
-
-  static const String protocol = 'WUMINAPP_CONTACT_V1';
-  static const String legacyProtocol = 'WUMINAPP_USER_CARD_V1';
-
-  final String nickname;
-  final String address;
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'proto': protocol,
-      'address': address,
-      'name': nickname,
-    };
-  }
-
-  String toRawJson() => jsonEncode(toJson());
-
-  static UserQrPayload parse(String raw) {
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map<String, dynamic>) {
-      throw const FormatException('二维码数据格式错误');
-    }
-
-    final proto = (decoded['proto'] ?? decoded['type'] ?? '').toString();
-
-    // 兼容旧版 WUMINAPP_USER_CARD_V1 格式。
-    if (proto == legacyProtocol) {
-      final nickname = decoded['nickname']?.toString().trim() ?? '';
-      final accountPubkeyHex = UserContactService.normalizePubkeyHex(
-          decoded['account_pubkey']?.toString() ?? '');
-      if (nickname.isEmpty || accountPubkeyHex.isEmpty) {
-        throw const FormatException('二维码缺少昵称或账号信息');
-      }
-      return UserQrPayload(nickname: nickname, address: accountPubkeyHex);
-    }
-
-    // 新版 WUMINAPP_CONTACT_V1 格式。
-    if (proto != protocol) {
-      throw const FormatException('不是用户通讯录二维码');
-    }
-
-    final name = decoded['name']?.toString().trim() ?? '';
-    final address = decoded['address']?.toString().trim() ?? '';
-    if (name.isEmpty || address.isEmpty) {
-      throw const FormatException('二维码缺少昵称或地址信息');
-    }
-
-    return UserQrPayload(nickname: name, address: address);
   }
 }
 
@@ -172,9 +127,7 @@ class UserContact {
   }
 
   static UserContact fromJson(Map<String, dynamic> json) {
-    final account = UserContactService.normalizePubkeyHex(
-      json['account_pubkey']?.toString() ?? '',
-    );
+    final account = (json['account_pubkey']?.toString().trim()) ?? '';
     if (account.isEmpty) {
       throw const FormatException('通讯录账号为空');
     }
@@ -212,10 +165,7 @@ class UserProfileService {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_kProfile);
     if (raw == null || raw.trim().isEmpty) {
-      return const UserProfileState(
-        nickname: defaultNickname,
-        nicknameCustomized: false,
-      );
+      return const UserProfileState();
     }
 
     try {
@@ -225,33 +175,14 @@ class UserProfileService {
       }
       return UserProfileState.fromJson(decoded);
     } catch (_) {
-      return const UserProfileState(
-        nickname: defaultNickname,
-        nicknameCustomized: false,
-      );
+      return const UserProfileState();
     }
   }
 
   Future<UserProfileState> saveState(UserProfileState state) async {
-    final sanitized = UserProfileState(
-      nickname: _normalizeNickname(state.nickname),
-      nicknameCustomized: state.nicknameCustomized,
-      avatarPath: _normalizeOptionalString(state.avatarPath),
-      backgroundPath: _normalizeOptionalString(state.backgroundPath),
-    );
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kProfile, jsonEncode(sanitized.toJson()));
-    return sanitized;
-  }
-
-  Future<UserProfileState> updateNickname(String nickname) async {
-    final current = await getState();
-    return saveState(
-      current.copyWith(
-        nickname: _normalizeNickname(nickname),
-        nicknameCustomized: true,
-      ),
-    );
+    await prefs.setString(_kProfile, jsonEncode(state.toJson()));
+    return state;
   }
 
   Future<UserProfileState> updateAvatarPath(String? avatarPath) async {
@@ -264,22 +195,27 @@ class UserProfileService {
     return saveState(current.copyWith(backgroundPath: backgroundPath));
   }
 
-  Future<UserProfileState> updateCommunicationAddress(
-      String? address) async {
+  /// 设置通信账户（钱包 index + 地址 + 名称）。
+  Future<UserProfileState> setCommunicationWallet({
+    required int walletIndex,
+    required String address,
+    required String walletName,
+  }) async {
     final current = await getState();
-    return saveState(current.copyWith(communicationAddress: address));
+    return saveState(current.copyWith(
+      communicationWalletIndex: walletIndex,
+      communicationAddress: address,
+      communicationWalletName: walletName,
+    ));
   }
 
-  bool isNicknameReady(UserProfileState state) {
-    return state.nicknameCustomized && state.nickname.trim().isNotEmpty;
-  }
-
-  String _normalizeNickname(String nickname) {
-    final normalized = nickname.trim();
-    if (normalized.isEmpty) {
-      return defaultNickname;
-    }
-    return normalized;
+  /// 更新通信账户钱包名称（双向同步用）。
+  Future<UserProfileState> updateCommunicationWalletName(
+      String walletName) async {
+    final current = await getState();
+    if (current.communicationWalletIndex == null) return current;
+    return saveState(
+        current.copyWith(communicationWalletName: walletName));
   }
 }
 
@@ -309,14 +245,18 @@ class UserContactService {
     }
   }
 
-  Future<ContactImportResult> addFromQrPayload(
-    String rawPayload, {
-    String? selfAccountPubkeyHex,
+  /// 添加或更新通讯录联系人。
+  Future<ContactImportResult> addContact({
+    required String address,
+    required String name,
+    String? selfAddress,
   }) async {
-    final payload = UserQrPayload.parse(rawPayload);
-    final incomingAccount = payload.address.trim();
-    final selfAccount = normalizePubkeyHex(selfAccountPubkeyHex ?? '');
-    if (selfAccount.isNotEmpty && incomingAccount == selfAccount) {
+    final incomingAccount = address.trim();
+    if (incomingAccount.isEmpty || name.trim().isEmpty) {
+      throw const FormatException('地址或名称为空');
+    }
+    final self = selfAddress?.trim() ?? '';
+    if (self.isNotEmpty && incomingAccount == self) {
       throw const FormatException('不能把自己加入通讯录');
     }
 
@@ -326,7 +266,7 @@ class UserContactService {
         contacts.indexWhere((item) => item.accountPubkeyHex == incomingAccount);
     if (index >= 0) {
       final updated = contacts[index].copyWith(
-        sourceNickname: payload.nickname,
+        sourceNickname: name.trim(),
         updatedAtMillis: now,
       );
       contacts[index] = updated;
@@ -336,7 +276,7 @@ class UserContactService {
 
     final created = UserContact(
       accountPubkeyHex: incomingAccount,
-      sourceNickname: payload.nickname,
+      sourceNickname: name.trim(),
       addedAtMillis: now,
       updatedAtMillis: now,
     );

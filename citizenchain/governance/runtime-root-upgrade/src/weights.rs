@@ -46,8 +46,6 @@ pub trait WeightInfo {
 	fn propose_runtime_upgrade() -> Weight;
 	fn finalize_joint_vote_approved() -> Weight;
 	fn finalize_joint_vote_rejected() -> Weight;
-	fn retry_failed_execution() -> Weight;
-	fn cancel_failed_proposal() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -132,38 +130,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(2))
 			.saturating_add(T::DbWeight::get().writes(8))
 	}
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
-	/// Storage: `RuntimeRootUpgrade::Proposals` (r:1 w:1)
-	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
-	/// Storage: `RuntimeRootUpgrade::RetryCount` (r:1 w:1)
-	/// Proof: `RuntimeRootUpgrade::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	fn retry_failed_execution() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `5245598`
-		//  Estimated: `5247464`
-		// Minimum execution time: 4_579_838_000 picoseconds.
-		Weight::from_parts(4_671_559_000, 0)
-			.saturating_add(Weight::from_parts(0, 5247464))
-			.saturating_add(T::DbWeight::get().reads(3))
-			.saturating_add(T::DbWeight::get().writes(2))
-	}
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
-	/// Storage: `RuntimeRootUpgrade::Proposals` (r:1 w:1)
-	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
-	/// Storage: `RuntimeRootUpgrade::RetryCount` (r:1 w:1)
-	/// Proof: `RuntimeRootUpgrade::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	fn cancel_failed_proposal() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `5245598`
-		//  Estimated: `5247464`
-		// Minimum execution time: 4_465_324_000 picoseconds.
-		Weight::from_parts(4_605_125_000, 0)
-			.saturating_add(Weight::from_parts(0, 5247464))
-			.saturating_add(T::DbWeight::get().reads(3))
-			.saturating_add(T::DbWeight::get().writes(2))
-	}
 }
 
 impl WeightInfo for () {
@@ -246,37 +212,5 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 5247464))
 			.saturating_add(RocksDbWeight::get().reads(2))
 			.saturating_add(RocksDbWeight::get().writes(8))
-	}
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
-	/// Storage: `RuntimeRootUpgrade::Proposals` (r:1 w:1)
-	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
-	/// Storage: `RuntimeRootUpgrade::RetryCount` (r:1 w:1)
-	/// Proof: `RuntimeRootUpgrade::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	fn retry_failed_execution() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `5245598`
-		//  Estimated: `5247464`
-		// Minimum execution time: 4_579_838_000 picoseconds.
-		Weight::from_parts(4_671_559_000, 0)
-			.saturating_add(Weight::from_parts(0, 5247464))
-			.saturating_add(RocksDbWeight::get().reads(3))
-			.saturating_add(RocksDbWeight::get().writes(2))
-	}
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
-	/// Storage: `RuntimeRootUpgrade::Proposals` (r:1 w:1)
-	/// Proof: `RuntimeRootUpgrade::Proposals` (`max_values`: None, `max_size`: Some(5243999), added: 5246474, mode: `MaxEncodedLen`)
-	/// Storage: `RuntimeRootUpgrade::RetryCount` (r:1 w:1)
-	/// Proof: `RuntimeRootUpgrade::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	fn cancel_failed_proposal() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `5245598`
-		//  Estimated: `5247464`
-		// Minimum execution time: 4_465_324_000 picoseconds.
-		Weight::from_parts(4_605_125_000, 0)
-			.saturating_add(Weight::from_parts(0, 5247464))
-			.saturating_add(RocksDbWeight::get().reads(3))
-			.saturating_add(RocksDbWeight::get().writes(2))
 	}
 }

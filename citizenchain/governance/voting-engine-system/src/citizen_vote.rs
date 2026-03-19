@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::{
     pallet::{CitizenTallies, CitizenVotesBySfid, Config, Error, Event, Pallet},
     PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STATUS_PASSED,

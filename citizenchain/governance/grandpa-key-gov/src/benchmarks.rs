@@ -2,17 +2,15 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
-use codec::Decode;
+use codec::{Decode, Encode};
 use frame_benchmarking::v2::*;
-use frame_support::traits::Get;
 use frame_system::RawOrigin;
 use sp_core::Pair;
-use sp_runtime::traits::{SaturatedConversion, Saturating};
 use voting_engine_system::InternalVoteEngine;
 
 use crate::{
-    pallet, reserve_pallet_id_to_bytes, ActiveProposalByInstitution, BlockNumberFor, Call, Config,
-    InstitutionPalletId, Pallet, ProposalActions, CHINA_CB,
+    pallet, reserve_pallet_id_to_bytes, Call, Config, GrandpaKeyReplacementAction,
+    InstitutionPalletId, Pallet, CHINA_CB,
 };
 
 use crate::Pallet as GrandpaKeyGov;
@@ -68,8 +66,7 @@ mod benchmarks {
         #[extrinsic_call]
         propose_replace_grandpa_key(RawOrigin::Signed(proposer), institution, new_key);
 
-        assert_eq!(ActiveProposalByInstitution::<T>::get(institution), Some(0));
-        assert!(ProposalActions::<T>::contains_key(0));
+        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(0).is_some());
     }
 
     #[benchmark]
@@ -102,27 +99,6 @@ mod benchmarks {
 
         #[extrinsic_call]
         execute_replace_grandpa_key(RawOrigin::Signed(caller), 0);
-
-        assert!(!ProposalActions::<T>::contains_key(0));
-    }
-
-    #[benchmark]
-    fn cancel_stale_replace_grandpa_key() {
-        let institution = prc_institution();
-        let proposer = prc_admin::<T>(0);
-        let caller = prc_admin::<T>(1);
-        let new_key = seeded_public_key(14);
-
-        propose::<T>(institution, proposer, new_key);
-
-        let one: BlockNumberFor<T> = 1u32.saturated_into();
-        let stale_block = T::StaleProposalLifetime::get().saturating_add(one);
-        frame_system::Pallet::<T>::set_block_number(stale_block);
-
-        #[extrinsic_call]
-        cancel_stale_replace_grandpa_key(RawOrigin::Signed(caller), 0);
-
-        assert!(!ProposalActions::<T>::contains_key(0));
     }
 
     #[benchmark]
@@ -135,16 +111,17 @@ mod benchmarks {
         propose::<T>(institution, proposer, new_key);
         pass_proposal::<T>(0);
 
-        // 将 old_key 篡改为不存在的 authority，制造“已通过但不可执行”场景。
-        ProposalActions::<T>::mutate(0, |action| {
-            if let Some(action) = action {
-                action.old_key = seeded_public_key(250);
-            }
-        });
+        // 将 old_key 篡改为不存在的 authority，制造"已通过但不可执行"场景。
+        let old_data = voting_engine_system::Pallet::<T>::get_proposal_data(0)
+            .expect("proposal data should exist");
+        let mut action = GrandpaKeyReplacementAction::decode(&mut &old_data[..])
+            .expect("action should decode");
+        action.old_key = seeded_public_key(250);
+        let new_data = action.encode();
+        voting_engine_system::Pallet::<T>::store_proposal_data(0, new_data)
+            .expect("store should succeed");
 
         #[extrinsic_call]
         cancel_failed_replace_grandpa_key(RawOrigin::Signed(caller), 0);
-
-        assert!(!ProposalActions::<T>::contains_key(0));
     }
 }

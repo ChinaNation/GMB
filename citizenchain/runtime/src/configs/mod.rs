@@ -27,7 +27,6 @@
 use alloc::collections::BTreeSet;
 use codec::Decode;
 use codec::Encode;
-use duoqian_transaction_pow::{DuoqianReservedAddressChecker as _, ProtectedSourceChecker as _};
 use frame_support::{
     derive_impl,
     dispatch::DispatchResult,
@@ -308,15 +307,22 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                 onchain_transaction_pow::AmountExtractResult::Amount(value)
             }
             RuntimeCall::DuoqianTransactionPow(
-                duoqian_transaction_pow::pallet::Call::create_duoqian { amount, .. },
+                duoqian_transaction_pow::pallet::Call::propose_create { amount, .. },
             ) => onchain_transaction_pow::AmountExtractResult::Amount(*amount),
             RuntimeCall::DuoqianTransactionPow(
-                duoqian_transaction_pow::pallet::Call::close_duoqian {
+                duoqian_transaction_pow::pallet::Call::propose_close {
                     duoqian_address, ..
                 },
             ) => onchain_transaction_pow::AmountExtractResult::Amount(Balances::free_balance(
                 duoqian_address,
             )),
+            // 投票调用不涉及资金转移，无金额
+            RuntimeCall::DuoqianTransactionPow(
+                duoqian_transaction_pow::pallet::Call::vote_create { .. },
+            ) => onchain_transaction_pow::AmountExtractResult::NoAmount,
+            RuntimeCall::DuoqianTransactionPow(
+                duoqian_transaction_pow::pallet::Call::vote_close { .. },
+            ) => onchain_transaction_pow::AmountExtractResult::NoAmount,
             // 中文注释：以下调用类型明确属于“无金额交易”，放行且不计算手续费。
             RuntimeCall::System(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
             RuntimeCall::Timestamp(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
@@ -352,11 +358,7 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::DuoqianTransactionPow(_) => {
                 onchain_transaction_pow::AmountExtractResult::NoAmount
             }
-            // 机构转账提案：按转账金额计费
-            RuntimeCall::DuoqianTransferPow(
-                duoqian_transfer_pow::Call::propose_transfer { amount, .. },
-            ) => onchain_transaction_pow::AmountExtractResult::Amount(*amount),
-            // 机构转账投票：无金额，不收费
+            // 机构转账提案/投票：全部免费（手续费在投票通过执行转账时由 pallet 内部扣取并分账）
             RuntimeCall::DuoqianTransferPow(_) => {
                 onchain_transaction_pow::AmountExtractResult::NoAmount
             }
@@ -370,45 +372,11 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
 pub struct RuntimeFeePayerExtractor;
 
 impl onchain_transaction_pow::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
-    fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
-        match call {
-            // 机构转账提案：手续费从机构 duoqian_address 扣取
-            RuntimeCall::DuoqianTransferPow(
-                duoqian_transfer_pow::Call::propose_transfer { institution, .. },
-            ) => transfer_institution_duoqian_address(institution),
-            // 机构转账投票：手续费从机构 duoqian_address 扣取
-            RuntimeCall::DuoqianTransferPow(
-                duoqian_transfer_pow::Call::vote_transfer { proposal_id, .. },
-            ) => duoqian_transfer_pow::ProposalActions::<Runtime>::get(proposal_id)
-                .and_then(|action| transfer_institution_duoqian_address(&action.institution)),
-            _ => None,
-        }
+    fn fee_payer(_who: &AccountId, _call: &RuntimeCall) -> Option<AccountId> {
+        // 机构转账提案/投票已改为 NoAmount（免费），无需转嫁手续费。
+        // 手续费在投票通过后由 pallet 内部按分账规则扣取。
+        None
     }
-}
-
-/// 通过机构 pallet id 查找 duoqian_address 并解码为 AccountId。
-fn transfer_institution_duoqian_address(
-    institution: &voting_engine_system::InstitutionPalletId,
-) -> Option<AccountId> {
-    use codec::Decode;
-    use primitives::china::china_cb::{
-        shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
-    };
-    use primitives::china::china_ch::{
-        shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
-    };
-
-    if let Some(node) = CHINA_CB
-        .iter()
-        .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(*institution))
-    {
-        return AccountId::decode(&mut &node.duoqian_address[..]).ok();
-    }
-
-    CHINA_CH
-        .iter()
-        .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(*institution))
-        .and_then(|n| AccountId::decode(&mut &n.duoqian_address[..]).ok())
 }
 
 /// 省储行质押利息模块配置：
@@ -448,39 +416,7 @@ impl fullnode_pow_reward::Config for Runtime {
     type WeightInfo = fullnode_pow_reward::weights::SubstrateWeight<Runtime>;
 }
 
-pub struct RuntimeDuoqianAdminAuth;
-
-impl duoqian_transaction_pow::DuoqianAdminAuth<AccountId> for RuntimeDuoqianAdminAuth {
-    type PublicKey = [u8; 32];
-    type Signature = [u8; 64];
-
-    fn is_valid_public_key(public_key: &Self::PublicKey) -> bool {
-        if public_key.iter().all(|b| *b == 0) {
-            return false;
-        }
-        let account = {
-            let signer = MultiSigner::from(sr25519::Public::from_raw(*public_key));
-            <MultiSigner as IdentifyAccount>::into_account(signer)
-        };
-        !RuntimeProtectedSourceChecker::is_protected(&account)
-            && !RuntimeDuoqianReservedAddressChecker::is_reserved(&account)
-    }
-
-    fn public_key_to_account(public_key: &Self::PublicKey) -> Option<AccountId> {
-        let signer = MultiSigner::from(sr25519::Public::from_raw(*public_key));
-        Some(<MultiSigner as IdentifyAccount>::into_account(signer))
-    }
-
-    fn verify_signature(
-        public_key: &Self::PublicKey,
-        payload: &[u8],
-        signature: &Self::Signature,
-    ) -> bool {
-        let public = sr25519::Public::from_raw(*public_key);
-        let sig = sr25519::Signature::from_raw(*signature);
-        sr25519_verify(&sig, payload, &public)
-    }
-}
+// RuntimeDuoqianAdminAuth 已移除：投票引擎管理管理员鉴权，不再需要离线签名验证。
 
 fn joint_vote_institution_org(
     institution: voting_engine_system::InstitutionPalletId,
@@ -547,7 +483,7 @@ impl voting_engine_system::JointInstitutionDecisionVerifier<AccountId, BlockNumb
             let Some(org) = joint_vote_institution_org(institution) else {
                 return false;
             };
-            let Some(threshold) = voting_engine_system::internal_vote::org_pass_threshold(org)
+            let Some(threshold) = voting_engine_system::internal_vote::governance_org_pass_threshold(org)
             else {
                 return false;
             };
@@ -708,7 +644,7 @@ impl duoqian_transaction_pow::SfidRegistryOperator<AccountId> for RuntimeSfidReg
 impl duoqian_transaction_pow::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
-    type AdminAuth = RuntimeDuoqianAdminAuth;
+    type InternalVoteEngine = voting_engine_system::Pallet<Runtime>;
     type AddressValidator = RuntimeDuoqianAddressValidator;
     type ReservedAddressChecker = RuntimeDuoqianReservedAddressChecker;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
@@ -903,12 +839,6 @@ parameter_types! {
     pub const RuntimeUpgradeMaxCodeSize: u32 = 5 * 1024 * 1024;
     /// 管理员治理：单机构管理员列表上限（覆盖国储会 19 人规模）。
     pub const MaxAdminsPerInstitution: u32 = 32;
-    /// 管理员替换提案过期清理窗口（区块数）。
-    pub const AdminReplacementStaleProposalLifetime: u32 =
-        primitives::count_const::VOTING_DURATION_BLOCKS * 2;
-    /// GRANDPA 密钥替换提案过期清理窗口（区块数）。
-    pub const GrandpaKeyStaleProposalLifetime: u32 =
-        primitives::count_const::VOTING_DURATION_BLOCKS * 2;
     /// GRANDPA authority set 变更生效延迟（单位：区块）。
     /// 取非 0，给运维注入新 gran 私钥预留窗口，避免立即切换导致短时失票。
     pub const GrandpaAuthoritySetChangeDelay: u32 = 30;
@@ -917,7 +847,6 @@ parameter_types! {
 impl admins_origin_gov::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
-    type StaleProposalLifetime = AdminReplacementStaleProposalLifetime;
     type InternalVoteEngine = VotingEngineSystem;
     type WeightInfo = admins_origin_gov::weights::SubstrateWeight<Runtime>;
 }
@@ -925,17 +854,43 @@ impl admins_origin_gov::Config for Runtime {
 impl resolution_destro_gov::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
-    type StaleProposalLifetime = AdminReplacementStaleProposalLifetime;
     type InternalVoteEngine = VotingEngineSystem;
     type WeightInfo = resolution_destro_gov::weights::SubstrateWeight<Runtime>;
 }
 
 impl grandpa_key_gov::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type StaleProposalLifetime = GrandpaKeyStaleProposalLifetime;
     type GrandpaChangeDelay = GrandpaAuthoritySetChangeDelay;
     type InternalVoteEngine = VotingEngineSystem;
     type WeightInfo = grandpa_key_gov::weights::SubstrateWeight<Runtime>;
+}
+
+/// 转账提案手续费分账适配器：将旧 Currency NegativeImbalance 转换后
+/// 交给现有 PowOnchainFeeRouter 处理（80% 矿工 / 10% 国储会 / 10% 销毁）。
+pub struct TransferFeeRouter;
+
+impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runtime>>
+    for TransferFeeRouter
+{
+    fn on_nonzero_unbalanced(amount: pallet_balances::NegativeImbalance<Runtime>) {
+        use frame_support::traits::fungible::Balanced;
+        // 将旧 NegativeImbalance 转为新 Credit（金额相同，drop 行为兼容）
+        let value = frame_support::traits::Imbalance::peek(&amount);
+        // 消费旧 imbalance（让余额变化生效）
+        drop(amount);
+        // 用 Balanced trait 从"零"铸造等额 Credit 传给现有 router
+        // 注意：drop(NegativeImbalance) 已将资金从流通中移除，
+        // issue() 再铸回等额 Credit 让 router 分配，总量不变。
+        let credit = <Balances as Balanced<AccountId>>::issue(value);
+        
+        type FeeRouter = onchain_transaction_pow::PowOnchainFeeRouter<
+            Runtime,
+            Balances,
+            PowDigestAuthor,
+            RuntimeNrcAccountProvider,
+        >;
+        <FeeRouter as frame_support::traits::tokens::imbalance::OnUnbalanced<_>>::on_unbalanced(credit);
+    }
 }
 
 impl duoqian_transfer_pow::Config for Runtime {
@@ -944,6 +899,7 @@ impl duoqian_transfer_pow::Config for Runtime {
     type MaxRemarkLen = ConstU32<256>;
     type InternalVoteEngine = VotingEngineSystem;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
+    type FeeRouter = TransferFeeRouter;
     type WeightInfo = duoqian_transfer_pow::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1048,7 +1004,6 @@ impl resolution_issuance_gov::Config for Runtime {
     type MaxAllocations = ResolutionIssuanceMaxAllocations;
     type MaxSnapshotNonceLength = ConstU32<64>;
     type MaxSnapshotSignatureLength = ConstU32<64>;
-    type MaxExecutionRetries = ConstU32<5>;
 }
 
 impl runtime_root_upgrade::Config for Runtime {
@@ -1056,8 +1011,6 @@ impl runtime_root_upgrade::Config for Runtime {
     type NrcProposeOrigin = EnsureNrcAdmin;
     type JointVoteEngine = VotingEngineSystem;
     type RuntimeCodeExecutor = RuntimeSetCodeExecutor;
-    // 中文注释：Runtime 升级执行失败后，最多允许 3 次人工重试，避免永久卡死但也避免无限 spam。
-    type MaxExecutionRetries = ConstU32<3>;
     type MaxReasonLen = RuntimeUpgradeMaxReasonLen;
     type MaxRuntimeCodeSize = RuntimeUpgradeMaxCodeSize;
     type MaxSnapshotNonceLength = ConstU32<64>;
@@ -1105,26 +1058,24 @@ impl voting_engine_system::JointVoteResultCallback for RuntimeJointVoteResultCal
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            if resolution_issuance_gov::Pallet::<Runtime>::joint_vote_to_gov(vote_proposal_id)
-                .is_some()
-            {
+            if resolution_issuance_gov::Pallet::<Runtime>::owns_proposal(vote_proposal_id) {
                 return <ResolutionIssuanceGov as voting_engine_system::JointVoteResultCallback>::on_joint_vote_finalized(
                 vote_proposal_id,
                 approved,
             );
             }
 
-            if runtime_root_upgrade::Pallet::<Runtime>::joint_vote_to_gov(vote_proposal_id)
-                .is_some()
-            {
-                return <RuntimeRootUpgrade as voting_engine_system::JointVoteResultCallback>::on_joint_vote_finalized(
+            // runtime_root_upgrade 使用统一 ID，尝试直接回调；
+            // 如果 proposal_id 不属于该模块，on_joint_vote_finalized 会返回 ProposalNotFound。
+            if let Ok(()) = <RuntimeRootUpgrade as voting_engine_system::JointVoteResultCallback>::on_joint_vote_finalized(
                 vote_proposal_id,
                 approved,
-            );
+            ) {
+                return Ok(());
             }
 
             Err(sp_runtime::DispatchError::Other(
-                "joint vote mapping not found",
+                "joint vote proposal not found in any module",
             ))
         }
     }
@@ -1136,6 +1087,7 @@ impl voting_engine_system::Config for Runtime {
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<2_048>;
     type MaxProposalsPerExpiry = ConstU32<2_048>;
+    type MaxProposalDataLen = ConstU32<8192>;
     type MaxCleanupStepsPerBlock = ConstU32<8>;
     type CleanupKeysPerStep = ConstU32<256>;
     type MaxJointDecisionApprovals = MaxAdminsPerInstitution;
@@ -1143,6 +1095,8 @@ impl voting_engine_system::Config for Runtime {
     type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
     type InternalAdminProvider = RuntimeInternalAdminProvider;
+    type InternalThresholdProvider = RuntimeInternalThresholdProvider;
+    type TimeProvider = pallet_timestamp::Pallet<Runtime>;
     type JointInstitutionDecisionVerifier = RuntimeJointInstitutionDecisionVerifier;
     type WeightInfo = voting_engine_system::weights::SubstrateWeight<Runtime>;
 }
@@ -1181,78 +1135,60 @@ mod tests {
 
     #[test]
     fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
+        use codec::Encode;
         new_test_ext().execute_with(|| {
-            let proposal_id = 1u64;
-            let joint_vote_id = 99u64;
+            // 统一 ID：proposal_id 即投票引擎 ID，不再有双 ID 映射
+            let proposal_id = 99u64;
             let recipient =
                 AccountId::new(primitives::china::china_cb::CHINA_CB[1].duoqian_address);
             let total_amount = 123u128;
 
-            let reason: resolution_issuance_gov::pallet::ReasonOf<Runtime> = b"runtime-integration"
-                .to_vec()
-                .try_into()
-                .expect("reason should fit");
-            let allocations: resolution_issuance_gov::pallet::AllocationOf<Runtime> =
-                vec![resolution_issuance_gov::pallet::RecipientAmount {
+            // 直接在投票引擎 ProposalData 中写入带 MODULE_TAG 前缀的业务数据
+            let data = resolution_issuance_gov::pallet::IssuanceProposalData {
+                proposer: recipient.clone(),
+                reason: b"runtime-integration".to_vec(),
+                total_amount,
+                allocations: vec![resolution_issuance_gov::pallet::RecipientAmount {
                     recipient: recipient.clone(),
                     amount: total_amount,
-                }]
-                .try_into()
-                .expect("allocations should fit");
-
-            let proposal = resolution_issuance_gov::pallet::Proposal::<Runtime> {
-                proposer: recipient.clone(),
-                reason: reason.clone(),
-                total_amount,
-                allocations: allocations.clone(),
-                vote_kind: resolution_issuance_gov::pallet::VoteKind::Joint,
-                status: resolution_issuance_gov::pallet::ProposalStatus::Voting,
+                }],
             };
+            let mut encoded = Vec::from(resolution_issuance_gov::MODULE_TAG);
+            encoded.extend_from_slice(&data.encode());
+            voting_engine_system::Pallet::<Runtime>::store_proposal_data(proposal_id, encoded)
+                .expect("store_proposal_data should succeed");
+            voting_engine_system::Pallet::<Runtime>::store_proposal_meta(
+                proposal_id,
+                System::block_number(),
+            );
 
-            resolution_issuance_gov::pallet::Proposals::<Runtime>::insert(proposal_id, proposal);
-            resolution_issuance_gov::pallet::GovToJointVote::<Runtime>::insert(
-                proposal_id,
-                joint_vote_id,
-            );
-            resolution_issuance_gov::pallet::JointVoteToGov::<Runtime>::insert(
-                joint_vote_id,
-                proposal_id,
-            );
             resolution_issuance_gov::pallet::VotingProposalCount::<Runtime>::put(1u32);
             let sfid_hash = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-sfid");
             let nonce_hash = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-nonce");
             sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::insert(
-                joint_vote_id,
+                proposal_id,
                 (sfid_hash, nonce_hash),
                 true,
             );
 
             assert_ok!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(
-                joint_vote_id,
+                proposal_id,
                 true
             ));
 
-            let updated = resolution_issuance_gov::pallet::Proposals::<Runtime>::get(proposal_id)
-                .expect("proposal should exist");
-            assert!(matches!(
-                updated.status,
-                resolution_issuance_gov::pallet::ProposalStatus::Passed
-            ));
-            assert!(
-                resolution_issuance_gov::pallet::GovToJointVote::<Runtime>::get(proposal_id)
-                    .is_none()
+            // 验证 VotingProposalCount 已递减
+            assert_eq!(
+                resolution_issuance_gov::pallet::VotingProposalCount::<Runtime>::get(),
+                0u32
             );
-            assert!(
-                resolution_issuance_gov::pallet::JointVoteToGov::<Runtime>::get(joint_vote_id)
-                    .is_none()
-            );
+
             // 推进区块，让 on_initialize 执行 PendingProposalCleanups 清理 UsedVoteNonce
             let next_block = System::block_number() + 1;
             System::set_block_number(next_block);
             <crate::VotingEngineSystem as Hooks<BlockNumber>>::on_initialize(next_block);
 
             assert!(!sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::get(
-                joint_vote_id,
+                proposal_id,
                 (sfid_hash, nonce_hash)
             ));
 
@@ -1341,14 +1277,13 @@ mod tests {
     }
 
     #[test]
-    fn pow_tx_amount_extractor_covers_duoqian_create_and_close() {
+    fn pow_tx_amount_extractor_covers_duoqian_propose_create_and_close() {
         new_test_ext().execute_with(|| {
             let (p1, _) = sr25519::Pair::generate();
             let (p2, _) = sr25519::Pair::generate();
-            let admin1 = p1.public().0;
-            let admin2 = p2.public().0;
             let signer1 = MultiSigner::from(p1.public());
             let who: AccountId = signer1.into_account();
+            let admin2: AccountId = MultiSigner::from(p2.public()).into_account();
 
             let duoqian_address = AccountId::new([77u8; 32]);
             let beneficiary = AccountId::new([78u8; 32]);
@@ -1358,35 +1293,15 @@ mod tests {
                     .try_into()
                     .expect("sfid id should fit");
             let admins: duoqian_transaction_pow::pallet::DuoqianAdminsOf<Runtime> =
-                vec![admin1, admin2].try_into().expect("admins should fit");
-
-            let create_payload = (
-                b"DUOQIAN_CREATE_V1".to_vec(),
-                &duoqian_address,
-                2u32,
-                &admins,
-                1u32,
-                1_000u128,
-            )
-                .encode();
-            let create_sig = p1.sign(&create_payload).0;
-            let approvals: duoqian_transaction_pow::pallet::AdminApprovalsOf<Runtime> =
-                vec![duoqian_transaction_pow::AdminApproval {
-                    public_key: admin1,
-                    signature: create_sig,
-                }]
-                .try_into()
-                .expect("approvals should fit");
+                vec![who.clone(), admin2.clone()].try_into().expect("admins should fit");
 
             let create_call = RuntimeCall::DuoqianTransactionPow(
-                duoqian_transaction_pow::pallet::Call::create_duoqian {
+                duoqian_transaction_pow::pallet::Call::propose_create {
                     sfid_id,
                     admin_count: 2,
                     duoqian_admins: admins.clone(),
-                    threshold: 1,
+                    threshold: 2,
                     amount: 1_000,
-                    expires_at: 9_999,
-                    approvals,
                 },
             );
             let create_amount = <PowTxAmountExtractor as onchain_transaction_pow::CallAmount<
@@ -1400,30 +1315,10 @@ mod tests {
             }
 
             let _ = Balances::deposit_creating(&duoqian_address, 777);
-            let close_payload = (
-                b"DUOQIAN_CLOSE_V1".to_vec(),
-                &duoqian_address,
-                &beneficiary,
-                2u32,
-                1u32,
-                777u128,
-            )
-                .encode();
-            let close_sig = p1.sign(&close_payload).0;
-            let close_approvals: duoqian_transaction_pow::pallet::AdminApprovalsOf<Runtime> =
-                vec![duoqian_transaction_pow::AdminApproval {
-                    public_key: admin1,
-                    signature: close_sig,
-                }]
-                .try_into()
-                .expect("approvals should fit");
             let close_call = RuntimeCall::DuoqianTransactionPow(
-                duoqian_transaction_pow::pallet::Call::close_duoqian {
+                duoqian_transaction_pow::pallet::Call::propose_close {
                     duoqian_address,
                     beneficiary,
-                    min_balance: 1,
-                    expires_at: 9_999,
-                    approvals: close_approvals,
                 },
             );
             let close_amount = <PowTxAmountExtractor as onchain_transaction_pow::CallAmount<
@@ -1761,15 +1656,61 @@ pub struct RuntimeInternalAdminProvider;
 
 impl voting_engine_system::InternalAdminProvider<AccountId> for RuntimeInternalAdminProvider {
     fn is_internal_admin(
-        _org: u8,
+        org: u8,
         institution: voting_engine_system::InstitutionPalletId,
         who: &AccountId,
     ) -> bool {
-        // 中文注释：生产逻辑只信任链上当前管理员状态；无状态则拒绝（不再回退常量）。
-        if let Some(admins) = admins_origin_gov::CurrentAdmins::<Runtime>::get(institution) {
-            admins.into_inner().iter().any(|admin| admin == who)
-        } else {
-            false
+        match org {
+            // 注册多签机构：从 DuoqianAccounts 读取管理员列表
+            voting_engine_system::internal_vote::ORG_DUOQIAN => {
+                let Ok(account) = AccountId::decode(&mut &institution[..32]) else {
+                    return false;
+                };
+                if let Some(duoqian) =
+                    duoqian_transaction_pow::DuoqianAccounts::<Runtime>::get(&account)
+                {
+                    duoqian.duoqian_admins.iter().any(|admin| admin == who)
+                } else {
+                    false
+                }
+            }
+            // 治理机构（NRC/PRC/PRB）：从 admins_origin_gov 读取管理员
+            _ => {
+                if let Some(admins) =
+                    admins_origin_gov::CurrentAdmins::<Runtime>::get(institution)
+                {
+                    admins.into_inner().iter().any(|admin| admin == who)
+                } else {
+                    false
+                }
+            }
+        }
+    }
+}
+
+pub struct RuntimeInternalThresholdProvider;
+
+impl voting_engine_system::InternalThresholdProvider for RuntimeInternalThresholdProvider {
+    fn pass_threshold(
+        org: u8,
+        institution: voting_engine_system::InstitutionPalletId,
+    ) -> Option<u32> {
+        match org {
+            // 治理机构：硬编码阈值
+            voting_engine_system::internal_vote::ORG_NRC
+            | voting_engine_system::internal_vote::ORG_PRC
+            | voting_engine_system::internal_vote::ORG_PRB => {
+                voting_engine_system::internal_vote::governance_org_pass_threshold(org)
+            }
+            // 注册多签机构：从链上 DuoqianAccounts 动态读取阈值
+            voting_engine_system::internal_vote::ORG_DUOQIAN => {
+                // institution 48 字节 → 解码为 AccountId32 → 查 DuoqianAccounts
+                let account =
+                    AccountId::decode(&mut &institution[..32]).ok()?;
+                let duoqian = duoqian_transaction_pow::DuoqianAccounts::<Runtime>::get(&account)?;
+                Some(duoqian.threshold)
+            }
+            _ => None,
         }
     }
 }

@@ -47,7 +47,6 @@ pub trait WeightInfo {
 	fn propose_resolution_issuance() -> Weight;
 	fn finalize_joint_vote_approved() -> Weight;
 	fn finalize_joint_vote_rejected() -> Weight;
-	fn retry_failed_execution() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -162,32 +161,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(3))
 			.saturating_add(T::DbWeight::get().writes(8))
 	}
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionIssuanceGov::Proposals` (r:1 w:1)
-	/// Proof: `ResolutionIssuanceGov::Proposals` (`max_values`: None, `max_size`: Some(3165), added: 5640, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionIssuanceGov::RetryCount` (r:1 w:1)
-	/// Proof: `ResolutionIssuanceGov::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionIssuanceIss::Paused` (r:1 w:0)
-	/// Proof: `ResolutionIssuanceIss::Paused` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionIssuanceIss::EverExecuted` (r:1 w:1)
-	/// Proof: `ResolutionIssuanceIss::EverExecuted` (`max_values`: None, `max_size`: Some(16), added: 2491, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionIssuanceIss::TotalIssued` (r:1 w:1)
-	/// Proof: `ResolutionIssuanceIss::TotalIssued` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
-	/// Storage: `System::Account` (r:43 w:43)
-	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionIssuanceIss::Executed` (r:0 w:1)
-	/// Proof: `ResolutionIssuanceIss::Executed` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	fn retry_failed_execution() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `6106`
-		//  Estimated: `112919`
-		// Minimum execution time: 1_004_001_000 picoseconds.
-		Weight::from_parts(1_008_139_000, 0)
-			.saturating_add(Weight::from_parts(0, 112919))
-			.saturating_add(T::DbWeight::get().reads(49))
-			.saturating_add(T::DbWeight::get().writes(48))
-	}
 }
 
 impl WeightInfo for () {
@@ -300,31 +273,5 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 6630))
 			.saturating_add(RocksDbWeight::get().reads(3))
 			.saturating_add(RocksDbWeight::get().writes(8))
-	}
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionIssuanceGov::Proposals` (r:1 w:1)
-	/// Proof: `ResolutionIssuanceGov::Proposals` (`max_values`: None, `max_size`: Some(3165), added: 5640, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionIssuanceGov::RetryCount` (r:1 w:1)
-	/// Proof: `ResolutionIssuanceGov::RetryCount` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionIssuanceIss::Paused` (r:1 w:0)
-	/// Proof: `ResolutionIssuanceIss::Paused` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionIssuanceIss::EverExecuted` (r:1 w:1)
-	/// Proof: `ResolutionIssuanceIss::EverExecuted` (`max_values`: None, `max_size`: Some(16), added: 2491, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionIssuanceIss::TotalIssued` (r:1 w:1)
-	/// Proof: `ResolutionIssuanceIss::TotalIssued` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
-	/// Storage: `System::Account` (r:43 w:43)
-	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionIssuanceIss::Executed` (r:0 w:1)
-	/// Proof: `ResolutionIssuanceIss::Executed` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	fn retry_failed_execution() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `6106`
-		//  Estimated: `112919`
-		// Minimum execution time: 1_004_001_000 picoseconds.
-		Weight::from_parts(1_008_139_000, 0)
-			.saturating_add(Weight::from_parts(0, 112919))
-			.saturating_add(RocksDbWeight::get().reads(49))
-			.saturating_add(RocksDbWeight::get().writes(48))
 	}
 }

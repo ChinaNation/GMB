@@ -1,10 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{ensure, pallet_prelude::*, traits::Currency, Blake2_128Concat};
+use frame_support::{ensure, pallet_prelude::*, traits::Currency};
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
-use sp_runtime::traits::{CheckedAdd, Zero};
+use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 
 use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
 use primitives::china::china_ch::{
@@ -12,7 +12,7 @@ use primitives::china::china_ch::{
 };
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, STATUS_PASSED, STATUS_REJECTED,
+    InstitutionPalletId, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -88,6 +88,7 @@ pub mod pallet {
     use crate::weights::WeightInfo;
     use duoqian_transaction_pow::ProtectedSourceChecker;
     use frame_support::traits::ExistenceRequirement;
+    use frame_support::traits::OnUnbalanced;
     use voting_engine_system::InternalAdminProvider;
     use voting_engine_system::InternalVoteEngine;
 
@@ -108,6 +109,11 @@ pub mod pallet {
         /// 受保护地址检查器（复用 duoqian-transaction-pow 的 trait）
         type ProtectedSourceChecker: duoqian_transaction_pow::ProtectedSourceChecker<Self::AccountId>;
 
+        /// 手续费分账路由（复用 PowOnchainFeeRouter）
+        type FeeRouter: frame_support::traits::OnUnbalanced<
+            <Self::Currency as Currency<Self::AccountId>>::NegativeImbalance,
+        >;
+
         /// Weight 配置
         type WeightInfo: crate::weights::WeightInfo;
     }
@@ -115,25 +121,8 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    #[pallet::storage]
-    #[pallet::getter(fn proposal_action)]
-    pub type ProposalActions<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        u64,
-        TransferAction<T::AccountId, BalanceOf<T>, T::MaxRemarkLen>,
-        OptionQuery,
-    >;
-
-    #[pallet::storage]
-    #[pallet::getter(fn proposal_created_at)]
-    pub type ProposalCreatedAt<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, BlockNumberFor<T>, OptionQuery>;
-
-    #[pallet::storage]
-    #[pallet::getter(fn active_proposal_by_institution)]
-    pub type ActiveProposalByInstitution<T: Config> =
-        StorageMap<_, Blake2_128Concat, InstitutionPalletId, u64, OptionQuery>;
+    // 活跃提案数限制已移至 voting-engine-system::active_proposal_limit 全局管控。
+    // 提案业务数据和元数据已统一存储到 voting-engine-system（ProposalData / ProposalMeta）。
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -158,12 +147,13 @@ pub mod pallet {
             proposal_id: u64,
             institution: InstitutionPalletId,
         },
-        /// 转账已执行（投票通过后自动触发）
+        /// 转账已执行（投票通过后自动触发，含手续费分账）
         TransferExecuted {
             proposal_id: u64,
             institution: InstitutionPalletId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
+            fee: BalanceOf<T>,
         },
     }
 
@@ -228,8 +218,7 @@ pub mod pallet {
                 Error::<T>::BeneficiaryIsProtectedAddress
             );
 
-            // 一机构一提案
-            Self::ensure_no_active_proposal(institution)?;
+            // 活跃提案数由 voting-engine-system 在 create_internal_proposal 中统一检查
 
             // 预检余额
             let free = T::Currency::free_balance(&institution_account);
@@ -242,18 +231,19 @@ pub mod pallet {
             let proposal_id =
                 T::InternalVoteEngine::create_internal_proposal(who.clone(), org, institution)?;
 
-            ProposalActions::<T>::insert(
+            let action = TransferAction {
+                institution,
+                beneficiary: beneficiary.clone(),
+                amount,
+                remark,
+                proposer: who.clone(),
+            };
+            let data = action.encode();
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            voting_engine_system::Pallet::<T>::store_proposal_meta(
                 proposal_id,
-                TransferAction {
-                    institution,
-                    beneficiary: beneficiary.clone(),
-                    amount,
-                    remark,
-                    proposer: who.clone(),
-                },
+                frame_system::Pallet::<T>::block_number(),
             );
-            ProposalCreatedAt::<T>::insert(proposal_id, frame_system::Pallet::<T>::block_number());
-            ActiveProposalByInstitution::<T>::insert(institution, proposal_id);
 
             Self::deposit_event(Event::<T>::TransferProposed {
                 proposal_id,
@@ -276,8 +266,12 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let action =
-                ProposalActions::<T>::get(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
+            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            let action = TransferAction::<T::AccountId, BalanceOf<T>, T::MaxRemarkLen>::decode(
+                &mut &data[..],
+            )
+            .map_err(|_| Error::<T>::ProposalActionNotFound)?;
             let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 Self::is_internal_admin(org, action.institution, &who),
@@ -298,15 +292,11 @@ pub mod pallet {
                     // 投票通过，尝试自动执行转账
                     let institution = action.institution;
                     if Self::execute_transfer_from_action(proposal_id, action).is_err() {
-                        // 执行失败：投票已记录不回滚，清理提案让管理员重新发起
-                        Self::cleanup_proposal(institution, proposal_id);
                         Self::deposit_event(Event::<T>::TransferExecutionFailed {
                             proposal_id,
                             institution,
                         });
                     }
-                } else if proposal.status == STATUS_REJECTED {
-                    Self::cleanup_proposal(action.institution, proposal_id);
                 }
             }
             Ok(())
@@ -326,27 +316,6 @@ pub mod pallet {
             )
         }
 
-        fn ensure_no_active_proposal(institution: InstitutionPalletId) -> DispatchResult {
-            if let Some(existing_id) = ActiveProposalByInstitution::<T>::get(institution) {
-                if ProposalActions::<T>::contains_key(existing_id) {
-                    if let Some(proposal) =
-                        voting_engine_system::Pallet::<T>::proposals(existing_id)
-                    {
-                        if proposal.status == STATUS_REJECTED {
-                            // 已拒绝的提案可以被覆盖
-                            Self::cleanup_proposal(institution, existing_id);
-                            return Ok(());
-                        }
-                        // 仍在投票中或其他状态，不允许创建新提案
-                        return Err(Error::<T>::ActiveProposalExists.into());
-                    }
-                }
-                // 投票引擎中已不存在，清理孤儿数据
-                Self::cleanup_proposal(institution, existing_id);
-            }
-            Ok(())
-        }
-
         fn execute_transfer_from_action(
             proposal_id: u64,
             action: TransferAction<T::AccountId, BalanceOf<T>, T::MaxRemarkLen>,
@@ -356,14 +325,24 @@ pub mod pallet {
             let institution_account = T::AccountId::decode(&mut &raw_account[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
 
+            // ── 计算手续费（复用 onchain-transaction-pow 公共接口） ──
+            let amount_u128: u128 = action.amount.saturated_into();
+            let fee_u128 = onchain_transaction_pow::calculate_onchain_fee(amount_u128);
+            let fee: BalanceOf<T> = fee_u128.saturated_into();
+            let total = action
+                .amount
+                .checked_add(&fee)
+                .ok_or(Error::<T>::InsufficientBalance)?;
+
+            // ── 余额检查：需要 total + ED ──
             let free = T::Currency::free_balance(&institution_account);
             let ed = T::Currency::minimum_balance();
-            let required = action
-                .amount
+            let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
             ensure!(free >= required, Error::<T>::InsufficientBalance);
 
+            // ── 执行转账 ──
             T::Currency::transfer(
                 &institution_account,
                 &action.beneficiary,
@@ -372,28 +351,24 @@ pub mod pallet {
             )
             .map_err(|_| Error::<T>::TransferFailed)?;
 
-            Self::cleanup_proposal(action.institution, proposal_id);
+            // ── 手续费：从机构账户扣取，通过 FeeRouter 按现有规则分账 ──
+            let fee_imbalance = T::Currency::withdraw(
+                &institution_account,
+                fee,
+                frame_support::traits::WithdrawReasons::FEE,
+                ExistenceRequirement::KeepAlive,
+            )
+            .map_err(|_| Error::<T>::InsufficientBalance)?;
+            T::FeeRouter::on_unbalanced(fee_imbalance);
 
             Self::deposit_event(Event::<T>::TransferExecuted {
                 proposal_id,
                 institution: action.institution,
                 beneficiary: action.beneficiary,
                 amount: action.amount,
+                fee,
             });
             Ok(())
-        }
-
-        fn remove_active_proposal_if_matches(institution: InstitutionPalletId, proposal_id: u64) {
-            if ActiveProposalByInstitution::<T>::get(institution) == Some(proposal_id) {
-                ActiveProposalByInstitution::<T>::remove(institution);
-            }
-        }
-
-        fn cleanup_proposal(institution: InstitutionPalletId, proposal_id: u64) {
-            ProposalActions::<T>::remove(proposal_id);
-            ProposalCreatedAt::<T>::remove(proposal_id);
-            Self::remove_active_proposal_if_matches(institution, proposal_id);
-            T::InternalVoteEngine::cleanup_internal_proposal(proposal_id);
         }
     }
 }
@@ -542,6 +517,13 @@ mod tests {
         }
     }
 
+    pub struct TestTimeProvider;
+    impl frame_support::traits::UnixTime for TestTimeProvider {
+        fn now() -> core::time::Duration {
+            core::time::Duration::from_secs(1_782_864_000) // 2026-07-01
+        }
+    }
+
     impl voting_engine_system::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
@@ -555,7 +537,10 @@ mod tests {
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
+        type InternalThresholdProvider = ();
+        type MaxProposalDataLen = ConstU32<1024>;
         type JointInstitutionDecisionVerifier = ();
+        type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
 
@@ -565,6 +550,7 @@ mod tests {
         type MaxRemarkLen = ConstU32<256>;
         type InternalVoteEngine = voting_engine_system::Pallet<Test>;
         type ProtectedSourceChecker = TestProtectedSourceChecker;
+        type FeeRouter = ();
         type WeightInfo = ();
     }
 
@@ -650,10 +636,8 @@ mod tests {
             // 转账已执行
             assert_eq!(Balances::free_balance(&inst_account), 9_000);
             assert_eq!(Balances::free_balance(&dest), 1_000);
-            // 提案已清理
-            assert!(DuoqianTransferPow::proposal_action(0).is_none());
-            assert!(voting_engine_system::Pallet::<Test>::proposals(0).is_none());
-            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
+            // 提案数据仍保留（由 voting-engine-system 延迟清理）
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
         });
     }
 
@@ -683,7 +667,7 @@ mod tests {
 
             assert_eq!(Balances::free_balance(&inst_account), 8_000);
             assert_eq!(Balances::free_balance(&dest), 2_000);
-            assert!(DuoqianTransferPow::proposal_action(0).is_none());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
         });
     }
 
@@ -713,7 +697,7 @@ mod tests {
 
             assert_eq!(Balances::free_balance(&inst_account), 7_000);
             assert_eq!(Balances::free_balance(&dest), 3_000);
-            assert!(DuoqianTransferPow::proposal_action(0).is_none());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
         });
     }
 
@@ -841,7 +825,7 @@ mod tests {
     }
 
     #[test]
-    fn active_proposal_blocks_new_proposal() {
+    fn multiple_proposals_allowed_within_limit() {
         new_test_ext().execute_with(|| {
             let institution = nrc_pallet_id();
             let dest = beneficiary();
@@ -855,17 +839,15 @@ mod tests {
                 BoundedVec::default(),
             ));
 
-            assert_noop!(
-                DuoqianTransferPow::propose_transfer(
-                    RuntimeOrigin::signed(nrc_admin(0)),
-                    ORG_NRC,
-                    institution,
-                    dest,
-                    200,
-                    BoundedVec::default(),
-                ),
-                Error::<Test>::ActiveProposalExists
-            );
+            // 活跃提案数限制由 voting-engine-system 全局管控（上限 10），第二个提案可以成功
+            assert_ok!(DuoqianTransferPow::propose_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                dest,
+                200,
+                BoundedVec::default(),
+            ));
         });
     }
 
@@ -901,10 +883,6 @@ mod tests {
                 200,
                 BoundedVec::default(),
             ));
-            assert_eq!(
-                ActiveProposalByInstitution::<Test>::get(institution),
-                Some(1)
-            );
         });
     }
 
@@ -947,10 +925,6 @@ mod tests {
                 50,
                 BoundedVec::default(),
             ));
-            assert_eq!(
-                ActiveProposalByInstitution::<Test>::get(institution),
-                Some(1)
-            );
         });
     }
 

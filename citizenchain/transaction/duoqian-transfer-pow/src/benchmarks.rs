@@ -12,8 +12,8 @@ use voting_engine_system::InternalVoteEngine;
 
 use crate::Pallet as DuoqianTransferPow;
 use crate::{
-    institution_pallet_address, reserve_pallet_id_to_bytes, ActiveProposalByInstitution, BalanceOf,
-    Call, Config, InstitutionPalletId, Pallet, ProposalActions, CHINA_CB, ORG_PRC,
+    institution_pallet_address, reserve_pallet_id_to_bytes, BalanceOf, Call, Config,
+    InstitutionPalletId, Pallet, CHINA_CB, ORG_PRC,
 };
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
@@ -62,8 +62,8 @@ mod benchmarks {
             BoundedVec::default(),
         );
 
-        assert_eq!(ActiveProposalByInstitution::<T>::get(institution), Some(0));
-        assert!(ProposalActions::<T>::contains_key(0));
+        // 提案业务数据已存储到 voting-engine-system
+        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(0).is_some());
     }
 
     #[benchmark]
@@ -96,7 +96,7 @@ mod benchmarks {
         #[extrinsic_call]
         vote_transfer(RawOrigin::Signed(final_voter), 0, true);
 
-        // 第 6 票达到阈值，转账自动执行，提案已清理
-        assert!(!ProposalActions::<T>::contains_key(0));
+        // 第 6 票达到阈值，转账自动执行；提案数据由 voting-engine-system 延迟清理
+        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(0).is_some());
     }
 }

@@ -34,7 +34,7 @@
 | --- | --- | --- |
 | `account` | `AccountId32` | SS58 地址字符串（当前链 `ss58 = 2027`） |
 | `institution` | `[u8; 48]` | `0x` + 96 hex（机构 pallet id） |
-| `proposal_id` | `u64` | 十进制整数 |
+| `proposal_id` | `u64` | 年份编码：`年份 × 1,000,000 + 年内计数器`，如 `2026000001`，App 显示为 `2026#1` |
 | `approve/internal_passed` | `bool` | `true/false` |
 | `expires_at` | `BlockNumber` | 十进制整数，必须是链上仍未过期的 proof 截止块 |
 | `nonce` | `BoundedVec<u8, 64>` | `0x` hex，解码后字节长度 `1..64` |
@@ -50,7 +50,7 @@
 
 ### 3.2 枚举与编码
 
-- `org`：`0 = NRC(国储会)`，`1 = PRC(省储会)`，`2 = PRB(省储行)`。
+- `org`：`0 = NRC(国储会)`，`1 = PRC(省储会)`，`2 = PRB(省储行)`，`3 = DUOQIAN(注册多签机构)`。
 - proposal kind：`0 = internal`，`1 = joint`。
 - stage：`0 = internal`，`1 = joint`，`2 = citizen`。
 - status：`0 = voting`，`1 = passed`，`2 = rejected`。
@@ -59,9 +59,10 @@
 
 - 单阶段投票时长：`VOTING_DURATION_BLOCKS`（当前为 30 天对应区块数）。
 - 内部投票通过阈值：
-  - NRC：`13`
-  - PRC：`6`
-  - PRB：`6`
+  - NRC：`13`（硬编码）
+  - PRC：`6`（硬编码）
+  - PRB：`6`（硬编码）
+  - DUOQIAN：`用户注册时设定的 threshold`（链上 `DuoqianAccounts.threshold` 动态读取）
 - 联合投票权重：
   - NRC：`19`
   - 每个 PRC：`1`
@@ -239,7 +240,62 @@ message = blake2_256(SCALE.encode(payload))
 
 - 投票引擎在 `on_initialize` 自动做到期结算（支持分桶分批）。
 - 业务 pallet 允许在部分场景手动执行或重试（如执行失败补偿）。
-- App 端必须支持“最终状态后停止轮询”，避免重复提交。
+- App 端必须支持”最终状态后停止轮询”，避免重复提交。
+
+### 6.4 统一数据存储与自动清理
+
+投票引擎统一存储所有提案数据（投票数据 + 业务数据），统一清理。业务模块不存储任何提案数据，不实现任何清理逻辑。
+
+**统一存储：**
+
+| Storage | 说明 | 写入方 |
+| --- | --- | --- |
+| `Proposals` | 提案基本信息（状态、起止区块） | 投票引擎 |
+| `ProposalData` | 业务详情（序列化的 BoundedVec\<u8\>） | 业务模块通过 `store_proposal_data()` |
+| `ProposalMeta` | 辅助元数据（创建时间、通过时间） | 业务模块通过 `store_proposal_meta()` |
+| `InternalTallies` / `JointTallies` / `CitizenTallies` | 投票计数 | 投票引擎 |
+| `InternalVotesByAccount` / `JointVotesByInstitution` / `CitizenVotesBySfid` | 投票记录 | 投票引擎 |
+| `ActiveProposalsByInstitution` | 每机构活跃提案列表（上限 10） | 投票引擎 |
+
+**自动清理策略（统一清理路径）：**
+- 提案完成（通过/拒绝/过期）时注册延迟清理：`schedule_cleanup(proposal_id, current_block)`
+- 清理时间 = 完成时区块 + **90 天**区块数
+- 如果目标区块的队列已满（50 个），自动顺延到下一个区块，保证不丢失
+- 每区块 `on_initialize` 检查 `CleanupQueue[当前区块]`，到期后触发清理
+- 每区块最多触发 **5 个**提案进入清理流程，未处理完的保留在队列中，下个区块继续
+- 实际数据删除委托给 `PendingProposalCleanups` 分块状态机，保证大量投票记录（如公民投票上万条）能分多个区块完成
+- 清理状态机阶段：`InternalVotes → JointVotes → CitizenVotes → VoteCredentials → FinalCleanup`
+- 提案结束（通过/拒绝/过期）时，活跃提案名额在 `set_status_and_emit` 中**立即释放**，不依赖业务模块
+- `on_initialize` weight 使用预估最大值（`cleanup_limit` 次读写），确保不超出声明的 weight
+- `UsedPopulationSnapshotNonce`（联合提案防重放）不清理（联合提案极少，累计存储量可忽略）
+
+**清理范围（全部）：**
+
+| Storage | 说明 |
+| --- | --- |
+| `Proposals` | 提案基本信息 |
+| `ProposalData` | 业务详情（转账/销毁/换管理员等所有类型） |
+| `ProposalMeta` | 辅助元数据 |
+| `InternalTallies` / `JointTallies` / `CitizenTallies` | 投票计数 |
+| `InternalVotesByAccount` / `JointVotesByInstitution` / `CitizenVotesBySfid` | 投票记录 |
+| `PendingProposalCleanups` | 分块清理游标 |
+| `ActiveProposalsByInstitution`（兜底移除） | 活跃提案列表 |
+
+**查询时效：**
+- 90 天内：可查完整投票细节和业务详情
+- 90 天后：仅可通过区块中的交易记录和事件查询
+- 永久：区块中的交易记录和事件不受影响
+
+**业务模块改造：**
+- 所有模块的 `ProposalActions`、`ProposalCreatedAt`、`ProposalPassedAt`、`ActiveProposalByInstitution` 等 Storage 已删除
+- 所有 `cancel_stale_*` extrinsic 已删除
+- 所有 `cleanup_inactive_proposal` 函数已删除
+- `resolution-issuance-gov` 和 `runtime-root-upgrade` 的独立 ID 体系（`NextProposalId`、`GovToJointVote`、`JointVoteToGov`）已删除，直接使用投票引擎 proposal_id
+
+关键文件：
+- `voting-engine-system/src/proposal_cleanup.rs`（清理逻辑）
+- `voting-engine-system/src/active_proposal_limit.rs`（活跃提案限制）
+- `voting-engine-system/src/lib.rs`（ProposalData/ProposalMeta/CleanupQueue Storage + 公共接口）
 
 ## 7. App 侧管理员权限检测与机构详情
 
@@ -261,7 +317,41 @@ message = blake2_256(SCALE.encode(payload))
    - 非管理员用户：卡片不可点击，不显示右箭头。
 2. **管理员身份标识**（仅管理员可见）：绿色提示条"你是本机构管理员，点击上方卡片可发起提案"。
 3. **管理员列表入口**：所有用户可见，点击进入管理员列表页。
-4. **投票事件列表**：所有用户可见，展示该机构的提案投票事件（当前为占位状态）。
+4. **投票事件列表**：所有用户可见，扫描 `NextProposalId` 范围内所有提案，按 ID 倒序显示，区分状态标签（投票中/已通过/已拒绝）。支持多管理员钱包选择。
+
+### 7.2.1 全局提案列表（投票 tab）
+
+公民页面的"投票"tab 展示全链所有提案（不分机构），按提案 ID 倒序（新的在上）。
+
+**四层优化架构**：
+
+| 层 | 说明 | 文件 |
+| --- | --- | --- |
+| WebSocket 订阅 | `chain_subscribeNewHeads` 监听新区块，自动检测新提案插入列表顶部 | `lib/rpc/chain_event_subscription.dart` |
+| 本地内存缓存 | ProposalMeta / TransferProposalInfo 缓存，避免重复 RPC | `lib/governance/proposal_cache.dart` |
+| 批量查询 | `state_queryStorageAt` 一次 RPC 查多个 key，减少网络往返 | `chain_rpc.dart::fetchStorageBatch` |
+| 分页加载 | 首屏 10 个，ScrollController 滚动触底加载更多 | `all_proposals_view.dart` |
+
+**数据流**：首屏 → 分页取最新 10 个 ID → 缓存命中直接显示，未命中批量查 → 存缓存 → WebSocket 后台监听新区块 → 有新提案自动插入顶部。
+
+**投票权判断**：
+- 遍历用户所有钱包 → 比对每个提案所属机构的管理员列表
+- 是管理员且未投票且状态=投票中 → 提案卡片显示红点
+- 进入详情页后：有投票权显示投票按钮，无投票权不显示
+
+**红点通知**：
+- 提案卡片右上角：该提案需要用户投票 → 红点
+- 底部"公民"tab 图标：汇总待投票数 → 带数字红点
+
+**投票权类型（分阶段实现）**：
+
+| 类型 | 判断依据 | 状态 |
+| --- | --- | --- |
+| 管理员投票 | 钱包是 NRC/PRC/PRB 管理员 | ✅ 已实现 |
+| 公民投票 | 钱包绑定了 SFID | ⏭️ 后期 |
+| 多签地址投票 | 钱包是多签地址的管理员 | ⏭️ 后期 |
+
+关键文件：`lib/governance/all_proposals_view.dart`
 
 ### 7.3 权限控制规则
 
@@ -271,6 +361,16 @@ message = blake2_256(SCALE.encode(payload))
 | 非管理员 | 机构详情页、管理员列表、投票事件列表 |
 
 核心原则：**只有管理员才能进入提案类型页面发起提案**，非管理员用户只能查看机构信息、管理员列表和投票事件。
+
+### 7.3.1 活跃提案数量限制
+
+每个机构（`InstitutionPalletId`）同时最多允许 **10 个活跃提案**，不区分提案类型（转账、销毁、换管理员等），由投票引擎（`voting-engine-system::active_proposal_limit`）统一管控。
+
+- 创建提案时：`try_add_active_proposal()` 检查并添加
+- 提案完成时：`remove_active_proposal()` 在 `set_status_and_emit` 中立即释放（提案通过/拒绝/过期时）
+- App 端发起提案前异步查询活跃数，达上限弹窗提示"提案数量已达上限"
+
+关键文件：`voting-engine-system/src/active_proposal_limit.rs`
 
 ### 7.4 提案类型页面
 
@@ -286,7 +386,70 @@ message = blake2_256(SCALE.encode(payload))
 - 验证密钥：更换 GRANDPA 共识验证密钥
 - 状态升级：Runtime 升级，需联合投票+公民投票
 
-### 7.5 管理员列表页面
+### 7.5 转账提案功能（已实现）
+
+#### 7.5.1 链上模块
+
+`duoqian-transfer-pow`（pallet_index=19）提供 2 个 extrinsic：
+
+| Extrinsic | call_index | 说明 |
+| --- | --- | --- |
+| `propose_transfer(org, institution, beneficiary, amount, remark)` | 0 | 管理员发起转账提案 |
+| `vote_transfer(proposal_id, approve)` | 1 | 管理员投票，达到阈值自动执行 |
+
+投票通过后自动执行 `Currency::transfer(duoqian_address → beneficiary)`。
+执行失败不回滚投票，发出 `TransferExecutionFailed` 事件，清理提案，管理员需重新发起。
+
+#### 7.5.1.1 手续费模型
+
+**提案提交和投票均免费**（`CallAmount` 返回 `NoAmount`），管理员个人账户零消耗，0 余额管理员也能操作。
+
+**手续费仅在投票通过后执行转账时扣取**，从机构 `duoqian_address` 一次性扣除 `转账金额 + 手续费`。
+
+手续费计算公式（与链上交易费一致）：
+- 费率：`amount × 0.1%`
+- 单笔最低：`10 分（0.1 元）`
+
+手续费按制度规则三方分账：
+| 接收方 | 比例 | 说明 |
+| --- | --- | --- |
+| 全节点矿工奖励钱包 | 80% | 通过 `MinerRewardWalletProvider` 查找当前区块矿工绑定钱包 |
+| 国储会账户 | 10% | 通过 `NrcAccountProvider` 提供 |
+| 销毁（黑洞） | 10% | 直接从流通中移除 |
+
+分账在 pallet 内部的 `distribute_fee` 函数中完成，与 `PowOnchainFeeRouter` 规则一致。
+
+#### 7.5.2 App 侧页面
+
+| 页面 | 文件 | 说明 |
+| --- | --- | --- |
+| 转账表单 | `transfer_proposal_page.dart` | 填写收款地址、金额、备注，校验后签名提交 |
+| 提案详情 | `transfer_proposal_detail_page.dart` | 查看提案信息（含备注折叠展开）、投票进度、管理员投票明细、投票操作 |
+
+#### 7.5.2.1 签名方式
+
+所有需要签名的操作（发起提案、投票、普通转账）统一检查钱包类型：
+- **热钱包**（`signMode == 'local'`）：通过 `WalletManager.signWithWallet()` 本地签名，私钥不出类
+- **冷钱包**（`signMode == 'external'`）：通过 `QrSigner` 协议（`WUMINAPP_QR_SIGN_V1`）发起扫码签名会话，导航到 `QrSignSessionPage` 展示请求二维码，用户用离线设备扫码签名后扫描回执二维码获取签名
+
+#### 7.5.3 App 侧服务
+
+`TransferProposalService`（`transfer_proposal_service.dart`）封装：
+- Extrinsic 编码（SCALE 编码 call data）和签名提交
+- Storage 查询：活跃提案 ID、投票计数、提案状态、管理员投票记录
+- 机构余额查询
+
+#### 7.5.4 Extrinsic SCALE 编码
+
+**propose_transfer**: `[0x13][0x00][org:u8][institution:48B][beneficiary:32B][amount:u128_le_16B][Vec remark]`
+**vote_transfer**: `[0x13][0x01][proposal_id:u64_le][approve:bool]`
+
+#### 7.5.5 机构 duoqian_address
+
+每个 `InstitutionInfo` 包含 `duoqianAddress` 字段（32 字节 hex），来源于 `primitives` 中的 `duoqian_address`。
+通过 `Keyring().encodeAddress(bytes, 2027)` 转为 SS58 地址展示。
+
+### 7.6 管理员列表页面
 
 管理员列表页面（`AdminListPage`）展示：
 - 机构名称与类型标签
@@ -303,25 +466,93 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 
 | 文件 | 说明 |
 | --- | --- |
-| `lib/governance/institution_data.dart` | 87 个机构静态注册表（name、shenfenId、orgType） |
+| `lib/governance/all_proposals_view.dart` | 全局提案列表（分页 + 缓存 + WebSocket + 红点通知） |
+| `lib/governance/proposal_cache.dart` | 提案内存缓存（Meta + Detail） |
+| `lib/rpc/chain_event_subscription.dart` | WebSocket 链事件订阅（新区块通知 + 自动重连） |
+| `lib/governance/institution_data.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
 | `lib/governance/institution_admin_service.dart` | 链上管理员查询服务（RPC + SCALE 解码 + 缓存） |
-| `lib/governance/institution_detail_page.dart` | 机构详情页（管理员检测 + 条件 UI） |
-| `lib/governance/proposal_types_page.dart` | 提案类型选择页（按机构类型过滤） |
+| `lib/governance/institution_detail_page.dart` | 机构详情页（管理员检测 + 条件 UI + 投票事件列表） |
+| `lib/governance/proposal_types_page.dart` | 提案类型选择页（转账已接入真实页面） |
 | `lib/governance/admin_list_page.dart` | 管理员列表页（SS58 地址展示） |
+| `lib/governance/transfer_proposal_page.dart` | 转账提案创建页（表单 + 校验 + 签名提交） |
+| `lib/governance/transfer_proposal_detail_page.dart` | 转账提案详情页（投票进度 + 管理员明细 + 投票操作） |
+| `lib/governance/transfer_proposal_service.dart` | 转账提案链上交互服务（extrinsic 编码 + storage 查询） |
 | `lib/rpc/chain_rpc.dart` | RPC 服务（含 `fetchStorage` 公开方法） |
 | `lib/main.dart` | 机构列表结构化（`InstitutionInfo`）+ 卡片点击跳转 |
 
-## 8. 源码对齐基线
+## 8. 注册多签机构（duoqian-transaction-pow）
+
+### 8.1 概述
+
+`duoqian-transaction-pow` 模块为非治理机构提供多人管理的公共支出账户。所有操作（创建、关闭）通过投票引擎的内部投票机制执行，与治理机构（NRC/PRC/PRB）使用同一套投票、存储、清理基础设施。
+
+### 8.2 机构类型
+
+注册多签机构使用 `org = 3`（`ORG_DUOQIAN`），与治理机构 org 0/1/2 并列。
+
+`InstitutionPalletId`（48 字节）= `duoqian_address`（32 字节 AccountId）+ 16 字节零填充。
+
+### 8.3 动态阈值与管理员
+
+| 项目 | 治理机构（NRC/PRC/PRB） | 注册多签机构（DUOQIAN） |
+| --- | --- | --- |
+| 管理员来源 | `admins_origin_gov::CurrentAdmins`（创世/治理替换） | `DuoqianAccounts.duoqian_admins`（注册时设定） |
+| 阈值来源 | 硬编码（13/6/6） | `DuoqianAccounts.threshold`（注册时设定） |
+| 管理员存储类型 | `AccountId` | `AccountId` |
+
+通过 `InternalThresholdProvider` trait 和 `InternalAdminProvider` trait，投票引擎动态查询阈值和管理员列表。
+
+### 8.4 Extrinsic
+
+| Extrinsic | call_index | 说明 | 投票 |
+| --- | --- | --- | --- |
+| `register_sfid_institution(sfid_id)` | 2 | SFID 系统登记机构，派生多签地址 | 不需要 |
+| `propose_create(sfid_id, admin_count, admins, threshold, amount)` | 0 | 发起"创建多签账户"提案 | 投票引擎 |
+| `vote_create(proposal_id, approve)` | 3 | 创建提案投票，达标自动激活账户并转入资金 | 投票引擎 |
+| `propose_close(duoqian_address, beneficiary)` | 1 | 发起"关闭多签账户"提案 | 投票引擎 |
+| `vote_close(proposal_id, approve)` | 4 | 关闭提案投票，达标自动转出余额并删除账户 | 投票引擎 |
+
+### 8.5 创建流程（Pending → Active）
+
+1. 管理员调用 `propose_create` → 写入 `DuoqianAccounts`（status=Pending）+ 投票引擎创建提案
+2. 其他管理员调用 `vote_create` → 投票引擎记票
+3. 达到 threshold → 自动执行：`Currency::transfer` 转入资金 + `DuoqianAccounts.status` 改为 Active
+4. 投票超时/否决 → 删除 Pending 状态的 `DuoqianAccounts`
+
+### 8.6 关闭流程
+
+1. 管理员调用 `propose_close` → 投票引擎创建提案
+2. 其他管理员调用 `vote_close` → 投票引擎记票
+3. 达到 threshold → 自动执行：`Currency::transfer` 转出全部余额 + 删除 `DuoqianAccounts`
+
+### 8.7 关键文件
+
+| 文件 | 说明 |
+| --- | --- |
+| `duoqian-transaction-pow/src/lib.rs` | 注册、创建、关闭业务逻辑 |
+| `voting-engine-system/src/internal_vote.rs` | 投票引擎（含 ORG_DUOQIAN 支持） |
+| `voting-engine-system/src/lib.rs` | InternalThresholdProvider trait |
+| `runtime/src/configs/mod.rs` | RuntimeInternalThresholdProvider + RuntimeInternalAdminProvider |
+
+## 9. 源码对齐基线
 
 - `lib/governance/institution_data.dart`
 - `lib/governance/institution_admin_service.dart`
 - `lib/governance/institution_detail_page.dart`
 - `lib/governance/proposal_types_page.dart`
 - `lib/governance/admin_list_page.dart`
+- `lib/governance/transfer_proposal_page.dart`
+- `lib/governance/transfer_proposal_detail_page.dart`
+- `lib/governance/transfer_proposal_service.dart`
 - `lib/rpc/chain_rpc.dart`
+- `citizenchain/transaction/duoqian-transfer-pow/src/lib.rs`
+- `citizenchain/transaction/duoqian-transaction-pow/src/lib.rs`
 - `citizenchain/governance/voting-engine-system/src/lib.rs`
+- `citizenchain/governance/voting-engine-system/src/internal_vote.rs`
 - `citizenchain/governance/voting-engine-system/src/joint_vote.rs`
 - `citizenchain/governance/voting-engine-system/src/citizen_vote.rs`
+- `citizenchain/governance/voting-engine-system/src/proposal_cleanup.rs`
+- `citizenchain/governance/voting-engine-system/src/active_proposal_limit.rs`
 - `citizenchain/governance/resolution-issuance-gov/src/lib.rs`
 - `citizenchain/governance/runtime-root-upgrade/src/lib.rs`
 - `citizenchain/governance/admins-origin-gov/src/lib.rs`

@@ -8,6 +8,7 @@ import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 class TransferQrPayload {
   const TransferQrPayload({
     required this.to,
+    this.name,
     this.amount,
     this.symbol = 'GMB',
     this.memo,
@@ -19,6 +20,9 @@ class TransferQrPayload {
 
   /// 收款地址（SS58 格式）。
   final String to;
+
+  /// 钱包名称（= 用户昵称），通讯录扫码时读取。
+  final String? name;
 
   /// 金额（字符串避免浮点精度问题）。
   ///
@@ -38,6 +42,7 @@ class TransferQrPayload {
     return <String, dynamic>{
       'proto': protocol,
       'to': to,
+      'name': name ?? '',
       'amount': amount ?? '',
       'symbol': symbol,
       'memo': memo ?? '',
@@ -54,6 +59,7 @@ class TransferQrPayload {
       throw const FormatException('收款码缺少收款地址');
     }
 
+    final name = _normalizeOptional(data['name']);
     final amount = _normalizeOptional(data['amount']);
     final symbol = (data['symbol'] ?? 'GMB').toString().trim().toUpperCase();
     final memo = _normalizeOptional(data['memo']);
@@ -61,6 +67,7 @@ class TransferQrPayload {
 
     return TransferQrPayload(
       to: to,
+      name: name,
       amount: amount,
       symbol: symbol.isEmpty ? 'GMB' : symbol,
       memo: memo,
