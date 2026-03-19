@@ -91,15 +91,15 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
         );
         return;
       }
-      // 校验 WASM 魔数：\0asm（0x00 0x61 0x73 0x6D）
-      if (fileBytes.length < 4 ||
-          fileBytes[0] != 0x00 ||
-          fileBytes[1] != 0x61 ||
-          fileBytes[2] != 0x73 ||
-          fileBytes[3] != 0x6D) {
+      // 校验文件格式：
+      // 1. 标准 WASM 魔数：\0asm（0x00 0x61 0x73 0x6D）
+      // 2. Substrate 压缩格式（.compact.compressed.wasm）：前缀不固定，
+      //    但 Substrate set_code 会自动解压，两种格式均合法。
+      // 只拒绝明显不是 WASM 的文件（太小）。
+      if (fileBytes.length < 8) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件不是有效的 WASM 二进制格式')),
+          const SnackBar(content: Text('文件太小，不是有效的 WASM 二进制')),
         );
         return;
       }
