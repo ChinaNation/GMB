@@ -118,7 +118,11 @@ Runtime 配置位置：
 4. 校验替换后无重复 key（否则 `NewKeyAlreadyUsed`）
 5. 若已有 pending change，直接报 `GrandpaChangePending`
 6. 调用 `pallet_grandpa::schedule_change(next_authorities, delay, None)`
-7. 成功后同步更新 `CurrentGrandpaKeys` 与 `GrandpaKeyOwnerByKey`
+7. 成功后调用 `set_status_and_emit(STATUS_EXECUTED)` 标记为已执行终态，防止重复执行
+8. 同步更新 `CurrentGrandpaKeys` 与 `GrandpaKeyOwnerByKey`
+
+提案状态流转：`VOTING → PASSED → EXECUTED`（执行成功）/ `VOTING → REJECTED`（否决）。
+注：`cancel_failed_replace_grandpa_key` 会将已通过但不可执行的提案设置为 `STATUS_REJECTED` 后清理。
 
 ## 7. 关键错误与语义
 - `GrandpaChangePending`：当前已有待生效 authority set 变更

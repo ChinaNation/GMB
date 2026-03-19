@@ -140,6 +140,19 @@ Close 签名 payload（当前版本）：
 4. 返回实际 `PostDispatch` weight（按真实 `admin_count` 退款）。
 5. 发出 `DuoqianClosed`。
 
+## 4.4 投票引擎回调与 STATUS_EXECUTED
+
+`create_duoqian` 和 `close_duoqian` 提交后进入投票引擎流程。投票通过后，投票引擎回调本模块执行 `execute_create` 或 `execute_close`。
+
+执行成功后，本模块调用 `voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)` 将投票引擎侧的提案状态标记为已执行，防止同一提案被重复执行。
+
+提案状态流转：`VOTING → PASSED → EXECUTED`
+
+说明：
+- `PASSED` 由投票引擎在投票通过时设置。
+- `EXECUTED` 由本模块在 `execute_create`/`execute_close` 成功后通过 `set_status_and_emit` 设置。
+- 一旦提案进入 `EXECUTED`，投票引擎不会再次触发执行回调，从而保证幂等性。
+
 ## 5. 错误码（重点）
 
 1. 注册相关：`UnauthorizedSfidRegistrar`、`SfidAlreadyRegistered`、`EmptySfidId`、`DerivedAddressDecodeFailed`

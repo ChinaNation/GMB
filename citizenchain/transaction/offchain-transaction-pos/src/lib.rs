@@ -27,7 +27,7 @@ use primitives::china::china_ch::{
 };
 use voting_engine_system::{
     internal_vote::ORG_PRB, InstitutionPalletId, InternalVoteEngine, PROPOSAL_KIND_INTERNAL,
-    STATUS_PASSED, STATUS_REJECTED,
+    STATUS_EXECUTED, STATUS_PASSED, STATUS_REJECTED,
 };
 
 type BalanceOf<T> =
@@ -2674,13 +2674,13 @@ pub mod pallet {
             );
 
             InstitutionRateBp::<T>::insert(action.institution, action.new_rate_bp);
-            RateProposalActions::<T>::remove(proposal_id);
 
             Self::deposit_event(Event::<T>::InstitutionRateUpdated {
                 proposal_id,
                 institution: action.institution,
                 rate_bp: action.new_rate_bp,
             });
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
             Ok(())
         }
 
@@ -2739,7 +2739,6 @@ pub mod pallet {
                     },
                 );
             }
-            VerifyKeyProposalActions::<T>::remove(proposal_id);
 
             if current_exists {
                 Self::deposit_event(Event::<T>::VerifyKeyRotationScheduled {
@@ -2755,6 +2754,7 @@ pub mod pallet {
                     key_len: action.new_key.len() as u32,
                 });
             }
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
             Ok(())
         }
 
@@ -2809,7 +2809,6 @@ pub mod pallet {
 
             let reserve_left: BalanceOf<T> = T::Currency::free_balance(&fee_account);
 
-            SweepProposalActions::<T>::remove(proposal_id);
 
             Self::deposit_event(Event::<T>::SweepToMainExecuted {
                 proposal_id,
@@ -2817,6 +2816,7 @@ pub mod pallet {
                 amount: action.amount,
                 reserve_left,
             });
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
             Ok(())
         }
 
@@ -2842,12 +2842,12 @@ pub mod pallet {
 
             let count = action.submitters.len() as u32;
             RelaySubmitters::<T>::insert(action.institution, action.submitters);
-            RelaySubmittersProposalActions::<T>::remove(proposal_id);
             Self::deposit_event(Event::<T>::RelaySubmittersUpdated {
                 proposal_id,
                 institution: action.institution,
                 count,
             });
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
             Ok(())
         }
     }
@@ -3167,6 +3167,10 @@ mod tests {
         AccountId32::new([11u8; 32])
     }
 
+    fn last_proposal_id() -> u64 {
+        voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+    }
+
     fn new_test_ext() -> sp_io::TestExternalities {
         let mut storage = frame_system::GenesisConfig::<Test>::default()
             .build_storage()
@@ -3229,11 +3233,12 @@ mod tests {
                 institution,
                 5
             ));
+            let pid = last_proposal_id();
 
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -3246,11 +3251,12 @@ mod tests {
                 institution,
                 key.clone()
             ));
+            let pid2 = last_proposal_id();
 
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    1,
+                    pid2,
                     true
                 ));
             }
@@ -3309,10 +3315,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -3402,10 +3409,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -3479,10 +3487,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -3553,10 +3562,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -3617,10 +3627,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -3762,10 +3773,11 @@ mod tests {
                 institution,
                 new_set.clone()
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_relay_submitters(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -3785,14 +3797,15 @@ mod tests {
                 institution,
                 5
             ));
-            let proposal = voting_engine_system::Pallet::<Test>::proposals(0).expect("proposal");
+            let pid = last_proposal_id();
+            let proposal = voting_engine_system::Pallet::<Test>::proposals(pid).expect("proposal");
             System::set_block_number(proposal.end.saturating_add(1));
-            assert!(RateProposalActions::<Test>::contains_key(0));
+            assert!(RateProposalActions::<Test>::contains_key(pid));
             assert_ok!(OffchainTransactionPos::prune_expired_proposal_action(
                 RuntimeOrigin::signed(relay_account()),
-                0
+                pid
             ));
-            assert!(!RateProposalActions::<Test>::contains_key(0));
+            assert!(!RateProposalActions::<Test>::contains_key(pid));
         });
     }
 
@@ -3818,10 +3831,11 @@ mod tests {
                 institution,
                 new_key.clone(),
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -3868,10 +3882,11 @@ mod tests {
                 institution,
                 100_000
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_sweep_to_main(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -3899,16 +3914,17 @@ mod tests {
                 institution,
                 100_000
             ));
+            let pid2 = last_proposal_id();
             for i in 0..5 {
                 assert_ok!(OffchainTransactionPos::vote_sweep_to_main(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    1,
+                    pid2,
                     true
                 ));
             }
             assert_ok!(OffchainTransactionPos::vote_sweep_to_main(
                 RuntimeOrigin::signed(prb_admin(5)),
-                1,
+                pid2,
                 true
             ));
             assert_eq!(Balances::free_balance(&fee_account), fee_before + 200_000);
@@ -3918,7 +3934,7 @@ mod tests {
                     Event::<Test>::InternalProposalExecutionFailed { proposal_id },
                 ) = &evt.event
                 {
-                    if *proposal_id == 1 {
+                    if *proposal_id == pid2 {
                         has_failed_event = true;
                         break;
                     }
@@ -3952,10 +3968,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -4054,10 +4071,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -4188,10 +4206,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -4304,10 +4323,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -4383,10 +4403,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -4467,10 +4488,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -4540,10 +4562,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -4606,10 +4629,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -4705,10 +4729,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -4779,10 +4804,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -4902,10 +4928,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -4973,10 +5000,11 @@ mod tests {
                 institution,
                 pending
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -5074,28 +5102,29 @@ mod tests {
                 institution,
                 sweep_amount
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_sweep_to_main(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
             // 首次自动执行因保底金不足失败。
-            assert!(SweepProposalActions::<Test>::contains_key(0));
+            assert!(SweepProposalActions::<Test>::contains_key(pid));
             assert_noop!(
                 OffchainTransactionPos::retry_execute_proposal(
                     RuntimeOrigin::signed(prb_admin(0)),
-                    0
+                    pid
                 ),
                 Error::<Test>::InsufficientFeeReserve
             );
             let _ = Balances::deposit_creating(&prb_fee_account(), 200_000);
             assert_ok!(OffchainTransactionPos::retry_execute_proposal(
                 RuntimeOrigin::signed(prb_admin(0)),
-                0
+                pid
             ));
-            assert!(!SweepProposalActions::<Test>::contains_key(0));
+            assert!(SweepProposalActions::<Test>::contains_key(pid));
         });
     }
 
@@ -5108,10 +5137,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -5169,10 +5199,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -5239,10 +5270,11 @@ mod tests {
                 institution,
                 next_key.clone()
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -5268,10 +5300,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -5322,10 +5355,11 @@ mod tests {
                 institution,
                 next_key
             ));
+            let pid2 = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    1,
+                    pid2,
                     true
                 ));
             }
@@ -5363,10 +5397,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -5441,10 +5476,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -5528,10 +5564,11 @@ mod tests {
                 institution,
                 key_a.clone()
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -5544,10 +5581,11 @@ mod tests {
                 institution,
                 key_b
             ));
+            let pid2 = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_verify_key(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    1,
+                    pid2,
                     true
                 ));
             }
@@ -5566,10 +5604,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -5650,10 +5689,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -5741,10 +5781,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -5811,10 +5852,11 @@ mod tests {
                 institution,
                 1
             ));
+            let pid = last_proposal_id();
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }

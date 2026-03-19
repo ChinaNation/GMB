@@ -21,7 +21,7 @@ use primitives::china::china_ch::{
 use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, STATUS_PASSED,
+    InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -426,6 +426,9 @@ pub mod pallet {
                 new_admin: action.new_admin,
             });
 
+            // 标记为已执行，防止双重执行
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+
             Ok(())
         }
     }
@@ -630,6 +633,11 @@ mod tests {
         AccountId32::new(CHINA_CH[0].admins[index])
     }
 
+    /// 获取最近一次 create_internal_proposal 分配的 proposal_id。
+    fn last_proposal_id() -> u64 {
+        voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+    }
+
     #[test]
     fn nrc_replacement_executes_when_yes_votes_reach_threshold() {
         new_test_ext().execute_with(|| {
@@ -644,11 +652,12 @@ mod tests {
                 old_admin.clone(),
                 new_admin.clone()
             ));
+            let pid = last_proposal_id();
 
             for i in 0..13 {
                 assert_ok!(AdminsOriginGov::vote_admin_replacement(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -689,11 +698,12 @@ mod tests {
                 nrc_admin(1),
                 AccountId32::new([88u8; 32])
             ));
+            let pid = last_proposal_id();
 
             assert_noop!(
                 AdminsOriginGov::vote_admin_replacement(
                     RuntimeOrigin::signed(prc_admin(0)),
-                    0,
+                    pid,
                     true
                 ),
                 Error::<Test>::UnauthorizedAdmin
@@ -715,10 +725,11 @@ mod tests {
                 old_admin,
                 new_admin.clone()
             ));
+            let pid = last_proposal_id();
             for i in 0..13 {
                 assert_ok!(AdminsOriginGov::vote_admin_replacement(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -747,12 +758,13 @@ mod tests {
                 old_admin.clone(),
                 new_admin.clone()
             ));
+            let pid = last_proposal_id();
 
             // 省储会内部投票阈值：>=6
             for i in 0..6 {
                 assert_ok!(AdminsOriginGov::vote_admin_replacement(
                     RuntimeOrigin::signed(prc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -779,12 +791,13 @@ mod tests {
                 old_admin.clone(),
                 new_admin.clone()
             ));
+            let pid = last_proposal_id();
 
             // 省储行内部投票阈值：>=6
             for i in 0..6 {
                 assert_ok!(AdminsOriginGov::vote_admin_replacement(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -820,11 +833,12 @@ mod tests {
                 prc_admin(1),
                 AccountId32::new([58u8; 32])
             ));
+            let pid = last_proposal_id();
 
             assert_noop!(
                 AdminsOriginGov::vote_admin_replacement(
                     RuntimeOrigin::signed(prb_admin(0)),
-                    0,
+                    pid,
                     true
                 ),
                 Error::<Test>::UnauthorizedAdmin
@@ -855,11 +869,12 @@ mod tests {
                 prb_admin(1),
                 AccountId32::new([60u8; 32])
             ));
+            let pid = last_proposal_id();
 
             assert_noop!(
                 AdminsOriginGov::vote_admin_replacement(
                     RuntimeOrigin::signed(prc_admin(0)),
-                    0,
+                    pid,
                     true
                 ),
                 Error::<Test>::UnauthorizedAdmin
@@ -881,6 +896,7 @@ mod tests {
                 old_admin.clone(),
                 new_admin
             ));
+            let pid = last_proposal_id();
 
             CurrentAdmins::<Test>::mutate(institution, |maybe| {
                 let admins = maybe.as_mut().expect("institution should exist");
@@ -894,21 +910,21 @@ mod tests {
             for i in [0usize, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
                 assert_ok!(AdminsOriginGov::vote_admin_replacement(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
 
             let proposal =
-                voting_engine_system::Pallet::<Test>::proposals(0).expect("proposal should exist");
+                voting_engine_system::Pallet::<Test>::proposals(pid).expect("proposal should exist");
             assert_eq!(proposal.status, STATUS_PASSED);
-            let data = voting_engine_system::Pallet::<Test>::get_proposal_data(0)
+            let data = voting_engine_system::Pallet::<Test>::get_proposal_data(pid)
                 .expect("proposal data should exist");
             let action = AdminReplacementAction::<AccountId32>::decode(&mut &data[..])
                 .expect("should decode");
             assert!(!action.executed);
             assert_noop!(
-                AdminsOriginGov::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), 0),
+                AdminsOriginGov::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
                 Error::<Test>::OldAdminNotFound
             );
         });
@@ -944,10 +960,11 @@ mod tests {
                 old_admin.clone(),
                 new_admin.clone()
             ));
+            let pid = last_proposal_id();
 
             assert_ok!(AdminsOriginGov::vote_admin_replacement(
                 RuntimeOrigin::signed(nrc_admin(2)),
-                0,
+                pid,
                 false
             ));
 
@@ -956,7 +973,7 @@ mod tests {
                 .into_inner();
             assert!(admins.iter().any(|a| a == &old_admin));
             assert!(!admins.iter().any(|a| a == &new_admin));
-            let data = voting_engine_system::Pallet::<Test>::get_proposal_data(0)
+            let data = voting_engine_system::Pallet::<Test>::get_proposal_data(pid)
                 .expect("proposal data should exist");
             let action = AdminReplacementAction::<AccountId32>::decode(&mut &data[..])
                 .expect("should decode");
@@ -1008,18 +1025,19 @@ mod tests {
                 nrc_admin(1),
                 AccountId32::new([203u8; 32])
             ));
+            let pid = last_proposal_id();
 
             for i in 0..13 {
                 assert_ok!(AdminsOriginGov::vote_admin_replacement(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
 
             assert_noop!(
-                AdminsOriginGov::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), 0),
-                Error::<Test>::ProposalActionNotFound
+                AdminsOriginGov::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
+                Error::<Test>::ProposalNotPassed
             );
         });
     }
@@ -1035,17 +1053,18 @@ mod tests {
                 nrc_admin(1),
                 AccountId32::new([206u8; 32])
             ));
+            let pid1 = last_proposal_id();
 
-            let end = voting_engine_system::Pallet::<Test>::proposals(0)
+            let end = voting_engine_system::Pallet::<Test>::proposals(pid1)
                 .expect("proposal should exist")
                 .end;
             System::set_block_number(end + 1);
             assert_ok!(voting_engine_system::Pallet::<Test>::finalize_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                0
+                pid1
             ));
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(0)
+                voting_engine_system::Pallet::<Test>::proposals(pid1)
                     .expect("proposal should exist")
                     .status,
                 STATUS_REJECTED
@@ -1076,6 +1095,7 @@ mod tests {
                 old_admin.clone(),
                 new_admin.clone()
             ));
+            let pid = last_proposal_id();
 
             CurrentAdmins::<Test>::mutate(institution, |maybe| {
                 let admins = maybe.as_mut().expect("institution should exist");
@@ -1089,18 +1109,18 @@ mod tests {
             for i in [0usize, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
                 assert_ok!(AdminsOriginGov::vote_admin_replacement(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
 
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(0)
+                voting_engine_system::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
                 STATUS_PASSED
             );
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
 
             CurrentAdmins::<Test>::mutate(institution, |maybe| {
                 let admins = maybe.as_mut().expect("institution should exist");
@@ -1113,7 +1133,7 @@ mod tests {
 
             assert_ok!(AdminsOriginGov::execute_admin_replacement(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                0
+                pid
             ));
             let admins = CurrentAdmins::<Test>::get(institution)
                 .expect("current admins should be stored")
@@ -1137,10 +1157,11 @@ mod tests {
                 old_admin.clone(),
                 new_admin.clone()
             ));
+            let pid = last_proposal_id();
 
             assert_ok!(AdminsOriginGov::vote_admin_replacement(
                 RuntimeOrigin::signed(nrc_admin(2)),
-                0,
+                pid,
                 true
             ));
 
@@ -1149,7 +1170,7 @@ mod tests {
                 .into_inner();
             assert!(admins.iter().any(|a| a == &old_admin));
             assert!(!admins.iter().any(|a| a == &new_admin));
-            let data = voting_engine_system::Pallet::<Test>::get_proposal_data(0)
+            let data = voting_engine_system::Pallet::<Test>::get_proposal_data(pid)
                 .expect("proposal data should exist");
             let action = AdminReplacementAction::<AccountId32>::decode(&mut &data[..])
                 .expect("should decode");

@@ -21,7 +21,6 @@ primitives = { path = "../../../primitives", default-features = false }
 voting-engine-system = { path = "../../governance/voting-engine-system", default-features = false }
 duoqian-transaction-pow = { path = "../duoqian-transaction-pow", default-features = false }
 onchain-transaction-pow = { path = "../onchain-transaction-pow", default-features = false }
-fullnode-pow-reward = { path = "../../issuance/fullnode-pow-reward", default-features = false }
 
 [features]
 default = ["std"]
@@ -39,7 +38,6 @@ std = [
     "voting-engine-system/std",
     "duoqian-transaction-pow/std",
     "onchain-transaction-pow/std",
-    "fullnode-pow-reward/std",
 ]
 runtime-benchmarks = [
     "frame-benchmarking/runtime-benchmarks",

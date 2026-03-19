@@ -61,6 +61,9 @@
 - 状态常量：
   - `STATUS_PASSED`
   - `STATUS_REJECTED`
+  - `STATUS_EXECUTED`
+- 状态设置：
+  - `Pallet::set_status_and_emit`（用于执行成功后标记 `STATUS_EXECUTED`）
 
 Runtime 接线：
 - `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs`
@@ -156,8 +159,11 @@ stale 判定：
 - `vote_destroy` 通过投票引擎计票。
 
 3. 通过后：
-- 自动执行成功：销毁并清理所有关联存储。
+- 自动执行成功：销毁并调用 `set_status_and_emit(STATUS_EXECUTED)` 标记为已执行终态，然后清理所有关联存储。
 - 自动执行失败：投票保留为通过状态，等待 `execute_destroy` 手动重试。
+
+提案状态流转：`VOTING → PASSED → EXECUTED`（执行成功）/ `VOTING → REJECTED`（否决）。
+`STATUS_EXECUTED` 防止已通过提案被重复执行。
 
 4. 否决后：
 - 在 `vote_destroy` 看到 `STATUS_REJECTED` 时立即清理。

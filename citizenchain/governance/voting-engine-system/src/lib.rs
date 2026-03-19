@@ -41,6 +41,8 @@ pub const STAGE_CITIZEN: u8 = 2;
 pub const STATUS_VOTING: u8 = 0;
 pub const STATUS_PASSED: u8 = 1;
 pub const STATUS_REJECTED: u8 = 2;
+/// 提案已执行完成（终态）。消费模块在业务逻辑成功后调用 set_status_and_emit 设置。
+pub const STATUS_EXECUTED: u8 = 3;
 
 /// 中文注释：事项模块接入联合投票时，统一由投票引擎创建提案并写入人口快照。
 pub trait JointVoteEngine<AccountId> {
@@ -799,7 +801,9 @@ pub mod pallet {
             Ok(proposal)
         }
 
-        pub(crate) fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
+        /// 更新提案状态并发出 ProposalFinalized 事件。
+        /// 消费模块在执行成功后调用此方法设置 STATUS_EXECUTED。
+        pub fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
             with_transaction(|| {
                 let (kind, institution) = match Proposals::<T>::try_mutate(
                     proposal_id,
@@ -836,6 +840,14 @@ pub mod pallet {
                         // 才允许投票引擎把提案标记为最终状态。
                         return TransactionOutcome::Rollback(Err(err));
                     }
+                }
+
+                // 终态转换时自动注册 90 天延迟清理（PASSED/REJECTED/EXECUTED 均触发）。
+                // 同一提案可能多次进入终态（PASSED → EXECUTED），schedule_cleanup
+                // 内部用 try_push 保证幂等，重复注册不会导致重复清理。
+                if status != STATUS_VOTING {
+                    let now = frame_system::Pallet::<T>::block_number();
+                    let _ = proposal_cleanup::schedule_cleanup::<T>(proposal_id, now);
                 }
 
                 TransactionOutcome::Commit(Ok(()))
@@ -1030,10 +1042,9 @@ impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
         )
     }
 
-    fn cleanup_joint_proposal(proposal_id: u64) {
-        // 名额已在 set_status_and_emit 中立即释放，此处只注册 90 天后数据清理
-        let now = frame_system::Pallet::<T>::block_number();
-        proposal_cleanup::schedule_cleanup::<T>(proposal_id, now);
+    fn cleanup_joint_proposal(_proposal_id: u64) {
+        // 已弃用：清理现在由 set_status_and_emit 在终态转换时自动注册。
+        // 保留空实现以兼容 trait 定义。
     }
 }
 
@@ -1054,10 +1065,9 @@ impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
         pallet::Pallet::<T>::do_internal_vote(who, proposal_id, approve)
     }
 
-    fn cleanup_internal_proposal(proposal_id: u64) {
-        // 名额已在 set_status_and_emit 中立即释放，此处只注册 90 天后数据清理
-        let now = frame_system::Pallet::<T>::block_number();
-        proposal_cleanup::schedule_cleanup::<T>(proposal_id, now);
+    fn cleanup_internal_proposal(_proposal_id: u64) {
+        // 已弃用：清理现在由 set_status_and_emit 在终态转换时自动注册。
+        // 保留空实现以兼容 trait 定义。
     }
 }
 
@@ -2024,10 +2034,9 @@ mod tests {
             );
             assert!(has_used_vote_nonce(0, sfid_hash_ok(), "timeout-cleanup"));
 
-            // cleanup_joint_proposal 注册 90 天后清理
-            <VotingEngineSystem as JointVoteEngine<AccountId32>>::cleanup_joint_proposal(0);
-
-            // cleanup_joint_proposal 在 block 6 调用，cleanup_at = 6 + retention
+            // set_status_and_emit(STATUS_REJECTED) 在 on_initialize(6) 中被调用时
+            // 已自动注册 90 天后清理，无需手动调用 cleanup_joint_proposal。
+            // cleanup_at = 6 + retention
             let retention = 90u64 * primitives::pow_const::BLOCKS_PER_DAY;
             let cleanup_block = 6 + retention;
             for i in 0..20u64 {
@@ -2137,10 +2146,8 @@ mod tests {
             assert_eq!(proposal.status, STATUS_PASSED);
             assert!(has_used_vote_nonce(0, sfid_hash_ok(), "immediate-cleanup"));
 
-            // cleanup_joint_proposal 注册 90 天后清理
-            <VotingEngineSystem as JointVoteEngine<AccountId32>>::cleanup_joint_proposal(0);
-
-            // 推进到清理到期区块（90 天后）并运行多轮 on_initialize 直到清理完成
+            // set_status_and_emit(STATUS_PASSED) 在 citizen_vote 通过时已自动注册 90 天后清理。
+            // 推进到清理到期区块并运行多轮 on_initialize 直到清理完成。
             let retention = 90u64 * primitives::pow_const::BLOCKS_PER_DAY;
             // schedule_cleanup 在 block 0 调用，cleanup_at = 0 + retention = retention
             let cleanup_block = retention;
@@ -2529,14 +2536,15 @@ mod tests {
                 mark_vote_nonce_used(proposal_id, *sfid_hash, nonce);
             }
 
-            // cleanup_joint_proposal 注册 90 天后清理（不再立即设置 PendingProposalCleanups）
-            <VotingEngineSystem as JointVoteEngine<AccountId32>>::cleanup_joint_proposal(
+            // set_status_and_emit 终态转换时自动注册 90 天后清理
+            assert_ok!(VotingEngineSystem::set_status_and_emit(
                 proposal_id,
-            );
+                STATUS_PASSED
+            ));
             // 此时 PendingProposalCleanups 尚未设置（要等 90 天后 process_cleanup_queue 触发）
             assert!(PendingProposalCleanups::<Test>::get(proposal_id).is_none());
 
-            // cleanup_joint_proposal 在 block 0 调用，cleanup_at = 0 + retention
+            // set_status_and_emit 在 block 0 调用，cleanup_at = 0 + retention
             let retention = 90u64 * primitives::pow_const::BLOCKS_PER_DAY;
             let cleanup_block = retention;
             // 运行多轮 on_initialize 直到清理完成

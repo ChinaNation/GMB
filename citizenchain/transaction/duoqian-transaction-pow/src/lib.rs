@@ -16,7 +16,7 @@ use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_runtime::traits::{Hash, Zero};
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
-use voting_engine_system::{InstitutionPalletId, STATUS_PASSED};
+use voting_engine_system::{InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED};
 
 type BalanceOf<T> =
     <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -814,6 +814,9 @@ pub mod pallet {
                 amount: action.amount,
             });
 
+            // 标记为已执行，防止双重执行
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+
             Ok(())
         }
 
@@ -847,6 +850,9 @@ pub mod pallet {
                 beneficiary: action.beneficiary.clone(),
                 amount: all_balance,
             });
+
+            // 标记为已执行，防止双重执行
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
 
             Ok(())
         }
@@ -1110,6 +1116,10 @@ mod tests {
         sp_io::TestExternalities::new(storage)
     }
 
+    fn last_proposal_id() -> u64 {
+        voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+    }
+
     fn make_admins(seeds: &[u8]) -> DuoqianAdminsOf<Test> {
         seeds
             .iter()
@@ -1149,15 +1159,17 @@ mod tests {
             assert_eq!(account.status, DuoqianStatus::Pending);
             assert_eq!(account.threshold, 2);
 
+            let pid = last_proposal_id();
+
             // 两个管理员投赞成票（阈值 2）
             assert_ok!(Duoqian::vote_create(
                 RuntimeOrigin::signed(admin(1)),
-                0,
+                pid,
                 true
             ));
             assert_ok!(Duoqian::vote_create(
                 RuntimeOrigin::signed(admin(2)),
-                0,
+                pid,
                 true
             ));
 
@@ -1186,8 +1198,9 @@ mod tests {
                 2,
                 1_000,
             ));
-            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(1)), 0, true));
-            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(2)), 0, true));
+            let create_pid = last_proposal_id();
+            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(1)), create_pid, true));
+            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(2)), create_pid, true));
 
             // 确认 active
             let account = DuoqianAccounts::<Test>::get(&duoqian_address).expect("should exist");
@@ -1200,9 +1213,11 @@ mod tests {
                 beneficiary.clone(),
             ));
 
+            let close_pid = last_proposal_id();
+
             // 投票关闭
-            assert_ok!(Duoqian::vote_close(RuntimeOrigin::signed(admin(1)), 1, true));
-            assert_ok!(Duoqian::vote_close(RuntimeOrigin::signed(admin(2)), 1, true));
+            assert_ok!(Duoqian::vote_close(RuntimeOrigin::signed(admin(1)), close_pid, true));
+            assert_ok!(Duoqian::vote_close(RuntimeOrigin::signed(admin(2)), close_pid, true));
 
             // DuoqianAccounts 应该被删除
             assert!(DuoqianAccounts::<Test>::get(&duoqian_address).is_none());
@@ -1249,9 +1264,11 @@ mod tests {
                 1_000,
             ));
 
+            let pid = last_proposal_id();
+
             // admin(4) 不在管理员列表中
             assert_noop!(
-                Duoqian::vote_create(RuntimeOrigin::signed(admin(4)), 0, true),
+                Duoqian::vote_create(RuntimeOrigin::signed(admin(4)), pid, true),
                 Error::<Test>::UnauthorizedAdmin
             );
         });

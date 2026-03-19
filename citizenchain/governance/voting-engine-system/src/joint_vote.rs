@@ -19,7 +19,7 @@ use primitives::count_const::{
 use crate::{
     pallet::{
         Config, Error, Event, JointDecisionApprovalsOf, JointTallies, JointVotesByInstitution,
-        Pallet, Proposals, UsedPopulationSnapshotNonce,
+        Pallet, Proposals, ProposalsByExpiry, UsedPopulationSnapshotNonce,
     },
     InstitutionPalletId, InternalAdminProvider, JointInstitutionDecisionVerifier,
     PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
@@ -307,21 +307,27 @@ impl<T: Config> Pallet<T> {
         let now = <frame_system::Pallet<T>>::block_number();
         let citizen_end = now.saturating_add(Self::citizen_stage_duration());
         with_transaction(|| {
-            let eligible_total = match Proposals::<T>::try_mutate(
+            let (eligible_total, old_end) = match Proposals::<T>::try_mutate(
                 proposal_id,
-                |maybe| -> Result<u64, sp_runtime::DispatchError> {
+                |maybe| -> Result<(u64, frame_system::pallet_prelude::BlockNumberFor<T>), sp_runtime::DispatchError> {
                     let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
                     let eligible_total = proposal.citizen_eligible_total;
+                    let old_end = proposal.end;
                     // 中文注释：这里只切换阶段窗口，不重算 eligible_total，保证联合阶段锁定的分母继续生效。
                     proposal.stage = crate::STAGE_CITIZEN;
                     proposal.start = now;
                     proposal.end = citizen_end;
-                    Ok(eligible_total)
+                    Ok((eligible_total, old_end))
                 },
             ) {
-                Ok(total) => total,
+                Ok(v) => v,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
+
+            // 移除旧的联合投票阶段 expiry 条目，避免 on_initialize 无效查询
+            ProposalsByExpiry::<T>::mutate(old_end, |ids| {
+                ids.retain(|&id| id != proposal_id);
+            });
 
             if let Err(err) = Self::schedule_proposal_expiry(proposal_id, citizen_end) {
                 return TransactionOutcome::Rollback(Err(err));

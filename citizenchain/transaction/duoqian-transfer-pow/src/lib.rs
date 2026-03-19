@@ -12,7 +12,7 @@ use primitives::china::china_ch::{
 };
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, STATUS_PASSED,
+    InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -142,7 +142,7 @@ pub mod pallet {
             who: T::AccountId,
             approve: bool,
         },
-        /// 投票通过但执行失败（投票已记录，提案已清理，需重新发起提案）
+        /// 投票通过但执行失败（投票已记录，提案数据保留，可通过 execute_transfer 手动重试）
         TransferExecutionFailed {
             proposal_id: u64,
             institution: InstitutionPalletId,
@@ -169,7 +169,7 @@ pub mod pallet {
         ProposalActionNotFound,
         InstitutionAccountDecodeFailed,
         InsufficientBalance,
-        ActiveProposalExists,
+        ProposalNotPassed,
         TransferFailed,
     }
 
@@ -220,9 +220,15 @@ pub mod pallet {
 
             // 活跃提案数由 voting-engine-system 在 create_internal_proposal 中统一检查
 
-            // 预检余额
+            // 预检余额（含手续费，与执行时检查一致，避免创建必定无法执行的提案）
+            let amount_u128: u128 = amount.saturated_into();
+            let fee_u128 = onchain_transaction_pow::calculate_onchain_fee(amount_u128);
+            let fee: BalanceOf<T> = fee_u128.saturated_into();
+            let total = amount
+                .checked_add(&fee)
+                .ok_or(Error::<T>::InsufficientBalance)?;
             let free = T::Currency::free_balance(&institution_account);
-            let required = amount
+            let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
             ensure!(free >= required, Error::<T>::InsufficientBalance);
@@ -291,7 +297,7 @@ pub mod pallet {
                 if proposal.status == STATUS_PASSED {
                     // 投票通过，尝试自动执行转账
                     let institution = action.institution;
-                    if Self::execute_transfer_from_action(proposal_id, action).is_err() {
+                    if Self::try_execute_transfer(proposal_id).is_err() {
                         Self::deposit_event(Event::<T>::TransferExecutionFailed {
                             proposal_id,
                             institution,
@@ -300,6 +306,20 @@ pub mod pallet {
                 }
             }
             Ok(())
+        }
+
+        /// 手动执行已通过的转账提案。
+        ///
+        /// 当投票通过后自动执行失败（如余额不足），可在补充余额后通过此接口重试。
+        /// 任何签名账户都可调用，避免因管理员离线导致通过的提案无法落地。
+        #[pallet::call_index(2)]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::execute_transfer())]
+        pub fn execute_transfer(
+            origin: OriginFor<T>,
+            proposal_id: u64,
+        ) -> DispatchResult {
+            let _ = ensure_signed(origin)?;
+            Self::try_execute_transfer(proposal_id)
         }
     }
 
@@ -316,10 +336,23 @@ pub mod pallet {
             )
         }
 
-        fn execute_transfer_from_action(
-            proposal_id: u64,
-            action: TransferAction<T::AccountId, BalanceOf<T>, T::MaxRemarkLen>,
-        ) -> DispatchResult {
+        /// 从 voting-engine-system 读取提案数据并执行转账。
+        /// vote_transfer（自动执行）和 execute_transfer（手动重试）共用此逻辑。
+        fn try_execute_transfer(proposal_id: u64) -> DispatchResult {
+            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            ensure!(
+                proposal.status == STATUS_PASSED,
+                Error::<T>::ProposalNotPassed
+            );
+
+            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            let action = TransferAction::<T::AccountId, BalanceOf<T>, T::MaxRemarkLen>::decode(
+                &mut &data[..],
+            )
+            .map_err(|_| Error::<T>::ProposalActionNotFound)?;
+
             let raw_account = institution_pallet_address(action.institution)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             let institution_account = T::AccountId::decode(&mut &raw_account[..])
@@ -360,6 +393,9 @@ pub mod pallet {
             )
             .map_err(|_| Error::<T>::InsufficientBalance)?;
             T::FeeRouter::on_unbalanced(fee_imbalance);
+
+            // ── 标记为已执行，防止双重执行 ──
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
 
             Self::deposit_event(Event::<T>::TransferExecuted {
                 proposal_id,
@@ -508,12 +544,16 @@ mod tests {
         }
     }
 
+    thread_local! {
+        static PROTECTED_ADDRESS: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
+    }
+
     pub struct TestProtectedSourceChecker;
     impl duoqian_transaction_pow::ProtectedSourceChecker<AccountId32>
         for TestProtectedSourceChecker
     {
-        fn is_protected(_address: &AccountId32) -> bool {
-            false
+        fn is_protected(address: &AccountId32) -> bool {
+            PROTECTED_ADDRESS.with(|pa| pa.borrow().as_ref() == Some(address))
         }
     }
 
@@ -589,6 +629,11 @@ mod tests {
         AccountId32::new([99u8; 32])
     }
 
+    /// 获取最近一次 create_internal_proposal 分配的 proposal_id。
+    fn last_proposal_id() -> u64 {
+        voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+    }
+
     fn new_test_ext() -> sp_io::TestExternalities {
         let mut storage = frame_system::GenesisConfig::<Test>::default()
             .build_storage()
@@ -624,20 +669,21 @@ mod tests {
                 1_000,
                 BoundedVec::default(),
             ));
+            let pid = last_proposal_id();
 
             for i in 0..13 {
                 assert_ok!(DuoqianTransferPow::vote_transfer(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
 
-            // 转账已执行
-            assert_eq!(Balances::free_balance(&inst_account), 9_000);
+            // 转账已执行（含手续费 10）
+            assert_eq!(Balances::free_balance(&inst_account), 8_990);
             assert_eq!(Balances::free_balance(&dest), 1_000);
             // 提案数据仍保留（由 voting-engine-system 延迟清理）
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
         });
     }
 
@@ -656,18 +702,19 @@ mod tests {
                 2_000,
                 BoundedVec::default(),
             ));
+            let pid = last_proposal_id();
 
             for i in 0..6 {
                 assert_ok!(DuoqianTransferPow::vote_transfer(
                     RuntimeOrigin::signed(prc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
 
-            assert_eq!(Balances::free_balance(&inst_account), 8_000);
+            assert_eq!(Balances::free_balance(&inst_account), 7_990);
             assert_eq!(Balances::free_balance(&dest), 2_000);
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
         });
     }
 
@@ -686,18 +733,19 @@ mod tests {
                 3_000,
                 BoundedVec::default(),
             ));
+            let pid = last_proposal_id();
 
             for i in 0..6 {
                 assert_ok!(DuoqianTransferPow::vote_transfer(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
 
-            assert_eq!(Balances::free_balance(&inst_account), 7_000);
+            assert_eq!(Balances::free_balance(&inst_account), 6_990);
             assert_eq!(Balances::free_balance(&dest), 3_000);
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
         });
     }
 
@@ -728,10 +776,11 @@ mod tests {
                 100,
                 BoundedVec::default(),
             ));
+            let pid = last_proposal_id();
 
             // PRC 管理员不能给 NRC 投票
             assert_noop!(
-                DuoqianTransferPow::vote_transfer(RuntimeOrigin::signed(prc_admin(0)), 0, true),
+                DuoqianTransferPow::vote_transfer(RuntimeOrigin::signed(prc_admin(0)), pid, true),
                 Error::<Test>::UnauthorizedAdmin
             );
         });
@@ -783,18 +832,29 @@ mod tests {
             let institution = nrc_pallet_id();
             let dest = beneficiary();
 
-            // 余额 10_000，ED=1，最多只能提案 9_999
+            // 余额 10_000，fee=10，ED=1：最多 amount=9_989（9_989+10+1=10_000）
+            // amount=9_990 时 required=9_990+10+1=10_001 > 10_000 → 拒绝
             assert_noop!(
                 DuoqianTransferPow::propose_transfer(
                     RuntimeOrigin::signed(nrc_admin(0)),
                     ORG_NRC,
                     institution,
-                    dest,
-                    10_000,
+                    dest.clone(),
+                    9_990,
                     BoundedVec::default(),
                 ),
                 Error::<Test>::InsufficientBalance
             );
+
+            // amount=9_989 时 required=9_989+10+1=10_000 → 刚好通过
+            assert_ok!(DuoqianTransferPow::propose_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                dest,
+                9_989,
+                BoundedVec::default(),
+            ));
         });
     }
 
@@ -812,13 +872,14 @@ mod tests {
                 100,
                 BoundedVec::default(),
             ));
+            let pid = last_proposal_id();
             assert_ok!(DuoqianTransferPow::vote_transfer(
                 RuntimeOrigin::signed(nrc_admin(1)),
-                0,
+                pid,
                 true
             ));
             assert_noop!(
-                DuoqianTransferPow::vote_transfer(RuntimeOrigin::signed(nrc_admin(1)), 0, true),
+                DuoqianTransferPow::vote_transfer(RuntimeOrigin::signed(nrc_admin(1)), pid, true),
                 voting_engine_system::pallet::Error::<Test>::AlreadyVoted
             );
         });
@@ -865,11 +926,12 @@ mod tests {
                 100,
                 BoundedVec::default(),
             ));
+            let pid1 = last_proposal_id();
 
             for i in 0..13 {
                 assert_ok!(DuoqianTransferPow::vote_transfer(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid1,
                     true
                 ));
             }
@@ -900,17 +962,18 @@ mod tests {
                 100,
                 BoundedVec::default(),
             ));
+            let pid1 = last_proposal_id();
 
-            let end = voting_engine_system::Pallet::<Test>::proposals(0)
+            let end = voting_engine_system::Pallet::<Test>::proposals(pid1)
                 .expect("proposal should exist")
                 .end;
             System::set_block_number(end + 1);
             assert_ok!(voting_engine_system::Pallet::<Test>::finalize_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                0
+                pid1
             ));
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(0)
+                voting_engine_system::Pallet::<Test>::proposals(pid1)
                     .expect("proposal should exist")
                     .status,
                 STATUS_REJECTED
@@ -935,26 +998,263 @@ mod tests {
             let inst_account = institution_account(institution);
             let dest = beneficiary();
 
-            // 余额 10_000，ED=1，提案 9_999 应该成功
+            // 余额 10_000，ED=1，手续费=10，提案 9_989 刚好使剩余 = ED
+            // required = 9_989 + 10(fee) + 1(ED) = 10_000
             assert_ok!(DuoqianTransferPow::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
                 institution,
                 dest.clone(),
-                9_999,
+                9_989,
                 BoundedVec::default(),
             ));
+            let pid = last_proposal_id();
 
             for i in 0..13 {
                 assert_ok!(DuoqianTransferPow::vote_transfer(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
 
             assert_eq!(Balances::free_balance(&inst_account), 1);
-            assert_eq!(Balances::free_balance(&dest), 9_999);
+            assert_eq!(Balances::free_balance(&dest), 9_989);
+        });
+    }
+
+    #[test]
+    fn execute_transfer_succeeds_after_failed_auto_execution() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let inst_account = institution_account(institution);
+            let dest = beneficiary();
+
+            // 余额 10_000，提案 9_990（required=9_990+10+1=10_001>10_000）
+            // propose 预检也含手续费，所以 9_990 会被拒绝
+            // 先用 9_989 创建提案（刚好通过预检），然后手动减余额使执行失败
+            assert_ok!(DuoqianTransferPow::propose_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                dest.clone(),
+                9_000,
+                BoundedVec::default(),
+            ));
+            let pid = last_proposal_id();
+
+            // 在投票前减少余额，使自动执行失败
+            // 转走 9_000 使余额仅剩 1_000，不够 amount(9_000)+fee(10)+ED(1)=9_011
+            let drain_dest = AccountId32::new([88u8; 32]);
+            let _ = Balances::deposit_creating(&drain_dest, 1);
+            assert_ok!(<Balances as frame_support::traits::Currency<_>>::transfer(
+                &inst_account,
+                &drain_dest,
+                9_000,
+                frame_support::traits::ExistenceRequirement::KeepAlive,
+            ));
+            assert_eq!(Balances::free_balance(&inst_account), 1_000);
+
+            // 投票通过，自动执行因余额不足失败
+            for i in 0..13 {
+                assert_ok!(DuoqianTransferPow::vote_transfer(
+                    RuntimeOrigin::signed(nrc_admin(i)),
+                    pid,
+                    true
+                ));
+            }
+
+            // 提案状态为 PASSED，但转账未执行
+            assert_eq!(
+                voting_engine_system::Pallet::<Test>::proposals(pid)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_PASSED
+            );
+            assert_eq!(Balances::free_balance(&dest), 0);
+            // 提案数据仍保留
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
+
+            // 补充余额后手动执行
+            let _ = Balances::deposit_creating(&inst_account, 9_000);
+            assert_eq!(Balances::free_balance(&inst_account), 10_000);
+            assert_ok!(DuoqianTransferPow::execute_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                pid
+            ));
+            // 转账成功：9_000 转出 + 10 手续费
+            assert_eq!(Balances::free_balance(&inst_account), 990);
+            assert_eq!(Balances::free_balance(&dest), 9_000);
+        });
+    }
+
+    #[test]
+    fn execute_transfer_rejects_non_passed_proposal() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let dest = beneficiary();
+
+            assert_ok!(DuoqianTransferPow::propose_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                dest,
+                100,
+                BoundedVec::default(),
+            ));
+            let pid = last_proposal_id();
+
+            // 提案仍在投票中，不能手动执行
+            assert_noop!(
+                DuoqianTransferPow::execute_transfer(RuntimeOrigin::signed(nrc_admin(0)), pid),
+                Error::<Test>::ProposalNotPassed
+            );
+        });
+    }
+
+    #[test]
+    fn execute_transfer_is_callable_by_non_admin() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let inst_account = institution_account(institution);
+            let dest = beneficiary();
+            let outsider = AccountId32::new([88u8; 32]);
+            let _ = Balances::deposit_creating(&outsider, 1);
+
+            assert_ok!(DuoqianTransferPow::propose_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                dest.clone(),
+                100,
+                BoundedVec::default(),
+            ));
+            let pid = last_proposal_id();
+
+            // 减余额使自动执行失败
+            let drain_dest = AccountId32::new([77u8; 32]);
+            let _ = Balances::deposit_creating(&drain_dest, 1);
+            assert_ok!(<Balances as frame_support::traits::Currency<_>>::transfer(
+                &inst_account,
+                &drain_dest,
+                9_900,
+                frame_support::traits::ExistenceRequirement::KeepAlive,
+            ));
+
+            for i in 0..13 {
+                assert_ok!(DuoqianTransferPow::vote_transfer(
+                    RuntimeOrigin::signed(nrc_admin(i)),
+                    pid,
+                    true
+                ));
+            }
+
+            // 自动执行失败，补充余额
+            assert_eq!(Balances::free_balance(&dest), 0);
+            let _ = Balances::deposit_creating(&inst_account, 10_000);
+
+            // 非管理员也能调用 execute_transfer
+            assert_ok!(DuoqianTransferPow::execute_transfer(
+                RuntimeOrigin::signed(outsider),
+                pid
+            ));
+            assert_eq!(Balances::free_balance(&dest), 100);
+        });
+    }
+
+    #[test]
+    fn executed_transfer_cannot_be_executed_again() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let dest = beneficiary();
+
+            assert_ok!(DuoqianTransferPow::propose_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                dest,
+                1_000,
+                BoundedVec::default(),
+            ));
+            let pid = last_proposal_id();
+
+            for i in 0..13 {
+                assert_ok!(DuoqianTransferPow::vote_transfer(
+                    RuntimeOrigin::signed(nrc_admin(i)),
+                    pid,
+                    true
+                ));
+            }
+
+            // 自动执行成功，状态变为 EXECUTED
+            assert_eq!(
+                voting_engine_system::Pallet::<Test>::proposals(pid)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_EXECUTED
+            );
+
+            // 再次调用 execute_transfer 应被拒绝
+            assert_noop!(
+                DuoqianTransferPow::execute_transfer(RuntimeOrigin::signed(nrc_admin(0)), pid),
+                Error::<Test>::ProposalNotPassed
+            );
+        });
+    }
+
+    #[test]
+    fn protected_address_is_rejected() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let protected = AccountId32::new([77u8; 32]);
+
+            // 标记为受保护地址
+            PROTECTED_ADDRESS.with(|pa| *pa.borrow_mut() = Some(protected.clone()));
+
+            assert_noop!(
+                DuoqianTransferPow::propose_transfer(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    ORG_NRC,
+                    institution,
+                    protected,
+                    100,
+                    BoundedVec::default(),
+                ),
+                Error::<Test>::BeneficiaryIsProtectedAddress
+            );
+        });
+    }
+
+    #[test]
+    fn fee_respects_minimum_on_small_amount() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let inst_account = institution_account(institution);
+            let dest = beneficiary();
+
+            // amount=1, 费率计算 1×0.1%=0.001 < 最低 10 分，手续费应为 10
+            // required = 1 + 10 + 1(ED) = 12
+            assert_ok!(DuoqianTransferPow::propose_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                dest.clone(),
+                1,
+                BoundedVec::default(),
+            ));
+            let pid = last_proposal_id();
+
+            for i in 0..13 {
+                assert_ok!(DuoqianTransferPow::vote_transfer(
+                    RuntimeOrigin::signed(nrc_admin(i)),
+                    pid,
+                    true
+                ));
+            }
+
+            // 余额 10_000 - 1(转账) - 10(最低手续费) = 9_989
+            assert_eq!(Balances::free_balance(&inst_account), 9_989);
+            assert_eq!(Balances::free_balance(&dest), 1);
         });
     }
 }

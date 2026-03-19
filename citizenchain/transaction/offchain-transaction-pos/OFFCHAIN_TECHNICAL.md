@@ -129,6 +129,22 @@
 - relay 白名单治理：`propose/vote_relay_submitters`。
 - 对“已通过但执行失败”的提案：`retry_execute_proposal`。
 
+## 7.1 治理提案执行与 STATUS_EXECUTED
+
+四类治理动作（rate、verify_key、sweep、relay_submitters）在投票通过后由投票引擎回调本模块执行。执行成功后，本模块调用 `voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)` 将投票引擎侧的提案状态标记为已执行，防止同一提案被重复执行。
+
+各动作执行函数：
+- `try_execute_rate`：执行成功后调用 `set_status_and_emit(proposal_id, STATUS_EXECUTED)`
+- `try_execute_verify_key`：执行成功后调用 `set_status_and_emit(proposal_id, STATUS_EXECUTED)`
+- `try_execute_sweep`：执行成功后调用 `set_status_and_emit(proposal_id, STATUS_EXECUTED)`
+- `try_execute_relay_submitters`：执行成功后调用 `set_status_and_emit(proposal_id, STATUS_EXECUTED)`
+
+提案状态流转：`VOTING → PASSED → EXECUTED`
+
+行为变更：
+- 执行成功后不再立即删除 `ProposalActions` 中的动作数据，而是保留原始数据用于审计。
+- 动作数据由投票引擎的 90 天延迟清理机制统一回收，避免执行后立即丢失提案上下文。
+
 ## 8. 权重与完整性约束
 - 关键权重按最坏项上界声明（含 `MaxBatchSize` 影响）。
 - 关键常量完整性在 `integrity_test` 中断言：

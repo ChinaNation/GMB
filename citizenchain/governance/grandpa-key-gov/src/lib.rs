@@ -16,7 +16,7 @@ use sp_core::ed25519;
 use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRC},
-    InstitutionPalletId, STATUS_PASSED,
+    InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED, STATUS_REJECTED,
 };
 
 pub use pallet::*;
@@ -351,6 +351,8 @@ pub mod pallet {
                 proposal_id,
                 institution: action.institution,
             });
+            // 标记为已取消，防止重复取消或重复执行
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_REJECTED)?;
             Ok(())
         }
     }
@@ -415,6 +417,8 @@ pub mod pallet {
                 old_key: action.old_key,
                 new_key: action.new_key,
             });
+            // 标记为已执行，防止双重执行
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
             Ok(())
         }
 
@@ -701,6 +705,11 @@ mod tests {
         <Grandpa as Hooks<u64>>::on_finalize(block);
     }
 
+    /// 获取最近一次 create_internal_proposal 分配的 proposal_id。
+    fn last_proposal_id() -> u64 {
+        voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+    }
+
     #[test]
     fn weak_small_order_new_key_is_rejected() {
         new_test_ext().execute_with(|| {
@@ -728,8 +737,9 @@ mod tests {
                 institution,
                 new_key,
             ));
+            let pid = last_proposal_id();
 
-            pass_prc_proposal(1, 0);
+            pass_prc_proposal(1, pid);
 
             let pending_change = Grandpa::pending_change().expect("change should be scheduled");
             assert_eq!(pending_change.scheduled_at, 1);
@@ -753,7 +763,7 @@ mod tests {
                         institution: inst,
                         old_key: replaced_old_key,
                         new_key: replaced_new_key,
-                    }) if *proposal_id == 0
+                    }) if *proposal_id == pid
                         && *inst == institution
                         && *replaced_old_key == old_key
                         && *replaced_new_key == new_key
@@ -775,28 +785,29 @@ mod tests {
                 institution,
                 new_key,
             ));
+            let pid = last_proposal_id();
             assert_ok!(Grandpa::schedule_change(
                 grandpa_authorities(),
                 GrandpaChangeDelay::get(),
                 None,
             ));
 
-            pass_prc_proposal(1, 0);
+            pass_prc_proposal(1, pid);
 
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(0)
+                voting_engine_system::Pallet::<Test>::proposals(pid)
                     .expect("passed proposal should remain for retries")
                     .status,
                 STATUS_PASSED
             );
             assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(old_key));
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
             assert!(System::events().iter().any(|record| {
                 matches!(
                     &record.event,
                     RuntimeEvent::GrandpaKeyGov(Event::<Test>::GrandpaKeyExecutionFailed {
                         proposal_id
-                    }) if *proposal_id == 0
+                    }) if *proposal_id == pid
                 )
             }));
 
@@ -805,7 +816,7 @@ mod tests {
 
             assert_ok!(GrandpaKeyGov::execute_replace_grandpa_key(
                 RuntimeOrigin::signed(prc_admin(0)),
-                0,
+                pid,
             ));
 
             assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(new_key));
@@ -832,6 +843,7 @@ mod tests {
                 institution,
                 new_key,
             ));
+            let pid = last_proposal_id();
             assert_ok!(Grandpa::schedule_change(
                 vec![
                     (authority_id_from_key(CHINA_CB[0].grandpa_key), 1),
@@ -841,10 +853,10 @@ mod tests {
                 None,
             ));
 
-            pass_prc_proposal(1, 0);
+            pass_prc_proposal(1, pid);
 
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(0)
+                voting_engine_system::Pallet::<Test>::proposals(pid)
                     .expect("passed proposal should remain for cleanup")
                     .status,
                 STATUS_PASSED
@@ -862,7 +874,7 @@ mod tests {
 
             assert_ok!(GrandpaKeyGov::cancel_failed_replace_grandpa_key(
                 RuntimeOrigin::signed(prc_admin(0)),
-                0,
+                pid,
             ));
 
             assert!(System::events().iter().any(|record| {
@@ -871,7 +883,7 @@ mod tests {
                     RuntimeEvent::GrandpaKeyGov(Event::<Test>::FailedProposalCancelled {
                         proposal_id,
                         institution: inst,
-                    }) if *proposal_id == 0 && *inst == institution
+                    }) if *proposal_id == pid && *inst == institution
                 )
             }));
         });
@@ -890,26 +902,27 @@ mod tests {
                 institution,
                 new_key,
             ));
+            let pid = last_proposal_id();
             assert_ok!(Grandpa::schedule_change(
                 grandpa_authorities(),
                 GrandpaChangeDelay::get(),
                 None,
             ));
 
-            pass_prc_proposal(1, 0);
+            pass_prc_proposal(1, pid);
 
             assert_noop!(
                 GrandpaKeyGov::cancel_failed_replace_grandpa_key(
                     RuntimeOrigin::signed(prc_admin(0)),
-                    0,
+                    pid,
                 ),
                 Error::<Test>::GrandpaChangePending
             );
 
             assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(old_key));
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(0)
+                voting_engine_system::Pallet::<Test>::proposals(pid)
                     .expect("passed proposal should remain active")
                     .status,
                 STATUS_PASSED

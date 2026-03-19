@@ -9,14 +9,13 @@
 - 机构管理员发起转账提案，指定收款地址、金额和备注。
 - 机构管理员通过内部投票引擎逐票投票。
 - 投票通过后执行转账：从机构 `duoqian_address` 向收款地址划转资金。
-- 手续费从机构 `duoqian_address` 扣取，由 `onchain-transaction-pow` 的自定义计费规则计算。
+- 手续费在投票通过后由 pallet 内部从机构 `duoqian_address` 扣取，通过 `onchain-transaction-pow::calculate_onchain_fee()` 计算。
 - 管理员个人账户不承担任何费用。
 
 ### 0.2 功能边界
 
 - 本模块仅处理治理机构（已在链上预置 `duoqian_address` 的 NRC/PRC/PRB 机构）的转账。
 - 非治理机构（通过 `duoqian-transaction-pow` 注册的多签地址）不在本模块范围。
-- 本模块不负责手续费计算，手续费由 `onchain-transaction-pow` 的 `PowOnchainChargeAdapter` 统一处理。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `voting-engine-system` 的 `InternalVoteEngine`。
 
 ### 0.3 与 `duoqian-transaction-pow` 的关系
@@ -67,22 +66,22 @@ pub fn propose_transfer(
 **校验规则：**
 
 1. `origin` 必须是 `signed`，提取 `proposer = ensure_signed(origin)`。
-2. `institution` 必须是有效的治理机构（在 CHINA_CB 或 CHINA_CH 中存在）。
-3. `org` 必须与 `institution` 的实际机构类型匹配。
-4. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验）。
-5. `amount > 0`。
-6. `beneficiary` 不能是机构自身的 `duoqian_address`（不允许自转账）。
-7. `beneficiary` 不能是受保护地址（如 `keyless_address`、黑洞地址）。
-8. 该机构当前不能有活跃的转账提案（一机构一提案）。
-9. 机构 `duoqian_address` 的可用余额 >= `amount + ED`（预检，防止创建必定无法执行的提案）。
+2. `amount > 0`。
+3. `institution` 必须是有效的治理机构（在 CHINA_CB 或 CHINA_CH 中存在）。
+4. `org` 必须与 `institution` 的实际机构类型匹配。
+5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验）。
+6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
+7. `beneficiary` 不能是机构自身的 `duoqian_address`（不允许自转账）。
+8. `beneficiary` 不能是受保护地址（如 `keyless_address`、黑洞地址）。
+9. 机构 `duoqian_address` 的可用余额 >= `amount + fee + ED`（预检含手续费，防止创建必定无法执行的提案）。
+10. 活跃提案数由 `voting-engine-system` 在 `create_internal_proposal` 中统一检查（全局限额）。
 
 **执行逻辑：**
 
 1. 调用 `InternalVoteEngine::create_internal_proposal(proposer, org, institution)` 获取 `proposal_id`。
-2. 存储 `TransferAction { institution, beneficiary, amount, remark, proposer }` → `ProposalActions`。
-3. 记录 `ProposalCreatedAt`。
-4. 设置 `ActiveProposalByInstitution`。
-5. 发出 `TransferProposed` 事件。
+2. 编码 `TransferAction { institution, beneficiary, amount, remark, proposer }` 存入 `voting_engine_system::ProposalData`。
+3. 记录 `ProposalMeta`（创建块号）到 `voting_engine_system`。
+4. 发出 `TransferProposed` 事件。
 
 ### 2.2 vote_transfer — 投票
 
@@ -97,7 +96,7 @@ pub fn vote_transfer(
 **校验规则：**
 
 1. `origin` 必须是 `signed`。
-2. `proposal_id` 必须存在且有关联的 `TransferAction`。
+2. `proposal_id` 必须在 `voting_engine_system::ProposalData` 中存在且能解码为 `TransferAction`。
 3. 投票者必须是该机构管理员。
 4. 每个管理员每个提案只能投一票（`InternalVoteEngine` 内部保证）。
 
@@ -106,30 +105,52 @@ pub fn vote_transfer(
 1. 调用 `InternalVoteEngine::cast_internal_vote(who, proposal_id, approve)`。
 2. 发出 `TransferVoteSubmitted { proposal_id, who, approve }` 事件。
 3. 读取投票引擎中的提案状态：
-   - 如果 `STATUS_PASSED`（赞成票 >= 阈值）：**立即自动执行转账**，无需手动触发。
-     - 执行 `Currency::transfer(duoqian_address, beneficiary, amount, KeepAlive)`。
-     - 清理所有关联存储。
-     - 发出 `TransferExecuted` 事件。
-   - 如果 `STATUS_REJECTED`（投票超时未达阈值）：清理所有关联存储。
+   - 如果 `STATUS_PASSED`（赞成票 >= 阈值）：**尝试自动执行转账**。
+     - 成功：发出 `TransferExecuted` 事件。
+     - 失败：发出 `TransferExecutionFailed` 事件（投票已记录，提案状态为 PASSED，可通过 `execute_transfer` 手动重试）。
+
+### 2.3 execute_transfer — 手动执行已通过的转账提案
+
+```rust
+pub fn execute_transfer(
+    origin: OriginFor<T>,
+    proposal_id: u64,
+) -> DispatchResult
+```
+
+**用途：** 当投票通过后自动执行失败（如余额不足），可在补充余额后通过此接口重试。
+
+**校验规则：**
+
+1. `origin` 必须是 `signed`（任何签名账户，不限管理员）。
+2. `proposal_id` 必须存在。
+3. 提案状态必须为 `STATUS_PASSED`。
+4. 提案数据（`TransferAction`）必须存在且可解码。
+
+**执行逻辑：** 与 `vote_transfer` 中自动执行的逻辑完全一致（共用 `try_execute_transfer` 内部方法）。执行成功后提案状态变为 `STATUS_EXECUTED`，防止双重执行。
+
+**设计说明：** 任何签名账户都可调用（不限管理员），避免因管理员离线导致已通过的提案无法落地。与 `resolution-destro-gov::execute_destroy` 保持一致。
 
 ## 3. 存储项
 
-| 存储项 | Key | Value | 说明 |
+本模块**自身不定义存储项**。所有提案数据统一存储在 `voting-engine-system` 中：
+
+| 存储位置 | Key | Value | 说明 |
 | --- | --- | --- | --- |
-| `ProposalActions<T>` | `u64` | `TransferAction` | 提案对应的转账动作 |
-| `ProposalCreatedAt<T>` | `u64` | `BlockNumber` | 提案创建块号 |
-| `ActiveProposalByInstitution<T>` | `InstitutionPalletId` | `u64` | 每机构仅一个活跃提案 |
+| `voting_engine_system::ProposalData` | `u64` | `Vec<u8>`（编码的 `TransferAction`） | 提案业务数据 |
+| `voting_engine_system::ProposalMeta` | `u64` | `ProposalMetadata` | 提案元数据（创建块号等） |
+| `voting_engine_system::Proposals` | `u64` | `Proposal` | 提案核心状态（status、timing） |
 
 ### 3.1 TransferAction 结构
 
 ```rust
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct TransferAction<AccountId, Balance, Remark> {
-    pub institution: InstitutionPalletId,  // 转出机构
-    pub beneficiary: AccountId,             // 收款地址
-    pub amount: Balance,                    // 转账金额
-    pub remark: Remark,                     // 备注
-    pub proposer: AccountId,                // 发起管理员
+pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
+    pub institution: InstitutionPalletId,       // 转出机构
+    pub beneficiary: AccountId,                  // 收款地址
+    pub amount: Balance,                         // 转账金额
+    pub remark: BoundedVec<u8, MaxRemarkLen>,    // 备注
+    pub proposer: AccountId,                     // 发起管理员
 }
 ```
 
@@ -153,12 +174,18 @@ pub enum Event<T: Config> {
         who: T::AccountId,
         approve: bool,
     },
-    /// 转账已执行（投票通过后自动触发）
+    /// 投票通过但执行失败（投票已记录，提案已标记 PASSED，可通过 execute_transfer 手动重试）
+    TransferExecutionFailed {
+        proposal_id: u64,
+        institution: InstitutionPalletId,
+    },
+    /// 转账已执行（投票通过后自动触发，含手续费分账）
     TransferExecuted {
         proposal_id: u64,
         institution: InstitutionPalletId,
         beneficiary: T::AccountId,
         amount: BalanceOf<T>,
+        fee: BalanceOf<T>,
     },
 }
 ```
@@ -172,12 +199,13 @@ pub enum Error<T> {
     InstitutionOrgMismatch,          // org 与机构类型不匹配
     UnauthorizedAdmin,               // 非该机构管理员
     ZeroAmount,                      // 金额为零
+    AmountBelowExistentialDeposit,   // 金额低于 ED
     SelfTransferNotAllowed,          // 不能转给自己
     BeneficiaryIsProtectedAddress,   // 收款地址是受保护地址
-    ProposalActionNotFound,          // 提案不存在
+    ProposalActionNotFound,          // 提案不存在或数据解码失败
     InstitutionAccountDecodeFailed,  // 机构地址解码失败
-    InsufficientBalance,             // 余额不足（amount + ED）
-    ActiveProposalExists,            // 该机构已有活跃提案
+    InsufficientBalance,             // 余额不足（amount + fee + ED）
+    ProposalNotPassed,               // 提案未通过（execute_transfer 校验）
     TransferFailed,                  // 转账执行失败
 }
 ```
@@ -186,78 +214,73 @@ pub enum Error<T> {
 
 ### 6.1 计费规则
 
-由 `onchain-transaction-pow` 的 `custom_fee_with_tip()` 统一计算：
+由 `onchain-transaction-pow::calculate_onchain_fee()` 计算：
 
 - 基础手续费 = `max(amount × ONCHAIN_FEE_RATE, ONCHAIN_MIN_FEE)`
 - `ONCHAIN_FEE_RATE` = 0.1%（`Perbill::from_parts(1_000_000)`）
 - `ONCHAIN_MIN_FEE` = 10 分 = 0.1 元
 - 按"分"四舍五入
 
-### 6.2 手续费支付者
+### 6.2 手续费处理方式
 
-通过 `RuntimeFeePayerExtractor`（实现 `CallFeePayer` trait）将手续费支付者从签名管理员切换到机构 `duoqian_address`：
+提案提交和投票交易本身**免费**（`CallAmount` 返回 `NoAmount`）。手续费在投票通过后由 pallet 的 `try_execute_transfer` 内部处理：
 
-```rust
-// runtime/src/configs/mod.rs 中扩展 RuntimeFeePayerExtractor
-impl CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
-    fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
-        match call {
-            RuntimeCall::DuoqianTransferPow(
-                duoqian_transfer_pow::Call::propose_transfer { institution, .. }
-            ) => institution_pallet_address(*institution)
-                .and_then(|raw| AccountId::decode(&mut &raw[..]).ok()),
-            RuntimeCall::DuoqianTransferPow(
-                duoqian_transfer_pow::Call::vote_transfer { proposal_id, .. }
-            ) => {
-                // 从 ProposalActions 中获取 institution，再查 duoqian_address
-                duoqian_transfer_pow::ProposalActions::<Runtime>::get(proposal_id)
-                    .and_then(|action| institution_pallet_address(action.institution))
-                    .and_then(|raw| AccountId::decode(&mut &raw[..]).ok())
-            }
-            _ => None,
-        }
-    }
-}
-```
+1. 通过 `calculate_onchain_fee(amount)` 计算手续费。
+2. 校验余额 >= `amount + fee + ED`。
+3. 执行 `Currency::transfer()` 转账。
+4. 执行 `Currency::withdraw()` 扣取手续费。
+5. 通过 `FeeRouter` 按规则分账。
+
+`RuntimeFeePayerExtractor` 对 `DuoqianTransferPow` 返回 `None`（不参与外部手续费流程）。
 
 ### 6.3 手续费分账
 
-按 `PowOnchainFeeRouter` 规则：
+按 `TransferFeeRouter`（复用 `PowOnchainFeeRouter` 规则）：
 - 80% → 全节点出块者
 - 10% → 国储会
 - 10% → 黑洞销毁
-
-### 6.4 手续费金额提取
-
-需要在 runtime 的 `CallAmount` 实现中为 `DuoqianTransferPow` 的转账交易返回 `Amount(transfer_amount)`，使计费规则能正确按转账金额计算费率。
 
 ## 7. 转账执行逻辑
 
 ### 7.1 自动执行流程
 
-投票达到阈值后，在最后一票的 `vote_transfer` 交易内**立即自动执行转账**：
+投票达到阈值后，在最后一票的 `vote_transfer` 交易内**尝试自动执行转账**：
 
 ```
 1. cast_internal_vote() 返回后，读取提案状态
 2. 若 STATUS_PASSED（yes >= threshold）：
-   a. 从 ProposalActions 读取 TransferAction
+   a. 从 voting_engine_system::ProposalData 读取编码的 TransferAction
    b. 通过 institution_pallet_address(institution) 获取 duoqian_address [u8; 32]
    c. 解码为 T::AccountId
-   d. 校验余额: free_balance >= amount + ED
-   e. 执行 Currency::transfer(duoqian_address, beneficiary, amount, KeepAlive)
-   f. 清理关联存储: ProposalActions, ProposalCreatedAt, ActiveProposalByInstitution
-   g. 调用 InternalVoteEngine::cleanup_internal_proposal(proposal_id)
-   h. 发出 TransferExecuted 事件
+   d. 计算手续费 fee = calculate_onchain_fee(amount)
+   e. 校验余额: free_balance >= amount + fee + ED
+   f. 执行 Currency::transfer(duoqian_address, beneficiary, amount, KeepAlive)
+   g. 执行 Currency::withdraw(duoqian_address, fee) 扣取手续费
+   h. 通过 FeeRouter 分账
+   i. 调用 set_status_and_emit(STATUS_EXECUTED) 标记为已执行（防止双重执行）
+   j. 发出 TransferExecuted 事件
+3. 若执行失败：发出 TransferExecutionFailed 事件（状态保持 PASSED，可通过 execute_transfer 手动重试）
 ```
 
-没有手动执行入口，投票通过即转账，一步到位。
+### 7.2 提案状态流转
 
-### 7.2 余额保护
+```
+VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
+                ↓ 执行失败
+           保持 PASSED（可通过 execute_transfer 重试）
+```
+
+- `VOTING`（0）：投票进行中
+- `PASSED`（1）：投票通过，待执行或执行失败待重试
+- `REJECTED`（2）：投票超时未达阈值
+- `EXECUTED`（3）：执行成功，终态，无法再次执行
+
+### 7.3 余额保护
 
 - 使用 `ExistenceRequirement::KeepAlive` 确保转账后机构账户不被 reap（删除）。
-- 预检 `free_balance >= amount + ED`，其中 `ED = 111 分`（`ACCOUNT_EXISTENTIAL_DEPOSIT`）。
+- 执行时校验 `free_balance >= amount + fee + ED`。
 
-### 7.3 转账 vs 销毁
+### 7.4 转账 vs 销毁
 
 | 操作 | resolution-destro-gov | duoqian-transfer-pow |
 | --- | --- | --- |
@@ -326,11 +349,16 @@ pub trait Config: frame_system::Config + voting_engine_system::Config {
     /// 内部投票引擎
     type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
 
-    /// 受保护地址检查器
-    type ProtectedAddressChecker: ProtectedAddressCheck<Self::AccountId>;
+    /// 受保护地址检查器（复用 duoqian-transaction-pow 的 trait）
+    type ProtectedSourceChecker: duoqian_transaction_pow::ProtectedSourceChecker<Self::AccountId>;
+
+    /// 手续费分账路由（复用 PowOnchainFeeRouter）
+    type FeeRouter: frame_support::traits::OnUnbalanced<
+        <Self::Currency as Currency<Self::AccountId>>::NegativeImbalance,
+    >;
 
     /// Weight 配置
-    type WeightInfo: WeightInfo;
+    type WeightInfo: crate::weights::WeightInfo;
 }
 ```
 
@@ -340,15 +368,17 @@ pub trait Config: frame_system::Config + voting_engine_system::Config {
 | --- | --- | --- | --- |
 | `propose_transfer` | ~55 ms | 5 | 7 |
 | `vote_transfer`（含自动执行） | ~140 ms | 9 | 12 |
+| `execute_transfer`（手动重试） | ~75 ms | 4 | 4 |
 
 说明：以上为参考 `resolution-destro-gov` 的基准估算，实际值需跑 benchmark 生成。
-`vote_transfer` 在最后一票触发自动转账时 DB 写入最多（投票记录 + 转账 + 清理）。
+`vote_transfer` 在最后一票触发自动转账时 DB 写入最多（投票记录 + 转账 + 手续费扣取）。
+`execute_transfer` 仅读取提案数据并执行转账，不涉及投票逻辑。
 
 ## 12. 文件清单
 
 | 文件 | 说明 |
 | --- | --- |
-| `src/lib.rs` | Pallet 主体（Config、Storage、Event、Error、Extrinsics） |
+| `src/lib.rs` | Pallet 主体（Config、Event、Error、Extrinsics、TransferAction） |
 | `src/weights.rs` | Weight 定义（先用占位值，后续 benchmark 生成） |
 | `src/benchmarks.rs` | 基准测试 |
 | `Cargo.toml` | 依赖声明 |
@@ -358,18 +388,34 @@ pub trait Config: frame_system::Config + voting_engine_system::Config {
 
 ### 13.1 注册 pallet
 
-在 `runtime/src/configs/mod.rs` 中：
-- 配置 `duoqian_transfer_pow::Config`
-- 在 `construct_runtime!` 中注册 `DuoqianTransferPow`
+在 `runtime/src/lib.rs` 中注册（pallet_index = 19）：
+```rust
+#[runtime::pallet_index(19)]
+pub type DuoqianTransferPow = duoqian_transfer_pow;
+```
 
-### 13.2 扩展 RuntimeFeePayerExtractor
+在 `runtime/src/configs/mod.rs` 中配置：
+```rust
+impl duoqian_transfer_pow::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type MaxRemarkLen = ConstU32<256>;
+    type InternalVoteEngine = VotingEngineSystem;
+    type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
+    type FeeRouter = TransferFeeRouter;
+    type WeightInfo = duoqian_transfer_pow::weights::SubstrateWeight<Runtime>;
+}
+```
 
-为 `propose_transfer` 和 `vote_transfer` 返回机构 `duoqian_address` 作为手续费支付者。
+### 13.2 CallAmount 配置
 
-### 13.3 扩展 CallAmount
+`DuoqianTransferPow` 的所有 extrinsic 返回 `NoAmount`（免费提交），手续费在 pallet 内部扣取：
+```rust
+RuntimeCall::DuoqianTransferPow(_) => {
+    onchain_transaction_pow::AmountExtractResult::NoAmount
+}
+```
 
-为 `DuoqianTransferPow` 的转账交易返回 `Amount(transfer_amount)`，使计费规则按转账金额计算。
-
-### 13.4 Benchmark 注册
+### 13.3 Benchmark 注册
 
 在 `define_benchmarks!` 中添加 `[duoqian_transfer_pow, DuoqianTransferPow]`。

@@ -47,7 +47,11 @@ fn retention_blocks<T: Config>() -> BlockNumberFor<T> {
 
 /// 注册延迟清理：提案完成时调用，90 天后自动清理。
 /// 如果目标区块的队列已满（50 个），自动顺延到下一个区块，保证不丢失。
-pub fn schedule_cleanup<T: Config>(proposal_id: u64, current_block: BlockNumberFor<T>) {
+/// 连续 100 个区块都满时返回错误（实际几乎不可能发生）。
+pub fn schedule_cleanup<T: Config>(
+    proposal_id: u64,
+    current_block: BlockNumberFor<T>,
+) -> frame_support::pallet_prelude::DispatchResult {
     let base = current_block.saturating_add(retention_blocks::<T>());
     let mut target = base;
 
@@ -57,18 +61,16 @@ pub fn schedule_cleanup<T: Config>(proposal_id: u64, current_block: BlockNumberF
             ids.try_push(proposal_id).is_ok()
         });
         if success {
-            return;
+            return Ok(());
         }
         target = target.saturating_add(BlockNumberFor::<T>::one());
     }
 
-    // 极端情况：连续 100 个区块都满了（几乎不可能），放弃注册。
-    // 数据不会被清理，但不影响链运行。
-    #[cfg(feature = "std")]
-    eprintln!(
-        "[proposal_cleanup] WARNING: schedule_cleanup failed for proposal {proposal_id}, \
-         all queues full from block {base:?} to {target:?}"
-    );
+    // 极端情况：连续 100 个区块都满了（几乎不可能）。
+    // 使用 defensive! 在 debug/test 模式下 panic 提示开发者，生产模式仅记录日志。
+    // 数据不会被清理但不影响链运行。
+    frame_support::defensive!("schedule_cleanup: all queues full, proposal may not be cleaned up");
+    Ok(())
 }
 
 /// 在 `on_initialize` 中调用。

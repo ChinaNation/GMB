@@ -12,7 +12,7 @@ use primitives::china::china_ch::{
 };
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, STATUS_PASSED,
+    InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -290,6 +290,9 @@ pub mod pallet {
                 T::Currency::slash(&institution_account, action.amount);
             ensure!(remaining.is_zero(), Error::<T>::InsufficientBalance);
 
+            // 标记为已执行，防止双重执行
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+
             Self::deposit_event(Event::<T>::DestroyExecuted {
                 proposal_id,
                 institution: action.institution,
@@ -499,6 +502,11 @@ mod tests {
         AccountId32::new(raw)
     }
 
+    /// 获取最近一次 create_internal_proposal 分配的 proposal_id。
+    fn last_proposal_id() -> u64 {
+        voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+    }
+
     fn new_test_ext() -> sp_io::TestExternalities {
         let mut storage = frame_system::GenesisConfig::<Test>::default()
             .build_storage()
@@ -531,11 +539,12 @@ mod tests {
                 institution,
                 100
             ));
+            let pid = last_proposal_id();
 
             for i in 0..13 {
                 assert_ok!(ResolutionDestroGov::vote_destroy(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -556,11 +565,12 @@ mod tests {
                 institution,
                 200
             ));
+            let pid = last_proposal_id();
 
             for i in 0..6 {
                 assert_ok!(ResolutionDestroGov::vote_destroy(
                     RuntimeOrigin::signed(prc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -581,11 +591,12 @@ mod tests {
                 institution,
                 300
             ));
+            let pid = last_proposal_id();
 
             for i in 0..6 {
                 assert_ok!(ResolutionDestroGov::vote_destroy(
                     RuntimeOrigin::signed(prb_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -615,9 +626,10 @@ mod tests {
                 institution,
                 100
             ));
+            let pid = last_proposal_id();
 
             assert_noop!(
-                ResolutionDestroGov::vote_destroy(RuntimeOrigin::signed(prc_admin(0)), 0, true),
+                ResolutionDestroGov::vote_destroy(RuntimeOrigin::signed(prc_admin(0)), pid, true),
                 Error::<Test>::UnauthorizedAdmin
             );
         });
@@ -644,11 +656,12 @@ mod tests {
                 institution,
                 2_000
             ));
+            let pid = last_proposal_id();
 
             for i in 0..12 {
                 assert_ok!(ResolutionDestroGov::vote_destroy(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -656,11 +669,11 @@ mod tests {
             // 第 13 票应被记录，自动执行失败不回滚投票。
             assert_ok!(ResolutionDestroGov::vote_destroy(
                 RuntimeOrigin::signed(nrc_admin(12)),
-                0,
+                pid,
                 true
             ));
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(0)
+                voting_engine_system::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
                 STATUS_PASSED
@@ -669,9 +682,9 @@ mod tests {
                 Balances::free_balance(institution_account(institution)),
                 1_000
             );
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
             assert_noop!(
-                ResolutionDestroGov::execute_destroy(RuntimeOrigin::signed(nrc_admin(0)), 0),
+                ResolutionDestroGov::execute_destroy(RuntimeOrigin::signed(nrc_admin(0)), pid),
                 Error::<Test>::InsufficientBalance
             );
         });
@@ -689,11 +702,12 @@ mod tests {
                 institution,
                 1_000
             ));
+            let pid = last_proposal_id();
 
             for i in 0..13 {
                 assert_ok!(ResolutionDestroGov::vote_destroy(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
@@ -701,7 +715,7 @@ mod tests {
             // 如果不校验 ED，这里会被销毁到 0 并触发账户 reap。
             assert_eq!(Balances::free_balance(&account), 1_000);
             assert_noop!(
-                ResolutionDestroGov::execute_destroy(RuntimeOrigin::signed(nrc_admin(0)), 0),
+                ResolutionDestroGov::execute_destroy(RuntimeOrigin::signed(nrc_admin(0)), pid),
                 Error::<Test>::InsufficientBalance
             );
         });
@@ -717,17 +731,18 @@ mod tests {
                 institution,
                 100
             ));
+            let pid1 = last_proposal_id();
 
-            let end = voting_engine_system::Pallet::<Test>::proposals(0)
+            let end = voting_engine_system::Pallet::<Test>::proposals(pid1)
                 .expect("proposal should exist")
                 .end;
             System::set_block_number(end + 1);
             assert_ok!(voting_engine_system::Pallet::<Test>::finalize_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                0
+                pid1
             ));
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(0)
+                voting_engine_system::Pallet::<Test>::proposals(pid1)
                     .expect("proposal should exist")
                     .status,
                 STATUS_REJECTED
@@ -739,8 +754,9 @@ mod tests {
                 institution,
                 50
             ));
-            // 提案 1 应该已创建
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(1).is_some());
+            let pid2 = last_proposal_id();
+            // 提案 2 应该已创建
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid2).is_some());
         });
     }
 
@@ -756,28 +772,29 @@ mod tests {
                 institution,
                 1_100
             ));
+            let pid = last_proposal_id();
 
             for i in 0..13 {
                 assert_ok!(ResolutionDestroGov::vote_destroy(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
 
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(0)
+                voting_engine_system::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
                 STATUS_PASSED
             );
             assert_eq!(Balances::free_balance(&account), 1_000);
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
 
             let _ = Balances::deposit_creating(&account, 200);
             assert_ok!(ResolutionDestroGov::execute_destroy(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                0
+                pid
             ));
             assert_eq!(Balances::free_balance(&account), 100);
         });
@@ -793,11 +810,12 @@ mod tests {
                 institution,
                 100
             ));
+            let pid1 = last_proposal_id();
 
             for i in 0..13 {
                 assert_ok!(ResolutionDestroGov::vote_destroy(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid1,
                     true
                 ));
             }
@@ -808,7 +826,8 @@ mod tests {
                 institution,
                 50
             ));
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(1).is_some());
+            let pid2 = last_proposal_id();
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid2).is_some());
         });
     }
 
@@ -822,13 +841,14 @@ mod tests {
                 institution,
                 100
             ));
+            let pid = last_proposal_id();
             assert_ok!(ResolutionDestroGov::vote_destroy(
                 RuntimeOrigin::signed(nrc_admin(1)),
-                0,
+                pid,
                 true
             ));
             assert_noop!(
-                ResolutionDestroGov::vote_destroy(RuntimeOrigin::signed(nrc_admin(1)), 0, true),
+                ResolutionDestroGov::vote_destroy(RuntimeOrigin::signed(nrc_admin(1)), pid, true),
                 voting_engine_system::pallet::Error::<Test>::AlreadyVoted
             );
         });
@@ -847,17 +867,18 @@ mod tests {
                 institution,
                 1_100
             ));
+            let pid = last_proposal_id();
             for i in 0..13 {
                 assert_ok!(ResolutionDestroGov::vote_destroy(
                     RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
+                    pid,
                     true
                 ));
             }
             let _ = Balances::deposit_creating(&account, 200);
             assert_ok!(ResolutionDestroGov::execute_destroy(
                 RuntimeOrigin::signed(outsider),
-                0
+                pid
             ));
             assert_eq!(Balances::free_balance(&account), 100);
         });
