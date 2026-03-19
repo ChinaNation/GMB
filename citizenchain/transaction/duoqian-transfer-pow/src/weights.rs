@@ -15,6 +15,7 @@ use frame_support::{
 pub trait WeightInfo {
 	fn propose_transfer() -> Weight;
 	fn vote_transfer() -> Weight;
+	fn execute_transfer() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -31,6 +32,14 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(9))
 			.saturating_add(T::DbWeight::get().writes(12))
 	}
+	/// execute_transfer 参考 resolution-destro-gov::execute_destroy 估算：
+	/// 读取 ProposalData + Proposals + Account，执行转账 + 手续费扣取。
+	fn execute_transfer() -> Weight {
+		Weight::from_parts(75_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 3593))
+			.saturating_add(T::DbWeight::get().reads(4))
+			.saturating_add(T::DbWeight::get().writes(4))
+	}
 }
 
 impl WeightInfo for () {
@@ -45,5 +54,11 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 4554))
 			.saturating_add(RocksDbWeight::get().reads(9))
 			.saturating_add(RocksDbWeight::get().writes(12))
+	}
+	fn execute_transfer() -> Weight {
+		Weight::from_parts(75_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 3593))
+			.saturating_add(RocksDbWeight::get().reads(4))
+			.saturating_add(RocksDbWeight::get().writes(4))
 	}
 }

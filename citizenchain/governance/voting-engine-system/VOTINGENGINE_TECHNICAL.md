@@ -3,8 +3,8 @@
 ## 0. 功能需求
 ### 0.1 统一投票引擎能力
 `voting-engine-system` 必须作为治理基础设施，统一承载内部投票、联合机构投票、公民投票三类流程，并向上层事项模块暴露稳定 trait 能力：
-- `InternalVoteEngine`：创建内部提案、代理内部投票、清理内部提案
-- `JointVoteEngine`：创建联合提案、清理联合/公民投票状态
+- `InternalVoteEngine`：创建内部提案、代理内部投票、清理内部提案（清理方法已废弃，由引擎自动注册）
+- `JointVoteEngine`：创建联合提案、清理联合/公民投票状态（清理方法已废弃，由引擎自动注册）
 - `JointVoteResultCallback`：联合提案终局后把结果回传给具体治理模块
 
 ### 0.2 内部投票功能需求
@@ -42,8 +42,8 @@
 - 公民投票（`CITIZEN`）
 
 它通过 trait 为上层治理模块提供标准化能力：
-- `InternalVoteEngine`：创建内部提案、内部投票、内部提案清理
-- `JointVoteEngine`：创建联合提案、联合提案清理
+- `InternalVoteEngine`：创建内部提案、内部投票、内部提案清理（清理方法已废弃 no-op）
+- `JointVoteEngine`：创建联合提案、联合提案清理（清理方法已废弃 no-op）
 - `JointVoteResultCallback`：联合提案终结后回调目标治理模块
 
 ## 2. 核心数据结构
@@ -51,7 +51,17 @@
 `Proposal<BlockNumber>` 字段：
 - `kind`：提案类型（内部/联合）
 - `stage`：当前阶段（内部/联合/公民）
-- `status`：投票中/通过/否决
+- `status`：投票中/通过/否决/已执行
+  - `STATUS_VOTING = 0`：投票进行中
+  - `STATUS_PASSED = 1`：投票已通过
+  - `STATUS_REJECTED = 2`：投票被否决
+  - `STATUS_EXECUTED = 3`：提案已执行完成（终态）。消费模块在业务逻辑成功后调用 `set_status_and_emit(STATUS_EXECUTED)` 设置。
+
+状态流转：
+```
+VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
+         → REJECTED(2)（投票超时/否决）
+```
 - `internal_org`、`internal_institution`：内部提案专用字段
 - `start`、`end`：当前阶段起止区块
 - `citizen_eligible_total`：公民投票总分母
@@ -93,18 +103,22 @@
 5. 未达阈值且到期后，`on_initialize` 自动走 `do_finalize_citizen_timeout`，按阈值判定 `Passed/Rejected`（未达阈值即 `Rejected`）。
 
 ### 3.4 自动超时结算
-1. 新建提案或联合转公民时，将提案写入 `ProposalsByExpiry(end + 1)`（`end` 为最后可投票区块）。
+1. 新建提案或联合转公民时，将提案写入 `ProposalsByExpiry(end + 1)`（`end` 为最后可投票区块）。联合转公民阶段时，`advance_joint_to_citizen` 会先移除旧联合阶段的 `ProposalsByExpiry` 条目，再注册新的公民阶段过期条目，避免 `on_initialize` 对过期旧条目的无效查询。
 2. 每个区块 `on_initialize` 优先处理 `PendingExpiryBucket`，再处理当前区块到期桶。
 3. 单块最多处理 `MaxAutoFinalizePerBlock` 个到期提案；超出部分回写原桶并记录游标，下块继续。
-4. 过期桶里的“历史索引项”（例如联合提前转公民后留下的旧 end）会在自动结算时按当前 `proposal.end/status` 判定并跳过。
+4. `advance_joint_to_citizen` 现在会主动移除旧联合阶段的 expiry 条目，因此正常路径下不再留下历史索引项。自动结算仍保留兜底逻辑：若过期桶中出现历史索引项，会按当前 `proposal.end/status` 判定并跳过。
 5. 若自动结算时下游回调失败，提案会重新写回过期桶，等待后续区块继续重试。
 
 ## 4. 状态终结与回调
-统一通过 `set_status_and_emit` 完成终结：
+统一通过 `set_status_and_emit`（`pub`，允许消费模块直接调用）完成终结：
 1. 原子更新 `Proposals.status`
 2. 发送 `ProposalFinalized` 事件
 3. 对联合提案触发 `JointVoteResultCallback`
-4. 若联合回调失败，则整个终结动作回滚，不留下“投票引擎已终结、业务模块未消费”的不一致状态
+4. 若联合回调失败，则整个终结动作回滚，不留下”投票引擎已终结、业务模块未消费”的不一致状态
+5. 消费模块在业务执行成功后，可调用 `set_status_and_emit(proposal_id, STATUS_EXECUTED)` 将提案标记为已执行终态，防止重复执行
+6. 当 status 从 `STATUS_VOTING` 转为终态（`PASSED` / `REJECTED` / `EXECUTED`）时，自动调用 `schedule_cleanup` 注册 90 天延迟清理，消费模块无需手动调用清理方法
+
+注：`set_status_and_emit` 可见性已从 `pub(crate)` 提升为 `pub`，以便上层治理模块直接调用设置 `STATUS_EXECUTED`。
 
 `finalize_proposal` extrinsic 仍保留，作为手动补偿入口（例如诊断/运维场景），但正常超时路径由 `on_initialize` 自动结算。
 
@@ -125,11 +139,15 @@
 - `finalize_proposal`：主入口读取 proposal 后传入各 timeout 分支，避免重复读
 
 ### 5.5 清理机制
-`cleanup_joint_proposal` / `cleanup_internal_proposal` 改为“小对象立即删，大前缀分块删”：
+`cleanup_joint_proposal` / `cleanup_internal_proposal` 改为”小对象立即删，大前缀分块删”：
 - `Proposals`
 - `JointTallies` / `CitizenTallies` / `InternalTallies`
 - 大体量前缀（`JointVotesByInstitution` / `CitizenVotesBySfid` / `InternalVotesByAccount` / vote credential nonce）改为写入 `PendingProposalCleanups`
 - `on_initialize` 按 `MaxCleanupStepsPerBlock` 与 `CleanupKeysPerStep` 分块续清，避免 finalize 路径单次无界 `clear_prefix`
+
+**自动清理注册**：`set_status_and_emit` 在终态转换（`STATUS_VOTING` → `PASSED` / `REJECTED` / `EXECUTED`）时自动调用 `schedule_cleanup` 注册 90 天延迟清理。因此消费模块不再需要手动调用 `cleanup_joint_proposal` 或 `cleanup_internal_proposal`，这两个 trait 方法已废弃（保留空实现以兼容 trait 定义）。同一提案的多次终态转换（如 `PASSED` → `EXECUTED`）通过 `try_push` 保持幂等，不会导致重复清理。
+
+**`schedule_cleanup` 返回 `DispatchResult`**：该函数在目标区块队列已满时自动顺延到下一个区块（最多尝试 100 个连续区块）。如果连续 100 个区块队列均满（极端情况），使用 `defensive!` 宏在 debug/test 模式下发出警告，但仍返回 `Ok(())`，不阻塞主流程。
 
 ### 5.6 联合回调一致性
 `set_status_and_emit` 现已使用存储事务包裹：
@@ -192,7 +210,7 @@ message = blake2_256(SCALE.encode(payload))
 
 ## 8. 运行与集成注意事项
 1. `JointVoteResultCallback` 应保证可恢复、可重放，不依赖脆弱临时映射。
-2. 上层治理模块在消费联合终结结果后应调用 `cleanup_joint_proposal`，避免状态无限增长。
+2. ~~上层治理模块在消费联合终结结果后应调用 `cleanup_joint_proposal`。~~ **已废弃**：`set_status_and_emit` 在终态转换时自动注册 90 天延迟清理，消费模块无需手动调用 `cleanup_joint_proposal` 或 `cleanup_internal_proposal`（这两个 trait 方法现为空实现 no-op）。
 3. `create_internal_proposal` / `create_joint_proposal` / `internal_vote` 外部 extrinsic 已禁用，统一要求业务模块通过 trait 接入，避免生成无业务映射的悬空提案或绕过上层副作用。
 4. 联合机构线下投票系统必须产出与上面 payload 完全一致的 `sr25519` 签名，否则链上会拒绝联合投票提交。
 5. 对生产链建议定期回归 benchmark，避免手工权重与实际执行漂移。

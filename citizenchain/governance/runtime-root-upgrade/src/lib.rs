@@ -18,7 +18,7 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use sp_runtime::{traits::Hash, DispatchError};
-    use voting_engine_system::JointVoteEngine;
+    use voting_engine_system::{JointVoteEngine, STATUS_EXECUTED};
 
     pub type ReasonOf<T> = BoundedVec<u8, <T as Config>::MaxReasonLen>;
     pub type CodeOf<T> = BoundedVec<u8, <T as Config>::MaxRuntimeCodeSize>;
@@ -234,6 +234,12 @@ pub mod pallet {
                     proposal.status = ProposalStatus::Passed;
                     proposal.code = Default::default();
                     Self::save_proposal(proposal_id, &proposal)?;
+                    // 将投票引擎状态设为 EXECUTED，标记提案已终结（不经 set_status_and_emit 以避免回调重入）。
+                    voting_engine_system::pallet::Proposals::<T>::mutate(proposal_id, |maybe| {
+                        if let Some(p) = maybe {
+                            p.status = STATUS_EXECUTED;
+                        }
+                    });
                     Self::deposit_event(Event::<T>::JointVoteFinalized {
                         proposal_id,
                         approved: true,
@@ -245,6 +251,12 @@ pub mod pallet {
                 } else {
                     proposal.status = ProposalStatus::ExecutionFailed;
                     Self::save_proposal(proposal_id, &proposal)?;
+                    // 执行失败也是终态（不再支持重试），将投票引擎状态设为 EXECUTED 防止重入。
+                    voting_engine_system::pallet::Proposals::<T>::mutate(proposal_id, |maybe| {
+                        if let Some(p) = maybe {
+                            p.status = STATUS_EXECUTED;
+                        }
+                    });
                     Self::deposit_event(Event::<T>::JointVoteFinalized {
                         proposal_id,
                         approved: true,
@@ -282,6 +294,7 @@ mod tests {
     use super::*;
     use core::cell::RefCell;
     use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
+    use codec::Decode;
     use frame_system as system;
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage, DispatchError};
 
