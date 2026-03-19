@@ -228,12 +228,48 @@ fn resolve_chain_genesis_hash() -> Result<[u8; 32], String> {
     if let Some(cached) = CHAIN_GENESIS_HASH.get() {
         return Ok(*cached);
     }
-    let raw = std::env::var("SFID_CHAIN_GENESIS_HASH")
-        .map_err(|_| "SFID_CHAIN_GENESIS_HASH must be configured".to_string())?;
-    let parsed = parse_hex_hash32(raw.as_str())
-        .map_err(|_| "SFID_CHAIN_GENESIS_HASH must be 32-byte hex".to_string())?;
-    let _ = CHAIN_GENESIS_HASH.set(parsed);
-    Ok(CHAIN_GENESIS_HASH.get().copied().unwrap_or(parsed))
+    // 优先读环境变量，没配则使用启动时从链上获取并缓存的值
+    if let Ok(raw) = std::env::var("SFID_CHAIN_GENESIS_HASH") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            let parsed = parse_hex_hash32(trimmed)
+                .map_err(|_| "SFID_CHAIN_GENESIS_HASH must be 32-byte hex".to_string())?;
+            let _ = CHAIN_GENESIS_HASH.set(parsed);
+            return Ok(CHAIN_GENESIS_HASH.get().copied().unwrap_or(parsed));
+        }
+    }
+    Err("genesis hash not available: configure SFID_CHAIN_GENESIS_HASH or call init_genesis_hash_from_chain() at startup".to_string())
+}
+
+/// 启动时从区块链 RPC 获取创世哈希并缓存。
+/// 调用一次后，后续 resolve_chain_genesis_hash() 直接返回缓存值。
+pub(crate) async fn init_genesis_hash_from_chain() -> Result<(), String> {
+    if CHAIN_GENESIS_HASH.get().is_some() {
+        return Ok(());
+    }
+    // 如果环境变量已配置且非空，直接使用
+    if let Ok(raw) = std::env::var("SFID_CHAIN_GENESIS_HASH") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            let parsed = parse_hex_hash32(trimmed)
+                .map_err(|_| "SFID_CHAIN_GENESIS_HASH must be 32-byte hex".to_string())?;
+            let _ = CHAIN_GENESIS_HASH.set(parsed);
+            return Ok(());
+        }
+    }
+    // 从链上获取
+    let ws_url = resolve_chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_url(ws_url)
+        .await
+        .map_err(|e| format!("connect chain for genesis hash failed: {e}"))?;
+    let genesis = client.genesis_hash();
+    let hash_bytes: [u8; 32] = genesis.0;
+    let _ = CHAIN_GENESIS_HASH.set(hash_bytes);
+    tracing::info!(
+        genesis_hash = %hex::encode(hash_bytes),
+        "fetched chain genesis hash from RPC"
+    );
+    Ok(())
 }
 
 fn parse_hex_hash32(raw: &str) -> Result<[u8; 32], String> {
