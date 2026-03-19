@@ -196,5 +196,9 @@ metadata-hash = ["substrate-wasm-builder/metadata-hash"]
 # for an on-chain release.
 on-chain-release-build = ["metadata-hash", "sp-api/disable-logging"]
 
+## 开发链模式：6秒出块、极低难度，仅用于本地开发调试。
+## 编译命令：cargo build --release -p node --features dev-chain
+dev-chain = ["primitives/dev-chain"]
+
 [dev-dependencies]
 ed25519-dalek = "2.2.0"

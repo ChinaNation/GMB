@@ -7,18 +7,16 @@ use frame_support::{
     pallet_prelude::*,
     traits::{GetStorageVersion, StorageVersion},
     weights::Weight,
-    Blake2_128Concat, Twox64Concat,
+    Blake2_128Concat,
 };
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
-use sp_runtime::traits::{One, Saturating, Zero};
-
 use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRC},
-    InstitutionPalletId, STATUS_PASSED, STATUS_REJECTED,
+    InstitutionPalletId, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -76,9 +74,6 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         #[pallet::constant]
-        type StaleProposalLifetime: Get<BlockNumberFor<Self>>;
-
-        #[pallet::constant]
         type GrandpaChangeDelay: Get<BlockNumberFor<Self>>;
 
         /// 中文注释：内部投票引擎（返回真实 proposal_id，避免猜测 next_proposal_id）。
@@ -92,11 +87,6 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::storage]
-    #[pallet::getter(fn proposal_action)]
-    pub type ProposalActions<T: Config> =
-        StorageMap<_, Twox64Concat, u64, GrandpaKeyReplacementAction, OptionQuery>;
-
-    #[pallet::storage]
     #[pallet::getter(fn current_grandpa_key)]
     pub type CurrentGrandpaKeys<T: Config> =
         StorageMap<_, Blake2_128Concat, InstitutionPalletId, [u8; 32], OptionQuery>;
@@ -105,21 +95,6 @@ pub mod pallet {
     #[pallet::getter(fn key_owner)]
     pub type GrandpaKeyOwnerByKey<T: Config> =
         StorageMap<_, Blake2_128Concat, [u8; 32], InstitutionPalletId, OptionQuery>;
-
-    #[pallet::storage]
-    #[pallet::getter(fn proposal_created_at)]
-    pub type ProposalCreatedAt<T: Config> =
-        StorageMap<_, Twox64Concat, u64, BlockNumberFor<T>, OptionQuery>;
-
-    #[pallet::storage]
-    #[pallet::getter(fn active_proposal_by_institution)]
-    pub type ActiveProposalByInstitution<T: Config> =
-        StorageMap<_, Blake2_128Concat, InstitutionPalletId, u64, OptionQuery>;
-
-    #[pallet::storage]
-    #[pallet::getter(fn pending_proposal_by_new_key)]
-    pub type PendingProposalByNewKey<T: Config> =
-        StorageMap<_, Blake2_128Concat, [u8; 32], u64, OptionQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -154,14 +129,6 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        #[cfg(feature = "std")]
-        fn integrity_test() {
-            assert!(
-                !T::StaleProposalLifetime::get().is_zero(),
-                "StaleProposalLifetime must be > 0"
-            );
-        }
-
         fn on_runtime_upgrade() -> Weight {
             let onchain = Pallet::<T>::on_chain_storage_version();
             if onchain < 2 {
@@ -176,43 +143,6 @@ pub mod pallet {
                 return T::DbWeight::get().reads_writes(reads, writes);
             }
             Weight::zero()
-        }
-
-        #[cfg(feature = "try-runtime")]
-        fn pre_upgrade() -> Result<sp_std::vec::Vec<u8>, sp_runtime::TryRuntimeError> {
-            let state = (
-                Pallet::<T>::on_chain_storage_version(),
-                CurrentGrandpaKeys::<T>::iter().count() as u64,
-                GrandpaKeyOwnerByKey::<T>::iter().count() as u64,
-                PendingProposalByNewKey::<T>::iter().count() as u64,
-            );
-            Ok(state.encode())
-        }
-
-        #[cfg(feature = "try-runtime")]
-        fn post_upgrade(state: sp_std::vec::Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
-            let (pre_version, pre_current_count, _pre_owner_count, _pre_pending_count): (
-                StorageVersion,
-                u64,
-                u64,
-                u64,
-            ) = Decode::decode(&mut &state[..]).map_err(|_| "decode pre_upgrade state failed")?;
-
-            if pre_version < 2 {
-                if (GrandpaKeyOwnerByKey::<T>::iter().count() as u64) < pre_current_count {
-                    return Err("owner map should be backfilled on migration".into());
-                }
-            }
-
-            for (key, proposal_id) in PendingProposalByNewKey::<T>::iter() {
-                let action = ProposalActions::<T>::get(proposal_id)
-                    .ok_or("pending key index points to missing proposal")?;
-                if action.new_key != key {
-                    return Err("pending key index mismatches proposal new_key".into());
-                }
-            }
-
-            Ok(())
         }
     }
 
@@ -243,11 +173,6 @@ pub mod pallet {
             old_key: [u8; 32],
             new_key: [u8; 32],
         },
-        /// 过期且未执行的提案被清理
-        StaleProposalCancelled {
-            proposal_id: u64,
-            institution: InstitutionPalletId,
-        },
         /// 已通过但不可执行的提案被取消
         FailedProposalCancelled {
             proposal_id: u64,
@@ -263,15 +188,12 @@ pub mod pallet {
         UnauthorizedAdmin,
         ProposalActionNotFound,
         ProposalNotPassed,
-        ActiveProposalExists,
-        ProposalNotStale,
         PassedProposalCannotBeCancelled,
         CurrentGrandpaKeyNotFound,
         NewKeyIsZero,
         InvalidEd25519Key,
         NewKeyUnchanged,
         NewKeyAlreadyUsed,
-        NewKeyPendingInOtherProposal,
         OldAuthorityNotFound,
         GrandpaChangePending,
         ProposalStillExecutable,
@@ -293,7 +215,7 @@ pub mod pallet {
             let point = CompressedEdwardsY(new_key)
                 .decompress()
                 .ok_or(Error::<T>::InvalidEd25519Key)?;
-            // 中文注释：仅“能解压”为曲线点还不够，small-order 弱公钥可能导致 GRANDPA 签名安全性失真。
+            // 中文注释：仅”能解压”为曲线点还不够，small-order 弱公钥可能导致 GRANDPA 签名安全性失真。
             ensure!(!point.is_small_order(), Error::<T>::InvalidEd25519Key);
 
             let actual_org = institution_org(institution).ok_or(Error::<T>::InvalidInstitution)?;
@@ -305,18 +227,6 @@ pub mod pallet {
                 Self::is_internal_admin(actual_org, institution, &who),
                 Error::<T>::UnauthorizedAdmin
             );
-            let stale_proposal = Self::ensure_no_active_proposal(institution)?;
-
-            if let Some(pending_id) = PendingProposalByNewKey::<T>::get(new_key) {
-                if let Some(pending_action) = ProposalActions::<T>::get(pending_id) {
-                    // 中文注释：同一 new_key 只能被一个活跃提案占用，防止并发冲突。
-                    if pending_action.institution != institution {
-                        return Err(Error::<T>::NewKeyPendingInOtherProposal.into());
-                    }
-                } else {
-                    PendingProposalByNewKey::<T>::remove(new_key);
-                }
-            }
 
             let old_key = CurrentGrandpaKeys::<T>::get(institution)
                 .ok_or(Error::<T>::CurrentGrandpaKeyNotFound)?;
@@ -326,29 +236,21 @@ pub mod pallet {
                 Error::<T>::NewKeyAlreadyUsed
             );
 
+            let action = GrandpaKeyReplacementAction {
+                institution,
+                old_key,
+                new_key,
+            };
+
             let proposal_id = T::InternalVoteEngine::create_internal_proposal(
                 who.clone(),
                 actual_org,
                 institution,
             )?;
 
-            if let Some(stale_id) = stale_proposal {
-                // 中文注释：先成功拿到新 proposal_id，再清理旧脏提案，避免未授权调用借机删除历史状态。
-                if stale_id != proposal_id {
-                    Self::cleanup_inactive_proposal(institution, stale_id);
-                }
-            }
-
-            ProposalActions::<T>::insert(
-                proposal_id,
-                GrandpaKeyReplacementAction {
-                    institution,
-                    old_key,
-                    new_key,
-                },
-            );
-            ProposalCreatedAt::<T>::insert(proposal_id, frame_system::Pallet::<T>::block_number());
-            ActiveProposalByInstitution::<T>::insert(institution, proposal_id);
+            let data = action.encode();
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            voting_engine_system::Pallet::<T>::store_proposal_meta(proposal_id, frame_system::Pallet::<T>::block_number());
 
             Self::deposit_event(Event::<T>::GrandpaKeyReplacementProposed {
                 proposal_id,
@@ -358,7 +260,6 @@ pub mod pallet {
                 old_key,
                 new_key,
             });
-            PendingProposalByNewKey::<T>::insert(new_key, proposal_id);
             Ok(())
         }
 
@@ -372,8 +273,7 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let action =
-                ProposalActions::<T>::get(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
+            let action = Self::decode_action(proposal_id)?;
             let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 Self::is_internal_admin(org, action.institution, &who),
@@ -393,8 +293,6 @@ pub mod pallet {
                     if Self::try_execute_from_action(proposal_id, action).is_err() {
                         Self::deposit_event(Event::<T>::GrandpaKeyExecutionFailed { proposal_id });
                     }
-                } else if proposal.status == STATUS_REJECTED {
-                    Self::cleanup_inactive_proposal(action.institution, proposal_id);
                 }
             }
 
@@ -409,53 +307,16 @@ pub mod pallet {
             proposal_id: u64,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            let action =
-                ProposalActions::<T>::get(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
+            let action = Self::decode_action(proposal_id)?;
             let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 Self::is_internal_admin(org, action.institution, &who),
                 Error::<T>::UnauthorizedAdmin
             );
-            Self::try_execute(proposal_id)
+            Self::try_execute_from_action(proposal_id, action)
         }
 
-        /// 清理已过期且未执行的提案。
-        #[pallet::call_index(3)]
-        #[pallet::weight(<T as Config>::WeightInfo::cancel_stale_replace_grandpa_key())]
-        pub fn cancel_stale_replace_grandpa_key(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            let action =
-                ProposalActions::<T>::get(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
-            let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                Self::is_internal_admin(org, action.institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-            let created_at = ProposalCreatedAt::<T>::get(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-
-            let is_passed = voting_engine_system::Pallet::<T>::proposals(proposal_id)
-                .map(|proposal| proposal.status == STATUS_PASSED)
-                .unwrap_or(false);
-            ensure!(!is_passed, Error::<T>::PassedProposalCannotBeCancelled);
-
-            let now = frame_system::Pallet::<T>::block_number();
-            let stale_at = created_at.saturating_add(Self::effective_stale_lifetime());
-            ensure!(now >= stale_at, Error::<T>::ProposalNotStale);
-
-            Self::cleanup_inactive_proposal(action.institution, proposal_id);
-
-            Self::deposit_event(Event::<T>::StaleProposalCancelled {
-                proposal_id,
-                institution: action.institution,
-            });
-            Ok(())
-        }
-
-        /// 清理“已通过但确定无法执行”的提案，避免机构长期被 ActiveProposal 锁死。
+        /// 清理”已通过但确定无法执行”的提案。
         #[pallet::call_index(4)]
         #[pallet::weight(<T as Config>::WeightInfo::cancel_failed_replace_grandpa_key())]
         pub fn cancel_failed_replace_grandpa_key(
@@ -463,8 +324,7 @@ pub mod pallet {
             proposal_id: u64,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            let action =
-                ProposalActions::<T>::get(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
+            let action = Self::decode_action(proposal_id)?;
             let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 Self::is_internal_admin(org, action.institution, &who),
@@ -477,7 +337,7 @@ pub mod pallet {
                 proposal.status == STATUS_PASSED,
                 Error::<T>::ProposalNotPassed
             );
-            // 中文注释：这里只允许清理“确定已经执行不了”的通过提案；
+            // 中文注释：这里只允许清理”确定已经执行不了”的通过提案；
             // 若只是 GRANDPA 仍有 pending change，则属于暂时不可执行，应该等待后重试。
             match Self::validate_action(&action) {
                 Ok(_) => return Err(Error::<T>::ProposalStillExecutable.into()),
@@ -487,7 +347,6 @@ pub mod pallet {
                 Err(_) => {}
             }
 
-            Self::cleanup_inactive_proposal(action.institution, proposal_id);
             Self::deposit_event(Event::<T>::FailedProposalCancelled {
                 proposal_id,
                 institution: action.institution,
@@ -509,51 +368,6 @@ pub mod pallet {
             )
         }
 
-        fn effective_stale_lifetime() -> BlockNumberFor<T> {
-            let configured = T::StaleProposalLifetime::get();
-            if configured.is_zero() {
-                One::one()
-            } else {
-                configured
-            }
-        }
-
-        fn ensure_no_active_proposal(
-            institution: InstitutionPalletId,
-        ) -> Result<Option<u64>, DispatchError> {
-            let Some(existing_id) = ActiveProposalByInstitution::<T>::get(institution) else {
-                return Ok(None);
-            };
-
-            let Some(_action) = ProposalActions::<T>::get(existing_id) else {
-                // 中文注释：机构活跃索引指向缺失动作，视为悬挂脏数据，可在新提案创建后顺手清掉。
-                return Ok(Some(existing_id));
-            };
-
-            let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(existing_id) else {
-                return Ok(Some(existing_id));
-            };
-
-            if proposal.status == STATUS_REJECTED {
-                return Ok(Some(existing_id));
-            }
-
-            if proposal.status != STATUS_PASSED {
-                let now = frame_system::Pallet::<T>::block_number();
-                let is_stale = ProposalCreatedAt::<T>::get(existing_id)
-                    .map(|created_at| {
-                        now >= created_at.saturating_add(Self::effective_stale_lifetime())
-                    })
-                    .unwrap_or(false);
-                // 中文注释：未通过且已经超过 stale 窗口的提案，下次 propose 时自动清理，避免机构长期被锁死。
-                if is_stale {
-                    return Ok(Some(existing_id));
-                }
-            }
-
-            Err(Error::<T>::ActiveProposalExists.into())
-        }
-
         fn is_key_used_by_other_institution(
             institution: InstitutionPalletId,
             key: &[u8; 32],
@@ -563,26 +377,11 @@ pub mod pallet {
                 .unwrap_or(false)
         }
 
-        fn remove_active_proposal_if_matches(institution: InstitutionPalletId, proposal_id: u64) {
-            if ActiveProposalByInstitution::<T>::get(institution) == Some(proposal_id) {
-                ActiveProposalByInstitution::<T>::remove(institution);
-            }
-        }
-
-        fn cleanup_inactive_proposal(institution: InstitutionPalletId, proposal_id: u64) {
-            // 中文注释：统一清理提案动作、new_key 并发索引、创建时间和投票引擎内部提案，避免残留脏状态。
-            if let Some(action) = ProposalActions::<T>::take(proposal_id) {
-                PendingProposalByNewKey::<T>::remove(action.new_key);
-            }
-            ProposalCreatedAt::<T>::remove(proposal_id);
-            Self::remove_active_proposal_if_matches(institution, proposal_id);
-            T::InternalVoteEngine::cleanup_internal_proposal(proposal_id);
-        }
-
-        fn try_execute(proposal_id: u64) -> DispatchResult {
-            let action =
-                ProposalActions::<T>::get(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
-            Self::try_execute_from_action(proposal_id, action)
+        fn decode_action(proposal_id: u64) -> Result<GrandpaKeyReplacementAction, DispatchError> {
+            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            GrandpaKeyReplacementAction::decode(&mut &data[..])
+                .map_err(|_| Error::<T>::ProposalActionNotFound.into())
         }
 
         fn try_execute_from_action(
@@ -609,7 +408,6 @@ pub mod pallet {
             CurrentGrandpaKeys::<T>::insert(action.institution, action.new_key);
             GrandpaKeyOwnerByKey::<T>::remove(action.old_key);
             GrandpaKeyOwnerByKey::<T>::insert(action.new_key, action.institution);
-            Self::cleanup_inactive_proposal(action.institution, proposal_id);
 
             Self::deposit_event(Event::<T>::GrandpaKeyReplaced {
                 proposal_id,
@@ -715,7 +513,6 @@ mod tests {
         pub const MaxGrandpaAuthorities: u32 = 64;
         pub const MaxGrandpaNominators: u32 = 0;
         pub const MaxSetIdSessionEntries: u64 = 16;
-        pub const StaleProposalLifetime: u64 = 100;
         pub const GrandpaChangeDelay: u64 = 30;
     }
 
@@ -788,6 +585,13 @@ mod tests {
         }
     }
 
+    pub struct TestTimeProvider;
+    impl frame_support::traits::UnixTime for TestTimeProvider {
+        fn now() -> core::time::Duration {
+            core::time::Duration::from_secs(1_782_864_000) // 2026-07-01
+        }
+    }
+
     impl voting_engine_system::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
@@ -797,17 +601,19 @@ mod tests {
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxJointDecisionApprovals = ConstU32<32>;
+        type MaxProposalDataLen = ConstU32<256>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
+        type InternalThresholdProvider = ();
         type JointInstitutionDecisionVerifier = ();
+        type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
 
     impl Config for Test {
         type RuntimeEvent = RuntimeEvent;
-        type StaleProposalLifetime = StaleProposalLifetime;
         type GrandpaChangeDelay = GrandpaChangeDelay;
         type InternalVoteEngine = voting_engine_system::Pallet<Test>;
         type WeightInfo = ();
@@ -910,80 +716,6 @@ mod tests {
     }
 
     #[test]
-    fn rejected_proposal_is_cleaned_on_next_propose() {
-        new_test_ext().execute_with(|| {
-            let institution = prc_pallet_id();
-            let old_new_key = valid_public_key(11);
-            let replacement_key = valid_public_key(12);
-
-            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
-                RuntimeOrigin::signed(prc_admin(0)),
-                institution,
-                old_new_key,
-            ));
-            assert_eq!(PendingProposalByNewKey::<Test>::get(old_new_key), Some(0));
-
-            let proposal = voting_engine_system::Pallet::<Test>::proposals(0)
-                .expect("internal proposal should exist");
-            System::set_block_number(proposal.end + 1);
-            assert_ok!(VotingEngineSystem::finalize_proposal(
-                RuntimeOrigin::signed(prc_admin(0)),
-                0,
-            ));
-            assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(0)
-                    .expect("proposal should still exist")
-                    .status,
-                STATUS_REJECTED
-            );
-
-            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
-                RuntimeOrigin::signed(prc_admin(0)),
-                institution,
-                replacement_key,
-            ));
-
-            assert!(ProposalActions::<Test>::get(0).is_none());
-            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
-            assert!(PendingProposalByNewKey::<Test>::get(old_new_key).is_none());
-            assert_eq!(
-                ActiveProposalByInstitution::<Test>::get(institution),
-                Some(1)
-            );
-        });
-    }
-
-    #[test]
-    fn stale_unfinalized_proposal_is_cleaned_on_next_propose() {
-        new_test_ext().execute_with(|| {
-            let institution = prc_pallet_id();
-            let old_new_key = valid_public_key(21);
-            let replacement_key = valid_public_key(22);
-
-            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
-                RuntimeOrigin::signed(prc_admin(0)),
-                institution,
-                old_new_key,
-            ));
-
-            System::set_block_number(StaleProposalLifetime::get() + 2);
-            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
-                RuntimeOrigin::signed(prc_admin(0)),
-                institution,
-                replacement_key,
-            ));
-
-            assert!(ProposalActions::<Test>::get(0).is_none());
-            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
-            assert!(PendingProposalByNewKey::<Test>::get(old_new_key).is_none());
-            assert_eq!(
-                ActiveProposalByInstitution::<Test>::get(institution),
-                Some(1)
-            );
-        });
-    }
-
-    #[test]
     fn passed_proposal_executes_and_cleans_up_state() {
         new_test_ext().execute_with(|| {
             let institution = prc_pallet_id();
@@ -1013,11 +745,6 @@ mod tests {
                 GrandpaKeyOwnerByKey::<Test>::get(new_key),
                 Some(institution)
             );
-            assert!(ProposalActions::<Test>::get(0).is_none());
-            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
-            assert!(PendingProposalByNewKey::<Test>::get(new_key).is_none());
-            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
-            assert!(voting_engine_system::Pallet::<Test>::proposals(0).is_none());
             assert!(System::events().iter().any(|record| {
                 matches!(
                     &record.event,
@@ -1063,8 +790,7 @@ mod tests {
                 STATUS_PASSED
             );
             assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(old_key));
-            assert_eq!(PendingProposalByNewKey::<Test>::get(new_key), Some(0));
-            assert!(ProposalActions::<Test>::get(0).is_some());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
             assert!(System::events().iter().any(|record| {
                 matches!(
                     &record.event,
@@ -1088,11 +814,6 @@ mod tests {
                 GrandpaKeyOwnerByKey::<Test>::get(new_key),
                 Some(institution)
             );
-            assert!(ProposalActions::<Test>::get(0).is_none());
-            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
-            assert!(PendingProposalByNewKey::<Test>::get(new_key).is_none());
-            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
-            assert!(voting_engine_system::Pallet::<Test>::proposals(0).is_none());
             assert!(Grandpa::pending_change().is_some());
         });
     }
@@ -1144,11 +865,6 @@ mod tests {
                 0,
             ));
 
-            assert!(ProposalActions::<Test>::get(0).is_none());
-            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
-            assert!(PendingProposalByNewKey::<Test>::get(new_key).is_none());
-            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
-            assert!(voting_engine_system::Pallet::<Test>::proposals(0).is_none());
             assert!(System::events().iter().any(|record| {
                 matches!(
                     &record.event,
@@ -1158,40 +874,6 @@ mod tests {
                     }) if *proposal_id == 0 && *inst == institution
                 )
             }));
-        });
-    }
-
-    #[test]
-    fn new_key_conflict_is_rejected_across_institutions() {
-        new_test_ext().execute_with(|| {
-            let first_institution = prc_pallet_id();
-            let second_institution = cb_pallet_id(2);
-            let shared_new_key = valid_public_key(61);
-
-            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
-                RuntimeOrigin::signed(prc_admin(0)),
-                first_institution,
-                shared_new_key,
-            ));
-
-            assert_noop!(
-                GrandpaKeyGov::propose_replace_grandpa_key(
-                    RuntimeOrigin::signed(cb_admin(2, 0)),
-                    second_institution,
-                    shared_new_key,
-                ),
-                Error::<Test>::NewKeyPendingInOtherProposal
-            );
-
-            assert_eq!(
-                PendingProposalByNewKey::<Test>::get(shared_new_key),
-                Some(0)
-            );
-            assert_eq!(
-                ActiveProposalByInstitution::<Test>::get(first_institution),
-                Some(0)
-            );
-            assert!(ActiveProposalByInstitution::<Test>::get(second_institution).is_none());
         });
     }
 
@@ -1225,12 +907,7 @@ mod tests {
             );
 
             assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(old_key));
-            assert_eq!(PendingProposalByNewKey::<Test>::get(new_key), Some(0));
-            assert_eq!(
-                ActiveProposalByInstitution::<Test>::get(institution),
-                Some(0)
-            );
-            assert!(ProposalActions::<Test>::get(0).is_some());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
             assert_eq!(
                 voting_engine_system::Pallet::<Test>::proposals(0)
                     .expect("passed proposal should remain active")

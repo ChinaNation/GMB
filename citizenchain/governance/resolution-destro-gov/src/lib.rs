@@ -1,10 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{ensure, pallet_prelude::*, traits::Currency, Blake2_128Concat};
+use frame_support::{ensure, pallet_prelude::*, traits::Currency};
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
-use sp_runtime::traits::{CheckedAdd, One, Saturating, Zero};
+use sp_runtime::traits::{CheckedAdd, Zero};
 
 use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
 use primitives::china::china_ch::{
@@ -12,7 +12,7 @@ use primitives::china::china_ch::{
 };
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, STATUS_PASSED, STATUS_REJECTED,
+    InstitutionPalletId, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -90,10 +90,6 @@ pub mod pallet {
 
         type Currency: Currency<Self::AccountId>;
 
-        #[pallet::constant]
-        /// 超过该时长仍未执行的提案可被清理。
-        type StaleProposalLifetime: Get<BlockNumberFor<Self>>;
-
         /// 中文注释：通过统一内部投票引擎创建提案，返回真实 proposal_id。
         type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
 
@@ -104,38 +100,7 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        #[cfg(feature = "std")]
-        fn integrity_test() {
-            assert!(
-                !T::StaleProposalLifetime::get().is_zero(),
-                "StaleProposalLifetime must be > 0"
-            );
-        }
-    }
-
-    #[pallet::storage]
-    #[pallet::getter(fn proposal_action)]
-    pub type ProposalActions<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, DestroyAction<BalanceOf<T>>, OptionQuery>;
-
-    #[pallet::storage]
-    #[pallet::getter(fn proposal_created_at)]
-    pub type ProposalCreatedAt<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, BlockNumberFor<T>, OptionQuery>;
-
-    #[pallet::storage]
-    #[pallet::getter(fn proposal_passed_at)]
-    /// 中文注释：记录提案首次进入 Passed 的时间点；
-    /// 用于“已通过但暂未执行”的 stale 窗口锚定，避免直接沿用 created_at。
-    pub type ProposalPassedAt<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, BlockNumberFor<T>, OptionQuery>;
-
-    #[pallet::storage]
-    #[pallet::getter(fn active_proposal_by_institution)]
-    pub type ActiveProposalByInstitution<T: Config> =
-        StorageMap<_, Blake2_128Concat, InstitutionPalletId, u64, OptionQuery>;
+    // 提案数据、元数据、活跃提案列表均已移至 voting-engine-system 统一管控。
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -162,11 +127,6 @@ pub mod pallet {
             institution: InstitutionPalletId,
             amount: BalanceOf<T>,
         },
-        /// 过期且未执行的销毁提案被清理
-        StaleDestroyCancelled {
-            proposal_id: u64,
-            institution: InstitutionPalletId,
-        },
     }
 
     #[pallet::error]
@@ -179,9 +139,6 @@ pub mod pallet {
         ProposalNotPassed,
         InstitutionAccountDecodeFailed,
         InsufficientBalance,
-        ActiveProposalExists,
-        ProposalNotStale,
-        PassedProposalCannotBeCancelled,
     }
 
     #[pallet::call]
@@ -200,7 +157,7 @@ pub mod pallet {
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
             let actual_org = institution_org(institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(actual_org == org, Error::<T>::InstitutionOrgMismatch);
-            let stale_proposal = Self::check_no_active_proposal(institution)?;
+            // 活跃提案数由 voting-engine-system 在 create_internal_proposal 中统一检查
             ensure!(
                 Self::is_internal_admin(org, institution, &who),
                 Error::<T>::UnauthorizedAdmin
@@ -208,28 +165,11 @@ pub mod pallet {
 
             let proposal_id =
                 T::InternalVoteEngine::create_internal_proposal(who.clone(), org, institution)?;
-            if let Some((stale_id, emit_stale_event)) = stale_proposal {
-                // 中文注释：防御性保护，避免极端 proposal_id 回绕时误删新提案。
-                if stale_id != proposal_id {
-                    Self::cleanup_inactive_proposal(institution, stale_id);
-                    if emit_stale_event {
-                        Self::deposit_event(Event::<T>::StaleDestroyCancelled {
-                            proposal_id: stale_id,
-                            institution,
-                        });
-                    }
-                }
-            }
 
-            ProposalActions::<T>::insert(
-                proposal_id,
-                DestroyAction {
-                    institution,
-                    amount,
-                },
-            );
-            ProposalCreatedAt::<T>::insert(proposal_id, frame_system::Pallet::<T>::block_number());
-            ActiveProposalByInstitution::<T>::insert(institution, proposal_id);
+            let action = DestroyAction { institution, amount };
+            let data = action.encode();
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            voting_engine_system::Pallet::<T>::store_proposal_meta(proposal_id, frame_system::Pallet::<T>::block_number());
 
             Self::deposit_event(Event::<T>::DestroyProposed {
                 proposal_id,
@@ -251,8 +191,10 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let action =
-                ProposalActions::<T>::get(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
+            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            let action = DestroyAction::decode(&mut &data[..])
+                .map_err(|_| Error::<T>::ProposalActionNotFound)?;
             let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 Self::is_internal_admin(org, action.institution, &who),
@@ -269,19 +211,17 @@ pub mod pallet {
 
             if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
                 if proposal.status == STATUS_PASSED {
-                    if ProposalPassedAt::<T>::get(proposal_id).is_none() {
-                        ProposalPassedAt::<T>::insert(
-                            proposal_id,
-                            frame_system::Pallet::<T>::block_number(),
-                        );
+                    if voting_engine_system::Pallet::<T>::get_proposal_meta(proposal_id)
+                        .and_then(|m| m.passed_at)
+                        .is_none()
+                    {
+                        voting_engine_system::Pallet::<T>::set_proposal_passed(proposal_id, frame_system::Pallet::<T>::block_number());
                     }
                     if approve
                         && Self::try_execute_destroy_from_action(proposal_id, action).is_err()
                     {
                         Self::deposit_event(Event::<T>::DestroyExecutionFailed { proposal_id });
                     }
-                } else if proposal.status == STATUS_REJECTED {
-                    Self::cleanup_inactive_proposal(action.institution, proposal_id);
                 }
             }
             Ok(())
@@ -297,33 +237,6 @@ pub mod pallet {
             Self::try_execute_destroy(proposal_id)
         }
 
-        /// 清理已过期且未执行的销毁提案。
-        #[pallet::call_index(3)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::cancel_stale_destroy())]
-        pub fn cancel_stale_destroy(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            // 中文注释：stale 清理同样设计为公开触发，只要提案已经超过治理窗口，
-            // 任意签名账户都可以帮助系统回收阻塞状态，避免同机构长期无法再发起新提案。
-            let _ = ensure_signed(origin)?;
-            let action =
-                ProposalActions::<T>::get(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
-            let created_at = ProposalCreatedAt::<T>::get(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-            let is_passed = voting_engine_system::Pallet::<T>::proposals(proposal_id)
-                .map(|proposal| proposal.status == STATUS_PASSED)
-                .unwrap_or(false);
-            ensure!(!is_passed, Error::<T>::PassedProposalCannotBeCancelled);
-            let now = frame_system::Pallet::<T>::block_number();
-            let stale_at = created_at.saturating_add(Self::effective_stale_lifetime());
-            ensure!(now >= stale_at, Error::<T>::ProposalNotStale);
-
-            Self::cleanup_inactive_proposal(action.institution, proposal_id);
-
-            Self::deposit_event(Event::<T>::StaleDestroyCancelled {
-                proposal_id,
-                institution: action.institution,
-            });
-            Ok(())
-        }
     }
 
     impl<T: Config> Pallet<T> {
@@ -339,71 +252,11 @@ pub mod pallet {
             )
         }
 
-        fn effective_stale_lifetime() -> BlockNumberFor<T> {
-            let configured = T::StaleProposalLifetime::get();
-            if configured.is_zero() {
-                One::one()
-            } else {
-                configured
-            }
-        }
-
-        fn check_no_active_proposal(
-            institution: InstitutionPalletId,
-        ) -> Result<Option<(u64, bool)>, DispatchError> {
-            if let Some(existing_id) = ActiveProposalByInstitution::<T>::get(institution) {
-                if ProposalActions::<T>::contains_key(existing_id) {
-                    if let Some(proposal) =
-                        voting_engine_system::Pallet::<T>::proposals(existing_id)
-                    {
-                        if proposal.status == STATUS_REJECTED {
-                            return Ok(Some((existing_id, false)));
-                        }
-                        if proposal.status == STATUS_PASSED {
-                            let now = frame_system::Pallet::<T>::block_number();
-                            // 中文注释：已通过但未执行的提案，优先以 passed_at 作为 stale 窗口起点；
-                            // 若历史脏数据缺失 passed_at，则回退到 created_at，保证仍可恢复解阻塞。
-                            let anchor = ProposalPassedAt::<T>::get(existing_id)
-                                .or_else(|| ProposalCreatedAt::<T>::get(existing_id));
-                            let still_active = anchor
-                                .map(|at| {
-                                    let stale_at =
-                                        at.saturating_add(Self::effective_stale_lifetime());
-                                    now < stale_at
-                                })
-                                .unwrap_or(false);
-                            if still_active {
-                                return Err(Error::<T>::ActiveProposalExists.into());
-                            }
-                            return Ok(Some((existing_id, anchor.is_some())));
-                        }
-                        return Err(Error::<T>::ActiveProposalExists.into());
-                    }
-                }
-                return Ok(Some((existing_id, false)));
-            }
-            Ok(None)
-        }
-
-        fn remove_active_proposal_if_matches(institution: InstitutionPalletId, proposal_id: u64) {
-            if ActiveProposalByInstitution::<T>::get(institution) == Some(proposal_id) {
-                ActiveProposalByInstitution::<T>::remove(institution);
-            }
-        }
-
-        fn cleanup_inactive_proposal(institution: InstitutionPalletId, proposal_id: u64) {
-            // 中文注释：业务侧动作、时间戳、机构活跃索引与投票引擎提案必须一起清理，
-            // 否则同机构后续新提案可能被陈旧状态卡住。
-            ProposalActions::<T>::remove(proposal_id);
-            ProposalCreatedAt::<T>::remove(proposal_id);
-            ProposalPassedAt::<T>::remove(proposal_id);
-            Self::remove_active_proposal_if_matches(institution, proposal_id);
-            T::InternalVoteEngine::cleanup_internal_proposal(proposal_id);
-        }
-
         fn try_execute_destroy(proposal_id: u64) -> DispatchResult {
-            let action =
-                ProposalActions::<T>::get(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
+            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            let action = DestroyAction::decode(&mut &data[..])
+                .map_err(|_| Error::<T>::ProposalActionNotFound)?;
             Self::try_execute_destroy_from_action(proposal_id, action)
         }
 
@@ -432,12 +285,10 @@ pub mod pallet {
                 .ok_or(Error::<T>::InsufficientBalance)?;
             ensure!(free >= required, Error::<T>::InsufficientBalance);
 
-            // 中文注释：slash 会同步减少总发行量，实现链上“销毁”。
+            // 中文注释：slash 会同步减少总发行量，实现链上”销毁”。
             let (_negative_imbalance, remaining) =
                 T::Currency::slash(&institution_account, action.amount);
             ensure!(remaining.is_zero(), Error::<T>::InsufficientBalance);
-
-            Self::cleanup_inactive_proposal(action.institution, proposal_id);
 
             Self::deposit_event(Event::<T>::DestroyExecuted {
                 proposal_id,
@@ -455,7 +306,7 @@ mod tests {
     use codec::Encode;
     use frame_support::{
         assert_noop, assert_ok, derive_impl,
-        traits::{ConstU128, ConstU32, ConstU64},
+        traits::{ConstU128, ConstU32},
     };
     use frame_system as system;
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
@@ -584,6 +435,13 @@ mod tests {
         }
     }
 
+    pub struct TestTimeProvider;
+    impl frame_support::traits::UnixTime for TestTimeProvider {
+        fn now() -> core::time::Duration {
+            core::time::Duration::from_secs(1_782_864_000) // 2026-07-01
+        }
+    }
+
     impl voting_engine_system::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
@@ -592,19 +450,21 @@ mod tests {
         type MaxProposalsPerExpiry = ConstU32<128>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
+        type MaxProposalDataLen = ConstU32<256>;
         type MaxJointDecisionApprovals = ConstU32<32>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
+        type InternalThresholdProvider = ();
         type JointInstitutionDecisionVerifier = ();
+        type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
 
     impl pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type Currency = Balances;
-        type StaleProposalLifetime = ConstU64<100>;
         type InternalVoteEngine = voting_engine_system::Pallet<Test>;
         type WeightInfo = ();
     }
@@ -681,8 +541,6 @@ mod tests {
             }
 
             assert_eq!(Balances::free_balance(&account), 900);
-            assert!(ResolutionDestroGov::proposal_action(0).is_none());
-            assert!(voting_engine_system::Pallet::<Test>::proposals(0).is_none());
         });
     }
 
@@ -708,7 +566,6 @@ mod tests {
             }
 
             assert_eq!(Balances::free_balance(&account), 800);
-            assert!(ResolutionDestroGov::proposal_action(0).is_none());
         });
     }
 
@@ -734,7 +591,6 @@ mod tests {
             }
 
             assert_eq!(Balances::free_balance(&account), 700);
-            assert!(ResolutionDestroGov::proposal_action(0).is_none());
         });
     }
 
@@ -813,7 +669,7 @@ mod tests {
                 Balances::free_balance(institution_account(institution)),
                 1_000
             );
-            assert!(ResolutionDestroGov::proposal_action(0).is_some());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
             assert_noop!(
                 ResolutionDestroGov::execute_destroy(RuntimeOrigin::signed(nrc_admin(0)), 0),
                 Error::<Test>::InsufficientBalance
@@ -883,12 +739,8 @@ mod tests {
                 institution,
                 50
             ));
-            assert!(ResolutionDestroGov::proposal_action(0).is_none());
-            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
-            assert_eq!(
-                ActiveProposalByInstitution::<Test>::get(institution),
-                Some(1)
-            );
+            // 提案 1 应该已创建
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(1).is_some());
         });
     }
 
@@ -920,7 +772,7 @@ mod tests {
                 STATUS_PASSED
             );
             assert_eq!(Balances::free_balance(&account), 1_000);
-            assert!(ResolutionDestroGov::proposal_action(0).is_some());
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(0).is_some());
 
             let _ = Balances::deposit_creating(&account, 200);
             assert_ok!(ResolutionDestroGov::execute_destroy(
@@ -928,159 +780,6 @@ mod tests {
                 0
             ));
             assert_eq!(Balances::free_balance(&account), 100);
-            assert!(ResolutionDestroGov::proposal_action(0).is_none());
-            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
-            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
-        });
-    }
-
-    #[test]
-    fn stale_proposal_can_be_cancelled() {
-        new_test_ext().execute_with(|| {
-            let institution = nrc_pallet_id();
-            assert_ok!(ResolutionDestroGov::propose_destroy(
-                RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
-                institution,
-                100
-            ));
-
-            System::set_block_number(99);
-            assert_noop!(
-                ResolutionDestroGov::cancel_stale_destroy(RuntimeOrigin::signed(nrc_admin(0)), 0),
-                Error::<Test>::ProposalNotStale
-            );
-
-            System::set_block_number(100);
-            assert_ok!(ResolutionDestroGov::cancel_stale_destroy(
-                RuntimeOrigin::signed(nrc_admin(0)),
-                0
-            ));
-            assert!(ResolutionDestroGov::proposal_action(0).is_none());
-            assert!(ProposalCreatedAt::<Test>::get(0).is_none());
-            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
-            assert!(voting_engine_system::Pallet::<Test>::proposals(0).is_none());
-        });
-    }
-
-    #[test]
-    fn passed_proposal_cannot_be_cancelled_but_stale_can_be_overridden() {
-        new_test_ext().execute_with(|| {
-            let institution = nrc_pallet_id();
-            assert_ok!(ResolutionDestroGov::propose_destroy(
-                RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
-                institution,
-                2_000
-            ));
-
-            System::set_block_number(90);
-            for i in 0..13 {
-                assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
-                    true
-                ));
-            }
-            assert_eq!(
-                ProposalPassedAt::<Test>::get(0),
-                Some(System::block_number())
-            );
-
-            System::set_block_number(190);
-            assert_noop!(
-                ResolutionDestroGov::cancel_stale_destroy(RuntimeOrigin::signed(nrc_admin(0)), 0),
-                Error::<Test>::PassedProposalCannotBeCancelled
-            );
-
-            assert_ok!(ResolutionDestroGov::propose_destroy(
-                RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
-                institution,
-                100
-            ));
-            assert!(System::events().iter().any(|record| {
-                matches!(
-                    &record.event,
-                    RuntimeEvent::ResolutionDestroGov(
-                        Event::<Test>::StaleDestroyCancelled {
-                            proposal_id,
-                            institution: inst,
-                        }
-                    ) if *proposal_id == 0 && *inst == institution
-                )
-            }));
-            assert!(ResolutionDestroGov::proposal_action(0).is_none());
-            assert!(voting_engine_system::Pallet::<Test>::proposals(0).is_none());
-            assert_eq!(
-                ActiveProposalByInstitution::<Test>::get(institution),
-                Some(1)
-            );
-        });
-    }
-
-    #[test]
-    fn passed_proposal_without_timestamps_can_be_overridden_for_recovery() {
-        new_test_ext().execute_with(|| {
-            let institution = nrc_pallet_id();
-            assert_ok!(ResolutionDestroGov::propose_destroy(
-                RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
-                institution,
-                2_000
-            ));
-
-            System::set_block_number(90);
-            for i in 0..13 {
-                assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    0,
-                    true
-                ));
-            }
-            assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(0)
-                    .expect("proposal should exist")
-                    .status,
-                STATUS_PASSED
-            );
-            ProposalPassedAt::<Test>::remove(0);
-            ProposalCreatedAt::<Test>::remove(0);
-
-            assert_ok!(ResolutionDestroGov::propose_destroy(
-                RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
-                institution,
-                100
-            ));
-            assert!(ResolutionDestroGov::proposal_action(0).is_none());
-            assert!(voting_engine_system::Pallet::<Test>::proposals(0).is_none());
-            assert_eq!(
-                ActiveProposalByInstitution::<Test>::get(institution),
-                Some(1)
-            );
-        });
-    }
-
-    #[test]
-    fn cancel_stale_destroy_is_allowed_for_non_admin() {
-        new_test_ext().execute_with(|| {
-            let institution = nrc_pallet_id();
-            let outsider = AccountId32::new([99u8; 32]);
-            assert_ok!(ResolutionDestroGov::propose_destroy(
-                RuntimeOrigin::signed(nrc_admin(0)),
-                ORG_NRC,
-                institution,
-                100
-            ));
-
-            System::set_block_number(100);
-            assert_ok!(ResolutionDestroGov::cancel_stale_destroy(
-                RuntimeOrigin::signed(outsider),
-                0
-            ));
-            assert!(ResolutionDestroGov::proposal_action(0).is_none());
-            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
         });
     }
 
@@ -1103,19 +802,13 @@ mod tests {
                 ));
             }
 
-            assert!(ResolutionDestroGov::proposal_action(0).is_none());
-            assert!(ActiveProposalByInstitution::<Test>::get(institution).is_none());
-
             assert_ok!(ResolutionDestroGov::propose_destroy(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
                 institution,
                 50
             ));
-            assert_eq!(
-                ActiveProposalByInstitution::<Test>::get(institution),
-                Some(1)
-            );
+            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(1).is_some());
         });
     }
 

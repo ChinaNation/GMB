@@ -2690,14 +2690,12 @@ dependencies = [
  "frame-system",
  "pallet-balances",
  "parity-scale-codec",
- "rand_core 0.6.4",
  "scale-info",
- "schnorrkel",
- "sfid-code-auth",
  "sp-core",
  "sp-io",
  "sp-runtime",
  "sp-std",
+ "voting-engine-system",
 ]
 
 [[package]]
@@ -2708,6 +2706,8 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "fullnode-pow-reward",
+ "onchain-transaction-pow",
  "pallet-balances",
  "parity-scale-codec",
  "primitives",

@@ -7,6 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wuminapp_mobile/qr/login/login_models.dart';
 import 'package:wuminapp_mobile/qr/login/login_service.dart';
+import 'package:wuminapp_mobile/qr/contact/contact_qr_models.dart';
 import 'package:wuminapp_mobile/qr/qr_router.dart';
 import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
 import 'package:wuminapp_mobile/user/user_service.dart';
@@ -136,8 +137,11 @@ class _QrScanPageState extends State<QrScanPage> {
             await _showUnrecognized();
           }
         case QrScanMode.contact:
-          // 扫码添加好友：仅处理用户码
-          if (result.type == QrRouteType.contact) {
+          // 扫码添加好友：扫描收款码读取 name + to
+          if (result.type == QrRouteType.transfer) {
+            await _handleContactFromTransfer(result);
+          } else if (result.type == QrRouteType.contact) {
+            // 兼容旧版用户码
             await _handleContact(raw);
           } else {
             await _showUnrecognized();
@@ -334,21 +338,78 @@ class _QrScanPageState extends State<QrScanPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 用户码
+  // 收款码 → 添加通讯录
+  // ---------------------------------------------------------------------------
+
+  Future<void> _handleContactFromTransfer(QrRouteResult result) async {
+    if (!mounted) return;
+    try {
+      final payload = TransferQrPayload.fromJson(result.jsonData!);
+      final name = payload.name?.trim() ?? '';
+      if (name.isEmpty) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('无法添加'),
+            content: const Text('该收款码不包含钱包名称，无法添加到通讯录'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('确定'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      final contactResult = await _contactService.addContact(
+        address: payload.to,
+        name: name,
+        selfAddress: widget.selfAccountPubkeyHex,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            contactResult.created
+                ? '已加入通讯录：${contactResult.contact.displayNickname}'
+                : '已更新通讯录：${contactResult.contact.displayNickname}',
+          ),
+        ),
+      );
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('添加失败'),
+          content: Text('$e'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('继续扫描'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 用户码（兼容旧版）
   // ---------------------------------------------------------------------------
 
   Future<void> _handleContact(String raw) async {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     try {
-      final result = await _contactService.addFromQrPayload(
-        raw,
-        selfAccountPubkeyHex: widget.selfAccountPubkeyHex,
+      final payload = ContactQrPayload.parse(raw);
+      final result = await _contactService.addContact(
+        address: payload.address,
+        name: payload.name,
+        selfAddress: widget.selfAccountPubkeyHex,
       );
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -358,14 +419,13 @@ class _QrScanPageState extends State<QrScanPage> {
           ),
         ),
       );
+      Navigator.of(context).pop();
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('无法识别用户二维码'),
+          title: const Text('无法识别二维码'),
           content: Text('$e'),
           actions: [
             TextButton(
@@ -406,7 +466,7 @@ class _QrScanPageState extends State<QrScanPage> {
   String get _hintText => switch (widget.mode) {
         QrScanMode.login => '扫描登录码',
         QrScanMode.transfer => '扫描收款码',
-        QrScanMode.contact => '扫描用户二维码',
+        QrScanMode.contact => '扫描对方收款码',
       };
 
   String get _titleText => switch (widget.mode) {

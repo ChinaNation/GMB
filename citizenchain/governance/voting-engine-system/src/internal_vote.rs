@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 #[cfg(test)]
 use codec::Encode;
 use frame_support::{
@@ -19,20 +17,22 @@ use primitives::count_const::{
 
 use crate::{
     pallet::{Config, Error, Event, InternalTallies, InternalVotesByAccount, Pallet, Proposals},
-    InstitutionPalletId, InternalAdminProvider, Proposal, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
-    STATUS_PASSED,
+    InstitutionPalletId, InternalAdminProvider, InternalThresholdProvider, Proposal,
+    PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
 };
 
 pub const ORG_NRC: u8 = 0;
 pub const ORG_PRC: u8 = 1;
 pub const ORG_PRB: u8 = 2;
+/// 注册多签机构（duoqian-transaction-pow），阈值从链上 DuoqianAccounts 动态读取。
+pub const ORG_DUOQIAN: u8 = 3;
 
 pub fn is_valid_org(org: u8) -> bool {
-    matches!(org, ORG_NRC | ORG_PRC | ORG_PRB)
+    matches!(org, ORG_NRC | ORG_PRC | ORG_PRB | ORG_DUOQIAN)
 }
 
-pub fn org_pass_threshold(org: u8) -> Option<u32> {
-    // 中文注释：不同组织的管理员规模不同，因此通过门槛必须按组织分别配置。
+/// 治理机构（NRC/PRC/PRB）的硬编码阈值，供 `InternalThresholdProvider` 默认实现使用。
+pub fn governance_org_pass_threshold(org: u8) -> Option<u32> {
     match org {
         ORG_NRC => Some(NRC_INTERNAL_THRESHOLD),
         ORG_PRC => Some(PRC_INTERNAL_THRESHOLD),
@@ -41,14 +41,10 @@ pub fn org_pass_threshold(org: u8) -> Option<u32> {
     }
 }
 
-fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
-    CHINA_CB
-        .first()
-        .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
-}
+use crate::nrc_pallet_id_bytes;
 
-fn is_valid_internal_institution(org: u8, institution: InstitutionPalletId) -> bool {
-    // 中文注释：内部投票里的 institution 必须与 org 类型严格对应，避免伪造“跨组织机构”。
+fn is_valid_internal_institution<T: Config>(org: u8, institution: InstitutionPalletId) -> bool {
+    // 中文注释：内部投票里的 institution 必须与 org 类型严格对应，避免伪造”跨组织机构”。
     match org {
         // 国储会只有一个机构
         ORG_NRC => nrc_pallet_id_bytes()
@@ -65,6 +61,8 @@ fn is_valid_internal_institution(org: u8, institution: InstitutionPalletId) -> b
             .iter()
             .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
             .any(|pid| pid == institution),
+        // 注册多签机构：由 InternalThresholdProvider 判断是否存在
+        ORG_DUOQIAN => T::InternalThresholdProvider::pass_threshold(org, institution).is_some(),
         _ => false,
     }
 }
@@ -122,7 +120,7 @@ impl<T: Config> Pallet<T> {
     ) -> Result<u64, sp_runtime::DispatchError> {
         ensure!(is_valid_org(org), Error::<T>::InvalidInternalOrg);
         ensure!(
-            is_valid_internal_institution(org, institution),
+            is_valid_internal_institution::<T>(org, institution),
             Error::<T>::InvalidInstitution
         );
         // 中文注释：内部投票仅允许该机构管理员发起
@@ -130,6 +128,8 @@ impl<T: Config> Pallet<T> {
             is_internal_admin::<T>(org, institution, &who),
             Error::<T>::NoPermission
         );
+        // 全局活跃提案数限制（每机构最多 10 个）
+        // 注意：此处只做预检，实际插入在 allocate_proposal_id 之后
 
         let now = <frame_system::Pallet<T>>::block_number();
         // 中文注释：end 是“最后一个允许投票的区块”，真正自动结算发生在 end + 1。
@@ -151,6 +151,13 @@ impl<T: Config> Pallet<T> {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
+
+            // 全局活跃提案数限制
+            if let Err(err) =
+                crate::active_proposal_limit::try_add_active_proposal::<T>(institution, id)
+            {
+                return TransactionOutcome::Rollback(Err(err));
+            }
 
             Proposals::<T>::insert(id, proposal);
             if let Err(err) = Self::schedule_proposal_expiry(id, end) {
@@ -213,7 +220,8 @@ impl<T: Config> Pallet<T> {
             approve,
         });
 
-        let threshold = org_pass_threshold(org).ok_or(Error::<T>::InvalidInternalOrg)?;
+        let threshold = T::InternalThresholdProvider::pass_threshold(org, institution)
+            .ok_or(Error::<T>::InvalidInternalOrg)?;
         if tally.yes >= threshold {
             Self::set_status_and_emit(proposal_id, STATUS_PASSED)?;
         }

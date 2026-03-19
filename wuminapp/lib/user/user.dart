@@ -1,13 +1,19 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:qr/qr.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:saver_gallery/saver_gallery.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
+import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
+import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
 import 'package:wuminapp_mobile/user/user_service.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -26,24 +32,10 @@ class _ProfilePageState extends State<ProfilePage> {
   final ImagePicker _imagePicker = ImagePicker();
   final UserProfileService _userProfileService = UserProfileService();
 
-  UserProfileState _userProfile = const UserProfileState(
-    nickname: UserProfileService.defaultNickname,
-    nicknameCustomized: false,
-  );
-
-  bool get _isQrEnabled {
-    return _communicationAddress.isNotEmpty;
-  }
+  UserProfileState _userProfile = const UserProfileState();
 
   String get _communicationAddress {
     return _userProfile.communicationAddress?.trim() ?? '';
-  }
-
-  String get _userQrPayload {
-    return UserQrPayload(
-      nickname: _userProfile.nickname,
-      address: _communicationAddress,
-    ).toRawJson();
   }
 
   @override
@@ -84,17 +76,19 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _openUserQr() async {
-    if (!_isQrEnabled) {
+  Future<void> _openMyQrPage() async {
+    final address = _communicationAddress;
+    if (address.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先在用户资料中设置通信账户')),
+      );
       return;
     }
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => UserQrPage(
+        builder: (_) => _MyQrCodePage(
           nickname: _userProfile.nickname,
-          avatarPath: _userProfile.avatarPath,
-          accountPubkeyHex: _communicationAddress,
-          qrPayload: _userQrPayload,
+          address: address,
         ),
       ),
     );
@@ -122,93 +116,47 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildProfileCard() {
-    final qrColor = _isQrEnabled ? Colors.white : Colors.white38;
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _SquareAvatar(path: _userProfile.avatarPath, size: 84),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Transform.translate(
-                        offset: const Offset(0, -2),
-                        child: Text(
-                          _userProfile.nickname,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 19,
-                            fontWeight: FontWeight.w600,
-                            shadows: [
-                              Shadow(
-                                color: Color(0x80000000),
-                                blurRadius: 10,
-                                offset: Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 1),
-                      child: Transform.translate(
-                        offset: const Offset(0, -10),
-                        child: InkWell(
-                          onTap: _isQrEnabled ? _openUserQr : null,
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.all(2),
-                            child: Icon(
-                              Icons.qr_code_2,
-                              size: 21,
-                              color: qrColor,
-                              shadows: const [
-                                Shadow(
-                                  color: Color(0x80000000),
-                                  blurRadius: 10,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: InkWell(
-                    onTap: _openProfileEdit,
-                    borderRadius: BorderRadius.circular(8),
-                    child: const SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: Icon(
-                        Icons.chevron_right,
-                        size: 24,
-                        color: Colors.white,
-                        shadows: [
-                          Shadow(
-                            color: Color(0x80000000),
-                            blurRadius: 10,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                    ),
+            child: Text(
+              _userProfile.nickname,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 19,
+                fontWeight: FontWeight.w600,
+                shadows: [
+                  Shadow(
+                    color: Color(0x80000000),
+                    blurRadius: 10,
+                    offset: Offset(0, 2),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: _openProfileEdit,
+            borderRadius: BorderRadius.circular(8),
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(
+                Icons.chevron_right,
+                size: 24,
+                color: Colors.white,
+                shadows: [
+                  Shadow(
+                    color: Color(0x80000000),
+                    blurRadius: 10,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -273,6 +221,29 @@ class _ProfilePageState extends State<ProfilePage> {
                             Shadow(
                               color: Color(0x66000000),
                               blurRadius: 12,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: topPadding + 14,
+                    right: 8,
+                    child: InkWell(
+                      onTap: _openMyQrPage,
+                      borderRadius: BorderRadius.circular(12),
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(
+                          Icons.qr_code_2,
+                          size: 22,
+                          color: Colors.white,
+                          shadows: [
+                            Shadow(
+                              color: Color(0x80000000),
+                              blurRadius: 10,
                               offset: Offset(0, 2),
                             ),
                           ],
@@ -363,10 +334,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   final UserProfileService _profileService = UserProfileService();
   final SfidBindingService _sfidBindingService = SfidBindingService();
 
+  final GlobalKey _qrKey = GlobalKey();
   late UserProfileState _profile;
   SfidBindState _voteBindState =
       const SfidBindState(status: SfidBindStatus.unbound);
   bool _voteSubmitting = false;
+  bool _isSavingQr = false;
 
   @override
   void initState() {
@@ -390,10 +363,45 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   }
 
   String get _qrPayload {
-    return UserQrPayload(
-      nickname: _profile.nickname,
-      address: _profile.communicationAddress?.trim() ?? '',
+    return TransferQrPayload(
+      to: _profile.communicationAddress?.trim() ?? '',
+      name: _profile.nickname,
     ).toRawJson();
+  }
+
+  // ---- 保存二维码 ----
+
+  Future<void> _saveQrToGallery() async {
+    if (_isSavingQr) return;
+    setState(() => _isSavingQr = true);
+    try {
+      final boundary =
+          _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return;
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null || !mounted) return;
+      final result = await SaverGallery.saveImage(
+        byteData.buffer.asUint8List(),
+        fileName: 'qr_${DateTime.now().millisecondsSinceEpoch}.png',
+        androidRelativePath: 'Pictures/WuminApp',
+        skipIfExists: false,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.isSuccess ? '已保存到相册' : '保存失败'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('保存失败：$e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSavingQr = false);
+    }
   }
 
   // ---- 头像 ----
@@ -419,9 +427,15 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     }
   }
 
-  // ---- 昵称 ----
+  // ---- 昵称（= 通信钱包名称，双向同步） ----
 
   Future<void> _editNickname() async {
+    if (_profile.communicationWalletIndex == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先设置通信账户')),
+      );
+      return;
+    }
     final controller = TextEditingController(text: _profile.nickname);
     final nickname = await showDialog<String>(
       context: context,
@@ -454,7 +468,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     await WidgetsBinding.instance.endOfFrame;
     controller.dispose();
     if (!mounted || nickname == null || nickname.trim().isEmpty) return;
-    final saved = await _profileService.updateNickname(nickname);
+    // 双向同步：同时改钱包名称 + 用户资料中的通信钱包名称
+    final walletManager = WalletManager();
+    await walletManager.renameWallet(
+        _profile.communicationWalletIndex!, nickname);
+    final saved =
+        await _profileService.updateCommunicationWalletName(nickname);
     if (!mounted) return;
     setState(() {
       _profile = saved;
@@ -470,8 +489,11 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       ),
     );
     if (!mounted || wallet == null) return;
-    final saved =
-        await _profileService.updateCommunicationAddress(wallet.address);
+    final saved = await _profileService.setCommunicationWallet(
+      walletIndex: wallet.walletIndex,
+      address: wallet.address,
+      walletName: wallet.walletName,
+    );
     if (!mounted) return;
     setState(() {
       _profile = saved;
@@ -590,10 +612,52 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Center(
               child: _isQrReady
-                  ? QrImageView(
-                      data: _qrPayload,
-                      version: QrVersions.auto,
-                      size: 180,
+                  ? Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        RepaintBoundary(
+                          key: _qrKey,
+                          child: Container(
+                            color: Colors.white,
+                            padding: const EdgeInsets.all(8),
+                            child: CustomPaint(
+                              size: const Size(180, 180),
+                              painter: _HollowQrPainter(
+                                data: _qrPayload,
+                                hollowSize: 40,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: Colors.grey.shade300,
+                              width: 1,
+                            ),
+                          ),
+                          child: IconButton(
+                            constraints: const BoxConstraints(),
+                            padding: EdgeInsets.zero,
+                            onPressed:
+                                _isSavingQr ? null : _saveQrToGallery,
+                            icon: _isSavingQr
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : Icon(Icons.download,
+                                    size: 18,
+                                    color: Colors.grey.shade600),
+                          ),
+                        ),
+                      ],
                     )
                   : Container(
                       width: 180,
@@ -678,9 +742,12 @@ class ContactBookPage extends StatefulWidget {
   const ContactBookPage({
     super.key,
     required this.selfAccountPubkeyHex,
+    this.selectForTrade = false,
   });
 
   final String selfAccountPubkeyHex;
+  /// 为 true 时，点击联系人直接返回该联系人（而非弹窗修改昵称）。
+  final bool selectForTrade;
 
   @override
   State<ContactBookPage> createState() => _ContactBookPageState();
@@ -774,6 +841,16 @@ class _ContactBookPageState extends State<ContactBookPage> {
     }
   }
 
+  Future<void> _openContactDetail(UserContact contact) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => _ContactDetailPage(contact: contact),
+      ),
+    );
+    if (!mounted) return;
+    _reload();
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
@@ -831,54 +908,46 @@ class _ContactBookPageState extends State<ContactBookPage> {
             return _buildEmptyState();
           }
 
+          // 按昵称字母排序
+          final sorted = List<UserContact>.from(contacts)
+            ..sort((a, b) => a.displayNickname
+                .toLowerCase()
+                .compareTo(b.displayNickname.toLowerCase()));
+
           return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            itemCount: contacts.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            itemCount: sorted.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, index) {
-              final contact = contacts[index];
-              final hasLocalNickname =
-                  (contact.localNickname?.trim().isNotEmpty ?? false);
-              return Card(
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: const Color(0xFFE3EFE8),
-                    child: Text(
-                      contact.displayNickname.characters.first,
-                      style: const TextStyle(
-                        color: _inkGreen,
-                        fontWeight: FontWeight.w700,
-                      ),
+              final contact = sorted[index];
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFFE3EFE8),
+                  child: Text(
+                    contact.displayNickname.characters.first,
+                    style: const TextStyle(
+                      color: _inkGreen,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  title: Text(
-                    contact.displayNickname,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 6),
-                      Text(
-                        contact.accountPubkeyHex,
-                        style: const TextStyle(height: 1.4),
-                      ),
-                      if (hasLocalNickname)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            '原始昵称：${contact.sourceNickname}',
-                            style: TextStyle(
-                              color: Colors.grey.shade700,
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  trailing: const Icon(Icons.edit_outlined),
-                  onTap: () => _renameContact(contact),
                 ),
+                title: Text(
+                  contact.displayNickname,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  contact.accountPubkeyHex,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right, size: 20),
+                onTap: widget.selectForTrade
+                    ? () => Navigator.of(context).pop(contact)
+                    : () => _openContactDetail(contact),
               );
             },
           );
@@ -888,28 +957,54 @@ class _ContactBookPageState extends State<ContactBookPage> {
   }
 }
 
-class UserQrPage extends StatelessWidget {
-  const UserQrPage({
-    super.key,
-    required this.nickname,
-    required this.avatarPath,
-    required this.accountPubkeyHex,
-    required this.qrPayload,
-  });
+class _MyQrCodePage extends StatefulWidget {
+  const _MyQrCodePage({required this.nickname, required this.address});
 
   final String nickname;
-  final String? avatarPath;
-  final String accountPubkeyHex;
-  final String qrPayload;
+  final String address;
 
-  Future<void> _copyPayload(BuildContext context) async {
-    await Clipboard.setData(ClipboardData(text: qrPayload));
-    if (!context.mounted) {
-      return;
+  @override
+  State<_MyQrCodePage> createState() => _MyQrCodePageState();
+}
+
+class _MyQrCodePageState extends State<_MyQrCodePage> {
+  final GlobalKey _qrKey = GlobalKey();
+  bool _saving = false;
+
+  String get _qrData => TransferQrPayload(
+        to: widget.address,
+        name: widget.nickname,
+      ).toRawJson();
+
+  Future<void> _saveQr() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final boundary =
+          _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return;
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null || !mounted) return;
+      final result = await SaverGallery.saveImage(
+        byteData.buffer.asUint8List(),
+        fileName: 'my_qr_${DateTime.now().millisecondsSinceEpoch}.png',
+        androidRelativePath: 'Pictures/WuminApp',
+        skipIfExists: false,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.isSuccess ? '已保存到相册' : '保存失败')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('保存失败：$e')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('二维码内容已复制')),
-    );
   }
 
   @override
@@ -919,79 +1014,230 @@ class UserQrPage extends StatelessWidget {
         title: const Text('我的二维码'),
         centerTitle: true,
       ),
-      body: Padding(
+      body: Column(
+        children: [
+          const Spacer(),
+          Text(
+            widget.nickname,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              RepaintBoundary(
+                key: _qrKey,
+                child: Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.all(12),
+                  child: CustomPaint(
+                    size: const Size(240, 240),
+                    painter: _HollowQrPainter(
+                      data: _qrData,
+                      hollowSize: 48,
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Colors.grey.shade300,
+                    width: 1,
+                  ),
+                ),
+                child: IconButton(
+                  constraints: const BoxConstraints(),
+                  padding: EdgeInsets.zero,
+                  onPressed: _saving ? null : _saveQr,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child:
+                              CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(Icons.download,
+                          size: 20, color: Colors.grey.shade600),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              widget.address,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey.shade600,
+                height: 1.5,
+              ),
+            ),
+          ),
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 32),
+            child: Text(
+              '其他用户扫描此二维码可添加通讯录',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContactDetailPage extends StatelessWidget {
+  const _ContactDetailPage({required this.contact});
+
+  final UserContact contact;
+
+  @override
+  Widget build(BuildContext context) {
+    final qrData = TransferQrPayload(
+      to: contact.accountPubkeyHex,
+      name: contact.displayNickname,
+    ).toRawJson();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('联系人详情'),
+        centerTitle: true,
+      ),
+      body: ListView(
         padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
+        children: [
+          // 头像 + 昵称
+          Center(
+            child: Column(
               children: [
-                _SquareAvatar(path: avatarPath, size: 54),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        nickname,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        accountPubkeyHex,
-                        style: TextStyle(
-                          color: Colors.grey.shade700,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
+                CircleAvatar(
+                  radius: 36,
+                  backgroundColor: const Color(0xFFE3EFE8),
+                  child: Text(
+                    contact.displayNickname.characters.first,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      color: _inkGreen,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  contact.displayNickname,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-            Expanded(
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: const Color(0xFFE5ECE8)),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x12000000),
-                        blurRadius: 24,
-                        offset: Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: QrImageView(
-                    data: qrPayload,
-                    version: QrVersions.auto,
-                    size: 280,
-                    backgroundColor: Colors.white,
+          ),
+          const SizedBox(height: 24),
+          // 二维码
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE5ECE8)),
+              ),
+              child: QrImageView(
+                data: qrData,
+                version: QrVersions.auto,
+                size: 240,
+                backgroundColor: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // 地址 + 复制图标
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    contact.accountPubkeyHex,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
+                      height: 1.5,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 4),
+                IconButton(
+                  constraints: const BoxConstraints(),
+                  padding: EdgeInsets.zero,
+                  iconSize: 18,
+                  onPressed: () {
+                    Clipboard.setData(
+                        ClipboardData(text: contact.accountPubkeyHex));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('地址已复制')),
+                    );
+                  },
+                  icon: SvgPicture.asset(
+                    'assets/icons/copy.svg',
+                    width: 16,
+                    height: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 28),
+          // 消息 + 转账按钮
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('消息功能开发中')),
+                    );
+                  },
+                  icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                  label: const Text('消息'),
+                ),
               ),
-            ),
-            Text(
-              '其他用户扫码后可直接加入通讯录',
-              style: TextStyle(color: Colors.grey.shade700),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => _copyPayload(context),
-                icon: const Icon(Icons.copy),
-                label: const Text('复制二维码内容'),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _inkGreen,
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => OnchainTradePage(
+                          initialToAddress: contact.accountPubkeyHex,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.send, size: 18),
+                  label: const Text('转账'),
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1177,5 +1423,56 @@ class _SettingsPageState extends State<_SettingsPage> {
               ],
             ),
     );
+  }
+}
+
+/// 自绘二维码，中央 [hollowSize] 像素区域不绘制任何模块（真正留白）。
+class _HollowQrPainter extends CustomPainter {
+  _HollowQrPainter({required this.data, required this.hollowSize});
+
+  final String data;
+  final double hollowSize;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final qrCode = QrCode.fromData(
+      data: data,
+      errorCorrectLevel: QrErrorCorrectLevel.H,
+    );
+    final qrImage = QrImage(qrCode);
+    final moduleCount = qrImage.moduleCount;
+    final moduleSize = size.width / moduleCount;
+    final paint = Paint()..color = const Color(0xFF000000);
+
+    final hollowModules = (hollowSize / moduleSize).ceil();
+    final hollowStart = (moduleCount - hollowModules) ~/ 2;
+    final hollowEnd = hollowStart + hollowModules;
+
+    for (var row = 0; row < moduleCount; row++) {
+      for (var col = 0; col < moduleCount; col++) {
+        if (qrImage.isDark(row, col)) {
+          if (row >= hollowStart &&
+              row < hollowEnd &&
+              col >= hollowStart &&
+              col < hollowEnd) {
+            continue;
+          }
+          canvas.drawRect(
+            Rect.fromLTWH(
+              col * moduleSize,
+              row * moduleSize,
+              moduleSize,
+              moduleSize,
+            ),
+            paint,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HollowQrPainter oldDelegate) {
+    return oldDelegate.data != data || oldDelegate.hollowSize != hollowSize;
   }
 }
