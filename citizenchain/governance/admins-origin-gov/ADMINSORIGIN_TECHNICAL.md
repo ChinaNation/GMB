@@ -64,7 +64,8 @@
 
 投票引擎：
 - `/Users/rhett/GMB/citizenchain/governance/voting-engine-system/src/lib.rs`
-  - 状态：`STATUS_VOTING=0`, `STATUS_PASSED=1`, `STATUS_REJECTED=2`
+  - 状态：`STATUS_VOTING=0`, `STATUS_PASSED=1`, `STATUS_REJECTED=2`, `STATUS_EXECUTED=3`
+- 状态设置：`Pallet::set_status_and_emit`（用于执行成功后标记 `STATUS_EXECUTED`）
 - 本模块使用：
   - `InternalVoteEngine::create_internal_proposal`
   - `InternalVoteEngine::cast_internal_vote`
@@ -157,8 +158,11 @@ Runtime 配置：
 1. `propose` 创建动作并建立机构活跃索引。
 2. `vote` 持续计票。
 3. 若通过：
-   - 自动执行成功：立即替换并清理动作存储。
+   - 自动执行成功：调用 `set_status_and_emit(STATUS_EXECUTED)` 标记为已执行终态，然后替换并清理动作存储。
    - 自动执行失败：记录 `ProposalPassedAt`，保留动作，等待 `execute_admin_replacement` 重试。
+
+提案状态流转：`VOTING → PASSED → EXECUTED`（执行成功）/ `VOTING → REJECTED`（否决）。
+`STATUS_EXECUTED` 提供主要的重复执行防护；`AdminReplacementAction.executed: bool` 字段作为辅助防护。
 4. 若否决/终结：
    - 下次该机构 `propose` 时会检测到旧活跃索引并自动清理，不再阻塞。
 5. 若长期无人处理：

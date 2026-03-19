@@ -356,8 +356,7 @@ mod tests {
     }
 
     #[test]
-    fn fee_payer_returns_institution_for_propose_transfer() {
-        use codec::Encode;
+    fn fee_payer_returns_none_for_transfer_pow() {
         use configs::RuntimeFeePayerExtractor;
         use frame_support::BoundedVec;
         use onchain_transaction_pow::CallFeePayer;
@@ -376,13 +375,13 @@ mod tests {
             },
         );
         let signer = AccountId::new([1u8; 32]);
+        // 机构转账提案/投票为 NoAmount（免费），手续费在 pallet 内部扣取，
+        // RuntimeFeePayerExtractor 不再参与。
         let payer = RuntimeFeePayerExtractor::fee_payer(&signer, &call);
         assert!(
-            payer.is_some(),
-            "fee_payer must return Some for propose_transfer"
+            payer.is_none(),
+            "fee_payer must return None for DuoqianTransferPow (fees handled internally)"
         );
-        let expected = AccountId::new(CHINA_CB[0].duoqian_address);
-        assert_eq!(payer.unwrap(), expected);
     }
 
     #[test]

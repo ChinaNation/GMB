@@ -2706,7 +2706,6 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "fullnode-pow-reward",
  "onchain-transaction-pow",
  "pallet-balances",
  "parity-scale-codec",

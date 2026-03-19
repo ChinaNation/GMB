@@ -120,6 +120,20 @@ Runtime 配置位置：
    - 失败：标记 `ExecutionFailed`，保留 `code`，初始化 `RetryCount=0`
    - 发出 `JointVoteFinalized`，并额外发出执行成功或失败事件
 
+### 5.2.1 投票引擎 STATUS_EXECUTED 标记
+
+无论 `set_code` 执行成功还是失败，本模块都会将投票引擎侧 `Proposals` 的状态直接修改为 `STATUS_EXECUTED`。
+
+实现方式：直接通过 `Proposals::<T>::mutate` 修改投票引擎存储中的 `status` 字段，而非调用 `set_status_and_emit`。
+
+原因：本模块的执行逻辑运行在投票引擎的回调路径中（`on_joint_vote_finalized`）。若在回调内部再调用 `set_status_and_emit`，会触发投票引擎的状态变更事件和潜在的回调链，产生回调重入风险。直接修改存储字段可以安全地标记提案为已执行，同时避免重入问题。
+
+提案状态流转（投票引擎侧）：`VOTING → PASSED → EXECUTED`
+
+说明：
+- 本模块自身的 `ProposalStatus`（`Passed`/`ExecutionFailed`/`Rejected`/`Cancelled`）与投票引擎侧的 `STATUS_EXECUTED` 是独立的状态维度。
+- 投票引擎侧的 `EXECUTED` 标记在执行成功和执行失败时都会设置，因为无论结果如何，投票引擎的职责（投票与回调触发）已经完成。
+
 ### 5.3 `retry_failed_execution`（call index = 2）
 流程：
 1. 校验 `NrcProposeOrigin`。

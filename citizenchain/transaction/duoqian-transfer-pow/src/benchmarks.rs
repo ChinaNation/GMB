@@ -37,6 +37,10 @@ fn beneficiary_account<T: Config>() -> T::AccountId {
     decode_account::<T>([99u8; 32])
 }
 
+fn last_proposal_id<T: Config>() -> u64 {
+    voting_engine_system::Pallet::<T>::next_proposal_id().saturating_sub(1)
+}
+
 #[benchmarks]
 mod benchmarks {
     use super::*;
@@ -62,8 +66,8 @@ mod benchmarks {
             BoundedVec::default(),
         );
 
-        // 提案业务数据已存储到 voting-engine-system
-        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(0).is_some());
+        let pid = last_proposal_id::<T>();
+        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(pid).is_some());
     }
 
     #[benchmark]
@@ -87,16 +91,55 @@ mod benchmarks {
             BoundedVec::default(),
         )
         .is_ok());
+        let pid = last_proposal_id::<T>();
 
         for i in 0..5 {
             let voter = prc_admin::<T>(i);
-            assert!(T::InternalVoteEngine::cast_internal_vote(voter, 0, true).is_ok());
+            assert!(T::InternalVoteEngine::cast_internal_vote(voter, pid, true).is_ok());
         }
 
         #[extrinsic_call]
-        vote_transfer(RawOrigin::Signed(final_voter), 0, true);
+        vote_transfer(RawOrigin::Signed(final_voter), pid, true);
 
         // 第 6 票达到阈值，转账自动执行；提案数据由 voting-engine-system 延迟清理
-        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(0).is_some());
+        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(pid).is_some());
+    }
+
+    #[benchmark]
+    fn execute_transfer() {
+        let institution = prc_institution();
+        let proposer = prc_admin::<T>(0);
+        let executor = prc_admin::<T>(0);
+        let beneficiary = beneficiary_account::<T>();
+        // 使用较大金额，使自动执行因余额不足失败，然后通过手动执行重试
+        let amount: BalanceOf<T> = 500u128.saturated_into();
+        let initial_balance: BalanceOf<T> = 600u128.saturated_into();
+
+        let inst_account = institution_account::<T>(institution);
+        let _ = T::Currency::deposit_creating(&inst_account, initial_balance);
+
+        assert!(DuoqianTransferPow::<T>::propose_transfer(
+            RawOrigin::Signed(proposer).into(),
+            ORG_PRC,
+            institution,
+            beneficiary,
+            amount,
+            BoundedVec::default(),
+        )
+        .is_ok());
+        let pid = last_proposal_id::<T>();
+
+        // 投票通过（自动执行可能因余额不足失败，这不影响提案状态）
+        for i in 0..6 {
+            let voter = prc_admin::<T>(i);
+            assert!(T::InternalVoteEngine::cast_internal_vote(voter, pid, true).is_ok());
+        }
+
+        // 补充余额后手动执行
+        let top_up: BalanceOf<T> = 1_000_000u128.saturated_into();
+        let _ = T::Currency::deposit_creating(&inst_account, top_up);
+
+        #[extrinsic_call]
+        execute_transfer(RawOrigin::Signed(executor), pid);
     }
 }

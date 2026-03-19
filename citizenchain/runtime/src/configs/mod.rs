@@ -1222,15 +1222,18 @@ mod tests {
                 destroy_amount,
             ));
 
+            let pid = VotingEngineSystem::next_proposal_id().saturating_sub(1);
+
             for i in 0..13 {
                 assert_ok!(ResolutionDestroGov::vote_destroy(
                     RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].admins[i])),
-                    0,
+                    pid,
                     true,
                 ));
             }
 
-            assert!(resolution_destro_gov::Pallet::<Runtime>::proposal_action(0).is_none());
+            // 提案数据由 voting-engine-system 延迟清理，执行后仍保留
+            assert!(VotingEngineSystem::get_proposal_data(pid).is_some());
 
             assert_eq!(
                 Balances::free_balance(&nrc_account),
