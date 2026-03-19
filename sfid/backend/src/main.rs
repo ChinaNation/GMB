@@ -830,11 +830,27 @@ fn main() {
                 get(business::query::public_identity_search),
             );
 
+        // App routes（手机 App 专用，x-app-token 认证）
+        let app_routes = Router::new()
+            .route(
+                "/api/v1/app/voters/count",
+                get(chain::app_api::app_voters_count),
+            )
+            .route(
+                "/api/v1/app/vote/credential",
+                post(chain::app_api::app_vote_credential),
+            )
+            .route(
+                "/api/v1/app/bind/request",
+                post(chain::app_api::app_bind_request),
+            );
+
         let app = Router::new()
             .merge(public_routes)
             .merge(auth_routes)
             .merge(admin_routes)
             .merge(chain_routes)
+            .merge(app_routes)
             .layer(middleware::from_fn_with_state(
                 state.clone(),
                 global_rate_limit_middleware,

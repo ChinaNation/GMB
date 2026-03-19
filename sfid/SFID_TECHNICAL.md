@@ -338,6 +338,34 @@
 - `/api/v1/vote/verify` 使用 5 秒短缓存（按 `account_pubkey + proposal_id`），状态变更/绑定变更会即时失效缓存。
 - 绑定凭证刷新规则：若当前 signer 公钥或 `key_id/key_version/alg` 与已持久化 Runtime 凭证不一致，会自动重签发并覆盖持久化凭证。
 
+### 9.9 App API 接口（移动端专用）
+- 路由组：`/api/v1/app/*`
+- 鉴权方式：请求头 `x-app-token`，服务端与环境变量 `SFID_APP_TOKEN` 比对。
+- 用途：为移动端（wuminapp）提供专用接口，采用静态 Token 鉴权，无需链路 HMAC 签名，认证复杂度低于区块链接口。
+- 限流：共享全局限流器，与其他接口统一限流策略。
+- 源码位置：`sfid/backend/src/chain/app_api.rs`
+
+#### 9.9.1 人口快照查询
+- `GET /api/v1/app/voters/count?who=<pubkey_hex>`
+- 返回字段：`eligible_total`、`snapshot_nonce`、`snapshot_signature`、`who`、`as_of`
+- 核心逻辑复用 `build_population_snapshot_signature()`，与链路 `/api/v1/chain/voters/count` 签名产出一致。
+
+#### 9.9.2 公民投票凭证
+- `POST /api/v1/app/vote/credential`
+- 请求体：`{ "who": "<pubkey>", "proposal_id": 42 }`
+- 返回字段：`sfid_hash`、`vote_nonce`、`vote_signature`（仅资格合格时签发）
+- 核心逻辑复用 `build_vote_credential()`，与链路 `/api/v1/vote/verify` 凭证产出一致。
+
+#### 9.9.3 身份绑定请求
+- `POST /api/v1/app/bind/request`
+- 请求体：`{ "account_pubkey": "<pubkey>", "callback_url": "..." }`
+- 绑定业务逻辑与链路绑定接口相同，仅鉴权方式替换为 App Token。
+
+#### 9.9.4 App Token 配置说明
+- 新增环境变量：`SFID_APP_TOKEN`（在部署脚本中配置）。
+- 移动端编译时通过 `--dart-define=WUMINAPP_API_TOKEN=<同一值>` 注入。
+- App Token 与 Chain Token（`SFID_CHAIN_TOKEN`）为独立凭据，安全级别不同，不可混用。
+
 ### 9.8 CPMS 状态变更扫码接口（人工）
 - `POST /api/v1/admin/cpms-status/scan`：超级管理员/操作管理员扫描 CPMS 状态变更二维码并更新用户状态。
 - 鉴权要求：`SUPER_ADMIN`、`OPERATOR_ADMIN`、`KEY_ADMIN` 可调用（省级角色仍受省域隔离）。
@@ -524,6 +552,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 10. `SFID_ALLOW_INSECURE_CALLBACK_HTTP`：仅开发联调放开 `http://` 回调。
 11. `SFID_CORS_ALLOWED_ORIGINS`：CORS 来源白名单（逗号分隔，禁止 `*`）。
 12. `SFID_PII_KEY`：仅部署脚本兼容保留，非后端启动强依赖。
+13. `SFID_APP_TOKEN`：移动端（wuminapp）App API 鉴权 Token（与 `SFID_CHAIN_TOKEN` 独立，不可混用）。
 - 常见故障排查：
 1. 前端提示 `Failed to fetch` 且 `curl` 返回 `Empty reply from server`：优先检查后端进程是否 panic。
 2. 日志出现 `AddrInUse`：说明 `8899` 端口被旧进程占用，先清理占用进程再启动。
