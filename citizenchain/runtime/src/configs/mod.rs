@@ -1417,14 +1417,15 @@ mod tests {
     }
 
     #[test]
-    fn joint_vote_callback_missing_mapping_and_runtime_upgrade_route() {
+    fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
         new_test_ext().execute_with(|| {
+            // 不存在的提案 ID 应返回错误
             assert!(
                 RuntimeJointVoteResultCallback::on_joint_vote_finalized(999_999, true).is_err()
             );
 
+            // 通过 voting-engine-system 的 ProposalData 写入提案数据（模块已无本地存储）
             let proposal_id = 7u64;
-            let joint_vote_id = 70u64;
             let proposer = AccountId::new(CHINA_CB[0].admins[0]);
             let reason: runtime_root_upgrade::pallet::ReasonOf<Runtime> =
                 b"upgrade".to_vec().try_into().expect("reason");
@@ -1432,42 +1433,35 @@ mod tests {
                 vec![1u8, 2, 3].try_into().expect("code");
             let code_hash = <Runtime as frame_system::Config>::Hashing::hash(code.as_slice());
 
-            runtime_root_upgrade::pallet::Proposals::<Runtime>::insert(
+            let proposal = runtime_root_upgrade::pallet::Proposal::<Runtime> {
+                proposer,
+                reason,
+                code_hash,
+                code,
+                status: runtime_root_upgrade::pallet::ProposalStatus::Voting,
+            };
+            let data = codec::Encode::encode(&proposal);
+            assert_ok!(voting_engine_system::Pallet::<Runtime>::store_proposal_data(
                 proposal_id,
-                runtime_root_upgrade::pallet::Proposal::<Runtime> {
-                    proposer,
-                    reason,
-                    code_hash,
-                    code,
-                    status: runtime_root_upgrade::pallet::ProposalStatus::Voting,
-                },
-            );
-            runtime_root_upgrade::pallet::GovToJointVote::<Runtime>::insert(
-                proposal_id,
-                joint_vote_id,
-            );
-            runtime_root_upgrade::pallet::JointVoteToGov::<Runtime>::insert(
-                joint_vote_id,
-                proposal_id,
-            );
+                data
+            ));
 
+            // 回调拒绝 → 提案状态应变为 Rejected
             assert_ok!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(
-                joint_vote_id,
+                proposal_id,
                 false
             ));
-            let updated = runtime_root_upgrade::pallet::Proposals::<Runtime>::get(proposal_id)
-                .expect("proposal should exist");
+            let raw = voting_engine_system::Pallet::<Runtime>::get_proposal_data(proposal_id)
+                .expect("proposal data should exist");
+            let updated =
+                runtime_root_upgrade::pallet::Proposal::<Runtime>::decode(&mut &raw[..])
+                    .expect("should decode");
             assert!(matches!(
                 updated.status,
                 runtime_root_upgrade::pallet::ProposalStatus::Rejected
             ));
-            assert!(
-                runtime_root_upgrade::pallet::GovToJointVote::<Runtime>::get(proposal_id).is_none()
-            );
-            assert!(
-                runtime_root_upgrade::pallet::JointVoteToGov::<Runtime>::get(joint_vote_id)
-                    .is_none()
-            );
+            // 拒绝后 code 应被清空
+            assert!(updated.code.is_empty());
         });
     }
 

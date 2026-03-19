@@ -90,14 +90,18 @@
 
 ### 6.3 与 wuminapp 对齐口径（当前）
 - 协议：`WUMINAPP_LOGIN_V1`
-- 挑战字段：`proto/system/request_id/challenge/nonce/issued_at/expires_at/aud`
+- 挑战字段：`proto/system/request_id/challenge/nonce/issued_at/expires_at/sys_pubkey/sys_sig/sys_cert`
 - 签名原文固定：
 
 ```text
-WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
+WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 ```
 
-- `origin` 不参与签名，也不作为移动端挑战协议字段。
+- `origin` 不参与移动端扫码验签，可仅作为网页侧上下文保留。
+- `sys_pubkey`：CPMS 当前登录系统公钥。
+- `sys_sig`：CPMS 对挑战原文的签名。
+- `sys_cert`：SFID 对该 CPMS 公钥的背书签名。
+- CPMS 不与区块链交互；WuminApp 只通过区块链获取 SFID 当前公钥，再据此验证 `sys_cert`。
 
 ### 6.4 安全约束
 - challenge 有效期固定 90 秒。
@@ -222,7 +226,8 @@ cpms-qr-v1|site_sfid|sign_key_id|archive_no|citizen_status|voting_eligible|issue
 - `CPMS_DATABASE_URL`：PostgreSQL 连接串（优先级高于 `DATABASE_URL`）。
 - `DATABASE_URL`：PostgreSQL 连接串兜底配置。
 - `SFID_ROOT_PUBKEY`：SFID 初始化二维码验签公钥（初始化必填）。
-- `CPMS_LOGIN_QR_AUD`：登录挑战二维码 `aud`，默认 `cpms-local-app`。
+- `CPMS_LOGIN_SYSTEM_KEY_*`：登录系统公钥/私钥配置（命名待实现统一）。
+- `CPMS_LOGIN_SYS_CERT`：SFID 对当前 CPMS 登录系统公钥的背书结果（命名待实现统一）。
 
 ## 13. 错误码口径（摘要）
 - `1001`：请求参数非法或字段缺失。
@@ -240,10 +245,11 @@ cpms-qr-v1|site_sfid|sign_key_id|archive_no|citizen_status|voting_eligible|issue
 - `5001+`：服务内部错误。
 
 ## 14. 与 wuminapp / SFID 联调要点
-- wuminapp 扫码登录验签串必须与 CPMS 完全一致（7 段，不含 `origin`）。
+- wuminapp 扫码登录验签串必须与 CPMS 完全一致（6 段，不含 `aud/origin`）。
 - CPMS 初始化必须基于 SFID 签发的 `SFID_CPMS_INSTALL` 挑战，并通过 `SFID_ROOT_PUBKEY` 验签。
 - SFID 录入机构公钥使用 CPMS 生成的 `CPMS_SITE_KEYS_REGISTER` 二维码。
 - 业务二维码与机构公钥体系分离于管理员登录公钥体系，不可混用。
+- 登录信任链固定为：区块链持有 SFID 当前公钥 -> SFID 背书 CPMS 登录公钥 -> CPMS 签发登录挑战。
 
 ## 15. 模块文档索引
 - `backend/src/initialize/INITIALIZE_TECHNICAL.md`

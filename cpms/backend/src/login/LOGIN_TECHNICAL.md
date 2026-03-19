@@ -52,14 +52,34 @@
 - `nonce`: 随机串
 - `issued_at`: 秒级时间戳
 - `expires_at`: 秒级时间戳（TTL=90 秒）
-- `aud`: 登录来源标识（默认 `cpms-local-app`）
+- `sys_pubkey`: CPMS 当前登录系统公钥（0x + hex）
+- `sys_sig`: CPMS 对挑战原文的签名（0x + hex）
+- `sys_cert`: SFID 对该 CPMS 公钥的背书签名（0x + hex，必填）
 
-说明：`origin` 不再作为扫码签名要素，也不作为移动端登录挑战协议字段。
+说明：
+
+- `origin`/`domain`/`session_id` 可以保留为网页侧会话上下文字段，但不进入移动端扫码挑战协议主载荷
+- CPMS 不与区块链交互；`sys_cert` 由 SFID 背书提供信任链
 
 ### 6.2 验签拼串（后端与移动端一致）
 ```text
-WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
+WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 ```
+
+### 6.3 CPMS 证书链规范
+
+CPMS 登录二维码中的 `sys_cert` 对应以下固定原文：
+
+```text
+CPMS_CERT_V1|cpms_pubkey|site_sfid|issued_at|expires_at
+```
+
+要求：
+
+- `cpms_pubkey` 必须等于挑战码中的 `sys_pubkey`
+- `site_sfid` 为当前 CPMS 实例绑定的机构编号
+- `sys_cert` 由 SFID 当前有效私钥签发
+- WuminApp 使用区块链当前 SFID 公钥验证 `sys_cert`
 
 ## 7. 依赖边界
 本模块依赖主模块提供通用能力：

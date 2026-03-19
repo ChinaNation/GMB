@@ -75,9 +75,10 @@
 6. 页面轮询 challenge 结果，成功后自动写入会话并完成登录。
 7. challenge 固定有效期 `90` 秒，且 `request_id` 一次性消费，防重放。
 8. 登录二维码协议固定为 `WUMINAPP_LOGIN_V1`，字段必须包含：
-`proto/system/request_id/challenge/nonce/issued_at/expires_at/aud`（时间戳为秒级）。
-9. 登录签名原文固定为：`WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at`。
-10. `origin` 已从登录协议移除，不参与扫码签名与白名单校验。
+`proto/system/request_id/challenge/nonce/issued_at/expires_at/sys_pubkey/sys_sig`（时间戳为秒级）。
+9. SFID 场景下 `sys_cert` 可空；CPMS 场景下 `sys_cert` 表示“SFID 对 CPMS 公钥的背书签名”。
+10. 登录签名原文固定为：`WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at`。
+11. `origin`/`domain`/`session_id` 仅作为网页侧上下文，不属于移动端扫码验签协议字段。
 
 ## 5. 核心业务流程
 ### 5.1 绑定流程（人工）
@@ -375,7 +376,7 @@
 - 区块链接口必须执行 `request_id + nonce + timestamp` 防重放，并落库幂等表。
 - 生产必须配置 `SFID_CHAIN_SIGNING_SECRET`，并强制 `x-chain-signature` 请求签名校验。
 - 公开查询接口允许匿名访问，但必须启用限流、IP 频控和访问日志审计。
-- 登录 challenge 必须一次性、短时效，并绑定 `aud + session` 上下文。
+- 登录 challenge 必须一次性、短时效，并绑定 `session` 上下文。
 - 审计日志保留不少于 3 年。
 - 状态变更扫码、绑定确认、解绑、机构公钥登记、链路资格查询、链路计数查询必须写入审计日志（操作者、公钥/档案号、结果、时间、request_id、actor_ip）。
 - CORS 不允许全开放；应通过 `SFID_CORS_ALLOWED_ORIGINS` 显式配置前端来源（禁止 `*`）。
@@ -405,12 +406,12 @@
 - `archive_no` 的省市代码来源与 CPMS 同步使用 `sheng_cities` 数据。
 - `archive_no` 不承载年龄与状态语义，SFID 不得从 `archive_no` 推导投票资格。
 
-## 12. WUMINAPP 扫码登录实现对齐（已落地）
+## 12. WUMINAPP 扫码登录协议规范（统一口径）
 
-### 12.1 当前状态
+### 12.1 目标状态
 - 协议：`WUMINAPP_LOGIN_V1`。
-- 现状：`wuminapp` 与 SFID 已完成“扫码 -> 确认签名 -> 回执 -> 验签登录”联调，已登录成功。
-- 责任边界：`wuminapp` 只生成签名二维码；SFID 独立完成验签、授权与登录结果展示，不向手机端回传结果状态。
+- 责任边界：`wuminapp` 负责挑战解析、系统身份验签、手机签名与回执生成；SFID 独立完成回执验签、授权与登录结果展示。
+- 信任来源：WuminApp 通过区块链 RPC 获取 SFID 当前公钥；CPMS 通过 SFID 背书建立信任，不直接依赖区块链。
 
 ### 12.2 挑战码（SFID -> 手机）
 ```json
@@ -422,13 +423,14 @@
   "nonce": "uuid",
   "issued_at": 1760000000,
   "expires_at": 1760000090,
-  "aud": "sfid-local-app"
+  "sys_pubkey": "0x...",
+  "sys_sig": "0x..."
 }
 ```
 
 ### 12.3 签名原文（固定）
 ```text
-WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
+proto|system|request_id|challenge|nonce|issued_at|expires_at
 ```
 
 ### 12.4 回执码（手机 -> SFID）
@@ -436,7 +438,6 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 {
   "proto": "WUMINAPP_LOGIN_V1",
   "request_id": "uuid",
-  "account": "ss58-address",
   "pubkey": "0x...",
   "sig_alg": "sr25519",
   "signature": "0x...",
@@ -445,12 +446,13 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 ```
 
 ### 12.5 SFID 验签顺序
-1. 解析回执并读取 `request_id/account/signature`。
-2. 按 `request_id` 查挑战缓存，校验 `proto/system/aud/request_id/challenge/nonce/issued_at/expires_at` 字段完整性与格式。
-3. 校验系统固定为 `sfid`，并执行 `aud` 白名单校验（默认 `sfid-local-app`）。
+1. 解析回执并读取 `request_id/pubkey/signature`。
+2. 按 `request_id` 查挑战缓存，校验 `proto/system/request_id/challenge/nonce/issued_at/expires_at` 字段完整性与格式。
+3. 校验系统固定为 `sfid`。
 4. 校验挑战固定 `90` 秒时效：`expires_at - issued_at == 90` 且当前未过期。
-5. 按固定拼串 `WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at` 重建签名原文并执行 `sr25519` 验签。
+5. 按固定拼串 `WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at` 重建用户签名原文并执行 `sr25519` 验签。
 6. 校验 `request_id` 未消费后一次性消费，再做管理员授权判定（是管理员登录，不是管理员拒绝）。
+7. 服务端接收回执时应兼容 `request_id|challenge_id`、`pubkey|admin_pubkey|public_key`、`signature|sig` 字段别名。
 - `archive_no` 校验位算法与 SFID `sfid_code` 统一：`BLAKE2b` 摘要字节和 `mod 10`。
 - 投票资格最终以 CPMS 二维码状态为准（`NORMAL` 可投票，`ABNORMAL` 不可投票）。
 
@@ -587,7 +589,7 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 
 ## 15. 优化路线（优先级）
 ### 15.1 P0（上线前建议完成）
-- 登录 challenge 绑定 `domain/aud/session_id/nonce/expires_at`，防钓鱼和跨环境签名。
+- 登录 challenge 可绑定 `domain/session_id/nonce/expires_at` 作为网页侧上下文；`aud` 不再属于扫码协议字段。
 - 冻结二维码签名原文规范（字段顺序、编码、时间格式），避免 CPMS/SFID 联调歧义。
 - 重放防护双层化：`qr_id` 一次性消费 + `login_challenges` 一次性消费与 TTL。
 - 超级管理员保护：除“不可删改角色”外，增加最小可用数量保护（避免误操作锁死）。
@@ -632,7 +634,7 @@ WUMINAPP_LOGIN_V1|system|aud|request_id|challenge|nonce|expires_at
 
 ### 16.3 里程碑 2：管理员认证与 RBAC（2-3 天）
 - 实现认证链路：`identify -> challenge -> verify`。
-- challenge 绑定 `aud/domain/session_id/nonce/expires_at`，一次性消费与 TTL 过期清理。
+- challenge 绑定 `domain/session_id/nonce/expires_at`，一次性消费与 TTL 过期清理。
 - 落地后端 RBAC 中间件，对每个管理接口进行角色强校验。
 - 实现操作管理员管理接口（仅超级管理员可访问）。
 - 交付物：认证 API、会话/JWT、权限中间件、管理员管理 API。

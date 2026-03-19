@@ -7,6 +7,8 @@ import '../wallet/core/wallet_manager.dart';
 import 'institution_admin_service.dart';
 import 'institution_data.dart';
 import 'proposal_cache.dart';
+import 'runtime_upgrade_detail_page.dart';
+import 'runtime_upgrade_service.dart';
 import 'transfer_proposal_detail_page.dart';
 import 'transfer_proposal_service.dart';
 
@@ -364,6 +366,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     final statusColor = _statusColor(meta.status);
     final statusLabel = _statusLabel(meta.status);
     final detail = item.proposal.transferDetail;
+    final upgradeDetail = item.proposal.runtimeUpgradeDetail;
 
     return Card(
       elevation: 0,
@@ -387,8 +390,10 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                   color: statusColor.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child:
-                    Icon(_proposalIcon(detail), size: 18, color: statusColor),
+                child: Icon(
+                    _proposalIcon(detail, upgradeDetail),
+                    size: 18,
+                    color: statusColor),
               ),
               const SizedBox(width: 12),
               // 中间信息
@@ -428,7 +433,9 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                     Text(
                       detail != null
                           ? '转账 ${detail.amountYuan.toStringAsFixed(2)} 元'
-                          : '提案 ${_kindLabel(meta.kind)}',
+                          : upgradeDetail != null
+                              ? 'Runtime 升级'
+                              : '提案 ${_kindLabel(meta.kind)}',
                       style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ],
@@ -502,8 +509,10 @@ class _AllProposalsViewState extends State<AllProposalsView> {
   }
 
   /// 根据提案类型返回图标。
-  IconData _proposalIcon(TransferProposalInfo? detail) {
+  IconData _proposalIcon(
+      TransferProposalInfo? detail, RuntimeUpgradeProposalInfo? upgradeDetail) {
     if (detail != null) return Icons.send_outlined; // 转账
+    if (upgradeDetail != null) return Icons.system_update_alt; // Runtime 升级
     return Icons.description_outlined; // 其他/未知
   }
 
@@ -520,23 +529,34 @@ class _AllProposalsViewState extends State<AllProposalsView> {
 
   Future<void> _openProposalDetail(_ProposalDisplayItem item) async {
     final inst = item.institution;
-    if (inst == null || item.proposal.transferDetail == null) {
-      // 非转账提案或未知机构，暂不支持详情
+    final proposalId = item.proposal.meta.proposalId;
+
+    // Runtime 升级提案（联合投票，kind=1）
+    if (item.proposal.runtimeUpgradeDetail != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              RuntimeUpgradeDetailPage(proposalId: proposalId),
+        ),
+      );
+    } else if (inst != null && item.proposal.transferDetail != null) {
+      // 转账提案
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TransferProposalDetailPage(
+            institution: inst,
+            proposalId: proposalId,
+            adminWallets: item.adminWallets,
+          ),
+        ),
+      );
+    } else {
+      // 其他未知类型
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('该提案类型的详情页面正在开发中')),
       );
       return;
     }
-
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => TransferProposalDetailPage(
-          institution: inst,
-          proposalId: item.proposal.meta.proposalId,
-          adminWallets: item.adminWallets,
-        ),
-      ),
-    );
 
     // 返回后刷新
     if (mounted) {

@@ -109,6 +109,8 @@ wuminapp/
 - 收款协议：`WUMINAPP_TRANSFER_V1`
 - 用户协议：`WUMINAPP_CONTACT_V1`
 - 系统身份：通过 `sys_pubkey`/`sys_sig`/`sys_cert` 密码学验证（不再使用 `aud` 白名单）
+- SFID 信任来源：通过区块链 RPC 获取 SFID 当前公钥
+- CPMS 信任来源：由 SFID 使用当前有效公钥对 CPMS 公钥做背书（`sys_cert`）
 - 登录签名串：
 
 ```text

@@ -47,6 +47,31 @@ class AdminCatalogResponse {
   final List<AdminCatalogEntryResponse> entries;
 }
 
+/// SFID 人口快照响应。
+class PopulationSnapshotResponse {
+  const PopulationSnapshotResponse({
+    required this.eligibleTotal,
+    required this.snapshotNonce,
+    required this.snapshotSignature,
+    required this.who,
+    required this.asOf,
+  });
+
+  final int eligibleTotal;
+
+  /// 快照 nonce（UTF-8 字符串，直接作为 BoundedVec<u8> 提交）。
+  final String snapshotNonce;
+
+  /// sr25519 签名（hex 编码，提交时需解码为原始字节）。
+  final String snapshotSignature;
+
+  /// 归一化后的账户公钥 hex。
+  final String who;
+
+  /// 快照生成时间（Unix 秒）。
+  final int asOf;
+}
+
 class ApiClient {
   ApiClient({String? baseUrl, String? apiToken})
       : _baseUrl = baseUrl ?? _defaultBaseUrl,
@@ -198,6 +223,57 @@ class ApiClient {
       institutionCount: (data['institution_count'] as num?)?.toInt() ?? 0,
       adminCount: (data['admin_count'] as num?)?.toInt() ?? 0,
       entries: entries,
+    );
+  }
+
+  /// 获取公民人口快照（eligible_total + nonce + signature）。
+  ///
+  /// 用于联合投票提案创建时附带人口证明。
+  Future<PopulationSnapshotResponse> fetchPopulationSnapshot(
+      String accountPubkeyHex) async {
+    final normalized = _normalizePubkeyHex(accountPubkeyHex);
+    final uri = Uri.parse(
+        '$_baseUrl/api/v1/chain/voters/count?account_pubkey=$normalized');
+    http.Response response;
+    try {
+      response = await http.get(
+        uri,
+        headers: _headers(requireAuth: true),
+      );
+    } on SocketException catch (_) {
+      if ((Platform.isAndroid || Platform.isIOS) &&
+          _baseUrl.contains('127.0.0.1')) {
+        throw Exception(
+          '当前使用$_baseUrl，手机真机无法访问本机回环地址。请用 --dart-define=WUMINAPP_API_BASE_URL=http://<电脑局域网IP>:8787',
+        );
+      }
+      rethrow;
+    }
+    if (response.statusCode != 200) {
+      throw Exception('population snapshot failed: ${response.statusCode}');
+    }
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final code = payload['code'] as int? ?? -1;
+    final message = payload['message']?.toString() ?? 'unknown';
+    if (code != 0) {
+      throw Exception(
+        'population snapshot rejected: code=$code message=$message',
+      );
+    }
+
+    final data = payload['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('population snapshot invalid response: missing data');
+    }
+
+    return PopulationSnapshotResponse(
+      eligibleTotal: (data['eligible_total'] as num?)?.toInt() ?? 0,
+      snapshotNonce: (data['snapshot_nonce']?.toString() ?? '').trim(),
+      snapshotSignature:
+          (data['snapshot_signature']?.toString() ?? '').trim(),
+      who: (data['who']?.toString() ?? '').trim(),
+      asOf: (data['as_of'] as num?)?.toInt() ?? 0,
     );
   }
 }

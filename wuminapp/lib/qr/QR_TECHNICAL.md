@@ -80,7 +80,8 @@ lib/qr/
 
 - SFID：运行在一台云服务器上的在线系统
 - CPMS：运行在千千万万台电脑上的离线系统
-- 信任链：区块链持有 SFID 公钥 → SFID 背书 CPMS 公钥
+- 信任链：区块链持有 SFID 当前公钥 -> SFID 背书 CPMS 公钥
+- 约束：CPMS 不直接与区块链交互；WuminApp 只通过区块链 RPC 获取 SFID 当前公钥
 
 ### 5.2 挑战码字段（系统 → 手机）
 
@@ -107,10 +108,30 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 
 验证逻辑：
 
-- SFID 场景：用 `sys_pubkey` 验证 `sys_sig`，然后检查 `sys_pubkey` 是否匹配区块链上注册的 SFID 公钥
-- CPMS 场景：用 `sys_pubkey` 验证 `sys_sig`，然后用链上 SFID 公钥验证 `sys_cert` 对该 CPMS 公钥的背书
+- SFID 场景：
+  - 用二维码中的 `sys_pubkey` 验证 `sys_sig`
+  - 再检查 `sys_pubkey` 是否等于区块链当前登记的 SFID 公钥
+- CPMS 场景：
+  - 用二维码中的 `sys_pubkey` 验证 `sys_sig`
+  - 再用区块链当前登记的 SFID 公钥验证 `sys_cert`
+  - `sys_cert` 表示“SFID 对该 CPMS 公钥的背书”，不要求 CPMS 自己上链
 
-当前状态：框架预留，实际验签逻辑在链上公钥缓存模块就绪后接入。
+### 5.3.1 CPMS 背书证书（`sys_cert`）
+
+CPMS 场景下，`sys_cert` 的规范原文固定为：
+
+```text
+CPMS_CERT_V1|cpms_pubkey|site_sfid|issued_at|expires_at
+```
+
+说明：
+
+- `cpms_pubkey`：当前 CPMS 登录系统公钥（应与挑战中的 `sys_pubkey` 一致）
+- `site_sfid`：该 CPMS 实例对应的 SFID 机构编号
+- `issued_at` / `expires_at`：SFID 签发背书的时间边界
+- `sys_cert`：SFID 使用其当前有效私钥对上述原文做 `sr25519` 签名得到的结果
+
+当前状态：字段规范已冻结；系统验签实现仍需三端按本规范补齐。
 
 ### 5.4 挑战校验规则
 
@@ -147,6 +168,16 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 - 基于 `request_id` 一次性消费
 - 存储：`SharedPreferences`（键 `login.used_request_ids`）
 - 过期条目自动清理
+
+### 5.7.1 服务端回执兼容要求
+
+为兼容不同系统前端实现，服务端接收登录回执时应同时兼容以下字段别名：
+
+- `request_id` 或 `challenge_id`
+- `pubkey` 或 `admin_pubkey` 或 `public_key`
+- `signature` 或 `sig`
+
+`sig_alg`、`signed_at` 属于可选扩展字段，服务端可记录审计但不应作为当前版本的必填拒绝条件。
 
 ### 5.8 错误码
 
