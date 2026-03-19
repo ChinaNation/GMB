@@ -11,8 +11,19 @@ ALTER TABLE IF EXISTS sfid_key_admin_keyring RENAME TO key_admin_keyring;
 ALTER INDEX IF EXISTS idx_sfid_admins_role_status RENAME TO idx_admins_role_status;
 ALTER INDEX IF EXISTS idx_sfid_operator_admin_scope_super RENAME TO idx_operator_admin_scope_super;
 ALTER TABLE IF EXISTS admins DROP CONSTRAINT IF EXISTS sfid_admins_role_check;
-ALTER TABLE IF EXISTS admins ADD CONSTRAINT admins_role_check
-  CHECK (role IN ('KEY_ADMIN', 'SUPER_ADMIN', 'OPERATOR_ADMIN', 'QUERY_ONLY'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'admins_role_check'
+      AND conrelid = 'admins'::regclass
+  ) THEN
+    ALTER TABLE admins ADD CONSTRAINT admins_role_check
+      CHECK (role IN ('KEY_ADMIN', 'SUPER_ADMIN', 'OPERATOR_ADMIN', 'QUERY_ONLY'));
+  END IF;
+END
+$$;
 
 DROP VIEW IF EXISTS v_key_admins;
 DROP VIEW IF EXISTS v_super_admins;
