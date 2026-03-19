@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'institution_data.dart';
+import 'runtime_upgrade_page.dart';
 import 'transfer_proposal_page.dart';
 import 'transfer_proposal_service.dart';
 import '../wallet/core/wallet_manager.dart';
@@ -148,7 +149,10 @@ class ProposalTypesPage extends StatelessWidget {
               title: '状态升级',
               subtitle: 'Runtime 升级，需联合投票+公民投票',
               color: const Color(0xFF1565C0),
-              onTap: () => _checkAndOpenProposal(context, null, name: '状态升级'),
+              onTap: () => _checkAndOpenProposal(
+                context,
+                () => RuntimeUpgradePage(adminWallets: adminWallets),
+              ),
             ),
           ],
         ],
