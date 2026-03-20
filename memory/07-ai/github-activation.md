@@ -81,7 +81,29 @@
 - Claude 主要运行在 GitHub PR 与评论场景
 - 本阶段还没有建设自有 Flutter AI 控制台
 
-## 6. 启用完成判定
+## 6. 常见故障排查
+
+### 6.1 Claude 仍提示额度不足
+
+- Claude GitHub Actions 使用的是 `ANTHROPIC_API_KEY` 对应的 API workspace 额度
+- 如果已经充值但仍报 `Credit balance is too low`，优先检查：
+  - 当前 secret 里的 key 是否来自刚刚充值的同一个 workspace
+  - Claude Console 左上角切换到正确 workspace 后，Billing 是否确实显示有余额
+  - 旧 key 是否仍然指向未充值的默认 workspace
+
+建议做法：
+
+- 在正确 workspace 中重新生成一个新的 API key
+- 用新 key 覆盖 GitHub 仓库里的 `ANTHROPIC_API_KEY`
+- 然后重新运行 `Claude PR Review`
+
+### 6.2 Benchmark Weights 构建失败
+
+- `scripts/run-benchmarks.sh` 以 `citizenchain` 作为 Cargo workspace 根目录执行
+- benchmark 自动化默认不对 node 构建附加 `--locked`
+- 如果确实需要强制校验 lockfile，再显式使用 `--locked-build`
+
+## 7. 启用完成判定
 
 只有同时满足以下条件，才算 GitHub AI 编程系统真正启用：
 

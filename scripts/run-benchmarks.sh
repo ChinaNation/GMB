@@ -21,6 +21,7 @@ HEAP_PAGES="${HEAP_PAGES:-4096}"
 CHECK_MODE=0
 DRY_RUN=0
 BUILD_NODE=1
+LOCK_BUILD="${LOCK_BUILD:-0}"
 TEMPLATE_PATH="${TEMPLATE_PATH:-$REPO_ROOT/scripts/benchmark-weight-template.hbs}"
 
 declare -a SELECTED_PALLETS=()
@@ -59,6 +60,7 @@ Options:
   --repeat <N>           benchmark repeat，默认 20。
   --heap-pages <N>       wasm heap pages，默认 4096。
   --template <path>      可选 hbs 模板路径（未传则使用 CLI 默认模板）。
+  --locked-build         构建 node 时附加 --locked，要求 Cargo.lock 完全同步。
   --pallet <name>        仅运行指定 benchmark 目标（可重复传入多个）。
   -h, --help             显示帮助。
 EOF
@@ -116,6 +118,10 @@ while [[ $# -gt 0 ]]; do
       TEMPLATE_PATH="$2"
       shift 2
       ;;
+    --locked-build)
+      LOCK_BUILD=1
+      shift
+      ;;
     --pallet)
       SELECTED_PALLETS+=("$2")
       shift 2
@@ -147,7 +153,20 @@ done
 
 if [[ "$BUILD_NODE" -eq 1 && "$NEEDS_NODE" -eq 1 ]]; then
   log "构建 benchmark 节点二进制（node, release, runtime-benchmarks）"
-  cargo build --manifest-path "$CHAIN_ROOT/Cargo.toml" -p node --release --features runtime-benchmarks --locked
+  build_cmd=(
+    cargo build
+    --manifest-path "$CHAIN_ROOT/Cargo.toml"
+    -p node
+    --release
+    --features runtime-benchmarks
+  )
+
+  # 中文注释：benchmark 自动化默认优先保证可执行，只有显式要求时才锁死 Cargo.lock。
+  if [[ "$LOCK_BUILD" -eq 1 ]]; then
+    build_cmd+=(--locked)
+  fi
+
+  "${build_cmd[@]}"
 fi
 
 if [[ "$DRY_RUN" -eq 0 && "$NEEDS_NODE" -eq 1 && ! -x "$NODE_BIN" ]]; then

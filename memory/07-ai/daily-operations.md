@@ -69,6 +69,11 @@ GitHub 自动运行：
 4. Claude GitHub App 是否已安装
 5. Workflow 是否真的被触发
 
+补充判断：
+
+- 如果 `Claude PR Review` 报 `Credit balance is too low`，先检查 API key 是否来自有余额的 workspace
+- 如果 `Benchmark Weights` 报 lockfile 相关错误，先确认 benchmark 脚本是否在用默认构建模式，而不是强制锁定 lockfile
+
 ## 5. 当前阶段结论
 
 当前阶段已经形成一套最小可用模式：
