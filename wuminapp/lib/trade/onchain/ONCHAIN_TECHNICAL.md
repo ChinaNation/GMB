@@ -145,7 +145,9 @@ onchain/
 
 1. 输入校验：`toAddress/symbol/amount`。
 2. 预估手续费并展示确认对话框，用户确认后继续。
-3. 直连链上节点：`OnchainRpc.transferKeepAlive()` 一步完成 extrinsic 构造、签名、提交。签名回调由 UI 层根据 `signMode` 注入（热钱包读 seed 后本机签名，冷钱包通过 QrSigner 协议）。
+3. 直连链上节点：`OnchainRpc.transferKeepAlive()` 一步完成 extrinsic 构造、签名、提交。
+   - 当前实现：签名回调由 UI 层根据 `signMode` 注入（热钱包通过 `WalletManager.signWithWallet()`，冷钱包通过 `QrSigner` 协议）
+   - 目标改造：UI 层统一通过 `SigningCoordinator` 注入签名能力，不再在页面中分散维护热/冷分支
 4. 落库：写入 `TxRecordEntity`（含 `usedNonce` + `estimatedFee`），状态默认 `pending`。
 5. 轮询：仅轮询未终态且有 `usedNonce` 的记录，通过 `isTxConfirmed(address, usedNonce)` 对比链上当前 nonce，确认后更新状态并停止轮询。
 

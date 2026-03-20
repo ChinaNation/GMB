@@ -6,7 +6,8 @@
 
 - 钱包创建/导入/删除/切换（热钱包 + 冷钱包）
 - 本地机密材料读取（热钱包 seed）
-- 登录签名编排（签名执行由 `lib/signer` 负责）
+- 热钱包私钥签名的唯一执行入口
+- 登录/转账/治理所需钱包上下文输出
 - 转账/提案/投票所需钱包上下文输出（地址、公钥、算法、机构角色）
 - 余额查询（通过 `lib/rpc/` 直连链上节点）
 - 管理员目录、观察账户、证明态等钱包周边能力
@@ -88,9 +89,22 @@ lib/
   - 交易记录列表页（`TransactionHistoryPage`）：按 walletIndex 过滤，显示转入/转出、金额、状态
   - 交易记录详情页（`TransactionDetailPage`）：txHash、金额、发送方、接收方、时间、状态、备注
 
-## 4. 关键流程
+## 4. 唯一签名入口原则（冻结）
 
-### 4.1 创建热钱包
+- **本机私钥签名只能有一处实现**：`WalletManager`
+- 所有热钱包签名统一使用：
+  - `signWithWallet(walletIndex, payload)`
+  - `signUtf8WithWallet(walletIndex, message)`
+- 业务模块不得：
+  - 直接读取 seed
+  - 直接 `Keyring.sr25519.fromSeed(...)`
+  - 自己实现第二套热钱包签名逻辑
+- 冷钱包不属于“本机私钥签名”，但也必须统一走 `QrSigner` 协议
+- 最终目标：业务层只依赖统一签名编排入口，不直接依赖热/冷签名细节
+
+## 5. 关键流程
+
+### 5.1 创建热钱包
 
 1. 生成 `bip39` 助记词
 2. 派生 mini-secret：`mnemonic → entropy → PBKDF2(substrate_bip39) → 64 字节 → 前 32 字节`
@@ -99,7 +113,7 @@ lib/
 5. 钱包元信息写入 Isar（`signMode: 'local'`）
 6. 助记词一次性展示给用户，不持久化
 
-### 4.2 导入热钱包
+### 5.2 导入热钱包
 
 1. 校验助记词合法性
 2. 派生 seed → 地址/公钥
@@ -107,20 +121,20 @@ lib/
 4. 钱包元信息写入 Isar（`signMode: 'local'`）
 5. 设为当前激活钱包
 
-### 4.3 创建冷钱包
+### 5.3 创建冷钱包
 
 1. 生成 `bip39` 助记词
 2. 派生地址/公钥（同热钱包）
 3. 仅写 Isar（`signMode: 'external'`），不写 secure storage
 4. 助记词一次性展示，强警告用户自行保管
 
-### 4.4 导入冷钱包
+### 5.4 导入冷钱包
 
 1. 接受 SS58 地址
 2. 解码公钥（`Keyring().decodeAddress()`）
 3. 仅写 Isar（`signMode: 'external'`），不写 secure storage
 
-### 4.5 余额查询
+### 5.5 余额查询
 
 1. 页面 `initState` 和下拉刷新触发 `_refreshBalancesFromChain()`
 2. 遍历所有本地钱包，对每个钱包：
@@ -130,36 +144,80 @@ lib/
 3. 若余额有变化，更新 Isar 中的 `WalletProfileEntity.balance`
 4. 刷新 UI 显示
 
-### 4.6 登录签名
+### 5.6 登录签名
+
+当前实现：
 
 - **热钱包**：`LoginService` 解析挑战 → `WalletManager.signUtf8WithWallet()` 完成 sr25519 签名（seed 不出 WalletManager）
-- **冷钱包**：`LoginService.buildReceiptFromSignature()` 接受外部签名结果构建回执
+- **冷钱包**：`LoginService.buildReceiptFromSignature()` 已提供回执收口能力，但主流程尚未完全统一到冷签路径
 
-### 4.7 链上交易签名（由 trade/onchain 调用）
+目标改造：
 
-- **热钱包**：`WalletManager.signWithWallet()` 签名回调注入 `OnchainTradeService`（seed 不出 WalletManager）
-- **冷钱包**：构造 `QrSignRequest` → 导航到 `QrSignSessionPage` → 展示请求二维码 → 用户用离线设备扫码签名 → 扫描回执二维码 → `QrSigner.parseResponse()` → 签名回调注入
+1. `LoginService` 只负责：
+   - 解析挑战
+   - 系统身份验证
+   - 生成登录待签名原文
+   - 收口登录回执
+2. 热/冷签名统一改由 `SigningCoordinator` 编排：
+   - `local` → `WalletManager.signUtf8WithWallet()`
+   - `external` → `QrSigner` 请求/回执会话
+3. 登录模块不再把热钱包路径写死在主流程中
 
-`OnchainTradeService.submitTransfer()` 接受 `sign` 回调参数，由 UI 层根据 `signMode` 提供不同实现。
+### 5.7 链上交易签名（由 trade/onchain 调用）
 
-### 4.8 治理提案/投票签名（由 governance + signer 调用，规划）
+当前实现：
+
+- **热钱包**：`WalletManager.signWithWallet()` 签名回调注入 `OnchainTradeService`
+- **冷钱包**：UI 页面构造 `QrSignRequest` → 导航到 `QrSignSessionPage` → 扫描回执 → 注入签名回调
+
+目标改造：
+
+- `OnchainTradeService.submitTransfer()` 继续只接受“签名回调/签名结果”
+- UI 页面不再自己维护热/冷两套细节
+- 统一由 `SigningCoordinator` 按 `signMode` 分流：
+  - `local`：委托 `WalletManager`
+  - `external`：委托 `QrSigner`
+
+### 5.8 治理提案/投票签名（由 governance + signer 调用，规划）
 
 1. 治理模块按业务类型组装提案/投票字段。
 2. 钱包模块输出当前激活钱包上下文（`address/pubkeyHex/alg/ss58`）。
-3. 根据 `signMode` 分流：
+3. 目标改造后统一由 `SigningCoordinator` 根据 `signMode` 分流：
    - `local`：`WalletManager.signWithWallet()`（seed 不出类）。
    - `external`：调用 `QrSigner` 发起外部签名会话。
 4. 回传签名结果给治理模块提交链上交易。
 
-## 5. 存储设计（当前）
+## 6. 冷热一体化目标架构
 
-### 5.1 机密层（flutter_secure_storage）
+目标新增组件：
+
+- `lib/signer/signing_coordinator.dart`
+  - 业务层唯一签名编排入口
+- `lib/signer/signature_verifier.dart`
+  - 统一公钥验签能力
+- `lib/qr/login/login_trust_service.dart`
+  - 登录信任链验证（链上 SFID 公钥、CPMS 背书）
+
+目标分工：
+
+- `WalletManager`
+  - 唯一热钱包私钥签名实现
+- `QrSigner`
+  - 唯一冷钱包签名协议实现
+- `SigningCoordinator`
+  - 统一对业务暴露 `signUtf8/signBytes`
+- `LoginService`
+  - 不直接关心热签/冷签，只负责编排登录协议
+
+## 7. 存储设计（当前）
+
+### 7.1 机密层（flutter_secure_storage）
 
 - `wallet.secret.<wallet_id>.seed_hex.v1` — 热钱包 32 字节 seed（hex 编码）
 - `wallet.session.<scope>.token.v1`
 - `wallet.session.<scope>.key.v1`（预留）
 
-### 5.2 业务层（Isar）
+### 7.2 业务层（Isar）
 
 集合定义（`Isar/wallet_isar.dart`）：
 
@@ -178,11 +236,11 @@ lib/
 - `AppKvEntity`
   - `key, stringValue, intValue, boolValue`
 
-### 5.3 其他 SharedPreferences（尚未迁移）
+### 7.3 其他 SharedPreferences（尚未迁移）
 
 - `sfid.bind.*`（`SfidBindingService`）
 
-### 5.4 钱包详情页布局 `WalletDetailPage`
+### 7.4 钱包详情页布局 `WalletDetailPage`
 
 页面元素（自上而下）：
 
@@ -192,7 +250,7 @@ lib/
 4. 交易记录标题行：左侧"交易记录"，右侧箭头，点击进入完整交易记录列表
 5. 最近交易记录：最多显示 5 条，点击进入交易详情
 
-### 5.5 交易记录数据来源
+### 7.5 交易记录数据来源
 
 钱包详情页和交易记录页面直接复用 `OnchainTradeRepository`（Isar `TxRecordEntity`），按钱包地址（fromAddress / toAddress）过滤。
 
@@ -200,26 +258,30 @@ lib/
 - 钱包详情页展示最近 5 条，点击"交易记录"进入完整列表
 - 状态同步（pending→confirmed）由交易页面定时轮询 `refreshPendingRecords()` 完成
 
-## 6. 迁移与清理策略
+## 8. 迁移与清理策略
 
 当前 schema：`wallet.data.schema.version = 1`。
 
 开发阶段直接覆盖，不做增量迁移。启动时仅确保 settings 行存在并更新 schema 版本标记。
 
-## 7. 安全边界
+## 9. 安全边界
 
 - seed 不写入 Isar/Postgres/日志
 - **seed 不出 WalletManager**：所有签名操作通过 `signWithWallet()` / `signUtf8WithWallet()` 完成，seed 仅在方法内短暂存在，签名后立即清零
 - 助记词不持久化，仅创建时一次性展示
 - 冷钱包不在本机保存任何密钥材料
 - 本机签名在本地完成，私钥材料不出端
+- 业务模块不得直接调用 `LocalSigner` 执行热钱包签名
+- 冷钱包扫码签名必须统一走 `QrSigner` 协议，不允许业务页面自行发明第二套协议
 - seed 读取前强制生物识别/设备密码验证（`_authenticateIfSupported()`），每次签名均需认证
 - 设备无生物识别也无密码时自动跳过验证（`isDeviceSupported()` 返回 false）
 - seed 读取后进行格式校验（64 位 hex），异常数据立即抛错
 - `wallet.secret.*` 与 `wallet.session.*` 统一命名，避免散落硬编码
 - `getLatestWalletSecret()` / `getWalletSecretByIndex()` 已标记 `@Deprecated`，新代码禁止使用
 
-## 8. 主要接口（对外）
+说明：公钥验签（如登录系统验签、CPMS 背书验签）不属于“本机私钥签名”，可以独立于 `WalletManager` 存在，但不得演化出新的热钱包私钥签名入口。
+
+## 10. 主要接口（对外）
 
 - `WalletManager`
   - `createWallet / importWallet / createColdWallet / importColdWallet`
@@ -227,12 +289,16 @@ lib/
   - `signWithWallet(walletIndex, payload)` — 热钱包 sr25519 签名（seed 不出类）
   - `signUtf8WithWallet(walletIndex, message)` — 热钱包 UTF-8 签名（返回 `WalletSignResult`）
   - ~~`getLatestWalletSecret / getWalletSecretByIndex`~~ — 已弃用
+- `SigningCoordinator`（目标新增）
+  - `signUtf8(...)` — 冷热统一字符串签名入口
+  - `signBytes(...)` — 冷热统一字节签名入口
 - `LoginService`（`lib/qr/login/login_service.dart`，通过 `sign_service.dart` re-export）
   - `parseChallenge / buildReceiptPayload / buildReceiptFromSignature`
 - `ChainRpc`（`lib/rpc/chain_rpc.dart`）
   - `fetchBalance` — 直连节点查询链上余额
+  - `fetchCurrentSfidVerifyPubkey`（目标新增）— 获取链上当前 SFID 验签公钥
 
-## 9. 测试覆盖（当前）
+## 11. 测试覆盖（当前）
 
 - `test/wallet/wallet_manager_test.dart`
   - 热钱包创建/导入/删除/seed 存储联动
@@ -246,18 +312,18 @@ lib/
 - `test/wallet/sign_service_test.dart`
   - 挑战解析、签名、防重放、钱包匹配
 
-## 10. 钱包模式规范
+## 12. 钱包模式规范
 
-### 10.1 模式定义
+### 12.1 模式定义
 
 - `signMode: 'local'`（热钱包 — 本机签名）
   - seed 保存在手机 secure storage
-  - 转账、登录、提案、投票均可直接在手机签名
+  - 转账、登录、提案、投票的热签都只能由 `WalletManager` 执行
 - `signMode: 'external'`（冷钱包 — 扫码签名）
   - 手机不保存私钥，仅保存钱包公开信息
-  - 转账、登录、提案、投票均通过扫码请求外部设备签名
+  - 转账、登录、提案、投票均通过 `QrSigner` 协议请求外部设备签名
 
-### 10.2 最小钱包上下文字段
+### 12.2 最小钱包上下文字段
 
 | 字段 | 说明 |
 | --- | --- |
@@ -268,7 +334,7 @@ lib/
 | `source` | `created/imported` |
 | `signMode` | `local/external` |
 
-### 10.3 Seed 派生链
+### 12.3 Seed 派生链
 
 ```
 mnemonic
@@ -281,7 +347,7 @@ mnemonic
 
 说明：使用 Substrate 特定的 BIP39 派生（非标准 BIP32），与 `polkadart_keyring` 的 `fromMnemonic` 内部逻辑一致。
 
-## 11. 治理字段联动要求
+## 13. 治理字段联动要求
 
 - 联合提案必须包含 `eligible_total/snapshot_nonce/snapshot_signature` 三元组。
 - 公民投票必须包含 `sfid_hash/nonce/signature` 三元组。

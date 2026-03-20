@@ -302,8 +302,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               ),
               const Divider(height: 20),
               _buildInfoRow(
-                'Code 状态',
-                info.hasCode ? '待执行' : '已清空',
+                '类型',
+                '联合投票 · Runtime 升级',
               ),
             ],
           ],

@@ -17,6 +17,8 @@
 - 一个 `QrRouter` 统一路由，各子模块各自负责解析与校验
 - 登录模块原位于 `lib/login/`，因其唯一用途为扫码登录，已整体迁入 `lib/qr/login/`
 - 签名算法由 `lib/signer/` 提供，本模块不直接实现签名细节
+- 热钱包私钥签名不在本模块实现，统一由 `WalletManager` 执行
+- 冷钱包扫码签名协议不在本模块重复实现，统一复用 `QrSigner`
 
 ## 2. 目录结构
 
@@ -132,6 +134,24 @@ CPMS_CERT_V1|cpms_pubkey|site_sfid|issued_at|expires_at
 - `sys_cert`：SFID 使用其当前有效私钥对上述原文做 `sr25519` 签名得到的结果
 
 当前状态：字段规范已冻结；系统验签实现仍需三端按本规范补齐。
+
+### 5.3.2 手机端目标校验分层
+
+WuminApp 侧目标分层如下：
+
+- `LoginService`
+  - 负责挑战解析、时效检查、回执收口
+- `LoginTrustService`（目标新增）
+  - 负责系统签名与信任链验证
+- `SignatureVerifier`（目标新增）
+  - 负责统一 `sr25519` 公钥验签
+- `ChainRpc.fetchCurrentSfidVerifyPubkey()`（目标新增）
+  - 负责获取链上当前 SFID 公钥
+
+约束：
+
+- 登录系统验签属于“公钥验签”，不属于“本机私钥签名”
+- 手机端不得为了登录协议再实现第二套热钱包私钥签名逻辑
 
 ### 5.4 挑战校验规则
 
@@ -280,19 +300,31 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 
 扫描到登录挑战后展示回执页面：
 
+当前实现：
+
 1. 解析挑战码
-2. 验证系统签名（预留）
-3. 调用 `LoginService.buildReceiptPayload()` 生成回执
-4. 展示回执二维码与倒计时
-5. 倒计时结束自动关闭
+2. 调用 `LoginService.buildReceiptPayload()`（热钱包主路径）
+3. 展示回执二维码与倒计时
+
+目标改造：
+
+1. 解析挑战码
+2. 调用 `LoginTrustService` 验证系统签名与信任链
+3. 由 `LoginService.buildSignMessage()` 生成用户待签名原文
+4. 统一通过 `SigningCoordinator` 分流：
+   - `local` → `WalletManager.signUtf8WithWallet()`
+   - `external` → `QrSigner` 冷钱包会话
+5. 使用 `LoginService.buildReceiptFromSignature()` 收口回执
+6. 展示回执二维码与倒计时
 
 ## 9. 与其他模块关系
 
 - `signer/`：
-  - `LocalSigner` 执行 sr25519 登录签名
-  - `QrSigner` 提供扫码签名协议（`WUMINAPP_QR_SIGN_V1`）
+  - `QrSigner` 提供冷钱包扫码签名协议（`WUMINAPP_QR_SIGN_V1`）
+  - `SignatureVerifier`（目标新增）提供统一公钥验签能力
+  - `SigningCoordinator`（目标新增）提供冷热统一签名入口
 - `wallet/`：
-  - `WalletManager` 提供钱包密钥材料
+  - `WalletManager` 是唯一热钱包私钥签名入口
   - `capabilities/sign_service.dart` 已重构为 re-export `qr/login/` 的兼容层
 - `trade/onchain/`：
   - 使用 `QrScanTransferResult` 预填转账表单
@@ -356,6 +388,12 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
   │ 继续 submitTransfer       │                               │
 ```
 
+说明：
+
+- 当前冷钱包扫码签名会话已可复用于转账
+- 目标改造后，登录、转账、治理都应复用这套会话页面
+- 页面不再由各业务页直接分散调用，而应由 `SigningCoordinator` 统一调起
+
 ### 12.3 输入/输出
 
 - **输入：** `QrSignRequest` + 编码后的 JSON 字符串
@@ -375,7 +413,9 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 
 ## 13. 后续扩展
 
-- 接入 sr25519 系统签名验证（`validateSystemSignature`）
+- 接入 `LoginTrustService` 与 `SignatureVerifier`，完成系统签名验证（`validateSystemSignature`）
+- 为 CPMS 背书证书补齐完整载荷字段或自描述证书结构
+- 引入 `SigningCoordinator`，收口冷热钱包签名入口
 - 为用户码增加签名与时效控制，防篡改
 - 收款码增加签名验证（可选），防伪造收款地址
 - 登录防重放迁移到 Isar（`LoginReplayEntity`）

@@ -59,7 +59,8 @@ configure_protoc
 
 node_manifest="${repo_root}/citizenchain/node/Cargo.toml"
 node_binary="${repo_root}/citizenchain/target/${target}/release/node"
-bin_dir="${repo_root}/citizenchain/nodeui/backend/binaries"
+# 旧版桌面节点壳已迁移到 nodeuitauri；新版 Flutter nodeui 暂未接管 sidecar 打包。
+bin_dir="${repo_root}/citizenchain/nodeuitauri/backend/binaries"
 sidecar_name="citizenchain-node-${target}"
 plain_name="citizenchain-node"
 

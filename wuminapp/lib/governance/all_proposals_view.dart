@@ -8,7 +8,6 @@ import 'institution_admin_service.dart';
 import 'institution_data.dart';
 import 'proposal_cache.dart';
 import 'runtime_upgrade_detail_page.dart';
-import 'runtime_upgrade_service.dart';
 import 'transfer_proposal_detail_page.dart';
 import 'transfer_proposal_service.dart';
 
@@ -366,7 +365,6 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     final statusColor = _statusColor(meta.status);
     final statusLabel = _statusLabel(meta.status);
     final detail = item.proposal.transferDetail;
-    final upgradeDetail = item.proposal.runtimeUpgradeDetail;
 
     return Card(
       elevation: 0,
@@ -391,7 +389,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                    _proposalIcon(detail, upgradeDetail),
+                    _proposalIcon(meta.kind, detail),
                     size: 18,
                     color: statusColor),
               ),
@@ -433,7 +431,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                     Text(
                       detail != null
                           ? '转账 ${detail.amountYuan.toStringAsFixed(2)} 元'
-                          : upgradeDetail != null
+                          : meta.kind == 1
                               ? 'Runtime 升级'
                               : '提案 ${_kindLabel(meta.kind)}',
                       style: TextStyle(fontSize: 12, color: Colors.grey[500]),
@@ -509,10 +507,9 @@ class _AllProposalsViewState extends State<AllProposalsView> {
   }
 
   /// 根据提案类型返回图标。
-  IconData _proposalIcon(
-      TransferProposalInfo? detail, RuntimeUpgradeProposalInfo? upgradeDetail) {
-    if (detail != null) return Icons.send_outlined; // 转账
-    if (upgradeDetail != null) return Icons.system_update_alt; // Runtime 升级
+  IconData _proposalIcon(int kind, TransferProposalInfo? detail) {
+    if (kind == 0 && detail != null) return Icons.send_outlined; // 转账
+    if (kind == 1) return Icons.system_update_alt; // Runtime 升级
     return Icons.description_outlined; // 其他/未知
   }
 
@@ -532,7 +529,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     final proposalId = item.proposal.meta.proposalId;
 
     // Runtime 升级提案（联合投票，kind=1）
-    if (item.proposal.runtimeUpgradeDetail != null) {
+    if (item.proposal.meta.kind == 1) {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) =>

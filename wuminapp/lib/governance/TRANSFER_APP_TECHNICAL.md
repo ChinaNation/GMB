@@ -190,10 +190,10 @@ class TransferProposalService {
 
 | 钱包类型 | 签名方式 |
 |---|---|
-| 热钱包（local） | `LocalSigner.sign(payload)` → 64 字节 sr25519 签名 |
-| 冷钱包（external） | `QrSignSessionPage` → QR 码展示 payload → 扫码获取签名 |
+| 热钱包（local） | `WalletManager.signWithWallet(payload)`（唯一热钱包私钥签名入口） |
+| 冷钱包（external） | `QrSigner` + `QrSignSessionPage`（统一冷钱包扫码签名协议） |
 
-签名流程与 `OnchainRpc.transferKeepAlive` 完全一致，仅 call data 不同。
+目标改造后，转账提案页不再自己分支调热签/冷签，而是统一通过 `SigningCoordinator` 获取签名结果。签名流程与 `OnchainRpc.transferKeepAlive` 完全一致，仅 call data 不同。
 
 ## 10. 文件清单
 

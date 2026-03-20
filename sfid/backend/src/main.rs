@@ -864,7 +864,15 @@ fn main() {
             Err(e) => warn!("chain genesis hash init skipped: {e}"),
         }
 
-        let addr = SocketAddr::from(([127, 0, 0, 1], 8899));
+        let bind_addr: [u8; 4] = if optional_env("SFID_ENV")
+            .map(|v| v == "dev")
+            .unwrap_or(false)
+        {
+            [0, 0, 0, 0] // 开发环境监听所有网卡（手机真机可访问）
+        } else {
+            [127, 0, 0, 1] // 生产环境仅监听回环
+        };
+        let addr = SocketAddr::from((bind_addr, 8899));
         info!("sfid-backend listening on http://{}", addr);
         let listener = tokio::net::TcpListener::bind(addr)
             .await

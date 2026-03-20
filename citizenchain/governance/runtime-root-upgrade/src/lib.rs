@@ -25,7 +25,9 @@ pub mod pallet {
     pub type SnapshotNonceOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotNonceLength>;
     pub type SnapshotSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotSignatureLength>;
 
-    /// 提案业务数据：序列化后存入 voting-engine-system 的 ProposalData。
+    /// 提案元数据：序列化后存入 voting-engine-system 的 ProposalData。
+    /// WASM code 单独存储在本模块的 RuntimeCode storage map 中，
+    /// 避免查询提案信息时被迫下载数 MB 的二进制数据。
     #[derive(
         Encode,
         Decode,
@@ -45,8 +47,6 @@ pub mod pallet {
         pub reason: ReasonOf<T>,
         /// 代码哈希，便于事件与链下审计对齐
         pub code_hash: T::Hash,
-        /// 待执行 wasm code；执行成功或投票拒绝后会清空
-        pub code: CodeOf<T>,
         /// 当前治理状态
         pub status: ProposalStatus,
     }
@@ -104,7 +104,12 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    // 提案数据、元数据均已移至 voting-engine-system 统一管控，本模块不再持有任何 Storage。
+    /// WASM code 单独存储，按 proposal_id 索引。
+    /// 与 ProposalData（元数据）分离，避免查询提案信息时下载数 MB 的二进制。
+    /// 提案终结（通过/拒绝/执行失败）后清空释放存储。
+    #[pallet::storage]
+    pub type RuntimeCode<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, CodeOf<T>, OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -168,11 +173,12 @@ pub mod pallet {
                 proposer: proposer.clone(),
                 reason,
                 code_hash,
-                code,
                 status: ProposalStatus::Voting,
             };
             let data = proposal.encode();
             voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            // WASM code 单独存储，不放入 ProposalData
+            RuntimeCode::<T>::insert(proposal_id, code);
             voting_engine_system::Pallet::<T>::store_proposal_meta(
                 proposal_id,
                 frame_system::Pallet::<T>::block_number(),
@@ -226,7 +232,9 @@ pub mod pallet {
             );
 
             if approved {
-                let code_to_execute = proposal.code.clone();
+                // 从独立存储读取 WASM code
+                let code_to_execute = RuntimeCode::<T>::get(proposal_id)
+                    .unwrap_or_default();
                 // 中文注释：只有真正 set_code 成功，提案才允许进入 Passed；
                 // 否则进入 ExecutionFailed。两种情况都清空 code 释放存储，
                 // 因为当前不支持重试——失败后需重新提案。
@@ -240,7 +248,7 @@ pub mod pallet {
                     proposal.status = ProposalStatus::ExecutionFailed;
                 }
                 // 无论成功/失败，都清空 code 释放存储（不支持重试）
-                proposal.code = Default::default();
+                RuntimeCode::<T>::remove(proposal_id);
                 Self::save_proposal(proposal_id, &proposal)?;
 
                 // 将投票引擎状态设为 EXECUTED，标记提案已终结。
@@ -269,7 +277,7 @@ pub mod pallet {
                 Ok(())
             } else {
                 proposal.status = ProposalStatus::Rejected;
-                proposal.code = Default::default();
+                RuntimeCode::<T>::remove(proposal_id);
                 Self::save_proposal(proposal_id, &proposal)?;
 
                 // 将投票引擎状态设为 EXECUTED，与 approved 路径保持一致，
@@ -559,8 +567,8 @@ mod tests {
                 .expect("should decode");
             assert!(matches!(p.status, pallet::ProposalStatus::Passed));
             assert!(
-                p.code.is_empty(),
-                "proposal code should be cleared after finalize"
+                pallet::RuntimeCode::<Test>::get(100).is_none(),
+                "runtime code should be cleared after finalize"
             );
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
             assert!(code_executed, "runtime code executor should be called");
@@ -581,7 +589,7 @@ mod tests {
                 .expect("should decode");
             assert!(matches!(p.status, pallet::ProposalStatus::ExecutionFailed));
             assert!(
-                p.code.is_empty(),
+                pallet::RuntimeCode::<Test>::get(100).is_none(),
                 "execution failed should also clear code (no retry support)"
             );
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
@@ -604,8 +612,8 @@ mod tests {
                 .expect("should decode");
             assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
             assert!(
-                p.code.is_empty(),
-                "proposal code should be cleared after finalize"
+                pallet::RuntimeCode::<Test>::get(100).is_none(),
+                "runtime code should be cleared after finalize"
             );
         });
     }

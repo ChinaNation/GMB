@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
-default_bundle_dir="${repo_root}/citizenchain/nodeui/target/release/bundle/macos"
+default_bundle_dir="${repo_root}/citizenchain/nodeuitauri/target/release/bundle/macos"
 
 resolve_default_app_path() {
   local matches=()
@@ -26,7 +26,7 @@ resolve_default_app_path() {
 }
 
 app_path="${1:-$(resolve_default_app_path)}"
-dmg_path="${2:-${repo_root}/citizenchain/nodeui/target/release/bundle/dmg/citizenchain-macos-arm64.dmg}"
+dmg_path="${2:-${repo_root}/citizenchain/nodeuitauri/target/release/bundle/dmg/citizenchain-macos-arm64.dmg}"
 volume_name="${3:-citizenchain}"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then

@@ -50,14 +50,14 @@ jobs:
         with:
           node-version: "25.2.1"
           cache: npm
-          cache-dependency-path: citizenchain/nodeui/frontend/package-lock.json
+          cache-dependency-path: citizenchain/nodeuitauri/frontend/package-lock.json
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             citizenchain -> target
-            citizenchain/nodeui -> target
+            citizenchain/nodeuitauri -> target
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
@@ -116,7 +116,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $binDir = "citizenchain/nodeui/backend/binaries"
+          # 旧版可运行桌面壳已迁移到 nodeuitauri。
+          $binDir = "citizenchain/nodeuitauri/backend/binaries"
           New-Item -ItemType Directory -Force -Path $binDir | Out-Null
           $src = "citizenchain/target/${{ matrix.target }}/release/node.exe"
           $side = "$binDir/${{ matrix.sidecar_name }}"
@@ -127,21 +128,21 @@ jobs:
           [System.IO.File]::WriteAllText("$binDir/citizenchain-node.sha256", $hash)
 
       - name: Install frontend dependencies
-        run: npm --prefix citizenchain/nodeui/frontend ci
+        run: npm --prefix citizenchain/nodeuitauri/frontend ci
 
       - name: Build installer bundles (Unix)
         if: runner.os != 'Windows'
-        run: npm --prefix citizenchain/nodeui/frontend run tauri:build -- --bundles ${{ matrix.bundles }}
+        run: npm --prefix citizenchain/nodeuitauri/frontend run tauri:build -- --bundles ${{ matrix.bundles }}
 
       - name: Build installer bundles (Windows)
         if: runner.os == 'Windows'
-        working-directory: citizenchain/nodeui
+        working-directory: citizenchain/nodeuitauri
         shell: pwsh
         run: |
           # 验证 sidecar 二进制已就位
           $sidecar = "backend/binaries/${{ matrix.sidecar_name }}"
           if (-not (Test-Path $sidecar)) { throw "Sidecar binary not found: $sidecar" }
-          # 从 nodeui/ 运行（Tauri 需要在子目录找到 tauri.conf.json）
+          # 从 nodeuitauri/ 运行（Tauri 需要在子目录找到 tauri.conf.json）
           # 用 npx 调用 tauri CLI（绕过 npm pre 钩子中的 bash 脚本）
           npx --prefix frontend tauri build -c backend/tauri.conf.json --bundles ${{ matrix.bundles }}
 
@@ -152,14 +153,14 @@ jobs:
           set -euo pipefail
           ./.github/scripts/create-macos-dmg.sh \
             "" \
-            "citizenchain/nodeui/target/release/bundle/dmg/citizenchain-${{ matrix.platform }}.dmg" \
+            "citizenchain/nodeuitauri/target/release/bundle/dmg/citizenchain-${{ matrix.platform }}.dmg" \
             "citizenchain"
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
           name: citizenchain-${{ matrix.platform }}
-          path: citizenchain/nodeui/**/bundle/**/*
+          path: citizenchain/nodeuitauri/**/bundle/**/*
           if-no-files-found: error
 
   release:

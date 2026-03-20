@@ -1,16 +1,17 @@
 import 'package:isar/isar.dart';
-import 'package:wuminapp_mobile/wallet/capabilities/api_client.dart';
+import 'package:wuminapp_mobile/governance/institution_admin_service.dart';
+import 'package:wuminapp_mobile/governance/institution_data.dart';
 import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
 
 class WalletTypeService {
-  WalletTypeService({ApiClient? apiClient})
-      : _apiClient = apiClient ?? ApiClient();
+  WalletTypeService({InstitutionAdminService? adminService})
+      : _adminService = adminService ?? InstitutionAdminService();
 
   static const String defaultType = '手机钱包';
   static const int _catalogTtlSeconds = 300;
   static const String _kUpdatedAtKey = 'wallet.admin_catalog.updated_at';
 
-  final ApiClient _apiClient;
+  final InstitutionAdminService _adminService;
   Map<String, String>? _memoryRoleMap;
   int? _memoryUpdatedAt;
 
@@ -36,14 +37,27 @@ class WalletTypeService {
       }
     }
 
-    final catalog = await _apiClient.fetchAdminCatalog();
+    // 从区块链查询所有机构的管理员列表，构建 pubkey → 角色名 映射。
+    _adminService.clearCache();
     final next = <String, String>{};
-    for (final entry in catalog.entries) {
-      final normalized = _normalizePubkeyHex(entry.pubkeyHex);
-      if (normalized == null) {
-        continue;
+    final allInstitutions = [
+      ...kNationalCouncil,
+      ...kProvincialCouncils,
+      ...kProvincialBanks,
+    ];
+    for (final inst in allInstitutions) {
+      try {
+        final admins = await _adminService.fetchAdmins(inst.shenfenId);
+        final roleName = '${inst.name}管理员';
+        for (final pubkey in admins) {
+          final normalized = _normalizePubkeyHex(pubkey);
+          if (normalized != null) {
+            next[normalized] = roleName;
+          }
+        }
+      } catch (_) {
+        // 单个机构查询失败不影响其他机构。
       }
-      next[normalized] = entry.roleName.trim();
     }
 
     final isar = await WalletIsar.instance.db();
@@ -83,7 +97,7 @@ class WalletTypeService {
     try {
       await refreshCatalog(force: true);
     } catch (_) {
-      // Keep local cache/fallback when backend or chain is unavailable.
+      // Keep local cache/fallback when chain is unavailable.
     }
   }
 

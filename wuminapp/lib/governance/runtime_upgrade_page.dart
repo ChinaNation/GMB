@@ -194,6 +194,10 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
       }
 
       final service = RuntimeUpgradeService();
+      // 记录提交前的 NextProposalId
+      final prevNextId = await service.fetchNextProposalId();
+      debugPrint('[RuntimeUpgrade] 提交前 nextProposalId=$prevNextId');
+
       await service.submitProposeRuntimeUpgrade(
         reason: _reasonController.text.trim(),
         wasmCode: _wasmCode!,
@@ -205,11 +209,33 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
         sign: signCallback,
       );
 
+      // 等待链上执行（轮询最多 30 秒）
+      debugPrint('[RuntimeUpgrade] extrinsic 已提交，等待链上确认...');
+      bool confirmed = false;
+      for (var attempt = 0; attempt < 10; attempt++) {
+        await Future.delayed(const Duration(seconds: 3));
+        final newNextId = await service.fetchNextProposalId();
+        debugPrint('[RuntimeUpgrade] 轮询 attempt=$attempt, nextProposalId=$newNextId');
+        if (newNextId > prevNextId) {
+          confirmed = true;
+          break;
+        }
+      }
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('提交成功')),
-      );
-      Navigator.of(context).pop(true);
+      if (confirmed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('提案创建成功')),
+        );
+        Navigator.of(context).pop(true);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('交易已提交但链上执行失败，请检查管理员权限和人口快照'),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
     } on WalletAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

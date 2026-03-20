@@ -15,38 +15,6 @@ class HealthStatus {
   final String status;
 }
 
-class AdminCatalogEntryResponse {
-  const AdminCatalogEntryResponse({
-    required this.pubkeyHex,
-    required this.roleName,
-    required this.institutionName,
-    required this.institutionIdHex,
-    required this.org,
-  });
-
-  final String pubkeyHex;
-  final String roleName;
-  final String institutionName;
-  final String institutionIdHex;
-  final String org;
-}
-
-class AdminCatalogResponse {
-  const AdminCatalogResponse({
-    required this.source,
-    required this.updatedAt,
-    required this.institutionCount,
-    required this.adminCount,
-    required this.entries,
-  });
-
-  final String source;
-  final int updatedAt;
-  final int institutionCount;
-  final int adminCount;
-  final List<AdminCatalogEntryResponse> entries;
-}
-
 /// SFID 人口快照响应。
 class PopulationSnapshotResponse {
   const PopulationSnapshotResponse({
@@ -83,7 +51,7 @@ class ApiClient {
     if (fromDefine.isNotEmpty) {
       return fromDefine;
     }
-    return 'http://127.0.0.1:8787';
+    return 'https://sfid.wuminapp.com';
   }
 
   Map<String, String> _headers({
@@ -151,65 +119,6 @@ class ApiClient {
       throw Exception('pubkey is empty');
     }
     return trimmed.startsWith('0x') ? trimmed : '0x$trimmed';
-  }
-
-  Future<AdminCatalogResponse> fetchAdminCatalog() async {
-    final uri = Uri.parse('$_baseUrl/api/v1/admins/catalog');
-    final response = await http.get(
-      uri,
-      headers: _headers(),
-    );
-    if (response.statusCode != 200) {
-      throw Exception('admin catalog failed: ${response.statusCode}');
-    }
-
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final code = payload['code'] as int? ?? -1;
-    final message = payload['message']?.toString() ?? 'unknown';
-    if (code != 0) {
-      throw Exception('admin catalog rejected: code=$code message=$message');
-    }
-
-    final data = payload['data'];
-    if (data is! Map<String, dynamic>) {
-      throw Exception('admin catalog invalid response: missing data');
-    }
-    final rawEntries = data['entries'];
-    if (rawEntries is! List) {
-      throw Exception('admin catalog invalid response: missing entries');
-    }
-    final entries = <AdminCatalogEntryResponse>[];
-    for (final item in rawEntries) {
-      if (item is! Map) {
-        continue;
-      }
-      final m = item.map((k, v) => MapEntry(k.toString(), v));
-      final pubkey = (m['pubkey_hex']?.toString() ?? '').trim().toLowerCase();
-      final role = (m['role_name']?.toString() ?? '').trim();
-      final institutionName = (m['institution_name']?.toString() ?? '').trim();
-      final institutionId =
-          (m['institution_id_hex']?.toString() ?? '').trim().toLowerCase();
-      if (pubkey.isEmpty || role.isEmpty || institutionName.isEmpty) {
-        continue;
-      }
-      entries.add(
-        AdminCatalogEntryResponse(
-          pubkeyHex: pubkey.startsWith('0x') ? pubkey.substring(2) : pubkey,
-          roleName: role,
-          institutionName: institutionName,
-          institutionIdHex: institutionId,
-          org: (m['org']?.toString() ?? 'unknown').trim().toLowerCase(),
-        ),
-      );
-    }
-
-    return AdminCatalogResponse(
-      source: data['source']?.toString() ?? 'chain',
-      updatedAt: (data['updated_at'] as num?)?.toInt() ?? 0,
-      institutionCount: (data['institution_count'] as num?)?.toInt() ?? 0,
-      adminCount: (data['admin_count'] as num?)?.toInt() ?? 0,
-      entries: entries,
-    );
   }
 
   /// 获取公民人口快照（eligible_total + nonce + signature）。

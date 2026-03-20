@@ -429,8 +429,14 @@ message = blake2_256(SCALE.encode(payload))
 #### 7.5.2.1 签名方式
 
 所有需要签名的操作（发起提案、投票、普通转账）统一检查钱包类型：
-- **热钱包**（`signMode == 'local'`）：通过 `WalletManager.signWithWallet()` 本地签名，私钥不出类
-- **冷钱包**（`signMode == 'external'`）：通过 `QrSigner` 协议（`WUMINAPP_QR_SIGN_V1`）发起扫码签名会话，导航到 `QrSignSessionPage` 展示请求二维码，用户用离线设备扫码签名后扫描回执二维码获取签名
+- **当前实现**
+  - 热钱包（`signMode == 'local'`）：通过 `WalletManager.signWithWallet()` 本地签名，私钥不出类
+  - 冷钱包（`signMode == 'external'`）：通过 `QrSigner` 协议（`WUMINAPP_QR_SIGN_V1`）发起扫码签名会话
+- **目标改造**
+  - 页面不再自己维护热/冷分支
+  - 统一通过 `SigningCoordinator` 分流：
+    - `local` → `WalletManager.signWithWallet()`
+    - `external` → `QrSigner + QrSignSessionPage`
 
 #### 7.5.3 App 侧服务
 

@@ -88,6 +88,14 @@ InstitutionInfo? findInstitutionByPalletId(List<int> palletIdBytes) {
   return null;
 }
 
+/// 通过 shenfenId 查找机构信息。
+InstitutionInfo? findInstitutionByShenfenId(String shenfenId) {
+  for (final inst in [...kNationalCouncil, ...kProvincialCouncils, ...kProvincialBanks]) {
+    if (inst.shenfenId == shenfenId) return inst;
+  }
+  return null;
+}
+
 List<int> _shenfenIdToFixed48(String shenfenId) {
   final utf8Bytes = shenfenId.codeUnits;
   final result = List<int>.filled(48, 0);

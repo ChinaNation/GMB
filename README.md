@@ -179,7 +179,7 @@
 # 4.技术架构
 ## 感谢Polkadot团队的无私奉献与技术支持！！！
 ## 4.1.主体架构
-* 主体使用Rust语言，采用Substrate框架开发，节点软件使用Tauri框架，手机端使用flutter开发；
+* 主体使用Rust语言，采用Substrate框架开发；节点软件当前处于 Tauri 旧版向 Flutter Desktop 新版迁移阶段；手机端使用flutter开发；
 * 采用模块化开发，开发初期就要做好为后期去框架的准备，并符合长期技术演进，为今后重构中国的政府、金融、通信等领域的应用预留扩展。
 * 主体架构图
 ```
@@ -188,13 +188,19 @@ GMB/
 ├── citizenchain/            # 公民币区块链
 │   ├── node/                # 区块链节点程序（chain_spec、service、cli等）
 │   ├── runtime/             # Runtime（链的统一运行时状态）
-│   ├── governance/          # 治理模块（负责投票治理等）
-│   ├── issuance/            # 发行模块（公民币的发行执行）
-│   ├── transaction/         # 交易模块（链上链下交易、机构多签账户）
-│   ├── otherpallet/         # 其他模块 （身份验证）
-│   └── nodeui/              # 节点UI
+│   │   ├── governance/      # 目标治理目录
+│   │   ├── issuance/        # 目标发行目录
+│   │   ├── transaction/     # 目标交易目录
+│   │   ├── otherpallet/     # 目标其他链上模块目录
+│   │   └── primitives/      # 目标运行时常量目录
+│   ├── governance/          # 旧版治理目录（迁移中）
+│   ├── issuance/            # 旧版发行目录（迁移中）
+│   ├── transaction/         # 旧版交易目录（迁移中）
+│   ├── otherpallet/         # 旧版其他模块目录（迁移中）
+│   ├── nodeuitauri/         # 旧版 Tauri 节点UI
+│   └── nodeui/              # 新版 Flutter Desktop 节点UI
 │ 
-├── primitives/              # 常量库
+├── primitives/              # 当前仓库级常量库
 │   ├── src/                 # 主要常量
 │   └── china/               # 公权账户常量
 │     

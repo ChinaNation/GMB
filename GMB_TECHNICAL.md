@@ -47,7 +47,7 @@
 - 产品文档：`/Users/rhett/GMB/citizenchain/CITIZENCHAIN_TECHNICAL.md`
 - 当前技术栈：
   - 链节点：Rust + Substrate / Polkadot SDK
-  - 桌面节点 UI：Tauri
+  - 桌面节点 UI：Tauri（旧版 `nodeuitauri`）+ Flutter Desktop（新版 `nodeui`，建设中）
 - 核心职责：
   - 链上状态机与共识
   - 治理、发行、交易、资格接入
@@ -112,9 +112,10 @@
 
 ### 5.4 节点部署与使用主流程
 1. `citizenchain/node` 提供原生节点程序。
-2. `citizenchain/nodeui` 将节点程序以内嵌 sidecar 方式打包为桌面应用。
-3. 用户安装桌面节点软件后可直接启动本地节点。
-4. `wuminapp` 与其他产品通过 RPC、链侧接口或间接服务读取链状态。
+2. `citizenchain/nodeuitauri` 当前将节点程序以内嵌 sidecar 方式打包为桌面应用。
+3. `citizenchain/nodeui` 是正在建设中的新版 Flutter Desktop 节点 UI。
+4. 用户安装桌面节点软件后可直接启动本地节点。
+5. `wuminapp` 与其他产品通过 RPC、链侧接口或间接服务读取链状态。
 
 ## 6. 共享协议与统一口径
 
@@ -197,6 +198,7 @@ GMB/
 - 适用产品：`citizenchain`
 - 触发条件：
   - 修改 `node/`
+  - 修改 `nodeuitauri/`
   - 修改 `nodeui/`
   - 修改安装包脚本、打包流水线
 - 影响：

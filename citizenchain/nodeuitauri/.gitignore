@@ -1,0 +1,10 @@
+node_modules
+dist
+target
+.vite
+.DS_Store
+backend/binaries
+backend/gen/schemas
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts

@@ -64,12 +64,12 @@ class RuntimeUpgradeService {
 
   // ──── 链上查询 ────
 
-  /// 查询 runtime upgrade 提案详情。返回 null 表示不存在。
+  /// 查询 runtime upgrade 提案元数据。返回 null 表示不存在。
   ///
   /// ProposalData 是 BoundedVec<u8>，SCALE 编码为 Compact 长度前缀 + 原始字节。
-  /// 原始字节布局：
+  /// 原始字节布局（WASM code 已分离到 RuntimeCode storage）：
   ///   proposer: AccountId32(32) + reason: Vec<u8>(Compact len + bytes)
-  ///   + code_hash: [u8;32] + code: Vec<u8>(Compact len + bytes)
+  ///   + code_hash: [u8;32]
   ///   + status: u8 enum (0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed)
   Future<RuntimeUpgradeProposalInfo?> fetchRuntimeUpgradeProposal(
       int proposalId) async {
@@ -204,7 +204,9 @@ class RuntimeUpgradeService {
 
   // ──── 内部：解码 ────
 
-  /// 解码 RuntimeUpgradeAction SCALE 数据。
+  /// 解码 Proposal 元数据 SCALE 数据（不含 WASM code，code 已分离存储）。
+  ///
+  /// 布局：proposer(32) + reason(Compact+bytes) + code_hash(32) + status(u8)
   RuntimeUpgradeProposalInfo? _decodeRuntimeUpgradeAction(
       int proposalId, Uint8List data) {
     try {
@@ -228,13 +230,6 @@ class RuntimeUpgradeService {
       final codeHashBytes = data.sublist(offset, offset + 32);
       offset += 32;
 
-      // code: Vec<u8> (Compact length + bytes)
-      final (codeLen, codeLenSize) = _decodeCompact(data, offset);
-      offset += codeLenSize;
-      if (offset + codeLen > data.length) return null;
-      final hasCode = codeLen > 0;
-      offset += codeLen;
-
       // status: u8 enum (0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed)
       if (offset >= data.length) return null;
       final status = data[offset];
@@ -248,7 +243,6 @@ class RuntimeUpgradeService {
         proposer: proposerSs58,
         reason: reason,
         codeHashHex: codeHashHex,
-        hasCode: hasCode,
         status: status,
       );
     } catch (_) {
@@ -492,14 +486,13 @@ class RuntimeUpgradeService {
   }
 }
 
-/// Runtime upgrade 提案链上数据。
+/// Runtime upgrade 提案链上数据（不含 WASM code）。
 class RuntimeUpgradeProposalInfo {
   const RuntimeUpgradeProposalInfo({
     required this.proposalId,
     required this.proposer,
     required this.reason,
     required this.codeHashHex,
-    required this.hasCode,
     required this.status,
   });
 
@@ -507,7 +500,6 @@ class RuntimeUpgradeProposalInfo {
   final String proposer; // SS58 (ss58Format 2027)
   final String reason; // UTF-8 decoded
   final String codeHashHex; // 32-byte hash as hex
-  final bool hasCode; // whether code is non-empty
   final int status; // 0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed
 }
 

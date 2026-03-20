@@ -9,7 +9,6 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import '../rpc/chain_rpc.dart';
 import 'institution_data.dart';
 import 'proposal_cache.dart';
-import 'runtime_upgrade_service.dart';
 
 /// 机构转账提案链上交互服务。
 ///
@@ -218,26 +217,18 @@ class TransferProposalService {
       if (meta == null) continue;
 
       // 尝试获取业务详情（ProposalData）
+      // 只获取转账提案详情；runtime 升级的 ProposalData 包含完整 WASM（数 MB），
+      // 列表展示不需要下载，进入详情页时再加载。
       TransferProposalInfo? transferDetail;
-      RuntimeUpgradeProposalInfo? runtimeUpgradeDetail;
       if (meta.kind == 0) {
-        // 内部投票提案 → 尝试解码为转账提案
         try {
           transferDetail = await fetchProposalAction(meta.proposalId);
-        } catch (_) {}
-      } else if (meta.kind == 1) {
-        // 联合投票提案 → 尝试解码为 runtime 升级提案
-        try {
-          final upgradeService = RuntimeUpgradeService(chainRpc: _rpc);
-          runtimeUpgradeDetail =
-              await upgradeService.fetchRuntimeUpgradeProposal(meta.proposalId);
         } catch (_) {}
       }
 
       results.add(ProposalWithDetail(
         meta: meta,
         transferDetail: transferDetail?.copyWithStatus(meta.status),
-        runtimeUpgradeDetail: runtimeUpgradeDetail,
       ));
     }
 
@@ -273,12 +264,15 @@ class TransferProposalService {
 
     // 批量查询未命中的 meta
     if (uncachedMetaKeys.isNotEmpty) {
+      debugPrint('[ProposalPage] batch query ${uncachedMetaKeys.length} metas');
       final batchResult = await _rpc.fetchStorageBatch(uncachedMetaKeys);
       for (var i = 0; i < uncachedMetaIds.length; i++) {
         final id = uncachedMetaIds[i];
         final data = batchResult[uncachedMetaKeys[i]];
+        debugPrint('[ProposalPage] id=$id, meta data=${data != null ? "len=${data.length} bytes=[${data.take(10).join(",")}]" : "null"}');
         if (data != null && data.length >= 3) {
           final meta = _decodeProposalMeta(id, data);
+          debugPrint('[ProposalPage] id=$id, decoded meta: kind=${meta?.kind}, stage=${meta?.stage}, status=${meta?.status}');
           if (meta != null) {
             cachedMetas[id] = meta;
             ProposalCache.putMeta(id, meta);
@@ -286,13 +280,18 @@ class TransferProposalService {
         }
       }
     }
+    debugPrint('[ProposalPage] total metas found: ${cachedMetas.length}, kinds: ${cachedMetas.values.map((m) => m.kind).toList()}');
 
     // 对有 meta 的提案，批量查询 ProposalData（先查缓存）
+    // 注意：只查 kind==0（内部/转账）的 ProposalData；
+    // kind==1（联合/runtime升级）的 ProposalData 包含完整 WASM 二进制（可能数 MB），
+    // 列表展示不需要下载这些数据。
     final uncachedDetailKeys = <String>[];
     final uncachedDetailIds = <int>[];
     final cachedDetails = <int, TransferProposalInfo>{};
 
     for (final entry in cachedMetas.entries) {
+      if (entry.value.kind != 0) continue; // 只查转账提案的详情
       final cachedDetail = ProposalCache.getDetail(entry.key);
       if (cachedDetail != null) {
         cachedDetails[entry.key] = cachedDetail;
@@ -323,10 +322,18 @@ class TransferProposalService {
     for (var id = startId; id > startId - count && id >= 0; id--) {
       final meta = cachedMetas[id];
       if (meta == null) continue;
-      final detail = cachedDetails[id];
+
+      TransferProposalInfo? transferDetail;
+      if (meta.kind == 0) {
+        // 内部投票提案 → 转账详情
+        transferDetail = cachedDetails[id]?.copyWithStatus(meta.status);
+      }
+      // kind==1（runtime 升级）的详情在进入详情页时才加载，
+      // 列表展示只需 meta.kind 即可区分提案类型。
+
       results.add(ProposalWithDetail(
         meta: meta,
-        transferDetail: detail?.copyWithStatus(meta.status),
+        transferDetail: transferDetail,
       ));
     }
 
@@ -453,44 +460,95 @@ class TransferProposalService {
     return _decodeTransferAction(proposalId, data);
   }
 
-  /// 查询指定机构的所有转账提案（包括已完成的），按 ID 倒序。
-  Future<List<TransferProposalInfo>> fetchAllInstitutionProposals(
+  /// 查询指定机构相关的所有提案（包括转账和 runtime 升级等），按 ID 倒序。
+  ///
+  /// 对于内部提案（kind==0）：按 institution 匹配。
+  /// 对于联合提案（kind==1，如 runtime 升级）：由国储会管理员发起，
+  ///   通过查 ProposalData 中的 proposer 是否属于该机构的管理员来匹配。
+  ///   但联合提案属于全链，所以只要 shenfenId 是国储会就显示所有联合提案。
+  Future<List<ProposalWithDetail>> fetchAllInstitutionProposals(
       String shenfenId) async {
     final nextId = await fetchNextProposalId();
     debugPrint('[ProposalQuery] nextProposalId=$nextId');
     if (nextId == 0) return const [];
 
     final institutionBytes = _shenfenIdToFixed48(shenfenId);
-    final proposals = <TransferProposalInfo>[];
 
-    // 并行查询所有提案
-    final futures = <Future<TransferProposalInfo?>>[];
-    for (var id = 0; id < nextId; id++) {
-      futures.add(fetchProposalAction(id));
+    // 提案 ID 格式：year * 1000000 + counter，从当年起始 ID 开始查询
+    final year = nextId ~/ 1000000;
+    final startId = year * 1000000;
+
+    // 第一步：批量查询所有提案的 meta
+    final metaKeys = <String>[];
+    final metaIds = <int>[];
+    for (var id = startId; id < nextId; id++) {
+      final keyBytes = _buildStorageKey(
+          'VotingEngineSystem', 'Proposals', _u64ToLeBytes(id));
+      metaKeys.add('0x${_hexEncode(keyBytes)}');
+      metaIds.add(id);
     }
-    final results = await Future.wait(futures);
 
-    for (var i = 0; i < results.length; i++) {
-      final info = results[i];
-      debugPrint('[ProposalQuery] id=$i, found=${info != null}');
-      if (info == null) continue;
-      final match = _bytesEqual(info.institutionBytes, institutionBytes);
-      debugPrint('[ProposalQuery] id=$i, institution_match=$match');
-      if (match) {
-        proposals.add(info);
+    final allMetas = <int, ProposalMeta>{};
+    if (metaKeys.isNotEmpty) {
+      final batchResult = await _rpc.fetchStorageBatch(metaKeys);
+      for (var i = 0; i < metaIds.length; i++) {
+        final data = batchResult[metaKeys[i]];
+        debugPrint('[InstProposal] id=${metaIds[i]}, meta data=${data != null ? "len=${data.length} bytes=[${data.take(10).join(",")}]" : "null"}');
+        if (data != null && data.length >= 3) {
+          final meta = _decodeProposalMeta(metaIds[i], data);
+          debugPrint('[InstProposal] id=${metaIds[i]}, kind=${meta?.kind}, stage=${meta?.stage}, status=${meta?.status}');
+          if (meta != null) allMetas[metaIds[i]] = meta;
+        }
+      }
+    }
+    // 判断当前机构是否是国储会（国储会显示所有联合提案）
+    final isNrc = _isNrcInstitution(shenfenId);
+    debugPrint('[InstProposal] total metas: ${allMetas.length}, isNrc=$isNrc');
+
+    // 第二步：分类处理
+    // kind==0：查 ProposalData 按 institution 匹配
+    // kind==1：联合提案（runtime 升级等），国储会页面直接显示
+    final results = <ProposalWithDetail>[];
+
+    // 收集 kind==0 的 ID，批量查 ProposalData
+    final internalIds = <int>[];
+    for (final entry in allMetas.entries) {
+      if (entry.value.kind == 0) {
+        internalIds.add(entry.key);
+      } else if (entry.value.kind == 1 && isNrc) {
+        // 联合提案：国储会页面直接显示
+        results.add(ProposalWithDetail(meta: entry.value));
       }
     }
 
-    // 同时查询每个提案的状态
-    final statusFutures = proposals.map((p) => fetchProposalStatus(p.proposalId));
-    final statuses = await Future.wait(statusFutures);
-    for (var i = 0; i < proposals.length; i++) {
-      proposals[i] = proposals[i].copyWithStatus(statuses.elementAt(i));
+    // 查 kind==0 的转账详情
+    final futures = <Future<TransferProposalInfo?>>[];
+    for (final id in internalIds) {
+      futures.add(fetchProposalAction(id));
+    }
+    final detailResults = await Future.wait(futures);
+
+    for (var i = 0; i < internalIds.length; i++) {
+      final info = detailResults[i];
+      if (info == null) continue;
+      if (_bytesEqual(info.institutionBytes, institutionBytes)) {
+        final meta = allMetas[internalIds[i]]!;
+        results.add(ProposalWithDetail(
+          meta: meta,
+          transferDetail: info.copyWithStatus(meta.status),
+        ));
+      }
     }
 
     // 按 ID 倒序（最新在上）
-    proposals.sort((a, b) => b.proposalId.compareTo(a.proposalId));
-    return proposals;
+    results.sort((a, b) => b.meta.proposalId.compareTo(a.meta.proposalId));
+    return results;
+  }
+
+  /// 判断 shenfenId 对应的机构是否是国储会。
+  bool _isNrcInstitution(String shenfenId) {
+    final inst = findInstitutionByShenfenId(shenfenId);
+    return inst != null && inst.orgType == OrgType.nrc;
   }
 
   /// 解码 TransferAction SCALE 数据。
@@ -858,12 +916,9 @@ class ProposalWithDetail {
   const ProposalWithDetail({
     required this.meta,
     this.transferDetail,
-    this.runtimeUpgradeDetail,
   });
 
   final ProposalMeta meta;
   /// 转账提案详情（非转账提案为 null）。
   final TransferProposalInfo? transferDetail;
-  /// Runtime 升级提案详情（非升级提案为 null）。
-  final RuntimeUpgradeProposalInfo? runtimeUpgradeDetail;
 }

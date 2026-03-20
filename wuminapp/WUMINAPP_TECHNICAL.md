@@ -82,8 +82,9 @@ wuminapp/
 
 签名能力收口在 `lib/signer/`：
 
-- `local_signer.dart`：手机本机签名（助记词在手机）
-- `qr_signer.dart`：扫码签名协议（私钥在外部设备）
+- `qr_signer.dart`：冷钱包扫码签名协议（私钥在外部设备）
+- `signature_verifier.dart`（目标新增）：统一公钥验签能力
+- `signing_coordinator.dart`（目标新增）：冷热钱包统一签名编排入口
 
 签名算法：`sr25519`。
 
@@ -92,7 +93,15 @@ wuminapp/
 - 登录扫码签名前
 - 链上交易签名前
 
-签名前守卫：`WalletManager._readMnemonic()` 内置生物识别/设备密码验证，所有读取助记词的路径自动触发。
+签名前守卫：热钱包签名统一经过 `WalletManager.signWithWallet()` / `signUtf8WithWallet()`，内部自动触发生物识别/设备密码验证。
+
+当前约束与目标方案：
+
+- **硬约束**：所有使用本机私钥的签名都必须只走 `WalletManager`
+- **热钱包**：唯一允许接触 seed 的模块是 `WalletManager`
+- **冷钱包**：唯一允许执行外部扫码签名协议的模块是 `QrSigner`
+- **业务模块**：`login`、`trade`、`governance` 只允许提交待签名原文/字节，不允许自己实现签名
+- **目标改造**：增加 `SigningCoordinator`，让业务层统一调用一个签名入口；其内部再按 `signMode` 分流到热钱包或冷钱包
 
 ### 4.5 二维码模块
 
@@ -119,15 +128,39 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 
 详细技术文档见：`lib/qr/QR_TECHNICAL.md`
 
-### 4.6 双签名模式（技术方案）
+### 4.6 冷热一体化签名架构（目标方案）
 
-- 模式 A：本机签名
-  - 私钥/助记词仅保存在手机 secure storage
-  - 交易和登录均由 `LocalSigner` 在手机完成签名
-- 模式 B：扫码签名
-  - 手机不保存私钥，仅保存钱包地址/公钥
-  - 手机生成待签名请求二维码，外部设备签名后返回签名回执二维码
-  - 协议由 `QrSigner` 统一编解码与校验（`WUMINAPP_QR_SIGN_V1`）
+统一原则：
+
+- 一套业务流程，两种签名执行方式
+- 热钱包和冷钱包共享同一份待签名内容与协议规范
+- 本机私钥签名只能由 `WalletManager` 执行
+- 外部设备签名只能由 `QrSigner` 协议执行
+
+目标分层：
+
+- `wallet/WalletManager`
+  - 热钱包唯一私钥签名入口
+- `signer/QrSigner`
+  - 冷钱包唯一签名协议入口
+- `signer/SignatureVerifier`
+  - 统一公钥验签基础能力
+- `signer/SigningCoordinator`
+  - 业务层唯一签名编排入口
+- `qr/login/LoginTrustService`
+  - 登录信任链验证：链上 SFID 公钥 + CPMS 背书校验
+
+业务侧调用方式（目标）：
+
+- 登录：先验系统身份，再生成用户待签名原文，最后统一走 `SigningCoordinator`
+- 转账：构造链上待签名字节后统一走 `SigningCoordinator`
+- 治理：构造提案/投票待签名字节后统一走 `SigningCoordinator`
+
+这样可保证：
+
+- 业务模块不直接接触 seed
+- 热钱包不会出现第二套本机签名实现
+- 冷钱包不会在每个页面里各自维护一份扫码签名流程
 
 ## 5. 手机端三层存储（当前）
 
