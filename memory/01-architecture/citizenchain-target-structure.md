@@ -70,15 +70,15 @@ runtime/
 - `transaction/`：交易相关 pallet
 - `primitives/`：runtime 内部常量、基础类型、运行时组织层
 
-## 4. 关于仓库根目录 `primitives/` 的说明
+## 4. 关于 `runtime/primitives/` 的说明
 
-当前仓库根目录已经存在 `primitives/` Rust crate，并被现有代码依赖。
+`citizenchain/runtime/primitives/` 已经承载原先仓库根目录 `primitives/` 的 Rust crate 与数据文件。
 
-因此本阶段采用以下策略：
+因此当前约束为：
 
-- 文档层面先固定 `citizenchain/runtime/primitives/` 为目标结构
-- 仓库根目录现有 `primitives/` 暂不移动
-- 等实际迁移到 runtime 新结构时，再由 Blockchain Agent 统一处理 crate 路径和依赖调整
+- 运行时共享常量、基础类型、制度保留地址等统一放在 `citizenchain/runtime/primitives/`
+- 其他 crate 如需依赖该能力，统一引用 `citizenchain/runtime/primitives`
+- 后续新增 runtime 常量与基础类型，不再回到仓库根目录新增独立 `primitives/`
 
 ## 5. 迁移原则
 

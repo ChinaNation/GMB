@@ -27,3 +27,12 @@
 ## 5. 沟通完成
 
 - 如需求或逻辑存在不确定性，已与负责人确认
+
+## 6. 模块级补充
+
+不同产品域还必须对照各自的模块级完成标准：
+
+- `memory/07-ai/module-definition-of-done/citizenchain.md`
+- `memory/07-ai/module-definition-of-done/sfid.md`
+- `memory/07-ai/module-definition-of-done/cpms.md`
+- `memory/07-ai/module-definition-of-done/wuminapp.md`

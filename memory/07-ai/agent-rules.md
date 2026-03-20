@@ -3,8 +3,10 @@
 ## 1. 统一交互规则
 
 - 你只在 Codex 主窗口中使用中文提出需求
+- 对外输入统一为任务需求，不要求手工拆标题和目标
 - Codex 是唯一主开发入口
 - Claude 不作为第二个主聊天窗口，而是后台代码审查角色
+- 首轮默认先做需求分析，再决定是否进入执行
 
 ## 2. Agent 角色
 
@@ -55,11 +57,13 @@
 - 代码更新后必须清理残留
 - 不允许擅自突破模块边界
 - 不允许跳过契约直接扩展系统规则
+- 不允许删除、迁出或重命名 AI 编程系统核心基础设施
 
 ## 4. 开发闭环
 
 ```text
-读文档
+先分析需求
+→ 读文档
 → 读契约
 → 生成计划
 → 写代码
@@ -69,3 +73,14 @@
 → 提交审查
 → 修复问题
 ```
+
+## 5. 配套入口
+
+- 角色执行说明：`memory/07-ai/agent-playbooks.md`
+- 上下文装载顺序：`memory/07-ai/context-loading-order.md`
+- 目录级 CI 路由：`memory/07-ai/ci-path-routing.md`
+- 需求分析入口：`bash memory/scripts/analyze-requirement.sh --requirement "..."`
+- 执行入口：`bash memory/scripts/architect-entry.sh --requirement "..." --execute`
+- 新建任务卡：`bash memory/scripts/new-task.sh --module "<模块>" --requirement "..."`
+- 装载模块上下文：`bash memory/scripts/load-context.sh <模块>`
+- 归档任务卡：`bash memory/scripts/complete-task.sh memory/08-tasks/open/<任务卡>.md "完成摘要"`

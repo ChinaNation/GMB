@@ -4,19 +4,22 @@
 
 你只需要做两件事：
 
-1. 在 Codex 主窗口里用中文下达需求
+1. 在 Codex 主窗口里用中文输入任务需求
 2. 在 GitHub PR 里查看 Claude 的审查意见
 
 ## 2. 标准操作流程
 
 ### 2.1 需求进入
 
-- 你在 Codex 中提出中文需求
-- Codex 先读取 `memory/`
+- 你在 Codex 中提出任务需求
+- Codex 先做需求分析
+- Codex 再读取 `memory/`
 - 如果逻辑不清，Codex 先和你确认
 
 ### 2.2 开发执行
 
+- Architect 先建任务卡
+- Codex 先装载模块上下文
 - Codex 改代码
 - Codex 补中文注释
 - Codex 更新文档
@@ -50,7 +53,16 @@ GitHub 自动运行：
 - `根据 Claude 的 review 评论修复，并补测试。`
 - `清理这次改动留下的无用代码和残留。`
 
-### 3.2 给 Claude 的常用 PR 评论
+### 3.2 本地 AI 任务入口
+
+- `bash memory/scripts/analyze-requirement.sh --requirement "任务需求"`
+- `bash memory/scripts/architect-entry.sh --requirement "任务需求" --execute`
+- `bash memory/scripts/start-task.sh --requirement "任务需求"`
+- `bash memory/scripts/new-task.sh --module "sfid/backend" --requirement "任务需求"`
+- `bash memory/scripts/load-context.sh citizenchain/runtime`
+- `bash memory/scripts/complete-task.sh memory/08-tasks/open/<task>.md "完成摘要"`
+
+### 3.3 给 Claude 的常用 PR 评论
 
 ```text
 @claude 请检查这个 PR 的 bug、回归风险、安全问题、文档遗漏和中文注释是否充分。

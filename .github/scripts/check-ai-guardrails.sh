@@ -14,6 +14,11 @@ while IFS= read -r file; do
   changed_files+=("${file}")
 done < <(git diff --name-only "${merge_base}...HEAD")
 
+declare -a status_lines=()
+while IFS= read -r line; do
+  status_lines+=("${line}")
+done < <(git diff --name-status --find-renames "${merge_base}...HEAD")
+
 if [[ "${#changed_files[@]}" -eq 0 ]]; then
   echo "未检测到变更文件，跳过 AI 门禁检查。"
   exit 0
@@ -29,6 +34,32 @@ residual_regex="(console\\.log\\(|debugger;|dbg!\\(|todo!\\(|unimplemented!\\(|\
 declare -a changed_code_files=()
 declare -a changed_doc_files=()
 declare -a residual_hits=()
+declare -a protected_ai_hits=()
+
+is_protected_ai_path() {
+  local file="$1"
+
+  case "$file" in
+    # 中文注释：根目录入口别名本身也是启动协议的一部分，不能删除或迁出。
+    AGENTS.md|CODEX.md|CLAUDE.md)
+      return 0
+      ;;
+    # 中文注释：memory/ 是 AI 编程系统唯一实体目录，下列路径属于核心基础设施。
+    memory/README.md|memory/AGENTS.md|memory/CODEX.md|memory/CLAUDE.md|\
+    memory/08-tasks/README.md|memory/08-tasks/index.md|\
+    memory/08-tasks/open/README.md|memory/08-tasks/done/README.md)
+      return 0
+      ;;
+    memory/00-vision/*|memory/01-architecture/*|memory/03-security/*|\
+    memory/04-decisions/*|memory/06-quality/*|memory/07-ai/*|\
+    memory/scripts/*|memory/08-tasks/templates/*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 should_skip_residual_scan() {
   local file="$1"
@@ -57,6 +88,34 @@ for file in "${changed_files[@]}"; do
     changed_code_files+=("${file}")
   fi
 done
+
+for line in "${status_lines[@]}"; do
+  IFS=$'\t' read -r status old_path new_path <<< "${line}"
+
+  case "${status}" in
+    D)
+      if is_protected_ai_path "${old_path}"; then
+        protected_ai_hits+=("禁止删除 AI 编程系统核心基础设施: ${old_path}")
+      fi
+      ;;
+    R*)
+      if is_protected_ai_path "${old_path}"; then
+        protected_ai_hits+=("禁止迁出 AI 编程系统核心基础设施: ${old_path} -> ${new_path}")
+      fi
+      ;;
+    *)
+      ;;
+  esac
+done
+
+if [[ "${#protected_ai_hits[@]}" -gt 0 ]]; then
+  echo "检测到对 AI 编程系统核心基础设施的删除或迁移操作。"
+  echo "以下路径受保护，禁止通过 PR 删除、迁出或重命名："
+  printf '  - %s\n' "${protected_ai_hits[@]}"
+  echo ""
+  echo "请保留这些路径，或仅在原位修改其内容。"
+  exit 1
+fi
 
 if [[ "${#changed_code_files[@]}" -gt 0 && "${#changed_doc_files[@]}" -eq 0 ]]; then
   echo "检测到代码或自动化变更，但没有同步更新文档。"

@@ -17,10 +17,6 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 以下目录命中后，触发 `runtime` 相关流水线：
 
 - `citizenchain/runtime/**`
-- `citizenchain/governance/**`
-- `citizenchain/issuance/**`
-- `citizenchain/otherpallet/**`
-- `citizenchain/transaction/**`
 
 触发的检查包括：
 
@@ -43,7 +39,7 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 
 以下目录命中后，同时触发 `runtime` 与 `node` 两侧：
 
-- `primitives/**`
+- `citizenchain/runtime/primitives/**`
 - `citizenchain/Cargo.toml`
 - `citizenchain/Cargo.lock`
 
@@ -57,11 +53,6 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 `Benchmark Weights` 只对以下路径触发：
 
 - `citizenchain/runtime/**`
-- `citizenchain/governance/**`
-- `citizenchain/issuance/**`
-- `citizenchain/otherpallet/**`
-- `citizenchain/transaction/**`
-- `primitives/**`
 - `citizenchain/Cargo.toml`
 - `citizenchain/Cargo.lock`
 - benchmark 脚本与模板文件
