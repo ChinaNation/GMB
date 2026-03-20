@@ -72,6 +72,7 @@ GitHub 自动运行：
 补充判断：
 
 - 如果 `Claude PR Review` 报 `Credit balance is too low`，先检查 API key 是否来自有余额的 workspace
+- 如果 `Claude PR Review` 报 `error_max_turns`，说明额度已通，优先检查 workflow 里的 `--max-turns` 是否过小
 - 如果 `Benchmark Weights` 报 lockfile 相关错误，先确认 benchmark 脚本是否在用默认构建模式，而不是强制锁定 lockfile
 
 ## 5. 当前阶段结论

@@ -46,5 +46,5 @@ jobs:
             2. memory/ or technical docs were updated when code changed,
             3. debug leftovers or TODO/FIXME markers remain.
           claude_args: |
-            --max-turns 5
+            --max-turns 10
             --append-system-prompt "必须优先报告高风险问题，不要猜测不清楚的业务逻辑。"

@@ -97,6 +97,12 @@
 - 用新 key 覆盖 GitHub 仓库里的 `ANTHROPIC_API_KEY`
 - 然后重新运行 `Claude PR Review`
 
+如果不再报额度不足，但日志里出现 `error_max_turns`：
+
+- 说明 Claude 已经真正跑起来了
+- 失败原因变成审查轮数限制过小
+- 当前仓库默认把 `Claude PR Review` 的 `--max-turns` 提高到 10
+
 ### 6.2 Benchmark Weights 构建失败
 
 - `scripts/run-benchmarks.sh` 以 `citizenchain` 作为 Cargo workspace 根目录执行
