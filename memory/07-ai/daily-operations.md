@@ -29,6 +29,7 @@ GitHub 自动运行：
 
 - `AI Guardrails`
 - `Claude PR Review`
+- 目录命中的模块级 CI
 
 ### 2.4 审查修复
 
@@ -74,6 +75,7 @@ GitHub 自动运行：
 - 如果 `Claude PR Review` 报 `Credit balance is too low`，先检查 API key 是否来自有余额的 workspace
 - 如果 `Claude PR Review` 报 `error_max_turns`，说明额度已通，优先检查 workflow 里的 `--max-turns` 是否过小
 - 如果 `Benchmark Weights` 报 lockfile 相关错误，先确认 benchmark 脚本是否在用默认构建模式，而不是强制锁定 lockfile
+- 如果你怀疑“改了一个目录却跑了另一个目录”，先对照 `memory/07-ai/ci-path-routing.md`
 
 ## 5. 当前阶段结论
 

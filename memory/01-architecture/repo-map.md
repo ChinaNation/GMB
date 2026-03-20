@@ -67,3 +67,21 @@ citizenchain/
 ## 5. 本阶段落地策略
 
 本阶段先落文档和目标目录基线，不直接进行大规模物理迁移，避免破坏现有代码与构建流程。
+
+## 6. GitHub Actions 路径分流原则
+
+GMB 的自动化不再采用“改了 `citizenchain/**` 就把整条区块链流水线全部跑一遍”的模式，而是逐步改为按二级目录分流。
+
+当前已经落地的规则：
+
+- 改 `citizenchain/runtime`、`citizenchain/governance`、`citizenchain/issuance`、`citizenchain/otherpallet`、`citizenchain/transaction`
+  - 只触发 `runtime` 相关 CI
+- 改 `citizenchain/node`
+  - 只触发 `node` 相关 CI
+- 改 `primitives`、`citizenchain/Cargo.toml`、`citizenchain/Cargo.lock`
+  - 触发 `runtime` 与 `node` 两侧 CI
+- benchmark 自动化只对 `runtime` 相关目录和共享 Rust 目录触发
+- `sfid` 部署流程按 `backend / frontend / deploy` 二级目录触发
+- Pages 只在 `docs/` 或自身 workflow 配置变更时触发
+
+跨模块共享目录仍然会触发多个模块，这是刻意保留的安全边界，而不是路径分流失效。

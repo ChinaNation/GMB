@@ -29,8 +29,17 @@
 - `.github/workflows/ai-guardrails.yml`
 - `.github/workflows/claude-pr-review.yml`
 - `.github/workflows/claude-on-comment.yml`
+- `.github/workflows/ci.yml`
+- `.github/workflows/benchmark-weights.yml`
 
-## 4. 当前执行方式
+## 4. 路径分流执行原则
+
+- `citizenchain/runtime` 与 `citizenchain/node` 分开执行
+- 共享 Rust 目录变更时，允许多侧联动执行
+- 纯文档、Pages、SFID 等目录按各自二级目录规则触发
+- 目录路由细则统一记录在 `memory/07-ai/ci-path-routing.md`
+
+## 5. 当前执行方式
 
 - 你只使用 Codex 主窗口
 - Claude 在 GitHub PR 与评论中承担审查与辅助角色

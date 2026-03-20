@@ -6,12 +6,28 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/ci.yml"
-      - "citizenchain/**"
+      - "citizenchain/runtime/**"
+      - "citizenchain/governance/**"
+      - "citizenchain/issuance/**"
+      - "citizenchain/otherpallet/**"
+      - "citizenchain/transaction/**"
+      - "citizenchain/node/**"
+      - "primitives/**"
+      - "citizenchain/Cargo.toml"
+      - "citizenchain/Cargo.lock"
   pull_request:
     branches: [main]
     paths:
       - ".github/workflows/ci.yml"
-      - "citizenchain/**"
+      - "citizenchain/runtime/**"
+      - "citizenchain/governance/**"
+      - "citizenchain/issuance/**"
+      - "citizenchain/otherpallet/**"
+      - "citizenchain/transaction/**"
+      - "citizenchain/node/**"
+      - "primitives/**"
+      - "citizenchain/Cargo.toml"
+      - "citizenchain/Cargo.lock"
 
 # 防止同一分支重复运行，新的推送会取消旧的运行
 concurrency:
@@ -23,10 +39,69 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # ── 第 1 步：代码检查 ──
-  check:
-    name: 编译检查
+  changes:
+    name: 识别 citizenchain 变更范围
     runs-on: ubuntu-latest
+    outputs:
+      runtime_changed: ${{ steps.scope.outputs.runtime_changed }}
+      node_changed: ${{ steps.scope.outputs.node_changed }}
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 按二级目录识别变更
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            runtime:
+              - '.github/workflows/ci.yml'
+              - 'citizenchain/runtime/**'
+              - 'citizenchain/governance/**'
+              - 'citizenchain/issuance/**'
+              - 'citizenchain/otherpallet/**'
+              - 'citizenchain/transaction/**'
+            node:
+              - '.github/workflows/ci.yml'
+              - 'citizenchain/node/**'
+            shared:
+              - '.github/workflows/ci.yml'
+              - 'citizenchain/Cargo.toml'
+              - 'citizenchain/Cargo.lock'
+              - 'primitives/**'
+
+      - name: 计算模块执行范围
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          runtime_changed=false
+          node_changed=false
+
+          # 中文注释：shared 目录影响 runtime 与 node 两侧，因此同时触发。
+          if [[ "${{ steps.filter.outputs.runtime }}" == "true" || "${{ steps.filter.outputs.shared }}" == "true" ]]; then
+            runtime_changed=true
+          fi
+
+          if [[ "${{ steps.filter.outputs.node }}" == "true" || "${{ steps.filter.outputs.shared }}" == "true" ]]; then
+            node_changed=true
+          fi
+
+          echo "runtime_changed=${runtime_changed}" >> "$GITHUB_OUTPUT"
+          echo "node_changed=${node_changed}" >> "$GITHUB_OUTPUT"
+
+          echo "runtime_changed=${runtime_changed}"
+          echo "node_changed=${node_changed}"
+
+  # ── 第 1 步：runtime 编译检查 ──
+  runtime-check:
+    name: runtime 编译检查
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.runtime_changed == 'true'
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
@@ -55,20 +130,20 @@ jobs:
           workspaces: |
             citizenchain -> target
 
-      - name: 编译检查（不含 benchmark）
+      - name: 编译 runtime（不含 benchmark）
         working-directory: citizenchain
-        run: cargo check --release
+        run: cargo check --release -p citizenchain
 
-      - name: Clippy 基线检查（非阻断）
+      - name: runtime Clippy 基线检查（非阻断）
         working-directory: citizenchain
         continue-on-error: true
-        run: cargo clippy --workspace --all-targets --all-features
+        run: cargo clippy -p citizenchain --all-targets --all-features
 
-  # ── 第 2 步：单元测试 ──
-  test:
-    name: 单元测试
+  # ── 第 2 步：runtime 单元测试 ──
+  runtime-test:
+    name: runtime 单元测试
     runs-on: ubuntu-latest
-    needs: check # 编译通过后才跑测试
+    needs: runtime-check
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
@@ -97,15 +172,15 @@ jobs:
           workspaces: |
             citizenchain -> target
 
-      - name: 运行所有测试
+      - name: 运行 runtime 测试
         working-directory: citizenchain
-        run: cargo test --release
+        run: cargo test --release -p citizenchain
 
-  # ── 第 3 步：生产 WASM 安全检查 ──
-  wasm-safety:
-    name: WASM 安全检查
+  # ── 第 3 步：runtime 生产 WASM 安全检查 ──
+  runtime-wasm-safety:
+    name: runtime WASM 安全检查
     runs-on: ubuntu-latest
-    needs: check
+    needs: runtime-check
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
@@ -154,3 +229,83 @@ jobs:
           else
             echo "✅ 通过：生产 WASM 不含 benchmark feature"
           fi
+
+  # ── 第 4 步：node 编译检查 ──
+  node-check:
+    name: node 编译检查
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.node_changed == 'true'
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          components: rust-src
+
+      - name: 安装 LLVM/Clang 依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm llvm-dev clang libclang-dev protobuf-compiler
+
+      - name: 配置 libclang 环境变量
+        run: |
+          echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
+          echo "PROTOC=$(command -v protoc)" >> "$GITHUB_ENV"
+
+      - name: 缓存依赖（加速后续构建）
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenchain"
+          workspaces: |
+            citizenchain -> target
+
+      - name: 编译 node
+        working-directory: citizenchain
+        run: cargo check --release -p node
+
+      - name: node Clippy 基线检查（非阻断）
+        working-directory: citizenchain
+        continue-on-error: true
+        run: cargo clippy -p node --all-targets --all-features
+
+  # ── 第 5 步：node 单元测试 ──
+  node-test:
+    name: node 单元测试
+    runs-on: ubuntu-latest
+    needs: node-check
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          components: rust-src
+
+      - name: 安装 LLVM/Clang 依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm llvm-dev clang libclang-dev protobuf-compiler
+
+      - name: 配置 libclang 环境变量
+        run: |
+          echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
+          echo "PROTOC=$(command -v protoc)" >> "$GITHUB_ENV"
+
+      - name: 缓存依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenchain"
+          workspaces: |
+            citizenchain -> target
+
+      - name: 运行 node 测试
+        working-directory: citizenchain
+        run: cargo test --release -p node

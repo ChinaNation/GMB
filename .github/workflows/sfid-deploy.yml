@@ -6,7 +6,9 @@ on:
       - main
     paths:
       - ".github/workflows/sfid-deploy.yml"
-      - "sfid/**"
+      - "sfid/backend/**"
+      - "sfid/frontend/**"
+      - "sfid/deploy/**"
   workflow_dispatch:
 
 concurrency:
