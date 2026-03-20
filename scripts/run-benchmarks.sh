@@ -10,8 +10,9 @@ set -euo pipefail
 #   ./scripts/run-benchmarks.sh --dry-run
 #   ./scripts/run-benchmarks.sh --pallet sfid_code_auth --steps 20 --repeat 10
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-NODE_BIN="$ROOT_DIR/target/release/node"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CHAIN_ROOT="$REPO_ROOT/citizenchain"
+NODE_BIN="$CHAIN_ROOT/target/release/node"
 
 CHAIN="${CHAIN:-mainnet}"
 STEPS="${STEPS:-50}"
@@ -20,7 +21,7 @@ HEAP_PAGES="${HEAP_PAGES:-4096}"
 CHECK_MODE=0
 DRY_RUN=0
 BUILD_NODE=1
-TEMPLATE_PATH="${TEMPLATE_PATH:-$ROOT_DIR/scripts/benchmark-weight-template.hbs}"
+TEMPLATE_PATH="${TEMPLATE_PATH:-$REPO_ROOT/scripts/benchmark-weight-template.hbs}"
 
 declare -a SELECTED_PALLETS=()
 
@@ -146,7 +147,7 @@ done
 
 if [[ "$BUILD_NODE" -eq 1 && "$NEEDS_NODE" -eq 1 ]]; then
   log "构建 benchmark 节点二进制（node, release, runtime-benchmarks）"
-  cargo build -p node --release --features runtime-benchmarks --locked
+  cargo build --manifest-path "$CHAIN_ROOT/Cargo.toml" -p node --release --features runtime-benchmarks --locked
 fi
 
 if [[ "$DRY_RUN" -eq 0 && "$NEEDS_NODE" -eq 1 && ! -x "$NODE_BIN" ]]; then
@@ -155,7 +156,7 @@ if [[ "$DRY_RUN" -eq 0 && "$NEEDS_NODE" -eq 1 && ! -x "$NODE_BIN" ]]; then
   exit 1
 fi
 
-cd "$ROOT_DIR"
+cd "$CHAIN_ROOT"
 
 declare -a TOUCHED_OUTPUTS=()
 declare -i RUN_COUNT=0
@@ -170,7 +171,7 @@ for target in "${TARGETS[@]}"; do
   RUN_COUNT+=1
 
   if [[ "$kind" == "pallet" ]]; then
-    output="$ROOT_DIR/$rel_output"
+    output="$CHAIN_ROOT/$rel_output"
     mkdir -p "$(dirname "$output")"
     TOUCHED_OUTPUTS+=("$rel_output")
 
@@ -201,6 +202,7 @@ for target in "${TARGETS[@]}"; do
   elif [[ "$kind" == "utility" ]]; then
     cmd=(
       cargo bench
+      --manifest-path "$CHAIN_ROOT/Cargo.toml"
       -p onchain-transaction-pow
       --bench transaction_fee_paths
       --
@@ -232,9 +234,9 @@ if [[ "$CHECK_MODE" -eq 1 && "$DRY_RUN" -eq 0 ]]; then
     log "本次未生成任何 weights.rs（可能只运行了 utility benchmark），跳过 weights 变更检查。"
     exit 0
   fi
-  if ! git -C "$ROOT_DIR" diff --quiet -- "${TOUCHED_OUTPUTS[@]}"; then
+  if ! git -C "$CHAIN_ROOT" diff --quiet -- "${TOUCHED_OUTPUTS[@]}"; then
     log "检测到 benchmark 生成的 weights 变更，请提交更新。"
-    git -C "$ROOT_DIR" --no-pager diff -- "${TOUCHED_OUTPUTS[@]}"
+    git -C "$CHAIN_ROOT" --no-pager diff -- "${TOUCHED_OUTPUTS[@]}"
     exit 1
   fi
   log "weights.rs 无变化，检查通过。"
