@@ -24,8 +24,10 @@ pub mod pallet {
     pub type CodeOf<T> = BoundedVec<u8, <T as Config>::MaxRuntimeCodeSize>;
     pub type SnapshotNonceOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotNonceLength>;
     pub type SnapshotSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotSignatureLength>;
+    pub const PROPOSAL_OBJECT_KIND_RUNTIME_WASM: u8 = 1;
 
-    /// 提案业务数据：序列化后存入 voting-engine-system 的 ProposalData。
+    /// 提案摘要数据：序列化后存入 voting-engine-system 的 ProposalData。
+    /// 大对象 wasm code 单独写入 voting-engine-system 的 ProposalObject。
     #[derive(
         Encode,
         Decode,
@@ -45,8 +47,8 @@ pub mod pallet {
         pub reason: ReasonOf<T>,
         /// 代码哈希，便于事件与链下审计对齐
         pub code_hash: T::Hash,
-        /// 待执行 wasm code；执行成功或投票拒绝后会清空
-        pub code: CodeOf<T>,
+        /// 是否仍保留链上对象层 wasm 数据。
+        pub has_code: bool,
         /// 当前治理状态
         pub status: ProposalStatus,
     }
@@ -135,6 +137,7 @@ pub mod pallet {
         ProposalNotFound,
         ProposalNotVoting,
         JointVoteCreateFailed,
+        RuntimeCodeMissing,
     }
 
     #[pallet::call]
@@ -148,7 +151,7 @@ pub mod pallet {
             code: CodeOf<T>,
             eligible_total: u64,
             snapshot_nonce: SnapshotNonceOf<T>,
-            snapshot_signature: SnapshotSignatureOf<T>,
+            signature: SnapshotSignatureOf<T>,
         ) -> DispatchResult {
             let proposer = T::NrcProposeOrigin::ensure_origin(origin)?;
 
@@ -159,7 +162,7 @@ pub mod pallet {
                 proposer.clone(),
                 eligible_total,
                 snapshot_nonce.as_slice(),
-                snapshot_signature.as_slice(),
+                signature.as_slice(),
             )
             .map_err(|_| Error::<T>::JointVoteCreateFailed)?;
 
@@ -168,11 +171,16 @@ pub mod pallet {
                 proposer: proposer.clone(),
                 reason,
                 code_hash,
-                code,
+                has_code: true,
                 status: ProposalStatus::Voting,
             };
             let data = proposal.encode();
             voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            voting_engine_system::Pallet::<T>::store_proposal_object(
+                proposal_id,
+                PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
+                code.into_inner(),
+            )?;
             voting_engine_system::Pallet::<T>::store_proposal_meta(
                 proposal_id,
                 frame_system::Pallet::<T>::block_number(),
@@ -209,13 +217,25 @@ pub mod pallet {
         fn load_proposal(proposal_id: u64) -> Result<Proposal<T>, DispatchError> {
             let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalNotFound)?;
-            Proposal::<T>::decode(&mut &raw[..])
-                .map_err(|_| Error::<T>::ProposalNotFound.into())
+            Proposal::<T>::decode(&mut &raw[..]).map_err(|_| Error::<T>::ProposalNotFound.into())
         }
 
         fn save_proposal(proposal_id: u64, proposal: &Proposal<T>) -> DispatchResult {
             let data = proposal.encode();
             voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)
+        }
+
+        fn load_runtime_code(proposal_id: u64) -> Result<CodeOf<T>, DispatchError> {
+            let meta = voting_engine_system::Pallet::<T>::get_proposal_object_meta(proposal_id)
+                .ok_or(Error::<T>::RuntimeCodeMissing)?;
+            ensure!(
+                meta.kind == PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
+                Error::<T>::RuntimeCodeMissing
+            );
+            let raw = voting_engine_system::Pallet::<T>::get_proposal_object(proposal_id)
+                .ok_or(Error::<T>::RuntimeCodeMissing)?;
+            raw.try_into()
+                .map_err(|_| Error::<T>::RuntimeCodeMissing.into())
         }
 
         pub(crate) fn apply_joint_vote_result(proposal_id: u64, approved: bool) -> DispatchResult {
@@ -226,10 +246,10 @@ pub mod pallet {
             );
 
             if approved {
-                let code_to_execute = proposal.code.clone();
+                let code_to_execute = Self::load_runtime_code(proposal_id)?;
                 // 中文注释：只有真正 set_code 成功，提案才允许进入 Passed；
-                // 否则进入 ExecutionFailed。两种情况都清空 code 释放存储，
-                // 因为当前不支持重试——失败后需重新提案。
+                // 否则进入 ExecutionFailed。原始 wasm 继续保留在投票引擎对象层，
+                // 交由统一 90 天延迟清理流程处理，不由业务模块自行删除。
                 let exec_ok =
                     T::RuntimeCodeExecutor::execute_runtime_code(code_to_execute.as_slice())
                         .is_ok();
@@ -239,8 +259,6 @@ pub mod pallet {
                 } else {
                     proposal.status = ProposalStatus::ExecutionFailed;
                 }
-                // 无论成功/失败，都清空 code 释放存储（不支持重试）
-                proposal.code = Default::default();
                 Self::save_proposal(proposal_id, &proposal)?;
 
                 // 将投票引擎状态设为 EXECUTED，标记提案已终结。
@@ -269,7 +287,6 @@ pub mod pallet {
                 Ok(())
             } else {
                 proposal.status = ProposalStatus::Rejected;
-                proposal.code = Default::default();
                 Self::save_proposal(proposal_id, &proposal)?;
 
                 // 将投票引擎状态设为 EXECUTED，与 approved 路径保持一致，
@@ -300,9 +317,9 @@ impl<T: pallet::Config> JointVoteResultCallback for pallet::Pallet<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codec::Decode;
     use core::cell::RefCell;
     use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
-    use codec::Decode;
     use frame_system as system;
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage, DispatchError};
 
@@ -374,9 +391,9 @@ mod tests {
             _who: AccountId32,
             eligible_total: u64,
             snapshot_nonce: &[u8],
-            snapshot_signature: &[u8],
+            signature: &[u8],
         ) -> Result<u64, DispatchError> {
-            if eligible_total == 0 || snapshot_nonce.is_empty() || snapshot_signature.is_empty() {
+            if eligible_total == 0 || snapshot_nonce.is_empty() || signature.is_empty() {
                 return Err(DispatchError::Other("bad snapshot"));
             }
             NEXT_JOINT_ID.with(|id| {
@@ -403,14 +420,14 @@ mod tests {
         type MaxProposalsPerExpiry = ConstU32<128>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
-        type MaxProposalDataLen = ConstU32<{ 6 * 1024 * 1024 }>;
-        type MaxJointDecisionApprovals = ConstU32<32>;
+        type MaxProposalDataLen = ConstU32<{ 100 * 1024 }>;
+        type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
         type SfidEligibility = ();
         type PopulationSnapshotVerifier = ();
         type JointVoteResultCallback = ();
         type InternalAdminProvider = ();
         type InternalThresholdProvider = ();
-        type JointInstitutionDecisionVerifier = ();
+        type InternalAdminCountProvider = ();
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
@@ -526,10 +543,21 @@ mod tests {
             propose_ok();
             // proposal_id comes from NEXT_JOINT_ID which starts at 100
             let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100);
-            assert!(raw.is_some(), "proposal data should be stored in voting engine");
+            assert!(
+                raw.is_some(),
+                "proposal data should be stored in voting engine"
+            );
             let proposal = pallet::Proposal::<Test>::decode(&mut &raw.unwrap()[..])
                 .expect("should decode proposal");
             assert!(matches!(proposal.status, pallet::ProposalStatus::Voting));
+            assert!(
+                proposal.has_code,
+                "summary should mark runtime code as retained"
+            );
+            assert!(
+                voting_engine_system::Pallet::<Test>::get_proposal_object(100).is_some(),
+                "runtime wasm should be stored in proposal object layer"
+            );
         });
     }
 
@@ -541,9 +569,12 @@ mod tests {
             assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, false));
             let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100)
                 .expect("proposal data should exist");
-            let p = pallet::Proposal::<Test>::decode(&mut &raw[..])
-                .expect("should decode");
+            let p = pallet::Proposal::<Test>::decode(&mut &raw[..]).expect("should decode");
             assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
+            assert!(
+                p.has_code,
+                "rejected proposal object should stay until unified cleanup"
+            );
         });
     }
 
@@ -555,12 +586,15 @@ mod tests {
 
             let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100)
                 .expect("proposal data should exist");
-            let p = pallet::Proposal::<Test>::decode(&mut &raw[..])
-                .expect("should decode");
+            let p = pallet::Proposal::<Test>::decode(&mut &raw[..]).expect("should decode");
             assert!(matches!(p.status, pallet::ProposalStatus::Passed));
             assert!(
-                p.code.is_empty(),
-                "proposal code should be cleared after finalize"
+                p.has_code,
+                "approved proposal object should stay until unified cleanup"
+            );
+            assert!(
+                voting_engine_system::Pallet::<Test>::get_proposal_object(100).is_some(),
+                "approved proposal should still keep object data for unified cleanup"
             );
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
             assert!(code_executed, "runtime code executor should be called");
@@ -577,12 +611,11 @@ mod tests {
 
             let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100)
                 .expect("proposal data should exist");
-            let p = pallet::Proposal::<Test>::decode(&mut &raw[..])
-                .expect("should decode");
+            let p = pallet::Proposal::<Test>::decode(&mut &raw[..]).expect("should decode");
             assert!(matches!(p.status, pallet::ProposalStatus::ExecutionFailed));
             assert!(
-                p.code.is_empty(),
-                "execution failed should also clear code (no retry support)"
+                p.has_code,
+                "execution failed proposal object should stay until unified cleanup"
             );
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
             assert!(
@@ -600,12 +633,11 @@ mod tests {
 
             let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100)
                 .expect("proposal data should exist");
-            let p = pallet::Proposal::<Test>::decode(&mut &raw[..])
-                .expect("should decode");
+            let p = pallet::Proposal::<Test>::decode(&mut &raw[..]).expect("should decode");
             assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
             assert!(
-                p.code.is_empty(),
-                "proposal code should be cleared after finalize"
+                p.has_code,
+                "rejected proposal object should stay until unified cleanup"
             );
         });
     }

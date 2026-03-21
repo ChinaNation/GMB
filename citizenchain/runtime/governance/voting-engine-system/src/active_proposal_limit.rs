@@ -33,10 +33,7 @@ pub fn try_add_active_proposal<T: Config>(
 }
 
 /// 从机构的活跃提案列表中移除指定提案。
-pub fn remove_active_proposal<T: Config>(
-    institution: InstitutionPalletId,
-    proposal_id: u64,
-) {
+pub fn remove_active_proposal<T: Config>(institution: InstitutionPalletId, proposal_id: u64) {
     pallet::ActiveProposalsByInstitution::<T>::mutate(institution, |ids| {
         ids.retain(|&id| id != proposal_id);
     });

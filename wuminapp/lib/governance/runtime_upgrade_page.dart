@@ -150,7 +150,8 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
       // 获取人口快照
       setState(() => _fetchingSnapshot = true);
       final apiClient = ApiClient();
-      final snapshot = await apiClient.fetchPopulationSnapshot(wallet.pubkeyHex);
+      final snapshot =
+          await apiClient.fetchPopulationSnapshot(wallet.pubkeyHex);
       if (!mounted) return;
       setState(() => _fetchingSnapshot = false);
 
@@ -173,24 +174,26 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
           context,
           MaterialPageRoute(
             builder: (_) => QrSignSessionPage(
-                request: request, requestJson: requestJson),
+                request: request,
+                requestJson: requestJson,
+                expectedPubkey: '0x${wallet.pubkeyHex}'),
           ),
         );
         if (response == null) throw Exception('签名已取消');
         return Uint8List.fromList(_hexToBytes(response.signature));
       }
 
-      final signerPubkey =
-          Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
+      final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
 
       // 将 SFID 返回的 nonce（UTF-8 字符串）和 signature（hex）转为原始字节
-      final nonceBytes = Uint8List.fromList(
-          utf8.encode(snapshot.snapshotNonce));
-      final sigHex = snapshot.snapshotSignature;
+      final nonceBytes =
+          Uint8List.fromList(utf8.encode(snapshot.snapshotNonce));
+      final sigHex = snapshot.signature;
       final sigClean = sigHex.startsWith('0x') ? sigHex.substring(2) : sigHex;
       final sigBytes = Uint8List(sigClean.length ~/ 2);
       for (var i = 0; i < sigBytes.length; i++) {
-        sigBytes[i] = int.parse(sigClean.substring(i * 2, i * 2 + 2), radix: 16);
+        sigBytes[i] =
+            int.parse(sigClean.substring(i * 2, i * 2 + 2), radix: 16);
       }
 
       final service = RuntimeUpgradeService();
@@ -199,7 +202,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
         wasmCode: _wasmCode!,
         eligibleTotal: snapshot.eligibleTotal,
         snapshotNonce: nonceBytes,
-        snapshotSignature: sigBytes,
+        signature: sigBytes,
         fromAddress: wallet.address,
         signerPubkey: signerPubkey,
         sign: signCallback,
@@ -562,4 +565,3 @@ List<int> _hexToBytes(String input) {
   }
   return out;
 }
-

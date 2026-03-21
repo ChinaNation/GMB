@@ -15,7 +15,9 @@ dependencies:
   polkadart: ^0.7.0
   polkadart_keyring: ^0.7.0
   bip39: ^1.0.6
+  bip39_mnemonic: ^3.0.10
   mobile_scanner: ^7.1.4
+  qr: ^3.0.2
   qr_flutter: ^4.1.0
   flutter_svg: ^2.0.10+1
   local_auth: ^2.3.0
@@ -28,6 +30,8 @@ dependencies:
   path_provider: ^2.1.4
   saver_gallery: ^4.1.0
   file_picker: ^8.0.0
+  sr25519: ^0.7.0
+  substrate_bip39: ^0.7.0
 
 dev_dependencies:
   flutter_test:

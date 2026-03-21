@@ -4,7 +4,9 @@ import '../wallet/core/wallet_manager.dart';
 import 'admin_list_page.dart';
 import 'institution_admin_service.dart';
 import 'institution_data.dart';
+import 'proposal_cache.dart';
 import 'proposal_types_page.dart';
+import 'runtime_upgrade_detail_page.dart';
 import 'transfer_proposal_detail_page.dart';
 import 'transfer_proposal_service.dart';
 
@@ -36,12 +38,15 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   bool _isCurrentUserAdmin = false;
   bool _loading = true;
   String? _error;
+
   /// 当前用户导入的所有管理员钱包（pubkeyHex → WalletProfile）。
   List<WalletProfile> _adminWallets = const [];
+
   /// 所有匹配的管理员公钥（小写 hex，不含 0x）。
   Set<String> _adminPubkeys = const {};
-  /// 该机构的所有转账提案（按 ID 倒序）。
-  List<TransferProposalInfo> _transferProposals = const [];
+
+  /// 机构页可见的提案事件（本机构内部提案 + 全局联合投票提案）。
+  List<ProposalWithDetail> _proposalEvents = const [];
 
   @override
   void initState() {
@@ -59,12 +64,13 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       final results = await Future.wait([
         _adminService.fetchAdmins(widget.institution.shenfenId),
         _walletManager.getWallets(),
-        _transferService
-            .fetchAllInstitutionProposals(widget.institution.shenfenId),
+        _transferService.fetchInstitutionVisibleProposals(
+          widget.institution.shenfenId,
+        ),
       ]);
       final admins = results[0] as List<String>;
       final wallets = results[1] as List<WalletProfile>;
-      final proposals = results[2] as List<TransferProposalInfo>;
+      final proposals = results[2] as List<ProposalWithDetail>;
 
       // 收集所有匹配的管理员钱包
       final matchedWallets = <WalletProfile>[];
@@ -84,7 +90,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         _adminWallets = matchedWallets;
         _adminPubkeys = matchedPubkeys;
         _isCurrentUserAdmin = matchedWallets.isNotEmpty;
-        _transferProposals = proposals;
+        _proposalEvents = proposals;
         _loading = false;
       });
     } catch (e) {
@@ -150,6 +156,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     return RefreshIndicator(
       onRefresh: () async {
         _adminService.clearCache(widget.institution.shenfenId);
+        ProposalCache.clear();
         await _load();
       },
       child: ListView(
@@ -195,8 +202,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                   color: widget.badgeColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child:
-                    Icon(widget.icon, size: 22, color: widget.badgeColor),
+                child: Icon(widget.icon, size: 22, color: widget.badgeColor),
               ),
               const SizedBox(width: 12),
               // 中间：简称标签 / 管理员信息
@@ -309,8 +315,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     const SizedBox(height: 2),
                     Text(
                       '共 ${_admins.length} 位管理员',
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ],
                 ),
@@ -338,7 +343,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           ),
         ),
         const SizedBox(height: 12),
-        if (_transferProposals.isEmpty)
+        if (_proposalEvents.isEmpty)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -357,18 +362,19 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '本机构的提案投票事件将在此显示',
+                  '本机构提案和全局联合投票事件将在此显示',
                   style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                 ),
               ],
             ),
           )
         else
-          ...List.generate(_transferProposals.length, (index) {
-            final proposal = _transferProposals[index];
+          ...List.generate(_proposalEvents.length, (index) {
+            final proposal = _proposalEvents[index];
             return Padding(
-              padding: EdgeInsets.only(bottom: index < _transferProposals.length - 1 ? 8 : 0),
-              child: _buildTransferProposalCard(proposal),
+              padding: EdgeInsets.only(
+                  bottom: index < _proposalEvents.length - 1 ? 8 : 0),
+              child: _buildProposalCard(proposal),
             );
           }),
       ],
@@ -383,6 +389,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         return '已通过';
       case 2:
         return '已拒绝';
+      case 3:
+        return '已执行';
       default:
         return '未知';
     }
@@ -396,13 +404,57 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         return Colors.green;
       case 2:
         return Colors.red;
+      case 3:
+        return Colors.green;
       default:
         return Colors.grey;
     }
   }
 
-  Widget _buildTransferProposalCard(TransferProposalInfo proposal) {
-    final statusColor = _statusColor(proposal.status);
+  String _proposalTitle(ProposalWithDetail proposal) {
+    final proposalId = formatProposalId(proposal.meta.proposalId);
+    if (proposal.transferDetail != null) {
+      return '转账提案 $proposalId';
+    }
+    if (proposal.runtimeUpgradeDetail != null) {
+      return 'Runtime 升级 $proposalId';
+    }
+    if (proposal.meta.kind == 1) {
+      return '联合投票提案 $proposalId';
+    }
+    return '提案 $proposalId';
+  }
+
+  String _proposalSubtitle(ProposalWithDetail proposal) {
+    final status = _statusLabel(proposal.meta.status);
+    final transferDetail = proposal.transferDetail;
+    if (transferDetail != null) {
+      return '${transferDetail.amountYuan.toStringAsFixed(2)} 元 · $status';
+    }
+    if (proposal.runtimeUpgradeDetail != null) {
+      return 'Runtime 升级 · $status';
+    }
+    if (proposal.meta.kind == 1) {
+      return '联合投票 · $status';
+    }
+    return '提案事件 · $status';
+  }
+
+  IconData _proposalIcon(ProposalWithDetail proposal) {
+    if (proposal.transferDetail != null) {
+      return Icons.send_outlined;
+    }
+    if (proposal.runtimeUpgradeDetail != null) {
+      return Icons.system_update_alt;
+    }
+    if (proposal.meta.kind == 1) {
+      return Icons.groups_outlined;
+    }
+    return Icons.description_outlined;
+  }
+
+  Widget _buildProposalCard(ProposalWithDetail proposal) {
+    final statusColor = _statusColor(proposal.meta.status);
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -411,7 +463,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         side: BorderSide(color: statusColor.withValues(alpha: 0.2)),
       ),
       child: InkWell(
-        onTap: () => _openTransferProposalDetail(proposal.proposalId),
+        onTap: () => _openProposalDetail(proposal),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -424,7 +476,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                   color: statusColor.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.send_outlined, size: 18, color: statusColor),
+                child:
+                    Icon(_proposalIcon(proposal), size: 18, color: statusColor),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -432,7 +485,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '转账提案 ${formatProposalId(proposal.proposalId)}',
+                      _proposalTitle(proposal),
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -441,21 +494,20 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${proposal.amountYuan.toStringAsFixed(2)} 元 · ${_statusLabel(proposal.status)}',
+                      _proposalSubtitle(proposal),
                       style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ],
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  _statusLabel(proposal.status),
+                  _statusLabel(proposal.meta.status),
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -475,7 +527,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   // ──── 导航 ────
 
   Future<void> _openProposalTypes() async {
-    await Navigator.of(context).push(
+    await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => ProposalTypesPage(
           institution: widget.institution,
@@ -488,23 +540,43 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     // 返回后刷新（可能新建了提案）
     if (mounted) {
       _adminService.clearCache(widget.institution.shenfenId);
+      ProposalCache.clear();
       _load();
     }
   }
 
-  Future<void> _openTransferProposalDetail(int proposalId) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => TransferProposalDetailPage(
-          institution: widget.institution,
-          proposalId: proposalId,
-          adminWallets: _adminWallets,
+  Future<void> _openProposalDetail(ProposalWithDetail proposal) async {
+    final proposalId = proposal.meta.proposalId;
+    if (proposal.runtimeUpgradeDetail != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RuntimeUpgradeDetailPage(
+            proposalId: proposalId,
+            institution: widget.institution,
+            adminWallets: _adminWallets,
+          ),
         ),
-      ),
-    );
+      );
+    } else if (proposal.transferDetail != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TransferProposalDetailPage(
+            institution: widget.institution,
+            proposalId: proposalId,
+            adminWallets: _adminWallets,
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('该联合提案详情页正在开发中')),
+      );
+      return;
+    }
     // 返回后刷新（投票状态可能变化）
     if (mounted) {
       _adminService.clearCache(widget.institution.shenfenId);
+      ProposalCache.clear();
       _load();
     }
   }

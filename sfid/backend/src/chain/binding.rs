@@ -9,8 +9,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::chain::runtime_align::{
-    build_bind_credential, compute_bind_credential_expiry_block, current_chain_block_number,
-    RuntimeBindCredential,
+    build_bind_credential, current_chain_genesis_hash_hex, RuntimeBindCredential,
 };
 use crate::*;
 
@@ -26,13 +25,9 @@ fn has_persisted_runtime_bind_credential(
             .map(|s| !s.is_empty() && s == expected)
             .unwrap_or(false)
     };
-    let has_unexpired = binding
-        .runtime_bind_expires_at_block
-        .map(|expires_at| expires_at >= current_block)
-        .unwrap_or(false);
-    has_value(&binding.runtime_bind_sfid_code_hash)
-        && has_value(&binding.runtime_bind_nonce)
-        && has_unexpired
+    let _ = current_block;
+    has_value(&binding.runtime_bind_binding_id)
+        && has_value(&binding.runtime_bind_bind_nonce)
         && has_value(&binding.runtime_bind_signature)
         && has_expected(&binding.runtime_bind_key_id, state.key_id.as_str())
         && has_expected(
@@ -48,9 +43,8 @@ fn apply_runtime_bind_credential(
     credential: RuntimeBindCredential,
     signer_pubkey: &str,
 ) {
-    binding.runtime_bind_sfid_code_hash = Some(credential.sfid_code_hash);
-    binding.runtime_bind_nonce = Some(credential.nonce);
-    binding.runtime_bind_expires_at_block = Some(credential.expires_at_block);
+    binding.runtime_bind_binding_id = Some(credential.binding_id);
+    binding.runtime_bind_bind_nonce = Some(credential.bind_nonce);
     binding.runtime_bind_signature = Some(credential.signature);
     binding.runtime_bind_key_id = Some(credential.meta.key_id);
     binding.runtime_bind_key_version = Some(credential.meta.key_version);
@@ -59,25 +53,8 @@ fn apply_runtime_bind_credential(
 }
 
 fn bind_result_not_bound(account_pubkey: String) -> axum::response::Response {
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data: BindResultOutput {
-            account_pubkey,
-            is_bound: false,
-            sfid_code: None,
-            sfid_code_hash: None,
-            nonce: None,
-            expires_at_block: None,
-            signature: None,
-            key_id: None,
-            key_version: None,
-            alg: None,
-            sfid_signature: None,
-            message: "not bound yet".to_string(),
-        },
-    })
-    .into_response()
+    let _ = account_pubkey;
+    api_error(StatusCode::NOT_FOUND, 1004, "binding not found")
 }
 
 pub(crate) async fn create_bind_request(
@@ -183,14 +160,6 @@ pub(crate) async fn get_bind_result(
         return api_error(StatusCode::BAD_REQUEST, 1001, "account_pubkey is invalid");
     };
     query.account_pubkey = account_pubkey;
-    let current_block = match current_chain_block_number().await {
-        Ok(v) => v,
-        Err(err) => {
-            let detail = format!("resolve chain block failed: {err}");
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
-        }
-    };
-    let bind_credential_expires_at = compute_bind_credential_expiry_block(current_block);
     let active_signer_pubkey = match state.public_key_hex.read() {
         Ok(v) => v.clone(),
         Err(_) => {
@@ -234,14 +203,7 @@ pub(crate) async fn get_bind_result(
 
     if !binding
         .as_ref()
-        .map(|v| {
-            has_persisted_runtime_bind_credential(
-                v,
-                &state,
-                active_signer_pubkey.as_str(),
-                current_block,
-            )
-        })
+        .map(|v| has_persisted_runtime_bind_credential(v, &state, active_signer_pubkey.as_str(), 0))
         .unwrap_or(false)
     {
         let generated = match build_bind_credential(
@@ -249,10 +211,9 @@ pub(crate) async fn get_bind_result(
             query.account_pubkey.as_str(),
             binding
                 .as_ref()
-                .map(|v| v.sfid_code.as_str())
+                .map(|v| v.archive_index.as_str())
                 .unwrap_or_default(),
             Uuid::new_v4().to_string(),
-            bind_credential_expires_at,
         ) {
             Ok(v) => v,
             Err(message) => {
@@ -269,7 +230,7 @@ pub(crate) async fn get_bind_result(
                 existing,
                 &state,
                 active_signer_pubkey.as_str(),
-                current_block,
+                0,
             ) {
                 apply_runtime_bind_credential(existing, generated, active_signer_pubkey.as_str());
             }
@@ -284,21 +245,14 @@ pub(crate) async fn get_bind_result(
     }
 
     let binding = binding.expect("checked is_some above");
-    let Some(sfid_code_hash) = binding.runtime_bind_sfid_code_hash else {
+    let Some(binding_id) = binding.runtime_bind_binding_id else {
         return api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             1004,
             "bind credential missing",
         );
     };
-    let Some(nonce) = binding.runtime_bind_nonce else {
-        return api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            1004,
-            "bind credential missing",
-        );
-    };
-    let Some(expires_at_block) = binding.runtime_bind_expires_at_block else {
+    let Some(bind_nonce) = binding.runtime_bind_bind_nonce else {
         return api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             1004,
@@ -312,44 +266,23 @@ pub(crate) async fn get_bind_result(
             "bind credential missing",
         );
     };
-    let Some(key_id) = binding.runtime_bind_key_id else {
-        return api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            1004,
-            "bind credential missing",
-        );
-    };
-    let Some(key_version) = binding.runtime_bind_key_version else {
-        return api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            1004,
-            "bind credential missing",
-        );
-    };
-    let Some(alg) = binding.runtime_bind_alg else {
-        return api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            1004,
-            "bind credential missing",
-        );
+    let genesis_hash = match current_chain_genesis_hash_hex() {
+        Ok(v) => v,
+        Err(message) => {
+            let detail = format!("resolve genesis hash failed: {message}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
+        }
     };
 
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: BindResultOutput {
-            account_pubkey: query.account_pubkey,
-            is_bound: true,
-            sfid_code: Some(binding.sfid_code),
-            sfid_code_hash: Some(sfid_code_hash),
-            nonce: Some(nonce),
-            expires_at_block: Some(expires_at_block),
-            signature: Some(signature.clone()),
-            key_id: Some(key_id),
-            key_version: Some(key_version),
-            alg: Some(alg),
-            sfid_signature: Some(binding.sfid_signature),
-            message: "sfid bind success".to_string(),
+            genesis_hash,
+            who: query.account_pubkey,
+            binding_id,
+            bind_nonce,
+            signature,
         },
     })
     .into_response()

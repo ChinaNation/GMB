@@ -107,49 +107,14 @@ impl VoteDecision {
     }
 }
 
-fn vote_verify_message(is_bound: bool, has_vote_eligibility: bool) -> String {
-    if has_vote_eligibility {
-        "pubkey bound and vote eligible".to_string()
-    } else if is_bound {
-        "pubkey bound but not vote eligible".to_string()
-    } else {
-        "pubkey not bound, no vote eligibility".to_string()
-    }
-}
-
-fn build_vote_output(
-    account_pubkey: String,
-    is_bound: bool,
-    has_vote_eligibility: bool,
-    proposal_id: u64,
-    credential: Option<RuntimeVoteCredential>,
-) -> VoteVerifyOutput {
-    let (sfid_hash, proposal_id, vote_nonce, signature, key_id, key_version, alg) =
-        if let Some(v) = credential {
-            (
-                Some(v.sfid_hash),
-                Some(v.proposal_id),
-                Some(v.vote_nonce),
-                Some(v.signature),
-                Some(v.meta.key_id),
-                Some(v.meta.key_version),
-                Some(v.meta.alg),
-            )
-        } else {
-            (None, Some(proposal_id), None, None, None, None, None)
-        };
+fn build_vote_output(proposal_id: u64, credential: RuntimeVoteCredential) -> VoteVerifyOutput {
     VoteVerifyOutput {
-        account_pubkey,
-        is_bound,
-        has_vote_eligibility,
-        sfid_hash,
+        genesis_hash: credential.genesis_hash,
+        who: credential.who,
+        binding_id: credential.binding_id,
         proposal_id,
-        vote_nonce,
-        signature,
-        key_id,
-        key_version,
-        alg,
-        message: vote_verify_message(is_bound, has_vote_eligibility),
+        vote_nonce: credential.vote_nonce,
+        signature: credential.signature,
     }
 }
 
@@ -204,7 +169,7 @@ pub(crate) async fn verify_vote_eligibility(
         };
 
         let vote_credential = if decision.has_vote_eligibility {
-            let Some(sfid_code) = decision.sfid_code.as_deref() else {
+            let Some(binding_seed) = decision.archive_index.as_deref() else {
                 return api_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     1004,
@@ -214,7 +179,7 @@ pub(crate) async fn verify_vote_eligibility(
             match build_vote_credential(
                 &state,
                 &account_pubkey,
-                sfid_code,
+                binding_seed,
                 proposal_id,
                 Uuid::new_v4().to_string(),
             ) {
@@ -224,8 +189,10 @@ pub(crate) async fn verify_vote_eligibility(
                     return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
                 }
             }
+        } else if decision.is_bound {
+            return api_error(StatusCode::FORBIDDEN, 1003, "binding not vote eligible");
         } else {
-            None
+            return api_error(StatusCode::NOT_FOUND, 1004, "binding not found");
         };
 
         let mut store = match store_write_or_500(&state) {
@@ -262,11 +229,8 @@ pub(crate) async fn verify_vote_eligibility(
             );
             record_chain_latency(&mut store, started_at);
             let output = build_vote_output(
-                account_pubkey.clone(),
-                latest_live.is_bound,
-                latest_live.has_vote_eligibility,
                 proposal_id,
-                vote_credential,
+                vote_credential.expect("vote credential must exist for eligible binding"),
             );
             return Json(ApiResponse {
                 code: 0,

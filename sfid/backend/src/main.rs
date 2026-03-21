@@ -8,6 +8,7 @@ use axum::{
 use chrono::{DateTime, NaiveDate, Utc};
 use postgres::config::Host;
 use redis::Client as RedisClient;
+use sp_core::Pair;
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
@@ -565,6 +566,12 @@ impl StoreHandle {
     }
 }
 
+fn resolve_backend_bind_addr() -> Result<SocketAddr, String> {
+    let raw = std::env::var("SFID_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:8899".to_string());
+    raw.parse::<SocketAddr>()
+        .map_err(|e| format!("invalid SFID_BIND_ADDR `{raw}`: {e}"))
+}
+
 fn database_url_targets_local_host_only(database_url: &str) -> Result<bool, String> {
     let config = database_url
         .parse::<postgres::Config>()
@@ -614,7 +621,7 @@ fn main() {
 
     let main_seed = SensitiveSeed::from(required_env("SFID_SIGNING_SEED_HEX"));
     let main_key = key_admins::chain_keyring::load_signing_key_from_seed(main_seed.expose_secret());
-    let public_key_hex = format!("0x{}", hex::encode(main_key.public.to_bytes()));
+    let public_key_hex = format!("0x{}", hex::encode(main_key.public().0));
     let mut known_key_seeds = HashMap::new();
     known_key_seeds.insert(public_key_hex.clone(), main_seed.clone());
     let database_url = required_env("DATABASE_URL");
@@ -653,9 +660,6 @@ fn main() {
         key_admins::seed_key_admins(&state);
         persist_runtime_state(&state);
         info!("initialized runtime state with defaults");
-    }
-    if let Err(err) = key_admins::reconcile_main_signer_with_keyring(&state) {
-        panic!("failed to reconcile main signer with keyring: {err}");
     }
     seed_demo_record(&state);
 
@@ -845,6 +849,7 @@ fn main() {
                 post(chain::app_api::app_bind_request),
             );
 
+        let app_state = state.clone();
         let app = Router::new()
             .merge(public_routes)
             .merge(auth_routes)
@@ -856,15 +861,25 @@ fn main() {
                 global_rate_limit_middleware,
             ))
             .layer(build_cors_layer())
-            .with_state(state);
+            .with_state(app_state);
 
-        // 启动时从区块链获取创世哈希（非阻塞：失败只打日志，不影响启动）
-        match chain::runtime_align::init_genesis_hash_from_chain().await {
-            Ok(()) => info!("chain genesis hash initialized"),
-            Err(e) => warn!("chain genesis hash init skipped: {e}"),
-        }
+        // 中文注释：SFID 现在以“链上三把公钥 + 本地主私钥”作为唯一真相；
+        // 启动前必须完成创世哈希初始化、同步链上 keyring，并确认本地主私钥
+        // 派生出的公钥就是链上当前 main 公钥，否则拒绝提供签名服务。
+        chain::runtime_align::init_genesis_hash_from_chain()
+            .await
+            .unwrap_or_else(|e| panic!("failed to initialize chain genesis hash: {e}"));
+        info!("chain genesis hash initialized");
 
-        let addr = SocketAddr::from(([127, 0, 0, 1], 8899));
+        key_admins::sync_chain_keyring_from_chain(&state)
+            .await
+            .unwrap_or_else(|e| panic!("failed to sync chain keyring from chain: {e}"));
+        key_admins::seed_key_admins(&state);
+        key_admins::validate_active_main_signer_with_keyring(&state)
+            .unwrap_or_else(|e| panic!("active main signer validation failed: {e}"));
+
+        // 本地手机联调时必须监听到与 App 可访问的一致地址，避免只绑定回环导致超时。
+        let addr = resolve_backend_bind_addr().expect("resolve sfid backend bind address");
         info!("sfid-backend listening on http://{}", addr);
         let listener = tokio::net::TcpListener::bind(addr)
             .await
@@ -1237,7 +1252,7 @@ fn load_runtime_state(state: &AppState) -> bool {
     };
     let payload: serde_json::Value = row.get(0);
     let payload_enc: Option<Vec<u8>> = row.get(1);
-    let snapshot: PersistedRuntimeMeta = match payload_enc {
+    let _snapshot: PersistedRuntimeMeta = match payload_enc {
         Some(ciphertext) if !ciphertext.is_empty() => {
             let decrypted_text = Zeroizing::new(
                 match StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
@@ -1272,46 +1287,13 @@ fn load_runtime_state(state: &AppState) -> bool {
         },
     };
 
-    {
-        let mut seed_guard = match state.signing_seed_hex.write() {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        *seed_guard = snapshot.signing_seed_hex;
-    }
-    {
-        let mut known_guard = match state.known_key_seeds.write() {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        *known_guard = snapshot.known_key_seeds;
-    }
-    {
-        let mut pubkey_guard = match state.public_key_hex.write() {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        *pubkey_guard = snapshot.public_key_hex;
-    }
+    // 中文注释：runtime_meta 现在只作为“运行态元信息占位”，
+    // 不再恢复任何主私钥/主公钥状态，避免数据库里的旧签名人覆盖部署环境。
     true
 }
 
 fn persist_runtime_state_checked(state: &AppState) -> Result<(), String> {
-    let snapshot = PersistedRuntimeMeta {
-        version: 1,
-        signing_seed_hex: match state.signing_seed_hex.read() {
-            Ok(v) => v.clone(),
-            Err(_) => return Err("signing seed read lock poisoned".to_string()),
-        },
-        known_key_seeds: match state.known_key_seeds.read() {
-            Ok(v) => v.clone(),
-            Err(_) => return Err("known seeds read lock poisoned".to_string()),
-        },
-        public_key_hex: match state.public_key_hex.read() {
-            Ok(v) => v.clone(),
-            Err(_) => return Err("public key read lock poisoned".to_string()),
-        },
-    };
+    let snapshot = PersistedRuntimeMeta { version: 2 };
     let payload_text = serde_json::to_string(&snapshot)
         .map_err(|err| format!("failed to encode runtime_meta: {err}"))?;
     let payload_text = Zeroizing::new(payload_text);

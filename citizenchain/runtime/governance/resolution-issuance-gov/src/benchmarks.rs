@@ -9,9 +9,7 @@ use frame_system::RawOrigin;
 use primitives::china::china_cb::CHINA_CB;
 use sp_std::{vec, vec::Vec};
 
-use crate::{
-    pallet, AllowedRecipients, Call, Config, Pallet, VotingProposalCount,
-};
+use crate::{pallet, AllowedRecipients, Call, Config, Pallet, VotingProposalCount};
 
 fn decode_account<T: pallet::Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")

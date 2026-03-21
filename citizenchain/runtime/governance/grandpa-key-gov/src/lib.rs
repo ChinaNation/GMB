@@ -10,10 +10,10 @@ use frame_support::{
     Blake2_128Concat,
 };
 use frame_system::pallet_prelude::*;
+use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
 use scale_info::TypeInfo;
 use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
-use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRC},
     InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED, STATUS_REJECTED,
@@ -250,7 +250,10 @@ pub mod pallet {
 
             let data = action.encode();
             voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
-            voting_engine_system::Pallet::<T>::store_proposal_meta(proposal_id, frame_system::Pallet::<T>::block_number());
+            voting_engine_system::Pallet::<T>::store_proposal_meta(
+                proposal_id,
+                frame_system::Pallet::<T>::block_number(),
+            );
 
             Self::deposit_event(Event::<T>::GrandpaKeyReplacementProposed {
                 proposal_id,
@@ -538,14 +541,14 @@ mod tests {
         for TestSfidEligibility
     {
         fn is_eligible(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
         ) -> bool {
             false
         }
 
         fn verify_and_consume_vote_credential(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
             _proposal_id: u64,
             _nonce: &[u8],
@@ -604,14 +607,14 @@ mod tests {
         type MaxProposalsPerExpiry = ConstU32<128>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
-        type MaxJointDecisionApprovals = ConstU32<32>;
         type MaxProposalDataLen = ConstU32<256>;
+        type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalThresholdProvider = ();
-        type JointInstitutionDecisionVerifier = ();
+        type InternalAdminCountProvider = ();
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }

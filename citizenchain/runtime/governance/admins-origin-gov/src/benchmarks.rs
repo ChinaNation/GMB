@@ -4,8 +4,8 @@
 
 use crate::Pallet as AdminsOriginGov;
 use crate::{
-    reserve_pallet_id_to_bytes, BlockNumberFor, Call, Config,
-    CurrentAdmins, InstitutionPalletId, Pallet, CHINA_CB, ORG_PRC,
+    reserve_pallet_id_to_bytes, BlockNumberFor, Call, Config, CurrentAdmins, InstitutionPalletId,
+    Pallet, CHINA_CB, ORG_PRC,
 };
 use codec::Decode;
 use frame_benchmarking::v2::*;
@@ -97,7 +97,6 @@ mod benchmarks {
 
         #[extrinsic_call]
         vote_admin_replacement(RawOrigin::Signed(final_voter), 0, true);
-
     }
 
     #[benchmark]

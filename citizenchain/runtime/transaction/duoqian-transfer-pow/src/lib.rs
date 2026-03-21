@@ -107,7 +107,9 @@ pub mod pallet {
         type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
 
         /// 受保护地址检查器（复用 duoqian-transaction-pow 的 trait）
-        type ProtectedSourceChecker: duoqian_transaction_pow::ProtectedSourceChecker<Self::AccountId>;
+        type ProtectedSourceChecker: duoqian_transaction_pow::ProtectedSourceChecker<
+            Self::AccountId,
+        >;
 
         /// 手续费分账路由（复用 PowOnchainFeeRouter）
         type FeeRouter: frame_support::traits::OnUnbalanced<
@@ -197,8 +199,8 @@ pub mod pallet {
             );
 
             // 获取机构 duoqian_address
-            let raw_account = institution_pallet_address(institution)
-                .ok_or(Error::<T>::InvalidInstitution)?;
+            let raw_account =
+                institution_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
             let institution_account = T::AccountId::decode(&mut &raw_account[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
 
@@ -314,10 +316,7 @@ pub mod pallet {
         /// 任何签名账户都可调用，避免因管理员离线导致通过的提案无法落地。
         #[pallet::call_index(2)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::execute_transfer())]
-        pub fn execute_transfer(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-        ) -> DispatchResult {
+        pub fn execute_transfer(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let _ = ensure_signed(origin)?;
             Self::try_execute_transfer(proposal_id)
         }
@@ -484,14 +483,14 @@ mod tests {
         for TestSfidEligibility
     {
         fn is_eligible(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
         ) -> bool {
             true
         }
 
         fn verify_and_consume_vote_credential(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
             _proposal_id: u64,
             _nonce: &[u8],
@@ -549,9 +548,7 @@ mod tests {
     }
 
     pub struct TestProtectedSourceChecker;
-    impl duoqian_transaction_pow::ProtectedSourceChecker<AccountId32>
-        for TestProtectedSourceChecker
-    {
+    impl duoqian_transaction_pow::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
         fn is_protected(address: &AccountId32) -> bool {
             PROTECTED_ADDRESS.with(|pa| pa.borrow().as_ref() == Some(address))
         }
@@ -579,6 +576,7 @@ mod tests {
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalThresholdProvider = ();
         type MaxProposalDataLen = ConstU32<1024>;
+        type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
         type JointInstitutionDecisionVerifier = ();
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();

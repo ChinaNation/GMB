@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:flutter/services.dart';
@@ -135,10 +133,23 @@ class WalletManager {
     return _toProfile(selected);
   }
 
+  Future<WalletProfile?> getWalletByIndex(int walletIndex) async {
+    final isar = await WalletIsar.instance.db();
+    final row = await isar.walletProfileEntitys
+        .filter()
+        .walletIndexEqualTo(walletIndex)
+        .findFirst();
+    if (row == null) {
+      return null;
+    }
+    return _toProfile(row);
+  }
+
   /// 获取当前活跃热钱包的密钥材料。冷钱包返回 null。
   ///
   /// **已弃用**：请使用 [signWithWallet] 或 [signUtf8WithWallet]，seed 不出类。
-  @Deprecated('Use signWithWallet() instead — seed should not leave WalletManager')
+  @Deprecated(
+      'Use signWithWallet() instead — seed should not leave WalletManager')
   Future<WalletSecret?> getLatestWalletSecret() async {
     final active = await getWallet();
     if (active == null) {
@@ -181,7 +192,8 @@ class WalletManager {
   /// 获取指定热钱包的密钥材料。冷钱包返回 null。
   ///
   /// **已弃用**：请使用 [signWithWallet] 或 [signUtf8WithWallet]，seed 不出类。
-  @Deprecated('Use signWithWallet() instead — seed should not leave WalletManager')
+  @Deprecated(
+      'Use signWithWallet() instead — seed should not leave WalletManager')
   Future<WalletSecret?> getWalletSecretByIndex(int walletIndex) async {
     final isar = await WalletIsar.instance.db();
     final row = await isar.walletProfileEntitys
@@ -309,7 +321,8 @@ class WalletManager {
       if (hex.length != 64 || !_isValidHex(hex)) {
         throw Exception('无效的账户地址，公钥应为 64 位十六进制（32 字节）');
       }
-      pubkeyBytes = List.generate(32, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16));
+      pubkeyBytes = List.generate(
+          32, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16));
       ss58Address = Keyring().encodeAddress(pubkeyBytes, _ss58Format);
     } else {
       // 输入的是 SS58 地址
@@ -466,8 +479,7 @@ class WalletManager {
   /// `polkadart_keyring` 的 `fromMnemonic` 内部逻辑一致。
   Future<List<int>> _mnemonicToMiniSecret(String mnemonic) async {
     final entropy =
-        bip39m.Mnemonic.fromSentence(mnemonic, bip39m.Language.english)
-            .entropy;
+        bip39m.Mnemonic.fromSentence(mnemonic, bip39m.Language.english).entropy;
     return CryptoScheme.miniSecretFromEntropy(entropy);
   }
 
@@ -485,8 +497,7 @@ class WalletManager {
   // Secure Storage（seed）
   // ---------------------------------------------------------------------------
 
-  String _seedKey(int walletIndex) =>
-      WalletSecureKeys.seedHexV1(walletIndex);
+  String _seedKey(int walletIndex) => WalletSecureKeys.seedHexV1(walletIndex);
 
   Future<void> _writeSeedHex(int walletIndex, String seedHex) async {
     await _secureStorage.write(key: _seedKey(walletIndex), value: seedHex);
@@ -520,6 +531,18 @@ class WalletManager {
   /// 每次调用均触发生物/密码认证（设备不支持时跳过）。
   Future<Uint8List> signWithWallet(int walletIndex, Uint8List payload) async {
     await _authenticateIfSupported();
+    final isar = await WalletIsar.instance.db();
+    final row = await isar.walletProfileEntitys
+        .filter()
+        .walletIndexEqualTo(walletIndex)
+        .findFirst();
+    if (row == null) {
+      throw const WalletAuthException('未找到指定钱包');
+    }
+    final profile = _toProfile(row);
+    if (profile.isColdWallet) {
+      throw const WalletAuthException('当前钱包为冷钱包，请使用扫码签名');
+    }
     final seedHex = await _readSeedHexRaw(walletIndex);
     if (seedHex == null) {
       throw const WalletAuthException('密钥不可用，请重新导入钱包');
@@ -527,6 +550,13 @@ class WalletManager {
     final seedBytes = Uint8List.fromList(_hexToBytes(seedHex));
     try {
       final pair = Keyring.sr25519.fromSeed(seedBytes);
+      pair.ss58Format = profile.ss58;
+      // 中文注释：提案页面选中的管理员钱包必须与实际本地签名密钥完全一致，
+      // 否则会导致人口快照与上链发起人不一致，链上直接拒绝创建提案。
+      final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
+      if (localPubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
+        throw const WalletAuthException('本地签名密钥与当前钱包不一致，请重新导入钱包');
+      }
       return Uint8List.fromList(pair.sign(payload));
     } finally {
       seedBytes.fillRange(0, seedBytes.length, 0);
@@ -541,12 +571,6 @@ class WalletManager {
     String message,
   ) async {
     await _authenticateIfSupported();
-    final seedHex = await _readSeedHexRaw(walletIndex);
-    if (seedHex == null) {
-      throw const WalletAuthException('密钥不可用，请重新导入钱包');
-    }
-
-    // 查询钱包 profile 以获取公钥信息
     final isar = await WalletIsar.instance.db();
     final row = await isar.walletProfileEntitys
         .filter()
@@ -556,6 +580,13 @@ class WalletManager {
       throw const WalletAuthException('未找到指定钱包');
     }
     final profile = _toProfile(row);
+    if (profile.isColdWallet) {
+      throw const WalletAuthException('当前钱包为冷钱包，请使用扫码签名');
+    }
+    final seedHex = await _readSeedHexRaw(walletIndex);
+    if (seedHex == null) {
+      throw const WalletAuthException('密钥不可用，请重新导入钱包');
+    }
 
     final seedBytes = Uint8List.fromList(_hexToBytes(seedHex));
     try {

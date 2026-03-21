@@ -37,10 +37,10 @@ src/login/
 
 二维码登录统一遵循 `WUMINAPP_LOGIN_V1` 协议规范：
 
-- 挑战字段：`proto/system/request_id/challenge/nonce/issued_at/expires_at/sys_pubkey/sys_sig`
-- SFID 场景：`sys_cert` 可空
-- 手机签名原文：`WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at`
-- 回执兼容字段：`request_id|challenge_id`、`pubkey|admin_pubkey|public_key`
+- 挑战字段：`proto/system/challenge/issued_at/expires_at/sys_pubkey/sys_sig`
+- 系统签名原文：`WUMINAPP_LOGIN_V1|system|challenge|issued_at|expires_at|sys_pubkey`
+- 手机签名原文：`WUMINAPP_LOGIN_V1|system|challenge|expires_at`
+- 回执兼容字段：`challenge|challenge_id|request_id`、`pubkey|admin_pubkey|public_key`
 
 ### 5.2 普通 challenge 登录
 1. 先 `identify` 校验管理员身份。
@@ -75,4 +75,4 @@ src/login/
 - `main.rs` 仅保留路由装配与模块接线，不再持有登录业务实现。
 - 新增登录需求必须先更新本文件再改代码，避免认证口径分叉。
 - 登录协议禁止再引入 `aud` 作为移动端扫码验签字段；网页上下文如需保留，只能作为服务端会话上下文单独保存。
-- SFID 自身系统身份信任来源为区块链当前登记公钥；二维码中的 `sys_pubkey` 必须与链上当前值一致。
+- SFID 二维码由 SFID 自身系统私钥签发；手机端使用二维码内的 `sys_pubkey` 验证 `sys_sig` 后，再进入管理员钱包签名步骤。

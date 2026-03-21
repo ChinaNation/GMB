@@ -58,7 +58,7 @@ packages:
     source: hosted
     version: "1.0.6"
   bip39_mnemonic:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: bip39_mnemonic
       sha256: e280b785d40dda3f70186d5a51126c5d3ae2c3b9a1bafdbd20a94b50c8253fb3
@@ -929,7 +929,7 @@ packages:
     source: hosted
     version: "1.5.0"
   qr:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: qr
       sha256: "5a1d2586170e172b8a8c8470bbbffd5eb0cd38a66c0d77155ea138d3af3a4445"
@@ -1078,7 +1078,7 @@ packages:
     source: hosted
     version: "1.10.2"
   sr25519:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: sr25519
       sha256: "122c930a933da6af018ec4a2ccdb853a7d0eb1a0891bfb03467e366b56f86f12"
@@ -1134,7 +1134,7 @@ packages:
     source: hosted
     version: "1.0.5"
   substrate_bip39:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: substrate_bip39
       sha256: ba880015808079804f40a0fde8c5bff0315ec6792fe3a4281a704e408f1c6bdb

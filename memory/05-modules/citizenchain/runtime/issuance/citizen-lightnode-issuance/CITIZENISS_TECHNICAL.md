@@ -40,7 +40,7 @@
 - `/Users/rhett/GMB/citizenchain/runtime/otherpallet/sfid-code-auth/src/lib.rs`
 
 接线方式：
-- `sfid-code-auth::bind_sfid` 成功后调用 `T::OnSfidBound::on_sfid_bound(&who, sfid_hash)`。
+- `sfid-code-auth::bind_sfid` 成功后调用 `T::OnSfidBound::on_sfid_bound(&who, binding_id)`。
 - Runtime 中配置 `type OnSfidBound = CitizenLightnodeIssuance`：
   - `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs`
   - `type WeightInfo = citizen_lightnode_issuance::weights::SubstrateWeight<Runtime>`
@@ -81,8 +81,8 @@ Weight 集成：
 
 ## 5. 事件与错误
 事件：
-- `CertificationRewardIssued { who, sfid_hash, reward }`
-- `CertificationRewardSkipped { who, sfid_hash, reason }`
+- `CertificationRewardIssued { who, binding_id, reward }`
+- `CertificationRewardSkipped { who, binding_id, reason }`
 
 `SkipReason`：
 - `DuplicateSfid`
@@ -97,7 +97,7 @@ Weight 集成：
 
 ## 6. 核心流程
 入口：
-- `OnSfidBound::on_sfid_bound(who, sfid_hash)`
+- `OnSfidBound::on_sfid_bound(who, binding_id)`
 
 执行逻辑：
 1. 先进行 SFID 去重检查（`RewardClaimed`）。

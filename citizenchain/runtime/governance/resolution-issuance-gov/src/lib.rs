@@ -271,7 +271,7 @@ pub mod pallet {
             allocations: AllocationOf<T>,
             eligible_total: u64,
             snapshot_nonce: SnapshotNonceOf<T>,
-            snapshot_signature: SnapshotSignatureOf<T>,
+            signature: SnapshotSignatureOf<T>,
         ) -> DispatchResult {
             let proposer = T::NrcProposeOrigin::ensure_origin(origin)?;
 
@@ -285,7 +285,7 @@ pub mod pallet {
                     proposer.clone(),
                     eligible_total,
                     snapshot_nonce.as_slice(),
-                    snapshot_signature.as_slice(),
+                    signature.as_slice(),
                 ) {
                     Ok(id) => id,
                     Err(_) => {
@@ -379,9 +379,7 @@ pub mod pallet {
 
     impl<T: Config> Pallet<T> {
         /// 从投票引擎的 ProposalData 中读取并解码本模块的业务数据。
-        pub fn load_proposal_data(
-            proposal_id: u64,
-        ) -> Option<IssuanceProposalData<T::AccountId>> {
+        pub fn load_proposal_data(proposal_id: u64) -> Option<IssuanceProposalData<T::AccountId>> {
             let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)?;
             Self::decode_tagged_data(&raw)
         }
@@ -417,11 +415,7 @@ pub mod pallet {
                 };
 
                 if approved {
-                    let execute_reason: ReasonOf<T> = match data
-                        .reason
-                        .clone()
-                        .try_into()
-                    {
+                    let execute_reason: ReasonOf<T> = match data.reason.clone().try_into() {
                         Ok(v) => v,
                         Err(_) => {
                             return TransactionOutcome::Rollback(Err(
@@ -429,18 +423,15 @@ pub mod pallet {
                             ))
                         }
                     };
-                    let execute_allocations_raw: AllocationOf<T> = match data
-                        .allocations
-                        .clone()
-                        .try_into()
-                    {
-                        Ok(v) => v,
-                        Err(_) => {
-                            return TransactionOutcome::Rollback(Err(
-                                Error::<T>::ProposalNotFound.into()
-                            ))
-                        }
-                    };
+                    let execute_allocations_raw: AllocationOf<T> =
+                        match data.allocations.clone().try_into() {
+                            Ok(v) => v,
+                            Err(_) => {
+                                return TransactionOutcome::Rollback(Err(
+                                    Error::<T>::ProposalNotFound.into(),
+                                ))
+                            }
+                        };
                     let (execute_reason, execute_allocations) =
                         match Self::issuance_payload(&execute_reason, &execute_allocations_raw) {
                             Ok(v) => v,
@@ -567,7 +558,10 @@ pub mod pallet {
         fn ensure_unique_recipients(recipients: &[T::AccountId]) -> DispatchResult {
             let mut seen: BTreeSet<&T::AccountId> = BTreeSet::new();
             for recipient in recipients {
-                ensure!(seen.insert(recipient), Error::<T>::DuplicateAllowedRecipient);
+                ensure!(
+                    seen.insert(recipient),
+                    Error::<T>::DuplicateAllowedRecipient
+                );
             }
             Ok(())
         }
@@ -692,9 +686,9 @@ mod tests {
             _who: AccountId32,
             eligible_total: u64,
             snapshot_nonce: &[u8],
-            snapshot_signature: &[u8],
+            signature: &[u8],
         ) -> Result<u64, DispatchError> {
-            if eligible_total == 0 || snapshot_nonce.is_empty() || snapshot_signature.is_empty() {
+            if eligible_total == 0 || snapshot_nonce.is_empty() || signature.is_empty() {
                 return Err(DispatchError::Other("bad snapshot"));
             }
             NEXT_JOINT_ID.with(|id| {
@@ -744,14 +738,14 @@ mod tests {
         for TestSfidEligibility
     {
         fn is_eligible(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
         ) -> bool {
             true
         }
 
         fn verify_and_consume_vote_credential(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
             _proposal_id: u64,
             _nonce: &[u8],
@@ -795,13 +789,13 @@ mod tests {
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<8192>;
-        type MaxJointDecisionApprovals = ConstU32<32>;
+        type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = ();
         type InternalThresholdProvider = ();
-        type JointInstitutionDecisionVerifier = ();
+        type InternalAdminCountProvider = ();
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }

@@ -1,5 +1,5 @@
 use crate::{
-    pallet::{CitizenTallies, CitizenVotesBySfid, Config, Error, Event, Pallet},
+    pallet::{CitizenTallies, CitizenVotesByBindingId, Config, Error, Event, Pallet},
     PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STATUS_PASSED,
 };
 use frame_support::{ensure, pallet_prelude::DispatchResult};
@@ -22,9 +22,9 @@ impl VoteCredentialCleanup {
 }
 
 pub trait SfidEligibility<AccountId, Hash> {
-    fn is_eligible(sfid_hash: &Hash, who: &AccountId) -> bool;
+    fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool;
     fn verify_and_consume_vote_credential(
-        sfid_hash: &Hash,
+        binding_id: &Hash,
         who: &AccountId,
         proposal_id: u64,
         nonce: &[u8],
@@ -44,12 +44,12 @@ pub trait SfidEligibility<AccountId, Hash> {
 }
 
 impl<AccountId, Hash> SfidEligibility<AccountId, Hash> for () {
-    fn is_eligible(_sfid_hash: &Hash, _who: &AccountId) -> bool {
+    fn is_eligible(_binding_id: &Hash, _who: &AccountId) -> bool {
         false
     }
 
     fn verify_and_consume_vote_credential(
-        _sfid_hash: &Hash,
+        _binding_id: &Hash,
         _who: &AccountId,
         _proposal_id: u64,
         _nonce: &[u8],
@@ -72,7 +72,7 @@ impl<T: Config> Pallet<T> {
     pub(crate) fn do_citizen_vote(
         who: T::AccountId,
         proposal_id: u64,
-        sfid_hash: T::Hash,
+        binding_id: T::Hash,
         nonce: crate::pallet::VoteNonceOf<T>,
         signature: crate::pallet::VoteSignatureOf<T>,
         approve: bool,
@@ -92,18 +92,18 @@ impl<T: Config> Pallet<T> {
             Error::<T>::CitizenEligibleTotalNotSet
         );
         ensure!(
-            T::SfidEligibility::is_eligible(&sfid_hash, &who),
+            T::SfidEligibility::is_eligible(&binding_id, &who),
             Error::<T>::SfidNotEligible
         );
 
         ensure!(
-            !CitizenVotesBySfid::<T>::contains_key(proposal_id, sfid_hash),
+            !CitizenVotesByBindingId::<T>::contains_key(proposal_id, binding_id),
             Error::<T>::AlreadyVoted
         );
         // 中文注释：资格校验只证明“这个人能投”，这里还要消费一次性投票凭证来阻止离线重放。
         ensure!(
             T::SfidEligibility::verify_and_consume_vote_credential(
-                &sfid_hash,
+                &binding_id,
                 &who,
                 proposal_id,
                 nonce.as_slice(),
@@ -112,7 +112,7 @@ impl<T: Config> Pallet<T> {
             Error::<T>::InvalidSfidVoteCredential
         );
 
-        CitizenVotesBySfid::<T>::insert(proposal_id, sfid_hash, approve);
+        CitizenVotesByBindingId::<T>::insert(proposal_id, binding_id, approve);
         let tally = CitizenTallies::<T>::mutate(proposal_id, |tally| {
             if approve {
                 tally.yes = tally.yes.saturating_add(1);
@@ -125,7 +125,7 @@ impl<T: Config> Pallet<T> {
         Self::deposit_event(Event::<T>::CitizenVoteCast {
             proposal_id,
             who,
-            sfid_hash,
+            binding_id,
             approve,
         });
 

@@ -5,28 +5,28 @@ import 'package:wuminapp_mobile/qr/login/login_models.dart';
 
 /// 登录请求防重放守卫。
 ///
-/// 基于 `request_id` 做一次性消费，过期条目自动清理。
+/// 基于 `challenge` 做一次性消费，过期条目自动清理。
 class LoginReplayGuard {
-  static const String _kUsedRequestIds = 'login.used_request_ids';
+  static const String _kUsedChallenges = 'login.used_challenges';
 
-  Future<bool> isConsumed(String requestId) async {
+  Future<bool> isConsumed(String challenge) async {
     final all = await _load();
-    return all.containsKey(requestId);
+    return all.containsKey(challenge);
   }
 
   Future<void> consume({
-    required String requestId,
+    required String challenge,
     required int expiresAt,
   }) async {
     final all = await _load();
     final now = _nowEpochSeconds();
     all.removeWhere((_, exp) => exp < now);
-    all[requestId] = expiresAt;
+    all[challenge] = expiresAt;
     await _save(all);
   }
 
-  Future<void> assertNotConsumed(String requestId) async {
-    final consumed = await isConsumed(requestId);
+  Future<void> assertNotConsumed(String challenge) async {
+    final consumed = await isConsumed(challenge);
     if (consumed) {
       throw const LoginException(
         LoginErrorCode.replay,
@@ -37,7 +37,7 @@ class LoginReplayGuard {
 
   Future<Map<String, int>> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_kUsedRequestIds);
+    final raw = prefs.getString(_kUsedChallenges);
     if (raw == null || raw.isEmpty) {
       return {};
     }
@@ -64,7 +64,7 @@ class LoginReplayGuard {
 
   Future<void> _save(Map<String, int> data) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kUsedRequestIds, jsonEncode(data));
+    await prefs.setString(_kUsedChallenges, jsonEncode(data));
   }
 
   int _nowEpochSeconds() => DateTime.now().millisecondsSinceEpoch ~/ 1000;

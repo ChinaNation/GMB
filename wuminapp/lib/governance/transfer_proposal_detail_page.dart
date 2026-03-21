@@ -20,6 +20,7 @@ class TransferProposalDetailPage extends StatefulWidget {
 
   final InstitutionInfo institution;
   final int proposalId;
+
   /// 当前用户导入的、属于此机构的管理员钱包列表。
   final List<WalletProfile> adminWallets;
 
@@ -244,7 +245,9 @@ class _TransferProposalDetailPageState
           context,
           MaterialPageRoute(
             builder: (_) => QrSignSessionPage(
-                request: request, requestJson: requestJson),
+                request: request,
+                requestJson: requestJson,
+                expectedPubkey: '0x${wallet.pubkeyHex}'),
           ),
         );
         if (response == null) throw Exception('签名已取消');
@@ -329,7 +332,10 @@ class _TransferProposalDetailPageState
           : _error != null
               ? _buildError()
               : _buildContent(),
-      bottomNavigationBar: (!_loading && _error == null && _status == _statusVoting && _isCurrentUserAdmin)
+      bottomNavigationBar: (!_loading &&
+              _error == null &&
+              _status == _statusVoting &&
+              _isCurrentUserAdmin)
           ? _buildVoteButtons()
           : null,
     );
@@ -566,7 +572,8 @@ class _TransferProposalDetailPageState
 
   Widget _buildVotingProgress() {
     final threshold = widget.institution.internalThreshold;
-    final progress = threshold > 0 ? (_yesCount / threshold).clamp(0.0, 1.0) : 0.0;
+    final progress =
+        threshold > 0 ? (_yesCount / threshold).clamp(0.0, 1.0) : 0.0;
 
     return Card(
       elevation: 0,
@@ -796,15 +803,14 @@ class _TransferProposalDetailPageState
                 decoration: BoxDecoration(
                   color: Colors.green.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                      color: Colors.green.withValues(alpha: 0.2)),
+                  border:
+                      Border.all(color: Colors.green.withValues(alpha: 0.2)),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
                     value: _selectedVoteWallet?.walletIndex,
                     isExpanded: true,
-                    icon: const Icon(Icons.arrow_drop_down,
-                        color: _inkGreen),
+                    icon: const Icon(Icons.arrow_drop_down, color: _inkGreen),
                     items: _votableWallets.map((w) {
                       return DropdownMenuItem<int>(
                         value: w.walletIndex,
@@ -848,66 +854,70 @@ class _TransferProposalDetailPageState
               ),
             ),
           Row(
-        children: [
-          Expanded(
-            child: ElevatedButton(
-              onPressed: (_submitting || !_canVote) ? null : () => _confirmVote(false),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _canVote ? Colors.red : Colors.grey[300],
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                elevation: 0,
-              ),
-              child: _submitting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      '反对',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: (_submitting || !_canVote)
+                      ? null
+                      : () => _confirmVote(false),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _canVote ? Colors.red : Colors.grey[300],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: ElevatedButton(
-              onPressed: (_submitting || !_canVote) ? null : () => _confirmVote(true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _canVote ? _inkGreen : Colors.grey[300],
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                    elevation: 0,
+                  ),
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          '反对',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
                 ),
-                elevation: 0,
               ),
-              child: _submitting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      '赞成',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: (_submitting || !_canVote)
+                      ? null
+                      : () => _confirmVote(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _canVote ? _inkGreen : Colors.grey[300],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
-            ),
+                    elevation: 0,
+                  ),
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          '赞成',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                ),
+              ),
+            ],
           ),
-          ],
-        ),
         ],
       ),
     );

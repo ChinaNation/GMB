@@ -114,8 +114,8 @@ mod benchmarks {
         // 将 old_key 篡改为不存在的 authority，制造"已通过但不可执行"场景。
         let old_data = voting_engine_system::Pallet::<T>::get_proposal_data(0)
             .expect("proposal data should exist");
-        let mut action = GrandpaKeyReplacementAction::decode(&mut &old_data[..])
-            .expect("action should decode");
+        let mut action =
+            GrandpaKeyReplacementAction::decode(&mut &old_data[..]).expect("action should decode");
         action.old_key = seeded_public_key(250);
         let new_data = action.encode();
         voting_engine_system::Pallet::<T>::store_proposal_data(0, new_data)
