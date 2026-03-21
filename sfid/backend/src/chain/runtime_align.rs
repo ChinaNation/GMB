@@ -3,23 +3,34 @@ use blake2::{
     Blake2bVar,
 };
 use parity_scale_codec::Encode;
-use schnorrkel::{signing_context, Keypair as Sr25519Keypair};
+use serde::Deserialize;
+use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
 use std::sync::{Arc, OnceLock, RwLock};
 use subxt::{OnlineClient, PolkadotConfig};
 
 use crate::*;
 
-const BIND_DOMAIN: [u8; 16] = *b"GMB_SFID_BIND_V2";
-const VOTE_DOMAIN: [u8; 16] = *b"GMB_SFID_VOTE_V2";
-pub(crate) const POPULATION_DOMAIN_STR: &str = "GMB_SFID_POPULATION_V2";
-const POPULATION_DOMAIN: [u8; 22] = *b"GMB_SFID_POPULATION_V2";
-const DEFAULT_BIND_CREDENTIAL_LIFETIME_BLOCKS: u32 = 7_200;
+const BIND_DOMAIN: [u8; 16] = *b"GMB_SFID_BIND_V3";
+const VOTE_DOMAIN: [u8; 16] = *b"GMB_SFID_VOTE_V3";
+const INSTITUTION_DOMAIN: &[u8] = b"GMB_SFID_INSTITUTION_V1";
+pub(crate) const POPULATION_DOMAIN_STR: &str = "GMB_SFID_POPULATION_V3";
+const POPULATION_DOMAIN: [u8; 22] = *b"GMB_SFID_POPULATION_V3";
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
 static SIGNING_KEY_CACHE: OnceLock<RwLock<Option<CachedSigningKey>>> = OnceLock::new();
+const TRUSTED_PRODUCTION_CHAINS: &[TrustedProductionChain] = &[
+    // 中文注释：正式链创世哈希在这里做源码级白名单绑定；新增正式链时只允许在此处追加。
+    // TrustedProductionChain { name: "mainnet", genesis_hash_hex: "0x<正式链创世哈希>" },
+];
 
 struct CachedSigningKey {
     seed_hex: SensitiveSeed,
-    keypair: Arc<Sr25519Keypair>,
+    keypair: Arc<Sr25519Pair>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TrustedProductionChain {
+    name: &'static str,
+    genesis_hash_hex: &'static str,
 }
 
 #[derive(Debug, Clone)]
@@ -31,16 +42,19 @@ pub(crate) struct RuntimeSignatureMeta {
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeBindCredential {
-    pub(crate) sfid_code_hash: String,
-    pub(crate) nonce: String,
-    pub(crate) expires_at_block: u32,
+    pub(crate) genesis_hash: String,
+    pub(crate) who: String,
+    pub(crate) binding_id: String,
+    pub(crate) bind_nonce: String,
     pub(crate) signature: String,
     pub(crate) meta: RuntimeSignatureMeta,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeVoteCredential {
-    pub(crate) sfid_hash: String,
+    pub(crate) genesis_hash: String,
+    pub(crate) who: String,
+    pub(crate) binding_id: String,
     pub(crate) proposal_id: u64,
     pub(crate) vote_nonce: String,
     pub(crate) signature: String,
@@ -48,7 +62,7 @@ pub(crate) struct RuntimeVoteCredential {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RuntimePopulationSnapshotSignature {
+pub(crate) struct RuntimePopulationSnapshotCredential {
     pub(crate) who: String,
     pub(crate) eligible_total: u64,
     pub(crate) snapshot_nonce: String,
@@ -58,100 +72,79 @@ pub(crate) struct RuntimePopulationSnapshotSignature {
     pub(crate) meta: RuntimeSignatureMeta,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeInstitutionCredential {
+    pub(crate) genesis_hash: String,
+    pub(crate) sfid_id: String,
+    pub(crate) register_nonce: String,
+    pub(crate) signature: String,
+    pub(crate) meta: RuntimeSignatureMeta,
+}
+
 pub(crate) fn build_bind_credential(
     state: &AppState,
     account_pubkey: &str,
-    sfid_code: &str,
-    nonce: String,
-    expires_at_block: u32,
+    binding_seed: &str,
+    bind_nonce: String,
 ) -> Result<RuntimeBindCredential, String> {
-    if nonce.trim().is_empty() {
+    if bind_nonce.trim().is_empty() {
         return Err("bind nonce is required".to_string());
     }
-    let (_, who) = normalize_and_parse_account_id32(account_pubkey)?;
+    if binding_seed.trim().is_empty() {
+        return Err("binding seed is required".to_string());
+    }
+    let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
     let genesis_hash = resolve_chain_genesis_hash()?;
-    let sfid_code_hash = blake2_256(sfid_code.as_bytes());
+    let binding_id = blake2_256(binding_seed.as_bytes());
     let payload = (
         BIND_DOMAIN,
         genesis_hash,
         who,
-        sfid_code_hash,
-        nonce.as_bytes(),
-        expires_at_block,
+        binding_id,
+        bind_nonce.as_bytes(),
     );
     let payload_digest = blake2_256(&payload.encode());
     let signature = sign_runtime_digest(state, &payload_digest)?;
     Ok(RuntimeBindCredential {
-        sfid_code_hash: hex::encode(sfid_code_hash),
-        nonce,
-        expires_at_block,
+        genesis_hash: hex::encode(genesis_hash),
+        who: normalized_who,
+        binding_id: hex::encode(binding_id),
+        bind_nonce,
         signature,
         meta: runtime_signature_meta(state),
     })
 }
 
-pub(crate) fn bind_credential_lifetime_blocks() -> u32 {
-    std::env::var("SFID_BIND_CREDENTIAL_LIFETIME_BLOCKS")
-        .ok()
-        .and_then(|raw| raw.trim().parse::<u32>().ok())
-        .filter(|v| *v > 0)
-        .unwrap_or(DEFAULT_BIND_CREDENTIAL_LIFETIME_BLOCKS)
-}
-
-pub(crate) fn compute_bind_credential_expiry_block(current_block: u32) -> u32 {
-    current_block.saturating_add(bind_credential_lifetime_blocks())
-}
-
-pub(crate) async fn current_chain_block_number() -> Result<u32, String> {
-    if let Some(override_value) = std::env::var("SFID_CHAIN_CURRENT_BLOCK_OVERRIDE")
-        .ok()
-        .and_then(|raw| raw.trim().parse::<u32>().ok())
-    {
-        return Ok(override_value);
-    }
-
-    let ws_url = resolve_chain_ws_url()?;
-    let client = OnlineClient::<PolkadotConfig>::from_url(ws_url)
-        .await
-        .map_err(|e| format!("connect chain ws failed: {e}"))?;
-    let latest = client
-        .blocks()
-        .at_latest()
-        .await
-        .map_err(|e| format!("query latest block failed: {e}"))?;
-    let parsed = latest
-        .number()
-        .to_string()
-        .parse::<u64>()
-        .map_err(|e| format!("parse latest block number failed: {e}"))?;
-    u32::try_from(parsed).map_err(|_| "latest block number exceeds u32".to_string())
-}
-
 pub(crate) fn build_vote_credential(
     state: &AppState,
     account_pubkey: &str,
-    sfid_code: &str,
+    binding_seed: &str,
     proposal_id: u64,
     vote_nonce: String,
 ) -> Result<RuntimeVoteCredential, String> {
     if vote_nonce.trim().is_empty() {
         return Err("vote_nonce is required".to_string());
     }
-    let (_, who) = normalize_and_parse_account_id32(account_pubkey)?;
+    if binding_seed.trim().is_empty() {
+        return Err("binding seed is required".to_string());
+    }
+    let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
     let genesis_hash = resolve_chain_genesis_hash()?;
-    let sfid_hash = blake2_256(sfid_code.as_bytes());
+    let binding_id = blake2_256(binding_seed.as_bytes());
     let payload = (
         VOTE_DOMAIN,
         genesis_hash,
         who,
-        sfid_hash,
+        binding_id,
         proposal_id,
         vote_nonce.as_bytes(),
     );
     let payload_digest = blake2_256(&payload.encode());
     let signature = sign_runtime_digest(state, &payload_digest)?;
     Ok(RuntimeVoteCredential {
-        sfid_hash: hex::encode(sfid_hash),
+        genesis_hash: hex::encode(genesis_hash),
+        who: normalized_who,
+        binding_id: hex::encode(binding_id),
         proposal_id,
         vote_nonce,
         signature,
@@ -159,12 +152,12 @@ pub(crate) fn build_vote_credential(
     })
 }
 
-pub(crate) fn build_population_snapshot_signature(
+pub(crate) fn build_population_snapshot_credential(
     state: &AppState,
     account_pubkey: &str,
     eligible_total: u64,
     snapshot_nonce: String,
-) -> Result<RuntimePopulationSnapshotSignature, String> {
+) -> Result<RuntimePopulationSnapshotCredential, String> {
     if snapshot_nonce.trim().is_empty() {
         return Err("snapshot_nonce is required".to_string());
     }
@@ -179,7 +172,7 @@ pub(crate) fn build_population_snapshot_signature(
     );
     let payload_digest = blake2_256(&payload.encode());
     let signature = sign_runtime_digest(state, &payload_digest)?;
-    Ok(RuntimePopulationSnapshotSignature {
+    Ok(RuntimePopulationSnapshotCredential {
         who: normalized_who,
         eligible_total,
         snapshot_nonce,
@@ -188,6 +181,39 @@ pub(crate) fn build_population_snapshot_signature(
         payload_digest: hex::encode(payload_digest),
         meta: runtime_signature_meta(state),
     })
+}
+
+pub(crate) fn build_institution_credential(
+    state: &AppState,
+    sfid_id: &str,
+    register_nonce: String,
+) -> Result<RuntimeInstitutionCredential, String> {
+    if sfid_id.trim().is_empty() {
+        return Err("sfid_id is required".to_string());
+    }
+    if register_nonce.trim().is_empty() {
+        return Err("register_nonce is required".to_string());
+    }
+    let genesis_hash = resolve_chain_genesis_hash()?;
+    let payload = (
+        INSTITUTION_DOMAIN,
+        genesis_hash,
+        sfid_id.as_bytes(),
+        register_nonce.as_bytes(),
+    );
+    let payload_digest = blake2_256(&payload.encode());
+    let signature = sign_runtime_digest(state, &payload_digest)?;
+    Ok(RuntimeInstitutionCredential {
+        genesis_hash: hex::encode(genesis_hash),
+        sfid_id: sfid_id.to_string(),
+        register_nonce,
+        signature,
+        meta: runtime_signature_meta(state),
+    })
+}
+
+pub(crate) fn current_chain_genesis_hash_hex() -> Result<String, String> {
+    resolve_chain_genesis_hash().map(hex::encode)
 }
 
 fn runtime_signature_meta(state: &AppState) -> RuntimeSignatureMeta {
@@ -208,12 +234,28 @@ fn normalize_chain_ws_url(input: &str) -> String {
     input.to_string()
 }
 
+fn resolve_chain_http_rpc_url() -> Result<String, String> {
+    std::env::var("SFID_CHAIN_RPC_URL")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| "SFID_CHAIN_RPC_URL not configured".to_string())
+}
+
 fn resolve_chain_ws_url() -> Result<String, String> {
     let ws_url = std::env::var("SFID_CHAIN_WS_URL")
         .ok()
-        .or_else(|| std::env::var("SFID_CHAIN_RPC_URL").ok())
-        .ok_or_else(|| "SFID_CHAIN_RPC_URL or SFID_CHAIN_WS_URL not configured".to_string())?;
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| "SFID_CHAIN_WS_URL not configured".to_string())?;
     Ok(normalize_chain_ws_url(ws_url.as_str()))
+}
+
+fn is_production_mode() -> bool {
+    std::env::var("SFID_ENV")
+        .ok()
+        .map(|v| v.eq_ignore_ascii_case("prod") || v.eq_ignore_ascii_case("production"))
+        .unwrap_or(false)
 }
 
 fn normalize_and_parse_account_id32(account_pubkey: &str) -> Result<(String, [u8; 32]), String> {
@@ -228,7 +270,13 @@ fn resolve_chain_genesis_hash() -> Result<[u8; 32], String> {
     if let Some(cached) = CHAIN_GENESIS_HASH.get() {
         return Ok(*cached);
     }
-    // 优先读环境变量，没配则使用启动时从链上获取并缓存的值
+    // 开发环境允许通过环境变量覆盖，生产环境必须依赖启动时完成的白名单校验结果。
+    if is_production_mode() {
+        return Err(
+            "production genesis hash not initialized: call init_genesis_hash_from_chain() at startup"
+                .to_string(),
+        );
+    }
     if let Ok(raw) = std::env::var("SFID_CHAIN_GENESIS_HASH") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
@@ -241,33 +289,122 @@ fn resolve_chain_genesis_hash() -> Result<[u8; 32], String> {
     Err("genesis hash not available: configure SFID_CHAIN_GENESIS_HASH or call init_genesis_hash_from_chain() at startup".to_string())
 }
 
+fn trusted_production_chain_by_hash(
+    hash: &[u8; 32],
+) -> Result<Option<TrustedProductionChain>, String> {
+    for chain in TRUSTED_PRODUCTION_CHAINS {
+        let parsed = parse_hex_hash32(chain.genesis_hash_hex).map_err(|_| {
+            format!(
+                "trusted production chain `{}` has invalid genesis hash literal",
+                chain.name
+            )
+        })?;
+        if &parsed == hash {
+            return Ok(Some(*chain));
+        }
+    }
+    Ok(None)
+}
+
+async fn fetch_chain_genesis_hash_from_rpc() -> Result<[u8; 32], String> {
+    if let Ok(http_url) = resolve_chain_http_rpc_url() {
+        return fetch_chain_genesis_hash_via_http(http_url.as_str()).await;
+    }
+    let ws_url = resolve_chain_ws_url()?;
+    fetch_chain_genesis_hash_via_ws(ws_url.as_str()).await
+}
+
+#[derive(Deserialize)]
+struct ChainGetBlockHashResponse {
+    result: Option<String>,
+    error: Option<serde_json::Value>,
+}
+
+async fn fetch_chain_genesis_hash_via_http(http_url: &str) -> Result<[u8; 32], String> {
+    let client = reqwest::Client::new();
+    let response = client
+        .post(http_url)
+        .json(&serde_json::json!({
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": "chain_getBlockHash",
+            "params": [0]
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("connect chain http rpc for genesis hash failed: {e}"))?;
+    let status = response.status();
+    let payload: ChainGetBlockHashResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("decode chain http rpc genesis hash response failed: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("chain http rpc returned status {status}"));
+    }
+    if let Some(error) = payload.error {
+        return Err(format!("chain http rpc returned error: {error}"));
+    }
+    let Some(hash_hex) = payload.result else {
+        return Err("chain http rpc missing result for genesis hash".to_string());
+    };
+    parse_hex_hash32(hash_hex.as_str())
+}
+
+async fn fetch_chain_genesis_hash_via_ws(ws_url: &str) -> Result<[u8; 32], String> {
+    let client = OnlineClient::<PolkadotConfig>::from_url(ws_url)
+        .await
+        .map_err(|e| format!("connect chain websocket for genesis hash failed: {e}"))?;
+    Ok(client.genesis_hash().0)
+}
+
 /// 启动时从区块链 RPC 获取创世哈希并缓存。
 /// 调用一次后，后续 resolve_chain_genesis_hash() 直接返回缓存值。
 pub(crate) async fn init_genesis_hash_from_chain() -> Result<(), String> {
     if CHAIN_GENESIS_HASH.get().is_some() {
         return Ok(());
     }
-    // 如果环境变量已配置且非空，直接使用
+    if is_production_mode() {
+        if TRUSTED_PRODUCTION_CHAINS.is_empty() {
+            return Err(
+                "production trusted chain whitelist is empty: add chain genesis hashes to TRUSTED_PRODUCTION_CHAINS"
+                    .to_string(),
+            );
+        }
+        let hash_bytes = fetch_chain_genesis_hash_from_rpc().await?;
+        let Some(chain) = trusted_production_chain_by_hash(&hash_bytes)? else {
+            return Err(format!(
+                "connected chain genesis hash 0x{} is not in TRUSTED_PRODUCTION_CHAINS",
+                hex::encode(hash_bytes)
+            ));
+        };
+        let _ = CHAIN_GENESIS_HASH.set(hash_bytes);
+        tracing::info!(
+            trusted_chain = chain.name,
+            genesis_hash = %format!("0x{}", hex::encode(hash_bytes)),
+            "validated production chain genesis hash from RPC"
+        );
+        return Ok(());
+    }
+
+    // 开发环境允许本地显式覆盖，否则启动时自动从链上获取。
     if let Ok(raw) = std::env::var("SFID_CHAIN_GENESIS_HASH") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
             let parsed = parse_hex_hash32(trimmed)
                 .map_err(|_| "SFID_CHAIN_GENESIS_HASH must be 32-byte hex".to_string())?;
             let _ = CHAIN_GENESIS_HASH.set(parsed);
+            tracing::info!(
+                genesis_hash = %format!("0x{}", hex::encode(parsed)),
+                "loaded development genesis hash from environment"
+            );
             return Ok(());
         }
     }
-    // 从链上获取
-    let ws_url = resolve_chain_ws_url()?;
-    let client = OnlineClient::<PolkadotConfig>::from_url(ws_url)
-        .await
-        .map_err(|e| format!("connect chain for genesis hash failed: {e}"))?;
-    let genesis = client.genesis_hash();
-    let hash_bytes: [u8; 32] = genesis.0;
+    let hash_bytes = fetch_chain_genesis_hash_from_rpc().await?;
     let _ = CHAIN_GENESIS_HASH.set(hash_bytes);
     tracing::info!(
-        genesis_hash = %hex::encode(hash_bytes),
-        "fetched chain genesis hash from RPC"
+        genesis_hash = %format!("0x{}", hex::encode(hash_bytes)),
+        "fetched development chain genesis hash from RPC"
     );
     Ok(())
 }
@@ -296,11 +433,11 @@ fn sign_runtime_digest(state: &AppState, digest: &[u8; 32]) -> Result<String, St
         .map_err(|_| "signing seed read lock poisoned".to_string())?
         .clone();
     let signing_key = resolve_signing_keypair(seed.expose_secret())?;
-    let signature = signing_key.sign(signing_context(b"substrate").bytes(digest));
-    Ok(hex::encode(signature.to_bytes()))
+    let signature = signing_key.sign(digest);
+    Ok(hex::encode(signature.0))
 }
 
-fn resolve_signing_keypair(seed_text: &str) -> Result<Arc<Sr25519Keypair>, String> {
+fn resolve_signing_keypair(seed_text: &str) -> Result<Arc<Sr25519Pair>, String> {
     let cache = SIGNING_KEY_CACHE.get_or_init(|| RwLock::new(None));
     {
         let guard = cache
@@ -339,4 +476,33 @@ fn blake2_256(input: &[u8]) -> [u8; 32] {
         .finalize_variable(&mut output)
         .expect("finalize blake2_256 failed");
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_production_mode, parse_hex_hash32, trusted_production_chain_by_hash};
+
+    #[test]
+    fn parse_hex_hash32_accepts_prefixed_hash() {
+        let parsed = parse_hex_hash32(&format!("0x{}", "11".repeat(32))).unwrap();
+        assert_eq!(parsed, [0x11; 32]);
+    }
+
+    #[test]
+    fn trusted_production_chain_lookup_returns_none_for_unknown_hash() {
+        let result = trusted_production_chain_by_hash(&[0x22; 32]).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn production_mode_detects_prod_env() {
+        let previous = std::env::var("SFID_ENV").ok();
+        std::env::set_var("SFID_ENV", "prod");
+        assert!(is_production_mode());
+        if let Some(value) = previous {
+            std::env::set_var("SFID_ENV", value);
+        } else {
+            std::env::remove_var("SFID_ENV");
+        }
+    }
 }

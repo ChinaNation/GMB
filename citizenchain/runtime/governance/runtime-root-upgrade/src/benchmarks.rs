@@ -61,7 +61,7 @@ fn snapshot_nonce_max<T: Config>() -> SnapshotNonceOf<T> {
         .expect("benchmark snapshot nonce should fit")
 }
 
-fn snapshot_signature_max<T: Config>() -> SnapshotSignatureOf<T> {
+fn signature_max<T: Config>() -> SnapshotSignatureOf<T> {
     assert_eq!(
         T::MaxSnapshotSignatureLength::get(),
         BENCH_MAX_SNAPSHOT_SIGNATURE_LEN,
@@ -82,12 +82,18 @@ fn insert_voting_proposal<T: Config>(proposal_id: u64) {
         proposer,
         reason,
         code_hash,
-        code,
+        has_code: true,
         status: ProposalStatus::Voting,
     };
     let data = proposal.encode();
     voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)
         .expect("benchmark store_proposal_data should succeed");
+    voting_engine_system::Pallet::<T>::store_proposal_object(
+        proposal_id,
+        crate::pallet::PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
+        code.into_inner(),
+    )
+    .expect("benchmark store_proposal_object should succeed");
 }
 
 #[benchmarks]
@@ -100,7 +106,7 @@ mod benchmarks {
         let reason = reason_max::<T>();
         let code = code_max::<T>();
         let nonce = snapshot_nonce_max::<T>();
-        let signature = snapshot_signature_max::<T>();
+        let signature = signature_max::<T>();
 
         #[extrinsic_call]
         propose_runtime_upgrade(
@@ -113,8 +119,10 @@ mod benchmarks {
         );
 
         // 提案数据应已存入 voting engine
-        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(0u64).is_some()
-            || voting_engine_system::Pallet::<T>::get_proposal_data(100u64).is_some());
+        assert!(
+            voting_engine_system::Pallet::<T>::get_proposal_data(0u64).is_some()
+                || voting_engine_system::Pallet::<T>::get_proposal_data(100u64).is_some()
+        );
     }
 
     #[benchmark]
@@ -129,8 +137,8 @@ mod benchmarks {
         let proposal = Proposal::<T>::decode(&mut &raw[..]).expect("should decode");
         assert!(matches!(proposal.status, ProposalStatus::Passed));
         assert!(
-            proposal.code.is_empty(),
-            "successful finalize should clear code"
+            proposal.has_code,
+            "successful finalize should retain archived wasm object"
         );
     }
 
@@ -146,8 +154,8 @@ mod benchmarks {
         let proposal = Proposal::<T>::decode(&mut &raw[..]).expect("should decode");
         assert!(matches!(proposal.status, ProposalStatus::Rejected));
         assert!(
-            proposal.code.is_empty(),
-            "rejected finalize should clear code"
+            proposal.has_code,
+            "rejected finalize should retain archived wasm object"
         );
     }
 }

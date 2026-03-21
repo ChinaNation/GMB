@@ -82,21 +82,16 @@ pub(crate) struct Store {
     pub(crate) metrics: ServiceMetrics,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub(crate) struct PersistedRuntimeMeta {
     pub(crate) version: u32,
-    pub(crate) signing_seed_hex: SensitiveSeed,
-    pub(crate) known_key_seeds: HashMap<String, SensitiveSeed>,
-    pub(crate) public_key_hex: String,
 }
 
 impl fmt::Debug for PersistedRuntimeMeta {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PersistedRuntimeMeta")
             .field("version", &self.version)
-            .field("signing_seed_hex", &self.signing_seed_hex)
-            .field("known_key_seeds_count", &self.known_key_seeds.len())
-            .field("public_key_hex", &self.public_key_hex)
             .finish()
     }
 }
@@ -227,11 +222,9 @@ pub(crate) struct BindingRecord {
     pub(crate) sfid_code: String,
     pub(crate) sfid_signature: String,
     #[serde(default)]
-    pub(crate) runtime_bind_sfid_code_hash: Option<String>,
+    pub(crate) runtime_bind_binding_id: Option<String>,
     #[serde(default)]
-    pub(crate) runtime_bind_nonce: Option<String>,
-    #[serde(default)]
-    pub(crate) runtime_bind_expires_at_block: Option<u32>,
+    pub(crate) runtime_bind_bind_nonce: Option<String>,
     #[serde(default)]
     pub(crate) runtime_bind_signature: Option<String>,
     #[serde(default)]
@@ -681,6 +674,10 @@ pub(crate) struct CpmsInstitutionInitQrPayload {
 #[derive(Serialize)]
 pub(crate) struct CpmsRegisterScanOutput {
     pub(crate) site_sfid: String,
+    pub(crate) genesis_hash: String,
+    pub(crate) sfid_id: String,
+    pub(crate) register_nonce: String,
+    pub(crate) signature: String,
     pub(crate) status: &'static str,
     pub(crate) message: &'static str,
     pub(crate) chain_register_tx_hash: String,
@@ -712,19 +709,11 @@ pub(crate) struct BindResultQuery {
 
 #[derive(Serialize)]
 pub(crate) struct BindResultOutput {
-    pub(crate) account_pubkey: String,
-    pub(crate) is_bound: bool,
-    pub(crate) sfid_code: Option<String>,
-    pub(crate) sfid_code_hash: Option<String>,
-    pub(crate) nonce: Option<String>,
-    pub(crate) expires_at_block: Option<u32>,
-    pub(crate) signature: Option<String>,
-    pub(crate) key_id: Option<String>,
-    pub(crate) key_version: Option<String>,
-    pub(crate) alg: Option<String>,
-    /// Deprecated: use `signature`.
-    pub(crate) sfid_signature: Option<String>,
-    pub(crate) message: String,
+    pub(crate) genesis_hash: String,
+    pub(crate) who: String,
+    pub(crate) binding_id: String,
+    pub(crate) bind_nonce: String,
+    pub(crate) signature: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -735,17 +724,12 @@ pub(crate) struct VoteVerifyInput {
 
 #[derive(Serialize)]
 pub(crate) struct VoteVerifyOutput {
-    pub(crate) account_pubkey: String,
-    pub(crate) is_bound: bool,
-    pub(crate) has_vote_eligibility: bool,
-    pub(crate) sfid_hash: Option<String>,
-    pub(crate) proposal_id: Option<u64>,
-    pub(crate) vote_nonce: Option<String>,
-    pub(crate) signature: Option<String>,
-    pub(crate) key_id: Option<String>,
-    pub(crate) key_version: Option<String>,
-    pub(crate) alg: Option<String>,
-    pub(crate) message: String,
+    pub(crate) genesis_hash: String,
+    pub(crate) who: String,
+    pub(crate) binding_id: String,
+    pub(crate) proposal_id: u64,
+    pub(crate) vote_nonce: String,
+    pub(crate) signature: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -756,13 +740,11 @@ pub(crate) struct ChainVotersCountQuery {
 
 #[derive(Serialize)]
 pub(crate) struct ChainVotersCountOutput {
+    pub(crate) genesis_hash: String,
     pub(crate) eligible_total: u64,
-    pub(crate) as_of: i64,
     pub(crate) who: String,
     pub(crate) snapshot_nonce: String,
-    /// Deprecated: use `snapshot_attestation.signature_hex` instead.
-    pub(crate) snapshot_signature: String,
-    pub(crate) snapshot_attestation: SignatureEnvelope,
+    pub(crate) signature: String,
 }
 
 #[derive(Serialize, Deserialize)]

@@ -7,6 +7,7 @@ enum QrSignErrorCode {
   expired,
   mismatchedRequest,
   mismatchedAccount,
+  mismatchedPubkey,
 }
 
 class QrSignException implements Exception {
@@ -184,6 +185,7 @@ class QrSigner {
   QrSignResponse parseResponse(
     String raw, {
     required String expectedRequestId,
+    String? expectedPubkey,
   }) {
     final data = _parseJson(raw);
     final proto = _requiredString(data, 'proto');
@@ -212,6 +214,17 @@ class QrSigner {
         QrSignErrorCode.mismatchedRequest,
         '签名回执 request_id 与请求不一致',
       );
+    }
+
+    if (expectedPubkey != null) {
+      final actual = _normalizeHex(pubkey);
+      final expected = _normalizeHex(expectedPubkey);
+      if (actual != expected) {
+        throw const QrSignException(
+          QrSignErrorCode.mismatchedPubkey,
+          '签名回执公钥与当前选中钱包不一致',
+        );
+      }
     }
 
     return QrSignResponse(
@@ -305,6 +318,12 @@ class QrSigner {
     if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(text)) {
       throw QrSignException(QrSignErrorCode.invalidField, '$field 必须是合法 hex');
     }
+  }
+
+  String _normalizeHex(String value) {
+    return value.startsWith('0x')
+        ? value.substring(2).toLowerCase()
+        : value.toLowerCase();
   }
 
   void _validateSigAlg(String sigAlg) {

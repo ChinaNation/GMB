@@ -54,20 +54,34 @@ impl<AccountId> ProtectedSourceChecker<AccountId> for () {
     }
 }
 
-/// SFID 机构登记操作员权限校验：仅 SFID 系统授权账户可登记机构ID。
-pub trait SfidRegistryOperator<AccountId> {
-    fn can_register(operator: &AccountId) -> bool;
+/// SFID 机构登记验签抽象：链上只信任 SFID 对 `sfid_id + register_nonce` 的主公钥签名。
+pub trait SfidInstitutionVerifier<Nonce, Signature> {
+    fn verify_institution_registration(sfid_id: &[u8], nonce: &Nonce, signature: &Signature)
+        -> bool;
 }
 
-impl<AccountId> SfidRegistryOperator<AccountId> for () {
-    fn can_register(_operator: &AccountId) -> bool {
+impl<Nonce, Signature> SfidInstitutionVerifier<Nonce, Signature> for () {
+    fn verify_institution_registration(
+        _sfid_id: &[u8],
+        _nonce: &Nonce,
+        _signature: &Signature,
+    ) -> bool {
         false
     }
 }
 
 /// 多签账户状态
 #[derive(
-    Encode, Decode, DecodeWithMemTracking, Clone, Copy, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    Copy,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
 )]
 pub enum DuoqianStatus {
     /// 提案投票中，尚未激活
@@ -146,7 +160,7 @@ pub mod pallet {
     use crate::weights::WeightInfo;
     use voting_engine_system::InternalAdminProvider;
     use voting_engine_system::InternalVoteEngine;
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + voting_engine_system::Config {
@@ -161,13 +175,20 @@ pub mod pallet {
         type AddressValidator: DuoqianAddressValidator<Self::AccountId>;
         type ReservedAddressChecker: DuoqianReservedAddressChecker<Self::AccountId>;
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
-        type SfidRegistryOperator: SfidRegistryOperator<Self::AccountId>;
+        type SfidInstitutionVerifier:
+            SfidInstitutionVerifier<RegisterNonceOf<Self>, RegisterSignatureOf<Self>>;
 
         #[pallet::constant]
         type MaxAdmins: Get<u32>;
 
         #[pallet::constant]
         type MaxSfidIdLength: Get<u32>;
+
+        #[pallet::constant]
+        type MaxRegisterNonceLength: Get<u32>;
+
+        #[pallet::constant]
+        type MaxRegisterSignatureLength: Get<u32>;
 
         /// 创建时最低入金（默认应设置为 111 分 = 1.11 元）。
         #[pallet::constant]
@@ -190,6 +211,8 @@ pub mod pallet {
     >;
 
     pub type SfidIdOf<T> = BoundedVec<u8, <T as Config>::MaxSfidIdLength>;
+    pub type RegisterNonceOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterNonceLength>;
+    pub type RegisterSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterSignatureLength>;
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -217,6 +240,11 @@ pub mod pallet {
         RegisteredInstitution<SfidIdOf<T>>,
         OptionQuery,
     >;
+
+    /// 已消费的机构登记 nonce，防止 proof 重放。
+    #[pallet::storage]
+    #[pallet::getter(fn used_register_nonce)]
+    pub type UsedRegisterNonce<T: Config> = StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -310,7 +338,7 @@ pub mod pallet {
         SfidInstitutionRegistered {
             sfid_id: SfidIdOf<T>,
             duoqian_address: T::AccountId,
-            operator: T::AccountId,
+            submitter: T::AccountId,
         },
     }
 
@@ -350,12 +378,14 @@ pub mod pallet {
         ProtectedSource,
         /// SFID机构未登记，不允许创建
         InstitutionNotRegistered,
-        /// SFID机构登记操作无权限
-        UnauthorizedSfidRegistrar,
+        /// SFID 机构登记签名无效
+        InvalidSfidInstitutionSignature,
         /// SFID ID 重复登记
         SfidAlreadyRegistered,
         /// SFID ID 为空
         EmptySfidId,
+        /// 机构登记 nonce 已被使用
+        RegisterNonceAlreadyUsed,
         /// 无法将派生地址转换为账户ID
         DerivedAddressDecodeFailed,
         /// 账户仍有保留余额，不允许注销
@@ -518,10 +548,8 @@ pub mod pallet {
                 data.first() == Some(&ACTION_CREATE),
                 Error::<T>::ProposalActionNotFound
             );
-            let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(
-                &mut &data[1..],
-            )
-            .map_err(|_| Error::<T>::ProposalActionNotFound)?;
+            let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(&mut &data[1..])
+                .map_err(|_| Error::<T>::ProposalActionNotFound)?;
 
             // 校验管理员权限
             let institution = account_to_institution_id(&action.duoqian_address);
@@ -554,18 +582,29 @@ pub mod pallet {
             Ok(())
         }
 
-        /// SFID 系统登记机构（保持不变）
+        /// 中文注释：机构登记改为 proof 模式；任意提交者都可代发，但链上只信任 SFID MAIN 签出的字段包。
         #[pallet::call_index(2)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::register_sfid_institution())]
         pub fn register_sfid_institution(
             origin: OriginFor<T>,
             sfid_id: SfidIdOf<T>,
+            register_nonce: RegisterNonceOf<T>,
+            signature: RegisterSignatureOf<T>,
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
+            let submitter = ensure_signed(origin)?;
             ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
+            let register_nonce_hash = T::Hashing::hash(register_nonce.as_slice());
             ensure!(
-                T::SfidRegistryOperator::can_register(&who),
-                Error::<T>::UnauthorizedSfidRegistrar
+                !UsedRegisterNonce::<T>::get(register_nonce_hash),
+                Error::<T>::RegisterNonceAlreadyUsed
+            );
+            ensure!(
+                T::SfidInstitutionVerifier::verify_institution_registration(
+                    sfid_id.as_slice(),
+                    &register_nonce,
+                    &signature,
+                ),
+                Error::<T>::InvalidSfidInstitutionSignature
             );
             ensure!(
                 !SfidRegisteredAddress::<T>::contains_key(&sfid_id),
@@ -591,6 +630,7 @@ pub mod pallet {
             );
 
             SfidRegisteredAddress::<T>::insert(&sfid_id, &duoqian_address);
+            UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
             AddressRegisteredSfid::<T>::insert(
                 &duoqian_address,
                 RegisteredInstitution {
@@ -601,7 +641,7 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::SfidInstitutionRegistered {
                 sfid_id,
                 duoqian_address,
-                operator: who,
+                submitter,
             });
             Ok(())
         }
@@ -693,11 +733,7 @@ pub mod pallet {
         /// 对"关闭多签账户"提案投票，达到阈值后自动执行关闭。
         #[pallet::call_index(4)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::vote_close())]
-        pub fn vote_close(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            approve: bool,
-        ) -> DispatchResult {
+        pub fn vote_close(origin: OriginFor<T>, proposal_id: u64, approve: bool) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             // 读取提案数据
@@ -867,9 +903,7 @@ mod tests {
         traits::{ConstU128, ConstU32, VariantCountOf},
     };
     use frame_system as system;
-    use sp_runtime::{
-        traits::IdentityLookup, AccountId32, BuildStorage,
-    };
+    use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
     use voting_engine_system::internal_vote::ORG_DUOQIAN;
 
     type Block = frame_system::mocking::MockBlock<Test>;
@@ -945,10 +979,17 @@ mod tests {
         }
     }
 
-    pub struct TestSfidRegistryOperator;
-    impl SfidRegistryOperator<AccountId32> for TestSfidRegistryOperator {
-        fn can_register(operator: &AccountId32) -> bool {
-            *operator == AccountId32::new([0x55; 32])
+    pub struct TestSfidInstitutionVerifier;
+    impl
+        SfidInstitutionVerifier<RegisterNonceOf<Test>, RegisterSignatureOf<Test>>
+        for TestSfidInstitutionVerifier
+    {
+        fn verify_institution_registration(
+            _sfid_id: &[u8],
+            nonce: &RegisterNonceOf<Test>,
+            signature: &RegisterSignatureOf<Test>,
+        ) -> bool {
+            !nonce.is_empty() && signature.as_slice() == b"register-ok"
         }
     }
 
@@ -963,11 +1004,14 @@ mod tests {
     impl voting_engine_system::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
         for TestSfidEligibility
     {
-        fn is_eligible(_sfid_hash: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
+        fn is_eligible(
+            _binding_id: &<Test as frame_system::Config>::Hash,
+            _who: &AccountId32,
+        ) -> bool {
             true
         }
         fn verify_and_consume_vote_credential(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
             _proposal_id: u64,
             _nonce: &[u8],
@@ -978,11 +1022,12 @@ mod tests {
     }
 
     pub struct TestPopulationSnapshotVerifier;
-    impl voting_engine_system::PopulationSnapshotVerifier<
-        AccountId32,
-        voting_engine_system::pallet::VoteNonceOf<Test>,
-        voting_engine_system::pallet::VoteSignatureOf<Test>,
-    > for TestPopulationSnapshotVerifier
+    impl
+        voting_engine_system::PopulationSnapshotVerifier<
+            AccountId32,
+            voting_engine_system::pallet::VoteNonceOf<Test>,
+            voting_engine_system::pallet::VoteSignatureOf<Test>,
+        > for TestPopulationSnapshotVerifier
     {
         fn verify_population_snapshot(
             _who: &AccountId32,
@@ -1048,6 +1093,7 @@ mod tests {
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalThresholdProvider = TestInternalThresholdProvider;
         type MaxProposalDataLen = ConstU32<4096>;
+        type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
         type JointInstitutionDecisionVerifier = ();
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
@@ -1060,15 +1106,17 @@ mod tests {
         type AddressValidator = TestAddressValidator;
         type ReservedAddressChecker = TestReservedAddressChecker;
         type ProtectedSourceChecker = TestProtectedSourceChecker;
-        type SfidRegistryOperator = TestSfidRegistryOperator;
+        type SfidInstitutionVerifier = TestSfidInstitutionVerifier;
         type MaxAdmins = ConstU32<10>;
         type MaxSfidIdLength = ConstU32<96>;
+        type MaxRegisterNonceLength = ConstU32<64>;
+        type MaxRegisterSignatureLength = ConstU32<64>;
         type MinCreateAmount = ConstU128<111>;
         type MinCloseBalance = ConstU128<111>;
         type WeightInfo = ();
     }
 
-    fn sfid_operator() -> AccountId32 {
+    fn relayer() -> AccountId32 {
         AccountId32::new([0x55; 32])
     }
 
@@ -1082,9 +1130,19 @@ mod tests {
             .to_vec()
             .try_into()
             .expect("sfid id should fit");
+        let register_nonce: RegisterNonceOf<Test> = b"register-nonce"
+            .to_vec()
+            .try_into()
+            .expect("register nonce should fit");
+        let signature: RegisterSignatureOf<Test> = b"register-ok"
+            .to_vec()
+            .try_into()
+            .expect("register signature should fit");
         assert_ok!(Duoqian::register_sfid_institution(
-            RuntimeOrigin::signed(sfid_operator()),
-            sfid.clone()
+            RuntimeOrigin::signed(relayer()),
+            sfid.clone(),
+            register_nonce,
+            signature,
         ));
         let duoqian_address =
             Duoqian::sfid_registered_address(sfid.clone()).expect("sfid should be registered");
@@ -1134,7 +1192,36 @@ mod tests {
         new_test_ext().execute_with(|| {
             let (sfid, duoqian_address) = register_sfid_and_get_address("A001");
             assert!(SfidRegisteredAddress::<Test>::contains_key(&sfid));
-            assert!(AddressRegisteredSfid::<Test>::contains_key(&duoqian_address));
+            assert!(AddressRegisteredSfid::<Test>::contains_key(
+                &duoqian_address
+            ));
+        });
+    }
+
+    #[test]
+    fn register_sfid_rejects_invalid_signature() {
+        new_test_ext().execute_with(|| {
+            let sfid: SfidIdOf<Test> = b"GFR-LN001-CB0C-Z001-20260222"
+                .to_vec()
+                .try_into()
+                .expect("sfid id should fit");
+            let register_nonce: RegisterNonceOf<Test> = b"bad-register-nonce"
+                .to_vec()
+                .try_into()
+                .expect("register nonce should fit");
+            let bad_signature: RegisterSignatureOf<Test> = b"bad-signature"
+                .to_vec()
+                .try_into()
+                .expect("register signature should fit");
+            assert_noop!(
+                Duoqian::register_sfid_institution(
+                    RuntimeOrigin::signed(admin(1)),
+                    sfid,
+                    register_nonce,
+                    bad_signature,
+                ),
+                Error::<Test>::InvalidSfidInstitutionSignature
+            );
         });
     }
 
@@ -1199,8 +1286,16 @@ mod tests {
                 1_000,
             ));
             let create_pid = last_proposal_id();
-            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(1)), create_pid, true));
-            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(2)), create_pid, true));
+            assert_ok!(Duoqian::vote_create(
+                RuntimeOrigin::signed(admin(1)),
+                create_pid,
+                true
+            ));
+            assert_ok!(Duoqian::vote_create(
+                RuntimeOrigin::signed(admin(2)),
+                create_pid,
+                true
+            ));
 
             // 确认 active
             let account = DuoqianAccounts::<Test>::get(&duoqian_address).expect("should exist");
@@ -1216,8 +1311,16 @@ mod tests {
             let close_pid = last_proposal_id();
 
             // 投票关闭
-            assert_ok!(Duoqian::vote_close(RuntimeOrigin::signed(admin(1)), close_pid, true));
-            assert_ok!(Duoqian::vote_close(RuntimeOrigin::signed(admin(2)), close_pid, true));
+            assert_ok!(Duoqian::vote_close(
+                RuntimeOrigin::signed(admin(1)),
+                close_pid,
+                true
+            ));
+            assert_ok!(Duoqian::vote_close(
+                RuntimeOrigin::signed(admin(2)),
+                close_pid,
+                true
+            ));
 
             // DuoqianAccounts 应该被删除
             assert!(DuoqianAccounts::<Test>::get(&duoqian_address).is_none());
@@ -1291,11 +1394,7 @@ mod tests {
             ));
 
             assert_noop!(
-                Duoqian::propose_close(
-                    RuntimeOrigin::signed(admin(1)),
-                    duoqian_address,
-                    admin(4),
-                ),
+                Duoqian::propose_close(RuntimeOrigin::signed(admin(1)), duoqian_address, admin(4),),
                 Error::<Test>::DuoqianNotActive
             );
         });

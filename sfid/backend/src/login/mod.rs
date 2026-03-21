@@ -122,13 +122,12 @@ struct AdminQrChallengeOutput {
     origin: String,
     domain: String,
     session_id: String,
-    nonce: String,
     expire_at: i64,
 }
 
 #[derive(Deserialize)]
 pub(crate) struct AdminQrCompleteInput {
-    #[serde(alias = "request_id")]
+    #[serde(alias = "request_id", alias = "challenge")]
     pub(crate) challenge_id: String,
     pub(crate) session_id: Option<String>,
     pub(crate) admin_pubkey: String,
@@ -139,6 +138,7 @@ pub(crate) struct AdminQrCompleteInput {
 
 #[derive(Deserialize)]
 pub(crate) struct AdminQrResultQuery {
+    #[serde(alias = "challenge")]
     pub(crate) challenge_id: String,
     pub(crate) session_id: String,
 }
@@ -458,32 +458,37 @@ pub(crate) async fn admin_auth_qr_challenge(
     let now = Utc::now();
     let expire_at = now + Duration::seconds(LOGIN_CHALLENGE_TTL_SECONDS);
     let challenge_id = Uuid::new_v4().to_string();
-    let nonce = Uuid::new_v4().to_string();
-    let challenge_token = Uuid::new_v4().to_string();
-    let qr_aud =
-        std::env::var("SFID_LOGIN_QR_AUD").unwrap_or_else(|_| "sfid-local-app".to_string());
-    let qr_origin =
-        std::env::var("SFID_LOGIN_QR_ORIGIN").unwrap_or_else(|_| "sfid-device-id".to_string());
     let challenge_text = format!(
-        "WUMINAPP_LOGIN_V1|{}|{}|{}|{}|{}|{}|{}",
+        "WUMINAPP_LOGIN_V1|{}|{}|{}",
         "sfid",
-        qr_aud,
-        qr_origin,
         challenge_id,
-        challenge_token,
-        nonce,
         expire_at.timestamp()
     );
+    let (sys_pubkey, sys_sig) = match build_login_qr_system_signature(
+        &state,
+        "sfid",
+        challenge_id.as_str(),
+        now.timestamp(),
+        expire_at.timestamp(),
+    ) {
+        Ok(v) => v,
+        Err(err) => {
+            warn!(error = %err, "build sfid login qr system signature failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "build login qr signature failed",
+            );
+        }
+    };
     let login_qr_payload = serde_json::json!({
         "proto": "WUMINAPP_LOGIN_V1",
         "system": "sfid",
-        "request_id": challenge_id,
-        "challenge": challenge_token,
-        "nonce": nonce,
+        "challenge": challenge_id,
         "issued_at": now.timestamp(),
         "expires_at": expire_at.timestamp(),
-        "aud": qr_aud,
-        "origin": qr_origin
+        "sys_pubkey": sys_pubkey,
+        "sys_sig": sys_sig
     })
     .to_string();
 
@@ -499,13 +504,13 @@ pub(crate) async fn admin_auth_qr_challenge(
             challenge_id: challenge_id.clone(),
             admin_pubkey: String::new(),
             challenge_text: challenge_text.clone(),
-            challenge_token,
-            qr_aud,
-            qr_origin,
+            challenge_token: String::new(),
+            qr_aud: String::new(),
+            qr_origin: String::new(),
             origin: origin.clone(),
             domain: derived_domain.clone(),
             session_id: session_id.clone(),
-            nonce: nonce.clone(),
+            nonce: String::new(),
             issued_at: now,
             expire_at,
             consumed: false,
@@ -523,7 +528,6 @@ pub(crate) async fn admin_auth_qr_challenge(
             origin,
             domain: derived_domain,
             session_id,
-            nonce,
             expire_at: expire_at.timestamp(),
         },
     })
@@ -567,24 +571,10 @@ pub(crate) async fn admin_auth_qr_complete(
         if now > challenge.expire_at {
             return api_error(StatusCode::UNAUTHORIZED, 1007, "challenge expired");
         }
-        let verify_message = if !challenge.challenge_token.is_empty()
-            && !challenge.qr_aud.is_empty()
-            && !challenge.qr_origin.is_empty()
-        {
-            format!(
-                "WUMINAPP_LOGIN_V1|{}|{}|{}|{}|{}|{}|{}",
-                "sfid",
-                challenge.qr_aud,
-                challenge.qr_origin,
-                challenge.challenge_id,
-                challenge.challenge_token,
-                challenge.nonce,
-                challenge.expire_at.timestamp()
-            )
-        } else {
-            challenge.challenge_text.clone()
-        };
-        (verify_message, challenge.session_id.clone())
+        (
+            challenge.challenge_text.clone(),
+            challenge.session_id.clone(),
+        )
     };
 
     let login_pubkey_raw = input.admin_pubkey.trim().to_string();
@@ -612,7 +602,7 @@ pub(crate) async fn admin_auth_qr_complete(
     }
     if !verify_admin_signature(&verify_pubkey, &challenge_text, input.signature.trim()) {
         warn!(
-            request_id = %input.challenge_id,
+            challenge = %input.challenge_id,
             admin_pubkey = %login_pubkey_raw,
             signer_pubkey = %verify_pubkey,
             "qr login signature verify failed"
@@ -972,6 +962,33 @@ pub(crate) fn verify_admin_signature(
     pubkey
         .verify(ctx.bytes(wrapped.as_bytes()), &signature)
         .is_ok()
+}
+
+fn build_login_qr_system_signature(
+    state: &AppState,
+    system: &str,
+    challenge: &str,
+    issued_at: i64,
+    expires_at: i64,
+) -> Result<(String, String), String> {
+    let sys_pubkey = state
+        .public_key_hex
+        .read()
+        .map_err(|_| "public key read lock poisoned".to_string())?
+        .clone();
+    let seed = state
+        .signing_seed_hex
+        .read()
+        .map_err(|_| "signing seed read lock poisoned".to_string())?
+        .clone();
+    let message = format!(
+        "WUMINAPP_LOGIN_V1|{}|{}|{}|{}|{}",
+        system, challenge, issued_at, expires_at, sys_pubkey
+    );
+    let signer =
+        crate::key_admins::chain_keyring::try_load_signing_key_from_seed(seed.expose_secret())?;
+    let signature = signer.sign(message.as_bytes());
+    Ok((sys_pubkey, format!("0x{}", hex::encode(signature.0))))
 }
 
 pub(crate) fn parse_sr25519_pubkey(admin_pubkey: &str) -> Option<String> {

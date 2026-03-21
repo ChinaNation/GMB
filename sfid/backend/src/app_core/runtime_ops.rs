@@ -9,8 +9,8 @@ use std::{
 };
 use tracing::warn;
 
-use blake2::{Blake2b, Digest};
 use blake2::digest::consts::U32;
+use blake2::{Blake2b, Digest};
 
 use crate::key_admins;
 use crate::key_admins::chain_proof::SignatureEnvelope;
@@ -484,9 +484,8 @@ pub(crate) fn seed_demo_record(state: &AppState) {
                     citizen_status: CitizenStatus::Normal,
                     sfid_code: sfid,
                     sfid_signature: proof.signature_hex,
-                    runtime_bind_sfid_code_hash: None,
-                    runtime_bind_nonce: None,
-                    runtime_bind_expires_at_block: None,
+                    runtime_bind_binding_id: None,
+                    runtime_bind_bind_nonce: None,
                     runtime_bind_signature: None,
                     runtime_bind_key_id: None,
                     runtime_bind_key_version: None,

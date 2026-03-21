@@ -28,6 +28,7 @@ void main() {
           home: QrSignSessionPage(
             request: request,
             requestJson: requestJson,
+            expectedPubkey: request.pubkey,
           ),
         ),
       );
@@ -64,6 +65,7 @@ void main() {
                     builder: (_) => QrSignSessionPage(
                       request: request,
                       requestJson: requestJson,
+                      expectedPubkey: request.pubkey,
                     ),
                   ),
                 );
@@ -94,8 +96,7 @@ void main() {
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
-        nowEpochSeconds:
-            DateTime.now().millisecondsSinceEpoch ~/ 1000 - 200,
+        nowEpochSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 200,
       );
       final expiredJson = signer.encodeRequest(expiredRequest);
 
@@ -104,6 +105,7 @@ void main() {
           home: QrSignSessionPage(
             request: expiredRequest,
             requestJson: expiredJson,
+            expectedPubkey: expiredRequest.pubkey,
           ),
         ),
       );

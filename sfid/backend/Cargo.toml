@@ -24,5 +24,7 @@ zeroize = "1"
 libc = "0.2"
 subxt = { version = "0.43.1", default-features = false, features = ["jsonrpsee", "native"] }
 redis = { version = "0.27", features = ["aio", "tokio-comp"] }
+twox-hash = "1"
+sp-core = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = true }
 
 [workspace]

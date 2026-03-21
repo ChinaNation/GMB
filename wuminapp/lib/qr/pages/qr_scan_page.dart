@@ -8,7 +8,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wuminapp_mobile/qr/login/login_models.dart';
 import 'package:wuminapp_mobile/qr/login/login_service.dart';
 import 'package:wuminapp_mobile/qr/contact/contact_qr_models.dart';
+import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/qr/qr_router.dart';
+import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
 import 'package:wuminapp_mobile/user/user_service.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -233,10 +235,47 @@ class _QrScanPageState extends State<QrScanPage> {
       if (challenge.isExpired) {
         throw Exception('登录挑战已过期，请重新扫码');
       }
-      final result = await _loginService.buildReceiptPayload(
-        challenge,
-        walletIndex: widget.walletIndex,
-      );
+      final walletManager = WalletManager();
+      final wallet = widget.walletIndex != null
+          ? await walletManager.getWalletByIndex(widget.walletIndex!)
+          : await walletManager.getWallet();
+      if (wallet == null) {
+        throw Exception('请先创建或导入钱包');
+      }
+
+      final Map<String, dynamic> result;
+      if (wallet.isColdWallet) {
+        final bundle = await _loginService.buildExternalSignRequest(
+          challenge,
+          wallet: wallet,
+        );
+        if (!mounted) {
+          return;
+        }
+        final response = await Navigator.of(context).push<QrSignResponse>(
+          MaterialPageRoute(
+            builder: (_) => QrSignSessionPage(
+              request: bundle.request,
+              requestJson: bundle.requestJson,
+              expectedPubkey: '0x${wallet.pubkeyHex}',
+            ),
+          ),
+        );
+        if (response == null) {
+          throw Exception('签名已取消');
+        }
+        result = await _loginService.buildReceiptFromSignature(
+          challenge: challenge,
+          pubkeyHex: response.pubkey,
+          signatureHex: response.signature,
+          sigAlg: response.sigAlg,
+        );
+      } else {
+        result = await _loginService.buildReceiptPayload(
+          challenge,
+          walletIndex: wallet.walletIndex,
+        );
+      }
 
       if (!mounted) {
         return;
@@ -436,27 +475,6 @@ class _QrScanPageState extends State<QrScanPage> {
         ),
       );
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // 扫码签名提示
-  // ---------------------------------------------------------------------------
-
-  Future<void> _showQrSignHint() async {
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('签名请求'),
-        content: const Text('这是一个冷钱包签名请求二维码。\n请在转账页面发起交易后，通过签名会话页面扫描回执。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
   }
 
   // ---------------------------------------------------------------------------

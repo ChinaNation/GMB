@@ -78,6 +78,8 @@ class ChainRpc {
     '26aa394eea5630e07c48ae0c9558cef7'
     'b99d880ec681799c0cf30e8886371da9',
   );
+  static final Uint8List _sfidMainAccountKey =
+      _buildStorageValueKey('SfidCodeAuth', 'SfidMainAccount');
 
   /// 当前活跃节点的 HTTP URL（可用于推导 WebSocket URL）。
   String get currentNodeUrl => _nodes[_currentIndex];
@@ -89,8 +91,7 @@ class ChainRpc {
   Future<Map<String, Uint8List?>> fetchStorageBatch(
       List<String> storageKeyHexList) async {
     if (storageKeyHexList.isEmpty) return {};
-    final result =
-        await _rpcCall('state_queryStorageAt', [storageKeyHexList]);
+    final result = await _rpcCall('state_queryStorageAt', [storageKeyHexList]);
     // result 格式: [{ block: "0x...", changes: [["0xkey1", "0xvalue1"], ...] }]
     final map = <String, Uint8List?>{};
     // 先初始化所有 key 为 null（未返回的 key 表示不存在）
@@ -155,6 +156,7 @@ class ChainRpc {
   }
 
   RuntimeMetadata? _cachedMetadata;
+  String? _cachedCurrentSfidMainPubkeyHex;
 
   /// 提交已签名的 extrinsic，返回交易哈希（32 字节）。
   Future<Uint8List> submitExtrinsic(Uint8List encoded) async {
@@ -203,6 +205,40 @@ class ChainRpc {
     return _decodeFreeBalance(bytes);
   }
 
+  /// 读取链上当前 SFID 主验签公钥（32 字节 AccountId）。
+  ///
+  /// 存储项：`SfidCodeAuth::SfidMainAccount`，类型为 `Option<AccountId32>`。
+  Future<String?> fetchCurrentSfidMainPubkeyHex() async {
+    final cached = _cachedCurrentSfidMainPubkeyHex;
+    if (cached != null && cached.isNotEmpty) {
+      return cached;
+    }
+
+    final keyHex = '0x${_hexEncode(_sfidMainAccountKey)}';
+    final result = await _rpcCall('state_getStorage', [keyHex]);
+    if (result == null) {
+      return null;
+    }
+
+    final data = _hexDecode((result as String).substring(2));
+    if (data.isEmpty) {
+      return null;
+    }
+
+    Uint8List pubkeyBytes;
+    if (data.length == 33 && data.first == 0x01) {
+      pubkeyBytes = Uint8List.sublistView(data, 1, 33);
+    } else if (data.length == 32) {
+      pubkeyBytes = data;
+    } else {
+      throw Exception('SfidMainAccount 存储格式异常');
+    }
+
+    final pubkeyHex = '0x${_hexEncode(pubkeyBytes)}';
+    _cachedCurrentSfidMainPubkeyHex = pubkeyHex;
+    return pubkeyHex;
+  }
+
   /// 构造 System.Account(accountId) 的 storage key。
   Uint8List _buildSystemAccountKey(Uint8List accountId) {
     // blake2_128_concat = blake2b_128(data) + data
@@ -217,6 +253,16 @@ class ChainRpc {
     key.setAll(offset, blake2Hash);
     offset += blake2Hash.length;
     key.setAll(offset, accountId);
+    return key;
+  }
+
+  static Uint8List _buildStorageValueKey(
+      String palletName, String storageName) {
+    final palletHash = Hasher.twoxx128.hashString(palletName);
+    final storageHash = Hasher.twoxx128.hashString(storageName);
+    final key = Uint8List(palletHash.length + storageHash.length);
+    key.setAll(0, palletHash);
+    key.setAll(palletHash.length, storageHash);
     return key;
   }
 
@@ -254,15 +300,15 @@ class ChainRpc {
   /// - 网络错误（超时、连接拒绝）：切换节点重试
   /// - RPC 业务错误（链返回 error）：直接抛出，不重试
   Future<dynamic> _rpcCall(String method, List<dynamic> params) async {
-    final maxAttempts = _nodes.length < _maxRetries ? _nodes.length : _maxRetries;
+    final maxAttempts =
+        _nodes.length < _maxRetries ? _nodes.length : _maxRetries;
     final tried = <int>{};
     while (tried.length < maxAttempts) {
       final provider = _getProvider();
       tried.add(_currentIndex);
       try {
-        final response = await provider
-            .send(method, params)
-            .timeout(_requestTimeout);
+        final response =
+            await provider.send(method, params).timeout(_requestTimeout);
         if (response.error != null) {
           // RPC 业务错误：链收到了请求但拒绝了，不需要重试其他节点
           throw Exception('${response.error}');
@@ -271,7 +317,11 @@ class ChainRpc {
       } on Exception catch (e) {
         final msg = e.toString();
         // 如果是链返回的业务错误（非网络问题），直接抛出不重试
-        if (msg.contains('code') || msg.contains('1010') || msg.contains('1012') || msg.contains('Extrinsic') || msg.contains('decode')) {
+        if (msg.contains('code') ||
+            msg.contains('1010') ||
+            msg.contains('1012') ||
+            msg.contains('Extrinsic') ||
+            msg.contains('decode')) {
           debugPrint('RPC business error on ${_nodes[_currentIndex]}: $e');
           rethrow;
         }

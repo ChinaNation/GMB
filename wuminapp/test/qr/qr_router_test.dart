@@ -15,9 +15,7 @@ void main() {
       final raw = jsonEncode({
         'proto': 'WUMINAPP_LOGIN_V1',
         'system': 'sfid',
-        'request_id': 'req-1',
         'challenge': 'abc123',
-        'nonce': 'n1',
         'issued_at': 1000,
         'expires_at': 1090,
         'sys_pubkey': '0xaabb',
@@ -55,7 +53,8 @@ void main() {
       final raw = jsonEncode({
         'type': 'WUMINAPP_USER_CARD_V1',
         'nickname': '张三',
-        'account_pubkey': '0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d',
+        'account_pubkey':
+            '0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d',
       });
       final result = router.route(raw);
       expect(result.type, QrRouteType.contact);

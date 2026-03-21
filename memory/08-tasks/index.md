@@ -2,7 +2,12 @@
 
 ## open
 
-- 暂无
+- `memory/08-tasks/open/20260321-084304-统一本地调试时-sfid-后端监听地址与手机访问地址-修复提交升级提案时人口快照接口连接超时问题.md`
+- `memory/08-tasks/open/20260321-095406-检查区块链所需的人口快照数据与sfid实际提供的人口快照数据是否对齐.md`
+- `memory/08-tasks/open/20260321-133021-统一机构页在手机端的双列显示规则-并确认手机访问-rpc-的联网条件.md`
+- `memory/08-tasks/open/20260321-133855-按链上要求实现手机端-runtime-升级提案联合投票-补齐投票按钮-机构上下文-管理员签名收集-联合投票提交与正确阈值展示.md`
+- `memory/08-tasks/open/20260321-134324-检查我的钱包中导入热钱包-新增热钱包-导入冷钱包-新增冷钱包-冷钱包签名-热钱包签名等功能是否完成.md`
+- `memory/08-tasks/open/20260321-142327-补齐冷钱包离线签名执行端-冷钱包登录接线与登录系统签名验证.md`
 
 ## done
 
@@ -11,4 +16,8 @@
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-nodeui-backend-对-runtime-primitives-的错误路径引用-恢复-clean-dev-sh-的本地启动能力.md`
 - `memory/08-tasks/done/20260320-221924-更新-ai-编程系统中的技术语言基线-citizenchain-区块链与-nodeui-使用-rust-tauri-react-typescript-vite-wuminapp-使用-flutter-补充查明并写明-sfid-与-cpms-当前技术栈.md`
 - `memory/08-tasks/done/20260320-223441-调整-citizenchain-启动脚本语义-run-sh-改为不清库继续启动开发链-clean-dev-sh-保持清库后启动开发链-并同步更新文档说明.md`
+- `memory/08-tasks/done/20260320-225846-把-codex-主窗口自动调度-blockchain-agent-sfid-agent-cpms-agent-mobile-agent-的机制写入-ai-编程系统-明确用户只需在-codex-用中文提需求-系统按需自动分工并回写-memory.md`
+- `memory/08-tasks/done/20260320-231550-修复手机端-runtime-升级联合投票提案在投票列表和投票事件列表不显示的问题-确保所有机构和所有用户都能看到并进入投票流程.md`
 - `memory/08-tasks/done/20260320-runtime-integration-retroactive.md`
+- `memory/08-tasks/done/20260321-074809-生成-sfid-env-dev-local-本地开发环境文件-并确保与当前启动脚本和后端必需环境变量一致.md`
+- `memory/08-tasks/done/20260321-082100-将-wuminapp-手机启动脚本补充-wuminapp-api-base-url-并指向云服务器-147-224-14-117-的-sfid-接口-避免真机回落到-127-0-0-1:8787-导致-runtime-升级提案提交失败.md`

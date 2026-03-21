@@ -12,7 +12,10 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Duration, Utc};
-use schnorrkel::signing_context;
+use reqwest::Client as HttpClient;
+use serde_json::json;
+use sp_core::Pair;
+use std::hash::Hasher;
 use std::{sync::OnceLock, time::Duration as StdDuration};
 use subxt::{
     config::substrate::{AccountId32, MultiSignature},
@@ -21,10 +24,11 @@ use subxt::{
 };
 use tokio::sync::Mutex as TokioMutex;
 use tracing::warn;
+use twox_hash::XxHash64;
 use uuid::Uuid;
 
-use blake2::{Blake2b, Digest};
 use blake2::digest::consts::U32;
+use blake2::{Blake2b, Digest};
 
 use crate::*;
 
@@ -33,7 +37,6 @@ type Blake2b256 = Blake2b<U32>;
 #[derive(Debug, Clone)]
 struct BackupSlotMaterial {
     pubkey: String,
-    seed_hex: Option<SensitiveSeed>,
 }
 
 fn rotate_challenge_ttl_minutes() -> i64 {
@@ -80,6 +83,18 @@ fn normalize_pubkey_for_signing(value: &str) -> String {
         .or_else(|| trimmed.strip_prefix("0X"))
         .unwrap_or(trimmed);
     format!("0x{}", no_prefix.to_ascii_lowercase())
+}
+
+fn twox_128(input: &[u8]) -> [u8; 16] {
+    let mut h1 = XxHash64::with_seed(0);
+    h1.write(input);
+    let mut h2 = XxHash64::with_seed(1);
+    h2.write(input);
+
+    let mut out = [0u8; 16];
+    out[..8].copy_from_slice(&h1.finish().to_le_bytes());
+    out[8..].copy_from_slice(&h2.finish().to_le_bytes());
+    out
 }
 
 fn rotate_commit_signature_message(challenge_text: &str, new_backup_pubkey: &str) -> String {
@@ -457,7 +472,7 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
                 return api_error(
                     StatusCode::UNAUTHORIZED,
                     2004,
-                    "initiator signer seed is not present on server",
+                    "initiator backup private key is not present on server; rotate_sfid_keys must be submitted by backup_1 or backup_2",
                 );
             };
             seed
@@ -635,7 +650,7 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
                 ),
             );
             drop(store);
-            if let Err(err) = reconcile_main_signer_with_keyring(&state) {
+            if let Err(err) = validate_active_main_signer_with_keyring(&state) {
                 warn!(
                     error = %err,
                     "failed to reconcile signer after concurrent rotation conflict"
@@ -696,7 +711,7 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
                 ),
             );
         }
-        if let Err(reconcile_err) = reconcile_main_signer_with_keyring(&state) {
+        if let Err(reconcile_err) = validate_active_main_signer_with_keyring(&state) {
             warn!(
                 error = %reconcile_err,
                 "failed to reconcile signer after local signer switch error"
@@ -838,63 +853,17 @@ pub(crate) fn seed_chain_keyring(state: &AppState) {
     if main_pubkey.is_empty() {
         return;
     }
-    let mut backup_a = resolve_backup_slot(
-        "SFID_BACKUP_A_SEED_HEX",
-        "SFID_BACKUP_A_PUBKEY",
-        "sfid-dev-backup-a",
-    );
-    let mut backup_b = resolve_backup_slot(
-        "SFID_BACKUP_B_SEED_HEX",
-        "SFID_BACKUP_B_PUBKEY",
-        "sfid-dev-backup-b",
-    );
+    let mut backup_a = resolve_backup_slot("SFID_BACKUP_A_PUBKEY", "sfid-dev-backup-a");
+    let mut backup_b = resolve_backup_slot("SFID_BACKUP_B_PUBKEY", "sfid-dev-backup-b");
     if backup_a.pubkey.eq_ignore_ascii_case(main_pubkey.as_str()) {
-        backup_a = resolve_backup_slot(
-            "SFID_BACKUP_A_SEED_HEX_ALT",
-            "SFID_BACKUP_A_PUBKEY_ALT",
-            "sfid-dev-backup-a-alt",
-        );
+        backup_a = resolve_backup_slot("SFID_BACKUP_A_PUBKEY_ALT", "sfid-dev-backup-a-alt");
     }
     if backup_b.pubkey.eq_ignore_ascii_case(main_pubkey.as_str())
         || backup_b
             .pubkey
             .eq_ignore_ascii_case(backup_a.pubkey.as_str())
     {
-        backup_b = resolve_backup_slot(
-            "SFID_BACKUP_B_SEED_HEX_ALT",
-            "SFID_BACKUP_B_PUBKEY_ALT",
-            "sfid-dev-backup-b-alt",
-        );
-    }
-
-    let main_seed = state
-        .signing_seed_hex
-        .read()
-        .map(|v| v.clone())
-        .unwrap_or_else(|_| {
-            warn!("signing seed read lock poisoned while seeding keyring");
-            SensitiveSeed::default()
-        });
-    if main_seed.expose_secret().is_empty() {
-        return;
-    }
-    if let Err(err) = upsert_seed_for_pubkey(state, main_pubkey.as_str(), main_seed.expose_secret())
-    {
-        warn!(error = %err, "failed to upsert main key seed while seeding keyring");
-    }
-    if let Some(seed) = backup_a.seed_hex.as_ref() {
-        if let Err(err) =
-            upsert_seed_for_pubkey(state, backup_a.pubkey.as_str(), seed.expose_secret())
-        {
-            warn!(error = %err, "failed to upsert backup_a key seed while seeding keyring");
-        }
-    }
-    if let Some(seed) = backup_b.seed_hex.as_ref() {
-        if let Err(err) =
-            upsert_seed_for_pubkey(state, backup_b.pubkey.as_str(), seed.expose_secret())
-        {
-            warn!(error = %err, "failed to upsert backup_b key seed while seeding keyring");
-        }
+        backup_b = resolve_backup_slot("SFID_BACKUP_B_PUBKEY_ALT", "sfid-dev-backup-b-alt");
     }
 
     store.chain_keyring_state = Some(ChainKeyringState::new(
@@ -912,42 +881,83 @@ pub(crate) fn seed_key_admins(state: &AppState) {
     sync_key_admin_users(&mut store);
 }
 
-pub(crate) fn reconcile_main_signer_with_keyring(state: &AppState) -> Result<bool, String> {
-    let keyring_main = {
+pub(crate) fn validate_active_main_signer_with_keyring(state: &AppState) -> Result<(), String> {
+    let keyring = {
         let store = state
             .store
             .read()
             .map_err(|_| "store read lock poisoned".to_string())?;
-        let Some(kr) = store.chain_keyring_state.as_ref() else {
-            return Ok(false);
+        let Some(kr) = store.chain_keyring_state.as_ref().cloned() else {
+            return Err("chain keyring not initialized".to_string());
         };
-        normalize_pubkey_for_signing(kr.main_pubkey.as_str())
+        kr
     };
-    let active_main = {
-        let pubkey = state
+    let signing_seed = state
+        .signing_seed_hex
+        .read()
+        .map_err(|_| "signing seed read lock poisoned".to_string())?
+        .clone();
+    let derived_main = try_derive_pubkey_hex_from_seed(signing_seed.expose_secret())
+        .map_err(|e| format!("local signing seed is invalid: {e}"))?;
+    let active_main = normalize_pubkey_for_signing(
+        state
             .public_key_hex
             .read()
-            .map_err(|_| "public key read lock poisoned".to_string())?;
-        normalize_pubkey_for_signing(pubkey.as_str())
-    };
-    if keyring_main.eq_ignore_ascii_case(active_main.as_str()) {
-        return Ok(false);
+            .map_err(|_| "public key read lock poisoned".to_string())?
+            .as_str(),
+    );
+
+    if !derived_main.eq_ignore_ascii_case(active_main.as_str()) {
+        return Err(format!(
+            "local signing seed derives {derived_main}, but active signer state is {active_main}"
+        ));
     }
 
-    let signer_seed = {
-        let known = state
-            .known_key_seeds
-            .read()
-            .map_err(|_| "known seeds read lock poisoned".to_string())?;
-        known
-            .iter()
-            .find(|(pubkey, _)| pubkey.eq_ignore_ascii_case(keyring_main.as_str()))
-            .map(|(_, seed)| seed.clone())
-            .ok_or_else(|| "keyring main signer seed is missing".to_string())?
+    let keyring_main = normalize_pubkey_for_signing(keyring.main_pubkey.as_str());
+    if derived_main.eq_ignore_ascii_case(keyring.backup_a_pubkey.as_str())
+        || derived_main.eq_ignore_ascii_case(keyring.backup_b_pubkey.as_str())
+    {
+        return Err(format!(
+            "local signing key {derived_main} matches a backup pubkey, but sfid must only hold the current chain main private key"
+        ));
+    }
+    if !derived_main.eq_ignore_ascii_case(keyring_main.as_str()) {
+        return Err(format!(
+            "local signing key {derived_main} does not match chain main pubkey {keyring_main}"
+        ));
+    }
+
+    Ok(())
+}
+
+pub(crate) async fn sync_chain_keyring_from_chain(state: &AppState) -> Result<bool, String> {
+    let chain_state = fetch_chain_keyring_from_chain().await?;
+    let mut store = state
+        .store
+        .write()
+        .map_err(|_| "store write lock poisoned".to_string())?;
+    let changed = match store.chain_keyring_state.as_ref() {
+        Some(current)
+            if current
+                .main_pubkey
+                .eq_ignore_ascii_case(chain_state.main_pubkey.as_str())
+                && current
+                    .backup_a_pubkey
+                    .eq_ignore_ascii_case(chain_state.backup_a_pubkey.as_str())
+                && current
+                    .backup_b_pubkey
+                    .eq_ignore_ascii_case(chain_state.backup_b_pubkey.as_str()) =>
+        {
+            false
+        }
+        _ => true,
     };
-    set_active_main_signer(state, keyring_main.as_str(), signer_seed.expose_secret())?;
-    persist_runtime_state_checked(state)?;
-    Ok(true)
+    if changed {
+        // 中文注释：链上三把公钥是最终真相，本地缓存只做镜像，不允许反向覆盖链上状态。
+        store.chain_keyring_state = Some(chain_state);
+        sync_key_admin_users(&mut store);
+    }
+    Ok(changed)
 }
 
 pub(crate) fn sync_key_admin_users(store: &mut Store) {
@@ -1027,54 +1037,33 @@ pub(crate) fn sync_key_admin_users(store: &mut Store) {
     }
 }
 
-fn resolve_backup_slot(
-    seed_env: &str,
-    pubkey_env: &str,
-    fallback_label: &str,
-) -> BackupSlotMaterial {
-    if let Ok(seed) = std::env::var(seed_env) {
-        let trimmed = seed.trim().to_string();
-        if !trimmed.is_empty() {
-            let pubkey = try_derive_pubkey_hex_from_seed(trimmed.as_str())
-                .unwrap_or_else(|err| panic!("{seed_env} is invalid: {err}"));
-            return BackupSlotMaterial {
-                pubkey,
-                seed_hex: Some(SensitiveSeed::from(trimmed)),
-            };
-        }
-    }
+fn resolve_backup_slot(pubkey_env: &str, fallback_label: &str) -> BackupSlotMaterial {
     if let Ok(pubkey) = std::env::var(pubkey_env) {
         let trimmed = pubkey.trim().to_string();
         if !trimmed.is_empty() {
             let normalized = normalize_pubkey_for_signing(trimmed.as_str());
-            return BackupSlotMaterial {
-                pubkey: normalized,
-                seed_hex: None,
-            };
+            return BackupSlotMaterial { pubkey: normalized };
         }
     }
     if is_production_mode() {
-        panic!("{seed_env} or {pubkey_env} must be configured in production mode (SFID_ENV=prod)");
+        panic!("{pubkey_env} must be configured in production mode (SFID_ENV=prod)");
     }
     let digest = Blake2b256::digest(fallback_label.as_bytes());
     BackupSlotMaterial {
         pubkey: format!("0x{}", hex::encode(digest)),
-        seed_hex: None,
     }
 }
 
-fn upsert_seed_for_pubkey(state: &AppState, pubkey: &str, seed_hex: &str) -> Result<(), String> {
+fn replace_active_main_seed(state: &AppState, pubkey: &str, seed_hex: &str) -> Result<(), String> {
     let mut seeds = state
         .known_key_seeds
         .write()
         .map_err(|_| "known seeds write lock poisoned".to_string())?;
-    let normalized = normalize_pubkey_for_signing(pubkey);
-    let target = seeds
-        .keys()
-        .find(|k| k.eq_ignore_ascii_case(normalized.as_str()))
-        .cloned()
-        .unwrap_or(normalized);
-    seeds.insert(target, SensitiveSeed::from(seed_hex.to_string()));
+    seeds.clear();
+    seeds.insert(
+        normalize_pubkey_for_signing(pubkey),
+        SensitiveSeed::from(seed_hex.to_string()),
+    );
     Ok(())
 }
 
@@ -1098,8 +1087,87 @@ fn set_active_main_signer(
             .map_err(|_| "public key write lock poisoned".to_string())?;
         *pubkey_guard = normalized_main_pubkey.clone();
     }
-    upsert_seed_for_pubkey(state, normalized_main_pubkey.as_str(), main_seed_hex)?;
+    replace_active_main_seed(state, normalized_main_pubkey.as_str(), main_seed_hex)?;
     Ok(())
+}
+
+fn resolve_chain_http_rpc_url() -> Result<String, String> {
+    std::env::var("SFID_CHAIN_RPC_URL")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| "SFID_CHAIN_RPC_URL not configured".to_string())
+}
+
+async fn chain_rpc_call(
+    method: &str,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let client = HttpClient::new();
+    let url = resolve_chain_http_rpc_url()?;
+    let response = client
+        .post(url)
+        .json(&json!({
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("chain rpc request failed: {e}"))?;
+    let status = response.status();
+    let payload = response
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("decode chain rpc response failed: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("chain rpc returned status {status}"));
+    }
+    if let Some(err) = payload.get("error") {
+        return Err(format!("chain rpc returned error: {err}"));
+    }
+    Ok(payload["result"].clone())
+}
+
+fn parse_chain_account_storage(raw: Option<&str>, field: &str) -> Result<String, String> {
+    let Some(raw) = raw else {
+        return Err(format!("chain storage `{field}` is empty"));
+    };
+    let bytes = hex::decode(raw.trim_start_matches("0x"))
+        .map_err(|_| format!("chain storage `{field}` is not valid hex"))?;
+    let account = match bytes.len() {
+        32 => bytes,
+        33 if bytes.first().copied() == Some(1) => bytes[1..33].to_vec(),
+        _ => {
+            return Err(format!(
+                "chain storage `{field}` has unexpected AccountId encoding length {}",
+                bytes.len()
+            ))
+        }
+    };
+    Ok(format!("0x{}", hex::encode(account)))
+}
+
+async fn fetch_chain_keyring_from_chain() -> Result<ChainKeyringState, String> {
+    async fn fetch_pubkey(storage_name: &str) -> Result<String, String> {
+        let storage_key = format!(
+            "0x{}{}",
+            hex::encode(twox_128(b"SfidCodeAuth")),
+            hex::encode(twox_128(storage_name.as_bytes()))
+        );
+        let raw = chain_rpc_call("state_getStorage", json!([storage_key])).await?;
+        parse_chain_account_storage(raw.as_str(), storage_name)
+    }
+
+    let main_pubkey = fetch_pubkey("SfidMainAccount").await?;
+    let backup_a_pubkey = fetch_pubkey("SfidBackupAccount1").await?;
+    let backup_b_pubkey = fetch_pubkey("SfidBackupAccount2").await?;
+    Ok(ChainKeyringState::new(
+        main_pubkey,
+        backup_a_pubkey,
+        backup_b_pubkey,
+    ))
 }
 
 #[derive(Debug, Clone)]
@@ -1168,9 +1236,7 @@ async fn submit_rotate_sfid_keys_extrinsic(
         .map_err(|e| format!("rotate_sfid_keys submit failed: build extrinsic failed: {e}"))?;
     let signing_key = try_load_signing_key_from_seed(initiator_seed_hex)
         .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
-    let signature = signing_key
-        .sign(signing_context(b"substrate").bytes(&partial_tx.signer_payload()))
-        .to_bytes();
+    let signature = signing_key.sign(&partial_tx.signer_payload()).0;
     let tx = partial_tx
         .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
     let tx_hash = format!("0x{}", hex::encode(tx.hash().as_ref()));

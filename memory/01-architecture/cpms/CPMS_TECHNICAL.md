@@ -90,18 +90,18 @@
 
 ### 6.3 与 wuminapp 对齐口径（当前）
 - 协议：`WUMINAPP_LOGIN_V1`
-- 挑战字段：`proto/system/request_id/challenge/nonce/issued_at/expires_at/sys_pubkey/sys_sig/sys_cert`
+- 挑战字段：`proto/system/challenge/issued_at/expires_at/sys_pubkey/sys_sig`
 - 签名原文固定：
 
 ```text
-WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
+WUMINAPP_LOGIN_V1|system|challenge|expires_at
 ```
 
 - `origin` 不参与移动端扫码验签，可仅作为网页侧上下文保留。
 - `sys_pubkey`：CPMS 当前登录系统公钥。
 - `sys_sig`：CPMS 对挑战原文的签名。
-- `sys_cert`：SFID 对该 CPMS 公钥的背书签名。
-- CPMS 不与区块链交互；WuminApp 只通过区块链获取 SFID 当前公钥，再据此验证 `sys_cert`。
+- 登录协议仅用于 `sfid/cpms` 登录，不用于链上转账、投票或治理签名。
+- 手机先验 `sys_pubkey + sys_sig` 确认二维码由 CPMS 私钥签发，再由管理员钱包完成第二层登录签名。
 
 ### 6.4 安全约束
 - challenge 有效期固定 90 秒。

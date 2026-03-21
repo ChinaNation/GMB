@@ -13,26 +13,38 @@ set -a
 source "$ENV_FILE"
 set +a
 
+SFID_BIND_ADDR="${SFID_BIND_ADDR:-127.0.0.1:8899}"
+SFID_HEALTHCHECK_URL="${SFID_HEALTHCHECK_URL:-http://${SFID_BIND_ADDR}/api/v1/health}"
+SFID_PORT="${SFID_BIND_ADDR##*:}"
+
 if [[ ! -d "$ROOT_DIR/frontend/node_modules" ]]; then
   (cd "$ROOT_DIR/frontend" && npm install)
 fi
 
 BACKEND_PID=""
-if ! lsof -ti tcp:8899 >/dev/null 2>&1; then
-  (cd "$ROOT_DIR" && cargo run --manifest-path backend/Cargo.toml) &
-  BACKEND_PID="$!"
+EXISTING_BACKEND_PIDS="$(lsof -ti "tcp:${SFID_PORT}" || true)"
+if [[ -n "$EXISTING_BACKEND_PIDS" ]]; then
+  echo "Stopping existing backend on tcp:${SFID_PORT}..."
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    kill "$pid" >/dev/null 2>&1 || true
+  done <<< "$EXISTING_BACKEND_PIDS"
+  sleep 1
 fi
+
+(cd "$ROOT_DIR" && cargo run --manifest-path backend/Cargo.toml) &
+BACKEND_PID="$!"
 
 wait_backend_ready() {
   local retries=120
   local i
   for ((i=1; i<=retries; i++)); do
-    if curl -fsS "http://127.0.0.1:8899/api/v1/health" >/dev/null 2>&1; then
+    if curl -fsS "$SFID_HEALTHCHECK_URL" >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
   done
-  echo "Backend did not become ready on http://127.0.0.1:8899 within ${retries}s"
+  echo "Backend did not become ready on ${SFID_HEALTHCHECK_URL} within ${retries}s"
   return 1
 }
 

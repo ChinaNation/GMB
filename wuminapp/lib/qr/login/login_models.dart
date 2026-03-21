@@ -1,18 +1,13 @@
-import 'package:wuminapp_mobile/qr/qr_protocols.dart';
-
 /// 登录挑战码数据模型（系统 → 手机）。
 class LoginChallenge {
   const LoginChallenge({
     required this.proto,
     required this.system,
-    required this.requestId,
     required this.challenge,
-    required this.nonce,
     required this.issuedAt,
     required this.expiresAt,
     required this.sysPubkey,
     required this.sysSig,
-    this.sysCert,
     required this.raw,
   });
 
@@ -22,14 +17,8 @@ class LoginChallenge {
   /// 目标系统：`sfid` 或 `cpms`。
   final String system;
 
-  /// 请求 ID，一次性，防重放。
-  final String requestId;
-
-  /// 随机挑战值。
+  /// 随机挑战值，同时也是本次登录请求的唯一标识。
   final String challenge;
-
-  /// 随机数，增加签名随机性。
-  final String nonce;
 
   /// 签发时间（秒级 epoch）。
   final int issuedAt;
@@ -45,23 +34,14 @@ class LoginChallenge {
 
   /// 系统对挑战字段的签名（0x + hex）。
   ///
-  /// 签名原文：`proto|system|request_id|challenge|nonce|issued_at|expires_at`
+  /// 签名原文：`proto|system|challenge|issued_at|expires_at|sys_pubkey`
   final String sysSig;
-
-  /// SFID 对 CPMS 公钥的背书签名（0x + hex）。
-  ///
-  /// 仅 `system == cpms` 时必填。
-  /// 手机通过验证 `sysCert` 确认该 CPMS 实例被 SFID 信任。
-  final String? sysCert;
 
   /// 原始扫码字符串。
   final String raw;
 
   bool get isExpired => _nowEpochSeconds() > expiresAt;
   int get ttlSeconds => expiresAt - _nowEpochSeconds();
-
-  /// 是否需要 SFID 证书链验证（CPMS 场景）。
-  bool get requiresCert => system == 'cpms';
 
   static int _nowEpochSeconds() =>
       DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -71,7 +51,7 @@ class LoginChallenge {
 class LoginReceipt {
   const LoginReceipt({
     required this.proto,
-    required this.requestId,
+    required this.challenge,
     required this.pubkey,
     required this.sigAlg,
     required this.signature,
@@ -79,7 +59,7 @@ class LoginReceipt {
   });
 
   final String proto;
-  final String requestId;
+  final String challenge;
   final String pubkey;
   final String sigAlg;
   final String signature;
@@ -88,7 +68,7 @@ class LoginReceipt {
   Map<String, dynamic> toJson() {
     return {
       'proto': proto,
-      'request_id': requestId,
+      'challenge': challenge,
       'pubkey': pubkey,
       'sig_alg': sigAlg,
       'signature': signature,

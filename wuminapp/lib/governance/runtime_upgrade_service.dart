@@ -13,8 +13,7 @@ import 'transfer_proposal_service.dart' show ProposalMeta;
 ///
 /// 负责 extrinsic 编码/提交 和 storage 查询。
 class RuntimeUpgradeService {
-  RuntimeUpgradeService({ChainRpc? chainRpc})
-      : _rpc = chainRpc ?? ChainRpc();
+  RuntimeUpgradeService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
   final ChainRpc _rpc;
 
@@ -26,8 +25,14 @@ class RuntimeUpgradeService {
   /// runtime-root-upgrade pallet index=13。
   static const _palletIndex = 13;
 
+  /// VotingEngineSystem pallet index=9。
+  static const _jointVotePalletIndex = 9;
+
   /// propose_runtime_upgrade call_index=0。
   static const _proposeCallIndex = 0;
+
+  /// joint_vote call_index=3。
+  static const _jointVoteCallIndex = 3;
 
   /// Mortal era 周期。
   static const _eraPeriod = 64;
@@ -42,7 +47,7 @@ class RuntimeUpgradeService {
     required Uint8List wasmCode,
     required int eligibleTotal,
     required Uint8List snapshotNonce,
-    required Uint8List snapshotSignature,
+    required Uint8List signature,
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
@@ -52,7 +57,29 @@ class RuntimeUpgradeService {
       wasmCode: wasmCode,
       eligibleTotal: eligibleTotal,
       snapshotNonce: snapshotNonce,
-      snapshotSignature: snapshotSignature,
+      signature: signature,
+    );
+    return _signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+    );
+  }
+
+  /// 提交机构管理员的联合投票。
+  Future<String> submitJointVote({
+    required int proposalId,
+    required Uint8List institutionId48,
+    required bool approve,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+  }) async {
+    final callData = _buildJointVoteCall(
+      proposalId: proposalId,
+      institutionId48: institutionId48,
+      approve: approve,
     );
     return _signAndSubmit(
       callData: callData,
@@ -69,7 +96,7 @@ class RuntimeUpgradeService {
   /// ProposalData 是 BoundedVec<u8>，SCALE 编码为 Compact 长度前缀 + 原始字节。
   /// 原始字节布局：
   ///   proposer: AccountId32(32) + reason: Vec<u8>(Compact len + bytes)
-  ///   + code_hash: [u8;32] + code: Vec<u8>(Compact len + bytes)
+  ///   + code_hash: [u8;32] + has_code: bool
   ///   + status: u8 enum (0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed)
   Future<RuntimeUpgradeProposalInfo?> fetchRuntimeUpgradeProposal(
       int proposalId) async {
@@ -80,15 +107,25 @@ class RuntimeUpgradeService {
     );
     final raw = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (raw == null || raw.isEmpty) return null;
+    return decodeRuntimeUpgradeStorageValue(proposalId, raw);
+  }
 
-    // ProposalData 存储为 BoundedVec<u8>，SCALE 编码：Compact<len> + bytes
-    int offset = 0;
-    final (vecLen, lenBytes) = _decodeCompact(raw, offset);
-    offset += lenBytes;
-    if (offset + vecLen > raw.length) return null;
-    final data = raw.sublist(offset, offset + vecLen);
-
-    return _decodeRuntimeUpgradeAction(proposalId, data);
+  /// 解码 `ProposalData` 的原始 storage value（带 Compact 长度前缀）。
+  ///
+  /// 中文注释：分页列表会批量读取 ProposalData，随后在内存里按提案类型解码；
+  /// 这里提供公共入口，避免不同页面各自复制一套 runtime 提案解码逻辑。
+  RuntimeUpgradeProposalInfo? decodeRuntimeUpgradeStorageValue(
+      int proposalId, Uint8List raw) {
+    try {
+      int offset = 0;
+      final (vecLen, lenBytes) = _decodeCompact(raw, offset);
+      offset += lenBytes;
+      if (offset + vecLen > raw.length) return null;
+      final data = raw.sublist(offset, offset + vecLen);
+      return _decodeRuntimeUpgradeAction(proposalId, data);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 查询联合投票计数（JointTallies）。
@@ -119,6 +156,42 @@ class RuntimeUpgradeService {
       'JointVotesByInstitution',
       _u64ToLeBytes(proposalId),
       institutionId48,
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
+    if (data == null || data.isEmpty) return null;
+    return data[0] == 1;
+  }
+
+  /// 查询某机构在联合投票阶段的管理员票数统计。
+  Future<({int yes, int no})> fetchJointInstitutionTally(
+      int proposalId, Uint8List institutionId48) async {
+    final fullKey = _buildDoubleStorageKey(
+      'VotingEngineSystem',
+      'JointInstitutionTallies',
+      _u64ToLeBytes(proposalId),
+      institutionId48,
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
+    if (data == null || data.length < 8) return (yes: 0, no: 0);
+    return (yes: _decodeU32(data, 0), no: _decodeU32(data, 4));
+  }
+
+  /// 查询某管理员在某机构联合投票中的投票记录。
+  Future<bool?> fetchJointAdminVote(
+    int proposalId,
+    Uint8List institutionId48,
+    String pubkeyHex,
+  ) async {
+    final accountBytes = Uint8List.fromList(_hexDecode(pubkeyHex));
+    if (institutionId48.length != 48 || accountBytes.length != 32) return null;
+    final compositeKey = Uint8List(institutionId48.length + accountBytes.length)
+      ..setAll(0, institutionId48)
+      ..setAll(institutionId48.length, accountBytes);
+    final fullKey = _buildDoubleStorageKey(
+      'VotingEngineSystem',
+      'JointVotesByAdmin',
+      _u64ToLeBytes(proposalId),
+      compositeKey,
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
     if (data == null || data.isEmpty) return null;
@@ -175,7 +248,8 @@ class RuntimeUpgradeService {
     if (offset < data.length && data[offset] == 1) {
       offset++;
       if (offset + 48 <= data.length) {
-        institutionBytes = Uint8List.fromList(data.sublist(offset, offset + 48));
+        institutionBytes =
+            Uint8List.fromList(data.sublist(offset, offset + 48));
         offset += 48;
       }
     }
@@ -228,12 +302,10 @@ class RuntimeUpgradeService {
       final codeHashBytes = data.sublist(offset, offset + 32);
       offset += 32;
 
-      // code: Vec<u8> (Compact length + bytes)
-      final (codeLen, codeLenSize) = _decodeCompact(data, offset);
-      offset += codeLenSize;
-      if (offset + codeLen > data.length) return null;
-      final hasCode = codeLen > 0;
-      offset += codeLen;
+      // has_code: bool (1 byte)
+      if (offset >= data.length) return null;
+      final hasCode = data[offset] != 0;
+      offset += 1;
 
       // status: u8 enum (0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed)
       if (offset >= data.length) return null;
@@ -267,7 +339,7 @@ class RuntimeUpgradeService {
     required Uint8List wasmCode,
     required int eligibleTotal,
     required Uint8List snapshotNonce,
-    required Uint8List snapshotSignature,
+    required Uint8List signature,
   }) {
     final output = ByteOutput();
     output.pushByte(_palletIndex);
@@ -282,8 +354,7 @@ class RuntimeUpgradeService {
     }
 
     // wasm_code: Vec<u8> = Compact<u32> length + bytes
-    output.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(wasmCode.length)));
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(wasmCode.length)));
     if (wasmCode.isNotEmpty) {
       output.write(wasmCode);
     }
@@ -298,12 +369,31 @@ class RuntimeUpgradeService {
       output.write(snapshotNonce);
     }
 
-    // snapshot_signature: Vec<u8> = Compact<u32> length + bytes
-    output.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(snapshotSignature.length)));
-    if (snapshotSignature.isNotEmpty) {
-      output.write(snapshotSignature);
+    // signature: Vec<u8> = Compact<u32> length + bytes
+    output
+        .write(CompactBigIntCodec.codec.encode(BigInt.from(signature.length)));
+    if (signature.isNotEmpty) {
+      output.write(signature);
     }
+
+    return output.toBytes();
+  }
+
+  Uint8List _buildJointVoteCall({
+    required int proposalId,
+    required Uint8List institutionId48,
+    required bool approve,
+  }) {
+    if (institutionId48.length != 48) {
+      throw ArgumentError('institutionId48 必须为 48 字节');
+    }
+
+    final output = ByteOutput();
+    output.pushByte(_jointVotePalletIndex);
+    output.pushByte(_jointVoteCallIndex);
+    output.write(_u64ToLeBytes(proposalId));
+    output.write(institutionId48);
+    output.pushByte(approve ? 1 : 0);
 
     return output.toBytes();
   }
@@ -321,7 +411,8 @@ class RuntimeUpgradeService {
     final genesisHash = await _rpc.fetchGenesisHash();
     final registry = metadata.chainInfo.scaleCodec.registry;
 
-    debugPrint('[RuntimeUpgrade] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
+    debugPrint(
+        '[RuntimeUpgrade] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
       _rpc.fetchNonce(fromAddress),
@@ -329,9 +420,9 @@ class RuntimeUpgradeService {
     ]);
     final runtimeVersion = results[0] as dynamic;
     final nonce = results[1] as int;
-    final latestBlock =
-        results[2] as ({Uint8List blockHash, int blockNumber});
-    debugPrint('[RuntimeUpgrade] nonce=$nonce, block=${latestBlock.blockNumber}');
+    final latestBlock = results[2] as ({Uint8List blockHash, int blockNumber});
+    debugPrint(
+        '[RuntimeUpgrade] nonce=$nonce, block=${latestBlock.blockNumber}');
 
     debugPrint('[RuntimeUpgrade] 步骤4: 构造签名载荷...');
     final signingPayload = SigningPayload(
@@ -361,13 +452,13 @@ class RuntimeUpgradeService {
       nonce: nonce,
       tip: 0,
     );
-    final encoded =
-        extrinsicPayload.encode(registry, SignatureType.sr25519);
+    final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
     debugPrint('[RuntimeUpgrade] extrinsic 编码完成 (${encoded.length} bytes)');
 
     debugPrint('[RuntimeUpgrade] 步骤7: 提交到链...');
     debugPrint('[RuntimeUpgrade] call data hex: ${_hexEncode(callData)}');
-    debugPrint('[RuntimeUpgrade] encoded extrinsic hex: ${_hexEncode(encoded)}');
+    debugPrint(
+        '[RuntimeUpgrade] encoded extrinsic hex: ${_hexEncode(encoded)}');
     try {
       final txHash = await _rpc.submitExtrinsic(encoded);
       debugPrint('[RuntimeUpgrade] 提交成功: 0x${_hexEncode(txHash)}');
@@ -414,8 +505,10 @@ class RuntimeUpgradeService {
     final key1Hash = _blake2128Concat(key1Data);
     final key2Hash = _blake2128Concat(key2Data);
 
-    final result = Uint8List(
-        palletHash.length + storageHash.length + key1Hash.length + key2Hash.length);
+    final result = Uint8List(palletHash.length +
+        storageHash.length +
+        key1Hash.length +
+        key2Hash.length);
     var offset = 0;
     result.setAll(offset, palletHash);
     offset += palletHash.length;
@@ -477,6 +570,15 @@ class RuntimeUpgradeService {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
+  static List<int> _hexDecode(String hex) {
+    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
+    final out = <int>[];
+    for (var i = 0; i + 1 < clean.length; i += 2) {
+      out.add(int.parse(clean.substring(i, i + 2), radix: 16));
+    }
+    return out;
+  }
+
   // ──── 内部：哈希（直接使用 polkadart Hasher）────
 
   Uint8List _twoxx128String(String input) {
@@ -507,7 +609,7 @@ class RuntimeUpgradeProposalInfo {
   final String proposer; // SS58 (ss58Format 2027)
   final String reason; // UTF-8 decoded
   final String codeHashHex; // 32-byte hash as hex
-  final bool hasCode; // whether code is non-empty
+  final bool hasCode; // whether object-layer wasm is still retained on-chain
   final int status; // 0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed
 }
 

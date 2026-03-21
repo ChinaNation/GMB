@@ -20,15 +20,15 @@ mod benchmarks {
     #[benchmark]
     fn on_sfid_bound() {
         let who = decode_account::<T>([7u8; 32]);
-        let sfid_hash = T::Hashing::hash(b"citizen-lightnode-bench");
+        let binding_id = T::Hashing::hash(b"citizen-lightnode-bench");
 
         #[block]
         {
-            <Pallet<T> as OnSfidBound<T::AccountId, T::Hash>>::on_sfid_bound(&who, sfid_hash);
+            <Pallet<T> as OnSfidBound<T::AccountId, T::Hash>>::on_sfid_bound(&who, binding_id);
         }
 
         assert_eq!(RewardedCount::<T>::get(), 1u64);
-        assert!(RewardClaimed::<T>::contains_key(sfid_hash));
+        assert!(RewardClaimed::<T>::contains_key(binding_id));
         assert!(AccountRewarded::<T>::contains_key(&who));
     }
 }

@@ -166,10 +166,16 @@ pub mod pallet {
             let proposal_id =
                 T::InternalVoteEngine::create_internal_proposal(who.clone(), org, institution)?;
 
-            let action = DestroyAction { institution, amount };
+            let action = DestroyAction {
+                institution,
+                amount,
+            };
             let data = action.encode();
             voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
-            voting_engine_system::Pallet::<T>::store_proposal_meta(proposal_id, frame_system::Pallet::<T>::block_number());
+            voting_engine_system::Pallet::<T>::store_proposal_meta(
+                proposal_id,
+                frame_system::Pallet::<T>::block_number(),
+            );
 
             Self::deposit_event(Event::<T>::DestroyProposed {
                 proposal_id,
@@ -215,7 +221,10 @@ pub mod pallet {
                         .and_then(|m| m.passed_at)
                         .is_none()
                     {
-                        voting_engine_system::Pallet::<T>::set_proposal_passed(proposal_id, frame_system::Pallet::<T>::block_number());
+                        voting_engine_system::Pallet::<T>::set_proposal_passed(
+                            proposal_id,
+                            frame_system::Pallet::<T>::block_number(),
+                        );
                     }
                     if approve
                         && Self::try_execute_destroy_from_action(proposal_id, action).is_err()
@@ -236,7 +245,6 @@ pub mod pallet {
             let _ = ensure_signed(origin)?;
             Self::try_execute_destroy(proposal_id)
         }
-
     }
 
     impl<T: Config> Pallet<T> {
@@ -378,14 +386,14 @@ mod tests {
         for TestSfidEligibility
     {
         fn is_eligible(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
         ) -> bool {
             true
         }
 
         fn verify_and_consume_vote_credential(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
             _proposal_id: u64,
             _nonce: &[u8],
@@ -454,13 +462,13 @@ mod tests {
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<256>;
-        type MaxJointDecisionApprovals = ConstU32<32>;
+        type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalThresholdProvider = ();
-        type JointInstitutionDecisionVerifier = ();
+        type InternalAdminCountProvider = ();
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }

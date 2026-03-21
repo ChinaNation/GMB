@@ -194,7 +194,8 @@ class _AppShellState extends State<AppShell> {
             NavigationDestination(
                 icon: Badge(
                   isLabelVisible: _pendingVoteCount > 0,
-                  label: Text('$_pendingVoteCount', style: const TextStyle(fontSize: 10)),
+                  label: Text('$_pendingVoteCount',
+                      style: const TextStyle(fontSize: 10)),
                   child: const Icon(Icons.how_to_vote_outlined),
                 ),
                 label: '公民'),
@@ -394,8 +395,8 @@ class _MessagePageState extends State<MessagePage> {
                   child: Center(
                     child: Text(
                       '消息',
-                      style: TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.w700),
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -511,15 +512,18 @@ class _InstitutionSection extends StatelessWidget {
             if (constraints.maxWidth <= 0) {
               return const SizedBox.shrink();
             }
+            // 机构列表固定一行两列，避免不同 Android 机型出现列数漂移。
+            const crossAxisCount = 2;
+            final childAspectRatio = constraints.maxWidth < 360 ? 2.6 : 2.9;
             return GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: institutions.length,
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 360,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
-                childAspectRatio: 2.9,
+                childAspectRatio: childAspectRatio,
               ),
               itemBuilder: (context, index) {
                 return _InstitutionCard(
