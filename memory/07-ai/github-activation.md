@@ -103,12 +103,6 @@
 - 失败原因变成审查轮数限制过小
 - 当前仓库默认把 `Claude PR Review` 的 `--max-turns` 提高到 10
 
-### 6.2 Benchmark Weights 构建失败
-
-- `scripts/run-benchmarks.sh` 以 `citizenchain` 作为 Cargo workspace 根目录执行
-- benchmark 自动化默认不对 node 构建附加 `--locked`
-- 如果确实需要强制校验 lockfile，再显式使用 `--locked-build`
-
 ## 7. 启用完成判定
 
 只有同时满足以下条件，才算 GitHub AI 编程系统真正启用：

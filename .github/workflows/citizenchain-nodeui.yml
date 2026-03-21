@@ -1,0 +1,79 @@
+name: CitizenChain NodeUI CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/citizenchain-nodeui.yml"
+      - ".github/scripts/prepare-nodeui-sidecar.sh"
+      - "citizenchain/nodeui/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/citizenchain-nodeui.yml"
+      - ".github/scripts/prepare-nodeui-sidecar.sh"
+      - "citizenchain/nodeui/**"
+  workflow_dispatch:
+
+concurrency:
+  group: citizenchain-nodeui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nodeui:
+    name: nodeui 前后端构建检查
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          components: rust-src
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: citizenchain/nodeui/frontend/package-lock.json
+
+      - name: 安装 Linux 构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            llvm \
+            llvm-dev \
+            libclang-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            protobuf-compiler \
+            libpam0g-dev
+
+      - name: 配置 libclang 环境变量
+        run: |
+          echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
+          echo "PROTOC=$(command -v protoc)" >> "$GITHUB_ENV"
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenchain-nodeui"
+          workspaces: |
+            citizenchain/nodeui -> target
+
+      - name: 安装前端依赖
+        run: npm --prefix citizenchain/nodeui/frontend ci
+
+      - name: 构建前端
+        run: npm --prefix citizenchain/nodeui/frontend run build
+
+      - name: 编译 backend
+        run: cargo check --manifest-path citizenchain/nodeui/backend/Cargo.toml

@@ -32,14 +32,24 @@
 - `.github/workflows/ai-guardrails.yml`
 - `.github/workflows/claude-pr-review.yml`
 - `.github/workflows/claude-on-comment.yml`
-- `.github/workflows/ci.yml`
-- `.github/workflows/benchmark-weights.yml`
+- `.github/workflows/citizenchain-node.yml`
+- `.github/workflows/citizenchain-nodeui.yml`
+- `.github/workflows/citizenchain-runtime-governance.yml`
+- `.github/workflows/citizenchain-runtime-issuance.yml`
+- `.github/workflows/citizenchain-runtime-otherpallet.yml`
+- `.github/workflows/citizenchain-runtime-primitives.yml`
+- `.github/workflows/citizenchain-runtime-src.yml`
+- `.github/workflows/citizenchain-runtime-transaction.yml`
+- `.github/workflows/sfid-ci.yml`
+- `.github/workflows/cpms-ci.yml`
+- `.github/workflows/wuminapp-ci.yml`
 
 ## 4. 路径分流执行原则
 
-- `citizenchain/runtime` 与 `citizenchain/node` 分开执行
+- `citizenchain/node`、`citizenchain/nodeui`、`citizenchain/runtime/*` 分开执行
 - 共享 Rust 目录变更时，允许多侧联动执行
-- 纯文档、Pages、SFID 等目录按各自二级目录规则触发
+- `sfid`、`cpms`、`wuminapp` 分别独立执行
+- 纯文档、Pages 等目录按各自规则触发
 - 目录路由细则统一记录在 `memory/07-ai/ci-path-routing.md`
 
 ## 5. 本地执行入口

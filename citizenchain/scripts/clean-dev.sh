@@ -40,6 +40,6 @@ rm -rf "$APP_DATA_DIR"
 echo "    已清除"
 
 # ── 3. 重新编译并启动 ──
-cd "$(dirname "$0")/../citizenchain/nodeui"
+cd "$(dirname "$0")/../nodeui"
 echo "==> 重新编译并启动 nodeui（开发链：30秒出块，全新创世）..."
 cargo tauri dev --features dev-chain

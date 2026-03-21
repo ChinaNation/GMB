@@ -25,8 +25,8 @@ if [[ "${#changed_files[@]}" -eq 0 ]]; then
 fi
 
 doc_regex='^(memory/|docs/|README\.md$|GMB_TECHNICAL\.md$|CLAUDE\.md$|\.github/pull_request_template\.md$|.*_TECHNICAL\.md$)'
-code_regex='^(\.github/workflows/|\.github/scripts/|citizenchain/|sfid/|cpms/|wuminapp/|primitives/|scripts/|Cargo\.toml$|Cargo\.lock$|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml|ya?ml|json|swift|kt|kts))'
-scan_regex='^(\.github/scripts/|citizenchain/|sfid/|cpms/|wuminapp/|primitives/|scripts/|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml))'
+code_regex='^(\.github/workflows/|\.github/scripts/|citizenchain/|sfid/|cpms/|wuminapp/|primitives/|Cargo\.toml$|Cargo\.lock$|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml|ya?ml|json|swift|kt|kts))'
+scan_regex='^(\.github/scripts/|citizenchain/|sfid/|cpms/|wuminapp/|primitives/|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml))'
 todo_word="TO""DO"
 fixme_word="FIX""ME"
 residual_regex="(console\\.log\\(|debugger;|dbg!\\(|todo!\\(|unimplemented!\\(|\\b${todo_word}\\b|\\b${fixme_word}\\b)"

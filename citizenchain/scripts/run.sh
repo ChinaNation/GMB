@@ -19,6 +19,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM HUP
 
-cd "$(dirname "$0")/../citizenchain/nodeui"
+cd "$(dirname "$0")/../nodeui"
 echo "==> 启动 nodeui..."
 cargo tauri dev
