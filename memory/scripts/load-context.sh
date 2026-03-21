@@ -26,6 +26,15 @@ case "$MODULE" in
   global)
     print_base_context
     ;;
+  ai/system)
+    print_base_context
+    print_if_exists "memory/AGENTS.md"
+    print_if_exists "memory/CODEX.md"
+    print_if_exists "memory/CLAUDE.md"
+    print_if_exists "memory/07-ai/ai-system-overview.md"
+    print_if_exists "memory/07-ai/document-boundaries.md"
+    print_if_exists "memory/07-ai/startup-acceptance.md"
+    ;;
   citizenchain/runtime|citizenchain/governance|citizenchain/issuance|citizenchain/otherpallet|citizenchain/transaction)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
@@ -72,4 +81,3 @@ case "$MODULE" in
     echo "# 请手动补充该模块技术文档"
     ;;
 esac
-

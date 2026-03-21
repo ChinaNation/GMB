@@ -51,5 +51,6 @@ fi
 target_file="${done_dir}/$(basename "$TASK_FILE")"
 mv "$tmp_file" "$target_file"
 rm -f "$TASK_FILE"
+bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/index-tasks.sh" >/dev/null
 
 echo "任务卡已归档：$target_file"
