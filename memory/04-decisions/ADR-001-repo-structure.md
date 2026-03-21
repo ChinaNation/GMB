@@ -38,7 +38,6 @@ CitizenChain 历史上存在以下旧布局：
 ```text
 citizenchain/
   node/
-  nodeuitauri/
   nodeui/
   runtime/
     governance/
@@ -48,8 +47,8 @@ citizenchain/
     primitives/
 ```
 
-5. 旧版 Tauri 实现当前使用 `citizenchain/nodeuitauri`。
-6. 新版 Flutter Desktop 节点 UI 使用 `citizenchain/nodeui`。
+5. 历史 `citizenchain/nodeuitauri` 已清理，不再作为当前实现目录。
+6. 当前 `citizenchain/nodeui` 使用 Rust + Tauri + React + TypeScript + Vite。
 7. 运行时共享常量 crate 统一放在 `citizenchain/runtime/primitives/`。
 
 ## 后果
@@ -58,7 +57,7 @@ citizenchain/
 
 - 明确 CitizenChain 是一个完整产品
 - 明确 runtime 内部的目标组织方式
-- 为 NodeUI Flutter 化迁移提供稳定目标
+- 为 NodeUI 当前实现提供稳定目录与技术栈口径
 - 便于 AI 在统一结构下工作
 
 注意事项：
