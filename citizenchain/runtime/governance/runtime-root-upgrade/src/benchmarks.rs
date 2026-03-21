@@ -13,7 +13,7 @@ use sp_runtime::traits::Hash;
 use crate::pallet::{
     CodeOf, Config, Proposal, ProposalStatus, ReasonOf, SnapshotNonceOf, SnapshotSignatureOf,
 };
-use crate::Pallet;
+use crate::{Call, Pallet};
 
 const BENCH_MAX_REASON_LEN: u32 = 1024;
 const BENCH_MAX_CODE_SIZE: u32 = 5 * 1024 * 1024;
