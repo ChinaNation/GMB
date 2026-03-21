@@ -20,8 +20,7 @@
 - `runtime/transaction/`：交易与手续费类 pallet。
 - `runtime/otherpallet/`：其他链上基础能力 pallet。
 - `runtime/primitives/`：运行时共享常量、基础类型与制度数据。
-- `nodeuitauri/`：旧版 Tauri 桌面节点 UI 与内嵌节点管理。
-- `nodeui/`：新版 Flutter Desktop 桌面节点 UI。
+- `nodeui/`：当前桌面节点 UI、内嵌节点管理与打包入口。
 
 ### 2.3 本文范围外
 - `SFID` 的链外网站、签名服务与数据库内部实现。
@@ -36,8 +35,7 @@
 - 原生链名称为 `CitizenChain`，原生数字货币为 `GMB`。
 - 产品同时包含两部分：
   - 区块链节点程序：`node/`
-  - 旧版桌面节点软件：`nodeuitauri/`
-  - 新版桌面节点软件：`nodeui/`
+  - 桌面节点软件：`nodeui/`
 
 ### 3.2 对外协作边界
 - 对 `SFID`：提供绑定、资格校验、人口快照、公民投票凭证等链侧接口承载能力。
@@ -55,8 +53,7 @@ citizenchain/
 │   ├── transaction/ # 交易 pallet 与手续费文档
 │   ├── otherpallet/ # 其他链上基础能力 pallet
 │   └── primitives/  # 运行时共享常量、基础类型与制度数据
-├── nodeuitauri/     # 旧版 Tauri 桌面节点 UI
-├── nodeui/          # 新版 Flutter Desktop 节点 UI
+├── nodeui/          # 当前桌面节点 UI、节点壳与打包入口
 └── scripts/         # 本产品脚本
 ```
 
@@ -66,7 +63,7 @@ citizenchain/
 - Native Node 层：负责 CLI、网络、数据库、共识服务编排、RPC 服务、chain spec 加载。
 - Runtime 层：负责所有链上状态转换、交易校验、治理规则、发行规则、手续费规则。
 - Pallet 层：按治理、发行、交易、其他能力拆分功能模块。
-- Desktop UI 层：负责本地节点进程生命周期管理、参数设置、状态展示与安装包交付；当前处于 Tauri 向 Flutter Desktop 迁移期。
+- Desktop UI 层：由 `nodeui/` 负责本地节点进程生命周期管理、参数设置、状态展示与安装包交付。
 
 ### 5.2 关键共享依赖
 - `runtime/primitives/`：提供链常量、机构常量、SS58 参数、发行与人口基础常量。
@@ -162,22 +159,21 @@ citizenchain/
 - `pow-difficulty-module`
 - `sfid-code-auth`
 
-## 10. 桌面节点软件（`nodeuitauri/` 与 `nodeui/`）
+## 10. 桌面节点软件（`nodeui/`）
 
 ### 10.1 定位
-- `nodeuitauri` 是当前可运行的旧版桌面节点产品壳，采用 Tauri。
-- `nodeui` 是新版 Flutter Desktop 节点 UI，作为未来正式实现建设。
+- `nodeui` 是当前唯一桌面节点产品壳。
+- 历史 `nodeuitauri` 目录中的桌面职责已经收口到 `nodeui`，旧目录已删除。
 - 对最终用户仍然提供“安装即用”的节点软件，而不是要求用户手工管理原生 node 命令。
 
 ### 10.2 当前职责
-- `nodeuitauri` 当前负责启动 / 停止内嵌节点进程。
-- `nodeuitauri` 当前负责管理 bootnode 地址、奖励地址、GRANDPA 地址、节点名称等本地设置。
-- `nodeuitauri` 当前负责展示节点状态、链状态、网络概览、挖矿面板与其他辅助信息。
-- `nodeui` 当前负责承接 Flutter Desktop 版的新架构入口和迁移目标。
+- `nodeui` 负责启动 / 停止内嵌节点进程。
+- `nodeui` 负责管理 bootnode 地址、奖励地址、GRANDPA 地址、节点名称等本地设置。
+- `nodeui` 负责展示节点状态、链状态、网络概览、挖矿面板与其他辅助信息。
+- `nodeui` 负责桌面节点产品的当前前后端实现与后续迭代。
 
 ### 10.3 打包边界
-- `nodeuitauri` 当前通过 sidecar 方式内嵌节点二进制。
-- `nodeui` 完成迁移前，桌面交付仍以 `nodeuitauri` 为准。
+- `nodeui` 通过 sidecar 方式内嵌节点二进制。
 - 对用户交付形态始终保持单个桌面安装包；对工程实现来说仍是“UI 壳 + 内嵌 node 二进制”。
 
 ## 11. 变更与发布边界
@@ -189,8 +185,7 @@ citizenchain/
 
 ### 11.2 不需要 runtime 升级的改动
 - `node/` 中的 CLI、RPC、服务编排、网络与本地运行逻辑。
-- `nodeuitauri/` 的桌面 UI、设置页、Tauri 命令与安装包逻辑。
-- `nodeui/` 的 Flutter Desktop UI、页面与桌面工程逻辑。
+- `nodeui/` 的桌面 UI、设置页、Tauri 命令与安装包逻辑。
 - 构建脚本、CI/CD、前端界面、说明文档。
 
 ### 11.3 特殊情况
@@ -223,14 +218,14 @@ citizenchain/
 - `runtime/otherpallet/sfid-code-auth/SFIDCODEAUTH_TECHNICAL.md`
 
 ### 12.5 桌面节点 UI
-- `nodeuitauri/backend/src/home/HOME_TECHNICAL.md`
-- `nodeuitauri/backend/src/mining/mining-dashboard/MINING_DASHBOARD_TECHNICAL.md`
-- `nodeuitauri/backend/src/network/network-overview/NETWORK_OVERVIEW_TECHNICAL.md`
-- `nodeuitauri/backend/src/other/other-tabs/OTHER_TABS_TECHNICAL.md`
-- `nodeuitauri/backend/src/settings/bootnodes-address/BOOTNODES_ADDRESS_TECHNICAL.md`
-- `nodeuitauri/backend/src/settings/device-password/DEVICE_PASSWORD_TECHNICAL.md`
-- `nodeuitauri/backend/src/settings/fee-address/FEE_ADDRESS_TECHNICAL.md`
-- `nodeuitauri/backend/src/settings/grandpa-address/GRANDPA_ADDRESS_TECHNICAL.md`
+- `memory/05-modules/citizenchain/nodeui/home/HOME_TECHNICAL.md`
+- `memory/05-modules/citizenchain/nodeui/mining/mining-dashboard/MINING_DASHBOARD_TECHNICAL.md`
+- `memory/05-modules/citizenchain/nodeui/network/network-overview/NETWORK_OVERVIEW_TECHNICAL.md`
+- `memory/05-modules/citizenchain/nodeui/other/other-tabs/OTHER_TABS_TECHNICAL.md`
+- `memory/05-modules/citizenchain/nodeui/settings/bootnodes-address/BOOTNODES_ADDRESS_TECHNICAL.md`
+- `memory/05-modules/citizenchain/nodeui/settings/device-password/DEVICE_PASSWORD_TECHNICAL.md`
+- `memory/05-modules/citizenchain/nodeui/settings/fee-address/FEE_ADDRESS_TECHNICAL.md`
+- `memory/05-modules/citizenchain/nodeui/settings/grandpa-address/GRANDPA_ADDRESS_TECHNICAL.md`
 
 ## 13. 维护要求
 - `citizenchain` 发生架构级、边界级、发布级改动时，必须同步更新本文档。

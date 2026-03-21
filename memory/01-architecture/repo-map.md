@@ -51,7 +51,6 @@ GMB/
 ```text
 citizenchain/
   node/
-  nodeuitauri/
   nodeui/
   runtime/
     governance/
@@ -72,15 +71,14 @@ citizenchain/
 - `citizenchain/runtime/otherpallet`
 - `citizenchain/runtime/transaction`
 - `citizenchain/runtime/primitives`
-- `citizenchain/nodeuitauri`
 - `citizenchain/nodeui`
 
 其中：
 
 - 四类 runtime 业务目录已经统一收敛到 `citizenchain/runtime/`
 - 原仓库根目录 `primitives/` 已迁入 `citizenchain/runtime/primitives`
-- 现有旧版 Tauri 节点 UI 使用 `citizenchain/nodeuitauri`
-- 新版 Flutter Desktop 节点 UI 使用 `citizenchain/nodeui`
+- 桌面节点 UI、节点壳与打包入口统一收口到 `citizenchain/nodeui`
+- 历史旧目录 `citizenchain/nodeuitauri` 已完成清理，不再作为当前实现
 
 ## 6. 当前落地策略
 
