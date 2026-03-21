@@ -52,6 +52,7 @@
 ## 3. 强制规则
 
 - 逻辑不清必须先沟通
+- 真实开发任务必须先创建任务卡
 - 代码必须补中文注释
 - 代码更新后必须更新文档
 - 代码更新后必须清理残留
@@ -77,9 +78,12 @@
 ## 5. 配套入口
 
 - 角色执行说明：`memory/07-ai/agent-playbooks.md`
+- 文档边界说明：`memory/07-ai/document-boundaries.md`
 - 上下文装载顺序：`memory/07-ai/context-loading-order.md`
 - 目录级 CI 路由：`memory/07-ai/ci-path-routing.md`
+- 启动协议验收：`memory/07-ai/startup-acceptance.md`
 - 需求分析入口：`bash memory/scripts/analyze-requirement.sh --requirement "..."`
+- 启动协议检查：`bash memory/scripts/check-startup-acceptance.sh`
 - 执行入口：`bash memory/scripts/architect-entry.sh --requirement "..." --execute`
 - 新建任务卡：`bash memory/scripts/new-task.sh --module "<模块>" --requirement "..."`
 - 装载模块上下文：`bash memory/scripts/load-context.sh <模块>`
