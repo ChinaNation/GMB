@@ -9,7 +9,7 @@
 ## Blockchain Agent
 
 - 负责 `citizenchain` 全域
-- 包括 `runtime`、`node`、`nodeui`、`nodeuitauri`
+- 包括 `runtime`、`node`、`nodeui`
 
 ## SFID Agent
 
@@ -33,4 +33,3 @@
 
 - 由 GitHub Actions 承担
 - 负责构建、打包、发布
-
