@@ -1,0 +1,29 @@
+name: AI Guardrails
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+concurrency:
+  group: ai-guardrails-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guardrails:
+    if: github.event.pull_request.draft == false
+    name: 文档与残留门禁
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 检查文档更新与残留清理
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: ./.github/scripts/check-ai-guardrails.sh
