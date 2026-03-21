@@ -5,20 +5,16 @@
 use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_support::traits::Currency;
-use frame_support::BoundedVec;
 use frame_system::RawOrigin;
+use sp_std::vec;
 use sp_runtime::traits::SaturatedConversion;
 use voting_engine_system::InternalVoteEngine;
 
 use crate::{
     pallet::{DuoqianAccounts, SfidRegisteredAddress, AddressRegisteredSfid, DuoqianAdminsOf, SfidIdOf},
     BalanceOf, Call, Config, DuoqianAddressValidator, DuoqianReservedAddressChecker,
-    Pallet, ProtectedSourceChecker, DuoqianStatus,
+    Pallet, ProtectedSourceChecker,
 };
-
-fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
-    T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
-}
 
 fn find_safe_sfid<T: Config>() -> Result<(SfidIdOf<T>, T::AccountId), BenchmarkError> {
     for candidate in 0..2_048u32 {
