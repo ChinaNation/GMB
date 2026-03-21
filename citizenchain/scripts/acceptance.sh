@@ -3,10 +3,10 @@ set -euo pipefail
 
 # 中文注释：区块链自动化验收脚本
 # 用法：
-#   ./scripts/acceptance.sh quick
-#   ./scripts/acceptance.sh full
-#   ./scripts/acceptance.sh coverage
-#   ./scripts/acceptance.sh full --html --lcov
+#   ./citizenchain/scripts/acceptance.sh quick
+#   ./citizenchain/scripts/acceptance.sh full
+#   ./citizenchain/scripts/acceptance.sh coverage
+#   ./citizenchain/scripts/acceptance.sh full --html --lcov
 
 MODE="${1:-quick}"
 shift || true

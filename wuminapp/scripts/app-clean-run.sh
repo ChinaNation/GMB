@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 清空缓存 + 重新编译 + 启动手机 App
 set -euo pipefail
-cd "$(dirname "$0")/../wuminapp"
+cd "$(dirname "$0")/.."
 echo "==> 清空构建缓存..."
 flutter clean
 echo "==> 获取依赖..."
