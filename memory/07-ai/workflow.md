@@ -9,7 +9,8 @@
 → Codex 读取对应模块文档
 → Codex 判断边界与影响范围
 → 如逻辑不清先沟通
-→ 分析确认后再进入实现
+→ 分析确认后先创建任务卡
+→ 再进入实现
 → Codex 改代码并补中文注释
 → Codex 更新 memory/ 或技术文档
 → Codex 清理残留
@@ -22,6 +23,7 @@
 ## 2. 强制门禁
 
 - 改代码后必须更新文档
+- 真实开发任务必须创建任务卡
 - 改代码后必须清理残留
 - 逻辑不清时必须先沟通
 - 关键逻辑必须补中文注释
@@ -55,6 +57,7 @@
 ## 5. 本地执行入口
 
 - `bash memory/scripts/analyze-requirement.sh --requirement "..."`
+- `bash memory/scripts/check-startup-acceptance.sh`
 - `bash memory/scripts/architect-entry.sh --requirement "..." --execute`
 - `bash memory/scripts/start-task.sh --requirement "..."`
 - `bash memory/scripts/new-task.sh --module "<模块>" --requirement "..."`

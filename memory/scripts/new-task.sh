@@ -35,6 +35,9 @@ append_line() {
 template_file_for_module() {
   local module="$1"
   case "$module" in
+    ai/system)
+      printf '%s' "memory/08-tasks/templates/ai-system.md"
+      ;;
     citizenchain/runtime|citizenchain/governance|citizenchain/issuance|citizenchain/otherpallet|citizenchain/transaction)
       printf '%s' "memory/08-tasks/templates/citizenchain-runtime.md"
       ;;
@@ -71,6 +74,9 @@ template_file_for_module() {
 checklist_file_for_module() {
   local module="$1"
   case "$module" in
+    ai/system)
+      printf '%s' "memory/07-ai/module-checklists/ai-system.md"
+      ;;
     citizenchain/runtime|citizenchain/governance|citizenchain/issuance|citizenchain/otherpallet|citizenchain/transaction|citizenchain/node|citizenchain/nodeui|citizenchain/nodeuitauri|primitives)
       printf '%s' "memory/07-ai/module-checklists/citizenchain.md"
       ;;
@@ -92,6 +98,9 @@ checklist_file_for_module() {
 dod_file_for_module() {
   local module="$1"
   case "$module" in
+    ai/system)
+      printf '%s' "memory/07-ai/module-definition-of-done/ai-system.md"
+      ;;
     citizenchain/runtime|citizenchain/governance|citizenchain/issuance|citizenchain/otherpallet|citizenchain/transaction|citizenchain/node|citizenchain/nodeui|citizenchain/nodeuitauri|primitives)
       printf '%s' "memory/07-ai/module-definition-of-done/citizenchain.md"
       ;;
@@ -110,6 +119,10 @@ dod_file_for_module() {
   esac
 }
 
+refresh_index() {
+  bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/index-tasks.sh" >/dev/null
+}
+
 write_context_block() {
   local file="$1"
   local module="$2"
@@ -122,6 +135,14 @@ write_context_block() {
   append_line "$file" "- memory/07-ai/context-loading-order.md"
 
   case "$module" in
+    ai/system)
+      append_line "$file" "- memory/AGENTS.md"
+      append_line "$file" "- memory/CODEX.md"
+      append_line "$file" "- memory/CLAUDE.md"
+      append_line "$file" "- memory/07-ai/ai-system-overview.md"
+      append_line "$file" "- memory/07-ai/document-boundaries.md"
+      append_line "$file" "- memory/07-ai/startup-acceptance.md"
+      ;;
     citizenchain/runtime|citizenchain/governance|citizenchain/issuance|citizenchain/otherpallet|citizenchain/transaction)
       append_line "$file" "- memory/01-architecture/citizenchain-target-structure.md"
       append_line "$file" "- citizenchain/CITIZENCHAIN_TECHNICAL.md"
@@ -288,6 +309,8 @@ cat >> "$task_file" <<'EOF'
 
 - 任务卡已创建
 EOF
+
+refresh_index
 
 echo "已创建任务卡：$task_file"
 echo "建议下一步：bash memory/scripts/load-context.sh \"$MODULE\""

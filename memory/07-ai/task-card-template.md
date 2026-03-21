@@ -39,6 +39,7 @@
 ## 使用规则
 
 - Codex 开工前先按此模板整理任务
+- 真实开发任务必须至少对应一张 `memory/08-tasks/` 下的任务卡
 - Claude Review 时也按此模板检查是否缺项
 - 若任务影响多个产品，必须补充影响范围说明
 - 若需求不清，先使用 `memory/07-ai/clarification-template.md`

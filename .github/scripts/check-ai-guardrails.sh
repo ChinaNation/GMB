@@ -24,17 +24,155 @@ if [[ "${#changed_files[@]}" -eq 0 ]]; then
   exit 0
 fi
 
+bash memory/scripts/check-startup-acceptance.sh --ci
+
 doc_regex='^(memory/|docs/|README\.md$|GMB_TECHNICAL\.md$|CLAUDE\.md$|\.github/pull_request_template\.md$|.*_TECHNICAL\.md$)'
 code_regex='^(\.github/workflows/|\.github/scripts/|citizenchain/|sfid/|cpms/|wuminapp/|primitives/|Cargo\.toml$|Cargo\.lock$|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml|ya?ml|json|swift|kt|kts))'
 scan_regex='^(\.github/scripts/|citizenchain/|sfid/|cpms/|wuminapp/|primitives/|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml))'
+task_card_regex='^memory/08-tasks/(open|done)/[^/]+\.md$'
 todo_word="TO""DO"
 fixme_word="FIX""ME"
 residual_regex="(console\\.log\\(|debugger;|dbg!\\(|todo!\\(|unimplemented!\\(|\\b${todo_word}\\b|\\b${fixme_word}\\b)"
+chinese_comment_regex='^\+.*(//|/\*|\*|#).*[一-龥]'
 
 declare -a changed_code_files=()
 declare -a changed_doc_files=()
+declare -a changed_task_cards=()
 declare -a residual_hits=()
 declare -a protected_ai_hits=()
+declare -a missing_task_card_hits=()
+declare -a missing_module_doc_hits=()
+declare -a chinese_comment_hits=()
+
+has_changed_doc_prefix() {
+  local prefix="$1"
+  local file
+
+  for file in "${changed_doc_files[@]}"; do
+    if [[ "$file" == "$prefix"* ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+has_changed_doc_file() {
+  local target="$1"
+  local file
+
+  for file in "${changed_doc_files[@]}"; do
+    if [[ "$file" == "$target" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+module_doc_requirement_for_file() {
+  local file="$1"
+
+  case "$file" in
+    .github/workflows/*|.github/scripts/*)
+      printf '%s' "memory/07-ai/"
+      ;;
+    citizenchain/*|primitives/*|Cargo.toml|Cargo.lock)
+      printf '%s' "memory/05-modules/citizenchain/"
+      ;;
+    sfid/*)
+      printf '%s' "memory/05-modules/sfid/"
+      ;;
+    cpms/*)
+      printf '%s' "memory/05-modules/cpms/"
+      ;;
+    wuminapp/*)
+      printf '%s' "memory/05-modules/wuminapp/"
+      ;;
+    *)
+      printf '%s' ""
+      ;;
+  esac
+}
+
+has_matching_module_doc_update() {
+  local file="$1"
+  local required_prefix
+
+  required_prefix="$(module_doc_requirement_for_file "$file")"
+
+  if [[ -z "$required_prefix" ]]; then
+    return 0
+  fi
+
+  if has_changed_doc_prefix "$required_prefix"; then
+    return 0
+  fi
+
+  case "$file" in
+    .github/workflows/*|.github/scripts/*)
+      has_changed_doc_file "memory/01-architecture/repo-map.md" && return 0
+      ;;
+    citizenchain/*|primitives/*|Cargo.toml|Cargo.lock)
+      has_changed_doc_file "memory/01-architecture/citizenchain-target-structure.md" && return 0
+      has_changed_doc_file "memory/01-architecture/repo-map.md" && return 0
+      has_changed_doc_file "memory/03-security/security-rules.md" && return 0
+      ;;
+    sfid/*|cpms/*|wuminapp/*)
+      has_changed_doc_file "memory/01-architecture/repo-map.md" && return 0
+      has_changed_doc_file "memory/03-security/security-rules.md" && return 0
+      ;;
+    *)
+      ;;
+  esac
+
+  return 1
+}
+
+should_check_chinese_comment_gate() {
+  local file="$1"
+
+  case "$file" in
+    *.rs|*.dart|*.ts|*.tsx|*.js|*.jsx|*.swift|*.kt|*.kts)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  case "$file" in
+    */test/*|*/tests/*|*.g.dart|*/GeneratedPluginRegistrant.*)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+check_chinese_comment_gate() {
+  local file="$1"
+  local added_lines
+  local added_count
+
+  added_lines="$(git diff --unified=0 "${merge_base}...HEAD" -- "$file" | grep '^+' | grep -v '^\+\+\+' || true)"
+
+  if [[ -z "$added_lines" ]]; then
+    return 0
+  fi
+
+  added_count="$(printf '%s\n' "$added_lines" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+
+  if [[ -z "$added_count" || "$added_count" -lt 12 ]]; then
+    return 0
+  fi
+
+  if printf '%s\n' "$added_lines" | grep -Eq "$chinese_comment_regex"; then
+    return 0
+  fi
+
+  chinese_comment_hits+=("${file}: 新增 ${added_count} 行实现，但未检测到新增中文注释")
+}
 
 is_protected_ai_path() {
   local file="$1"
@@ -84,6 +222,10 @@ for file in "${changed_files[@]}"; do
     changed_doc_files+=("${file}")
   fi
 
+  if [[ "${file}" =~ ${task_card_regex} ]]; then
+    changed_task_cards+=("${file}")
+  fi
+
   if [[ "${file}" =~ ${code_regex} ]]; then
     changed_code_files+=("${file}")
   fi
@@ -129,6 +271,33 @@ if [[ "${#changed_code_files[@]}" -gt 0 && "${#changed_doc_files[@]}" -eq 0 ]]; 
   exit 1
 fi
 
+if [[ "${#changed_code_files[@]}" -gt 0 && "${#changed_task_cards[@]}" -eq 0 ]]; then
+  echo "检测到真实开发变更，但没有同步任务卡。"
+  echo "真实开发任务必须至少更新一张任务卡："
+  echo "- memory/08-tasks/open/<任务卡>.md"
+  echo "- memory/08-tasks/done/<任务卡>.md"
+  echo ""
+  printf '代码变更文件:\n'
+  printf '  - %s\n' "${changed_code_files[@]}"
+  exit 1
+fi
+
+for file in "${changed_code_files[@]}"; do
+  if ! has_matching_module_doc_update "$file"; then
+    required_prefix="$(module_doc_requirement_for_file "$file")"
+    if [[ -n "$required_prefix" ]]; then
+      missing_module_doc_hits+=("${file}: 缺少对应模块文档更新（期望更新 ${required_prefix}）")
+    fi
+  fi
+done
+
+if [[ "${#missing_module_doc_hits[@]}" -gt 0 ]]; then
+  echo "检测到更细粒度的文档回写缺失。"
+  echo "以下代码变更没有同步到对应模块文档："
+  printf '  - %s\n' "${missing_module_doc_hits[@]}"
+  exit 1
+fi
+
 for file in "${changed_code_files[@]}"; do
   if [[ ! -f "${file}" ]]; then
     continue
@@ -147,6 +316,10 @@ for file in "${changed_code_files[@]}"; do
       residual_hits+=("${file}:${line}")
     done < /tmp/gmb_guardrail_hit.txt
   fi
+
+  if should_check_chinese_comment_gate "$file"; then
+    check_chinese_comment_gate "$file"
+  fi
 done
 
 rm -f /tmp/gmb_guardrail_hit.txt
@@ -155,6 +328,13 @@ if [[ "${#residual_hits[@]}" -gt 0 ]]; then
   echo "检测到可能未清理的开发残留："
   printf '  - %s\n' "${residual_hits[@]}"
   echo "请清理后重新提交。"
+  exit 1
+fi
+
+if [[ "${#chinese_comment_hits[@]}" -gt 0 ]]; then
+  echo "检测到较大代码改动，但没有同步新增中文注释："
+  printf '  - %s\n' "${chinese_comment_hits[@]}"
+  echo "请至少为关键逻辑补充轻量中文注释后重新提交。"
   exit 1
 fi
 

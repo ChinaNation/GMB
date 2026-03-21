@@ -81,12 +81,13 @@ Codex 修复并回写文档
 - `memory/07-ai/context-loading-order.md`
 - `memory/07-ai/agent-playbooks.md`
 - `memory/07-ai/architect-workflow.md`
+- `memory/07-ai/document-boundaries.md`
 - `memory/07-ai/module-task-routing.md`
 - `memory/07-ai/operator-manual.md`
 - `memory/07-ai/module-checklists/`
 - `memory/07-ai/module-definition-of-done/`
-- `memory/07-ai/chat-first-mode.md`
 - `memory/07-ai/chat-protocol.md`
+- `memory/07-ai/startup-acceptance.md`
 - `memory/07-ai/requirement-analysis-template.md`
 - `memory/07-ai/thread-model.md`
 - `memory/07-ai/clarification-template.md`
@@ -98,6 +99,7 @@ Codex 修复并回写文档
 - `memory/06-quality/change-log-template.md`
 - `memory/scripts/module-router.sh`
 - `memory/scripts/analyze-requirement.sh`
+- `memory/scripts/check-startup-acceptance.sh`
 - `memory/scripts/architect-entry.sh`
 - `memory/scripts/new-task.sh`
 - `memory/scripts/start-task.sh`
@@ -106,6 +108,10 @@ Codex 修复并回写文档
 - `memory/scripts/index-tasks.sh`
 
 仓库根目录保留的 `AGENTS.md`、`CODEX.md`、`CLAUDE.md` 只是指向 `memory/` 的入口别名，不是第二份内容。
+
+AI 文档边界统一收口在：
+
+- `memory/07-ai/document-boundaries.md`
 
 ## 6. 第二阶段建设内容
 
