@@ -7,6 +7,7 @@
 - `memory/AGENTS.md`
 - `memory/CODEX.md`
 - `memory/CLAUDE.md`
+- `memory/05-modules/`
 - `memory/07-ai/`
 - `memory/08-tasks/`
 - `memory/scripts/`
@@ -26,6 +27,7 @@
 - `memory/01-architecture/`
 - `memory/03-security/`
 - `memory/04-decisions/`
+- `memory/05-modules/`
 - `memory/06-quality/`
 - `memory/07-ai/`
 - `memory/scripts/`
