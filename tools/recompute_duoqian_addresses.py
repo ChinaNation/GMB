@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-重新计算 primitives/china 中所有 duoqian_address。
+重新计算 citizenchain/runtime/primitives/china 中所有 duoqian_address。
 
 算法（与 duoqian-transaction-pow pallet 完全一致）：
   address = blake2b_256("DUOQIAN_SFID_V1" || ss58_prefix_u16_le || sfid_id_bytes)
@@ -24,7 +24,13 @@ from pathlib import Path
 from typing import Optional
 
 
-CHINA_DIR = Path(__file__).resolve().parent.parent / "primitives" / "china"
+CHINA_DIR = (
+    Path(__file__).resolve().parent.parent
+    / "citizenchain"
+    / "runtime"
+    / "primitives"
+    / "china"
+)
 PREFIX = b"DUOQIAN_SFID_V1"
 SS58_FORMAT: int = 2027  # 与 primitives::core_const::SS58_FORMAT 一致
 
@@ -124,7 +130,7 @@ def recompute_zb(
     all_addresses = sorted(set(e.new_hex for e in all_entries))
 
     lines = [
-        '//! 汇总 primitives/china 目录下所有制度保留 duoqian_address。',
+        '//! 汇总 citizenchain/runtime/primitives/china 目录下所有制度保留 duoqian_address。',
         '//! 用于禁止 duoqian-transaction-pow 抢注这些机构地址。',
         '',
         'use hex_literal::hex;',
@@ -154,7 +160,7 @@ def recompute_zb(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="重新计算 primitives/china 中的 duoqian_address（blake2b-256 + SS58 前缀 2027）"
+        description="重新计算 citizenchain/runtime/primitives/china 中的 duoqian_address（blake2b-256 + SS58 前缀 2027）"
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
