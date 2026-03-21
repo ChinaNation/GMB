@@ -21,7 +21,6 @@
 
 - 负责 `citizenchain` 全域
 - 包括 `node/`
-- 包括 `nodeuitauri/`
 - 包括 `nodeui/`
 - 包括 `runtime/`
 - 包括区块链相关文档和打包流程

@@ -30,8 +30,8 @@
 ## 4. CitizenChain 特别规则
 
 - `citizenchain` 是一个完整产品，节点程序和节点 UI 对外仍是一个桌面软件
-- 旧版可运行桌面壳在 `citizenchain/nodeuitauri`
-- 新版 Flutter Desktop 节点 UI 在 `citizenchain/nodeui`
+- 当前桌面节点壳在 `citizenchain/nodeui`
+- 历史目录 `citizenchain/nodeuitauri` 已清理，不再作为当前实现
 - `citizenchain/runtime/` 是目标结构，当前仍处于迁移期
 
 ## 5. 输出要求

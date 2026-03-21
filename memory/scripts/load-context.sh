@@ -49,10 +49,10 @@ case "$MODULE" in
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/node/Cargo.toml"
     ;;
-  citizenchain/nodeui|citizenchain/nodeuitauri)
+  citizenchain/nodeui)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
-    print_if_exists "citizenchain/nodeui/README.md"
+    print_if_exists "memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md"
     ;;
   sfid|sfid/backend|sfid/frontend|sfid/deploy)
     print_base_context

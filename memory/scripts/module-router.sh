@@ -20,7 +20,7 @@ infer_module() {
     *wallet*|*钱包*|*手机*app*|*手机端*|*isar*|*转账*|*扫码登录*)
       printf '%s' "wuminapp"
       ;;
-    *nodeui*|*节点ui*|*桌面端*|*挖矿界面*|*节点状态界面*|*flutter*desktop*)
+    *nodeuitauri*|*nodeui*|*节点ui*|*桌面端*|*挖矿界面*|*节点状态界面*|*flutter*desktop*)
       printf '%s' "citizenchain/nodeui"
       ;;
     *node*|*节点*|*出块*|*同步*|*cli*|*矿工*|*挖矿*)
@@ -51,8 +51,8 @@ impact_scope_for_module() {
     citizenchain/node)
       printf '%s\n' "citizenchain/node" "memory"
       ;;
-    citizenchain/nodeui|citizenchain/nodeuitauri)
-      printf '%s\n' "citizenchain/nodeui" "citizenchain/nodeuitauri" "memory"
+    citizenchain/nodeui)
+      printf '%s\n' "citizenchain/nodeui" "memory"
       ;;
     sfid|sfid/backend)
       printf '%s\n' "sfid/backend" "memory"
@@ -113,10 +113,10 @@ risk_points_for_module() {
         "节点行为可能与 runtime、安装包和启动流程联动。" \
         "不能在 node 层越权决定链上规则。"
       ;;
-    citizenchain/nodeui|citizenchain/nodeuitauri)
+    citizenchain/nodeui)
       printf '%s\n' \
         "节点 UI 只能承载交互，不能把链规则固化在界面层。" \
-        "新版 nodeui 与旧版 nodeuitauri 的迁移边界要先分清。"
+        "节点启停、本地设置、打包与 sidecar 改动会联动桌面发布链路。"
       ;;
     sfid|sfid/backend|sfid/frontend|sfid/deploy)
       printf '%s\n' \
