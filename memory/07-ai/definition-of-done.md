@@ -1,0 +1,38 @@
+# GMB Definition Of Done
+
+一个任务只有同时满足以下条件，才算真正完成：
+
+## 1. 功能完成
+
+- 功能达到任务目标
+- 没有明显行为回归
+
+## 2. 代码完成
+
+- 关键逻辑已补中文注释
+- 没有临时调试残留
+- 没有 TODO、FIXME、`dbg!`、`console.log`
+
+## 3. 文档完成
+
+- 已更新 `memory/` 或对应技术文档
+- 如涉及边界变化，已更新架构文档或 ADR
+
+## 4. 验证完成
+
+- 已运行必要测试
+- PR 门禁通过
+- Claude Review 主要问题已处理
+
+## 5. 沟通完成
+
+- 如需求或逻辑存在不确定性，已与负责人确认
+
+## 6. 模块级补充
+
+不同产品域还必须对照各自的模块级完成标准：
+
+- `memory/07-ai/module-definition-of-done/citizenchain.md`
+- `memory/07-ai/module-definition-of-done/sfid.md`
+- `memory/07-ai/module-definition-of-done/cpms.md`
+- `memory/07-ai/module-definition-of-done/wuminapp.md`
