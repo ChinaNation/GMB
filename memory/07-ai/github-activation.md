@@ -77,8 +77,8 @@
 
 ## 5. 当前限制
 
-- Codex 仍然是唯一主开发入口
-- Claude 主要运行在 GitHub PR 与评论场景
+- Codex 与 Claude 都可以作为开发入口
+- Claude 当前已支持 GitHub PR 与评论场景
 - 本阶段还没有建设自有 Flutter AI 控制台
 
 ## 6. 常见故障排查
