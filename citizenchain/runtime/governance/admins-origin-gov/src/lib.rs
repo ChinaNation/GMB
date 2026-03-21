@@ -8,9 +8,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
-use frame_support::{
-    ensure, pallet_prelude::*, traits::StorageVersion, Blake2_128Concat,
-};
+use frame_support::{ensure, pallet_prelude::*, traits::StorageVersion, Blake2_128Concat};
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 
@@ -285,7 +283,10 @@ pub mod pallet {
             };
             let data = action.encode();
             voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
-            voting_engine_system::Pallet::<T>::store_proposal_meta(proposal_id, frame_system::Pallet::<T>::block_number());
+            voting_engine_system::Pallet::<T>::store_proposal_meta(
+                proposal_id,
+                frame_system::Pallet::<T>::block_number(),
+            );
 
             Self::deposit_event(Event::<T>::AdminReplacementProposed {
                 proposal_id,
@@ -353,7 +354,6 @@ pub mod pallet {
             // 中文注释：执行入口保持公开触发，只要提案已经通过，任何账户都可以帮助把已批准的替换落地。
             Self::try_execute_replacement(proposal_id)
         }
-
     }
 
     impl<T: Config> Pallet<T> {
@@ -438,10 +438,7 @@ pub mod pallet {
 mod tests {
     use super::*;
     use codec::Encode;
-    use frame_support::{
-        assert_noop, assert_ok, derive_impl,
-        traits::ConstU32,
-    };
+    use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
     use frame_system as system;
     use primitives::china::china_cb::{
         shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
@@ -496,14 +493,14 @@ mod tests {
         for TestSfidEligibility
     {
         fn is_eligible(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
         ) -> bool {
             true
         }
 
         fn verify_and_consume_vote_credential(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
             _proposal_id: u64,
             _nonce: &[u8],
@@ -578,13 +575,13 @@ mod tests {
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<256>;
-        type MaxJointDecisionApprovals = ConstU32<32>;
+        type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalThresholdProvider = ();
-        type JointInstitutionDecisionVerifier = ();
+        type InternalAdminCountProvider = ();
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
@@ -915,8 +912,8 @@ mod tests {
                 ));
             }
 
-            let proposal =
-                voting_engine_system::Pallet::<Test>::proposals(pid).expect("proposal should exist");
+            let proposal = voting_engine_system::Pallet::<Test>::proposals(pid)
+                .expect("proposal should exist");
             assert_eq!(proposal.status, STATUS_PASSED);
             let data = voting_engine_system::Pallet::<Test>::get_proposal_data(pid)
                 .expect("proposal data should exist");
@@ -924,7 +921,10 @@ mod tests {
                 .expect("should decode");
             assert!(!action.executed);
             assert_noop!(
-                AdminsOriginGov::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
+                AdminsOriginGov::execute_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    pid
+                ),
                 Error::<Test>::OldAdminNotFound
             );
         });
@@ -1036,7 +1036,10 @@ mod tests {
             }
 
             assert_noop!(
-                AdminsOriginGov::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
+                AdminsOriginGov::execute_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    pid
+                ),
                 Error::<Test>::ProposalNotPassed
             );
         });

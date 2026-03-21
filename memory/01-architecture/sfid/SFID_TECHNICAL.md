@@ -34,7 +34,7 @@
 1. 机构 SFID 登记（多签创建前置）：`super-admins` 模块（`sfid_id` 对应内部 `site_sfid`）。
 2. 公民身份绑定凭证：`chain` 模块（`/api/v1/bind/result`）。
 3. 公民投票凭证：`chain` 模块（`/api/v1/vote/verify`）。
-4. 联合投票人口快照：`chain` 模块（按 Runtime payload 输出 `eligible_total + snapshot_nonce + snapshot_signature`，`who` 必入签名）。
+4. 联合投票人口快照：`chain` 模块（按 Runtime payload 输出 `eligible_total + snapshot_nonce + signature`，`who` 必入签名）。
 5. SFID 验签主备账户管理：`key-admins` 模块（一主两备与轮换）。
 
 ## 4. 管理员模型与登录机制
@@ -73,11 +73,11 @@
 4. SFID 前端扫描该签名结果二维码（或粘贴签名原文）后，提交到 `/api/v1/admin/auth/qr/complete`。
 5. SFID 校验扫码公钥与签名：是管理员则登录管理员模式，不是管理员或签名失败则拒绝登录。
 6. 页面轮询 challenge 结果，成功后自动写入会话并完成登录。
-7. challenge 固定有效期 `90` 秒，且 `request_id` 一次性消费，防重放。
+7. challenge 固定有效期 `90` 秒，且 `challenge` 一次性消费，防重放。
 8. 登录二维码协议固定为 `WUMINAPP_LOGIN_V1`，字段必须包含：
-`proto/system/request_id/challenge/nonce/issued_at/expires_at/sys_pubkey/sys_sig`（时间戳为秒级）。
-9. SFID 场景下 `sys_cert` 可空；CPMS 场景下 `sys_cert` 表示“SFID 对 CPMS 公钥的背书签名”。
-10. 登录签名原文固定为：`WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at`。
+`proto/system/challenge/issued_at/expires_at/sys_pubkey/sys_sig`（时间戳为秒级）。
+9. 系统先使用自身私钥对登录二维码签名；手机验 `sys_pubkey + sys_sig` 后，管理员钱包再对登录 challenge 签名。
+10. 手机端登录签名原文固定为：`WUMINAPP_LOGIN_V1|system|challenge|expires_at`。
 11. `origin`/`domain`/`session_id` 仅作为网页侧上下文，不属于移动端扫码验签协议字段。
 
 ## 5. 核心业务流程
@@ -205,9 +205,10 @@
 - `backend/src/models/mod.rs`：后端统一数据结构定义（Store、DTO、状态枚举）。
 - 主密钥轮换规则（强约束）：
 1. 区块链验证只使用主公钥（`main`）。
-2. 更换主公钥只能由两把备用公钥之一发起。
-3. 发起轮换时必须提交一把新公钥替换被提升的备用槽位。
-4. 被用于发起的旧备用提升为新主公钥，旧主公钥退出活动集，结果始终保持“一主两备”。
+2. 功能 1/2/3/4 的链上可信输出统一只认当前 `main`。
+3. 更换主公钥只能由两把备用公钥之一发起。
+4. 发起轮换时必须提交一把新公钥替换被提升的备用槽位。
+5. 被用于发起的旧备用提升为新主公钥，旧主公钥退出活动集，结果始终保持“一主两备”。
 - 轮换接口流程（Runtime 对齐口径）：
 1. 密钥管理员（且必须为当前备用公钥）调用 `rotate/challenge` 生成一次性挑战原文。
 2. 指定备用公钥对应私钥对挑战原文签名。
@@ -310,13 +311,13 @@
 - `GET /api/v1/admin/cpms-keys`：查询机构列表（仅超级管理员，返回本省机构）。
 
 ### 9.4 区块链接口（自动）
-- `GET /api/v1/chain/voters/count?account_pubkey=<who>`：返回 `eligible_total`、`snapshot_nonce`、`snapshot_signature`（过渡期兼容 `snapshot_attestation`）；签名 payload 必须包含 `who(account)`，且 `as_of` 与 `eligible_total` 同一统计快照生成。
+- `GET /api/v1/chain/voters/count?account_pubkey=<who>`：返回 `genesis_hash`、`who`、`eligible_total`、`snapshot_nonce`、`signature`；签名 payload 必须包含 `who(account)`。
 - `POST /api/v1/chain/binding/validate`：校验档案号与公钥绑定是否有效。
 - `POST /api/v1/chain/reward/ack`：区块链回执绑定奖励处理结果（`SUCCESS/FAILED`）。
 - `GET /api/v1/chain/reward/state`：查询绑定奖励状态机。
-- `GET /api/v1/bind/result`：查询某公钥绑定结果；绑定成功后返回持久化 Runtime 凭证（`sfid_code_hash/nonce/expires_at_block/signature/key_*`），同一公钥在凭证有效期内重复查询不会生成新 `nonce`。
-- `GET /api/v1/bind/result`：`signature` 为 Runtime 凭证签名，`sfid_signature` 为历史兼容字段（旧 JSON 绑定证明签名）。
-- `POST /api/v1/vote/verify`：`proposal_id` 必填，输出投票验签凭证字段对齐 Runtime（`sfid_hash/proposal_id/vote_nonce/signature`），不返回 `sfid_code` 明文。
+- `GET /api/v1/bind/result`：查询某公钥绑定结果；绑定成功后返回持久化 Runtime 凭证（`genesis_hash/who/binding_id/bind_nonce/signature`），同一公钥重复查询不会生成新 `bind_nonce`。
+- `GET /api/v1/bind/result`：`signature` 为 Runtime 绑定凭证签名，旧 `sfid_signature` 不再对链输出。
+- `POST /api/v1/vote/verify`：`proposal_id` 必填，输出投票验签凭证字段对齐 Runtime（`genesis_hash/who/binding_id/proposal_id/vote_nonce/signature`），不返回 `sfid_code` 明文。
 - 鉴权要求：仅接受区块链调用方请求，请求头必须携带：
   - `x-chain-token`
   - `x-chain-request-id`
@@ -347,13 +348,13 @@
 
 #### 9.9.1 人口快照查询
 - `GET /api/v1/app/voters/count?who=<pubkey_hex>`
-- 返回字段：`eligible_total`、`snapshot_nonce`、`snapshot_signature`、`who`、`as_of`
-- 核心逻辑复用 `build_population_snapshot_signature()`，与链路 `/api/v1/chain/voters/count` 签名产出一致。
+- 返回字段：`eligible_total`、`snapshot_nonce`、`signature`、`who`、`as_of`
+- 核心逻辑复用 `build_population_signature()`，与链路 `/api/v1/chain/voters/count` 签名产出一致。
 
 #### 9.9.2 公民投票凭证
 - `POST /api/v1/app/vote/credential`
 - 请求体：`{ "who": "<pubkey>", "proposal_id": 42 }`
-- 返回字段：`sfid_hash`、`vote_nonce`、`vote_signature`（仅资格合格时签发）
+- 返回字段：`binding_id`、`vote_nonce`、`vote_signature`（仅资格合格时签发）
 - 核心逻辑复用 `build_vote_credential()`，与链路 `/api/v1/vote/verify` 凭证产出一致。
 
 #### 9.9.3 身份绑定请求

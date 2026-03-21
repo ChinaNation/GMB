@@ -3,7 +3,7 @@
 ## 0. 区块链端方案对齐（冻结，优先级最高）
 1. 本文档第 0 步严格按《SFID-Chain 五项能力对齐技术方案（Runtime 对齐版）》执行。
 2. 功能 5 轮换以链上标准 extrinsic 为准（如 `sfid-code-auth::rotate_sfid_keys`），不依赖私有 RPC 方法。
-3. 轮换策略固定：先写链上 `backup`，再提升为 `main`，再下发新 `backup`。
+3. 链上三把公钥是唯一权威来源；`sfid` 本地不得用数据库恢复活动主签名人覆盖链上状态。
 4. 全流程必须记录并回写 `chain_tx_hash`、`block_number`，并记录审计事件与版本号。
 5. 若本文件其余章节与本节冲突，以本节为准。
 
@@ -12,9 +12,9 @@
 - 密钥轮换规则固定为：`只能备升主，新增的是备`。
 
 ## 2. 角色与槽位
-- `MAIN`：主密钥管理员（主公钥 + 主私钥）。
-- `BACKUP_A`：备用密钥管理员 A（仅备用公钥，或由钱包持有私钥参与轮换签名）。
-- `BACKUP_B`：备用密钥管理员 B（仅备用公钥，或由钱包持有私钥参与轮换签名）。
+- `MAIN`：主密钥管理员（链上主公钥 + `sfid` 本地唯一在线主私钥）。
+- `BACKUP_A`：备用密钥管理员 A（链上备用公钥；私钥不进入 `sfid`）。
+- `BACKUP_B`：备用密钥管理员 B（链上备用公钥；私钥不进入 `sfid`）。
 
 ### 2.1 链上参数命名对齐
 1. `sfidMainAccount` 对应本模块 `MAIN.main_pubkey`。
@@ -72,8 +72,7 @@
      - `new_backup_pubkey`（新备用公钥）
    - commit 阶段验签消息为：`{challenge_text}|phase=commit|new_backup={normalized_pubkey}`。
    - `verify` 与 `commit` 签名不可复用（防止 verify 报文签名被直接用于 commit）。
-   - 说明：发起备用私钥不再通过前端上传；服务端从受控密钥库按 `initiator_pubkey` 查找对应 seed。
-   - 后端调用链上标准 extrinsic（如 `rotate_sfid_keys`），提交 `new_backup` 并等待链上受理回执。
+   - 说明：功能 5 固定要求 `backup_1/backup_2` 发起；若由服务端代提 `rotate_sfid_keys`，则服务端必须具备被选备用账户的 signer 能力，否则应改由外部 signer 提交。
    - commit 在服务内按互斥锁串行执行，避免并发 commit 的本地覆盖风险。
    - 链提交等待最终确认带超时：`SFID_CHAIN_ROTATE_FINALIZE_TIMEOUT_SECONDS`（默认 `90` 秒）。
    - 记录并回写 `tx_hash`、`block_number`（可先回写受理高度，最终高度异步确认）。
@@ -91,16 +90,18 @@
 3. 若链上提交失败，必须返回明确错误并保留可重试上下文（challenge_id、version、initiator、new_backup_pubkey）。
 
 ### 6.1 本地一致性顺序（关键）
-1. `rotate_commit` 内部顺序为：
-   - 上链成功后先做版本重检：若 `store.chain_keyring_state.version` 已变化，则判定并发轮换，写审计并返回 `409`，不覆盖本地 keyring。
-   - 切换 active signer（`signing_seed_hex/public_key_hex`）
-   - 持久化 `runtime_meta`（失败则回滚 active signer 并返回错误）
-   - 标记 challenge consumed、更新 keyring state、同步 key admin 用户并持久化 store
-2. 若链上已成功但本地 `set_active_main_signer` 失败：
-   - 必须写审计（含 `chain_tx_hash`、`block_number`、错误原因），并触发一次 `reconcile_main_signer_with_keyring` 的自动修复尝试（best-effort）。
-3. 启动时执行自修复：
-   - 若 `runtime_meta.public_key_hex` 与 `store.chain_keyring_state.main_pubkey` 不一致，
-   - 则从 `known_key_seeds` 找到 keyring.main 对应 seed，自动修复 active signer 并重持久化 `runtime_meta`。
+1. `sfid` 本地唯一权威密钥材料只有当前主私钥 `SFID_SIGNING_SEED_HEX`。
+2. `SFID_SIGNING_SEED_HEX` 必须按 Substrate `sp-core::sr25519::Pair::from_seed_slice` 规则派生主公钥与签名，不允许使用裸 `schnorrkel::MiniSecretKey::expand_to_keypair(Uniform)` 自行扩展。
+3. `runtime_meta` 不再持久化也不再恢复：
+   - `signing_seed_hex`
+   - `known_key_seeds`
+   - `public_key_hex`
+4. 启动顺序固定为：
+   - 从 `SFID_SIGNING_SEED_HEX` 派生本地主公钥
+   - 从链上同步 `main/backup_a/backup_b`
+   - 校验“本地主公钥 == 链上 main 公钥”
+   - 不一致直接拒绝启动签名服务
+5. `store.chain_keyring_state` 只是链上三把公钥的本地镜像，不得反向覆盖链上状态。
 
 ### 6.2 与区块链“验签主备账户管理”对齐口径
 1. 创世固定三账户：`sfidMainAccount`、`sfidBackupAccount1`、`sfidBackupAccount2`。
@@ -126,13 +127,15 @@
 - 审计必记：发起人、旧主、新主、新增备用、challenge_id、交易哈希、时间、结果。
 - 密钥材料约束：
 1. seed 只接受严格 `64` hex 字符（可含 `0x` 前缀），不再允许任意字符串哈希兜底。
-2. 生产模式（`SFID_ENV=prod|production`）必须显式配置 backup seed/pubkey，不允许 deterministic fallback。
-3. 内存中敏感字段使用 `SensitiveSeed`（Drop 时 zeroize），`Debug` 输出脱敏；仅通过 `expose_secret()` 供加密路径调用。
-4. 进程启动时尝试设置 `RLIMIT_CORE=0` 禁用 core dump（best-effort）。
+2. 主私钥 seed 的派生与签名必须与链 runtime 使用的 Substrate sr25519 实现一致，避免“seed 正确但派生公钥错误”造成链上验签失败。
+3. 生产模式（`SFID_ENV=prod|production`）必须显式配置两把备用公钥，不允许 deterministic fallback。
+4. 备用私钥不得进入 `sfid` 进程、数据库或运行态缓存。
+5. 内存中敏感字段使用 `SensitiveSeed`（Drop 时 zeroize），`Debug` 输出脱敏；仅通过 `expose_secret()` 供加密路径调用。
+6. 进程启动时尝试设置 `RLIMIT_CORE=0` 禁用 core dump（best-effort）。
 
 ## 9. 错误语义
 - `initiator must be backup`
-- `initiator signer seed is not present on server`
+- `initiator backup private key is not present on server; rotate_sfid_keys must be submitted by backup_1 or backup_2`
 - `server signer seed does not match initiator_pubkey`
 - `new_backup_pubkey is required`
 - `new_backup_pubkey conflicts with current keyring`
@@ -168,8 +171,8 @@
    - 公钥输出：`GET /api/v1/attestor/public-key`
    - 绑定证明、投票资格证明、公民计数证明签名由当前主签名密钥执行。
 6. 一致性与安全加固：
-   - 启动自动修复 keyring/main signer 不一致。
-   - rotation 提交改为 runtime signer 持久化优先，失败可回滚。
+   - 启动改为“链上 keyring 同步 + 本地主私钥硬校验”，不再自动修复旧 signer。
+   - `runtime_meta` 不再保存活动主私钥/主公钥，避免数据库旧状态覆盖部署环境。
    - key admin pubkey 统一规范化存储（`0x` + 小写）。
    - 轮换上链改为标准 extrinsic（`rotate_sfid_keys`）并回写 `tx_hash/block_number`。
 
@@ -186,7 +189,7 @@
 10. 未经过 `verify` 的 challenge 调用 `commit` 必须被拒绝。
 11. `verify` 签名不可复用于 `commit`。
 12. `SensitiveSeed` / `PersistedRuntimeMeta` 的 `Debug` 输出不含明文 seed。
-13. 启动修复：runtime signer 与 keyring main 不一致时可自动纠正。
+13. 启动校验：本地主私钥派生公钥与链上 `main` 不一致时必须拒绝启动。
 
 ## 12. 文件归属
 - `chain_keyring.rs`：一主两备状态机、轮换验签、签名密钥加载。

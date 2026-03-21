@@ -80,8 +80,10 @@ lib/qr/
 
 - SFID：运行在一台云服务器上的在线系统
 - CPMS：运行在千千万万台电脑上的离线系统
-- 信任链：区块链持有 SFID 当前公钥 -> SFID 背书 CPMS 公钥
-- 约束：CPMS 不直接与区块链交互；WuminApp 只通过区块链 RPC 获取 SFID 当前公钥
+- 登录协议只用于 `sfid/cpms` 扫码登录，不用于链上转账、投票或治理签名
+- 登录为双层签名：
+  - 第一层：系统使用自身私钥对登录二维码签名，手机验 `sys_pubkey + sys_sig`
+  - 第二层：管理员钱包对 challenge 签名，系统再用内置管理员公钥名单验签
 
 ### 5.2 挑战码字段（系统 → 手机）
 
@@ -89,73 +91,50 @@ lib/qr/
 | --- | --- | --- | --- |
 | `proto` | string | 是 | 固定 `WUMINAPP_LOGIN_V1` |
 | `system` | string | 是 | `sfid` 或 `cpms` |
-| `request_id` | string | 是 | 一次性 ID，防重放 |
 | `challenge` | string | 是 | 随机挑战值 |
-| `nonce` | string | 是 | 随机数，增加签名随机性 |
 | `issued_at` | int | 是 | 签发时间（秒级 epoch） |
 | `expires_at` | int | 是 | 过期时间（秒级 epoch） |
 | `sys_pubkey` | string | 是 | 系统公钥（`0x` + hex） |
 | `sys_sig` | string | 是 | 系统对挑战字段的签名（`0x` + hex） |
-| `sys_cert` | string | CPMS 必填 | SFID 对 CPMS 公钥的背书签名（`0x` + hex） |
 
 ### 5.3 系统签名验证
 
 系统签名原文：
 
 ```text
-proto|system|request_id|challenge|nonce|issued_at|expires_at
+proto|system|challenge|issued_at|expires_at|sys_pubkey
 ```
 
 验证逻辑：
 
 - SFID 场景：
   - 用二维码中的 `sys_pubkey` 验证 `sys_sig`
-  - 再检查 `sys_pubkey` 是否等于区块链当前登记的 SFID 公钥
 - CPMS 场景：
   - 用二维码中的 `sys_pubkey` 验证 `sys_sig`
-  - 再用区块链当前登记的 SFID 公钥验证 `sys_cert`
-  - `sys_cert` 表示“SFID 对该 CPMS 公钥的背书”，不要求 CPMS 自己上链
-
-### 5.3.1 CPMS 背书证书（`sys_cert`）
-
-CPMS 场景下，`sys_cert` 的规范原文固定为：
-
-```text
-CPMS_CERT_V1|cpms_pubkey|site_sfid|issued_at|expires_at
-```
-
-说明：
-
-- `cpms_pubkey`：当前 CPMS 登录系统公钥（应与挑战中的 `sys_pubkey` 一致）
-- `site_sfid`：该 CPMS 实例对应的 SFID 机构编号
-- `issued_at` / `expires_at`：SFID 签发背书的时间边界
-- `sys_cert`：SFID 使用其当前有效私钥对上述原文做 `sr25519` 签名得到的结果
-
-当前状态：字段规范已冻结；系统验签实现仍需三端按本规范补齐。
+  - 不再要求链上或 SFID 证书链参与手机端登录验签
 
 ### 5.4 挑战校验规则
 
 - TTL 固定 90 秒（`expires_at - issued_at == 90`）
 - 最大时钟偏差 30 秒（`issued_at` 不超过当前时间 + 30 秒）
-- `request_id` 格式：`[A-Za-z0-9._:-]{4,128}`
 - `challenge` 长度 4-512 字符，不含空白
-- `sys_pubkey`/`sys_sig`/`sys_cert` 必须为合法偶数字节 hex
+- `sys_pubkey`/`sys_sig` 必须为合法偶数字节 hex
 - 载荷总长度不超过 4096 字符
 
 ### 5.5 用户签名原文（手机签名）
 
 ```text
-WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
+WUMINAPP_LOGIN_V1|system|challenge|expires_at
 ```
 
-说明：不包含 `aud` 字段，系统身份通过 `sys_pubkey`/`sys_sig`/`sys_cert` 密码学验证。
+说明：不包含 `aud` 字段，系统身份通过 `sys_pubkey`/`sys_sig` 密码学验证。
 
 ### 5.6 回执码字段（手机 → 系统）
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `proto` | string | 固定 `WUMINAPP_LOGIN_V1` |
-| `request_id` | string | 与挑战对应 |
+| `challenge` | string | 与挑战码对应 |
 | `pubkey` | string | 用户公钥（`0x` + hex） |
 | `sig_alg` | string | 固定 `sr25519` |
 | `signature` | string | 签名（`0x` + hex） |
@@ -165,15 +144,15 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 
 ### 5.7 防重放
 
-- 基于 `request_id` 一次性消费
-- 存储：`SharedPreferences`（键 `login.used_request_ids`）
+- 基于 `challenge` 一次性消费
+- 存储：`SharedPreferences`（键 `login.used_challenges`）
 - 过期条目自动清理
 
 ### 5.7.1 服务端回执兼容要求
 
 为兼容不同系统前端实现，服务端接收登录回执时应同时兼容以下字段别名：
 
-- `request_id` 或 `challenge_id`
+- `challenge` 或 `challenge_id` 或 `request_id`
 - `pubkey` 或 `admin_pubkey` 或 `public_key`
 - `signature` 或 `sig`
 
@@ -291,6 +270,7 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 - `signer/`：
   - `LocalSigner` 执行 sr25519 登录签名
   - `QrSigner` 提供扫码签名协议（`WUMINAPP_QR_SIGN_V1`）
+  - `OfflineSignService` 为离线设备执行 `sign_request -> sign_response`
 - `wallet/`：
   - `WalletManager` 提供钱包密钥材料
   - `capabilities/sign_service.dart` 已重构为 re-export `qr/login/` 的兼容层
@@ -303,9 +283,8 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 ## 10. 安全要求
 
 - 登录挑战 TTL 固定 90 秒，不可配置
-- `request_id` 一次性消费，防重放
-- 系统身份通过密码学签名验证（`sys_pubkey`/`sys_sig`/`sys_cert`），不依赖白名单
-- CPMS 必须提供 SFID 背书证书（`sys_cert`）
+- `challenge` 一次性消费，防重放
+- 系统身份通过密码学签名验证（`sys_pubkey`/`sys_sig`），不依赖白名单
 - 签名域隔离：登录签名与交易签名使用不同签名消息格式
 - 私钥/助记词不经二维码传输
 - 回执仅包含公钥，不包含地址（防止信息泄露超出必要范围）
@@ -321,7 +300,6 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
   - 挑战解析与校验
   - 签名原文格式（不含 `aud`）
   - 回执不含 `account` 字段
-  - `sys_cert` 必填/可选逻辑
   - 防重放
   - 钱包缺失/不匹配
 - `test/signer/qr_signer_test.dart`
@@ -358,9 +336,15 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 
 ### 12.3 输入/输出
 
-- **输入：** `QrSignRequest` + 编码后的 JSON 字符串
+- **输入：** `QrSignRequest` + 编码后的 JSON 字符串 + 当前页面期望签名公钥 `expectedPubkey`
 - **输出：** `QrSignResponse`（成功）或 `null`（取消/超时）
 - 通过 `Navigator.pop()` 返回结果
+
+### 12.3.1 回执校验规则
+
+- `request_id` 必须与当前会话一致
+- `pubkey` 必须与页面发起签名时选中的钱包公钥一致
+- 任一校验失败都必须拒绝回执，不能把错误钱包的签名继续交给业务模块
 
 ### 12.4 UI 元素
 
@@ -373,9 +357,12 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 
 `_SimpleScanner`：最小扫码页面，扫到任何 QR 码后返回原始字符串。不做协议路由，路由由 `QrSignSessionPage` 通过 `QrSigner.parseResponse()` 负责。
 
+### 12.6 离线执行端页面
+
+`QrOfflineSignPage`：离线设备入口页面，负责扫描 `sign_request`、展示签名摘要、调用 `OfflineSignService` 完成本机签名，并展示 `sign_response` 回执二维码。
+
 ## 13. 后续扩展
 
-- 接入 sr25519 系统签名验证（`validateSystemSignature`）
 - 为用户码增加签名与时效控制，防篡改
 - 收款码增加签名验证（可选），防伪造收款地址
 - 登录防重放迁移到 Isar（`LoginReplayEntity`）

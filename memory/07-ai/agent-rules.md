@@ -4,9 +4,11 @@
 
 - 你只在 Codex 主窗口中使用中文提出需求
 - 对外输入统一为任务需求，不要求手工拆标题和目标
-- Codex 是唯一主开发入口
+- Codex 是唯一主开发入口，也是默认总调度器
 - Claude 不作为第二个主聊天窗口，而是后台代码审查角色
 - 首轮默认先做需求分析，再决定是否进入执行
+- 进入执行阶段后，Codex 必须根据任务所属模块，按需调度 `Blockchain Agent`、`SFID Agent`、`CPMS Agent`、`Mobile Agent`
+- 用户不需要手工指定分配给哪个 Agent，模块识别、任务拆分和调度由 Codex 负责
 
 ## 2. Agent 角色
 
@@ -20,6 +22,7 @@
 
 ### Architect Agent
 
+- 默认由 Codex 主线程承担
 - 负责读取 `memory/`
 - 负责任务拆解
 - 负责边界控制
@@ -27,6 +30,7 @@
 
 ### Blockchain Agent
 
+- 由 Codex 在任务涉及 `citizenchain` 时按需调度
 - 负责 `citizenchain` 全域
 - 包括 `node/`
 - 包括 `nodeui/`
@@ -35,14 +39,17 @@
 
 ### SFID Agent
 
+- 由 Codex 在任务涉及 `sfid` 时按需调度
 - 负责 `sfid` 后端、前端、数据库与文档
 
 ### CPMS Agent
 
+- 由 Codex 在任务涉及 `cpms` 时按需调度
 - 负责 `cpms` 后端、前端、数据库与文档
 
 ### Mobile Agent
 
+- 由 Codex 在任务涉及 `wuminapp` 时按需调度
 - 负责 `wuminapp`
 - 负责 Flutter 移动端与 Isar 本地存储
 

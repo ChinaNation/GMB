@@ -11,8 +11,8 @@ use voting_engine_system::InternalVoteEngine;
 
 use crate::Pallet as ResolutionDestroGov;
 use crate::{
-    institution_pallet_address, reserve_pallet_id_to_bytes, BalanceOf,
-    Call, Config, InstitutionPalletId, Pallet, CHINA_CB, ORG_PRC,
+    institution_pallet_address, reserve_pallet_id_to_bytes, BalanceOf, Call, Config,
+    InstitutionPalletId, Pallet, CHINA_CB, ORG_PRC,
 };
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {

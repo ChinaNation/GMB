@@ -8,9 +8,7 @@ use chrono::Utc;
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::chain::runtime_align::{
-    build_bind_credential, compute_bind_credential_expiry_block, current_chain_block_number,
-};
+use crate::chain::runtime_align::build_bind_credential;
 use crate::*;
 
 pub(crate) async fn admin_bind_scan(
@@ -164,15 +162,6 @@ pub(crate) async fn admin_bind_confirm(
     {
         return api_error(StatusCode::BAD_REQUEST, 1001, "invalid request params");
     }
-    let current_block = match current_chain_block_number().await {
-        Ok(v) => v,
-        Err(err) => {
-            let detail = format!("resolve chain block failed: {err}");
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
-        }
-    };
-    let bind_credential_expires_at = compute_bind_credential_expiry_block(current_block);
-
     let mut store = match store_write_or_500(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -303,9 +292,8 @@ pub(crate) async fn admin_bind_confirm(
     let runtime_bind_credential = match build_bind_credential(
         &state,
         input.account_pubkey.as_str(),
-        sfid_code.as_str(),
+        input.archive_index.as_str(),
         Uuid::new_v4().to_string(),
-        bind_credential_expires_at,
     ) {
         Ok(v) => v,
         Err(_) => {
@@ -342,9 +330,8 @@ pub(crate) async fn admin_bind_confirm(
         citizen_status,
         sfid_code: sfid_code.clone(),
         sfid_signature: proof.signature_hex.clone(),
-        runtime_bind_sfid_code_hash: Some(runtime_bind_credential.sfid_code_hash),
-        runtime_bind_nonce: Some(runtime_bind_credential.nonce),
-        runtime_bind_expires_at_block: Some(runtime_bind_credential.expires_at_block),
+        runtime_bind_binding_id: Some(runtime_bind_credential.binding_id),
+        runtime_bind_bind_nonce: Some(runtime_bind_credential.bind_nonce),
         runtime_bind_signature: Some(runtime_bind_credential.signature),
         runtime_bind_key_id: Some(runtime_bind_credential.meta.key_id),
         runtime_bind_key_version: Some(runtime_bind_credential.meta.key_version),

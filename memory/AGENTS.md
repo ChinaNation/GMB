@@ -21,6 +21,7 @@
 4. 第一轮禁止直接进入代码实现、代码修改、实现方案落地或测试执行
 5. 第一轮分析结论必须按统一格式输出
 6. 需求分析完成并得到继续信号后，必须先创建任务卡，再进入写代码、更新文档、清理残留
+7. 进入执行阶段后，由 Codex 主窗口按需自动调度专业工作线程，不要求用户手工指定 `Blockchain Agent`、`SFID Agent`、`CPMS Agent` 或 `Mobile Agent`
 
 ## 3. 第一轮强制响应规则
 
@@ -91,5 +92,7 @@
 ## 8. 系统定位
 
 - Codex 聊天窗口 = GMB AI 编程系统的主交互界面
+- Codex 聊天窗口 = 主入口 + 总调度器
 - 多个 Codex 线程 = 同一 AI 系统的多个工作线程
+- `Blockchain Agent / SFID Agent / CPMS Agent / Mobile Agent` = 由 Codex 按任务需要调度的专业工作线程
 - `memory/` = 这套 AI 系统的永久记忆与主内容目录

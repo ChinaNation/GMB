@@ -7,7 +7,7 @@ use axum::{
     response::Response,
 };
 use chrono::Duration;
-use schnorrkel::signing_context;
+use sp_core::Pair;
 use std::collections::HashSet;
 
 fn hex_seed(byte: u8) -> String {
@@ -36,7 +36,7 @@ fn build_test_state() -> AppState {
     std::env::set_var("SFID_RUNTIME_META_KEY", "test-runtime-meta-key");
     let main_seed = hex_seed(0x11);
     let main_key = key_admins::chain_keyring::load_signing_key_from_seed(main_seed.as_str());
-    let public_key_hex = format!("0x{}", hex::encode(main_key.public.to_bytes()));
+    let public_key_hex = format!("0x{}", hex::encode(main_key.public().0));
     let mut known_key_seeds = HashMap::new();
     known_key_seeds.insert(
         public_key_hex.clone(),
@@ -70,22 +70,19 @@ async fn parse_json(resp: Response) -> serde_json::Value {
 }
 
 fn sign_with_test_sr25519(seed_byte: u8, message: &str) -> (String, String) {
-    let seed = [seed_byte; 32];
-    let mini = schnorrkel::MiniSecretKey::from_bytes(&seed).expect("mini secret key");
-    let keypair = mini.expand_to_keypair(schnorrkel::ExpansionMode::Uniform);
-    let ctx = signing_context(b"substrate");
-    let sig = keypair.sign(ctx.bytes(message.as_bytes()));
+    let seed = hex_seed(seed_byte);
+    let keypair = key_admins::chain_keyring::load_signing_key_from_seed(seed.as_str());
+    let sig = keypair.sign(message.as_bytes());
     (
-        format!("0x{}", hex::encode(keypair.public.to_bytes())),
-        format!("0x{}", hex::encode(sig.to_bytes())),
+        format!("0x{}", hex::encode(keypair.public().0)),
+        format!("0x{}", hex::encode(sig.0)),
     )
 }
 
 fn sign_rotation_challenge(seed_hex: &str, message: &str) -> String {
     let keypair = key_admins::chain_keyring::load_signing_key_from_seed(seed_hex);
-    let ctx = signing_context(b"substrate");
-    let sig = keypair.sign(ctx.bytes(message.as_bytes()));
-    format!("0x{}", hex::encode(sig.to_bytes()))
+    let sig = keypair.sign(message.as_bytes());
+    format!("0x{}", hex::encode(sig.0))
 }
 
 fn setup_rotation_test_state() -> (AppState, HeaderMap, String, String) {
@@ -159,6 +156,40 @@ fn setup_rotation_test_state() -> (AppState, HeaderMap, String, String) {
         HeaderValue::from_str("Bearer tok-rotate").expect("header value"),
     );
     (state, headers, backup_a_seed, new_backup_seed)
+}
+
+#[tokio::test]
+async fn keyring_rotate_challenge_rejects_main_initiator() {
+    let (state, headers, _, _) = setup_rotation_test_state();
+    let main_pubkey = state
+        .public_key_hex
+        .read()
+        .expect("public key read lock poisoned")
+        .clone();
+    {
+        let mut store = state.store.write().expect("store write lock poisoned");
+        let session = store
+            .admin_sessions
+            .get_mut("tok-rotate")
+            .expect("rotation session should exist");
+        session.admin_pubkey = main_pubkey.clone();
+    }
+
+    let challenge_resp = key_admins::admin_chain_keyring_rotate_challenge(
+        State(state),
+        headers,
+        Json(KeyringRotateChallengeInput {
+            initiator_pubkey: main_pubkey,
+        }),
+    )
+    .await
+    .into_response();
+    assert_eq!(challenge_resp.status(), StatusCode::FORBIDDEN);
+    let body = parse_json(challenge_resp).await;
+    assert_eq!(
+        body["message"].as_str(),
+        Some("rotation initiator must be backup key")
+    );
 }
 
 #[tokio::test]
@@ -882,8 +913,6 @@ fn chain_request_rejects_duplicate_nonce() {
 #[tokio::test]
 async fn chain_bind_result_reuses_persisted_runtime_credential() {
     std::env::set_var("SFID_CHAIN_GENESIS_HASH", format!("0x{}", "11".repeat(32)));
-    let prev_block_override = std::env::var("SFID_CHAIN_CURRENT_BLOCK_OVERRIDE").ok();
-    std::env::set_var("SFID_CHAIN_CURRENT_BLOCK_OVERRIDE", "100");
     let state = build_test_state();
     let seed = hex_seed(0x41);
     let account_pubkey = key_admins::chain_keyring::derive_pubkey_hex_from_seed(seed.as_str());
@@ -899,9 +928,8 @@ async fn chain_bind_result_reuses_persisted_runtime_credential() {
                 citizen_status: CitizenStatus::Normal,
                 sfid_code: "SFID-TEST-0001".to_string(),
                 sfid_signature: "legacy-signature".to_string(),
-                runtime_bind_sfid_code_hash: None,
-                runtime_bind_nonce: None,
-                runtime_bind_expires_at_block: None,
+                runtime_bind_binding_id: None,
+                runtime_bind_bind_nonce: None,
                 runtime_bind_signature: None,
                 runtime_bind_key_id: None,
                 runtime_bind_key_version: None,
@@ -954,10 +982,14 @@ async fn chain_bind_result_reuses_persisted_runtime_credential() {
     .into_response();
     assert_eq!(resp1.status(), StatusCode::OK);
     let body1 = parse_json(resp1).await;
-    let nonce_1 = body1["data"]["nonce"].as_str().expect("nonce").to_string();
-    let expires_1 = body1["data"]["expires_at_block"]
-        .as_u64()
-        .expect("expires_at_block");
+    let nonce_1 = body1["data"]["bind_nonce"]
+        .as_str()
+        .expect("bind_nonce")
+        .to_string();
+    let binding_id_1 = body1["data"]["binding_id"]
+        .as_str()
+        .expect("binding_id")
+        .to_string();
     let signature_1 = body1["data"]["signature"]
         .as_str()
         .expect("signature")
@@ -999,17 +1031,21 @@ async fn chain_bind_result_reuses_persisted_runtime_credential() {
     .into_response();
     assert_eq!(resp2.status(), StatusCode::OK);
     let body2 = parse_json(resp2).await;
-    let nonce_2 = body2["data"]["nonce"].as_str().expect("nonce").to_string();
-    let expires_2 = body2["data"]["expires_at_block"]
-        .as_u64()
-        .expect("expires_at_block");
+    let nonce_2 = body2["data"]["bind_nonce"]
+        .as_str()
+        .expect("bind_nonce")
+        .to_string();
+    let binding_id_2 = body2["data"]["binding_id"]
+        .as_str()
+        .expect("binding_id")
+        .to_string();
     let signature_2 = body2["data"]["signature"]
         .as_str()
         .expect("signature")
         .to_string();
 
     assert_eq!(nonce_1, nonce_2);
-    assert_eq!(expires_1, expires_2);
+    assert_eq!(binding_id_1, binding_id_2);
     assert_eq!(signature_1, signature_2);
 
     let store = state.store.read().expect("store read lock poisoned");
@@ -1018,23 +1054,17 @@ async fn chain_bind_result_reuses_persisted_runtime_credential() {
         .get(&account_pubkey)
         .expect("binding exists");
     assert_eq!(
-        binding.runtime_bind_nonce.as_deref(),
+        binding.runtime_bind_bind_nonce.as_deref(),
         Some(nonce_1.as_str())
     );
     assert_eq!(
-        binding.runtime_bind_expires_at_block,
-        Some(expires_1 as u32)
+        binding.runtime_bind_binding_id.as_deref(),
+        Some(binding_id_1.as_str())
     );
     assert_eq!(
         binding.runtime_bind_signature.as_deref(),
         Some(signature_1.as_str())
     );
-
-    if let Some(v) = prev_block_override {
-        std::env::set_var("SFID_CHAIN_CURRENT_BLOCK_OVERRIDE", v);
-    } else {
-        std::env::remove_var("SFID_CHAIN_CURRENT_BLOCK_OVERRIDE");
-    }
 }
 
 #[test]
@@ -1075,17 +1105,8 @@ fn sync_key_admin_users_keeps_monotonic_ids() {
 }
 
 #[test]
-fn reconcile_main_signer_with_keyring_repairs_runtime_mismatch() {
+fn validate_active_main_signer_with_keyring_rejects_runtime_mismatch() {
     let (state, _, _, _) = setup_rotation_test_state();
-    let keyring_main_pubkey = {
-        let store = state.store.read().expect("store read lock poisoned");
-        store
-            .chain_keyring_state
-            .as_ref()
-            .expect("keyring exists")
-            .main_pubkey
-            .clone()
-    };
 
     {
         let mut pubkey_guard = state
@@ -1094,18 +1115,9 @@ fn reconcile_main_signer_with_keyring_repairs_runtime_mismatch() {
             .expect("public key write lock poisoned");
         *pubkey_guard = "0xdeadbeef".to_string();
     }
-    let repaired =
-        key_admins::reconcile_main_signer_with_keyring(&state).expect("reconcile should succeed");
-    assert!(repaired);
-    let active = state
-        .public_key_hex
-        .read()
-        .expect("public key read lock poisoned")
-        .clone();
-    assert_eq!(
-        active.to_ascii_lowercase(),
-        keyring_main_pubkey.to_ascii_lowercase()
-    );
+    let err = key_admins::validate_active_main_signer_with_keyring(&state)
+        .expect_err("mismatched runtime signer should be rejected");
+    assert!(err.contains("active signer state"));
 }
 
 #[test]
@@ -1114,15 +1126,8 @@ fn sensitive_seed_debug_remains_redacted() {
     let seed = SensitiveSeed::from(raw_seed);
     assert_eq!(format!("{seed:?}"), "SensitiveSeed(***)");
 
-    let mut known = HashMap::new();
-    known.insert("0xabc".to_string(), seed.clone());
-    let meta = PersistedRuntimeMeta {
-        version: 1,
-        signing_seed_hex: seed,
-        known_key_seeds: known,
-        public_key_hex: "0xpub".to_string(),
-    };
+    let meta = PersistedRuntimeMeta { version: 2 };
     let debug_text = format!("{meta:?}");
     assert!(!debug_text.contains(raw_seed));
-    assert!(debug_text.contains("known_key_seeds_count"));
+    assert!(debug_text.contains("version"));
 }

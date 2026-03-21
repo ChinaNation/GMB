@@ -77,18 +77,20 @@
 
 ## 4. Extrinsic 规则
 
-### 4.1 register_sfid_institution(sfid_id)
+### 4.1 register_sfid_institution(sfid_id, register_nonce, signature)
 
 校验：
 1. `sfid_id` 非空。
-2. 调用者是 SFID 授权操作员。
-3. `sfid_id` 未登记。
-4. 派生地址未登记、非保留地址、非受保护地址、地址格式合法。
+2. `register_nonce` 未被消费。
+3. `signature` 必须能通过 `("GMB_SFID_INSTITUTION_V1", genesis_hash, sfid_id, register_nonce)` 验签，且只认当前 SFID `MAIN`。
+4. `sfid_id` 未登记。
+5. 派生地址未登记、非保留地址、非受保护地址、地址格式合法。
 
 执行：
 1. 写入双向映射。
-2. 初始化该地址 nonce 为 `0`。
+2. 记录 `register_nonce` 已消费。
 3. 发出 `SfidInstitutionRegistered`。
+4. 初始化该地址 nonce 为 `0`。
 
 ### 4.2 create_duoqian(sfid_id, admin_count, duoqian_admins, threshold, amount, expires_at, approvals)
 

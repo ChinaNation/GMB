@@ -15,8 +15,7 @@ import 'runtime_upgrade_service.dart';
 ///
 /// 负责 extrinsic 编码/提交 和 storage 查询。
 class TransferProposalService {
-  TransferProposalService({ChainRpc? chainRpc})
-      : _rpc = chainRpc ?? ChainRpc();
+  TransferProposalService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
   final ChainRpc _rpc;
 
@@ -181,7 +180,8 @@ class TransferProposalService {
     if (offset < data.length && data[offset] == 1) {
       offset++;
       if (offset + 48 <= data.length) {
-        institutionBytes = Uint8List.fromList(data.sublist(offset, offset + 48));
+        institutionBytes =
+            Uint8List.fromList(data.sublist(offset, offset + 48));
         offset += 48;
       }
     }
@@ -258,6 +258,7 @@ class TransferProposalService {
     final uncachedMetaKeys = <String>[];
     final uncachedMetaIds = <int>[];
     final cachedMetas = <int, ProposalMeta>{};
+    final runtimeUpgradeService = RuntimeUpgradeService(chainRpc: _rpc);
 
     for (var id = startId; id > startId - count && id >= 0; id--) {
       final cached = ProposalCache.getMeta(id);
@@ -287,34 +288,57 @@ class TransferProposalService {
       }
     }
 
-    // 对有 meta 的提案，批量查询 ProposalData（先查缓存）
+    // 对有 meta 的提案，批量查询 ProposalData（先查缓存）。
+    // 中文注释：联合投票提案不能再走“统一按转账解码”的旧逻辑，
+    // 否则 runtime 升级这类提案会被漏掉或误判类型。
     final uncachedDetailKeys = <String>[];
     final uncachedDetailIds = <int>[];
-    final cachedDetails = <int, TransferProposalInfo>{};
+    final cachedTransferDetails = <int, TransferProposalInfo>{};
+    final cachedRuntimeUpgradeDetails = <int, RuntimeUpgradeProposalInfo>{};
 
     for (final entry in cachedMetas.entries) {
-      final cachedDetail = ProposalCache.getDetail(entry.key);
-      if (cachedDetail != null) {
-        cachedDetails[entry.key] = cachedDetail;
+      final meta = entry.value;
+      if (meta.kind == 1) {
+        final cachedDetail = ProposalCache.getRuntimeUpgradeDetail(entry.key);
+        if (cachedDetail != null) {
+          cachedRuntimeUpgradeDetails[entry.key] = cachedDetail;
+          continue;
+        }
       } else {
-        final keyBytes = _buildStorageKey(
-            'VotingEngineSystem', 'ProposalData', _u64ToLeBytes(entry.key));
-        uncachedDetailKeys.add('0x${_hexEncode(keyBytes)}');
-        uncachedDetailIds.add(entry.key);
+        final cachedDetail = ProposalCache.getTransferDetail(entry.key);
+        if (cachedDetail != null) {
+          cachedTransferDetails[entry.key] = cachedDetail;
+          continue;
+        }
       }
+      final keyBytes = _buildStorageKey(
+          'VotingEngineSystem', 'ProposalData', _u64ToLeBytes(entry.key));
+      uncachedDetailKeys.add('0x${_hexEncode(keyBytes)}');
+      uncachedDetailIds.add(entry.key);
     }
 
     if (uncachedDetailKeys.isNotEmpty) {
       final batchResult = await _rpc.fetchStorageBatch(uncachedDetailKeys);
       for (var i = 0; i < uncachedDetailIds.length; i++) {
         final id = uncachedDetailIds[i];
+        final meta = cachedMetas[id];
         final raw = batchResult[uncachedDetailKeys[i]];
-        if (raw != null && raw.isNotEmpty) {
-          final detail = _decodeProposalData(id, raw);
-          if (detail != null) {
-            cachedDetails[id] = detail;
-            ProposalCache.putDetail(id, detail);
+        if (meta == null || raw == null || raw.isEmpty) {
+          continue;
+        }
+        if (meta.kind == 1) {
+          final runtimeDetail =
+              runtimeUpgradeService.decodeRuntimeUpgradeStorageValue(id, raw);
+          if (runtimeDetail != null) {
+            cachedRuntimeUpgradeDetails[id] = runtimeDetail;
+            ProposalCache.putRuntimeUpgradeDetail(id, runtimeDetail);
           }
+          continue;
+        }
+        final transferDetail = _decodeProposalData(id, raw);
+        if (transferDetail != null) {
+          cachedTransferDetails[id] = transferDetail;
+          ProposalCache.putTransferDetail(id, transferDetail);
         }
       }
     }
@@ -323,14 +347,78 @@ class TransferProposalService {
     for (var id = startId; id > startId - count && id >= 0; id--) {
       final meta = cachedMetas[id];
       if (meta == null) continue;
-      final detail = cachedDetails[id];
+      final transferDetail = cachedTransferDetails[id];
+      final runtimeUpgradeDetail = cachedRuntimeUpgradeDetails[id];
       results.add(ProposalWithDetail(
         meta: meta,
-        transferDetail: detail?.copyWithStatus(meta.status),
+        transferDetail: transferDetail?.copyWithStatus(meta.status),
+        runtimeUpgradeDetail: runtimeUpgradeDetail,
       ));
     }
 
     return results;
+  }
+
+  /// 查询当前年份内，对指定机构用户可见的提案事件。
+  ///
+  /// 中文注释：机构页除了显示本机构内部提案，也必须显示所有用户都可见的联合投票提案，
+  /// 否则 runtime 升级这类联合投票提案无法在各机构入口被发现。
+  Future<List<ProposalWithDetail>> fetchInstitutionVisibleProposals(
+      String shenfenId) async {
+    final nextId = await fetchNextProposalId();
+    if (nextId == 0) return const <ProposalWithDetail>[];
+
+    final yearStartId = _currentYearStartId(nextId);
+    final institutionBytes = _shenfenIdToFixed48(shenfenId);
+    final visibleProposals = <ProposalWithDetail>[];
+
+    const pageSize = 100;
+    for (var startId = nextId - 1;
+        startId >= yearStartId;
+        startId -= pageSize) {
+      final remaining = startId - yearStartId + 1;
+      final count = remaining < pageSize ? remaining : pageSize;
+      final page = await fetchProposalPage(startId, count);
+      for (final proposal in page) {
+        final transferDetail = proposal.transferDetail;
+        if (transferDetail != null &&
+            _bytesEqual(transferDetail.institutionBytes, institutionBytes)) {
+          visibleProposals.add(proposal);
+          continue;
+        }
+        if (proposal.meta.kind == 1) {
+          visibleProposals.add(proposal);
+        }
+      }
+    }
+
+    return visibleProposals;
+  }
+
+  int _currentYearStartId(int nextId) {
+    final year = nextId ~/ 1000000;
+    return year * 1000000;
+  }
+
+  /// 查询指定机构的所有转账提案（包括已完成的），按 ID 倒序。
+  Future<List<TransferProposalInfo>> fetchAllInstitutionProposals(
+      String shenfenId) async {
+    final visibleProposals = await fetchInstitutionVisibleProposals(shenfenId);
+    final institutionBytes = _shenfenIdToFixed48(shenfenId);
+    final proposals = <TransferProposalInfo>[];
+
+    for (final proposal in visibleProposals) {
+      final detail = proposal.transferDetail;
+      if (detail == null) {
+        continue;
+      }
+      if (_bytesEqual(detail.institutionBytes, institutionBytes)) {
+        proposals.add(detail.copyWithStatus(proposal.meta.status));
+      }
+    }
+
+    proposals.sort((a, b) => b.proposalId.compareTo(a.proposalId));
+    return proposals;
   }
 
   /// 从原始 SCALE 字节解码 ProposalMeta（与 fetchProposalMeta 相同逻辑）。
@@ -392,10 +480,8 @@ class TransferProposalService {
     final accountBytes = _hexDecode(pubkeyHex);
 
     // 双 key：blake2_128_concat(proposal_id) + blake2_128_concat(account)
-    final palletHash =
-        _twoxx128String('VotingEngineSystem');
-    final storageHash =
-        _twoxx128String('InternalVotesByAccount');
+    final palletHash = _twoxx128String('VotingEngineSystem');
+    final storageHash = _twoxx128String('InternalVotesByAccount');
     final key1 = _blake2128Concat(proposalIdBytes);
     final key2 = _blake2128Concat(accountBytes);
 
@@ -453,46 +539,6 @@ class TransferProposalService {
     return _decodeTransferAction(proposalId, data);
   }
 
-  /// 查询指定机构的所有转账提案（包括已完成的），按 ID 倒序。
-  Future<List<TransferProposalInfo>> fetchAllInstitutionProposals(
-      String shenfenId) async {
-    final nextId = await fetchNextProposalId();
-    debugPrint('[ProposalQuery] nextProposalId=$nextId');
-    if (nextId == 0) return const [];
-
-    final institutionBytes = _shenfenIdToFixed48(shenfenId);
-    final proposals = <TransferProposalInfo>[];
-
-    // 并行查询所有提案
-    final futures = <Future<TransferProposalInfo?>>[];
-    for (var id = 0; id < nextId; id++) {
-      futures.add(fetchProposalAction(id));
-    }
-    final results = await Future.wait(futures);
-
-    for (var i = 0; i < results.length; i++) {
-      final info = results[i];
-      debugPrint('[ProposalQuery] id=$i, found=${info != null}');
-      if (info == null) continue;
-      final match = _bytesEqual(info.institutionBytes, institutionBytes);
-      debugPrint('[ProposalQuery] id=$i, institution_match=$match');
-      if (match) {
-        proposals.add(info);
-      }
-    }
-
-    // 同时查询每个提案的状态
-    final statusFutures = proposals.map((p) => fetchProposalStatus(p.proposalId));
-    final statuses = await Future.wait(statusFutures);
-    for (var i = 0; i < proposals.length; i++) {
-      proposals[i] = proposals[i].copyWithStatus(statuses.elementAt(i));
-    }
-
-    // 按 ID 倒序（最新在上）
-    proposals.sort((a, b) => b.proposalId.compareTo(a.proposalId));
-    return proposals;
-  }
-
   /// 解码 TransferAction SCALE 数据。
   TransferProposalInfo? _decodeTransferAction(int proposalId, Uint8List data) {
     try {
@@ -524,8 +570,8 @@ class TransferProposalService {
       // proposer: AccountId32 (32 bytes)
       final proposerBytes = data.sublist(offset, offset + 32);
 
-      final beneficiarySs58 = Keyring()
-          .encodeAddress(Uint8List.fromList(beneficiaryBytes), 2027);
+      final beneficiarySs58 =
+          Keyring().encodeAddress(Uint8List.fromList(beneficiaryBytes), 2027);
       final proposerSs58 =
           Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
 
@@ -650,7 +696,8 @@ class TransferProposalService {
     final genesisHash = await _rpc.fetchGenesisHash();
     final registry = metadata.chainInfo.scaleCodec.registry;
 
-    debugPrint('[TransferProposal] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
+    debugPrint(
+        '[TransferProposal] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
       _rpc.fetchNonce(fromAddress),
@@ -658,9 +705,9 @@ class TransferProposalService {
     ]);
     final runtimeVersion = results[0] as dynamic;
     final nonce = results[1] as int;
-    final latestBlock =
-        results[2] as ({Uint8List blockHash, int blockNumber});
-    debugPrint('[TransferProposal] nonce=$nonce, block=${latestBlock.blockNumber}');
+    final latestBlock = results[2] as ({Uint8List blockHash, int blockNumber});
+    debugPrint(
+        '[TransferProposal] nonce=$nonce, block=${latestBlock.blockNumber}');
 
     debugPrint('[TransferProposal] 步骤4: 构造签名载荷...');
     final signingPayload = SigningPayload(
@@ -690,13 +737,13 @@ class TransferProposalService {
       nonce: nonce,
       tip: 0,
     );
-    final encoded =
-        extrinsicPayload.encode(registry, SignatureType.sr25519);
+    final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
     debugPrint('[TransferProposal] extrinsic 编码完成 (${encoded.length} bytes)');
 
     debugPrint('[TransferProposal] 步骤7: 提交到链...');
     debugPrint('[TransferProposal] call data hex: ${_hexEncode(callData)}');
-    debugPrint('[TransferProposal] encoded extrinsic hex: ${_hexEncode(encoded)}');
+    debugPrint(
+        '[TransferProposal] encoded extrinsic hex: ${_hexEncode(encoded)}');
     try {
       final txHash = await _rpc.submitExtrinsic(encoded);
       debugPrint('[TransferProposal] 提交成功: 0x${_hexEncode(txHash)}');
@@ -846,8 +893,8 @@ class ProposalMeta {
   });
 
   final int proposalId;
-  final int kind;   // 0=internal, 1=joint
-  final int stage;  // 0=internal, 1=joint, 2=citizen
+  final int kind; // 0=internal, 1=joint
+  final int stage; // 0=internal, 1=joint, 2=citizen
   final int status; // 0=voting, 1=passed, 2=rejected
   final int? internalOrg;
   final Uint8List? institutionBytes;
@@ -862,8 +909,10 @@ class ProposalWithDetail {
   });
 
   final ProposalMeta meta;
+
   /// 转账提案详情（非转账提案为 null）。
   final TransferProposalInfo? transferDetail;
+
   /// Runtime 升级提案详情（非升级提案为 null）。
   final RuntimeUpgradeProposalInfo? runtimeUpgradeDetail;
 }

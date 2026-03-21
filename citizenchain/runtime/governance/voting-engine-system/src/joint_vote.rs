@@ -1,11 +1,11 @@
+#[cfg(test)]
 use codec::Encode;
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
     storage::{with_transaction, TransactionOutcome},
 };
-use sp_runtime::traits::Hash;
-use sp_runtime::traits::{SaturatedConversion, Saturating};
+use sp_runtime::traits::{Hash, SaturatedConversion, Saturating};
 
 use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
 use primitives::china::china_ch::{
@@ -17,12 +17,14 @@ use primitives::count_const::{
 };
 
 use crate::{
+    internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
     pallet::{
-        Config, Error, Event, JointDecisionApprovalsOf, JointTallies, JointVotesByInstitution,
-        Pallet, Proposals, ProposalsByExpiry, UsedPopulationSnapshotNonce,
+        Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
+        JointVotesByInstitution, Pallet, Proposals, ProposalsByExpiry, UsedPopulationSnapshotNonce,
     },
-    InstitutionPalletId, InternalAdminProvider, JointInstitutionDecisionVerifier,
-    PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
+    InstitutionPalletId, InternalAdminCountProvider, InternalAdminProvider,
+    InternalThresholdProvider, PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT,
+    STAGE_JOINT, STATUS_PASSED,
 };
 
 use crate::nrc_pallet_id_bytes;
@@ -63,30 +65,12 @@ fn is_nrc_admin<T: Config>(who: &T::AccountId) -> bool {
     }
 }
 
-fn institution_multisig_account(institution: InstitutionPalletId) -> Option<[u8; 32]> {
-    CHINA_CB
-        .iter()
-        .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-        .map(|n| n.duoqian_address)
-        .or_else(|| {
-            CHINA_CH
-                .iter()
-                .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                .map(|n| n.duoqian_address)
-        })
-}
-
-fn is_institution_multisig_account(institution: InstitutionPalletId, who: &[u8; 32]) -> bool {
-    institution_multisig_account(institution)
-        .map(|addr| addr == *who)
-        .unwrap_or(false)
-}
-
-pub fn institution_info(id: InstitutionPalletId) -> Option<u32> {
-    // 中文注释：联合投票按机构类型折算票权，这里只负责把 institution 映射成固定权重。
+fn institution_profile(id: InstitutionPalletId) -> Option<(u8, u32)> {
+    // 中文注释：联合投票需要同时知道机构所属组织和联合投票权重，
+    // 这里统一把 institution 映射成 (org, weight)。
     if let Some(nrc) = nrc_pallet_id_bytes() {
         if id == nrc {
-            return Some(NRC_JOINT_VOTE_WEIGHT);
+            return Some((ORG_NRC, NRC_JOINT_VOTE_WEIGHT));
         }
     }
 
@@ -96,7 +80,7 @@ pub fn institution_info(id: InstitutionPalletId) -> Option<u32> {
         .filter_map(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
         .any(|pid| pid == id)
     {
-        return Some(PRC_JOINT_VOTE_WEIGHT);
+        return Some((ORG_PRC, PRC_JOINT_VOTE_WEIGHT));
     }
 
     if CHINA_CH
@@ -104,10 +88,52 @@ pub fn institution_info(id: InstitutionPalletId) -> Option<u32> {
         .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
         .any(|pid| pid == id)
     {
-        return Some(PRB_JOINT_VOTE_WEIGHT);
+        return Some((ORG_PRB, PRB_JOINT_VOTE_WEIGHT));
     }
 
     None
+}
+
+pub fn institution_info(id: InstitutionPalletId) -> Option<u32> {
+    institution_profile(id).map(|(_, weight)| weight)
+}
+
+fn is_joint_admin<T: Config>(
+    org: u8,
+    institution: InstitutionPalletId,
+    who: &T::AccountId,
+) -> bool {
+    #[cfg(not(test))]
+    {
+        T::InternalAdminProvider::is_internal_admin(org, institution, who)
+    }
+    #[cfg(test)]
+    {
+        if T::InternalAdminProvider::is_internal_admin(org, institution, who) {
+            return true;
+        }
+
+        let who_bytes = who.encode();
+        if who_bytes.len() != 32 {
+            return false;
+        }
+        let mut who_arr = [0u8; 32];
+        who_arr.copy_from_slice(&who_bytes);
+
+        match org {
+            ORG_NRC | ORG_PRC => CHINA_CB
+                .iter()
+                .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                .unwrap_or(false),
+            ORG_PRB => CHINA_CH
+                .iter()
+                .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                .unwrap_or(false),
+            _ => false,
+        }
+    }
 }
 
 pub fn is_joint_unanimous(yes_weight: u32) -> bool {
@@ -131,7 +157,7 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         eligible_total: u64,
         snapshot_nonce: crate::pallet::VoteNonceOf<T>,
-        snapshot_signature: crate::pallet::VoteSignatureOf<T>,
+        signature: crate::pallet::VoteSignatureOf<T>,
     ) -> Result<u64, sp_runtime::DispatchError> {
         ensure!(is_nrc_admin::<T>(&who), Error::<T>::NoPermission);
         ensure!(eligible_total > 0, Error::<T>::CitizenEligibleTotalNotSet);
@@ -139,10 +165,7 @@ impl<T: Config> Pallet<T> {
             !snapshot_nonce.is_empty(),
             Error::<T>::InvalidPopulationSnapshot
         );
-        ensure!(
-            !snapshot_signature.is_empty(),
-            Error::<T>::InvalidPopulationSnapshot
-        );
+        ensure!(!signature.is_empty(), Error::<T>::InvalidPopulationSnapshot);
 
         let snapshot_nonce_hash = T::Hashing::hash(snapshot_nonce.as_slice());
         ensure!(
@@ -154,7 +177,7 @@ impl<T: Config> Pallet<T> {
                 &who,
                 eligible_total,
                 &snapshot_nonce,
-                &snapshot_signature
+                &signature
             ),
             Error::<T>::InvalidPopulationSnapshot
         );
@@ -195,26 +218,12 @@ impl<T: Config> Pallet<T> {
         })
     }
 
-    pub(crate) fn do_submit_joint_institution_vote(
+    pub(crate) fn do_joint_vote(
         who: T::AccountId,
         proposal_id: u64,
         institution: InstitutionPalletId,
-        internal_passed: bool,
-        expires_at: frame_system::pallet_prelude::BlockNumberFor<T>,
-        approvals: JointDecisionApprovalsOf<T>,
+        approve: bool,
     ) -> DispatchResult {
-        // 中文注释：联合投票结果必须由“对应机构自己的多签地址”提交；
-        // 国储会不能代替其他机构提交。
-        let who_arr: [u8; 32] = who
-            .encode()
-            .as_slice()
-            .try_into()
-            .map_err(|_| Error::<T>::AccountIdEncodingMismatch)?;
-        ensure!(
-            is_institution_multisig_account(institution, &who_arr),
-            Error::<T>::NoPermission
-        );
-
         let proposal = Self::ensure_open_proposal(proposal_id)?;
 
         ensure!(
@@ -226,29 +235,69 @@ impl<T: Config> Pallet<T> {
             Error::<T>::InvalidProposalStage
         );
         ensure!(
-            <frame_system::Pallet<T>>::block_number() <= expires_at,
-            Error::<T>::JointDecisionProofExpired
+            !JointVotesByInstitution::<T>::contains_key(proposal_id, institution),
+            Error::<T>::AlreadyVoted
+        );
+        let (org, _) = institution_profile(institution).ok_or(Error::<T>::InvalidInstitution)?;
+        ensure!(
+            is_joint_admin::<T>(org, institution, &who),
+            Error::<T>::NoPermission
         );
         ensure!(
-            T::JointInstitutionDecisionVerifier::verify_institution_decision(
-                proposal_id,
-                institution,
-                internal_passed,
-                expires_at,
-                approvals.as_slice()
-            ),
-            Error::<T>::InvalidJointInstitutionDecisionProof
+            !JointVotesByAdmin::<T>::contains_key(proposal_id, (institution, who.clone())),
+            Error::<T>::AlreadyVoted
         );
-        let weight = institution_info(institution).ok_or(Error::<T>::InvalidInstitution)?;
+
+        JointVotesByAdmin::<T>::insert(proposal_id, (institution, who.clone()), approve);
+        let tally = JointInstitutionTallies::<T>::mutate(proposal_id, institution, |tally| {
+            if approve {
+                tally.yes = tally.yes.saturating_add(1);
+            } else {
+                tally.no = tally.no.saturating_add(1);
+            }
+            *tally
+        });
+
+        Self::deposit_event(Event::<T>::JointAdminVoteCast {
+            proposal_id,
+            institution,
+            who,
+            approve,
+        });
+
+        let threshold = T::InternalThresholdProvider::pass_threshold(org, institution)
+            .ok_or(Error::<T>::InvalidInstitution)?;
+        let admin_count = T::InternalAdminCountProvider::admin_count(org, institution)
+            .ok_or(Error::<T>::InvalidInstitution)?;
+
+        if tally.yes >= threshold {
+            return Self::finalize_joint_institution_vote(proposal_id, institution, true);
+        }
+
+        let casted_votes = tally.yes.saturating_add(tally.no);
+        let remaining_admins = admin_count.saturating_sub(casted_votes);
+        if tally.yes.saturating_add(remaining_admins) < threshold {
+            return Self::finalize_joint_institution_vote(proposal_id, institution, false);
+        }
+
+        Ok(())
+    }
+
+    fn finalize_joint_institution_vote(
+        proposal_id: u64,
+        institution: InstitutionPalletId,
+        approved: bool,
+    ) -> DispatchResult {
         ensure!(
             !JointVotesByInstitution::<T>::contains_key(proposal_id, institution),
             Error::<T>::AlreadyVoted
         );
+        let weight = institution_info(institution).ok_or(Error::<T>::InvalidInstitution)?;
 
-        JointVotesByInstitution::<T>::insert(proposal_id, institution, internal_passed);
+        JointVotesByInstitution::<T>::insert(proposal_id, institution, approved);
 
         let tally = JointTallies::<T>::mutate(proposal_id, |tally| {
-            if internal_passed {
+            if approved {
                 tally.yes = tally.yes.saturating_add(weight);
             } else {
                 tally.no = tally.no.saturating_add(weight);
@@ -256,22 +305,28 @@ impl<T: Config> Pallet<T> {
             *tally
         });
 
-        Self::deposit_event(Event::<T>::JointInstitutionVoteCast {
+        Self::deposit_event(Event::<T>::JointInstitutionVoteFinalized {
             proposal_id,
             institution,
-            internal_passed,
+            approved,
         });
 
-        if is_joint_unanimous(tally.yes) {
-            Self::set_status_and_emit(proposal_id, STATUS_PASSED)?;
+        if approved {
+            if is_joint_unanimous(tally.yes) {
+                Self::set_status_and_emit(proposal_id, STATUS_PASSED)?;
+                return Ok(());
+            }
+
+            if tally.yes.saturating_add(tally.no) >= JOINT_VOTE_TOTAL {
+                return Self::advance_joint_to_citizen(proposal_id);
+            }
+
             return Ok(());
         }
 
-        if tally.yes.saturating_add(tally.no) >= JOINT_VOTE_TOTAL {
-            Self::advance_joint_to_citizen(proposal_id)?;
-        }
-
-        Ok(())
+        // 中文注释：联合投票要求全票通过，只要任一机构已经形成“反对”结果，
+        // 就可以立刻结束联合阶段并进入公民投票，无需再等待其他机构。
+        Self::advance_joint_to_citizen(proposal_id)
     }
 
     /// 联合投票超时处理：
@@ -309,7 +364,10 @@ impl<T: Config> Pallet<T> {
         with_transaction(|| {
             let (eligible_total, old_end) = match Proposals::<T>::try_mutate(
                 proposal_id,
-                |maybe| -> Result<(u64, frame_system::pallet_prelude::BlockNumberFor<T>), sp_runtime::DispatchError> {
+                |maybe| -> Result<
+                    (u64, frame_system::pallet_prelude::BlockNumberFor<T>),
+                    sp_runtime::DispatchError,
+                > {
                     let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
                     let eligible_total = proposal.citizen_eligible_total;
                     let old_end = proposal.end;

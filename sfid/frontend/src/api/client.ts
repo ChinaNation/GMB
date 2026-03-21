@@ -218,6 +218,10 @@ export type BindScanResult = {
 
 export type CpmsRegisterResult = {
   site_sfid: string;
+  genesis_hash: string;
+  sfid_id: string;
+  register_nonce: string;
+  signature: string;
   status: string;
   message: string;
 };

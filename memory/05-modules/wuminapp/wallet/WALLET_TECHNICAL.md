@@ -132,13 +132,17 @@ lib/
 
 ### 4.6 登录签名
 
-- **热钱包**：`LoginService` 解析挑战 → `WalletManager.signUtf8WithWallet()` 完成 sr25519 签名（seed 不出 WalletManager）
-- **冷钱包**：`LoginService.buildReceiptFromSignature()` 接受外部签名结果构建回执
+- **热钱包**：`LoginService` 解析挑战 → `LoginSystemSignatureVerifier` 验证系统签名 → `WalletManager.signUtf8WithWallet()` 完成 sr25519 签名（seed 不出 `WalletManager`）
+- **冷钱包**：
+  1. `LoginService.buildExternalSignRequest()` 将登录签名原文包装为 `QrSignRequest(scope=login)`
+  2. 在线手机导航到 `QrSignSessionPage` 展示请求二维码
+  3. 离线设备进入 `QrOfflineSignPage` 扫描请求，并通过 `OfflineSignService` 调用本机热钱包签名
+  4. 在线手机扫描回执后，`LoginService.buildReceiptFromSignature()` 校验签名并生成登录回执
 
 ### 4.7 链上交易签名（由 trade/onchain 调用）
 
-- **热钱包**：`WalletManager.signWithWallet()` 签名回调注入 `OnchainTradeService`（seed 不出 WalletManager）
-- **冷钱包**：构造 `QrSignRequest` → 导航到 `QrSignSessionPage` → 展示请求二维码 → 用户用离线设备扫码签名 → 扫描回执二维码 → `QrSigner.parseResponse()` → 签名回调注入
+- **热钱包**：`WalletManager.signWithWallet()` 签名回调注入 `OnchainTradeService`（seed 不出 WalletManager）；签名前必须重新派生本地公钥，并校验其与当前 `WalletProfile.pubkeyHex` 完全一致，不一致直接拒绝签名
+- **冷钱包**：构造 `QrSignRequest` → 导航到 `QrSignSessionPage` → 展示请求二维码 → 用户用离线设备扫码签名 → 扫描回执二维码 → `QrSigner.parseResponse()` 校验 `request_id + pubkey` → 签名回调注入
 
 `OnchainTradeService.submitTransfer()` 接受 `sign` 回调参数，由 UI 层根据 `signMode` 提供不同实现。
 
@@ -150,6 +154,13 @@ lib/
    - `local`：`WalletManager.signWithWallet()`（seed 不出类）。
    - `external`：调用 `QrSigner` 发起外部签名会话。
 4. 回传签名结果给治理模块提交链上交易。
+5. 选择了哪个管理员钱包，就必须由同一钱包完成签名：
+   - 热钱包：`walletIndex` 对应的 seed 派生公钥必须等于页面选中的 `pubkeyHex`
+   - 冷钱包：扫码回执中的 `pubkey` 必须等于页面选中的 `pubkeyHex`
+6. 联合提案（如 Runtime 升级）还要求：
+   - 请求人口快照使用的 `account_pubkey`
+   - 实际上链发起人的签名账户
+   两者必须是同一把钱包，否则链上会把人口快照判为无效。
 
 ## 5. 存储设计（当前）
 
@@ -188,9 +199,10 @@ lib/
 
 1. 余额卡片：左上角钱包名称（可点击编辑），居中余额数字+元+GMB
 2. 二维码：`gmb://account/{address}`，下载按钮浮在二维码正中间（半透明圆形背景）
-3. 地址+复制：地址居中两行显示，复制图标在右侧
-4. 交易记录标题行：左侧"交易记录"，右侧箭头，点击进入完整交易记录列表
-5. 最近交易记录：最多显示 5 条，点击进入交易详情
+3. 热钱包额外显示“离线签名”按钮，进入 `QrOfflineSignPage`
+4. 地址+复制：地址居中两行显示，复制图标在右侧
+5. 交易记录标题行：左侧"交易记录"，右侧箭头，点击进入完整交易记录列表
+6. 最近交易记录：最多显示 5 条，点击进入交易详情
 
 ### 5.5 交易记录数据来源
 
@@ -283,7 +295,13 @@ mnemonic
 
 ## 11. 治理字段联动要求
 
-- 联合提案必须包含 `eligible_total/snapshot_nonce/snapshot_signature` 三元组。
-- 公民投票必须包含 `sfid_hash/nonce/signature` 三元组。
+- 联合提案必须包含 `eligible_total/snapshot_nonce/signature` 三元组。
+- 公民投票必须包含 `binding_id/nonce/signature` 三元组。
 - 钱包模块负责提供签名账户上下文，不负责生成 SFID 凭证签名。
 - 钱包模块必须保证"登录签名"和"转账/治理签名"使用不同签名 payload。
+
+## 12. 本地 SFID 联调约束
+
+- `ApiClient` 的 `baseUrl` 优先读取 `WUMINAPP_API_BASE_URL`。
+- 手机真机联调时，`WUMINAPP_API_BASE_URL` 必须填写手机可访问的 `sfid` 地址，不能使用 `127.0.0.1`。
+- `wuminapp/scripts/app-run.sh` 与 `wuminapp/scripts/app-clean-run.sh` 会优先读取 `sfid/.env.dev.local` 的 `SFID_PUBLIC_BASE_URL`，用于手机访问；只有缺失时才回退到 `SFID_BIND_ADDR`。

@@ -1,9 +1,24 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:wuminapp_mobile/qr/login/login_models.dart';
 import 'package:wuminapp_mobile/qr/login/login_replay_guard.dart';
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
+import 'package:wuminapp_mobile/signer/qr_signer.dart';
+import 'package:wuminapp_mobile/signer/system_signature_verifier.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
+
+class LoginExternalSignBundle {
+  const LoginExternalSignBundle({
+    required this.signMessage,
+    required this.request,
+    required this.requestJson,
+  });
+
+  final String signMessage;
+  final QrSignRequest request;
+  final String requestJson;
+}
 
 /// 登录签名编排服务。
 ///
@@ -16,17 +31,23 @@ class LoginService {
   LoginService({
     WalletManager? walletManager,
     LoginReplayGuard? replayGuard,
+    LoginSystemSignatureVerifier? systemSignatureVerifier,
+    Sr25519MessageVerifier? messageVerifier,
   })  : _walletManager = walletManager ?? WalletManager(),
-        _replayGuard = replayGuard ?? LoginReplayGuard();
+        _replayGuard = replayGuard ?? LoginReplayGuard(),
+        _systemSignatureVerifier =
+            systemSignatureVerifier ?? LoginSystemSignatureVerifier(),
+        _messageVerifier = messageVerifier ?? Sr25519MessageVerifier();
 
   static const int challengeTtlSeconds = 90;
   static const int maxClockSkewSeconds = 30;
   static const int maxChallengePayloadChars = 4096;
   static const Set<String> allowedSystems = {'cpms', 'sfid'};
-  static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9._:-]{4,128}$');
 
   final WalletManager _walletManager;
   final LoginReplayGuard _replayGuard;
+  final LoginSystemSignatureVerifier _systemSignatureVerifier;
+  final Sr25519MessageVerifier _messageVerifier;
 
   // ---------------------------------------------------------------------------
   // 解析
@@ -75,41 +96,24 @@ class LoginService {
       );
     }
 
-    final requestId = _requiredString(data, 'request_id');
     final challenge = _requiredString(data, 'challenge');
-    final nonce = _requiredString(data, 'nonce');
     final issuedAt = _requiredInt(data, 'issued_at');
     final expiresAt = _requiredInt(data, 'expires_at');
     final sysPubkey = _requiredString(data, 'sys_pubkey');
     final sysSig = _requiredString(data, 'sys_sig');
-    final sysCert = data['sys_cert']?.toString().trim();
 
-    _validateIdField('request_id', requestId);
     _validateOpaqueField('challenge', challenge);
-    _validateIdField('nonce', nonce);
     _validateHexField(sysPubkey, 'sys_pubkey');
     _validateHexField(sysSig, 'sys_sig');
-    if (system == 'cpms') {
-      if (sysCert == null || sysCert.isEmpty) {
-        throw const LoginException(
-          LoginErrorCode.missingField,
-          'CPMS 登录必须包含 sys_cert 字段',
-        );
-      }
-      _validateHexField(sysCert, 'sys_cert');
-    }
 
     final challengeData = LoginChallenge(
       proto: proto,
       system: system,
-      requestId: requestId,
       challenge: challenge,
-      nonce: nonce,
       issuedAt: issuedAt,
       expiresAt: expiresAt,
       sysPubkey: sysPubkey,
       sysSig: sysSig,
-      sysCert: (sysCert != null && sysCert.isNotEmpty) ? sysCert : null,
       raw: raw,
     );
 
@@ -147,18 +151,9 @@ class LoginService {
   // 系统签名验证
   // ---------------------------------------------------------------------------
 
-  /// 验证系统签名与信任链。
-  ///
-  /// - SFID：验证 `sys_sig`，并检查 `sys_pubkey` 是否匹配链上注册的 SFID 公钥。
-  /// - CPMS：验证 `sys_sig`，并通过 `sys_cert` 验证 SFID 对该 CPMS 公钥的背书。
-  ///
-  /// 当前阶段：框架预留，实际验签逻辑在链上公钥缓存模块就绪后接入。
+  /// 验证系统签名。
   Future<void> validateSystemSignature(LoginChallenge challenge) async {
-    // TODO: 接入 sr25519 验签
-    // 1. 重组签名原文：proto|system|request_id|challenge|nonce|issued_at|expires_at
-    // 2. 用 challenge.sysPubkey 验证 challenge.sysSig
-    // 3. SFID 场景：检查 sysPubkey == 链上缓存的 SFID 公钥
-    // 4. CPMS 场景：用 SFID 公钥验证 sysCert 对 sysPubkey 的背书
+    await _systemSignatureVerifier.verify(challenge);
   }
 
   // ---------------------------------------------------------------------------
@@ -170,11 +165,50 @@ class LoginService {
     return [
       QrProtocols.login,
       challenge.system,
-      challenge.requestId,
       challenge.challenge,
-      challenge.nonce,
       challenge.expiresAt.toString(),
     ].join('|');
+  }
+
+  /// 为冷钱包登录构造外部签名请求。
+  Future<LoginExternalSignBundle> buildExternalSignRequest(
+    LoginChallenge challenge, {
+    required WalletProfile wallet,
+  }) async {
+    await validateSystemSignature(challenge);
+    await _replayGuard.assertNotConsumed(challenge.challenge);
+    if (wallet.isHotWallet) {
+      throw const LoginException(
+        LoginErrorCode.invalidField,
+        '当前钱包为热钱包，请直接在本机签名',
+      );
+    }
+    if (challenge.isExpired) {
+      throw const LoginException(
+        LoginErrorCode.expired,
+        '登录挑战已过期，请重新扫码',
+      );
+    }
+
+    final signMessage = buildSignMessage(challenge);
+    final payloadHex = '0x${_hexEncode(utf8.encode(signMessage))}';
+    final now = _nowEpochSeconds();
+    final remaining = challenge.expiresAt - now;
+    final ttlSeconds = remaining > 1 ? remaining : 1;
+    final request = QrSigner().buildRequest(
+      scope: QrSignScope.login,
+      requestId: challenge.challenge,
+      account: wallet.address,
+      pubkey: '0x${wallet.pubkeyHex}',
+      payloadHex: payloadHex,
+      nowEpochSeconds: now,
+      ttlSeconds: ttlSeconds,
+    );
+    return LoginExternalSignBundle(
+      signMessage: signMessage,
+      request: request,
+      requestJson: QrSigner().encodeRequest(request),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -187,7 +221,7 @@ class LoginService {
     int? walletIndex,
   }) async {
     await validateSystemSignature(challenge);
-    await _replayGuard.assertNotConsumed(challenge.requestId);
+    await _replayGuard.assertNotConsumed(challenge.challenge);
 
     // 确定要使用的钱包 index
     final int targetIndex;
@@ -229,14 +263,14 @@ class LoginService {
 
     final receipt = LoginReceipt(
       proto: QrProtocols.login,
-      requestId: challenge.requestId,
+      challenge: challenge.challenge,
       pubkey: signed.pubkeyHex,
       sigAlg: signed.sigAlg,
       signature: signed.signatureHex,
       signedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
     await _replayGuard.consume(
-      requestId: challenge.requestId,
+      challenge: challenge.challenge,
       expiresAt: challenge.expiresAt,
     );
     return receipt.toJson();
@@ -252,18 +286,30 @@ class LoginService {
     String sigAlg = 'sr25519',
   }) async {
     await validateSystemSignature(challenge);
-    await _replayGuard.assertNotConsumed(challenge.requestId);
+    await _replayGuard.assertNotConsumed(challenge.challenge);
+    final signMessage = buildSignMessage(challenge);
+    final verified = _messageVerifier.verify(
+      pubkeyHex: pubkeyHex,
+      message: Uint8List.fromList(utf8.encode(signMessage)),
+      signatureHex: signatureHex,
+    );
+    if (!verified) {
+      throw const LoginException(
+        LoginErrorCode.invalidField,
+        '冷钱包签名结果校验失败，请重新扫码签名',
+      );
+    }
 
     final receipt = LoginReceipt(
       proto: QrProtocols.login,
-      requestId: challenge.requestId,
+      challenge: challenge.challenge,
       pubkey: pubkeyHex,
       sigAlg: sigAlg,
       signature: signatureHex,
       signedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
     await _replayGuard.consume(
-      requestId: challenge.requestId,
+      challenge: challenge.challenge,
       expiresAt: challenge.expiresAt,
     );
     return receipt.toJson();
@@ -301,15 +347,6 @@ class LoginService {
     );
   }
 
-  void _validateIdField(String key, String value) {
-    if (!_idPattern.hasMatch(value)) {
-      throw LoginException(
-        LoginErrorCode.invalidField,
-        '二维码字段格式错误：$key',
-      );
-    }
-  }
-
   void _validateOpaqueField(String key, String value) {
     if (value.length < 4 || value.length > 512) {
       throw LoginException(
@@ -342,4 +379,15 @@ class LoginService {
   }
 
   int _nowEpochSeconds() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+  String _hexEncode(List<int> bytes) {
+    const chars = '0123456789abcdef';
+    final buf = StringBuffer();
+    for (final b in bytes) {
+      buf
+        ..write(chars[(b >> 4) & 0x0f])
+        ..write(chars[b & 0x0f]);
+    }
+    return buf.toString();
+  }
 }

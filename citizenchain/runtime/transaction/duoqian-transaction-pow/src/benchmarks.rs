@@ -6,14 +6,17 @@ use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_support::traits::Currency;
 use frame_system::RawOrigin;
-use sp_std::vec;
 use sp_runtime::traits::SaturatedConversion;
+use sp_std::vec;
 use voting_engine_system::InternalVoteEngine;
 
 use crate::{
-    pallet::{DuoqianAccounts, SfidRegisteredAddress, AddressRegisteredSfid, DuoqianAdminsOf, SfidIdOf},
-    BalanceOf, Call, Config, DuoqianAddressValidator, DuoqianReservedAddressChecker,
-    Pallet, ProtectedSourceChecker,
+    pallet::{
+        AddressRegisteredSfid, DuoqianAccounts, DuoqianAdminsOf, RegisterNonceOf,
+        RegisterSignatureOf, SfidIdOf, SfidRegisteredAddress,
+    },
+    BalanceOf, Call, Config, DuoqianAddressValidator, DuoqianReservedAddressChecker, Pallet,
+    ProtectedSourceChecker,
 };
 
 fn find_safe_sfid<T: Config>() -> Result<(SfidIdOf<T>, T::AccountId), BenchmarkError> {
@@ -49,12 +52,21 @@ fn find_safe_sfid<T: Config>() -> Result<(SfidIdOf<T>, T::AccountId), BenchmarkE
 }
 
 fn register_institution<T: Config>(
-    operator: &T::AccountId,
+    relayer: &T::AccountId,
     sfid_id: &SfidIdOf<T>,
 ) -> Result<T::AccountId, BenchmarkError> {
+    let register_nonce: RegisterNonceOf<T> = b"bench-register-nonce"
+        .to_vec()
+        .try_into()
+        .map_err(|_| BenchmarkError::Stop("benchmark register nonce should fit"))?;
+    let signature: RegisterSignatureOf<T> = vec![1u8; 64]
+        .try_into()
+        .map_err(|_| BenchmarkError::Stop("benchmark register signature should fit"))?;
     Pallet::<T>::register_sfid_institution(
-        RawOrigin::Signed(operator.clone()).into(),
+        RawOrigin::Signed(relayer.clone()).into(),
         sfid_id.clone(),
+        register_nonce,
+        signature,
     )?;
     SfidRegisteredAddress::<T>::get(sfid_id)
         .ok_or(BenchmarkError::Stop("benchmark sfid should be registered"))
@@ -86,7 +98,7 @@ fn find_safe_beneficiary<T: Config>(
 }
 
 #[benchmarks(where
-    T: Config + sfid_code_auth::Config,
+    T: Config,
     <T as frame_system::Config>::AccountId: Decode,
     BalanceOf<T>: Ord + sp_runtime::traits::Saturating + Copy,
 )]
@@ -95,13 +107,24 @@ mod benchmarks {
 
     #[benchmark]
     fn register_sfid_institution() -> Result<(), BenchmarkError> {
-        let operator: T::AccountId = frame_benchmarking::account("operator", 0, 0);
-        sfid_code_auth::SfidMainAccount::<T>::put(&operator);
+        let relayer: T::AccountId = frame_benchmarking::account("relayer", 0, 0);
 
         let (sfid_id, duoqian_address) = find_safe_sfid::<T>()?;
+        let register_nonce: RegisterNonceOf<T> = b"bench-register-nonce"
+            .to_vec()
+            .try_into()
+            .map_err(|_| BenchmarkError::Stop("benchmark register nonce should fit"))?;
+        let signature: RegisterSignatureOf<T> = vec![1u8; 64]
+            .try_into()
+            .map_err(|_| BenchmarkError::Stop("benchmark register signature should fit"))?;
 
         #[extrinsic_call]
-        register_sfid_institution(RawOrigin::Signed(operator.clone()), sfid_id.clone());
+        register_sfid_institution(
+            RawOrigin::Signed(relayer.clone()),
+            sfid_id.clone(),
+            register_nonce,
+            signature
+        );
 
         assert_eq!(
             SfidRegisteredAddress::<T>::get(&sfid_id),
@@ -113,11 +136,10 @@ mod benchmarks {
 
     #[benchmark]
     fn propose_create() -> Result<(), BenchmarkError> {
-        let operator: T::AccountId = frame_benchmarking::account("operator", 1, 0);
-        sfid_code_auth::SfidMainAccount::<T>::put(&operator);
+        let relayer: T::AccountId = frame_benchmarking::account("relayer", 1, 0);
 
         let (sfid_id, _) = find_safe_sfid::<T>()?;
-        let duoqian_address = register_institution::<T>(&operator, &sfid_id)?;
+        let duoqian_address = register_institution::<T>(&relayer, &sfid_id)?;
 
         let admin1: T::AccountId = frame_benchmarking::account("admin", 0, 0);
         let admin2: T::AccountId = frame_benchmarking::account("admin", 1, 0);
@@ -148,11 +170,10 @@ mod benchmarks {
 
     #[benchmark]
     fn vote_create() -> Result<(), BenchmarkError> {
-        let operator: T::AccountId = frame_benchmarking::account("operator", 2, 0);
-        sfid_code_auth::SfidMainAccount::<T>::put(&operator);
+        let relayer: T::AccountId = frame_benchmarking::account("relayer", 2, 0);
 
         let (sfid_id, duoqian_address) = find_safe_sfid::<T>()?;
-        let _ = register_institution::<T>(&operator, &sfid_id)?;
+        let _ = register_institution::<T>(&relayer, &sfid_id)?;
 
         let admin1: T::AccountId = frame_benchmarking::account("admin", 10, 0);
         let admin2: T::AccountId = frame_benchmarking::account("admin", 11, 0);
@@ -190,11 +211,10 @@ mod benchmarks {
 
     #[benchmark]
     fn propose_close() -> Result<(), BenchmarkError> {
-        let operator: T::AccountId = frame_benchmarking::account("operator", 3, 0);
-        sfid_code_auth::SfidMainAccount::<T>::put(&operator);
+        let relayer: T::AccountId = frame_benchmarking::account("relayer", 3, 0);
 
         let (sfid_id, duoqian_address) = find_safe_sfid::<T>()?;
-        let _ = register_institution::<T>(&operator, &sfid_id)?;
+        let _ = register_institution::<T>(&relayer, &sfid_id)?;
 
         let admin1: T::AccountId = frame_benchmarking::account("admin", 20, 0);
         let admin2: T::AccountId = frame_benchmarking::account("admin", 21, 0);
@@ -235,11 +255,10 @@ mod benchmarks {
 
     #[benchmark]
     fn vote_close() -> Result<(), BenchmarkError> {
-        let operator: T::AccountId = frame_benchmarking::account("operator", 4, 0);
-        sfid_code_auth::SfidMainAccount::<T>::put(&operator);
+        let relayer: T::AccountId = frame_benchmarking::account("relayer", 4, 0);
 
         let (sfid_id, duoqian_address) = find_safe_sfid::<T>()?;
-        let _ = register_institution::<T>(&operator, &sfid_id)?;
+        let _ = register_institution::<T>(&relayer, &sfid_id)?;
 
         let admin1: T::AccountId = frame_benchmarking::account("admin", 30, 0);
         let admin2: T::AccountId = frame_benchmarking::account("admin", 31, 0);

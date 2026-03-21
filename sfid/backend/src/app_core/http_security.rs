@@ -17,10 +17,10 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::warn;
 use uuid::Uuid;
 
-use blake2::{Blake2b, Digest};
 use blake2::digest::consts::U32;
-use blake2::Blake2bMac;
 use blake2::digest::Mac;
+use blake2::Blake2bMac;
+use blake2::{Blake2b, Digest};
 
 use crate::key_admins::chain_proof::build_public_key_output;
 use crate::*;
@@ -541,8 +541,8 @@ pub(crate) fn chain_signature_payload(
 
 pub(crate) fn chain_signature_hex(secret: &str, payload: &str) -> String {
     let key_digest = Blake2b256::digest(secret.as_bytes());
-    let mut mac = Blake2bMac256::new_from_slice(&key_digest)
-        .expect("Blake2bMac256 accepts any key length");
+    let mut mac =
+        Blake2bMac256::new_from_slice(&key_digest).expect("Blake2bMac256 accepts any key length");
     mac.update(payload.as_bytes());
     hex::encode(mac.finalize().into_bytes())
 }

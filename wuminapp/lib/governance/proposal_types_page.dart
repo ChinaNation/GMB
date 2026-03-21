@@ -23,6 +23,7 @@ class ProposalTypesPage extends StatelessWidget {
   final InstitutionInfo institution;
   final IconData icon;
   final Color badgeColor;
+
   /// 当前用户导入的、属于此机构的管理员钱包列表。
   final List<WalletProfile> adminWallets;
 
@@ -99,12 +100,14 @@ class ProposalTypesPage extends StatelessWidget {
             title: '转账',
             subtitle: '从机构多签账户发起转账',
             color: const Color(0xFF176650),
-            onTap: () => _checkAndOpenProposal(context, () => TransferProposalPage(
-              institution: institution,
-              icon: icon,
-              badgeColor: badgeColor,
-              adminWallets: adminWallets,
-            )),
+            onTap: () => _checkAndOpenProposal(
+                context,
+                () => TransferProposalPage(
+                      institution: institution,
+                      icon: icon,
+                      badgeColor: badgeColor,
+                      adminWallets: adminWallets,
+                    )),
           ),
           const SizedBox(height: 8),
           _ProposalTypeCard(
@@ -207,10 +210,13 @@ class ProposalTypesPage extends StatelessWidget {
       }
 
       if (pageBuilder != null) {
-        Navigator.push(
+        final created = await Navigator.push<bool>(
           context,
           MaterialPageRoute(builder: (_) => pageBuilder()),
         );
+        if (created == true && context.mounted) {
+          Navigator.of(context).pop(true);
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${name ?? "该"}功能开发中')),
@@ -281,8 +287,7 @@ class _ProposalTypeCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),

@@ -1,10 +1,8 @@
 use chrono::Utc;
 use hex::FromHex;
-use schnorrkel::{
-    signing_context, ExpansionMode, Keypair as Sr25519Keypair, MiniSecretKey,
-    PublicKey as Sr25519PublicKey, Signature as Sr25519Signature,
-};
+use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
 use serde::{Deserialize, Serialize};
+use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ChainKeyringState {
@@ -113,7 +111,7 @@ impl ChainKeyringState {
     }
 }
 
-pub fn load_signing_key() -> Sr25519Keypair {
+pub fn load_signing_key() -> Sr25519Pair {
     let raw = std::env::var("SFID_SIGNING_SEED_HEX")
         .ok()
         .map(|v| v.trim().to_string())
@@ -122,21 +120,20 @@ pub fn load_signing_key() -> Sr25519Keypair {
     load_signing_key_from_seed(raw.as_str())
 }
 
-pub fn try_load_signing_key_from_seed(seed_text: &str) -> Result<Sr25519Keypair, String> {
+pub fn try_load_signing_key_from_seed(seed_text: &str) -> Result<Sr25519Pair, String> {
     let seed = decode_seed_to_32(seed_text)?;
-    let mini = MiniSecretKey::from_bytes(&seed)
-        .map_err(|_| "invalid sr25519 mini secret key".to_string())?;
-    Ok(mini.expand_to_keypair(ExpansionMode::Uniform))
+    Sr25519Pair::from_seed_slice(&seed)
+        .map_err(|_| "invalid sr25519 seed for substrate pair derivation".to_string())
 }
 
-pub fn load_signing_key_from_seed(seed_text: &str) -> Sr25519Keypair {
+pub fn load_signing_key_from_seed(seed_text: &str) -> Sr25519Pair {
     try_load_signing_key_from_seed(seed_text)
         .unwrap_or_else(|err| panic!("invalid signing seed hex: {err}"))
 }
 
 pub fn try_derive_pubkey_hex_from_seed(seed_text: &str) -> Result<String, String> {
     let keypair = try_load_signing_key_from_seed(seed_text)?;
-    Ok(format!("0x{}", hex::encode(keypair.public.to_bytes())))
+    Ok(format!("0x{}", hex::encode(keypair.public().0)))
 }
 
 pub fn derive_pubkey_hex_from_seed(seed_text: &str) -> String {
@@ -299,5 +296,16 @@ mod tests {
     fn weak_non_hex_seed_is_rejected() {
         assert!(try_load_signing_key_from_seed("password123").is_err());
         assert!(try_derive_pubkey_hex_from_seed("test-seed").is_err());
+    }
+
+    #[test]
+    fn substrate_seed_derivation_matches_dev_chain_main_pubkey() {
+        let pubkey = derive_pubkey_hex_from_seed(
+            "0xb642a34db79f5adbc800415b27bd271a5459e5e53f80d63c4e4c920fc247f4da",
+        );
+        assert_eq!(
+            pubkey,
+            "0x14e4f684453a0ccf9ebb3113d05ae1da934b7f7b2dbd3b9dcdf4138357ab1607"
+        );
     }
 }

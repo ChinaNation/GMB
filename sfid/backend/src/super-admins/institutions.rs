@@ -5,18 +5,19 @@ use axum::{
     Json,
 };
 use chrono::{Duration, Utc};
-use schnorrkel::signing_context;
 use serde::Serialize;
+use sp_core::Pair;
 use subxt::{
     config::substrate::{AccountId32, MultiSignature},
     dynamic::{tx, Value},
     OnlineClient, PolkadotConfig,
 };
 
-use blake2::{Blake2b, Digest};
 use blake2::digest::consts::U32;
+use blake2::{Blake2b, Digest};
 
 use crate::business::pubkey::{normalize_cpms_pubkey, same_cpms_pubkey};
+use crate::chain::runtime_align::build_institution_credential;
 use crate::sfid::{generate_sfid_code, GenerateSfidInput};
 use crate::*;
 
@@ -594,6 +595,10 @@ pub(crate) async fn register_cpms_keys_scan(
         message: "ok".to_string(),
         data: CpmsRegisterScanOutput {
             site_sfid,
+            genesis_hash: chain_receipt.genesis_hash,
+            sfid_id: chain_receipt.sfid_id,
+            register_nonce: chain_receipt.register_nonce,
+            signature: chain_receipt.signature,
             status: "ACTIVE",
             message: "cpms site keys registered",
             chain_register_tx_hash: chain_receipt.tx_hash,
@@ -954,6 +959,10 @@ fn cpms_site_keys_to_list_row(site: &CpmsSiteKeys) -> CpmsSiteKeysListRow {
 
 #[derive(Debug, Clone)]
 struct ChainInstitutionRegisterReceipt {
+    genesis_hash: String,
+    sfid_id: String,
+    register_nonce: String,
+    signature: String,
     tx_hash: String,
     block_number: u64,
 }
@@ -1040,6 +1049,9 @@ fn parse_account_id32(pubkey: &str) -> Result<[u8; 32], String> {
 }
 
 fn resolve_chain_signer_material(state: &AppState) -> Result<(String, SensitiveSeed), String> {
+    // 中文注释：机构 sfid_id 登记统一要求当前服务端 signer 必须就是链上 MAIN。
+    key_admins::validate_active_main_signer_with_keyring(state)
+        .map_err(|e| format!("current signer is not chain main: {e}"))?;
     let signer_pubkey = state
         .public_key_hex
         .read()
@@ -1065,6 +1077,9 @@ async fn submit_register_sfid_institution_extrinsic(
 ) -> Result<ChainInstitutionRegisterReceipt, String> {
     let sfid_id = validate_sfid_id_format(site_sfid)
         .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
+    let register_nonce = Uuid::new_v4().to_string();
+    let credential = build_institution_credential(state, sfid_id.as_str(), register_nonce)
+        .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
     let ws_url = resolve_chain_ws_url()
         .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
     let client = OnlineClient::<PolkadotConfig>::from_url(ws_url)
@@ -1082,7 +1097,13 @@ async fn submit_register_sfid_institution_extrinsic(
     let payload = tx(
         "DuoqianTransactionPow",
         "register_sfid_institution",
-        vec![Value::from_bytes(sfid_id.as_bytes().to_vec())],
+        vec![
+            Value::from_bytes(sfid_id.as_bytes().to_vec()),
+            Value::from_bytes(credential.register_nonce.as_bytes().to_vec()),
+            Value::from_bytes(hex::decode(credential.signature.as_str()).map_err(|e| {
+                format!("register_sfid_institution submit failed: signature hex decode failed: {e}")
+            })?),
+        ],
     );
     let mut partial_tx = client
         .tx()
@@ -1094,9 +1115,7 @@ async fn submit_register_sfid_institution_extrinsic(
     let signing_key =
         key_admins::chain_keyring::try_load_signing_key_from_seed(signer_seed.expose_secret())
             .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
-    let signature = signing_key
-        .sign(signing_context(b"substrate").bytes(&partial_tx.signer_payload()))
-        .to_bytes();
+    let signature = signing_key.sign(&partial_tx.signer_payload()).0;
     let extrinsic = partial_tx
         .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
     let tx_hash = format!("0x{}", hex::encode(extrinsic.hash().as_ref()));
@@ -1132,6 +1151,10 @@ async fn submit_register_sfid_institution_extrinsic(
     })?;
 
     Ok(ChainInstitutionRegisterReceipt {
+        genesis_hash: credential.genesis_hash,
+        sfid_id,
+        register_nonce: credential.register_nonce,
+        signature: credential.signature,
         tx_hash,
         block_number,
     })
@@ -1188,23 +1211,14 @@ fn is_trusted_attestor_pubkey(state: &AppState, public_key: &str) -> bool {
     let Some(candidate) = parse_sr25519_pubkey(public_key) else {
         return false;
     };
+    if key_admins::validate_active_main_signer_with_keyring(state).is_err() {
+        return false;
+    }
     let current = match state.public_key_hex.read() {
         Ok(v) => v.clone(),
         Err(_) => return false,
     };
-    if parse_sr25519_pubkey(current.as_str())
+    parse_sr25519_pubkey(current.as_str())
         .map(|v| v == candidate)
         .unwrap_or(false)
-    {
-        return true;
-    }
-    let known = match state.known_key_seeds.read() {
-        Ok(v) => v,
-        Err(_) => return false,
-    };
-    known.keys().any(|k| {
-        parse_sr25519_pubkey(k.as_str())
-            .map(|v| v == candidate)
-            .unwrap_or(false)
-    })
 }

@@ -97,8 +97,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
       final newNextId = await _proposalService.fetchNextProposalId();
       if (newNextId > _knownNextId && _knownNextId > 0) {
         // 有新提案，在顶部插入
-        final newItems = await _loadProposalRange(
-            newNextId - 1, _knownNextId);
+        final newItems = await _loadProposalRange(newNextId - 1, _knownNextId);
         if (newItems.isNotEmpty && mounted) {
           setState(() {
             _items = [...newItems, ..._items];
@@ -154,8 +153,8 @@ class _AllProposalsViewState extends State<AllProposalsView> {
       final yearStartId = year * 1000000;
 
       final startId = nextId - 1; // 最新提案 ID
-      final items = await _loadProposalRange(startId,
-          (startId - _pageSize + 1).clamp(yearStartId, startId + 1));
+      final items = await _loadProposalRange(
+          startId, (startId - _pageSize + 1).clamp(yearStartId, startId + 1));
 
       if (!mounted) return;
       setState(() {
@@ -189,7 +188,12 @@ class _AllProposalsViewState extends State<AllProposalsView> {
       final startId = _loadedUpTo - 1;
 
       if (startId < yearStartId) {
-        if (mounted) setState(() { _hasMore = false; _loadingMore = false; });
+        if (mounted) {
+          setState(() {
+            _hasMore = false;
+            _loadingMore = false;
+          });
+        }
         return;
       }
 
@@ -220,8 +224,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     final count = startId - endId + 1;
     if (count <= 0) return const [];
 
-    final proposals =
-        await _proposalService.fetchProposalPage(startId, count);
+    final proposals = await _proposalService.fetchProposalPage(startId, count);
 
     final wallets = _wallets ?? [];
     final items = <_ProposalDisplayItem>[];
@@ -255,8 +258,8 @@ class _AllProposalsViewState extends State<AllProposalsView> {
         for (final w in matchedWallets) {
           var pk = w.pubkeyHex.toLowerCase();
           if (pk.startsWith('0x')) pk = pk.substring(2);
-          final vote = await _proposalService.fetchAdminVote(
-              p.meta.proposalId, pk);
+          final vote =
+              await _proposalService.fetchAdminVote(p.meta.proposalId, pk);
           if (vote == null) {
             needsVote = true;
             break;
@@ -390,10 +393,8 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                   color: statusColor.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
-                    _proposalIcon(detail, upgradeDetail),
-                    size: 18,
-                    color: statusColor),
+                child: Icon(_proposalIcon(detail, upgradeDetail),
+                    size: 18, color: statusColor),
               ),
               const SizedBox(width: 12),
               // 中间信息
@@ -435,7 +436,9 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                           ? '转账 ${detail.amountYuan.toStringAsFixed(2)} 元'
                           : upgradeDetail != null
                               ? 'Runtime 升级'
-                              : '提案 ${_kindLabel(meta.kind)}',
+                              : meta.kind == 1
+                                  ? '联合投票提案'
+                                  : '提案 ${_kindLabel(meta.kind)}',
                       style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ],
@@ -490,6 +493,8 @@ class _AllProposalsViewState extends State<AllProposalsView> {
         return '已通过';
       case 2:
         return '已拒绝';
+      case 3:
+        return '已执行';
       default:
         return '未知';
     }
@@ -503,6 +508,8 @@ class _AllProposalsViewState extends State<AllProposalsView> {
         return Colors.green;
       case 2:
         return Colors.red;
+      case 3:
+        return Colors.green;
       default:
         return Colors.grey;
     }
@@ -535,8 +542,11 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     if (item.proposal.runtimeUpgradeDetail != null) {
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) =>
-              RuntimeUpgradeDetailPage(proposalId: proposalId),
+          builder: (_) => RuntimeUpgradeDetailPage(
+            proposalId: proposalId,
+            institution: inst,
+            adminWallets: item.adminWallets,
+          ),
         ),
       );
     } else if (inst != null && item.proposal.transferDetail != null) {

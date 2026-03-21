@@ -11,7 +11,7 @@
 说明：
 
 - 本文档定义的是“链上字段/格式/标准/流程”。
-- 当前 App 里治理业务 UI 仍是占位，本文作为后续开发对齐基线。
+- 当前 App 已接入 runtime 升级、转账等主要治理路径，本文同时作为现有实现与后续扩展的对齐基线。
 
 ## 2. 链上入口与权限边界
 
@@ -23,8 +23,8 @@
 
 ### 2.2 可直接由交易发起的投票引擎入口
 
-- `submit_joint_institution_vote(proposal_id, institution, internal_passed, expires_at, approvals)`
-- `citizen_vote(proposal_id, sfid_hash, nonce, signature, approve)`
+- `joint_vote(proposal_id, institution, approve)`
+- `citizen_vote(proposal_id, binding_id, nonce, signature, approve)`
 
 ## 3. 通用字段与格式标准
 
@@ -35,18 +35,10 @@
 | `account` | `AccountId32` | SS58 地址字符串（当前链 `ss58 = 2027`） |
 | `institution` | `[u8; 48]` | `0x` + 96 hex（机构 pallet id） |
 | `proposal_id` | `u64` | 年份编码：`年份 × 1,000,000 + 年内计数器`，如 `2026000001`，App 显示为 `2026#1` |
-| `approve/internal_passed` | `bool` | `true/false` |
-| `expires_at` | `BlockNumber` | 十进制整数，必须是链上仍未过期的 proof 截止块 |
+| `approve` | `bool` | `true/false` |
 | `nonce` | `BoundedVec<u8, 64>` | `0x` hex，解码后字节长度 `1..64` |
 | `signature` | `BoundedVec<u8, 64>` | `0x` hex，解码后字节长度 `1..64` |
-| `sfid_hash` | `Hash` | `0x` + 64 hex |
-
-联合门限证明项：
-
-| 字段 | 链上类型 | App 传输规范 |
-| --- | --- | --- |
-| `approvals[].public_key` | `[u8; 32]` | `0x` + 64 hex（管理员 `sr25519` 公钥） |
-| `approvals[].signature` | `[u8; 64]` | `0x` + 128 hex（管理员对联合决定 payload 的原始签名） |
+| `binding_id` | `Hash` | `0x` + 64 hex |
 
 ### 3.2 枚举与编码
 
@@ -68,19 +60,22 @@
   - 每个 PRC：`1`
   - 每个 PRB：`1`
   - 总票权：`105`
-- 联合机构提交时，`approvals` 必须达到该机构当前链上管理员门限：
+- 联合机构内部管理员阈值：
   - NRC：`13`
   - PRC：`6`
   - PRB：`6`
-- 联合投票 `yes >= 105` 立即通过，否则在“全机构结果齐备”或超时后进入公民投票阶段。
+- 联合投票阶段中，管理员直接上链投票：
+  - 某机构赞成票达到该机构阈值时，链上自动形成该机构 `yes`
+  - 若该机构剩余管理员已不足以让赞成票达到阈值，链上自动形成该机构 `no`
+- 联合投票 `yes >= 105` 立即通过；任一机构形成 `no` 时立即转入公民投票；否则超时后进入公民投票阶段。
 - 公民投票通过规则：`yes * 100 > eligible_total * 50`（严格大于 50%）。
 
 ## 4. 提案字段规范（按业务类型）
 
 | 业务类型 | 提案入口 | 必填字段 | 发起权限 | 投票入口 |
 | --- | --- | --- | --- | --- |
-| 决议发行 | `propose_resolution_issuance` | `reason, total_amount, allocations[], eligible_total, snapshot_nonce, snapshot_signature` | 国储会管理员（NRC） | 联合+公民 |
-| Runtime 升级 | `propose_runtime_upgrade` | `reason, code, eligible_total, snapshot_nonce, snapshot_signature` | 国储会管理员（NRC） | 联合+公民 |
+| 决议发行 | `propose_resolution_issuance` | `reason, total_amount, allocations[], eligible_total, snapshot_nonce, signature` | 国储会管理员（NRC） | 联合+公民 |
+| Runtime 升级 | `propose_runtime_upgrade` | `reason, code, eligible_total, snapshot_nonce, signature` | 国储会管理员（NRC） | 联合+公民 |
 | 管理员更换 | `propose_admin_replacement` | `org, institution, old_admin, new_admin` | 目标机构管理员 | 内部 |
 | 决议销毁 | `propose_destroy` | `org, institution, amount` | 目标机构管理员 | 内部 |
 | GRANDPA 密钥更换 | `propose_replace_grandpa_key` | `institution, new_key(32B)` | NRC/PRC 机构管理员 | 内部 |
@@ -90,13 +85,13 @@
 
 - `eligible_total`：`u64`，必须 `> 0`。
 - `snapshot_nonce`：`1..64` 字节。
-- `snapshot_signature`：`1..64` 字节，运行时当前要求 64 字节 `sr25519` 原始签名。
+- `signature`：`1..64` 字节，运行时当前要求 64 字节 `sr25519` 原始签名。
 
 人口快照验签消息标准（runtime）：
 
 ```text
 payload = (
-  "GMB_SFID_POPULATION_V2",
+  "GMB_SFID_POPULATION_V3",
   genesis_hash,
   who,
   eligible_total,
@@ -153,46 +148,24 @@ message = blake2_256(SCALE.encode(payload))
 
 ### 5.2 联合机构投票（投票引擎）
 
-`submit_joint_institution_vote` 字段：
+`joint_vote` 字段：
 
 - `proposal_id: u64`
 - `institution: [u8;48]`
-- `internal_passed: bool`（该机构内部投票是否通过）
-- `expires_at: BlockNumber`
-- `approvals: Vec<{ public_key: [u8;32], signature: [u8;64] }>`
+- `approve: bool`
 
 权限要求：
 
-- 必须由“该机构多签账户”提交，不能由其他机构或普通管理员代提。
-- 同时必须附带当前机构管理员对本次联合决定的门限签名证明；只有“多签地址提交 + proof 验证通过”两者都满足才会记票。
-
-运行时联合决定验签消息标准：
-
-```text
-payload = (
-  "GMB_JOINT_DECISION_V1",
-  genesis_hash,
-  proposal_id,
-  institution,
-  internal_passed,
-  expires_at
-)
-message = blake2_256(SCALE.encode(payload))
-```
-
-联合 proof 校验要求：
-
-- `approvals` 不能为空，且签名人必须属于该机构当前链上管理员集合。
-- 同一管理员不能重复出现在 `approvals` 里。
-- 签名数量必须达到该机构当前门限。
-- `expires_at` 到期后该 proof 无效，不能重放旧内部决议。
+- 必须由“当前机构管理员个人钱包”直接提交，不能跨机构代投。
+- 同一管理员对同一 `proposal_id + institution` 只能投一次。
+- 链上按机构当前管理员门限自动结算机构结果，不再需要额外 `approvals proof` 或机构多签提交。
 
 ### 5.3 公民投票（投票引擎）
 
 `citizen_vote` 字段：
 
 - `proposal_id: u64`
-- `sfid_hash: Hash`
+- `binding_id: Hash`
 - `nonce: BoundedVec<u8,64>`
 - `signature: BoundedVec<u8,64>`
 - `approve: bool`
@@ -201,10 +174,10 @@ message = blake2_256(SCALE.encode(payload))
 
 ```text
 payload = (
-  "GMB_SFID_VOTE_V2",
+  "GMB_SFID_VOTE_V3",
   genesis_hash,
   account,
-  sfid_hash,
+  binding_id,
   proposal_id,
   nonce
 )
@@ -213,8 +186,8 @@ message = blake2_256(SCALE.encode(payload))
 
 防重放要求：
 
-- 同一 `proposal_id + sfid_hash` 只能投一次。
-- 同一 `proposal_id + sfid_hash + nonce` 不能重放。
+- 同一 `proposal_id + binding_id` 只能投一次。
+- 同一 `proposal_id + binding_id + nonce` 不能重放。
 
 ## 6. 标准流程
 
@@ -222,19 +195,37 @@ message = blake2_256(SCALE.encode(payload))
 
 1. 选择业务类型并收集业务字段。
 2. 校验当前钱包是否具备该机构管理员权限。
-3. 若为联合提案，先获取 `eligible_total + snapshot_nonce + snapshot_signature`。
+3. 若为联合提案，先获取 `eligible_total + snapshot_nonce + signature`。
 4. 组装链上调用字段并签名提交。
 5. 记录 `proposal_id` 与业务类型映射，订阅状态事件。
 
 ### 6.2 投票流程（App 侧）
 
 1. 根据提案类型匹配投票入口（内部/联合/公民）。
-2. 采集投票字段并做本地格式校验；若为联合投票，还要收集足够数量的管理员签名 proof。
+2. 采集投票字段并做本地格式校验；联合投票与内部投票一样，直接由管理员个人钱包上链投票。
 3. 发起签名并提交交易。
 4. 监听事件刷新状态：
-  - `InternalVoteCast / JointInstitutionVoteCast / CitizenVoteCast`
+  - `InternalVoteCast / JointAdminVoteCast / JointInstitutionVoteFinalized / CitizenVoteCast`
   - `ProposalAdvancedToCitizen`
   - `ProposalFinalized`
+
+#### 6.2.1 Runtime 升级提案在 App 里的联合投票实现
+
+- `RuntimeUpgradeDetailPage` 从机构页进入时必须带上：
+  - `institution`
+  - `adminWallets`
+- 页面会先按链上 `AdminsOriginGov.CurrentAdmins` 过滤当前仍有效的管理员钱包。
+- 联合投票按钮只在以下条件全部满足时启用：
+  - 提案仍处于 `joint` 阶段且状态为 `voting`
+  - 当前机构尚未投票
+- 当前用户已导入至少一个仍未投票的本机构管理员钱包
+- App 直接使用所选管理员钱包提交 `joint_vote(proposal_id, institution, approve)`。
+- 页面会读取：
+  - `JointInstitutionTallies` 展示本机构当前赞成/反对管理员票数
+  - `JointVotesByInstitution` 展示本机构是否已经形成最终机构结果
+  - `JointVotesByAdmin` 判断当前导入管理员钱包是否已投票
+- 页面展示的联合投票阈值不再写死 `3`，而是显示链上的联合权重阈值 `105`。
+- 页面还会单独展示“本机构管理员投票进度 / 本机构阈值”，避免把联合权重阈值和机构内部门限混淆。
 
 ### 6.3 超时与补偿
 
@@ -251,10 +242,11 @@ message = blake2_256(SCALE.encode(payload))
 | Storage | 说明 | 写入方 |
 | --- | --- | --- |
 | `Proposals` | 提案基本信息（状态、起止区块） | 投票引擎 |
-| `ProposalData` | 业务详情（序列化的 BoundedVec\<u8\>） | 业务模块通过 `store_proposal_data()` |
+| `ProposalData` | 提案摘要层（序列化的 BoundedVec\<u8\>，默认上限 100KB） | 业务模块通过 `store_proposal_data()` |
+| `ProposalObjectMeta` / `ProposalObject` | 提案对象层（大对象，例如 runtime wasm，默认上限 10MB） | 业务模块通过 `store_proposal_object()` |
 | `ProposalMeta` | 辅助元数据（创建时间、通过时间） | 业务模块通过 `store_proposal_meta()` |
-| `InternalTallies` / `JointTallies` / `CitizenTallies` | 投票计数 | 投票引擎 |
-| `InternalVotesByAccount` / `JointVotesByInstitution` / `CitizenVotesBySfid` | 投票记录 | 投票引擎 |
+| `InternalTallies` / `JointInstitutionTallies` / `JointTallies` / `CitizenTallies` | 投票计数 | 投票引擎 |
+| `InternalVotesByAccount` / `JointVotesByAdmin` / `JointVotesByInstitution` / `CitizenVotesByBindingId` | 投票记录 | 投票引擎 |
 | `ActiveProposalsByInstitution` | 每机构活跃提案列表（上限 10） | 投票引擎 |
 
 **自动清理策略（统一清理路径）：**
@@ -264,7 +256,7 @@ message = blake2_256(SCALE.encode(payload))
 - 每区块 `on_initialize` 检查 `CleanupQueue[当前区块]`，到期后触发清理
 - 每区块最多触发 **5 个**提案进入清理流程，未处理完的保留在队列中，下个区块继续
 - 实际数据删除委托给 `PendingProposalCleanups` 分块状态机，保证大量投票记录（如公民投票上万条）能分多个区块完成
-- 清理状态机阶段：`InternalVotes → JointVotes → CitizenVotes → VoteCredentials → FinalCleanup`
+- 清理状态机阶段：`InternalVotes → JointAdminVotes → JointInstitutionVotes → JointInstitutionTallies → CitizenVotes → VoteCredentials → ProposalObject → FinalCleanup`
 - 提案结束（通过/拒绝/过期）时，活跃提案名额在 `set_status_and_emit` 中**立即释放**，不依赖业务模块
 - `on_initialize` weight 使用预估最大值（`cleanup_limit` 次读写），确保不超出声明的 weight
 - `UsedPopulationSnapshotNonce`（联合提案防重放）不清理（联合提案极少，累计存储量可忽略）
@@ -274,10 +266,11 @@ message = blake2_256(SCALE.encode(payload))
 | Storage | 说明 |
 | --- | --- |
 | `Proposals` | 提案基本信息 |
-| `ProposalData` | 业务详情（转账/销毁/换管理员等所有类型） |
+| `ProposalData` | 业务摘要（转账/销毁/换管理员/runtime 升级摘要等所有类型） |
+| `ProposalObjectMeta` / `ProposalObject` | 业务大对象（如 runtime wasm） |
 | `ProposalMeta` | 辅助元数据 |
-| `InternalTallies` / `JointTallies` / `CitizenTallies` | 投票计数 |
-| `InternalVotesByAccount` / `JointVotesByInstitution` / `CitizenVotesBySfid` | 投票记录 |
+| `InternalTallies` / `JointInstitutionTallies` / `JointTallies` / `CitizenTallies` | 投票计数 |
+| `InternalVotesByAccount` / `JointVotesByAdmin` / `JointVotesByInstitution` / `CitizenVotesByBindingId` | 投票记录 |
 | `PendingProposalCleanups` | 分块清理游标 |
 | `ActiveProposalsByInstitution`（兜底移除） | 活跃提案列表 |
 
@@ -295,7 +288,17 @@ message = blake2_256(SCALE.encode(payload))
 关键文件：
 - `voting-engine-system/src/proposal_cleanup.rs`（清理逻辑）
 - `voting-engine-system/src/active_proposal_limit.rs`（活跃提案限制）
-- `voting-engine-system/src/lib.rs`（ProposalData/ProposalMeta/CleanupQueue Storage + 公共接口）
+- `voting-engine-system/src/lib.rs`（ProposalData/ProposalObject/ProposalMeta/CleanupQueue Storage + 公共接口）
+
+### 6.4.1 Runtime 升级提案的摘要 / 对象分层
+
+- `runtime-root-upgrade` 现在只把 `proposer + reason + code_hash + has_code + status` 编进 `ProposalData`
+- 原始 wasm 不再塞进摘要层，而是统一进入 `ProposalObject(kind=runtime_wasm)`
+- App 列表与详情页默认只读取摘要层，不主动拉取大对象
+- 详情页里的 `hasCode` 含义已调整为“链上对象层 wasm 是否仍保留”，因此：
+  - 投票中且 `hasCode=true`：显示“待执行”
+  - 终态且 `hasCode=true`：显示“已归档”
+  - `hasCode=false`：显示“已清理”
 
 ## 7. App 侧管理员权限检测与机构详情
 
@@ -317,7 +320,7 @@ message = blake2_256(SCALE.encode(payload))
    - 非管理员用户：卡片不可点击，不显示右箭头。
 2. **管理员身份标识**（仅管理员可见）：绿色提示条"你是本机构管理员，点击上方卡片可发起提案"。
 3. **管理员列表入口**：所有用户可见，点击进入管理员列表页。
-4. **投票事件列表**：所有用户可见，扫描 `NextProposalId` 范围内所有提案，按 ID 倒序显示，区分状态标签（投票中/已通过/已拒绝）。支持多管理员钱包选择。
+4. **投票事件列表**：所有用户可见，显示“本机构内部提案 + 所有机构都可见的联合投票提案”，按 ID 倒序展示。Runtime 升级等联合投票提案必须在所有机构入口可见，不能只挂在国储会单一列表下。
 
 ### 7.2.1 全局提案列表（投票 tab）
 
@@ -328,11 +331,16 @@ message = blake2_256(SCALE.encode(payload))
 | 层 | 说明 | 文件 |
 | --- | --- | --- |
 | WebSocket 订阅 | `chain_subscribeNewHeads` 监听新区块，自动检测新提案插入列表顶部 | `lib/rpc/chain_event_subscription.dart` |
-| 本地内存缓存 | ProposalMeta / TransferProposalInfo 缓存，避免重复 RPC | `lib/governance/proposal_cache.dart` |
+| 本地内存缓存 | ProposalMeta / TransferProposalInfo / RuntimeUpgradeProposalInfo 缓存，避免重复 RPC | `lib/governance/proposal_cache.dart` |
 | 批量查询 | `state_queryStorageAt` 一次 RPC 查多个 key，减少网络往返 | `chain_rpc.dart::fetchStorageBatch` |
 | 分页加载 | 首屏 10 个，ScrollController 滚动触底加载更多 | `all_proposals_view.dart` |
 
 **数据流**：首屏 → 分页取最新 10 个 ID → 缓存命中直接显示，未命中批量查 → 存缓存 → WebSocket 后台监听新区块 → 有新提案自动插入顶部。
+
+**提案类型识别**：
+- 内部提案：按转账等内部提案数据结构解码。
+- 联合提案：按 `meta.kind == 1` 单独走联合提案解码链路，Runtime 升级提案进入 `runtime_upgrade_detail_page.dart`。
+- 未接入专用详情页的联合提案，列表仍需可见，至少保留通用联合提案卡片。
 
 **投票权判断**：
 - 遍历用户所有钱包 → 比对每个提案所属机构的管理员列表
@@ -349,7 +357,7 @@ message = blake2_256(SCALE.encode(payload))
 | --- | --- | --- |
 | 管理员投票 | 钱包是 NRC/PRC/PRB 管理员 | ✅ 已实现 |
 | 公民投票 | 钱包绑定了 SFID | ⏭️ 后期 |
-| 多签地址投票 | 钱包是多签地址的管理员 | ⏭️ 后期 |
+| 机构联合投票 | 钱包是当前机构管理员，且该管理员尚未对本机构投票 | ✅ 已实现 |
 
 关键文件：`lib/governance/all_proposals_view.dart`
 
@@ -385,6 +393,8 @@ message = blake2_256(SCALE.encode(payload))
 - 决议发行：发起公民币发行决议，需联合投票+公民投票
 - 验证密钥：更换 GRANDPA 共识验证密钥
 - 状态升级：Runtime 升级，需联合投票+公民投票
+
+提交成功后，提案类型页应把创建结果向上冒泡到机构详情页，触发列表刷新，避免“链上已创建但机构页仍停留旧状态”。
 
 ### 7.5 转账提案功能（已实现）
 
@@ -429,8 +439,13 @@ message = blake2_256(SCALE.encode(payload))
 #### 7.5.2.1 签名方式
 
 所有需要签名的操作（发起提案、投票、普通转账）统一检查钱包类型：
-- **热钱包**（`signMode == 'local'`）：通过 `WalletManager.signWithWallet()` 本地签名，私钥不出类
-- **冷钱包**（`signMode == 'external'`）：通过 `QrSigner` 协议（`WUMINAPP_QR_SIGN_V1`）发起扫码签名会话，导航到 `QrSignSessionPage` 展示请求二维码，用户用离线设备扫码签名后扫描回执二维码获取签名
+- **热钱包**（`signMode == 'local'`）：通过 `WalletManager.signWithWallet()` 本地签名，私钥不出类；签名前必须校验本地 seed 派生公钥与页面选中的管理员钱包 `pubkeyHex` 一致
+- **冷钱包**（`signMode == 'external'`）：通过 `QrSigner` 协议（`WUMINAPP_QR_SIGN_V1`）发起扫码签名会话，导航到 `QrSignSessionPage` 展示请求二维码，用户用离线设备扫码签名后扫描回执二维码获取签名；回执中的 `pubkey` 必须与页面选中的管理员钱包一致
+
+管理员钱包选择硬约束：
+- 发起提案页面中选中的管理员钱包，是本次提案唯一允许的签名钱包
+- 提案页面用于请求 SFID 人口快照的 `account_pubkey`，必须与最终链上 extrinsic 的签名钱包相同
+- 任何“页面选中 A 钱包，但实际由 B 钱包签名”的情况，都必须在 App 侧直接拦截，不能继续提交
 
 #### 7.5.3 App 侧服务
 
@@ -467,16 +482,18 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 | 文件 | 说明 |
 | --- | --- |
 | `lib/governance/all_proposals_view.dart` | 全局提案列表（分页 + 缓存 + WebSocket + 红点通知） |
-| `lib/governance/proposal_cache.dart` | 提案内存缓存（Meta + Detail） |
+| `lib/governance/proposal_cache.dart` | 提案内存缓存（Meta + Transfer Detail + Runtime Upgrade Detail） |
 | `lib/rpc/chain_event_subscription.dart` | WebSocket 链事件订阅（新区块通知 + 自动重连） |
 | `lib/governance/institution_data.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
 | `lib/governance/institution_admin_service.dart` | 链上管理员查询服务（RPC + SCALE 解码 + 缓存） |
 | `lib/governance/institution_detail_page.dart` | 机构详情页（管理员检测 + 条件 UI + 投票事件列表） |
 | `lib/governance/proposal_types_page.dart` | 提案类型选择页（转账已接入真实页面） |
+| `lib/governance/runtime_upgrade_page.dart` | Runtime 升级提案创建页（人口快照 + WASM 上传 + 签名提交） |
+| `lib/governance/runtime_upgrade_detail_page.dart` | Runtime 升级提案详情页（联合投票/公民投票进度） |
 | `lib/governance/admin_list_page.dart` | 管理员列表页（SS58 地址展示） |
 | `lib/governance/transfer_proposal_page.dart` | 转账提案创建页（表单 + 校验 + 签名提交） |
 | `lib/governance/transfer_proposal_detail_page.dart` | 转账提案详情页（投票进度 + 管理员明细 + 投票操作） |
-| `lib/governance/transfer_proposal_service.dart` | 转账提案链上交互服务（extrinsic 编码 + storage 查询） |
+| `lib/governance/transfer_proposal_service.dart` | 提案列表装配服务（转账提案 + 联合提案查询、分页与机构页事件聚合） |
 | `lib/rpc/chain_rpc.dart` | RPC 服务（含 `fetchStorage` 公开方法） |
 | `lib/main.dart` | 机构列表结构化（`InstitutionInfo`）+ 卡片点击跳转 |
 

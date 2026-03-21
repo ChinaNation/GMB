@@ -8,8 +8,7 @@ use chrono::Utc;
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::chain::runtime_align::{build_population_snapshot_signature, POPULATION_DOMAIN_STR};
-use crate::key_admins::chain_proof::SignatureEnvelope;
+use crate::chain::runtime_align::build_population_snapshot_credential;
 use crate::*;
 
 #[derive(Serialize)]
@@ -17,16 +16,6 @@ struct ChainVotersCountFingerprint<'a> {
     route: &'a str,
     request_id: &'a str,
     who: &'a str,
-}
-
-#[derive(Serialize)]
-struct SnapshotAttestationPayload<'a> {
-    domain: &'static str,
-    genesis_hash: &'a str,
-    who: &'a str,
-    eligible_total: u64,
-    snapshot_nonce: &'a str,
-    payload_digest: &'a str,
 }
 
 pub(crate) async fn chain_voters_count(
@@ -61,7 +50,7 @@ pub(crate) async fn chain_voters_count(
         };
     let request_id = chain_auth.request_id;
 
-    let (eligible_total, as_of) = {
+    let eligible_total = {
         let mut store = match store_write_or_500(&state) {
             Ok(v) => v,
             Err(resp) => return resp,
@@ -72,9 +61,9 @@ pub(crate) async fn chain_voters_count(
             .values()
             .filter(|b| b.citizen_status == CitizenStatus::Normal)
             .count() as u64;
-        (total, Utc::now().timestamp())
+        total
     };
-    let snapshot = match build_population_snapshot_signature(
+    let snapshot = match build_population_snapshot_credential(
         &state,
         who.as_str(),
         eligible_total,
@@ -90,31 +79,6 @@ pub(crate) async fn chain_voters_count(
             );
         }
     };
-    let attestation_payload = match serde_json::to_string(&SnapshotAttestationPayload {
-        domain: POPULATION_DOMAIN_STR,
-        genesis_hash: snapshot.genesis_hash.as_str(),
-        who: snapshot.who.as_str(),
-        eligible_total: snapshot.eligible_total,
-        snapshot_nonce: snapshot.snapshot_nonce.as_str(),
-        payload_digest: snapshot.payload_digest.as_str(),
-    }) {
-        Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "snapshot attestation serialize failed",
-            )
-        }
-    };
-    let snapshot_attestation = SignatureEnvelope {
-        key_id: snapshot.meta.key_id.clone(),
-        key_version: snapshot.meta.key_version.clone(),
-        alg: snapshot.meta.alg.clone(),
-        payload: attestation_payload,
-        signature_hex: snapshot.signature.clone(),
-    };
-    let snapshot_signature = snapshot.signature.clone();
     let mut store = match store_write_or_500(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -136,12 +100,11 @@ pub(crate) async fn chain_voters_count(
         code: 0,
         message: "ok".to_string(),
         data: ChainVotersCountOutput {
+            genesis_hash: snapshot.genesis_hash,
             eligible_total: snapshot.eligible_total,
-            as_of,
             who: snapshot.who,
             snapshot_nonce: snapshot.snapshot_nonce,
-            snapshot_signature,
-            snapshot_attestation,
+            signature: snapshot.signature,
         },
     })
     .into_response()

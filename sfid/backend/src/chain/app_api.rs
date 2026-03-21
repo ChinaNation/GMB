@@ -18,7 +18,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::chain::runtime_align::{build_population_snapshot_signature, build_vote_credential};
+use crate::chain::runtime_align::{build_population_snapshot_credential, build_vote_credential};
 use crate::*;
 
 // ─── 人口快照 ─────────────────────────────────────────────
@@ -31,11 +31,11 @@ pub(crate) struct AppVotersCountQuery {
 
 #[derive(Serialize)]
 struct AppVotersCountOutput {
+    genesis_hash: String,
     eligible_total: u64,
-    as_of: i64,
     who: String,
     snapshot_nonce: String,
-    snapshot_signature: String,
+    signature: String,
 }
 
 /// GET /api/v1/app/voters/count?who=<pubkey_hex>
@@ -54,7 +54,7 @@ pub(crate) async fn app_voters_count(
         return api_error(StatusCode::BAD_REQUEST, 1001, "account_pubkey is required");
     };
 
-    let (eligible_total, as_of) = {
+    let eligible_total = {
         let store = match store_write_or_500(&state) {
             Ok(v) => v,
             Err(resp) => return resp,
@@ -64,10 +64,10 @@ pub(crate) async fn app_voters_count(
             .values()
             .filter(|b| b.citizen_status == CitizenStatus::Normal)
             .count() as u64;
-        (total, Utc::now().timestamp())
+        total
     };
 
-    let snapshot = match build_population_snapshot_signature(
+    let snapshot = match build_population_snapshot_credential(
         &state,
         who.as_str(),
         eligible_total,
@@ -100,11 +100,11 @@ pub(crate) async fn app_voters_count(
         code: 0,
         message: "ok".to_string(),
         data: AppVotersCountOutput {
+            genesis_hash: snapshot.genesis_hash,
             eligible_total,
-            as_of,
             who: snapshot.who,
             snapshot_nonce: snapshot.snapshot_nonce,
-            snapshot_signature: snapshot.signature,
+            signature: snapshot.signature,
         },
     })
     .into_response()
@@ -121,14 +121,12 @@ pub(crate) struct AppVoteCredentialInput {
 
 #[derive(Serialize)]
 struct AppVoteCredentialOutput {
-    account_pubkey: String,
-    is_bound: bool,
-    has_vote_eligibility: bool,
-    sfid_hash: Option<String>,
+    genesis_hash: String,
+    who: String,
+    binding_id: String,
     proposal_id: u64,
-    vote_nonce: Option<String>,
-    vote_signature: Option<String>,
-    message: String,
+    vote_nonce: String,
+    signature: String,
 }
 
 /// POST /api/v1/app/vote/credential
@@ -148,48 +146,38 @@ pub(crate) async fn app_vote_credential(
     };
     let proposal_id = input.proposal_id;
 
-    let (is_bound, has_vote_eligibility, sfid_code) = {
+    let (is_bound, has_vote_eligibility, binding_seed) = {
         let store = match store_write_or_500(&state) {
             Ok(v) => v,
             Err(resp) => return resp,
         };
         if let Some(binding) = store.bindings_by_pubkey.get(account_pubkey.as_str()) {
             let eligible = binding.citizen_status == CitizenStatus::Normal;
-            (true, eligible, Some(binding.sfid_code.clone()))
+            (true, eligible, Some(binding.archive_index.clone()))
         } else {
             (false, false, None)
         }
     };
 
-    let (sfid_hash, vote_nonce, vote_signature) = if has_vote_eligibility {
-        let sfid_code = sfid_code.as_deref().unwrap_or("");
+    let credential = if has_vote_eligibility {
+        let binding_seed = binding_seed.as_deref().unwrap_or("");
         match build_vote_credential(
             &state,
             &account_pubkey,
-            sfid_code,
+            binding_seed,
             proposal_id,
             Uuid::new_v4().to_string(),
         ) {
-            Ok(cred) => (
-                Some(cred.sfid_hash),
-                Some(cred.vote_nonce),
-                Some(cred.signature),
-            ),
+            Ok(cred) => cred,
             Err(message) => {
                 let detail = format!("vote credential sign failed: {message}");
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
             }
         }
-    } else {
-        (None, None, None)
-    };
-
-    let message = if has_vote_eligibility {
-        "pubkey bound and vote eligible"
     } else if is_bound {
-        "pubkey bound but not vote eligible"
+        return api_error(StatusCode::FORBIDDEN, 1003, "binding not vote eligible");
     } else {
-        "pubkey not bound, no vote eligibility"
+        return api_error(StatusCode::NOT_FOUND, 1004, "binding not found");
     };
 
     let mut store = match store_write_or_500(&state) {
@@ -204,7 +192,11 @@ pub(crate) async fn app_vote_credential(
         None,
         None,
         actor_ip_from_headers(&headers),
-        if has_vote_eligibility { "SUCCESS" } else { "INELIGIBLE" },
+        if has_vote_eligibility {
+            "SUCCESS"
+        } else {
+            "INELIGIBLE"
+        },
         format!("proposal_id={proposal_id} eligible={has_vote_eligibility}"),
     );
 
@@ -212,14 +204,12 @@ pub(crate) async fn app_vote_credential(
         code: 0,
         message: "ok".to_string(),
         data: AppVoteCredentialOutput {
-            account_pubkey,
-            is_bound,
-            has_vote_eligibility,
-            sfid_hash,
+            genesis_hash: credential.genesis_hash,
+            who: credential.who,
+            binding_id: credential.binding_id,
             proposal_id,
-            vote_nonce,
-            vote_signature,
-            message: message.to_string(),
+            vote_nonce: credential.vote_nonce,
+            signature: credential.signature,
         },
     })
     .into_response()
@@ -255,8 +245,7 @@ pub(crate) async fn app_bind_request(
     let Some(account_pubkey) = normalize_account_pubkey(input.account_pubkey.as_str()) else {
         return api_error(StatusCode::BAD_REQUEST, 1001, "account_pubkey is invalid");
     };
-    let callback_url =
-        normalize_optional(input.callback_url).or_else(default_bind_callback_url);
+    let callback_url = normalize_optional(input.callback_url).or_else(default_bind_callback_url);
     if let Some(url) = callback_url.as_ref() {
         if let Err(message) = validate_bind_callback_url(url) {
             return api_error(StatusCode::BAD_REQUEST, 1001, message.as_str());

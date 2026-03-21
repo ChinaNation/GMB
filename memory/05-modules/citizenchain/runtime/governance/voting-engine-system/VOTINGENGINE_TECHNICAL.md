@@ -17,14 +17,14 @@
 ### 0.3 联合投票功能需求
 - 仅允许国储会管理员创建联合提案。
 - 创建提案时必须一次性锁定公民投票总分母及人口快照凭证。
-- 每个机构只能由自己的多签地址提交本机构内部投票结果。
-- 联合投票提交必须附带当前机构管理员的门限签名证明，链上必须校验签名人与阈值。
+- 每个机构只能由自己的当前管理员直接参与联合投票，禁止跨机构代投。
+- 链上必须按机构当前管理员阈值自动形成机构结果，不再依赖机构多签地址或线下 approvals proof。
 - 联合阶段全票通过时立即通过；未全票但已收齐全部机构票权时转入公民投票。
 - 联合阶段超时后，若未全票通过，必须自动进入公民投票阶段。
 
 ### 0.4 公民投票功能需求
 - 仅允许具备资格的 SFID 哈希参与公民投票。
-- 每个 `proposal_id + sfid_hash` 只能投一次，且投票凭证必须防重放。
+- 每个 `proposal_id + binding_id` 只能投一次，且投票凭证必须防重放。
 - 公民投票只接收 SFID 哈希，不接收链上明文 SFID。
 - 赞成票必须“严格大于 50%”才算通过；到期后按同一规则结算。
 
@@ -33,7 +33,7 @@
 - 自动超时结算必须受单块上限约束，避免 `on_initialize` 无界增长。
 - 联合投票终结时，投票引擎状态变更与业务模块回调必须保持原子一致。
 - 自动结算若遇到回调失败，必须保留重试索引，不能让提案卡在 `Voting` 且丢失后续处理入口。
-- 所有清理入口必须能释放对应提案的计票状态，避免存储长期累积。
+- 所有清理入口必须能释放对应提案的计票状态与对象层存储，避免存储长期累积。
 
 ## 1. 模块定位
 `voting-engine-system` 是治理投票引擎基础模块，统一承载三类治理投票流程：
@@ -72,9 +72,12 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 - `ProposalsByExpiry`：按阶段截止区块索引提案（用于自动超时结算）
 - `PendingExpiryBucket`：自动结算游标（上块未处理完的过期桶）
 - `InternalVotesByAccount` / `InternalTallies`
+- `JointVotesByAdmin` / `JointInstitutionTallies`
 - `JointVotesByInstitution` / `JointTallies`
-- `CitizenVotesBySfid` / `CitizenTallies`
+- `CitizenVotesByBindingId` / `CitizenTallies`
 - `UsedPopulationSnapshotNonce`：人口快照 nonce 防重放
+- `ProposalData`：提案摘要层存储（默认上限 100KB）
+- `ProposalObjectMeta` / `ProposalObject`：提案对象层存储（默认上限 10MB）
 
 ## 3. 流程设计
 ### 3.1 内部提案
@@ -85,20 +88,24 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 
 ### 3.2 联合提案
 1. 通过 `do_create_joint_proposal` 创建提案，阶段为 `STAGE_JOINT`。
-2. `do_submit_joint_institution_vote` 先校验机构多签地址，再校验当前机构管理员对本次 `internal_passed` 结果的门限签名证明：
-   - proof 绑定 `proposal_id + institution + internal_passed + expires_at`
-   - proof 只接受当前链上管理员集合
-   - proof 达到对应机构阈值后才允许记票
-3. 联合全票通过则立即 `Passed`。
-4. 联合未全票但已收齐总票权时，立即进入 `STAGE_CITIZEN`。
-5. 联合阶段到期后，`on_initialize` 自动走 `do_finalize_joint_timeout`：
+2. `joint_vote` 由机构当前管理员个人钱包直接上链投票：
+   - `proposal_id + institution + who` 只能投一次
+   - 仅允许当前机构管理员投票
+   - 投票结果立即写入 `JointVotesByAdmin`
+3. 链上同步维护 `JointInstitutionTallies`：
+   - `yes >= institution_threshold` 时，自动把该机构结果记为 `approved`
+   - `yes + remaining_admins < institution_threshold` 时，自动把该机构结果记为 `rejected`
+4. 机构结果形成后写入 `JointVotesByInstitution`，并按机构权重累计到 `JointTallies`。
+5. 联合全票通过则立即 `Passed`。
+6. 任一机构一旦自动形成 `rejected`，由于联合阶段要求全票通过，会立即进入 `STAGE_CITIZEN`。
+7. 联合阶段到期后，`on_initialize` 自动走 `do_finalize_joint_timeout`：
    - 全票：`Passed`
    - 非全票：自动进入 `STAGE_CITIZEN`
 
 ### 3.3 公民投票
-1. `citizen_vote` 入口参数为：`(proposal_id, sfid_hash, nonce, signature, approve)`。
+1. `citizen_vote` 入口参数为：`(proposal_id, binding_id, nonce, signature, approve)`。
 2. `do_citizen_vote` 校验阶段、资格、凭证、去重后计票。
-3. 公民投票链路仅接收 `sfid_hash`，Runtime 不再接收/处理 SFID 明文字段。
+3. 公民投票链路仅接收 `binding_id`，Runtime 不再接收/处理 SFID 明文字段。
 4. 赞成票超过 50%（严格大于）时立即 `Passed`。
 5. 未达阈值且到期后，`on_initialize` 自动走 `do_finalize_citizen_timeout`，按阈值判定 `Passed/Rejected`（未达阈值即 `Rejected`）。
 
@@ -129,8 +136,12 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 ### 5.2 无 panic 的 NRC ID 解析
 `nrc_pallet_id_bytes` 返回 `Option`，移除运行时执行路径中的 `expect`，避免潜在 panic 停链风险。
 
-### 5.3 编码错误可观测
-联合投票提交人账号编码失败时返回 `AccountIdEncodingMismatch`，不再混淆为权限错误。
+### 5.3 联合投票身份模型收敛
+联合投票已收敛到“管理员直接上链投票”模型：
+- 不再要求 `origin == duoqian_address`
+- 不再依赖线下门限签名 proof
+- 权限校验完全基于当前链上管理员集合
+- 机构结果完全由链上按阈值自动形成
 
 ### 5.4 冗余存储读取优化
 - `internal_vote`：`InternalTallies::mutate` 直接返回 tally，移除额外 `get`
@@ -139,13 +150,18 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 - `finalize_proposal`：主入口读取 proposal 后传入各 timeout 分支，避免重复读
 
 ### 5.5 清理机制
-`cleanup_joint_proposal` / `cleanup_internal_proposal` 改为”小对象立即删，大前缀分块删”：
-- `Proposals`
-- `JointTallies` / `CitizenTallies` / `InternalTallies`
-- 大体量前缀（`JointVotesByInstitution` / `CitizenVotesBySfid` / `InternalVotesByAccount` / vote credential nonce）改为写入 `PendingProposalCleanups`
+`cleanup_joint_proposal` / `cleanup_internal_proposal` 改为”统一注册、分阶段清理”：
+- 摘要层：`ProposalData` / `ProposalMeta`
+- 对象层：`ProposalObjectMeta` / `ProposalObject`
+- 核心层：`Proposals` / `JointTallies` / `CitizenTallies` / `InternalTallies`
+- 大体量前缀（`JointVotesByAdmin` / `JointVotesByInstitution` / `JointInstitutionTallies` / `CitizenVotesByBindingId` / `InternalVotesByAccount` / vote credential nonce）写入 `PendingProposalCleanups`
 - `on_initialize` 按 `MaxCleanupStepsPerBlock` 与 `CleanupKeysPerStep` 分块续清，避免 finalize 路径单次无界 `clear_prefix`
 
 **自动清理注册**：`set_status_and_emit` 在终态转换（`STATUS_VOTING` → `PASSED` / `REJECTED` / `EXECUTED`）时自动调用 `schedule_cleanup` 注册 90 天延迟清理。因此消费模块不再需要手动调用 `cleanup_joint_proposal` 或 `cleanup_internal_proposal`，这两个 trait 方法已废弃（保留空实现以兼容 trait 定义）。同一提案的多次终态转换（如 `PASSED` → `EXECUTED`）通过 `try_push` 保持幂等，不会导致重复清理。
+
+**清理阶段顺序**：
+- `InternalVotes → JointAdminVotes → JointInstitutionVotes → JointInstitutionTallies → CitizenVotes → VoteCredentials → ProposalObject → FinalCleanup`
+- 其中 `ProposalObject` 专门负责删除对象层存储；`FinalCleanup` 只删除摘要层、提案主表与 tally。
 
 **`schedule_cleanup` 返回 `DispatchResult`**：该函数在目标区块队列已满时自动顺延到下一个区块（最多尝试 100 个连续区块）。如果连续 100 个区块队列均满（极端情况），使用 `defensive!` 宏在 debug/test 模式下发出警告，但仍返回 `Ok(())`，不阻塞主流程。
 
@@ -164,36 +180,19 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 - 避免同一过期区块下的提案 ID 列表无界膨胀。
 - 创建提案或阶段切换时若桶已满，会返回显式错误而不是悄悄留下未调度提案。
 
-### 5.9 联合投票门限证明上链校验
-`submit_joint_institution_vote` 不再接受裸的机构自报结果，而是要求同时提交：
-- `expires_at`
-- `approvals[] = { public_key, signature }`
-
-Runtime 必须对以下 payload 验签并验证阈值：
-
-```text
-payload = (
-  "GMB_JOINT_DECISION_V1",
-  genesis_hash,
-  proposal_id,
-  institution,
-  internal_passed,
-  expires_at
-)
-message = blake2_256(SCALE.encode(payload))
-```
-
-验签规则：
-- 签名人必须属于该机构当前链上管理员集合
-- 同一管理员不得重复计数
-- 赞成签名数量必须达到该机构类型对应的内部通过阈值
-- 过期 proof 必须拒绝，避免旧决定被重放
+### 5.9 联合投票自动机构结算
+`joint_vote` 不再接收线下 approvals proof，而是直接接收管理员个人钱包的链上投票：
+- 仅允许当前机构管理员投票
+- 同一管理员对同一 `proposal_id + institution` 只能投一次
+- 赞成票达到机构阈值时，自动形成该机构 `approved`
+- 剩余管理员已不足以让赞成达到阈值时，自动形成该机构 `rejected`
+- 任一机构 `rejected` 后，联合阶段立即结束并进入公民投票
 
 ## 6. Weight 与计费
 ### 6.1 WeightInfo
 模块定义 `WeightInfo`：
 - `create_internal_proposal`
-- `submit_joint_institution_vote`
+- `joint_vote`
 - `citizen_vote`
 - `finalize_proposal_internal`
 - `finalize_proposal_joint`
@@ -212,7 +211,7 @@ message = blake2_256(SCALE.encode(payload))
 1. `JointVoteResultCallback` 应保证可恢复、可重放，不依赖脆弱临时映射。
 2. ~~上层治理模块在消费联合终结结果后应调用 `cleanup_joint_proposal`。~~ **已废弃**：`set_status_and_emit` 在终态转换时自动注册 90 天延迟清理，消费模块无需手动调用 `cleanup_joint_proposal` 或 `cleanup_internal_proposal`（这两个 trait 方法现为空实现 no-op）。
 3. `create_internal_proposal` / `create_joint_proposal` / `internal_vote` 外部 extrinsic 已禁用，统一要求业务模块通过 trait 接入，避免生成无业务映射的悬空提案或绕过上层副作用。
-4. 联合机构线下投票系统必须产出与上面 payload 完全一致的 `sr25519` 签名，否则链上会拒绝联合投票提交。
+4. 联合投票客户端必须保证“选中的管理员钱包 = 实际上链签名钱包”，否则会被链上管理员身份或重复投票校验拒绝。
 5. 对生产链建议定期回归 benchmark，避免手工权重与实际执行漂移。
 
 ## 9. 文件索引

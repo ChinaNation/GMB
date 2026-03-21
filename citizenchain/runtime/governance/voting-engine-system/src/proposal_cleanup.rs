@@ -20,7 +20,8 @@
 //! 1. `schedule_cleanup` → 写入 `CleanupQueue[cleanup_at]`
 //! 2. `on_initialize` → `process_cleanup_queue` → 从队列取出 proposal_id
 //! 3. 释放活跃提案名额 + 删除 core/业务数据 + 注册 `PendingProposalCleanups`
-//! 4. `process_pending_cleanup_steps` 分块清理投票记录（InternalVotes → JointVotes → CitizenVotes → VoteCredentials → FinalCleanup）
+//! 4. `process_pending_cleanup_steps` 分块清理投票记录与对象层数据
+//!    （InternalVotes → JointVotes → CitizenVotes → VoteCredentials → ProposalObject → FinalCleanup）
 
 use crate::pallet::{self, Config};
 use crate::PendingCleanupStage;
@@ -39,8 +40,7 @@ const QUEUE_CAPACITY: u32 = 50;
 
 /// 计算保留期限对应的区块数。
 fn retention_blocks<T: Config>() -> BlockNumberFor<T> {
-    let blocks_per_day: BlockNumberFor<T> =
-        (primitives::pow_const::BLOCKS_PER_DAY as u32).into();
+    let blocks_per_day: BlockNumberFor<T> = (primitives::pow_const::BLOCKS_PER_DAY as u32).into();
     let days: BlockNumberFor<T> = RETENTION_DAYS.into();
     blocks_per_day.saturating_mul(days)
 }
@@ -57,9 +57,8 @@ pub fn schedule_cleanup<T: Config>(
 
     // 尝试最多 100 个区块的偏移，找到有空位的队列
     for _ in 0..100u32 {
-        let success = pallet::CleanupQueue::<T>::mutate(target, |ids| {
-            ids.try_push(proposal_id).is_ok()
-        });
+        let success =
+            pallet::CleanupQueue::<T>::mutate(target, |ids| ids.try_push(proposal_id).is_ok());
         if success {
             return Ok(());
         }
@@ -128,7 +127,7 @@ fn trigger_cleanup<T: Config>(proposal_id: u64) -> Weight {
 
     // 2. 注册到分块清理状态机。
     //    所有提案（无论内部/联合）统一从 InternalVotes 阶段开始：
-    //    InternalVotes → JointVotes → CitizenVotes → VoteCredentials → FinalCleanup
+    //    InternalVotes → JointVotes → CitizenVotes → VoteCredentials → ProposalObject → FinalCleanup
     //    如果某阶段没有数据（比如内部提案没有 JointVotes），clear_prefix 返回空结果，
     //    自动跳到下一阶段，不会卡住。最后 FinalCleanup 删除核心数据和业务数据。
     if !pallet::PendingProposalCleanups::<T>::contains_key(proposal_id) {

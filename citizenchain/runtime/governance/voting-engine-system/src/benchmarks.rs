@@ -8,7 +8,7 @@ use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_
 use sp_runtime::traits::{Hash as HashT, SaturatedConversion, Saturating};
 
 use crate::{
-    CitizenTallies, CitizenVotesBySfid, Config, InstitutionPalletId, JointDecisionApprovalsOf,
+    CitizenTallies, CitizenVotesByBindingId, Config, InstitutionPalletId, JointInstitutionTallies,
     JointTallies, NextProposalId, Pallet, Proposal, Proposals, VoteCountU32, VoteCountU64,
     VoteNonceOf, VoteSignatureOf, PROPOSAL_KIND_INTERNAL, PROPOSAL_KIND_JOINT, STAGE_CITIZEN,
     STAGE_INTERNAL, STAGE_JOINT, STATUS_VOTING,
@@ -59,8 +59,8 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn submit_joint_institution_vote() -> Result<(), BenchmarkError> {
-        let who = decode_account::<T>(CHINA_CB[0].duoqian_address)?;
+    fn joint_vote() -> Result<(), BenchmarkError> {
+        let who = decode_account::<T>(CHINA_CB[0].admins[0])?;
         let institution = nrc_institution()?;
         let now = frame_system::Pallet::<T>::block_number();
         let end = now.saturating_add(100u32.saturated_into());
@@ -77,18 +77,12 @@ mod benchmarks {
                 citizen_eligible_total: 1_000,
             },
         );
+        JointInstitutionTallies::<T>::insert(1u64, institution, VoteCountU32 { yes: 0, no: 0 });
 
         #[block]
         {
-            Pallet::<T>::do_submit_joint_institution_vote(
-                who,
-                1u64,
-                institution,
-                true,
-                end,
-                JointDecisionApprovalsOf::<T>::default(),
-            )
-            .map_err(|_| BenchmarkError::Stop("joint vote should succeed"))?;
+            Pallet::<T>::do_joint_vote(who, 1u64, institution, true)
+                .map_err(|_| BenchmarkError::Stop("joint vote should succeed"))?;
         }
 
         Ok(())
@@ -114,7 +108,7 @@ mod benchmarks {
             },
         );
         CitizenTallies::<T>::insert(proposal_id, VoteCountU64 { yes: 0, no: 0 });
-        let sfid_hash = T::Hashing::hash(b"bench-sfid");
+        let binding_id = T::Hashing::hash(b"bench-sfid");
         let nonce: VoteNonceOf<T> = b"bench-nonce"
             .to_vec()
             .try_into()
@@ -126,13 +120,13 @@ mod benchmarks {
 
         #[block]
         {
-            Pallet::<T>::do_citizen_vote(who, proposal_id, sfid_hash, nonce, signature, true)
+            Pallet::<T>::do_citizen_vote(who, proposal_id, binding_id, nonce, signature, true)
                 .map_err(|_| BenchmarkError::Stop("citizen vote should succeed"))?;
         }
 
-        assert!(CitizenVotesBySfid::<T>::contains_key(
+        assert!(CitizenVotesByBindingId::<T>::contains_key(
             proposal_id,
-            sfid_hash
+            binding_id
         ));
         assert_eq!(CitizenTallies::<T>::get(proposal_id).yes, 1u64);
         Ok(())

@@ -87,11 +87,12 @@
    - `sfid_id` 规范：长度、字符集、大小写规则由 SFID 与链侧双端校验（同一规则集）。
 3. `POST /api/v1/admin/cpms-keys/register-scan`
    - 权限：`SUPER_ADMIN`
-   - 功能：扫码录入 CPMS 初始化后产生的机构公钥二维码，调用链上 `DuoqianTransactionPow.register_sfid_institution(sfid_id)`，成功后写审计 `CPMS_KEYS_REGISTER_SCAN`。
+   - 功能：扫码录入 CPMS 初始化后产生的机构公钥二维码，生成 proof 字段 `genesis_hash + sfid_id + register_nonce + signature`，并调用链上 `DuoqianTransactionPow.register_sfid_institution(sfid_id, register_nonce, signature)`，成功后写审计 `CPMS_KEYS_REGISTER_SCAN`。
+   - 主公钥约束：初始化二维码验签与功能 4 proof 签名统一只认当前 SFID `MAIN`；备用公钥不能代替功能 4 出具 proof。
    - 并发控制：同一登记二维码 `replay_token` 在链上提交阶段采用进程内 in-flight 占位，重复并发请求直接拒绝（`register qr is being processed`），避免双重链上提交。
    - 链上等待：`submit_and_watch -> wait_for_finalized` 设置 120 秒超时，防止 HTTP 请求长期挂起。
    - 失败处理：链上提交失败写审计（`CPMS_KEYS_REGISTER_SCAN` + `CHAIN_SUBMIT_FAILED`）并立即持久化，再返回网关错误。
-   - 返回：必须包含链上回执字段 `chain_register_tx_hash`、`chain_register_block_number`。
+   - 返回：必须包含 proof 字段 `genesis_hash | sfid_id | register_nonce | signature`，以及链上回执字段 `chain_register_tx_hash`、`chain_register_block_number`。
 4. `PUT /api/v1/admin/cpms-keys/:site_sfid`
    - 权限：`SUPER_ADMIN`
    - 功能：仅允许 `ACTIVE` 机构更新三把公钥；写审计 `CPMS_KEYS_UPDATE`。
@@ -145,7 +146,7 @@
    - `SUPER_ADMIN` 必须具备省域作用域，且作用域必须等于 `init_qr_payload.province`。
    - `site_sfid` 必须已存在且当前为 `PENDING`。
    - 录入时提交的 `init_qr_payload` 必须与该 `site_sfid` 生成阶段保存值一致。
-5. 通过首轮校验后，写入 in-flight 占位（按 `replay_token`）再提交链上机构登记交易（`register_sfid_institution`）。
+5. 通过首轮校验后，写入 in-flight 占位（按 `replay_token`）再提交链上机构登记交易（`register_sfid_institution`）；提交 signer 必须与链上当前 `MAIN` 完全一致。
 6. 链上提交阶段若失败：清理 in-flight 占位，写审计 `CHAIN_SUBMIT_FAILED` 并持久化，返回 `BAD_GATEWAY`。
 7. 链上成功后进入二次提交校验（再次验证 `PENDING` 与 `init_qr_payload` 一致性），通过后机构置为 `ACTIVE`，写入 3 把公钥，清空 `init_qr_payload`，并回写 `chain_register_tx_hash | chain_register_block_number | chain_register_at`。
 8. 成功路径完成后：写 `SUCCESS` 审计、持久化运行时状态，并清理 in-flight 占位。
@@ -181,7 +182,7 @@
 3. 省域隔离由 `in_scope_cpms_site` 强校验。
 4. 机构登记二维码有防重放 token（24 小时窗口）。
 5. 只有 `ACTIVE` 机构可用于后续 CPMS 业务二维码验签。
-6. 机构登记面与链上多签发起面解耦：本模块只治理 `sfid_id` 主数据，链上 `origin` 由链与钱包侧校验。
+6. 机构登记面与链上多签发起面解耦：本模块只治理 `sfid_id` 主数据，但链上 `origin` 已冻结为“仅当前 MAIN 可提交”。
 7. 机构登记状态必须支持“链上已登记”可验证回执，至少包含 `tx_hash/block_number`。
 8. 机构登记链上提交阶段使用 in-flight 占位（按 `replay_token`）防止并发双提。
 9. 链上 finalized 等待有 120 秒超时保护。

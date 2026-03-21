@@ -31,8 +31,10 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   static const Color _cardBgColor = Color(0xFFF5F5F5);
   static const Color _inputTextColor = Colors.black87;
   static const Color _inputBorderColor = Color(0xFFD0D0D0);
+
   /// 链的 SS58 地址前缀。
   static const int _ss58Prefix = 2027;
+
   /// 链上存在性保证金（Existential Deposit）= 111 分 = 1.11 元。
   /// 来源：primitives::core_const::ACCOUNT_EXISTENTIAL_DEPOSIT = 111
   static const double _edYuan = 1.11;
@@ -126,8 +128,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
     final contact = await Navigator.of(context).push<UserContact>(
       MaterialPageRoute(
         builder: (_) => ContactBookPage(
-          selfAccountPubkeyHex:
-              _currentWallet?.pubkeyHex ?? '',
+          selfAccountPubkeyHex: _currentWallet?.pubkeyHex ?? '',
           selectForTrade: true,
         ),
       ),
@@ -295,6 +296,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
               builder: (_) => QrSignSessionPage(
                 request: request,
                 requestJson: requestJson,
+                expectedPubkey: '0x${wallet.pubkeyHex}',
               ),
             ),
           );
@@ -598,66 +600,66 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             ),
             Expanded(
               child: RefreshIndicator(
-        onRefresh: () => _reloadRecords(syncPending: true),
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          children: [
-            // 多签交易入口
-            Card(
-              color: _cardBgColor,
-              child: InkWell(
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('多签交易功能开发中')),
-                  );
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
-                  child: Row(
-                    children: [
-                      const Text(
-                        '多签交易',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                onRefresh: () => _reloadRecords(syncPending: true),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    // 多签交易入口
+                    Card(
+                      color: _cardBgColor,
+                      child: InkWell(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('多签交易功能开发中')),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+                          child: Row(
+                            children: [
+                              const Text(
+                                '多签交易',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const Spacer(),
+                              const Icon(Icons.chevron_right, size: 22),
+                            ],
+                          ),
                         ),
                       ),
-                      const Spacer(),
-                      const Icon(Icons.chevron_right, size: 22),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (_currentWallet == null && !_loadingWallet)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Card(
-                  color: _cardBgColor,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('未检测到钱包，无法执行链上签名与交易广播'),
-                        const SizedBox(height: 8),
-                        FilledButton(
-                          onPressed: _openMyWalletPage,
-                          child: const Text('去创建/导入钱包'),
-                        ),
-                      ],
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    if (_currentWallet == null && !_loadingWallet)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Card(
+                          color: _cardBgColor,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('未检测到钱包，无法执行链上签名与交易广播'),
+                                const SizedBox(height: 8),
+                                FilledButton(
+                                  onPressed: _openMyWalletPage,
+                                  child: const Text('去创建/导入钱包'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    _buildSubmitCard(),
+                    const SizedBox(height: 24),
+                  ],
                 ),
               ),
-            _buildSubmitCard(),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
             ),
           ],
         ),
@@ -1073,4 +1075,3 @@ List<int> _hexToBytes(String input) {
   }
   return out;
 }
-

@@ -50,26 +50,24 @@ class AdminCatalogResponse {
 /// SFID 人口快照响应。
 class PopulationSnapshotResponse {
   const PopulationSnapshotResponse({
+    required this.genesisHash,
     required this.eligibleTotal,
     required this.snapshotNonce,
-    required this.snapshotSignature,
+    required this.signature,
     required this.who,
-    required this.asOf,
   });
 
+  final String genesisHash;
   final int eligibleTotal;
 
   /// 快照 nonce（UTF-8 字符串，直接作为 BoundedVec<u8> 提交）。
   final String snapshotNonce;
 
   /// sr25519 签名（hex 编码，提交时需解码为原始字节）。
-  final String snapshotSignature;
+  final String signature;
 
   /// 归一化后的账户公钥 hex。
   final String who;
-
-  /// 快照生成时间（Unix 秒）。
-  final int asOf;
 }
 
 class ApiClient {
@@ -256,16 +254,15 @@ class ApiClient {
     return PopulationSnapshotResponse(
       eligibleTotal: (data['eligible_total'] as num?)?.toInt() ?? 0,
       snapshotNonce: (data['snapshot_nonce']?.toString() ?? '').trim(),
-      snapshotSignature:
-          (data['snapshot_signature']?.toString() ?? '').trim(),
+      genesisHash: (data['genesis_hash']?.toString() ?? '').trim(),
+      signature: (data['signature']?.toString() ?? '').trim(),
       who: (data['who']?.toString() ?? '').trim(),
-      asOf: (data['as_of'] as num?)?.toInt() ?? 0,
     );
   }
 
   /// 从 SFID 获取公民投票凭证。
   ///
-  /// 公民投票时，App 先从 SFID 获取投票资格证明（sfid_hash + vote_nonce + signature），
+  /// 公民投票时，App 先从 SFID 获取投票资格证明（binding_id + vote_nonce + signature），
   /// 再将凭证提交到链上。
   Future<VoteCredentialResponse> fetchVoteCredential(
       String accountPubkeyHex, int proposalId) async {
@@ -310,36 +307,30 @@ class ApiClient {
     }
 
     return VoteCredentialResponse(
-      accountPubkey: (data['account_pubkey']?.toString() ?? '').trim(),
-      isBound: data['is_bound'] as bool? ?? false,
-      hasVoteEligibility: data['has_vote_eligibility'] as bool? ?? false,
-      sfidHash: data['sfid_hash']?.toString(),
+      genesisHash: (data['genesis_hash']?.toString() ?? '').trim(),
+      who: (data['who']?.toString() ?? '').trim(),
+      bindingId: (data['binding_id']?.toString() ?? '').trim(),
       proposalId: (data['proposal_id'] as num?)?.toInt() ?? proposalId,
-      voteNonce: data['vote_nonce']?.toString(),
-      voteSignature: data['vote_signature']?.toString(),
-      message: data['message']?.toString() ?? '',
+      voteNonce: (data['vote_nonce']?.toString() ?? '').trim(),
+      signature: (data['signature']?.toString() ?? '').trim(),
     );
   }
 }
 
 class VoteCredentialResponse {
-  final String accountPubkey;
-  final bool isBound;
-  final bool hasVoteEligibility;
-  final String? sfidHash;
+  final String genesisHash;
+  final String who;
+  final String bindingId;
   final int proposalId;
-  final String? voteNonce;
-  final String? voteSignature;
-  final String message;
+  final String voteNonce;
+  final String signature;
 
   VoteCredentialResponse({
-    required this.accountPubkey,
-    required this.isBound,
-    required this.hasVoteEligibility,
-    this.sfidHash,
+    required this.genesisHash,
+    required this.who,
+    required this.bindingId,
     required this.proposalId,
-    this.voteNonce,
-    this.voteSignature,
-    required this.message,
+    required this.voteNonce,
+    required this.signature,
   });
 }

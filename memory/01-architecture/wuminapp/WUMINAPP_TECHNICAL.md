@@ -62,6 +62,7 @@ wuminapp/
   - 国储会 1
   - 省储会 43
   - 省储行 43
+- 机构分类列表固定为一行两列展示，避免因不同 Android 机型逻辑宽度差异出现单列大卡或列数漂移
 - 提案/投票链上交互仍在治理模块开发阶段（规范已落文档）
 
 ### 4.3 金融页
@@ -108,13 +109,12 @@ wuminapp/
 - 登录协议：`WUMINAPP_LOGIN_V1`
 - 收款协议：`WUMINAPP_TRANSFER_V1`
 - 用户协议：`WUMINAPP_CONTACT_V1`
-- 系统身份：通过 `sys_pubkey`/`sys_sig`/`sys_cert` 密码学验证（不再使用 `aud` 白名单）
-- SFID 信任来源：通过区块链 RPC 获取 SFID 当前公钥
-- CPMS 信任来源：由 SFID 使用当前有效公钥对 CPMS 公钥做背书（`sys_cert`）
+- 登录协议与链上转账/投票签名协议完全分离；前者只用于 `sfid/cpms` 扫码登录，后者只用于链上交易 `payload` 签名
+- 系统身份：通过 `sys_pubkey`/`sys_sig` 密码学验证二维码确由系统私钥签发（不再使用 `aud` 白名单）
 - 登录签名串：
 
 ```text
-WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
+WUMINAPP_LOGIN_V1|system|challenge|expires_at
 ```
 
 详细技术文档见：`lib/qr/QR_TECHNICAL.md`
@@ -123,11 +123,13 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 
 - 模式 A：本机签名
   - 私钥/助记词仅保存在手机 secure storage
-  - 交易和登录均由 `LocalSigner` 在手机完成签名
+  - 交易和登录均由 `WalletManager` 调起本机 sr25519 签名
 - 模式 B：扫码签名
   - 手机不保存私钥，仅保存钱包地址/公钥
   - 手机生成待签名请求二维码，外部设备签名后返回签名回执二维码
   - 协议由 `QrSigner` 统一编解码与校验（`WUMINAPP_QR_SIGN_V1`）
+  - 在线手机使用 `QrSignSessionPage`，离线设备使用 `QrOfflineSignPage`
+  - 登录挑战先经过 `LoginSystemSignatureVerifier` 校验 `sys_pubkey + sys_sig`
 
 ## 5. 手机端三层存储（当前）
 
@@ -157,7 +159,7 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 
 仍有少量非机密配置使用（按模块逐步收口）：
 
-- 登录防重放记录：`login.used_request_ids`
+- 登录防重放记录：`login.used_challenges`
 - SFID 绑定状态：`sfid.bind.*`
 - 用户资料：
   - `user.profile.nickname`
@@ -301,7 +303,7 @@ App 通过 `ApiClient` 访问非链上外部服务，当前已使用接口：
 - 私钥/助记词不落 Isar 与远端服务
 - 助记词读取强制生物识别/设备密码验证（存储层统一守卫，不可关闭）
 - 设备无生物识别也无密码时自动跳过验证
-- 登录系统身份通过密码学签名验证（`sys_pubkey`/`sys_sig`/`sys_cert`）
+- 登录系统身份通过密码学签名验证（`sys_pubkey`/`sys_sig`）
 - 绑定请求与交易状态依赖外部服务返回
 
 ## 9. 已知限制
@@ -319,12 +321,13 @@ cd /Users/rhett/GMB/wuminapp
 flutter pub get
 flutter run \
   --dart-define=WUMINAPP_RPC_URL=http://127.0.0.1:9944 \
-  --dart-define=WUMINAPP_API_BASE_URL=http://<外部服务地址> \
-  --dart-define=WUMINAPP_API_TOKEN=<token>
+  --dart-define=WUMINAPP_API_BASE_URL=http://<sfid服务地址>:8899
 ```
 
 - `WUMINAPP_RPC_URL`：覆盖默认 RPC 节点地址，本地开发时指向本机节点。不设置时 App 自动从 44 个引导节点中选择。
-- 真机调试时地址需为手机可达地址，不可用 `127.0.0.1`。
+- `WUMINAPP_API_BASE_URL`：指向 `sfid` 的 HTTP API 基地址，例如 `http://147.224.14.117:8899`。
+- 真机调试时 `WUMINAPP_RPC_URL` / `WUMINAPP_API_BASE_URL` 都必须使用手机可达地址，不可用 `127.0.0.1`。
+- 手机访问 RPC 不一定需要公网互联网；如果使用局域网地址（如 `10.x.x.x`），手机只需要和节点处于同一可达网络（同一 Wi-Fi / 热点 / VPN / USB 网络共享）即可。如果使用公网域名节点，则需要普通互联网连接。
 
 ## 11. 关联模块文档
 

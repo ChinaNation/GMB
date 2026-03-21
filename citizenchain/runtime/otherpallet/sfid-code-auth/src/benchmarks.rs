@@ -3,8 +3,8 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 use crate::{
-    AccountToSfid, BindCredential, BoundCount, Call, Config, NonceOf, Pallet, SfidBackupAccount1,
-    SfidBackupAccount2, SfidMainAccount, SfidOf, SfidToAccount, SignatureOf,
+    AccountToBindingId, BindCredential, BindingIdToAccount, BoundCount, Call, Config, NonceOf,
+    Pallet, SfidBackupAccount1, SfidBackupAccount2, SfidMainAccount, SignatureOf,
 };
 use codec::{Decode, Encode};
 use frame_benchmarking::v2::*;
@@ -31,23 +31,18 @@ mod benchmarks {
         .expect("benchmark sfid main account must decode");
         SfidMainAccount::<T>::put(sfid_main);
 
-        let sfid_bytes = b"benchmark-sfid-code".to_vec();
-        let sfid_code: SfidOf<T> = sfid_bytes.try_into().expect("sfid should fit");
-        let sfid_hash = T::Hashing::hash(sfid_code.as_slice());
+        let binding_id = T::Hashing::hash(b"benchmark-binding-id");
 
         let nonce_bytes = b"benchmark-nonce".to_vec();
         let nonce: NonceOf<T> = nonce_bytes.try_into().expect("nonce should fit");
 
-        let now = frame_system::Pallet::<T>::block_number();
-        let expires_at = now.saturating_add(10u32.into());
         let genesis_block = BlockNumberFor::<T>::zero();
         let payload = (
-            b"GMB_SFID_BIND_V2",
+            b"GMB_SFID_BIND_V3",
             frame_system::Pallet::<T>::block_hash(genesis_block),
             &caller,
-            sfid_hash,
+            binding_id,
             nonce.as_slice(),
-            expires_at,
         );
         let msg = BlakeTwo256::hash_of(&payload);
         let signature: SignatureOf<T> = sr25519_sign(key_type, &public, msg.as_fixed_bytes())
@@ -58,23 +53,22 @@ mod benchmarks {
             .expect("sig should fit");
 
         let credential = BindCredential {
-            sfid_code_hash: sfid_hash,
-            nonce,
-            expires_at,
+            binding_id,
+            bind_nonce: nonce,
             signature,
         };
 
         #[extrinsic_call]
-        bind_sfid(RawOrigin::Signed(caller), sfid_code, credential);
+        bind_sfid(RawOrigin::Signed(caller), credential);
     }
 
     #[benchmark]
     fn unbind_sfid() {
         let caller: T::AccountId = frame_benchmarking::account("caller", 0, 0);
-        let sfid_hash = T::Hashing::hash(b"bench-sfid");
+        let binding_id = T::Hashing::hash(b"bench-binding");
 
-        SfidToAccount::<T>::insert(sfid_hash, &caller);
-        AccountToSfid::<T>::insert(&caller, sfid_hash);
+        BindingIdToAccount::<T>::insert(binding_id, &caller);
+        AccountToBindingId::<T>::insert(&caller, binding_id);
         BoundCount::<T>::put(1u64);
 
         #[extrinsic_call]

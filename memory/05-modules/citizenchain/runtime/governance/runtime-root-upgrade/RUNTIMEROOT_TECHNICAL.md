@@ -5,6 +5,7 @@
 `runtime-root-upgrade` 负责把"Runtime wasm 升级"包装成一个受治理约束的链上流程，核心要求是：
 - 仅允许国储会（NRC）管理员发起升级提案。
 - 升级提案必须先经过 `voting-engine-system` 的联合投票。
+- 联合阶段由各机构管理员个人钱包直接上链投票，链上按机构阈值自动形成机构结果。
 - 联合投票通过后才允许执行 `set_code`。
 - 投票结果、执行结果必须在链上可追踪。
 
@@ -14,15 +15,15 @@
 - 创建提案时同步在 `voting-engine-system` 创建联合投票，使用投票引擎统一分配的 `proposal_id`（本模块不维护独立 ID）。
 
 ### 0.3 联合投票回调需求
-- 联合投票拒绝时，提案必须进入 `Rejected`，并清空保存的 wasm code。
+- 联合投票拒绝时，提案必须进入 `Rejected`。
 - 联合投票通过时，模块必须尝试执行 runtime code。
 - 联合投票结束后，将投票引擎侧提案状态设为 `STATUS_EXECUTED`，标记投票引擎职责完成。
 - 回调直接使用投票引擎的 `proposal_id`，无需映射反查。
 
 ### 0.4 执行失败处理
 - 若联合投票已通过但 `set_code` 执行失败，提案进入 `ExecutionFailed`。
-- 执行失败时清空 code 释放存储（不支持重试，需重新发起提案）。
-- 设计理由：runtime 升级失败通常是 WASM 本身有问题，重试同一份代码意义不大，修复后重新提案更合理。
+- runtime wasm 不再内嵌在摘要结构里，而是统一存入 `voting-engine-system::ProposalObject`。
+- 执行成功、拒绝、执行失败后，wasm 对象继续保留到投票引擎 90 天延迟清理统一删除，不由业务模块手工删除。
 
 ### 0.5 可审计与运维需求
 - 需要区分以下事件：提案创建、联合投票终结、升级执行成功、升级执行失败。
@@ -37,7 +38,9 @@
 - 接收 NRC 管理员提交的 wasm 升级提案；
 - 调用 `voting-engine-system` 创建联合投票；
 - 在联合投票回调后执行 `set_code`；
-- 业务数据存储在 `voting-engine-system` 的 `ProposalData`，本模块零本地存储。
+- 摘要数据存储在 `voting-engine-system` 的 `ProposalData`；
+- 原始 wasm 对象存储在 `voting-engine-system` 的 `ProposalObject`；
+- 本模块零本地存储。
 
 代码位置：
 - `runtime/governance/runtime-root-upgrade/src/lib.rs`
@@ -52,6 +55,8 @@ Runtime 配置位置：
 - `RuntimeCodeExecutor = RuntimeSetCodeExecutor`
 - `MaxReasonLen = RuntimeUpgradeMaxReasonLen`（1024）
 - `MaxRuntimeCodeSize = RuntimeUpgradeMaxCodeSize`（5 * 1024 * 1024）
+- `VotingEngineSystem::MaxProposalDataLen = 100 * 1024`
+- `VotingEngineSystem::MaxProposalObjectLen = 10 * 1024 * 1024`
 - `MaxSnapshotNonceLength = 64`
 - `MaxSnapshotSignatureLength = 64`
 - `WeightInfo = runtime_root_upgrade::weights::SubstrateWeight<Runtime>`
@@ -67,16 +72,24 @@ Runtime 配置位置：
 - `Rejected`：联合投票拒绝
 - `ExecutionFailed`：联合投票通过，但 runtime code 执行失败
 
-### 3.2 Proposal（序列化存入 voting-engine-system ProposalData）
+### 3.2 Proposal（摘要，序列化存入 voting-engine-system ProposalData）
 - `proposer: AccountId`：提案发起人（仅允许 NRC 管理员）
 - `reason: BoundedVec<u8, MaxReasonLen>`：升级理由
 - `code_hash: Hash`：升级 code 哈希，便于事件与链下审计对齐
-- `code: BoundedVec<u8, MaxRuntimeCodeSize>`：待执行 wasm code；终态后清空
+- `has_code: bool`：对象层 wasm 是否仍保留在链上
 - `status: ProposalStatus`：当前提案状态
+
+### 3.3 对象层数据（统一存入 voting-engine-system ProposalObject）
+- `kind = 1`：表示 runtime wasm 对象
+- `object_len`：wasm 字节长度
+- `object_hash`：对象哈希
+- `object bytes`：原始 wasm 字节（对象层上限 10MB，业务自身继续限制 5MB）
 
 ## 4. 存储模型
 本模块无本地存储。所有提案数据、投票数据、元数据均存储在 `voting-engine-system`：
-- `ProposalData`：存放 `Proposal<T>` 的 SCALE 编码
+- `ProposalData`：存放 `Proposal<T>` 摘要的 SCALE 编码
+- `ProposalObjectMeta`：存放 runtime wasm 的对象元数据（kind / len / hash）
+- `ProposalObject`：存放 runtime wasm 原始字节
 - `ProposalMeta`：存放提案创建时间
 - `Proposals`：投票引擎核心提案表（状态、阶段、截止区块等）
 
@@ -86,9 +99,10 @@ Runtime 配置位置：
 1. 校验 `NrcProposeOrigin`。
 2. 校验 `reason` 与 `code` 非空。
 3. 调用 `JointVoteEngine::create_joint_proposal` 创建联合投票，获取统一 `proposal_id`。
-4. 计算 `code_hash`，构造 `Proposal` 结构并序列化存入 `ProposalData`。
-5. 调用 `store_proposal_meta` 记录创建时间。
-6. 发出 `RuntimeUpgradeProposed` 事件。
+4. 计算 `code_hash`，构造摘要 `Proposal` 并序列化存入 `ProposalData`。
+5. 将原始 wasm 写入 `store_proposal_object(proposal_id, kind=1, code)`。
+6. 调用 `store_proposal_meta` 记录创建时间。
+7. 发出 `RuntimeUpgradeProposed` 事件。
 
 ### 5.2 `finalize_joint_vote`（call index = 1）
 说明：
@@ -97,17 +111,19 @@ Runtime 配置位置：
 
 流程：
 1. 校验 `Root`。
-2. 从 `ProposalData` 加载提案并要求当前状态为 `Voting`。
+2. 从 `ProposalData` 加载提案摘要并要求当前状态为 `Voting`。
 3. 若 `approved=false`：
-   - 标记 `Rejected`，清空 `code`
+   - 标记 `Rejected`
    - 设投票引擎状态为 `STATUS_EXECUTED`
    - 发出 `JointVoteFinalized`
 4. 若 `approved=true`：
+   - 从 `ProposalObject` 加载 runtime wasm
    - 尝试执行 `RuntimeCodeExecutor::execute_runtime_code`
-   - 成功：标记 `Passed`，清空 `code`
-   - 失败：标记 `ExecutionFailed`，清空 `code`
+   - 成功：标记 `Passed`
+   - 失败：标记 `ExecutionFailed`
    - 设投票引擎状态为 `STATUS_EXECUTED`
    - 发出 `JointVoteFinalized` + 执行成功或失败事件
+5. wasm 对象不由本模块手工删除，统一交由投票引擎 90 天延迟清理。
 
 ### 5.2.1 投票引擎 STATUS_EXECUTED 标记
 
@@ -141,12 +157,15 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - 执行成功才进入 `Passed`
 - 执行失败进入 `ExecutionFailed`
 
-### 7.2 已修复风险：ExecutionFailed 不清空 code
-旧实现中执行失败时保留 code 供重试，但重试功能未实现，导致 5MB WASM 在存储中滞留 90 天。
+### 7.2 已修复风险：大 wasm 直接塞入 ProposalData 导致提案创建失败
+旧实现中整份 runtime wasm 会直接编码进 `ProposalData`，而投票引擎通用摘要存储无法承载 MB 级对象，runtime 升级提案会在创建阶段触发 `ProposalDataTooLarge`。
 
 现已修复：
-- 执行失败时也清空 `code`，与 `Rejected` 路径一致
-- 失败后需重新提案，而非重试同一份可能有问题的 WASM
+- `ProposalData` 只存摘要
+- wasm 改为统一写入投票引擎对象层 `ProposalObject`
+- 投票引擎摘要上限提升到 `100KB`
+- 投票引擎对象层上限提升到 `10MB`
+- runtime 升级业务自身 `MaxRuntimeCodeSize` 继续保持 `5MB`
 
 ### 7.3 已修复风险：Rejected 路径未设 STATUS_EXECUTED
 旧实现中 `approved=true` 路径会设投票引擎 `STATUS_EXECUTED`，但 `approved=false` 路径不设，导致两种终态行为不一致。
@@ -174,10 +193,10 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 ## 9. 测试覆盖
 已覆盖（10 个测试）：
 - 仅 NRC 管理员可发起提案
-- 提案数据正确存入 voting-engine-system
-- 联合投票拒绝进入 `Rejected` 并清空 code
-- 联合投票通过并成功执行进入 `Passed` 并清空 code
-- 联合投票通过但执行失败进入 `ExecutionFailed` 并清空 code
+- 提案摘要与对象数据正确分别存入 voting-engine-system
+- 联合投票拒绝进入 `Rejected`
+- 联合投票通过并成功执行进入 `Passed`
+- 联合投票通过但执行失败进入 `ExecutionFailed`
 - 已终结的提案不可重复终结（`ProposalNotVoting`）
 - 不存在的提案终结失败（`ProposalNotFound`）
 - GenesisConfig 构建成功

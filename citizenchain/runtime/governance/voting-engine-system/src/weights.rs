@@ -44,7 +44,7 @@ use frame_support::{
 /// Weight functions for `voting_engine_system`.
 pub trait WeightInfo {
 	fn create_internal_proposal() -> Weight;
-	fn submit_joint_institution_vote() -> Weight;
+	fn joint_vote() -> Weight;
 	fn citizen_vote() -> Weight;
 	fn finalize_proposal_internal() -> Weight;
 	fn finalize_proposal_joint() -> Weight;
@@ -73,7 +73,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `VotingEngineSystem::JointVotesByInstitution` (`max_values`: None, `max_size`: Some(89), added: 2564, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::JointTallies` (r:1 w:1)
 	/// Proof: `VotingEngineSystem::JointTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	fn submit_joint_institution_vote() -> Weight {
+	fn joint_vote() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `113`
 		//  Estimated: `3559`
@@ -87,8 +87,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
 	/// Storage: `SfidCodeAuth::SfidToAccount` (r:1 w:0)
 	/// Proof: `SfidCodeAuth::SfidToAccount` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::CitizenVotesBySfid` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::CitizenVotesBySfid` (`max_values`: None, `max_size`: Some(73), added: 2548, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::CitizenVotesByBindingId` (r:1 w:1)
+	/// Proof: `VotingEngineSystem::CitizenVotesByBindingId` (`max_values`: None, `max_size`: Some(73), added: 2548, mode: `MaxEncodedLen`)
 	/// Storage: `SfidCodeAuth::UsedVoteNonce` (r:1 w:1)
 	/// Proof: `SfidCodeAuth::UsedVoteNonce` (`max_values`: None, `max_size`: Some(105), added: 2580, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::CitizenTallies` (r:1 w:1)
@@ -168,7 +168,7 @@ impl WeightInfo for () {
 	/// Proof: `VotingEngineSystem::JointVotesByInstitution` (`max_values`: None, `max_size`: Some(89), added: 2564, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::JointTallies` (r:1 w:1)
 	/// Proof: `VotingEngineSystem::JointTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	fn submit_joint_institution_vote() -> Weight {
+	fn joint_vote() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `113`
 		//  Estimated: `3559`
@@ -182,8 +182,8 @@ impl WeightInfo for () {
 	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
 	/// Storage: `SfidCodeAuth::SfidToAccount` (r:1 w:0)
 	/// Proof: `SfidCodeAuth::SfidToAccount` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::CitizenVotesBySfid` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::CitizenVotesBySfid` (`max_values`: None, `max_size`: Some(73), added: 2548, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngineSystem::CitizenVotesByBindingId` (r:1 w:1)
+	/// Proof: `VotingEngineSystem::CitizenVotesByBindingId` (`max_values`: None, `max_size`: Some(73), added: 2548, mode: `MaxEncodedLen`)
 	/// Storage: `SfidCodeAuth::UsedVoteNonce` (r:1 w:1)
 	/// Proof: `SfidCodeAuth::UsedVoteNonce` (`max_values`: None, `max_size`: Some(105), added: 2580, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::CitizenTallies` (r:1 w:1)

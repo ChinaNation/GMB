@@ -10,6 +10,7 @@ void main() {
 
   const secureStorageChannel =
       MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+  const localAuthChannel = MethodChannel('plugins.flutter.io/local_auth');
   final secureStorage = <String, String>{};
 
   setUpAll(() async {
@@ -49,11 +50,27 @@ void main() {
           return null;
       }
     });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(localAuthChannel, (call) async {
+      switch (call.method) {
+        case 'isDeviceSupported':
+        case 'deviceSupportsBiometrics':
+          return false;
+        case 'getAvailableBiometrics':
+          return const <String>[];
+        case 'authenticate':
+          return true;
+        default:
+          return null;
+      }
+    });
   });
 
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(secureStorageChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(localAuthChannel, null);
   });
 
   group('WalletManager — 热钱包', () {
@@ -97,8 +114,7 @@ void main() {
       wallets = await manager.getWallets();
       expect(wallets.length, 1);
       expect(await manager.getActiveWalletIndex(), 1);
-      expect(
-          secureStorage.containsKey(WalletSecureKeys.seedHexV1(2)), isFalse);
+      expect(secureStorage.containsKey(WalletSecureKeys.seedHexV1(2)), isFalse);
 
       await manager.deleteWallet(1);
       expect(await manager.getWallet(), isNull);

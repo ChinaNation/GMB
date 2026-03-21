@@ -17,6 +17,7 @@ class QrSignSessionPage extends StatefulWidget {
     super.key,
     required this.request,
     required this.requestJson,
+    required this.expectedPubkey,
   });
 
   /// 已构建的签名请求。
@@ -24,6 +25,7 @@ class QrSignSessionPage extends StatefulWidget {
 
   /// 编码后的 JSON 字符串，直接用于二维码展示。
   final String requestJson;
+  final String expectedPubkey;
 
   @override
   State<QrSignSessionPage> createState() => _QrSignSessionPageState();
@@ -67,6 +69,7 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
       final response = QrSigner().parseResponse(
         raw,
         expectedRequestId: widget.request.requestId,
+        expectedPubkey: widget.expectedPubkey,
       );
       if (!mounted) return;
       Navigator.of(context).pop(response);
@@ -108,9 +111,7 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              expired
-                  ? '签名请求已过期，请返回重新提交'
-                  : '签名请求有效期剩余：${_remainingSeconds}s',
+              expired ? '签名请求已过期，请返回重新提交' : '签名请求有效期剩余：${_remainingSeconds}s',
               style: TextStyle(
                 color: expired ? Colors.red.shade700 : Colors.green.shade700,
                 fontWeight: FontWeight.w600,

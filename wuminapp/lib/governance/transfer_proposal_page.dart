@@ -26,6 +26,7 @@ class TransferProposalPage extends StatefulWidget {
   final InstitutionInfo institution;
   final IconData icon;
   final Color badgeColor;
+
   /// 当前用户导入的、属于此机构的管理员钱包列表。
   final List<WalletProfile> adminWallets;
 
@@ -165,8 +166,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
     final bytes = utf8.encode(remark);
     if (bytes.length > 256) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('备注超过 256 字节限制（当前 ${bytes.length} 字节）')),
+        SnackBar(content: Text('备注超过 256 字节限制（当前 ${bytes.length} 字节）')),
       );
       return false;
     }
@@ -202,15 +202,16 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
           context,
           MaterialPageRoute(
             builder: (_) => QrSignSessionPage(
-                request: request, requestJson: requestJson),
+                request: request,
+                requestJson: requestJson,
+                expectedPubkey: '0x${wallet.pubkeyHex}'),
           ),
         );
         if (response == null) throw Exception('签名已取消');
         return Uint8List.fromList(_hexToBytes(response.signature));
       }
 
-      final signerPubkey =
-          Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
+      final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
 
       final service = TransferProposalService();
       await service.submitProposeTransfer(
@@ -360,9 +361,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
           // ──── 预估手续费 ────
           _buildInfoRow(
             '预估手续费',
-            _estimatedFee > 0
-                ? '${_estimatedFee.toStringAsFixed(2)} 元'
-                : '--',
+            _estimatedFee > 0 ? '${_estimatedFee.toStringAsFixed(2)} 元' : '--',
           ),
           const SizedBox(height: 8),
 

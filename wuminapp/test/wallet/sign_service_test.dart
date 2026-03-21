@@ -8,41 +8,45 @@ import 'package:substrate_bip39/crypto_scheme.dart';
 import 'package:wuminapp_mobile/qr/login/login_models.dart';
 import 'package:wuminapp_mobile/qr/login/login_replay_guard.dart';
 import 'package:wuminapp_mobile/qr/login/login_service.dart';
+import 'package:wuminapp_mobile/signer/qr_signer.dart';
+import 'package:wuminapp_mobile/signer/system_signature_verifier.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 void main() {
   group('LoginService', () {
     late _FakeWalletService walletService;
     late _FakeReplayGuard replayGuard;
+    late _FakeSystemSignatureVerifier systemSignatureVerifier;
     late LoginService service;
 
     setUp(() {
       walletService = _FakeWalletService();
       replayGuard = _FakeReplayGuard();
+      systemSignatureVerifier = _FakeSystemSignatureVerifier();
       service = LoginService(
         walletManager: walletService,
         replayGuard: replayGuard,
+        systemSignatureVerifier: systemSignatureVerifier,
       );
     });
 
     test('parseChallenge should parse a valid challenge', () {
       final raw = _challengeJson(
-        requestId: 'req-1',
+        challenge: 'req-1',
         expiresAt: _nowSec() + 90,
       );
       final challenge = service.parseChallenge(raw);
 
       expect(challenge.proto, 'WUMINAPP_LOGIN_V1');
       expect(challenge.system, 'cpms');
-      expect(challenge.requestId, 'req-1');
+      expect(challenge.challenge, 'req-1');
       expect(challenge.sysPubkey, startsWith('0x'));
       expect(challenge.sysSig, startsWith('0x'));
-      expect(challenge.sysCert, startsWith('0x'));
     });
 
     test('parseChallenge should reject expired challenge', () {
       final raw = _challengeJson(
-        requestId: 'req-expired',
+        challenge: 'req-expired',
         issuedAt: _nowSec() - 120,
         expiresAt: _nowSec() - 1,
       );
@@ -60,7 +64,7 @@ void main() {
 
     test('parseChallenge should reject non-90-second ttl', () {
       final raw = _challengeJson(
-        requestId: 'req-invalid-ttl',
+        challenge: 'req-invalid-ttl',
         issuedAt: _nowSec() - 1,
         expiresAt: _nowSec() + 60,
       );
@@ -76,9 +80,9 @@ void main() {
       );
     });
 
-    test('parseChallenge should reject request_id with illegal chars', () {
+    test('parseChallenge should reject challenge with illegal chars', () {
       final raw = _challengeJson(
-        requestId: 'bad id',
+        challenge: 'bad id',
         expiresAt: _nowSec() + 90,
       );
       expect(
@@ -87,7 +91,7 @@ void main() {
           isA<Exception>().having(
             (e) => e.toString(),
             'message',
-            contains('request_id'),
+            contains('challenge'),
           ),
         ),
       );
@@ -95,7 +99,6 @@ void main() {
 
     test('parseChallenge should reject challenge with whitespace', () {
       final raw = _challengeJson(
-        requestId: 'req-challenge-space',
         challenge: 'ab c123',
         expiresAt: _nowSec() + 90,
       );
@@ -114,7 +117,7 @@ void main() {
     test('parseChallenge should reject issued_at too far in future', () {
       final issuedAt = _nowSec() + LoginService.maxClockSkewSeconds + 10;
       final raw = _challengeJson(
-        requestId: 'req-future-issued-at',
+        challenge: 'req-future-issued-at',
         issuedAt: issuedAt,
         expiresAt: issuedAt + LoginService.challengeTtlSeconds,
       );
@@ -130,52 +133,21 @@ void main() {
       );
     });
 
-    test('parseChallenge should require sys_cert for cpms system', () {
-      final expiresAt = _nowSec() + 90;
-      final iat = expiresAt - 90;
-      final raw = '''
-{
-  "proto": "WUMINAPP_LOGIN_V1",
-  "system": "cpms",
-  "request_id": "req-no-cert",
-  "challenge": "base64-rand",
-  "nonce": "nonce-1",
-  "issued_at": $iat,
-  "expires_at": $expiresAt,
-  "sys_pubkey": "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-  "sys_sig": "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
-}
-''';
-      expect(
-        () => service.parseChallenge(raw),
-        throwsA(
-          isA<Exception>().having(
-            (e) => e.toString(),
-            'message',
-            contains('sys_cert'),
-          ),
-        ),
-      );
-    });
-
-    test('parseChallenge should allow sfid without sys_cert', () {
+    test('parseChallenge should allow sfid payload without extra cert fields',
+        () {
       final raw = _challengeJson(
-        requestId: 'req-sfid-no-cert',
+        challenge: 'req-sfid-no-cert',
         system: 'sfid',
         expiresAt: _nowSec() + 90,
-        includeSysCert: false,
       );
       final challenge = service.parseChallenge(raw);
       expect(challenge.system, 'sfid');
-      expect(challenge.sysCert, isNull);
     });
 
-    test('buildSignMessage should follow canonical format without aud', () {
+    test('buildSignMessage should follow canonical format', () {
       final expiresAt = _nowSec() + 90;
       final raw = _challengeJson(
-        requestId: 'req-preview',
         challenge: 'abc123',
-        nonce: 'nonce-xyz',
         expiresAt: expiresAt,
       );
       final challenge = service.parseChallenge(raw);
@@ -183,16 +155,15 @@ void main() {
 
       expect(
         signMessage,
-        'WUMINAPP_LOGIN_V1|cpms|req-preview|abc123|nonce-xyz|$expiresAt',
+        'WUMINAPP_LOGIN_V1|cpms|abc123|$expiresAt',
       );
     });
 
     test('buildReceiptPayload should sign with selected wallet', () async {
       final raw = _challengeJson(
-        requestId: 'req-wallet-2',
+        challenge: 'req-wallet-2',
         system: 'sfid',
         expiresAt: _nowSec() + 90,
-        includeSysCert: false,
       );
       final challenge = service.parseChallenge(raw);
 
@@ -211,9 +182,9 @@ void main() {
       expect(receipt.containsKey('account'), isFalse);
     });
 
-    test('buildReceiptPayload should block replay request_id', () async {
+    test('buildReceiptPayload should block replay challenge', () async {
       final raw = _challengeJson(
-        requestId: 'req-replay',
+        challenge: 'req-replay',
         expiresAt: _nowSec() + 90,
       );
       final challenge = service.parseChallenge(raw);
@@ -234,7 +205,7 @@ void main() {
     test('buildReceiptPayload should fail when walletIndex not found',
         () async {
       final raw = _challengeJson(
-        requestId: 'req-wallet-missing',
+        challenge: 'req-wallet-missing',
         expiresAt: _nowSec() + 90,
       );
       final challenge = service.parseChallenge(raw);
@@ -250,6 +221,53 @@ void main() {
         ),
       );
     });
+
+    test('buildExternalSignRequest should build cold-wallet qr request',
+        () async {
+      final raw = _challengeJson(
+        challenge: 'req-cold-login',
+        expiresAt: _nowSec() + 90,
+      );
+      final challenge = service.parseChallenge(raw);
+      final coldWallet = await walletService.buildColdWalletProfile(1);
+
+      final bundle = await service.buildExternalSignRequest(
+        challenge,
+        wallet: coldWallet,
+      );
+
+      final parsed = QrSigner().parseRequest(bundle.requestJson);
+      expect(parsed.scope, QrSignScope.login);
+      expect(parsed.requestId, challenge.challenge);
+      expect(parsed.account, coldWallet.address);
+      expect(parsed.pubkey, '0x${coldWallet.pubkeyHex}');
+      expect(bundle.signMessage, service.buildSignMessage(challenge));
+    });
+
+    test('buildReceiptFromSignature should accept cold-wallet signature',
+        () async {
+      final raw = _challengeJson(
+        challenge: 'req-cold-receipt',
+        expiresAt: _nowSec() + 90,
+      );
+      final challenge = service.parseChallenge(raw);
+      final coldWallet = await walletService.buildColdWalletProfile(1);
+      final signMessage = service.buildSignMessage(challenge);
+      final signed = await walletService.signUtf8WithWallet(
+        coldWallet.walletIndex,
+        signMessage,
+      );
+
+      final receipt = await service.buildReceiptFromSignature(
+        challenge: challenge,
+        pubkeyHex: signed.pubkeyHex,
+        signatureHex: signed.signatureHex,
+      );
+
+      expect(receipt['challenge'], challenge.challenge);
+      expect(receipt['pubkey'], signed.pubkeyHex);
+      expect(receipt['signature'], signed.signatureHex);
+    });
   });
 }
 
@@ -259,33 +277,23 @@ const String _fakeSysPubkey =
     '0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
 const String _fakeSysSig =
     '0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
-const String _fakeSysCert =
-    '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
 
 String _challengeJson({
-  required String requestId,
+  required String challenge,
   String system = 'cpms',
-  String challenge = 'base64-rand',
-  String nonce = 'nonce-1',
   int? issuedAt,
   required int expiresAt,
-  bool includeSysCert = true,
 }) {
   final iat = issuedAt ?? (expiresAt - LoginService.challengeTtlSeconds);
-  final certLine =
-      includeSysCert ? '"sys_cert": "$_fakeSysCert",' : '';
   return '''
 {
   "proto": "WUMINAPP_LOGIN_V1",
   "system": "$system",
-  "request_id": "$requestId",
   "challenge": "$challenge",
-  "nonce": "$nonce",
   "issued_at": $iat,
   "expires_at": $expiresAt,
   "sys_pubkey": "$_fakeSysPubkey",
   "sys_sig": "$_fakeSysSig",
-  $certLine
   "_pad": true
 }
 ''';
@@ -295,18 +303,18 @@ class _FakeReplayGuard extends LoginReplayGuard {
   final Set<String> _used = <String>{};
 
   @override
-  Future<void> assertNotConsumed(String requestId) async {
-    if (_used.contains(requestId)) {
+  Future<void> assertNotConsumed(String challenge) async {
+    if (_used.contains(challenge)) {
       throw Exception('登录挑战已使用，请刷新二维码后重试');
     }
   }
 
   @override
   Future<void> consume({
-    required String requestId,
+    required String challenge,
     required int expiresAt,
   }) async {
-    _used.add(requestId);
+    _used.add(challenge);
   }
 }
 
@@ -336,8 +344,7 @@ class _FakeWalletService extends WalletManager {
   }) async {
     // 使用与 WalletManager 相同的派生链。
     final entropy =
-        bip39m.Mnemonic.fromSentence(mnemonic, bip39m.Language.english)
-            .entropy;
+        bip39m.Mnemonic.fromSentence(mnemonic, bip39m.Language.english).entropy;
     final miniSecret = await CryptoScheme.miniSecretFromEntropy(entropy);
 
     final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(miniSecret));
@@ -388,6 +395,39 @@ class _FakeWalletService extends WalletManager {
   Future<WalletProfile?> getWallet() async {
     final fixtures = await _ensureFixtures();
     return fixtures.last.profile;
+  }
+
+  @override
+  Future<WalletProfile?> getWalletByIndex(int walletIndex) async {
+    final fixtures = await _ensureFixtures();
+    for (final f in fixtures) {
+      if (f.profile.walletIndex == walletIndex) {
+        return f.profile;
+      }
+    }
+    return null;
+  }
+
+  Future<WalletProfile> buildColdWalletProfile(int walletIndex) async {
+    final fixtures = await _ensureFixtures();
+    for (final f in fixtures) {
+      if (f.profile.walletIndex == walletIndex) {
+        return WalletProfile(
+          walletIndex: f.profile.walletIndex,
+          walletName: '${f.profile.walletName}-冷',
+          walletIcon: f.profile.walletIcon,
+          balance: f.profile.balance,
+          address: f.profile.address,
+          pubkeyHex: f.profile.pubkeyHex,
+          alg: f.profile.alg,
+          ss58: f.profile.ss58,
+          createdAtMillis: f.profile.createdAtMillis,
+          source: f.profile.source,
+          signMode: 'external',
+        );
+      }
+    }
+    throw StateError('未找到测试钱包');
   }
 
   @override
@@ -444,4 +484,9 @@ class _WalletFixture {
 
   final WalletProfile profile;
   final String seedHex;
+}
+
+class _FakeSystemSignatureVerifier extends LoginSystemSignatureVerifier {
+  @override
+  Future<void> verify(LoginChallenge challenge) async {}
 }

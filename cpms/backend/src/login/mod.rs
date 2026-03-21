@@ -5,7 +5,7 @@ use axum::{
     Json, Router,
 };
 use chrono::{Duration, Utc};
-use schnorrkel::{signing_context, PublicKey, Signature};
+use schnorrkel::{MiniSecretKey, PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
@@ -75,12 +75,12 @@ struct QrChallengeData {
     origin: String,
     domain: String,
     session_id: String,
-    nonce: String,
     expire_at: i64,
 }
 
 #[derive(Deserialize)]
 struct QrCompleteRequest {
+    #[serde(alias = "challenge")]
     challenge_id: String,
     session_id: String,
     admin_pubkey: String,
@@ -89,6 +89,7 @@ struct QrCompleteRequest {
 
 #[derive(Deserialize)]
 struct QrResultQuery {
+    #[serde(alias = "challenge")]
     challenge_id: String,
     session_id: String,
 }
@@ -355,16 +356,20 @@ async fn auth_qr_challenge(
     }
 
     let challenge_id = format!("chl_{}", Uuid::new_v4().simple());
-    let nonce = Uuid::new_v4().simple().to_string();
-    let challenge_token = Uuid::new_v4().simple().to_string();
     let issued_at = Utc::now().timestamp();
     let expire_at = (Utc::now() + Duration::seconds(CHALLENGE_EXPIRES_SECONDS)).timestamp();
-    let qr_aud =
-        std::env::var("CPMS_LOGIN_QR_AUD").unwrap_or_else(|_| "cpms-local-app".to_string());
     let challenge_payload = format!(
-        "WUMINAPP_LOGIN_V1|{}|{}|{}|{}|{}|{}",
-        "cpms", qr_aud, challenge_id, challenge_token, nonce, expire_at
+        "WUMINAPP_LOGIN_V1|{}|{}|{}",
+        "cpms", challenge_id, expire_at
     );
+    let (sys_pubkey, sys_sig) = build_login_qr_system_signature(
+        &state,
+        "cpms",
+        challenge_id.as_str(),
+        issued_at,
+        expire_at,
+    )
+    .await?;
 
     sqlx::query(
         "INSERT INTO login_challenges (challenge_id, admin_pubkey, challenge_payload, session_id, expire_at, consumed, created_at)
@@ -382,16 +387,11 @@ async fn auth_qr_challenge(
     let login_qr_payload = serde_json::json!({
         "proto": "WUMINAPP_LOGIN_V1",
         "system": "cpms",
-        "request_id": challenge_id,
-        "challenge": challenge_token,
+        "challenge": challenge_id,
         "issued_at": issued_at,
         "expires_at": expire_at,
-        "aud": qr_aud,
-        "challenge_id": challenge_id,
-        "challenge_payload": challenge_payload,
-        "session_id": session_id,
-        "nonce": nonce,
-        "expire_at": expire_at
+        "sys_pubkey": sys_pubkey,
+        "sys_sig": sys_sig
     })
     .to_string();
 
@@ -402,7 +402,6 @@ async fn auth_qr_challenge(
         origin,
         domain,
         session_id,
-        nonce,
         expire_at,
     })))
 }
@@ -746,14 +745,47 @@ fn verify_wumin_login_signature(
 
     let pk = PublicKey::from_bytes(&pubkey_bytes).map_err(|_| "invalid sr25519 public key")?;
     let sig = Signature::from_bytes(&sig_bytes).map_err(|_| "invalid sr25519 signature")?;
-    let ctx = signing_context(b"substrate");
-    if pk
-        .verify(ctx.bytes(challenge_payload.as_bytes()), &sig)
-        .is_ok()
-    {
-        return Ok(());
-    }
-    let wrapped = format!("<Bytes>{}</Bytes>", challenge_payload);
-    pk.verify(ctx.bytes(wrapped.as_bytes()), &sig)
+    pk.verify_simple(b"", challenge_payload.as_bytes(), &sig)
         .map_err(|_| "sr25519 verify failed")
+}
+
+async fn build_login_qr_system_signature(
+    state: &AppState,
+    system: &str,
+    challenge: &str,
+    issued_at: i64,
+    expires_at: i64,
+) -> Result<(String, String), (StatusCode, Json<ApiError>)> {
+    let keys = crate::initialize::load_qr_sign_keys(state).await?;
+    let active = keys.iter().find(|k| k.status == "ACTIVE").ok_or_else(|| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5002,
+            "missing active qr sign key",
+        )
+    })?;
+    if active.secret_bytes.len() != 32 {
+        return Err(err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5003,
+            "invalid qr sign secret length",
+        ));
+    }
+    let mini = MiniSecretKey::from_bytes(active.secret_bytes.as_slice()).map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5003,
+            "invalid qr sign secret key",
+        )
+    })?;
+    let keypair = mini.expand_to_keypair(schnorrkel::ExpansionMode::Ed25519);
+    let message = format!(
+        "WUMINAPP_LOGIN_V1|{}|{}|{}|{}|{}",
+        system, challenge, issued_at, expires_at, active.pubkey
+    );
+    let signature = keypair.sign_simple(b"", message.as_bytes());
+    Ok((
+        active.pubkey.clone(),
+        format!("0x{}", hex::encode(signature.to_bytes())),
+    ))
 }

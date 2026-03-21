@@ -2809,7 +2809,6 @@ pub mod pallet {
 
             let reserve_left: BalanceOf<T> = T::Currency::free_balance(&fee_account);
 
-
             Self::deposit_event(Event::<T>::SweepToMainExecuted {
                 proposal_id,
                 institution: action.institution,
@@ -3041,14 +3040,14 @@ mod tests {
         for TestSfidEligibility
     {
         fn is_eligible(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
         ) -> bool {
             true
         }
 
         fn verify_and_consume_vote_credential(
-            _sfid_hash: &<Test as frame_system::Config>::Hash,
+            _binding_id: &<Test as frame_system::Config>::Hash,
             _who: &AccountId32,
             _proposal_id: u64,
             _nonce: &[u8],
@@ -3113,6 +3112,7 @@ mod tests {
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxJointDecisionApprovals = ConstU32<32>;
         type MaxProposalDataLen = ConstU32<256>;
+        type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();

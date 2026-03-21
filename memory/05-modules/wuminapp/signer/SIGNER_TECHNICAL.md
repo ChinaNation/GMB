@@ -18,8 +18,10 @@
 ```text
 lib/signer/
 ├── local_signer.dart
+├── offline_sign_service.dart
 ├── qr_signer.dart
 ├── signer.dart
+├── system_signature_verifier.dart
 └── SIGNER_TECHNICAL.md
 ```
 
@@ -63,7 +65,32 @@ lib/signer/
 
 说明：
 
-- 当前版本先提供协议编解码与校验能力，UI 交互后续接入。
+- 协议编解码与校验能力已接入登录、链上交易、治理等业务页面
+- `QrSignSessionPage` 负责在线手机展示请求二维码并扫描回执
+- `QrOfflineSignPage` 负责离线设备扫描请求并展示签名回执二维码
+
+### 4.1 离线签名执行服务（OfflineSignService）
+
+文件：`offline_sign_service.dart`
+
+职责：
+
+- 解析在线设备展示的 `sign_request`
+- 校验请求中的 `account/pubkey` 与当前本机热钱包完全一致
+- 调用 `WalletManager.signWithWallet()` 在本机完成签名
+- 生成统一 `sign_response` 回执二维码数据
+
+### 4.2 登录系统签名验证（LoginSystemSignatureVerifier）
+
+文件：`system_signature_verifier.dart`
+
+职责：
+
+- 用二维码中的 `sys_pubkey` 验证 `sys_sig`
+- 从链上读取 `SfidCodeAuth::SfidMainAccount`，得到当前 SFID 主验签公钥
+- `sfid` 场景校验二维码公钥与链上当前 SFID 公钥一致
+- `cpms` 场景校验 `sys_cert` 是否由链上 SFID 当前公钥签发
+- 对 CPMS 证书时间窗口做覆盖校验，拒绝挑战有效期超出证书范围的请求
 
 ## 5. 协议口径（WUMINAPP_QR_SIGN_V1）
 
@@ -102,10 +129,12 @@ lib/signer/
   - 不再直接实现签名算法细节
 - `qr/login`：
   - 负责挑战解析、防重放、系统签名验证、签名前确认
-  - 通过 `LocalSigner` 获取签名回执
+  - 热钱包通过 `WalletManager.signUtf8WithWallet()` 本机签名
+  - 冷钱包通过 `QrSigner + OfflineSignService` 完成外部签名
 - `trade/onchain`：
   - 负责交易草稿校验、prepare/submit/status 编排
-  - 通过 `LocalSigner` 对 signer payload 签名
+  - 热钱包通过 `WalletManager.signWithWallet()` 本机签名
+  - 冷钱包通过 `QrSigner + QrSignSessionPage + OfflineSignService` 完成外部签名
 - `governance`（规划）：
   - 负责提案/投票业务字段编排
   - 通过 `Signer` 完成链上交易签名
@@ -132,13 +161,13 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 - 人口快照签名（联合提案字段）：
 
 ```text
-("GMB_SFID_POPULATION_V2", genesis_hash, who, eligible_total, nonce)
+("GMB_SFID_POPULATION_V3", genesis_hash, who, eligible_total, nonce)
 ```
 
 - 公民投票凭证签名：
 
 ```text
-("GMB_SFID_VOTE_V2", genesis_hash, who, sfid_hash, proposal_id, nonce)
+("GMB_SFID_VOTE_V3", genesis_hash, who, binding_id, proposal_id, nonce)
 ```
 
 两类消息均采用 `blake2_256(SCALE.encode(payload))` 后做 `sr25519` 签名。
@@ -154,7 +183,6 @@ WUMINAPP_LOGIN_V1|system|request_id|challenge|nonce|expires_at
 
 ## 9. 后续扩展点
 
-- 接入外部签名设备端 UI 与会话管理
 - 支持二维码分片/重组与重传
 - 引入设备绑定与会话确认（防中间人替换二维码）
 - 增加扫码签名链路的端到端测试
