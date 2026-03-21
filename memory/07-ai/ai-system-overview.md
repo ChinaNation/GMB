@@ -53,6 +53,14 @@ Codex 修复并回写文档
 - 逻辑不清时必须先沟通
 - 对外输入统一是任务需求，不强制手工拆标题和目标
 
+## 4.1 当前技术语言基线
+
+- `citizenchain/node` 与 `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
+- `citizenchain/nodeui`：Rust + Tauri + React + TypeScript + Vite
+- `sfid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
+- `cpms`：Rust + Axum + SQLx + PostgreSQL；`frontend/` 当前仅为预留目录
+- `wuminapp`：Flutter + Dart + Isar
+
 ## 5. 第一阶段建设内容
 
 第一阶段的 AI 编程系统只做最关键的底座：

@@ -21,7 +21,7 @@ twox-hash = "2"
 ed25519-dalek = "2"
 sha2 = "0.10"
 rand = "0.8"
-primitives = { path = "../../../primitives" }
+primitives = { path = "../../runtime/primitives" } # 指向当前 citizenchain/runtime/primitives 统一共享常量目录
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 sysinfo = "0.34"
 thiserror = "2"

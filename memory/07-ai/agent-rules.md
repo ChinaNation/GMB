@@ -10,6 +10,14 @@
 
 ## 2. Agent 角色
 
+## 2.1 当前技术栈口径
+
+- `citizenchain/node` 与 `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
+- `citizenchain/nodeui`：Rust + Tauri + React + TypeScript + Vite
+- `sfid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
+- `cpms`：Rust + Axum + SQLx + PostgreSQL；当前仓库只有预留前端目录，没有独立前端实现落地
+- `wuminapp`：Flutter + Dart + Isar
+
 ### Architect Agent
 
 - 负责读取 `memory/`
