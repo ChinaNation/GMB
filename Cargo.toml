@@ -1,6 +1,5 @@
 [workspace]         # 声明整个仓库的工作空间
 members = [
-  "primitives",     # 全项目通用常量
   "tools/scripts",  # 工具库：脚本工具
 ]
 resolver = "2"      # 使用 Cargo 新版依赖解析器，减少 feature 冲突

@@ -24,7 +24,7 @@ clap = { workspace = true }
 futures = { workspace = true }
 jsonrpsee = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-primitives = { path = "../../primitives" }
+primitives = { path = "../runtime/primitives" }
 ocl = { version = "0.19", optional = true }
 
 # substrate client
@@ -73,9 +73,9 @@ frame-benchmarking-cli = { workspace = true, default-features = true }
 
 # Local Dependencies
 citizenchain = { workspace = true }
-pow-difficulty-module = { path = "../otherpallet/pow-difficulty-module", default-features = true }
-fullnode-pow-reward = { path = "../issuance/fullnode-pow-reward", default-features = true }
-onchain-transaction-pow = { path = "../transaction/onchain-transaction-pow", default-features = true }
+pow-difficulty-module = { path = "../runtime/otherpallet/pow-difficulty-module", default-features = true }
+fullnode-pow-reward = { path = "../runtime/issuance/fullnode-pow-reward", default-features = true }
+onchain-transaction-pow = { path = "../runtime/transaction/onchain-transaction-pow", default-features = true }
 
 [build-dependencies]
 substrate-build-script-utils = { workspace = true, default-features = true }
