@@ -21,7 +21,7 @@ scale-info = { features = ["derive", "serde"], workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 hex = { version = "0.4", default-features = false }
 hex-literal = "0.4"
-primitives = { path = "../../primitives", default-features = false } # 引用统一常量
+primitives = { path = "primitives", default-features = false } # 引用统一常量
 
 # frame
 frame-executive = { workspace = true }
@@ -60,21 +60,21 @@ pallet-transaction-payment-rpc-runtime-api = { workspace = true }
 frame-benchmarking = { optional = true, workspace = true }
 frame-system-benchmarking = { optional = true, workspace = true }
 
-shengbank-stake-interest = { path = "../issuance/shengbank-stake-interest", default-features = false }
-fullnode-pow-reward = { path = "../issuance/fullnode-pow-reward", default-features = false }
-citizen-lightnode-issuance = { path = "../issuance/citizen-lightnode-issuance", default-features = false }
-sfid-code-auth = { path = "../otherpallet/sfid-code-auth", default-features = false }
-pow-difficulty-module = { path = "../otherpallet/pow-difficulty-module", default-features = false }
-onchain-transaction-pow = { path = "../transaction/onchain-transaction-pow", default-features = false }
-duoqian-transaction-pow = { path = "../transaction/duoqian-transaction-pow", default-features = false }
-resolution-issuance-iss = { path = "../issuance/resolution-issuance-iss", default-features = false }
-resolution-issuance-gov = { path = "../governance/resolution-issuance-gov", default-features = false }
-voting-engine-system = { path = "../governance/voting-engine-system", default-features = false }
-admins-origin-gov = { path = "../governance/admins-origin-gov", default-features = false }
-grandpa-key-gov = { path = "../governance/grandpa-key-gov", default-features = false }
-runtime-root-upgrade = { path = "../governance/runtime-root-upgrade", default-features = false }
-resolution-destro-gov = { path = "../governance/resolution-destro-gov", default-features = false }
-duoqian-transfer-pow = { path = "../transaction/duoqian-transfer-pow", default-features = false }
+shengbank-stake-interest = { path = "issuance/shengbank-stake-interest", default-features = false }
+fullnode-pow-reward = { path = "issuance/fullnode-pow-reward", default-features = false }
+citizen-lightnode-issuance = { path = "issuance/citizen-lightnode-issuance", default-features = false }
+sfid-code-auth = { path = "otherpallet/sfid-code-auth", default-features = false }
+pow-difficulty-module = { path = "otherpallet/pow-difficulty-module", default-features = false }
+onchain-transaction-pow = { path = "transaction/onchain-transaction-pow", default-features = false }
+duoqian-transaction-pow = { path = "transaction/duoqian-transaction-pow", default-features = false }
+resolution-issuance-iss = { path = "issuance/resolution-issuance-iss", default-features = false }
+resolution-issuance-gov = { path = "governance/resolution-issuance-gov", default-features = false }
+voting-engine-system = { path = "governance/voting-engine-system", default-features = false }
+admins-origin-gov = { path = "governance/admins-origin-gov", default-features = false }
+grandpa-key-gov = { path = "governance/grandpa-key-gov", default-features = false }
+runtime-root-upgrade = { path = "governance/runtime-root-upgrade", default-features = false }
+resolution-destro-gov = { path = "governance/resolution-destro-gov", default-features = false }
+duoqian-transfer-pow = { path = "transaction/duoqian-transfer-pow", default-features = false }
 
 [build-dependencies]
 substrate-wasm-builder = { optional = true, workspace = true, default-features = true }
