@@ -4,10 +4,10 @@
 
 GMB 的 AI 编程系统优先解决以下问题：
 
-- 你只使用一个中文聊天窗口沟通
+- 你可以在 Codex 或 Claude 聊天窗口里用中文沟通
 - 你只需要输入任务需求，不需要手工拆标题和目标
-- Codex 负责主开发
-- Claude 负责代码检查与修复建议
+- Codex 与 Claude 都可以承接主开发
+- Codex 与 Claude 都可以承担代码检查与修复
 - 项目知识长期保存在仓库中
 - 代码提交后可以走 GitHub 自动化测试、审查与发布
 
@@ -15,16 +15,16 @@ GMB 的 AI 编程系统优先解决以下问题：
 
 当前阶段不先自研新的聊天窗口，而是采用：
 
-- `Codex`：唯一主聊天窗口，也是总调度器
-- `Claude`：后台 Review Agent
+- `Codex`：聊天入口之一
+- `Claude`：聊天入口之一
 - `GitHub Actions`：自动测试、自动构建、自动发布
 - `memory/`：AI 永久记忆系统
 
 交互方式固定为：
 
-- 你在 Codex 聊天窗口直接输入中文任务需求
+- 你在 Codex 或 Claude 聊天窗口直接输入中文任务需求
 - AI 先做需求分析
-- Codex 根据模块边界按需分配给 `Blockchain Agent / SFID Agent / CPMS Agent / Mobile Agent`
+- 当前主聊天入口根据模块边界按需分配给 `Blockchain Agent / SFID Agent / CPMS Agent / Mobile Agent`
 - 分析完成后再进入任务创建和开发
 
 ## 3. 系统结构
@@ -32,7 +32,9 @@ GMB 的 AI 编程系统优先解决以下问题：
 ```text
 你（中文自然语言）
         ↓
-Codex（唯一主开发入口 + 总调度器）
+Codex / Claude（聊天入口）
+        ↓
+当前主聊天入口（需求分析 + 总调度）
         ↓
 Architect / Blockchain / SFID / CPMS / Mobile 工作线程
         ↓
@@ -42,9 +44,7 @@ memory/（项目目标、边界、ADR、规则、任务模板）
         ↓
 GitHub PR / Actions
         ↓
-Claude Review
-        ↓
-Codex 修复并回写文档
+任一聊天入口继续修复并回写文档
 ```
 
 ## 4. 核心规则
@@ -55,7 +55,7 @@ Codex 修复并回写文档
 - 代码更新后必须清理残留
 - 逻辑不清时必须先沟通
 - 对外输入统一是任务需求，不强制手工拆标题和目标
-- 用户不需要手工指定 Agent，Codex 必须按模块边界自动判断和调度专业工作线程
+- 用户不需要手工指定 Agent，当前主聊天入口必须按模块边界自动判断和调度专业工作线程
 
 ## 4.1 当前技术语言基线
 
