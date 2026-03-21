@@ -1,0 +1,86 @@
+name: CitizenChain Runtime Primitives CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/citizenchain-runtime-primitives.yml"
+      - "citizenchain/runtime/primitives/**"
+      - "citizenchain/runtime/Cargo.toml"
+      - "citizenchain/Cargo.toml"
+      - "citizenchain/Cargo.lock"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/citizenchain-runtime-primitives.yml"
+      - "citizenchain/runtime/primitives/**"
+      - "citizenchain/runtime/Cargo.toml"
+      - "citizenchain/Cargo.toml"
+      - "citizenchain/Cargo.lock"
+  workflow_dispatch:
+
+concurrency:
+  group: citizenchain-runtime-primitives-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  runtime:
+    name: primitives runtime 编译与测试
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          components: rust-src
+
+      - name: 安装 LLVM/Clang 依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm llvm-dev clang libclang-dev protobuf-compiler
+
+      - name: 配置 libclang 环境变量
+        run: |
+          echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
+          echo "PROTOC=$(command -v protoc)" >> "$GITHUB_ENV"
+
+      - name: 缓存依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenchain-runtime-primitives"
+          workspaces: |
+            citizenchain -> target
+
+      - name: 编译 runtime
+        working-directory: citizenchain
+        run: cargo check --release -p citizenchain
+
+      - name: 运行 runtime 测试
+        working-directory: citizenchain
+        run: cargo test --release -p citizenchain
+
+      - name: 构建生产 WASM
+        working-directory: citizenchain
+        run: cargo build --release -p citizenchain
+
+      - name: 检查 WASM 不含 benchmark feature
+        working-directory: citizenchain
+        run: |
+          WASM_FILE=$(find target/release/wbuild -name "*.wasm" | head -1)
+          if [ -z "$WASM_FILE" ]; then
+            echo "未找到 WASM 文件，跳过检查。"
+            exit 0
+          fi
+          if strings "$WASM_FILE" | grep -qi "runtime.benchmarks"; then
+            echo "生产 WASM 包含 runtime-benchmarks feature。"
+            exit 1
+          fi
+          echo "生产 WASM 安全检查通过。"

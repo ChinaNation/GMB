@@ -14,7 +14,6 @@ GMB/
   sfid/
   cpms/
   wuminapp/
-  scripts/
 ```
 
 ## 2. 目录职责
@@ -25,7 +24,6 @@ GMB/
 - `sfid/`：在线身份系统
 - `cpms/`：离线实名系统
 - `wuminapp/`：手机 App
-- `scripts/`：统一脚本
 
 ## 3. 文档集中管理规则
 
@@ -90,18 +88,33 @@ citizenchain/
 
 ## 7. GitHub Actions 路径分流原则
 
-GMB 的自动化不再采用“改了 `citizenchain/**` 就把整条区块链流水线全部跑一遍”的模式，而是逐步改为按二级目录分流。
+GMB 的自动化已经改为“每个系统 / 模块一个 workflow”：
 
-当前已经落地的规则：
+- `citizenchain/node`
+  - `.github/workflows/citizenchain-node.yml`
+- `citizenchain/nodeui`
+  - `.github/workflows/citizenchain-nodeui.yml`
+- `citizenchain/runtime/governance`
+  - `.github/workflows/citizenchain-runtime-governance.yml`
+- `citizenchain/runtime/issuance`
+  - `.github/workflows/citizenchain-runtime-issuance.yml`
+- `citizenchain/runtime/otherpallet`
+  - `.github/workflows/citizenchain-runtime-otherpallet.yml`
+- `citizenchain/runtime/primitives`
+  - `.github/workflows/citizenchain-runtime-primitives.yml`
+- `citizenchain/runtime/src`
+  - `.github/workflows/citizenchain-runtime-src.yml`
+- `citizenchain/runtime/transaction`
+  - `.github/workflows/citizenchain-runtime-transaction.yml`
+- `sfid`
+  - `.github/workflows/sfid-ci.yml`
+- `cpms`
+  - `.github/workflows/cpms-ci.yml`
+- `wuminapp`
+  - `.github/workflows/wuminapp-ci.yml`
 
-- 改 `citizenchain/runtime/**`
-  - 触发 `runtime` 相关 CI
-- 改 `citizenchain/node`
-  - 只触发 `node` 相关 CI
-- 改 `citizenchain/runtime/primitives/**`、`citizenchain/Cargo.toml`、`citizenchain/Cargo.lock`
-  - 触发 `runtime` 与 `node` 两侧 CI
-- benchmark 自动化只对 `runtime` 相关目录和共享 Rust 目录触发
-- `sfid` 部署流程按 `backend / frontend / deploy` 二级目录触发
-- Pages 只在 `docs/` 或自身 workflow 配置变更时触发
+补充说明：
 
-跨模块共享目录仍然会触发多个模块，这是刻意保留的安全边界，而不是路径分流失效。
+- `sfid` 部署仍由 `.github/workflows/sfid-deploy.yml` 单独负责
+- Pages 只在 `docs/**` 或自身 workflow 变更时触发
+- 共享 Rust 根目录变更允许触发多个 citizenchain workflow，这是保留的安全边界

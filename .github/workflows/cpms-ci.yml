@@ -1,0 +1,61 @@
+name: CPMS CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/cpms-ci.yml"
+      - "cpms/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/cpms-ci.yml"
+      - "cpms/**"
+  workflow_dispatch:
+
+concurrency:
+  group: cpms-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: cpms 后端编译与测试
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "cpms-backend"
+          workspaces: |
+            cpms/backend -> target
+
+      - name: 编译后端
+        working-directory: cpms/backend
+        run: cargo check
+
+      - name: 运行后端测试
+        working-directory: cpms/backend
+        run: cargo test
+
+  frontend-placeholder:
+    name: cpms 前端构建入口检查
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 检查前端构建入口
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find cpms/frontend -maxdepth 3 \( -name package.json -o -name pubspec.yaml \) | grep -q .; then
+            echo "检测到 CPMS 前端构建入口，请后续补充对应 CI。"
+          else
+            echo "当前 CPMS 前端尚未定义可执行构建入口，跳过。"
+          fi

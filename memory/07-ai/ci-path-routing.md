@@ -12,63 +12,93 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 
 ## 2. citizenchain 当前规则
 
-### 2.1 runtime 侧
+### 2.1 node
 
-以下目录命中后，触发 `runtime` 相关流水线：
+- workflow：`.github/workflows/citizenchain-node.yml`
+- 主要命中目录：
+  - `citizenchain/node/**`
+  - `citizenchain/runtime/primitives/**`
+  - `citizenchain/runtime/src/**`
+  - `citizenchain/runtime/Cargo.toml`
+  - `citizenchain/Cargo.toml`
+  - `citizenchain/Cargo.lock`
 
-- `citizenchain/runtime/**`
+### 2.2 nodeui
 
-触发的检查包括：
+- workflow：`.github/workflows/citizenchain-nodeui.yml`
+- 主要命中目录：
+  - `citizenchain/nodeui/**`
+  - `.github/scripts/prepare-nodeui-sidecar.sh`
 
-- `runtime 编译检查`
-- `runtime 单元测试`
-- `runtime WASM 安全检查`
+### 2.3 runtime/governance
 
-### 2.2 node 侧
+- workflow：`.github/workflows/citizenchain-runtime-governance.yml`
+- 主要命中目录：
+  - `citizenchain/runtime/governance/**`
+  - `citizenchain/runtime/Cargo.toml`
+  - `citizenchain/Cargo.toml`
+  - `citizenchain/Cargo.lock`
 
-以下目录命中后，触发 `node` 相关流水线：
+### 2.4 runtime/issuance
 
-- `citizenchain/node/**`
+- workflow：`.github/workflows/citizenchain-runtime-issuance.yml`
+- 主要命中目录：
+  - `citizenchain/runtime/issuance/**`
+  - `citizenchain/runtime/Cargo.toml`
+  - `citizenchain/Cargo.toml`
+  - `citizenchain/Cargo.lock`
 
-触发的检查包括：
+### 2.5 runtime/otherpallet
 
-- `node 编译检查`
-- `node 单元测试`
+- workflow：`.github/workflows/citizenchain-runtime-otherpallet.yml`
+- 主要命中目录：
+  - `citizenchain/runtime/otherpallet/**`
+  - `citizenchain/runtime/Cargo.toml`
+  - `citizenchain/Cargo.toml`
+  - `citizenchain/Cargo.lock`
 
-### 2.3 共享 Rust 目录
+### 2.6 runtime/primitives
 
-以下目录命中后，同时触发 `runtime` 与 `node` 两侧：
+- workflow：`.github/workflows/citizenchain-runtime-primitives.yml`
+- 主要命中目录：
+  - `citizenchain/runtime/primitives/**`
+  - `citizenchain/runtime/Cargo.toml`
+  - `citizenchain/Cargo.toml`
+  - `citizenchain/Cargo.lock`
 
-- `citizenchain/runtime/primitives/**`
-- `citizenchain/Cargo.toml`
-- `citizenchain/Cargo.lock`
+### 2.7 runtime/src
 
-原因：
+- workflow：`.github/workflows/citizenchain-runtime-src.yml`
+- 主要命中目录：
+  - `citizenchain/runtime/src/**`
+  - `citizenchain/runtime/Cargo.toml`
+  - `citizenchain/Cargo.toml`
+  - `citizenchain/Cargo.lock`
 
-- 这些目录属于 `citizenchain` 的共享依赖面
-- 如果只跑单边，很容易漏掉交叉编译错误
+### 2.8 runtime/transaction
 
-## 3. benchmark 规则
+- workflow：`.github/workflows/citizenchain-runtime-transaction.yml`
+- 主要命中目录：
+  - `citizenchain/runtime/transaction/**`
+  - `citizenchain/runtime/Cargo.toml`
+  - `citizenchain/Cargo.toml`
+  - `citizenchain/Cargo.lock`
 
-`Benchmark Weights` 只对以下路径触发：
-
-- `citizenchain/runtime/**`
-- `citizenchain/Cargo.toml`
-- `citizenchain/Cargo.lock`
-- benchmark 脚本与模板文件
-
-明确不再因为单纯的 `citizenchain/node/**` 改动触发 benchmark。
-
-## 4. 其他模块的分流方向
+## 3. 其他模块的分流方向
 
 当前仓库规则已经明确为：
 
-- `sfid`：按 `backend / frontend / deploy` 二级目录触发
-- `cpms`：后续按 `backend / frontend / deploy` 二级目录补齐
-- `wuminapp`：后续按 `lib / android / ios / test` 等二级目录补齐
-- `docs`：只触发 Pages 相关流程
+- `sfid`
+  - CI：`.github/workflows/sfid-ci.yml`
+  - 部署：`.github/workflows/sfid-deploy.yml`
+- `cpms`
+  - CI：`.github/workflows/cpms-ci.yml`
+- `wuminapp`
+  - CI：`.github/workflows/wuminapp-ci.yml`
+- `docs`
+  - Pages：`.github/workflows/pages.yml`
 
-## 5. 当前结论
+## 4. 当前结论
 
 路径分流的目的不是减少安全检查，而是减少无关重复构建。
 
@@ -77,3 +107,4 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 - 全局门禁继续保留
 - Claude 审查继续保留
 - 模块级构建和测试按目录精确触发
+- 共享 Rust 根目录变更允许触发多个 citizenchain workflow
