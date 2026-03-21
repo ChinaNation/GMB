@@ -2,7 +2,7 @@
 
 ## 1. 对你的输入要求
 
-你在 Codex 聊天窗口里直接输入：
+你在 Codex 或 Claude 聊天窗口里直接输入：
 
 - 中文任务需求
 
@@ -30,10 +30,17 @@ AI 在第一轮不直接写代码，而是必须先做需求分析。
 
 ## 3. 多线程下的聊天协议
 
-即使你在 Codex 里开多个线程，也要遵守同一套协议：
+即使你在 Codex 或 Claude 里开多个线程，也要遵守同一套协议：
 
 - 第一轮先分析
 - 主线程负责需求分析、模块识别和任务调度
-- 工作线程由 Codex 按需分配给 `Blockchain Agent`、`SFID Agent`、`CPMS Agent`、`Mobile Agent`
+- 工作线程由当前主聊天入口按需分配给 `Blockchain Agent`、`SFID Agent`、`CPMS Agent`、`Mobile Agent`
 - 关键结论写回 `memory/` 或任务卡
 - 不依赖某个线程私有的聊天历史当长期记忆
+
+## 4. 双聊天入口规则
+
+- Codex 与 Claude 都必须读取同一套 `memory/` 规则
+- Codex 与 Claude 都必须先执行需求分析，再创建任务卡，再进入实现
+- 不允许因为聊天入口不同而形成两套任务模板、两套安全边界或两套文档口径
+- 任一入口产出的关键结论，都必须回写到 `memory/` 或任务卡中
