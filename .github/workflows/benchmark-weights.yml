@@ -7,16 +7,11 @@ on:
       - "**"
     paths:
       - ".github/workflows/benchmark-weights.yml"
-      - "citizenchain/scripts/run-benchmarks.sh"
+      - "scripts/run-benchmarks.sh"
       - "citizenchain/runtime/**"
-      - "citizenchain/node/**"
-      - "citizenchain/governance/**"
-      - "citizenchain/issuance/**"
-      - "citizenchain/transaction/**"
-      - "citizenchain/otherpallet/**"
-      - "citizenchain/primitives/**"
       - "citizenchain/Cargo.toml"
       - "citizenchain/Cargo.lock"
+      - "scripts/benchmark-weight-template.hbs"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -66,15 +61,13 @@ jobs:
             citizenchain -> target
 
       - name: 跑全部 benchmark 并写回权重文件
-        working-directory: citizenchain
         run: ./scripts/run-benchmarks.sh --chain mainnet --steps 50 --repeat 20
 
       - name: 自动提交并推送 weights.rs 更新
-        working-directory: citizenchain
         run: |
           set -euo pipefail
 
-          mapfile -t WEIGHT_FILES < <(find governance issuance otherpallet transaction -path '*/src/weights.rs' | sort)
+          mapfile -t WEIGHT_FILES < <(find citizenchain/runtime/governance citizenchain/runtime/issuance citizenchain/runtime/otherpallet citizenchain/runtime/transaction -path '*/src/weights.rs' | sort)
 
           changed=0
           for f in "${WEIGHT_FILES[@]}"; do
