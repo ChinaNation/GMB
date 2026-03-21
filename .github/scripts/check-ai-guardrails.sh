@@ -51,7 +51,7 @@ is_protected_ai_path() {
       return 0
       ;;
     memory/00-vision/*|memory/01-architecture/*|memory/03-security/*|\
-    memory/04-decisions/*|memory/06-quality/*|memory/07-ai/*|\
+    memory/04-decisions/*|memory/05-modules/*|memory/06-quality/*|memory/07-ai/*|\
     memory/scripts/*|memory/08-tasks/templates/*)
       return 0
       ;;

@@ -26,7 +26,7 @@
 - 首次启动若不存在 `powr` 密钥，节点会自动生成本地 PoW 作者密钥
 
 相关实现参考：
-- [`CITIZENCHAIN_TECHNICAL.md`](/Users/rhett/GMB/citizenchain/CITIZENCHAIN_TECHNICAL.md)
+- [`CITIZENCHAIN_TECHNICAL.md`](/Users/rhett/GMB/memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md)
 - [`node/src/command.rs`](/Users/rhett/GMB/citizenchain/node/src/command.rs)
 - [`node/src/service.rs`](/Users/rhett/GMB/citizenchain/node/src/service.rs)
 - [`node/src/chain_spec.rs`](/Users/rhett/GMB/citizenchain/node/src/chain_spec.rs)

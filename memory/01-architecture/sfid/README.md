@@ -4,7 +4,7 @@
 * 每次编写代码后都要更新技术文档；
 * 需要其他模块和仓库联测的同步更新对应的技术文档；
 * 编写代码的同时必须完善中文注释；
-* 根级文档为 `README.md` 与 `SFID_TECHNICAL.md`，模块级文档位于 `backend/src/*/*TECHNICAL.md`。
+* 产品级文档位于 `memory/01-architecture/sfid/`，模块级文档位于 `memory/05-modules/sfid/`。
 
 SFID 是在线身份绑定系统，用于接收线下二维码并服务区块链身份校验。
 安全基线（2026-03）：后端已移除默认开发密钥/Token，关键环境变量缺失时会拒绝启动。
@@ -47,7 +47,7 @@ SFID 是在线身份绑定系统，用于接收线下二维码并服务区块链
 - `backend/scripts/`：后端脚本（联调/冒烟）
 - `backend/tests/`：后端测试（integration/e2e）
 - `deploy/`：环境部署配置（dev/staging/prod）
-- `SFID_TECHNICAL.md`：完整技术开发文档（流程、架构、数据、接口、安全、验收）
+- `memory/01-architecture/sfid/SFID_TECHNICAL.md`：完整技术开发文档（流程、架构、数据、接口、安全、验收）
 
 ## 快速启动
 ### 0) 启动 PostgreSQL（本地开发）
