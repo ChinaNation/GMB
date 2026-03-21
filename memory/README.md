@@ -6,6 +6,8 @@
 
 - AI 系统规则
 - 项目长期记忆
+- 产品级文档
+- 模块级文档
 - 任务卡与模板
 - 质量记录
 - AI 执行脚本
@@ -18,12 +20,30 @@
 - `memory/CLAUDE.md`
 - `memory/00-vision/`
 - `memory/01-architecture/`
+- `memory/05-modules/`
 - `memory/03-security/`
 - `memory/04-decisions/`
 - `memory/06-quality/`
 - `memory/07-ai/`
 - `memory/08-tasks/`
 - `memory/scripts/`
+
+## 文档真源规则
+
+正式项目文档统一保存在 `memory/`：
+
+- 产品文档统一放在 `memory/01-architecture/`
+- 模块文档统一放在 `memory/05-modules/`
+- AI 规则、任务、质量记录继续放在各自子目录
+
+各产品目录默认只保留：
+
+- 代码
+- 配置
+- 测试
+- 构建脚本
+- 数据库迁移
+- 运行时必须紧贴代码的资源文件
 
 ## 入口别名说明
 

@@ -14,14 +14,14 @@
 
 ### 2.2 当前固定文档命名
 - 仓库技术文档：
-  - `GMB_TECHNICAL.md`
+  - `memory/01-architecture/gmb/GMB_TECHNICAL.md`
 - 产品技术文档：
-  - `citizenchain/CITIZENCHAIN_TECHNICAL.md`
-  - `sfid/SFID_TECHNICAL.md`
-  - `cpms/CPMS_TECHNICAL.md`
-  - `wuminapp/WUMINAPP_TECHNICAL.md`
+  - `memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
+  - `memory/01-architecture/sfid/SFID_TECHNICAL.md`
+  - `memory/01-architecture/cpms/CPMS_TECHNICAL.md`
+  - `memory/01-architecture/wuminapp/WUMINAPP_TECHNICAL.md`
 - 模块技术文档：
-  - 位于各产品目录下的具体模块目录中，命名统一为 `*_TECHNICAL.md`
+  - 位于 `memory/05-modules/` 中，按产品和模块目录归档，命名统一为 `*_TECHNICAL.md`
 
 ### 2.3 维护规则
 - 改代码之前先读对应层级文档。
@@ -44,7 +44,7 @@
 
 ### 4.1 CitizenChain
 - 代码目录：`/Users/rhett/GMB/citizenchain`
-- 产品文档：`/Users/rhett/GMB/citizenchain/CITIZENCHAIN_TECHNICAL.md`
+- 产品文档：`/Users/rhett/GMB/memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
 - 当前技术栈：
   - 链节点：Rust + Substrate / Polkadot SDK
   - 桌面节点 UI：Tauri
@@ -55,7 +55,7 @@
 
 ### 4.2 SFID
 - 代码目录：`/Users/rhett/GMB/sfid`
-- 产品文档：`/Users/rhett/GMB/sfid/SFID_TECHNICAL.md`
+- 产品文档：`/Users/rhett/GMB/memory/01-architecture/sfid/SFID_TECHNICAL.md`
 - 当前技术栈：
   - 前端：React + TypeScript + Vite
   - 后端：Rust + Axum + PostgreSQL
@@ -67,7 +67,7 @@
 
 ### 4.3 CPMS
 - 代码目录：`/Users/rhett/GMB/cpms`
-- 产品文档：`/Users/rhett/GMB/cpms/CPMS_TECHNICAL.md`
+- 产品文档：`/Users/rhett/GMB/memory/01-architecture/cpms/CPMS_TECHNICAL.md`
 - 当前技术栈：
   - 后端：Rust + PostgreSQL
   - 前端：独立前端目录，围绕离线管理场景
@@ -79,7 +79,7 @@
 
 ### 4.4 WuminApp
 - 代码目录：`/Users/rhett/GMB/wuminapp`
-- 产品文档：`/Users/rhett/GMB/wuminapp/WUMINAPP_TECHNICAL.md`
+- 产品文档：`/Users/rhett/GMB/memory/01-architecture/wuminapp/WUMINAPP_TECHNICAL.md`
 - 当前技术栈：
   - Flutter + Dart
   - Secure Storage + Isar
@@ -153,26 +153,26 @@
 - 联合投票人口快照
 - SFID 主备验签账户管理
 
-这 5 项能力的详细归属在 `SFID_TECHNICAL.md` 中定义，但其链侧承接能力由 `citizenchain` 负责落地。
+这 5 项能力的详细归属在 `memory/01-architecture/sfid/SFID_TECHNICAL.md` 中定义，但其链侧承接能力由 `citizenchain` 负责落地。
 
 ## 7. 仓库目录结构与共享层
 
 ```text
 GMB/
-├── citizenchain/   # 区块链主产品
-├── sfid/           # 身份识别码系统
-├── cpms/           # 离线档案系统
-├── wuminapp/       # 移动端客户端
-├── primitives/     # 共享链常量、机构常量、类型基础
+├── citizenchain/   # 区块链主产品代码
+├── sfid/           # 身份识别码系统代码
+├── cpms/           # 离线档案系统代码
+├── wuminapp/       # 移动端客户端代码
+├── memory/         # AI 编程系统与正式文档真源
 ├── tools/          # 环境与开发工具
-├── docs/           # 文档、图片、白皮书与参考资料
+├── docs/           # 图片、白皮书素材与参考资料
 └── .github/        # CI/CD、脚本、安装包流水线
 ```
 
-### 7.1 `primitives/`
-- 主要服务 `citizenchain`
-- 承载链常量、机构常量、人口/省份等基础数据
-- 若变更影响 runtime 行为，属于链级变更
+### 7.1 `memory/`
+- 统一承载 AI 编程系统、仓库级文档、产品文档与模块文档。
+- 是正式文档真源，不在产品目录中复制第二份。
+- 任意产品实现变更后，都应优先回写 `memory/` 中的对应文档。
 
 ### 7.2 `tools/`
 - 提供环境安装、辅助脚本、身份相关工具
@@ -250,12 +250,12 @@ GMB/
 6. 若边界或共享口径变化，再回写产品文档与仓库文档。
 
 ## 10. 产品技术文档索引
-- `citizenchain/CITIZENCHAIN_TECHNICAL.md`
-- `sfid/SFID_TECHNICAL.md`
-- `cpms/CPMS_TECHNICAL.md`
-- `wuminapp/WUMINAPP_TECHNICAL.md`
+- `memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
+- `memory/01-architecture/sfid/SFID_TECHNICAL.md`
+- `memory/01-architecture/cpms/CPMS_TECHNICAL.md`
+- `memory/01-architecture/wuminapp/WUMINAPP_TECHNICAL.md`
 
 ## 11. 结论性维护要求
-- `GMB_TECHNICAL.md` 只描述仓库级总览、跨产品协议、发布边界与维护规则。
+- `memory/01-architecture/gmb/GMB_TECHNICAL.md` 只描述仓库级总览、跨产品协议、发布边界与维护规则。
 - 单个产品的实现细节不在本文件展开到底层代码级别，而应继续下钻到对应产品技术文档。
 - 任一产品新增或下线时，必须先更新本文件中的产品矩阵、目录结构与文档索引。

@@ -35,14 +35,14 @@ wuminapp/
 │   ├── user/
 │   ├── wallet/
 │   └── trade/
-├── test/
-└── WUMINAPP_TECHNICAL.md
+└── test/
 ```
 
 说明：
 
 - 原 `mobile/` 内容已上移到项目根目录
 - 原 `backend/` 已移除
+- 正式产品文档统一收口到 `memory/01-architecture/wuminapp/`
 
 ## 4. App 当前实现
 

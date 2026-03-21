@@ -8,9 +8,9 @@
 ## 2. 文档体系定位
 
 ### 2.1 技术文档三层结构
-- 仓库技术文档：`/Users/rhett/GMB/GMB_TECHNICAL.md`
-- 产品技术文档：`/Users/rhett/GMB/citizenchain/CITIZENCHAIN_TECHNICAL.md`
-- 模块技术文档：位于 `citizenchain` 各模块目录下，描述单模块需求与实现细节。
+- 仓库技术文档：`/Users/rhett/GMB/memory/01-architecture/gmb/GMB_TECHNICAL.md`
+- 产品技术文档：`/Users/rhett/GMB/memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
+- 模块技术文档：位于 `memory/05-modules/citizenchain/`，描述单模块需求与实现细节。
 
 ### 2.2 本文范围内
 - `node/`：区块链节点原生程序。
