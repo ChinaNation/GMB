@@ -10,8 +10,9 @@ set -euo pipefail
 #   ./scripts/run-benchmarks.sh --dry-run
 #   ./scripts/run-benchmarks.sh --pallet sfid_code_auth --steps 20 --repeat 10
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-NODE_BIN="$ROOT_DIR/target/release/node"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CHAIN_ROOT="$REPO_ROOT/citizenchain"
+NODE_BIN="$CHAIN_ROOT/target/release/node"
 
 CHAIN="${CHAIN:-mainnet}"
 STEPS="${STEPS:-50}"
@@ -20,7 +21,8 @@ HEAP_PAGES="${HEAP_PAGES:-4096}"
 CHECK_MODE=0
 DRY_RUN=0
 BUILD_NODE=1
-TEMPLATE_PATH="${TEMPLATE_PATH:-$ROOT_DIR/scripts/benchmark-weight-template.hbs}"
+LOCK_BUILD="${LOCK_BUILD:-0}"
+TEMPLATE_PATH="${TEMPLATE_PATH:-$REPO_ROOT/scripts/benchmark-weight-template.hbs}"
 
 declare -a SELECTED_PALLETS=()
 
@@ -29,20 +31,20 @@ declare -a SELECTED_PALLETS=()
 # - pallet: payload=weights.rs 相对路径
 # - utility: payload=说明性路径（当前仅用于日志展示）
 declare -a TARGETS=(
-  "pallet:shengbank_stake_interest:issuance/shengbank-stake-interest/src/weights.rs"
-  "pallet:fullnode_pow_reward:issuance/fullnode-pow-reward/src/weights.rs"
-  "pallet:citizen_lightnode_issuance:issuance/citizen-lightnode-issuance/src/weights.rs"
-  "pallet:sfid_code_auth:otherpallet/sfid-code-auth/src/weights.rs"
-  "pallet:pow_difficulty_module:otherpallet/pow-difficulty-module/src/weights.rs"
-  "pallet:resolution_issuance_iss:issuance/resolution-issuance-iss/src/weights.rs"
-  "pallet:resolution_issuance_gov:governance/resolution-issuance-gov/src/weights.rs"
-  "pallet:voting_engine_system:governance/voting-engine-system/src/weights.rs"
-  "pallet:admins_origin_gov:governance/admins-origin-gov/src/weights.rs"
-  "pallet:grandpa_key_gov:governance/grandpa-key-gov/src/weights.rs"
-  "pallet:runtime_root_upgrade:governance/runtime-root-upgrade/src/weights.rs"
-  "pallet:resolution_destro_gov:governance/resolution-destro-gov/src/weights.rs"
-  "pallet:duoqian_transaction_pow:transaction/duoqian-transaction-pow/src/weights.rs"
-  "utility:onchain_transaction_pow:transaction/onchain-transaction-pow/benches/transaction_fee_paths.rs"
+  "pallet:shengbank_stake_interest:runtime/issuance/shengbank-stake-interest/src/weights.rs"
+  "pallet:fullnode_pow_reward:runtime/issuance/fullnode-pow-reward/src/weights.rs"
+  "pallet:citizen_lightnode_issuance:runtime/issuance/citizen-lightnode-issuance/src/weights.rs"
+  "pallet:sfid_code_auth:runtime/otherpallet/sfid-code-auth/src/weights.rs"
+  "pallet:pow_difficulty_module:runtime/otherpallet/pow-difficulty-module/src/weights.rs"
+  "pallet:resolution_issuance_iss:runtime/issuance/resolution-issuance-iss/src/weights.rs"
+  "pallet:resolution_issuance_gov:runtime/governance/resolution-issuance-gov/src/weights.rs"
+  "pallet:voting_engine_system:runtime/governance/voting-engine-system/src/weights.rs"
+  "pallet:admins_origin_gov:runtime/governance/admins-origin-gov/src/weights.rs"
+  "pallet:grandpa_key_gov:runtime/governance/grandpa-key-gov/src/weights.rs"
+  "pallet:runtime_root_upgrade:runtime/governance/runtime-root-upgrade/src/weights.rs"
+  "pallet:resolution_destro_gov:runtime/governance/resolution-destro-gov/src/weights.rs"
+  "pallet:duoqian_transaction_pow:runtime/transaction/duoqian-transaction-pow/src/weights.rs"
+  "utility:onchain_transaction_pow:runtime/transaction/onchain-transaction-pow/benches/transaction_fee_paths.rs"
 )
 
 usage() {
@@ -58,6 +60,7 @@ Options:
   --repeat <N>           benchmark repeat，默认 20。
   --heap-pages <N>       wasm heap pages，默认 4096。
   --template <path>      可选 hbs 模板路径（未传则使用 CLI 默认模板）。
+  --locked-build         构建 node 时附加 --locked，要求 Cargo.lock 完全同步。
   --pallet <name>        仅运行指定 benchmark 目标（可重复传入多个）。
   -h, --help             显示帮助。
 EOF
@@ -115,6 +118,10 @@ while [[ $# -gt 0 ]]; do
       TEMPLATE_PATH="$2"
       shift 2
       ;;
+    --locked-build)
+      LOCK_BUILD=1
+      shift
+      ;;
     --pallet)
       SELECTED_PALLETS+=("$2")
       shift 2
@@ -146,7 +153,20 @@ done
 
 if [[ "$BUILD_NODE" -eq 1 && "$NEEDS_NODE" -eq 1 ]]; then
   log "构建 benchmark 节点二进制（node, release, runtime-benchmarks）"
-  cargo build -p node --release --features runtime-benchmarks --locked
+  build_cmd=(
+    cargo build
+    --manifest-path "$CHAIN_ROOT/Cargo.toml"
+    -p node
+    --release
+    --features runtime-benchmarks
+  )
+
+  # 中文注释：benchmark 自动化默认优先保证可执行，只有显式要求时才锁死 Cargo.lock。
+  if [[ "$LOCK_BUILD" -eq 1 ]]; then
+    build_cmd+=(--locked)
+  fi
+
+  "${build_cmd[@]}"
 fi
 
 if [[ "$DRY_RUN" -eq 0 && "$NEEDS_NODE" -eq 1 && ! -x "$NODE_BIN" ]]; then
@@ -155,7 +175,7 @@ if [[ "$DRY_RUN" -eq 0 && "$NEEDS_NODE" -eq 1 && ! -x "$NODE_BIN" ]]; then
   exit 1
 fi
 
-cd "$ROOT_DIR"
+cd "$CHAIN_ROOT"
 
 declare -a TOUCHED_OUTPUTS=()
 declare -i RUN_COUNT=0
@@ -170,7 +190,7 @@ for target in "${TARGETS[@]}"; do
   RUN_COUNT+=1
 
   if [[ "$kind" == "pallet" ]]; then
-    output="$ROOT_DIR/$rel_output"
+    output="$CHAIN_ROOT/$rel_output"
     mkdir -p "$(dirname "$output")"
     TOUCHED_OUTPUTS+=("$rel_output")
 
@@ -201,6 +221,7 @@ for target in "${TARGETS[@]}"; do
   elif [[ "$kind" == "utility" ]]; then
     cmd=(
       cargo bench
+      --manifest-path "$CHAIN_ROOT/Cargo.toml"
       -p onchain-transaction-pow
       --bench transaction_fee_paths
       --
@@ -232,9 +253,9 @@ if [[ "$CHECK_MODE" -eq 1 && "$DRY_RUN" -eq 0 ]]; then
     log "本次未生成任何 weights.rs（可能只运行了 utility benchmark），跳过 weights 变更检查。"
     exit 0
   fi
-  if ! git -C "$ROOT_DIR" diff --quiet -- "${TOUCHED_OUTPUTS[@]}"; then
+  if ! git -C "$CHAIN_ROOT" diff --quiet -- "${TOUCHED_OUTPUTS[@]}"; then
     log "检测到 benchmark 生成的 weights 变更，请提交更新。"
-    git -C "$ROOT_DIR" --no-pager diff -- "${TOUCHED_OUTPUTS[@]}"
+    git -C "$CHAIN_ROOT" --no-pager diff -- "${TOUCHED_OUTPUTS[@]}"
     exit 1
   fi
   log "weights.rs 无变化，检查通过。"

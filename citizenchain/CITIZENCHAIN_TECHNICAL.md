@@ -15,11 +15,13 @@
 ### 2.2 本文范围内
 - `node/`：区块链节点原生程序。
 - `runtime/`：链上运行时与统一状态机。
-- `governance/`：治理类 pallet。
-- `issuance/`：发行类 pallet。
-- `transaction/`：交易与手续费类 pallet。
-- `otherpallet/`：其他链上基础能力 pallet。
-- `nodeui/`：桌面节点 UI 与内嵌节点管理。
+- `runtime/governance/`：治理类 pallet。
+- `runtime/issuance/`：发行类 pallet。
+- `runtime/transaction/`：交易与手续费类 pallet。
+- `runtime/otherpallet/`：其他链上基础能力 pallet。
+- `runtime/primitives/`：运行时共享常量、基础类型与制度数据。
+- `nodeuitauri/`：旧版 Tauri 桌面节点 UI 与内嵌节点管理。
+- `nodeui/`：新版 Flutter Desktop 桌面节点 UI。
 
 ### 2.3 本文范围外
 - `SFID` 的链外网站、签名服务与数据库内部实现。
@@ -34,7 +36,8 @@
 - 原生链名称为 `CitizenChain`，原生数字货币为 `GMB`。
 - 产品同时包含两部分：
   - 区块链节点程序：`node/`
-  - 桌面节点软件：`nodeui/`
+  - 旧版桌面节点软件：`nodeuitauri/`
+  - 新版桌面节点软件：`nodeui/`
 
 ### 3.2 对外协作边界
 - 对 `SFID`：提供绑定、资格校验、人口快照、公民投票凭证等链侧接口承载能力。
@@ -47,11 +50,13 @@
 citizenchain/
 ├── node/            # 原生节点程序（CLI、service、RPC、chain spec）
 ├── runtime/         # 运行时 wasm 与 runtime API
-├── governance/      # 治理 pallet
-├── issuance/        # 发行 pallet
-├── transaction/     # 交易与手续费 pallet
-├── otherpallet/     # 其他基础能力 pallet
-├── nodeui/          # Tauri 桌面节点 UI
+│   ├── governance/  # 治理 pallet 与治理文档
+│   ├── issuance/    # 发行 pallet 与发行文档
+│   ├── transaction/ # 交易 pallet 与手续费文档
+│   ├── otherpallet/ # 其他链上基础能力 pallet
+│   └── primitives/  # 运行时共享常量、基础类型与制度数据
+├── nodeuitauri/     # 旧版 Tauri 桌面节点 UI
+├── nodeui/          # 新版 Flutter Desktop 节点 UI
 └── scripts/         # 本产品脚本
 ```
 
@@ -61,10 +66,10 @@ citizenchain/
 - Native Node 层：负责 CLI、网络、数据库、共识服务编排、RPC 服务、chain spec 加载。
 - Runtime 层：负责所有链上状态转换、交易校验、治理规则、发行规则、手续费规则。
 - Pallet 层：按治理、发行、交易、其他能力拆分功能模块。
-- Desktop UI 层：负责本地节点进程生命周期管理、参数设置、状态展示与安装包交付。
+- Desktop UI 层：负责本地节点进程生命周期管理、参数设置、状态展示与安装包交付；当前处于 Tauri 向 Flutter Desktop 迁移期。
 
 ### 5.2 关键共享依赖
-- `primitives/`：提供链常量、机构常量、SS58 参数、发行与人口基础常量。
+- `runtime/primitives/`：提供链常量、机构常量、SS58 参数、发行与人口基础常量。
 - `polkadot-sdk`：提供 Substrate / FRAME / client / consensus 依赖。
 
 ## 6. 节点程序（`node/`）
@@ -118,11 +123,11 @@ citizenchain/
 
 ### 8.3 链身份
 - 地址显示格式使用自定义 `SS58 = 2027`。
-- 链名、链 ID、Token 显示属性统一来自 `primitives` 与 chain spec 配置。
+- 链名、链 ID、Token 显示属性统一来自 `runtime/primitives` 与 chain spec 配置。
 
 ## 9. 链上模块分组
 
-### 9.1 治理模块（`governance/`）
+### 9.1 治理模块（`runtime/governance/`）
 - 负责内部投票、联合投票、公民投票、最终性密钥治理、管理员权限治理、运行时升级治理、决议发行治理、销毁治理。
 
 当前模块：
@@ -133,7 +138,7 @@ citizenchain/
 - `runtime-root-upgrade`
 - `voting-engine-system`
 
-### 9.2 发行模块（`issuance/`）
+### 9.2 发行模块（`runtime/issuance/`）
 - 负责轻节点认证发行、全节点 PoW 奖励、省储行质押利息、决议发行执行。
 
 当前模块：
@@ -142,7 +147,7 @@ citizenchain/
 - `resolution-issuance-iss`
 - `shengbank-stake-interest`
 
-### 9.3 交易模块（`transaction/`）
+### 9.3 交易模块（`runtime/transaction/`）
 - 负责链上交易手续费、链下交易手续费、机构多签交易能力。
 
 当前模块：
@@ -150,38 +155,42 @@ citizenchain/
 - `offchain-transaction-pos`
 - `onchain-transaction-pow`
 
-### 9.4 其他模块（`otherpallet/`）
+### 9.4 其他模块（`runtime/otherpallet/`）
 - 负责 SFID 链上绑定 / 资格校验、PoW 难度调整等基础能力。
 
 当前模块：
 - `pow-difficulty-module`
 - `sfid-code-auth`
 
-## 10. 桌面节点软件（`nodeui/`）
+## 10. 桌面节点软件（`nodeuitauri/` 与 `nodeui/`）
 
 ### 10.1 定位
-- `nodeui` 是 `citizenchain` 的桌面节点产品壳，采用 Tauri。
-- 对最终用户提供“安装即用”的节点软件，而不是要求用户手工管理原生 node 命令。
+- `nodeuitauri` 是当前可运行的旧版桌面节点产品壳，采用 Tauri。
+- `nodeui` 是新版 Flutter Desktop 节点 UI，作为未来正式实现建设。
+- 对最终用户仍然提供“安装即用”的节点软件，而不是要求用户手工管理原生 node 命令。
 
 ### 10.2 当前职责
-- 启动 / 停止内嵌节点进程。
-- 管理 bootnode 地址、奖励地址、GRANDPA 地址、节点名称等本地设置。
-- 展示节点状态、链状态、网络概览、挖矿面板与其他辅助信息。
+- `nodeuitauri` 当前负责启动 / 停止内嵌节点进程。
+- `nodeuitauri` 当前负责管理 bootnode 地址、奖励地址、GRANDPA 地址、节点名称等本地设置。
+- `nodeuitauri` 当前负责展示节点状态、链状态、网络概览、挖矿面板与其他辅助信息。
+- `nodeui` 当前负责承接 Flutter Desktop 版的新架构入口和迁移目标。
 
 ### 10.3 打包边界
-- `nodeui` 通过 sidecar 方式内嵌节点二进制。
-- 对用户交付形态是单个桌面安装包；对工程实现来说仍是“UI 壳 + 内嵌 node 二进制”。
+- `nodeuitauri` 当前通过 sidecar 方式内嵌节点二进制。
+- `nodeui` 完成迁移前，桌面交付仍以 `nodeuitauri` 为准。
+- 对用户交付形态始终保持单个桌面安装包；对工程实现来说仍是“UI 壳 + 内嵌 node 二进制”。
 
 ## 11. 变更与发布边界
 
 ### 11.1 需要 runtime 升级的改动
 - `runtime/` 中的状态机、类型、交易校验、runtime API。
-- `governance/`、`issuance/`、`transaction/`、`otherpallet/` 中被 runtime 直接引用的链上逻辑。
-- `primitives/` 中被 runtime 直接使用、并影响链上行为的常量 / 类型 /编码结构。
+- `runtime/governance/`、`runtime/issuance/`、`runtime/transaction/`、`runtime/otherpallet/` 中被 runtime 直接引用的链上逻辑。
+- `runtime/primitives/` 中被 runtime 直接使用、并影响链上行为的常量 / 类型 /编码结构。
 
 ### 11.2 不需要 runtime 升级的改动
 - `node/` 中的 CLI、RPC、服务编排、网络与本地运行逻辑。
-- `nodeui/` 的桌面 UI、设置页、Tauri 命令与安装包逻辑。
+- `nodeuitauri/` 的桌面 UI、设置页、Tauri 命令与安装包逻辑。
+- `nodeui/` 的 Flutter Desktop UI、页面与桌面工程逻辑。
 - 构建脚本、CI/CD、前端界面、说明文档。
 
 ### 11.3 特殊情况
@@ -191,37 +200,37 @@ citizenchain/
 ## 12. 产品级模块文档索引
 
 ### 12.1 治理
-- `governance/admins-origin-gov/ADMINSORIGIN_TECHNICAL.md`
-- `governance/grandpa-key-gov/GRANDPAKEYGOV_TECHNICAL.md`
-- `governance/resolution-destro-gov/RESOLUTIONDESTRO_TECHNICAL.md`
-- `governance/resolution-issuance-gov/RESOLUTIONISSUANCEGOV_TECHNICAL.md`
-- `governance/runtime-root-upgrade/RUNTIMEROOT_TECHNICAL.md`
-- `governance/voting-engine-system/VOTINGENGINE_TECHNICAL.md`
+- `runtime/governance/admins-origin-gov/ADMINSORIGIN_TECHNICAL.md`
+- `runtime/governance/grandpa-key-gov/GRANDPAKEYGOV_TECHNICAL.md`
+- `runtime/governance/resolution-destro-gov/RESOLUTIONDESTRO_TECHNICAL.md`
+- `runtime/governance/resolution-issuance-gov/RESOLUTIONISSUANCEGOV_TECHNICAL.md`
+- `runtime/governance/runtime-root-upgrade/RUNTIMEROOT_TECHNICAL.md`
+- `runtime/governance/voting-engine-system/VOTINGENGINE_TECHNICAL.md`
 
 ### 12.2 发行
-- `issuance/citizen-lightnode-issuance/CITIZENISS_TECHNICAL.md`
-- `issuance/fullnode-pow-reward/FULLNODE_TECHNICAL.md`
-- `issuance/resolution-issuance-iss/RESOLUTIONISS_TECHNICAL.md`
-- `issuance/shengbank-stake-interest/SHENGBANK_TECHNICAL.md`
+- `runtime/issuance/citizen-lightnode-issuance/CITIZENISS_TECHNICAL.md`
+- `runtime/issuance/fullnode-pow-reward/FULLNODE_TECHNICAL.md`
+- `runtime/issuance/resolution-issuance-iss/RESOLUTIONISS_TECHNICAL.md`
+- `runtime/issuance/shengbank-stake-interest/SHENGBANK_TECHNICAL.md`
 
 ### 12.3 交易
-- `transaction/duoqian-transaction-pow/DUOQIAN_TECHNICAL.md`
-- `transaction/offchain-transaction-pos/OFFCHAIN_TECHNICAL.md`
-- `transaction/onchain-transaction-pow/ONCHAIN_TECHNICAL.md`
+- `runtime/transaction/duoqian-transaction-pow/DUOQIAN_TECHNICAL.md`
+- `runtime/transaction/offchain-transaction-pos/OFFCHAIN_TECHNICAL.md`
+- `runtime/transaction/onchain-transaction-pow/ONCHAIN_TECHNICAL.md`
 
 ### 12.4 其他链上模块
-- `otherpallet/pow-difficulty-module/POW_DIFFICULTY_TECHNICAL.md`
-- `otherpallet/sfid-code-auth/SFIDCODEAUTH_TECHNICAL.md`
+- `runtime/otherpallet/pow-difficulty-module/POW_DIFFICULTY_TECHNICAL.md`
+- `runtime/otherpallet/sfid-code-auth/SFIDCODEAUTH_TECHNICAL.md`
 
 ### 12.5 桌面节点 UI
-- `nodeui/backend/src/home/home-node/HOME_NODE_TECHNICAL.md`
-- `nodeui/backend/src/mining/mining-dashboard/MINING_DASHBOARD_TECHNICAL.md`
-- `nodeui/backend/src/network/network-overview/NETWORK_OVERVIEW_TECHNICAL.md`
-- `nodeui/backend/src/other/other-tabs/OTHER_TABS_TECHNICAL.md`
-- `nodeui/backend/src/settings/bootnodes-address/BOOTNODES_ADDRESS_TECHNICAL.md`
-- `nodeui/backend/src/settings/device-password/DEVICE_PASSWORD_TECHNICAL.md`
-- `nodeui/backend/src/settings/fee-address/FEE_ADDRESS_TECHNICAL.md`
-- `nodeui/backend/src/settings/grandpa-address/GRANDPA_ADDRESS_TECHNICAL.md`
+- `nodeuitauri/backend/src/home/HOME_TECHNICAL.md`
+- `nodeuitauri/backend/src/mining/mining-dashboard/MINING_DASHBOARD_TECHNICAL.md`
+- `nodeuitauri/backend/src/network/network-overview/NETWORK_OVERVIEW_TECHNICAL.md`
+- `nodeuitauri/backend/src/other/other-tabs/OTHER_TABS_TECHNICAL.md`
+- `nodeuitauri/backend/src/settings/bootnodes-address/BOOTNODES_ADDRESS_TECHNICAL.md`
+- `nodeuitauri/backend/src/settings/device-password/DEVICE_PASSWORD_TECHNICAL.md`
+- `nodeuitauri/backend/src/settings/fee-address/FEE_ADDRESS_TECHNICAL.md`
+- `nodeuitauri/backend/src/settings/grandpa-address/GRANDPA_ADDRESS_TECHNICAL.md`
 
 ## 13. 维护要求
 - `citizenchain` 发生架构级、边界级、发布级改动时，必须同步更新本文档。
