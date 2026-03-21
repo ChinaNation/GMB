@@ -46,8 +46,8 @@
 - 代码目录：`/Users/rhett/GMB/citizenchain`
 - 产品文档：`/Users/rhett/GMB/memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
 - 当前技术栈：
-  - 链节点：Rust + Substrate / Polkadot SDK
-  - 桌面节点 UI：Tauri
+  - 链节点与 Runtime：Rust + Substrate / Polkadot SDK
+  - 桌面节点 UI：Rust + Tauri + React + TypeScript + Vite
 - 核心职责：
   - 链上状态机与共识
   - 治理、发行、交易、资格接入
@@ -57,7 +57,7 @@
 - 代码目录：`/Users/rhett/GMB/sfid`
 - 产品文档：`/Users/rhett/GMB/memory/01-architecture/sfid/SFID_TECHNICAL.md`
 - 当前技术栈：
-  - 前端：React + TypeScript + Vite
+  - 前端：React + TypeScript + Vite + Ant Design
   - 后端：Rust + Axum + PostgreSQL
 - 核心职责：
   - 公民身份绑定与解绑
@@ -69,8 +69,8 @@
 - 代码目录：`/Users/rhett/GMB/cpms`
 - 产品文档：`/Users/rhett/GMB/memory/01-architecture/cpms/CPMS_TECHNICAL.md`
 - 当前技术栈：
-  - 后端：Rust + PostgreSQL
-  - 前端：独立前端目录，围绕离线管理场景
+  - 后端：Rust + Axum + SQLx + PostgreSQL
+  - 前端：当前仓库仅保留 `cpms/frontend/` 预留目录，未落地独立前端实现
 - 核心职责：
   - 离线档案录入
   - 档案二维码签发与打印
