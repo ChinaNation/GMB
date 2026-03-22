@@ -341,7 +341,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
       },
       child: ListView.separated(
         controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
         itemCount: _items.length + (_hasMore ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
@@ -520,7 +520,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
   IconData _proposalIcon(
       TransferProposalInfo? detail, RuntimeUpgradeProposalInfo? upgradeDetail) {
     if (detail != null) return Icons.send_outlined; // 转账
-    if (upgradeDetail != null) return Icons.system_update_alt; // Runtime 升级
+    if (upgradeDetail != null) return Icons.arrow_upward; // Runtime 升级
     return Icons.description_outlined; // 其他/未知
   }
 

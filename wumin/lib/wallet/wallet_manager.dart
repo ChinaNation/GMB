@@ -23,6 +23,7 @@ class WalletProfile {
     required this.createdAtMillis,
     required this.source,
     required this.signMode,
+    this.groupNames = const [],
   });
 
   final int walletIndex;
@@ -36,6 +37,15 @@ class WalletProfile {
   final int createdAtMillis;
   final String source;
   final String signMode;
+
+  /// 所属分组列表（不含"全部"）。
+  final List<String> groupNames;
+
+  /// 是否属于指定分组（"全部"始终返回 true）。
+  bool inGroup(String group) {
+    if (group == '全部') return true;
+    return groupNames.contains(group);
+  }
 
   bool get isHotWallet => signMode == 'local';
   bool get isColdWallet => signMode == 'external';
@@ -532,6 +542,9 @@ class WalletManager {
       createdAtMillis: row.createdAtMillis,
       source: row.source,
       signMode: row.signMode,
+      groupNames: row.groupNames.isEmpty
+          ? const []
+          : row.groupNames.split(','),
     );
   }
 

@@ -188,6 +188,9 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
         final qrSigner = QrSigner();
         final beneficiary = _beneficiaryController.text.trim();
         final amountText = _amountController.text.trim();
+        // 统一格式化为两位小数，与 PayloadDecoder._fenToYuan 对齐
+        final amountFormatted =
+            (double.tryParse(amountText) ?? 0).toStringAsFixed(2);
         final remarkText = _remarkController.text;
         final request = qrSigner.buildRequest(
           requestId: 'propose-${DateTime.now().millisecondsSinceEpoch}',
@@ -196,10 +199,10 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
           payloadHex: '0x${_toHex(payload)}',
           display: {
             'action': 'propose_transfer',
-            'summary': '提案转账 $amountText GMB 给 $beneficiary',
+            'summary': '提案转账 $amountFormatted GMB 给 $beneficiary',
             'fields': {
               'beneficiary': beneficiary,
-              'amount_yuan': amountText,
+              'amount_yuan': amountFormatted,
               'remark': remarkText,
             },
           },
