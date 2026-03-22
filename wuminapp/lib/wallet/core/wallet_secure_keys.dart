@@ -9,6 +9,14 @@ class WalletSecureKeys {
     return 'wallet.secret.$walletId.seed_hex.v1';
   }
 
+  /// 热钱包助记词存储键。
+  static String mnemonicV1(int walletId) {
+    if (walletId <= 0) {
+      throw ArgumentError.value(walletId, 'walletId', 'must be positive');
+    }
+    return 'wallet.secret.$walletId.mnemonic.v1';
+  }
+
   static String sessionTokenV1(String scope) {
     final normalized = _normalizeScope(scope);
     return 'wallet.session.$normalized.token.v1';

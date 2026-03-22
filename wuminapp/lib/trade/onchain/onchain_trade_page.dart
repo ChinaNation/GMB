@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_service.dart';
@@ -280,17 +281,19 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         // 冷钱包：扫码签名。
         signCallback = (Uint8List payload) async {
           final qrSigner = QrSigner();
-          final requestId = 'tx-${DateTime.now().millisecondsSinceEpoch}';
+          final requestId = QrSigner.generateRequestId(prefix: 'tx-');
           final toAddr = _toController.text.trim();
           final amountText = _amountController.text.trim();
           // 统一格式化为两位小数，与 PayloadDecoder._fenToYuan 对齐
           final amountFormatted =
               (double.tryParse(amountText) ?? 0).toStringAsFixed(2);
+          final rv = await ChainRpc().fetchRuntimeVersion();
           final request = qrSigner.buildRequest(
             requestId: requestId,
             account: wallet.address,
             pubkey: '0x${wallet.pubkeyHex}',
             payloadHex: '0x${_toHex(payload)}',
+            specVersion: rv.specVersion,
             display: {
               'action': 'transfer',
               'summary': '转账 $amountFormatted $_selectedSymbol 给 $toAddr',

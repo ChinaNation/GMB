@@ -44,11 +44,9 @@ pub const MILLISECS_PER_BLOCK: u64 = 360_000; // 正式链：360,000 毫秒（6 
 #[cfg(feature = "dev-chain")]
 pub const MILLISECS_PER_BLOCK: u64 = 30_000; // 开发链：30,000 毫秒（30 秒）
 
-pub const MINUTES_PER_BLOCK: u64 = if MILLISECS_PER_BLOCK >= 60_000 {
-    MILLISECS_PER_BLOCK / 60_000
-} else {
-    1 // 开发链出块时间不足 1 分钟，视为 1
-};
+/// 每个区块的目标秒数。
+/// 正式链为 360 秒，开发链为 30 秒，避免把 30 。
+pub const SECONDS_PER_BLOCK: u64 = MILLISECS_PER_BLOCK / 1_000;
 pub const BLOCKS_PER_HOUR: u64 = 3_600_000 / MILLISECS_PER_BLOCK; // 每小时区块数
 pub const BLOCKS_PER_DAY: u64 = BLOCKS_PER_HOUR * 24; // 每天区块数
 pub const BLOCKS_PER_YEAR: u64 = BLOCKS_PER_DAY * 365; // 每年区块数

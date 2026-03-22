@@ -10,6 +10,7 @@ enum OfflineSignErrorCode {
   walletMismatch,
   invalidPayload,
   displayMismatch,
+  expired,
 }
 
 class OfflineSignException implements Exception {
@@ -55,7 +56,10 @@ class OfflineSignService {
   }
 
   OfflineSignVerification verifyPayload(QrSignRequest request) {
-    final decoded = PayloadDecoder.decode(request.payloadHex);
+    final decoded = PayloadDecoder.decode(
+      request.payloadHex,
+      specVersion: request.specVersion,
+    );
 
     if (decoded == null) {
       return const OfflineSignVerification(
@@ -102,7 +106,17 @@ class OfflineSignService {
   Future<QrSignResponse> signParsedRequest({
     required int walletIndex,
     required QrSignRequest request,
+    bool acknowledgeDecodeFailed = false,
   }) async {
+    // 签名时再次校验过期，防止用户在 UI 上停留太久后点击签名。
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if (request.expiresAt < now) {
+      throw const OfflineSignException(
+        OfflineSignErrorCode.expired,
+        '签名请求已过期，请重新扫描',
+      );
+    }
+
     final wallet = await _walletManager.getWalletByIndex(walletIndex);
     if (wallet == null) {
       throw const OfflineSignException(
@@ -135,6 +149,13 @@ class OfflineSignService {
       throw const OfflineSignException(
         OfflineSignErrorCode.displayMismatch,
         '交易内容与摘要不符，拒绝签名',
+      );
+    }
+    if (verification.displayMatch == DisplayMatchStatus.decodeFailed &&
+        !acknowledgeDecodeFailed) {
+      throw const OfflineSignException(
+        OfflineSignErrorCode.displayMismatch,
+        '无法独立验证交易内容，需用户确认风险后才能签名',
       );
     }
 

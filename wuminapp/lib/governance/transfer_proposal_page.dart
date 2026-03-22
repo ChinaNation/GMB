@@ -9,6 +9,7 @@ import 'institution_data.dart';
 import 'transfer_proposal_service.dart';
 import '../qr/pages/qr_scan_page.dart';
 import '../qr/pages/qr_sign_session_page.dart';
+import '../rpc/chain_rpc.dart';
 import '../rpc/onchain.dart' show OnchainRpc;
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
@@ -192,11 +193,13 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
         final amountFormatted =
             (double.tryParse(amountText) ?? 0).toStringAsFixed(2);
         final remarkText = _remarkController.text;
+        final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
-          requestId: 'propose-${DateTime.now().millisecondsSinceEpoch}',
+          requestId: QrSigner.generateRequestId(prefix: 'propose-'),
           account: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
+          specVersion: rv.specVersion,
           display: {
             'action': 'propose_transfer',
             'summary': '提案转账 $amountFormatted GMB 给 $beneficiary',

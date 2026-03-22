@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:sr25519/sr25519.dart' as sr25519;
 
 enum QrSignErrorCode {
   invalidFormat,
@@ -38,6 +41,7 @@ class QrSignRequest {
     required this.issuedAt,
     required this.expiresAt,
     required this.display,
+    this.specVersion,
   });
 
   final String proto;
@@ -55,18 +59,30 @@ class QrSignRequest {
   /// 可包含 `fields`（结构化字段，供离线端交叉比对）。
   final Map<String, dynamic> display;
 
-  Map<String, dynamic> toJson() => {
-        'proto': proto,
-        'type': 'sign_request',
-        'request_id': requestId,
-        'account': account,
-        'pubkey': pubkey,
-        'sig_alg': sigAlg,
-        'payload_hex': payloadHex,
-        'issued_at': issuedAt,
-        'expires_at': expiresAt,
-        'display': display,
-      };
+  /// 链 runtime 的 spec_version，由在线设备从 `state_getRuntimeVersion` 读取。
+  ///
+  /// 离线设备据此判断自身的 pallet 索引注册表是否与当前链版本匹配。
+  /// 为可选字段，旧版在线端不发送时离线端按 decodeFailed 处理。
+  final int? specVersion;
+
+  Map<String, dynamic> toJson() {
+    final json = <String, dynamic>{
+      'proto': proto,
+      'type': 'sign_request',
+      'request_id': requestId,
+      'account': account,
+      'pubkey': pubkey,
+      'sig_alg': sigAlg,
+      'payload_hex': payloadHex,
+      'issued_at': issuedAt,
+      'expires_at': expiresAt,
+      'display': display,
+    };
+    if (specVersion != null) {
+      json['spec_version'] = specVersion;
+    }
+    return json;
+  }
 }
 
 /// 交易签名回执（WUMIN_SIGN_V1.0.0）。
@@ -111,9 +127,21 @@ class QrSigner {
   static const int defaultTtlSeconds = 90;
   static const int maxClockSkewSeconds = 30;
   static const int maxPayloadChars = 32768;
-  static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9._:-]{4,128}$');
+  static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9._:-]{16,128}$');
   static final RegExp _addressPattern =
       RegExp(r'^[1-9A-HJ-NP-Za-km-z]{30,80}$');
+
+  /// 生成加密安全的随机 request ID（32 字符 hex）。
+  ///
+  /// 使用 [Random.secure] 保证不可预测，防止 replay 攻击。
+  /// 可选 [prefix] 用于标识请求类型（如 "tx-"、"vote-"）。
+  static String generateRequestId({String prefix = ''}) {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final id = prefix.isEmpty ? hex : '$prefix$hex';
+    return id.length > 128 ? id.substring(0, 128) : id;
+  }
 
   QrSignRequest buildRequest({
     required String requestId,
@@ -124,6 +152,7 @@ class QrSigner {
     String sigAlg = 'sr25519',
     int? nowEpochSeconds,
     int ttlSeconds = defaultTtlSeconds,
+    int? specVersion,
   }) {
     final now = nowEpochSeconds ?? _now();
     return QrSignRequest(
@@ -136,6 +165,7 @@ class QrSigner {
       issuedAt: now,
       expiresAt: now + ttlSeconds,
       display: display,
+      specVersion: specVersion,
     );
   }
 
@@ -176,6 +206,15 @@ class QrSigner {
     _validateExpiry(issuedAt: issuedAt, expiresAt: expiresAt);
     _validateDisplay(display);
 
+    // spec_version 为可选字段，旧版在线端可能不发送。
+    final specVersionRaw = data['spec_version'];
+    int? specVersion;
+    if (specVersionRaw is int) {
+      specVersion = specVersionRaw;
+    } else if (specVersionRaw is String) {
+      specVersion = int.tryParse(specVersionRaw);
+    }
+
     return QrSignRequest(
       proto: proto,
       requestId: requestId,
@@ -186,6 +225,7 @@ class QrSigner {
       issuedAt: issuedAt,
       expiresAt: expiresAt,
       display: display,
+      specVersion: specVersion,
     );
   }
 
@@ -265,6 +305,28 @@ class QrSigner {
     final bytes = _hexToBytes(payloadHex);
     final digest = sha256.convert(bytes);
     return digest.toString();
+  }
+
+  /// 验证 sr25519 签名是否与 payload 和公钥匹配。
+  ///
+  /// 用于在线端接收签名回执后、提交上链前提前发现无效签名。
+  static bool verifySr25519Signature({
+    required String pubkeyHex,
+    required String signatureHex,
+    required String payloadHex,
+  }) {
+    try {
+      final pubBytes = Uint8List.fromList(_hexToBytes(pubkeyHex));
+      final sigBytes = Uint8List.fromList(_hexToBytes(signatureHex));
+      final msgBytes = Uint8List.fromList(_hexToBytes(payloadHex));
+      final publicKey = sr25519.PublicKey.newPublicKey(pubBytes);
+      final signature = sr25519.Signature.fromBytes(sigBytes);
+      final (verified, _) =
+          sr25519.Sr25519.verify(publicKey, signature, msgBytes);
+      return verified;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ---------------------------------------------------------------------------

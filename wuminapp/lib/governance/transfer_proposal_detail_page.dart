@@ -4,8 +4,10 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'institution_data.dart';
 import 'institution_admin_service.dart';
+import 'proposal_context.dart';
 import 'transfer_proposal_service.dart';
 import '../qr/pages/qr_sign_session_page.dart';
+import '../rpc/chain_rpc.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 
@@ -15,14 +17,17 @@ class TransferProposalDetailPage extends StatefulWidget {
     super.key,
     required this.institution,
     required this.proposalId,
-    required this.adminWallets,
+    required this.proposalContext,
   });
 
   final InstitutionInfo institution;
   final int proposalId;
 
-  /// 当前用户导入的、属于此机构的管理员钱包列表。
-  final List<WalletProfile> adminWallets;
+  /// 统一的提案上下文。
+  final ProposalContext proposalContext;
+
+  /// 便捷访问。
+  List<WalletProfile> get adminWallets => proposalContext.adminWallets;
 
   @override
   State<TransferProposalDetailPage> createState() =>
@@ -196,7 +201,7 @@ class _TransferProposalDetailPageState
   // ──── 投票提交 ────
 
   /// 当前用户是否是此机构的管理员（可能导入了多个管理员钱包）。
-  bool get _isCurrentUserAdmin => widget.adminWallets.isNotEmpty;
+  bool get _isCurrentUserAdmin => widget.proposalContext.isAdmin;
 
   /// 是否还有可投票的钱包（未投票的管理员钱包）。
   bool get _canVote {
@@ -229,17 +234,25 @@ class _TransferProposalDetailPageState
         // 管理员投票统一通过 QR 码签名（wumin 冷钱包）
         final qrSigner = QrSigner();
         final voteText = approve ? '赞成' : '反对';
+        final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
-          requestId: 'vote-${DateTime.now().millisecondsSinceEpoch}',
+          requestId: QrSigner.generateRequestId(prefix: 'vote-'),
           account: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
+          specVersion: rv.specVersion,
           display: {
             'action': 'vote_transfer',
             'summary': '转账提案 #${widget.proposalId} 投票：$voteText',
             'fields': {
               'proposal_id': widget.proposalId.toString(),
               'approve': approve.toString(),
+              if (_proposalInfo != null) ...{
+                'to': _proposalInfo!.beneficiary,
+                'amount_yuan': '${_proposalInfo!.amountYuan.toStringAsFixed(2)} GMB',
+                if (_proposalInfo!.remark.isNotEmpty)
+                  'remark': _proposalInfo!.remark,
+              },
             },
           },
         );

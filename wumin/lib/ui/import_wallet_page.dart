@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../wallet/wallet_manager.dart';
+import 'widgets/bip39_input.dart';
 
 /// 导入钱包页面（通过助记词）。
 class ImportWalletPage extends StatefulWidget {
@@ -33,6 +35,9 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
     setState(() => _importing = true);
     try {
       final profile = await _walletManager.importWallet(mnemonic);
+      // 导入成功后清空剪贴板，防止助记词残留
+      await Clipboard.setData(const ClipboardData(text: ''));
+      _mnemonicController.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已导入「${profile.walletName}」')),
@@ -64,21 +69,11 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '请输入助记词，用空格分隔',
+            '逐个输入单词，从候选列表中选择匹配项',
             style: TextStyle(color: Colors.black54),
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _mnemonicController,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              hintText: 'word1 word2 word3 ...',
-            ),
-            textInputAction: TextInputAction.done,
-            autocorrect: false,
-            enableSuggestions: false,
-          ),
+          Bip39InputField(controller: _mnemonicController, wordCount: 0),
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,

@@ -5,6 +5,7 @@ import 'admin_list_page.dart';
 import 'institution_admin_service.dart';
 import 'institution_data.dart';
 import 'proposal_cache.dart';
+import 'proposal_context.dart';
 import 'proposal_types_page.dart';
 import 'runtime_upgrade_detail_page.dart';
 import 'transfer_proposal_detail_page.dart';
@@ -33,13 +34,17 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   final InstitutionAdminService _adminService = InstitutionAdminService();
   final WalletManager _walletManager = WalletManager();
   final TransferProposalService _transferService = TransferProposalService();
+  late final ProposalContextResolver _contextResolver = ProposalContextResolver(
+    adminService: _adminService,
+    walletManager: _walletManager,
+  );
 
   List<String> _admins = const [];
   bool _isCurrentUserAdmin = false;
   bool _loading = true;
   String? _error;
 
-  /// 当前用户导入的所有管理员钱包（pubkeyHex → WalletProfile）。
+  /// 通过 ProposalContext 解析的管理员钱包。
   List<WalletProfile> _adminWallets = const [];
 
   /// 所有匹配的管理员公钥（小写 hex，不含 0x）。
@@ -63,34 +68,38 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     try {
       final results = await Future.wait([
         _adminService.fetchAdmins(widget.institution.shenfenId),
-        _walletManager.getWallets(),
+        _contextResolver.resolve(
+          knownInstitution: widget.institution,
+        ),
         _transferService.fetchInstitutionVisibleProposals(
           widget.institution.shenfenId,
         ),
       ]);
       final admins = results[0] as List<String>;
-      final wallets = results[1] as List<WalletProfile>;
+      final ctx = results[1] as ProposalContext;
       final proposals = results[2] as List<ProposalWithDetail>;
 
-      // 收集匹配的管理员冷钱包（管理员操作统一通过冷钱包 QR 签名）
-      final matchedWallets = <WalletProfile>[];
+      // 从 ProposalContext 获取匹配的管理员冷钱包
       final matchedPubkeys = <String>{};
-      for (final wallet in wallets) {
-        if (wallet.isHotWallet) continue; // 管理员操作只允许冷钱包
+      for (final wallet in ctx.adminWallets) {
         var pubkey = wallet.pubkeyHex.toLowerCase();
         if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
-        if (admins.contains(pubkey)) {
-          matchedWallets.add(wallet);
-          matchedPubkeys.add(pubkey);
-        }
+        matchedPubkeys.add(pubkey);
+      }
+
+      // 记录管理员机构状态到公共缓存
+      if (ctx.isAdmin) {
+        ProposalContextResolver.markAdminInstitution(
+          widget.institution.shenfenId,
+        );
       }
 
       if (!mounted) return;
       setState(() {
         _admins = admins;
-        _adminWallets = matchedWallets;
+        _adminWallets = ctx.adminWallets;
         _adminPubkeys = matchedPubkeys;
-        _isCurrentUserAdmin = matchedWallets.isNotEmpty;
+        _isCurrentUserAdmin = ctx.isAdmin;
         _proposalEvents = proposals;
         _loading = false;
       });
@@ -157,6 +166,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     return RefreshIndicator(
       onRefresh: () async {
         _adminService.clearCache(widget.institution.shenfenId);
+        _contextResolver.clearWalletCache();
         ProposalCache.clear();
         await _load();
       },
@@ -548,13 +558,17 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   Future<void> _openProposalDetail(ProposalWithDetail proposal) async {
     final proposalId = proposal.meta.proposalId;
+    final ctx = ProposalContext(
+      institution: widget.institution,
+      adminWallets: _adminWallets,
+      role: _isCurrentUserAdmin ? ProposalRole.admin : ProposalRole.viewer,
+    );
     if (proposal.runtimeUpgradeDetail != null) {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => RuntimeUpgradeDetailPage(
             proposalId: proposalId,
-            institution: widget.institution,
-            adminWallets: _adminWallets,
+            proposalContext: ctx,
           ),
         ),
       );
@@ -564,7 +578,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           builder: (_) => TransferProposalDetailPage(
             institution: widget.institution,
             proposalId: proposalId,
-            adminWallets: _adminWallets,
+            proposalContext: ctx,
           ),
         ),
       );
