@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
+import 'pallet_registry.dart';
+
 /// payload_hex 中 call data 的解码结果。
 ///
 /// 离线设备用此结果向用户展示交易详情，
@@ -43,8 +45,14 @@ class PayloadDecoder {
   /// [payloadHex] 为完整 SigningPayload 编码的 hex 字符串。
   /// call data 从 payload 起始位置开始，以 pallet_index 和 call_index 为前两字节。
   ///
+  /// [specVersion] 为链 runtime 版本号。当 spec_version 不在
+  /// [PalletRegistry.supportedSpecVersions] 中时直接返回 null，
+  /// 避免因 pallet 索引偏移导致错误解码。
+  ///
   /// 返回 null 表示无法识别或解码失败。
-  static DecodedPayload? decode(String payloadHex) {
+  static DecodedPayload? decode(String payloadHex, {int? specVersion}) {
+    // spec_version 不在已知列表中时放弃解码，由调用方走 decodeFailed 路径。
+    if (!PalletRegistry.isSupported(specVersion)) return null;
     try {
       final bytes = _hexToBytes(payloadHex);
       if (bytes.length < 2) return null;
@@ -52,28 +60,33 @@ class PayloadDecoder {
       final palletIndex = bytes[0];
       final callIndex = bytes[1];
 
-      // Balances(2) / transfer_keep_alive(3)
-      if (palletIndex == 2 && callIndex == 3) {
+      // Balances / transfer_keep_alive
+      if (palletIndex == PalletRegistry.balancesPallet &&
+          callIndex == PalletRegistry.transferKeepAliveCall) {
         return _decodeTransferKeepAlive(bytes);
       }
 
-      // DuoqianTransferPow(19) / propose_transfer(0)
-      if (palletIndex == 19 && callIndex == 0) {
+      // DuoqianTransferPow / propose_transfer
+      if (palletIndex == PalletRegistry.duoqianTransferPowPallet &&
+          callIndex == PalletRegistry.proposeTransferCall) {
         return _decodeProposeTransfer(bytes);
       }
 
-      // DuoqianTransferPow(19) / vote_transfer(1)
-      if (palletIndex == 19 && callIndex == 1) {
+      // DuoqianTransferPow / vote_transfer
+      if (palletIndex == PalletRegistry.duoqianTransferPowPallet &&
+          callIndex == PalletRegistry.voteTransferCall) {
         return _decodeVoteTransfer(bytes);
       }
 
-      // VotingEngineSystem(9) / joint_vote(3)
-      if (palletIndex == 9 && callIndex == 3) {
+      // VotingEngineSystem / joint_vote
+      if (palletIndex == PalletRegistry.votingEngineSystemPallet &&
+          callIndex == PalletRegistry.jointVoteCall) {
         return _decodeJointVote(bytes);
       }
 
-      // VotingEngineSystem(9) / citizen_vote(4)
-      if (palletIndex == 9 && callIndex == 4) {
+      // VotingEngineSystem / citizen_vote
+      if (palletIndex == PalletRegistry.votingEngineSystemPallet &&
+          callIndex == PalletRegistry.citizenVoteCall) {
         return _decodeCitizenVote(bytes);
       }
 
@@ -215,18 +228,33 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // VotingEngineSystem(9) / citizen_vote(4)
-  // 格式：[0x09][0x04][proposal_id:u64_le][binding_id:32][Vec nonce][Vec sig][approve:bool]
+  // VotingEngineSystem / citizen_vote
+  // 格式：[pallet][call][proposal_id:u64_le][binding_id:32][Vec nonce][Vec sig][approve:bool]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeCitizenVote(Uint8List bytes) {
-    // 最小：2 + 8 + 32 + 1 + 1 + 1 = 45
+    // 最小：2 + 8 + 32 + 1(Vec nonce compact len) + 1(Vec sig compact len) + 1(approve) = 45
     if (bytes.length < 45) return null;
 
     final proposalId = _readU64Le(bytes, 2);
 
-    // 跳过 binding_id(32) + nonce(Vec) + sig(Vec) 找到 approve
-    // 由于 Vec 长度不固定，直接从尾部取 approve
-    final approve = bytes[bytes.length - 1] != 0;
+    // 逐段解析变长字段，精确定位 approve 偏移量。
+    var offset = 2 + 8 + 32; // 跳过 pallet+call, proposal_id, binding_id
+
+    // Vec<u8> nonce — SCALE Compact 前缀 + nonce 字节
+    final (nonceLen, nonceLenSize) = _decodeCompactU32(bytes, offset);
+    offset += nonceLenSize;
+    if (offset + nonceLen > bytes.length) return null;
+    offset += nonceLen;
+
+    // Vec<u8> sig — SCALE Compact 前缀 + sig 字节
+    final (sigLen, sigLenSize) = _decodeCompactU32(bytes, offset);
+    offset += sigLenSize;
+    if (offset + sigLen > bytes.length) return null;
+    offset += sigLen;
+
+    // approve: bool（1 字节）
+    if (offset >= bytes.length) return null;
+    final approve = bytes[offset] != 0;
     final voteText = approve ? '赞成' : '反对';
 
     return DecodedPayload(
@@ -253,6 +281,10 @@ class PayloadDecoder {
     ));
   }
 
+  /// 读取 little-endian u64。
+  ///
+  /// 注意：Dart int 在 native 平台为 64 位，在 Web 平台为 53 位。
+  /// 此方法仅适用于 Flutter mobile（native），Web 环境下大 u64 值会溢出。
   static int _readU64Le(Uint8List bytes, int offset) {
     var value = 0;
     for (var i = 7; i >= 0; i--) {

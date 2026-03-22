@@ -1,5 +1,5 @@
 //! 公民币全链统一常量模块=primitives/src
-//! 所有 Pallet、runtime、chain_spec、node、fcrcnode、fullnode、wuminapp等均可安全引用。
+//! 所有 Pallet、runtime、chain_spec、node、fullnode、wuminapp等均可安全引用。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 

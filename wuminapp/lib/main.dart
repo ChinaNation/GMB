@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/governance/all_proposals_view.dart';
 import 'package:wuminapp_mobile/governance/institution_data.dart';
 import 'package:wuminapp_mobile/governance/institution_detail_page.dart';
+import 'package:wuminapp_mobile/governance/proposal_context.dart';
+import 'package:wuminapp_mobile/security/app_lock_service.dart';
+import 'package:wuminapp_mobile/security/pin_input_page.dart';
+import 'package:wuminapp_mobile/util/screenshot_guard.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
 import 'package:wuminapp_mobile/user/user.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
@@ -30,7 +34,7 @@ class WuminApp extends StatelessWidget {
   }
 }
 
-/// 应用锁入口：检查是否需要认证才能进入主界面。
+/// 应用锁入口：先检查 PIN 锁 → 再检查设备锁 → 进入主界面。
 class _AppLockGate extends StatefulWidget {
   const _AppLockGate();
 
@@ -38,37 +42,96 @@ class _AppLockGate extends StatefulWidget {
   State<_AppLockGate> createState() => _AppLockGateState();
 }
 
-class _AppLockGateState extends State<_AppLockGate> {
+class _AppLockGateState extends State<_AppLockGate>
+    with WidgetsBindingObserver {
   final LocalAuthentication _localAuth = LocalAuthentication();
   bool _authenticated = false;
   bool _checking = true;
+  bool _showDeviceLock = false;
+
+  /// 后台超过此时长后回到前台需重新验证。
+  static const Duration _sessionTimeout = Duration(minutes: 5);
+  DateTime? _pausedAt;
 
   @override
   void initState() {
     super.initState();
-    _checkAppLock();
+    WidgetsBinding.instance.addObserver(this);
+    _checkLock();
   }
 
-  Future<void> _checkAppLock() async {
-    final prefs = await SharedPreferences.getInstance();
-    final lockEnabled = prefs.getBool('app_lock_enabled') ?? false;
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
-    if (!lockEnabled) {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _pausedAt = DateTime.now();
+    } else if (state == AppLifecycleState.resumed && _authenticated) {
+      final paused = _pausedAt;
+      if (paused != null &&
+          DateTime.now().difference(paused) > _sessionTimeout) {
+        // 超时，重新锁定
+        setState(() {
+          _authenticated = false;
+          _checking = true;
+          _showDeviceLock = false;
+        });
+        _checkLock();
+      }
+      _pausedAt = null;
+    }
+  }
+
+  Future<void> _checkLock() async {
+    // 1. 检查 PIN 锁
+    final pinSet = await AppLockService.isPinSet();
+    if (pinSet) {
       if (!mounted) return;
-      setState(() {
-        _authenticated = true;
-        _checking = false;
-      });
+      setState(() => _checking = false);
+      _showPinVerify();
       return;
     }
 
-    // 应用锁已开启，需要认证
+    // 2. 检查设备锁（存储在 SecureStorage，防 root 篡改）
+    const secure = FlutterSecureStorage();
+    final deviceLockStr = await secure.read(key: 'device_lock_enabled');
+    final deviceLockEnabled = deviceLockStr == 'true';
+    if (deviceLockEnabled) {
+      if (!mounted) return;
+      setState(() {
+        _checking = false;
+        _showDeviceLock = true;
+      });
+      _authenticateDevice();
+      return;
+    }
+
+    // 3. 无锁，直接进入
     if (!mounted) return;
-    setState(() => _checking = false);
-    _authenticate();
+    setState(() {
+      _authenticated = true;
+      _checking = false;
+    });
   }
 
-  Future<void> _authenticate() async {
+  Future<void> _showPinVerify() async {
+    if (!mounted) return;
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => const PinInputPage(mode: PinInputMode.verify),
+      ),
+    );
+    if (!mounted) return;
+    if (result == true) {
+      setState(() => _authenticated = true);
+    }
+  }
+
+  Future<void> _authenticateDevice() async {
     try {
       final success = await _localAuth.authenticate(
         localizedReason: '请验证身份以进入应用',
@@ -98,38 +161,44 @@ class _AppLockGateState extends State<_AppLockGate> {
       return const AppShell();
     }
 
-    // 锁定界面
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.lock_outline, size: 64, color: Color(0xFF007A74)),
-            const SizedBox(height: 24),
-            const Text(
-              '应用已锁定',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '请验证身份以继续',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: _authenticate,
-              icon: const Icon(Icons.fingerprint),
-              label: const Text('验证身份'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF007A74),
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+    if (_showDeviceLock) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.lock_outline, size: 64, color: Color(0xFF007A74)),
+              const SizedBox(height: 24),
+              const Text(
+                '应用已锁定',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              const Text(
+                '请验证身份以继续',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: _authenticateDevice,
+                icon: const Icon(Icons.fingerprint),
+                label: const Text('验证身份'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF007A74),
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
+      );
+    }
+
+    // PIN 锁模式下，PinInputPage 已通过 Navigator 展示
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
     );
   }
 }
@@ -146,6 +215,19 @@ class _AppShellState extends State<AppShell> {
   static const Color _navUnselectedColor = Color(0xFF111111);
   int _currentIndex = 2;
   int _pendingVoteCount = 0;
+  bool _isRooted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkRootStatus();
+  }
+
+  Future<void> _checkRootStatus() async {
+    final rooted = await ScreenshotGuard.isDeviceRooted();
+    if (!mounted) return;
+    setState(() => _isRooted = rooted);
+  }
 
   late final List<Widget> _pages = [
     VotingPage(onPendingVoteCountChanged: (count) {
@@ -161,7 +243,32 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _pages[_currentIndex],
+      body: Column(
+        children: [
+          if (_isRooted)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              color: Colors.red.shade700,
+              child: SafeArea(
+                bottom: false,
+                child: Row(
+                  children: const [
+                    Icon(Icons.warning, color: Colors.white, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '检测到设备已 root/越狱，密钥安全无法保障',
+                        style: TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          Expanded(child: _pages[_currentIndex]),
+        ],
+      ),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
           indicatorColor: const Color(0xFFD7E9E1),
@@ -334,7 +441,7 @@ class _VotingPageState extends State<VotingPage> {
           onPendingVoteCountChanged: widget.onPendingVoteCountChanged,
         );
       case 2:
-        return const _InstitutionCategoryView(
+        return _InstitutionCategoryView(
           nationalCouncil: kNationalCouncil,
           provincialCouncils: kProvincialCouncils,
           provincialBanks: kProvincialBanks,
@@ -436,7 +543,7 @@ class _MessagePageState extends State<MessagePage> {
   }
 }
 
-class _InstitutionCategoryView extends StatelessWidget {
+class _InstitutionCategoryView extends StatefulWidget {
   const _InstitutionCategoryView({
     required this.nationalCouncil,
     required this.provincialCouncils,
@@ -446,6 +553,25 @@ class _InstitutionCategoryView extends StatelessWidget {
   final List<InstitutionInfo> nationalCouncil;
   final List<InstitutionInfo> provincialCouncils;
   final List<InstitutionInfo> provincialBanks;
+
+  @override
+  State<_InstitutionCategoryView> createState() =>
+      _InstitutionCategoryViewState();
+}
+
+class _InstitutionCategoryViewState extends State<_InstitutionCategoryView> {
+  /// 对列表按"管理员机构优先"排序。
+  List<InstitutionInfo> _sorted(List<InstitutionInfo> list) {
+    final sorted = List<InstitutionInfo>.from(list);
+    sorted.sort((a, b) {
+      final aAdmin = ProposalContextResolver.isAdminInstitution(a.shenfenId);
+      final bAdmin = ProposalContextResolver.isAdminInstitution(b.shenfenId);
+      if (aAdmin && !bAdmin) return -1;
+      if (!aAdmin && bAdmin) return 1;
+      return 0;
+    });
+    return sorted;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -466,19 +592,22 @@ class _InstitutionCategoryView extends StatelessWidget {
           title: '国储会',
           icon: Icons.account_balance,
           badgeColor: const Color(0xFF0B3D2E),
-          institutions: nationalCouncil,
+          institutions: widget.nationalCouncil,
+          onReturnFromDetail: () => setState(() {}),
         ),
         _InstitutionSection(
           title: '省储会',
           icon: Icons.groups_2_outlined,
           badgeColor: const Color(0xFF0E5A44),
-          institutions: provincialCouncils,
+          institutions: _sorted(widget.provincialCouncils),
+          onReturnFromDetail: () => setState(() {}),
         ),
         _InstitutionSection(
           title: '省储行',
           icon: Icons.account_balance_wallet_outlined,
           badgeColor: const Color(0xFF176650),
-          institutions: provincialBanks,
+          institutions: _sorted(widget.provincialBanks),
+          onReturnFromDetail: () => setState(() {}),
         ),
       ],
     );
@@ -491,12 +620,14 @@ class _InstitutionSection extends StatelessWidget {
     required this.icon,
     required this.badgeColor,
     required this.institutions,
+    this.onReturnFromDetail,
   });
 
   final String title;
   final IconData icon;
   final Color badgeColor;
   final List<InstitutionInfo> institutions;
+  final VoidCallback? onReturnFromDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -533,10 +664,16 @@ class _InstitutionSection extends StatelessWidget {
                 childAspectRatio: childAspectRatio,
               ),
               itemBuilder: (context, index) {
+                final inst = institutions[index];
+                final isAdmin = ProposalContextResolver.isAdminInstitution(
+                  inst.shenfenId,
+                );
                 return _InstitutionCard(
-                  institution: institutions[index],
+                  institution: inst,
                   icon: icon,
                   badgeColor: badgeColor,
+                  isAdmin: isAdmin,
+                  onReturnFromDetail: onReturnFromDetail,
                 );
               },
             );
@@ -553,32 +690,45 @@ class _InstitutionCard extends StatelessWidget {
     required this.institution,
     required this.icon,
     required this.badgeColor,
+    this.isAdmin = false,
+    this.onReturnFromDetail,
   });
 
   final InstitutionInfo institution;
   final IconData icon;
   final Color badgeColor;
+  final bool isAdmin;
+  final VoidCallback? onReturnFromDetail;
+
+  static const Color _adminGreen = Color(0xFF2E7D32);
 
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = isAdmin ? _adminGreen : badgeColor;
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
+      color: isAdmin ? const Color(0xFFE8F5E9) : null,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: badgeColor.withValues(alpha: 0.18)),
+        side: BorderSide(
+          color: isAdmin
+              ? _adminGreen.withValues(alpha: 0.4)
+              : badgeColor.withValues(alpha: 0.18),
+        ),
       ),
       child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
+        onTap: () async {
+          await Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => InstitutionDetailPage(
                 institution: institution,
                 icon: icon,
-                badgeColor: badgeColor,
+                badgeColor: effectiveColor,
               ),
             ),
           );
+          onReturnFromDetail?.call();
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -589,10 +739,10 @@ class _InstitutionCard extends StatelessWidget {
                 width: 24,
                 height: 24,
                 decoration: BoxDecoration(
-                  color: badgeColor.withValues(alpha: 0.12),
+                  color: effectiveColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Icon(icon, size: 14, color: badgeColor),
+                child: Icon(icon, size: 14, color: effectiveColor),
               ),
               const SizedBox(width: 8),
               Expanded(

@@ -4,9 +4,11 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'institution_admin_service.dart';
 import 'institution_data.dart';
+import 'proposal_context.dart';
 import 'runtime_upgrade_service.dart';
 import 'transfer_proposal_service.dart' show ProposalMeta;
 import '../qr/pages/qr_sign_session_page.dart';
+import '../rpc/chain_rpc.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 
@@ -18,15 +20,17 @@ class RuntimeUpgradeDetailPage extends StatefulWidget {
   const RuntimeUpgradeDetailPage({
     super.key,
     required this.proposalId,
-    this.institution,
-    this.adminWallets = const [],
+    required this.proposalContext,
   });
 
   final int proposalId;
-  final InstitutionInfo? institution;
 
-  /// 当前用户导入的、属于该机构的管理员钱包列表。
-  final List<WalletProfile> adminWallets;
+  /// 统一的提案上下文（包含机构信息和管理员钱包）。
+  final ProposalContext proposalContext;
+
+  /// 便捷访问。
+  InstitutionInfo? get institution => proposalContext.institution;
+  List<WalletProfile> get adminWallets => proposalContext.adminWallets;
 
   @override
   State<RuntimeUpgradeDetailPage> createState() =>
@@ -62,7 +66,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     _load();
   }
 
-  bool get _hasInstitutionContext => widget.institution != null;
+  bool get _isAdmin => widget.proposalContext.isAdmin;
 
   int get _requiredAdminThreshold => widget.institution?.internalThreshold ?? 0;
 
@@ -70,16 +74,14 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       (_meta?.status == 0) && (_meta?.stage == 1) && _resolvedStatusCode() == 0;
 
   bool get _canSubmitVote =>
-      _hasInstitutionContext &&
+      _isAdmin &&
       _jointVoteOpen &&
       _institutionVote == null &&
       _selectedVoteWallet != null &&
       !_submitting;
 
-  bool get _hasImportedAdminWallets => widget.adminWallets.isNotEmpty;
-
   bool get _allImportedAdminsVoted {
-    if (!_hasImportedAdminWallets) return false;
+    if (!_isAdmin) return false;
     for (final wallet in widget.adminWallets) {
       final vote = _adminVotes[_normalizeHex(wallet.pubkeyHex)];
       if (vote == null) return false;
@@ -88,10 +90,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   String? get _voteDisabledReason {
-    if (!_hasInstitutionContext) return null;
+    if (!_isAdmin) return null;
     if (!_jointVoteOpen) return '当前提案不在联合投票阶段';
     if (_institutionVote != null) return '本机构已形成最终投票结果';
-    if (!_hasImportedAdminWallets) return '当前未导入本机构管理员钱包';
     if (_votableWallets.isEmpty && _allImportedAdminsVoted) {
       return '已导入的管理员钱包都已完成投票';
     }
@@ -256,12 +257,13 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }) async {
     // 管理员投票统一通过 QR 码签名（wumin 冷钱包）
     final qrSigner = QrSigner();
+    final rv = await ChainRpc().fetchRuntimeVersion();
     final request = qrSigner.buildRequest(
-      requestId:
-          '$requestPrefix-${wallet.walletIndex}-${DateTime.now().millisecondsSinceEpoch}',
+      requestId: QrSigner.generateRequestId(prefix: '$requestPrefix-'),
       account: wallet.address,
       pubkey: '0x${wallet.pubkeyHex}',
       payloadHex: '0x${_toHex(payload)}',
+      specVersion: rv.specVersion,
       display: display,
     );
     final requestJson = qrSigner.encodeRequest(request);
@@ -503,7 +505,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           _buildProposalInfoCard(),
           const SizedBox(height: 16),
           _buildJointVotingProgress(),
-          if (_hasInstitutionContext) ...[
+          if (_isAdmin) ...[
             const SizedBox(height: 16),
             _buildInstitutionVoteCard(),
           ],
@@ -604,8 +606,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                 },
               ),
               const Divider(height: 20),
-              _buildRemarkRow('升级理由', reason),
-              const Divider(height: 20),
               _buildInfoRow(
                 'Code Hash',
                 _truncateAddress(info.codeHashHex),
@@ -621,6 +621,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               ),
               const Divider(height: 20),
               _buildInfoRow('Code 状态', _codeStatusLabel(info)),
+              const Divider(height: 20),
+              _buildRemarkRow('升级理由', reason),
             ],
           ],
         ),
@@ -843,7 +845,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   Widget _buildVoteWalletSelector() {
-    if (!_hasImportedAdminWallets) {
+    if (!_isAdmin) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(12),
@@ -988,15 +990,15 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   Widget? _buildBottomBar() {
     if (_loading || _error != null) return null;
     // 联合投票阶段：仅管理员显示投票按钮
-    if (_hasInstitutionContext && _jointVoteOpen) {
+    if (_isAdmin && _jointVoteOpen) {
       return _buildVoteButtons();
     }
     // 公民投票阶段：所有用户显示投票按钮（SFID 绑定校验后续完善）
     if (_citizenVoteOpen) {
       return _buildCitizenVoteButtons();
     }
-    // 非投票阶段但有机构上下文：显示禁用状态的投票按钮
-    if (_hasInstitutionContext) {
+    // 非投票阶段但是管理员：显示禁用状态的投票按钮
+    if (_isAdmin) {
       return _buildVoteButtons();
     }
     return null;

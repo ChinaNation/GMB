@@ -175,29 +175,17 @@ void main() {
       expect(secret, isNull);
     });
 
-    test('createColdWallet should return mnemonic but not store seed',
-        () async {
-      final manager = WalletManager();
-
-      final result = await manager.createColdWallet();
-      expect(result.profile.signMode, 'external');
-      expect(result.mnemonic.trim().split(RegExp(r'\s+')).length, 12);
-
-      // 冷钱包不在 secure storage 存任何东西。
-      expect(
-        secureStorage.containsKey(
-            WalletSecureKeys.seedHexV1(result.profile.walletIndex)),
-        isFalse,
-      );
-    });
-
     test('deleteColdWallet should not touch secure storage', () async {
       final manager = WalletManager();
-      final result = await manager.createColdWallet();
-      final walletIndex = result.profile.walletIndex;
+
+      final hot = await manager.createWallet();
+      final address = hot.profile.address;
+      final cold = await manager.importColdWallet(address: address);
+      final walletIndex = cold.walletIndex;
 
       await manager.deleteWallet(walletIndex);
-      expect(await manager.getWallets(), isEmpty);
+      final wallets = await manager.getWallets();
+      expect(wallets.where((w) => w.walletIndex == walletIndex), isEmpty);
     });
   });
 }

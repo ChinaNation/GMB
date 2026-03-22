@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
 
 import '../isar/wallet_isar.dart';
+import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 
 /// 钱包详情页：名称、地址、公钥、私钥（遮挡）、助记词（遮挡）。
@@ -22,6 +23,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   String? _mnemonic;
   bool _seedVisible = false;
   bool _mnemonicVisible = false;
+  bool _screenshotGuardActive = false;
   List<WalletGroupEntity> _groups = [];
   late Set<String> _selectedGroups;
 
@@ -30,6 +32,19 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     super.initState();
     _selectedGroups = widget.wallet.groupNames.toSet();
     _loadGroups();
+  }
+
+  @override
+  void dispose() {
+    if (_screenshotGuardActive) ScreenshotGuard.disable();
+    super.dispose();
+  }
+
+  void _enableScreenshotGuard() {
+    if (!_screenshotGuardActive) {
+      _screenshotGuardActive = true;
+      ScreenshotGuard.enable();
+    }
   }
 
   Future<void> _loadGroups() async {
@@ -70,6 +85,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     try {
       final seed = await _walletManager.getSeedHex(widget.wallet.walletIndex);
       if (!mounted) return;
+      _enableScreenshotGuard();
       setState(() {
         _seedHex = seed;
         _seedVisible = true;
@@ -89,6 +105,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       final mnemonic =
           await _walletManager.getMnemonic(widget.wallet.walletIndex);
       if (!mounted) return;
+      _enableScreenshotGuard();
       setState(() {
         _mnemonic = mnemonic;
         _mnemonicVisible = true;
@@ -298,7 +315,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.red.shade200),
               ),
-              child: SelectableText(
+              child: Text(
                 value ?? '无数据',
                 style: const TextStyle(
                   fontSize: 14,
@@ -309,12 +326,11 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
             const SizedBox(height: 8),
             Row(
               children: [
-                TextButton.icon(
-                  onPressed: () {
-                    if (value != null) _copyToClipboard(value, label);
-                  },
-                  icon: const Icon(Icons.copy, size: 16),
-                  label: const Text('复制'),
+                const Expanded(
+                  child: Text(
+                    '请手抄备份，不支持复制',
+                    style: TextStyle(color: Colors.red, fontSize: 12),
+                  ),
                 ),
                 TextButton.icon(
                   onPressed: onHide,

@@ -7,6 +7,7 @@ import '../wallet/core/wallet_manager.dart';
 import 'institution_admin_service.dart';
 import 'institution_data.dart';
 import 'proposal_cache.dart';
+import 'proposal_context.dart';
 import 'runtime_upgrade_detail_page.dart';
 import 'runtime_upgrade_service.dart';
 import 'transfer_proposal_detail_page.dart';
@@ -38,7 +39,8 @@ class _AllProposalsViewState extends State<AllProposalsView> {
 
   final TransferProposalService _proposalService = TransferProposalService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
-  final WalletManager _walletManager = WalletManager();
+  final ProposalContextResolver _contextResolver = ProposalContextResolver();
+  final VoteChecker _voteChecker = VoteChecker();
   final ScrollController _scrollController = ScrollController();
 
   // WebSocket 订阅
@@ -57,9 +59,6 @@ class _AllProposalsViewState extends State<AllProposalsView> {
 
   /// 已加载到的最小提案 ID（不含）。
   int _loadedUpTo = -1;
-
-  /// 缓存的钱包列表（首次加载后缓存）。
-  List<WalletProfile>? _wallets;
 
   /// 待投票计数。
   int _pendingVoteCount = 0;
@@ -130,12 +129,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     });
 
     try {
-      final results = await Future.wait([
-        _proposalService.fetchNextProposalId(),
-        _walletManager.getWallets(),
-      ]);
-      final nextId = results[0] as int;
-      _wallets = results[1] as List<WalletProfile>;
+      final nextId = await _proposalService.fetchNextProposalId();
       _knownNextId = nextId;
 
       if (nextId == 0) {
@@ -226,52 +220,33 @@ class _AllProposalsViewState extends State<AllProposalsView> {
 
     final proposals = await _proposalService.fetchProposalPage(startId, count);
 
-    final wallets = _wallets ?? [];
+    // 批量解析提案上下文
+    final contexts = await _contextResolver.resolveBatch(
+      proposals
+          .map((p) => p.meta.institutionBytes?.toList())
+          .toList(),
+    );
+
     final items = <_ProposalDisplayItem>[];
 
-    for (final p in proposals) {
-      final inst = p.meta.institutionBytes != null
-          ? findInstitutionByPalletId(p.meta.institutionBytes!.toList())
-          : null;
+    for (var i = 0; i < proposals.length; i++) {
+      final p = proposals[i];
+      final ctx = contexts[i];
 
-      // 查管理员列表
-      List<String> admins = const [];
-      if (inst != null) {
-        try {
-          admins = await _adminService.fetchAdmins(inst.shenfenId);
-        } catch (_) {}
-      }
-
-      // 匹配当前用户的管理员冷钱包（管理员操作只允许冷钱包）
-      final matchedWallets = <WalletProfile>[];
-      for (final w in wallets) {
-        if (w.isHotWallet) continue;
-        var pk = w.pubkeyHex.toLowerCase();
-        if (pk.startsWith('0x')) pk = pk.substring(2);
-        if (admins.contains(pk)) {
-          matchedWallets.add(w);
-        }
-      }
-
-      // 检查是否有未投票的钱包
+      // 检查是否有未投票的钱包（统一使用 VoteChecker）
       bool needsVote = false;
-      if (matchedWallets.isNotEmpty && p.meta.status == 0) {
-        for (final w in matchedWallets) {
-          var pk = w.pubkeyHex.toLowerCase();
-          if (pk.startsWith('0x')) pk = pk.substring(2);
-          final vote =
-              await _proposalService.fetchAdminVote(p.meta.proposalId, pk);
-          if (vote == null) {
-            needsVote = true;
-            break;
-          }
-        }
+      if (ctx.hasAdminWallets && p.meta.status == 0) {
+        needsVote = await _voteChecker.hasUnvotedWallet(
+          proposalId: p.meta.proposalId,
+          kind: p.meta.kind,
+          adminWallets: ctx.adminWallets,
+          institution: ctx.institution,
+        );
       }
 
       items.add(_ProposalDisplayItem(
         proposal: p,
-        institution: inst,
-        adminWallets: matchedWallets,
+        context: ctx,
         needsVote: needsVote,
       ));
     }
@@ -336,6 +311,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     return RefreshIndicator(
       onRefresh: () async {
         _adminService.clearCache();
+        _contextResolver.clearWalletCache();
         ProposalCache.clear();
         await _loadFirstPage();
       },
@@ -545,19 +521,18 @@ class _AllProposalsViewState extends State<AllProposalsView> {
         MaterialPageRoute(
           builder: (_) => RuntimeUpgradeDetailPage(
             proposalId: proposalId,
-            institution: inst,
-            adminWallets: item.adminWallets,
+            proposalContext: item.context,
           ),
         ),
       );
-    } else if (inst != null && item.proposal.transferDetail != null) {
+    } else if (item.proposal.transferDetail != null && inst != null) {
       // 转账提案
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => TransferProposalDetailPage(
             institution: inst,
             proposalId: proposalId,
-            adminWallets: item.adminWallets,
+            proposalContext: item.context,
           ),
         ),
       );
@@ -581,13 +556,14 @@ class _AllProposalsViewState extends State<AllProposalsView> {
 class _ProposalDisplayItem {
   const _ProposalDisplayItem({
     required this.proposal,
-    this.institution,
-    this.adminWallets = const [],
+    required this.context,
     this.needsVote = false,
   });
 
   final ProposalWithDetail proposal;
-  final InstitutionInfo? institution;
-  final List<WalletProfile> adminWallets;
+  final ProposalContext context;
   final bool needsVote;
+
+  InstitutionInfo? get institution => context.institution;
+  List<WalletProfile> get adminWallets => context.adminWallets;
 }

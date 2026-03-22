@@ -12,6 +12,8 @@ import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_repository.dart';
 import 'package:wuminapp_mobile/user/user_service.dart' show UserProfileService;
+import 'package:wuminapp_mobile/ui/widgets/bip39_input.dart';
+import 'package:wuminapp_mobile/util/screenshot_guard.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
 
@@ -602,6 +604,14 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   bool _isSavingQr = false;
   late final TextEditingController _nameEditController;
   List<OnchainTxRecord> _recentRecords = const [];
+  bool _screenshotGuardActive = false;
+
+  @override
+  void dispose() {
+    _nameEditController.dispose();
+    if (_screenshotGuardActive) ScreenshotGuard.disable();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -626,10 +636,90 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     });
   }
 
-  @override
-  void dispose() {
-    _nameEditController.dispose();
-    super.dispose();
+  Future<void> _onMenuAction(String action) async {
+    switch (action) {
+      case 'seed':
+        await _revealSecret('私钥', () async {
+          final seed = await _walletService.getSeedHex(widget.wallet.walletIndex);
+          return seed != null ? '0x$seed' : null;
+        });
+      case 'mnemonic':
+        await _revealSecret('助记词', () async {
+          return _walletService.getMnemonic(widget.wallet.walletIndex);
+        });
+    }
+  }
+
+  Future<void> _revealSecret(
+      String label, Future<String?> Function() fetcher) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('查看$label'),
+        content: Text('$label是核心机密信息，泄露将导致资产被盗。\n\n确认要查看吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('查看'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final value = await fetcher();
+      if (!mounted) return;
+      if (!_screenshotGuardActive) {
+        _screenshotGuardActive = true;
+        await ScreenshotGuard.enable();
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(label),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Text(
+                  value ?? '无数据',
+                  style: const TextStyle(fontSize: 14, fontFamily: 'monospace'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '请手抄备份，不支持复制',
+                style: TextStyle(color: Colors.red, fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } on WalletAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('验证失败：${e.message}')),
+      );
+    }
   }
 
   Future<void> _saveWalletName(String name) async {
@@ -727,6 +817,17 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         appBar: AppBar(
           title: const Text('钱包详情'),
           centerTitle: true,
+          actions: [
+            if (widget.wallet.isHotWallet)
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                onSelected: _onMenuAction,
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'seed', child: Text('查看私钥')),
+                  PopupMenuItem(value: 'mnemonic', child: Text('查看助记词')),
+                ],
+              ),
+          ],
         ),
         body: ListView(
           padding: const EdgeInsets.all(16),
@@ -1044,16 +1145,18 @@ class CreateWalletPage extends StatefulWidget {
 
 class _CreateWalletPageState extends State<CreateWalletPage> {
   bool _isSaving = false;
+  int _wordCount = 12;
 
   Future<void> _create() async {
     setState(() {
       _isSaving = true;
     });
     try {
-      final created = await WalletManager().createWallet();
+      final created = await WalletManager().createWallet(wordCount: _wordCount);
       if (!mounted) {
         return;
       }
+      await ScreenshotGuard.enable();
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
@@ -1065,10 +1168,12 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  '助记词仅此一次展示，本机不保存助记词。\n请离线抄写并妥善保管，这是恢复钱包的唯一凭证。',
+                  '助记词已加密存储在本机，后续可在钱包详情中查看。\n'
+                  '请务必手抄备份并妥善保管，这是恢复钱包的唯一凭证。\n'
+                  '不支持复制，不支持截屏。',
                 ),
                 const SizedBox(height: 12),
-                SelectableText(
+                Text(
                   created.mnemonic,
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
@@ -1083,6 +1188,7 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
           );
         },
       );
+      await ScreenshotGuard.disable();
       if (!mounted) {
         return;
       }
@@ -1108,6 +1214,20 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
             const Text('将创建一个 sr25519 钱包，并生成 SS58(2027) 地址。'),
             const SizedBox(height: 8),
             const Text('仅使用默认派生路径，不暴露自定义路径。'),
+            const SizedBox(height: 16),
+            SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(value: 12, label: Text('12 个单词')),
+                ButtonSegment(value: 24, label: Text('24 个单词')),
+              ],
+              selected: {_wordCount},
+              onSelectionChanged: (v) => setState(() => _wordCount = v.first),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _wordCount == 24 ? '256 位熵，安全性更高' : '128 位熵，标准安全强度',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _isSaving ? null : _create,
@@ -1139,6 +1259,9 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
     });
     try {
       await WalletManager().importWallet(_mnemonicController.text);
+      // 导入成功后清空剪贴板，防止助记词残留
+      await Clipboard.setData(const ClipboardData(text: ''));
+      _mnemonicController.clear();
       if (!mounted) {
         return;
       }
@@ -1166,36 +1289,25 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('导入热钱包')),
-      body: Padding(
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('请输入助记词，用空格分隔'),
-            const SizedBox(height: 8),
-            const Text('仅使用默认派生路径，不暴露自定义路径。'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _mnemonicController,
-              minLines: 3,
-              maxLines: 5,
-              decoration: const InputDecoration(
-                hintText: 'word1 word2 ...',
-                border: OutlineInputBorder(),
-              ),
+        children: [
+          const Text('逐个输入单词，从候选列表中选择匹配项'),
+          const SizedBox(height: 8),
+          const Text('仅使用默认派生路径，不暴露自定义路径。'),
+          const SizedBox(height: 12),
+          Bip39InputField(controller: _mnemonicController, wordCount: 0),
+          const SizedBox(height: 12),
+          if (_error != null)
+            Text(
+              _error!,
+              style: const TextStyle(color: Colors.red),
             ),
-            const SizedBox(height: 12),
-            if (_error != null)
-              Text(
-                _error!,
-                style: const TextStyle(color: Colors.red),
-              ),
-            FilledButton(
-              onPressed: _isImporting ? null : _import,
-              child: Text(_isImporting ? '导入中...' : '确认导入'),
-            ),
-          ],
-        ),
+          FilledButton(
+            onPressed: _isImporting ? null : _import,
+            child: Text(_isImporting ? '导入中...' : '确认导入'),
+          ),
+        ],
       ),
     );
   }

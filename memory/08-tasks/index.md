@@ -8,6 +8,15 @@
 - `memory/08-tasks/open/20260321-133855-按链上要求实现手机端-runtime-升级提案联合投票-补齐投票按钮-机构上下文-管理员签名收集-联合投票提交与正确阈值展示.md`
 - `memory/08-tasks/open/20260321-134324-检查我的钱包中导入热钱包-新增热钱包-导入冷钱包-新增冷钱包-冷钱包签名-热钱包签名等功能是否完成.md`
 - `memory/08-tasks/open/20260321-142327-补齐冷钱包离线签名执行端-冷钱包登录接线与登录系统签名验证.md`
+- `memory/08-tasks/open/20260321-152234-统一-sfid-与-cpms-的手机扫码登录协议为-challenge-sys-pubkey-sys-sig-版本.md`
+- `memory/08-tasks/open/20260321-161014-统一-gmb-ai-编程系统支持-codex-与-claude-双聊天窗口入口.md`
+- `memory/08-tasks/open/20260321-170000-升级冷钱包签名协议为-wuminapp-qr-sign-v2-解决盲签问题.md`
+- `memory/08-tasks/open/20260321-180000-整理热钱包详情页扫码入口.md`
+- `memory/08-tasks/open/20260321-190000-分离离线签名功能到独立-wumin-app-软件硬件钱包.md`
+- `memory/08-tasks/open/20260322-123405-补齐-china-机构常量模块接入并纳入-primitives-模块树.md`
+- `memory/08-tasks/open/20260322-124030-审查-wumin-冷钱包与-wuminapp-我的钱包功能的安全漏洞-实现缺口与改进建议-并按严重级别输出具体问题.md`
+- `memory/08-tasks/open/20260322-公民投票完整实现.md`
+- `memory/08-tasks/open/20260322-冷钱包安全审计修复-跨产品同步.md`
 
 ## done
 

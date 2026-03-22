@@ -171,28 +171,25 @@ class WalletManager {
   // 热钱包创建 / 导入
   // ---------------------------------------------------------------------------
 
-  Future<WalletCreationResult> createWallet() async {
-    final mnemonic = bip39.generateMnemonic();
+  /// 创建新钱包。
+  ///
+  /// [wordCount] 助记词个数，12（默认）或 24。
+  Future<WalletCreationResult> createWallet({int wordCount = 12}) async {
+    assert(wordCount == 12 || wordCount == 24);
+    final strength = wordCount == 24 ? 256 : 128;
+    final mnemonic = bip39.generateMnemonic(strength: strength);
     final seed = await _mnemonicToMiniSecret(mnemonic);
     final derived = _deriveSr25519FromSeed(seed);
-    final walletIndex = await _nextWalletIndex();
 
-    final profile = WalletProfile(
-      walletIndex: walletIndex,
-      walletName: '钱包$walletIndex',
-      walletIcon: 'wallet',
-      balance: 0,
+    // walletIndex 分配和写入在同一个事务中完成，避免并发冲突。
+    final profile = await _appendHotWalletAtomic(
       address: derived.address,
       pubkeyHex: derived.pubkeyHex,
-      alg: 'sr25519',
-      ss58: _ss58Format,
-      createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+      seedHex: _toHex(seed),
       source: 'created',
-      signMode: 'local',
     );
 
-    await _appendHotWallet(profile, _toHex(seed));
-    await _writeMnemonic(walletIndex, mnemonic);
+    await _writeMnemonic(profile.walletIndex, mnemonic);
     return WalletCreationResult(profile: profile, mnemonic: mnemonic);
   }
 
@@ -204,24 +201,19 @@ class WalletManager {
 
     final seed = await _mnemonicToMiniSecret(trimmed);
     final derived = _deriveSr25519FromSeed(seed);
-    final walletIndex = await _nextWalletIndex();
 
-    final profile = WalletProfile(
-      walletIndex: walletIndex,
-      walletName: '钱包$walletIndex',
-      walletIcon: 'wallet',
-      balance: 0,
+    // 检测重复：同一公钥的钱包已存在则拒绝
+    await _checkDuplicatePubkey(derived.pubkeyHex);
+
+    // walletIndex 分配和写入在同一个事务中完成，避免并发冲突。
+    final profile = await _appendHotWalletAtomic(
       address: derived.address,
       pubkeyHex: derived.pubkeyHex,
-      alg: 'sr25519',
-      ss58: _ss58Format,
-      createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+      seedHex: _toHex(seed),
       source: 'imported',
-      signMode: 'local',
     );
 
-    await _appendHotWallet(profile, _toHex(seed));
-    await _writeMnemonic(walletIndex, trimmed);
+    await _writeMnemonic(profile.walletIndex, trimmed);
     return profile;
   }
 
@@ -430,21 +422,31 @@ class WalletManager {
     return _readMnemonic(walletIndex);
   }
 
+  /// 强制身份验证。
+  ///
+  /// 优先使用生物识别（面容/指纹），若不可用则退到设备密码/图案，
+  /// 若设备未设置任何安全措施则抛出异常要求用户先设置。
+  /// 认证服务异常同样阻止访问。
   static Future<void> _authenticateIfSupported() async {
+    bool supported;
     try {
-      final supported = await _localAuth.isDeviceSupported();
-      if (!supported) return;
+      supported = await _localAuth.isDeviceSupported();
+    } on PlatformException catch (e) {
+      throw WalletAuthException('认证服务异常：${e.message}，无法访问钱包');
+    }
 
-      final biometrics = await _localAuth.getAvailableBiometrics();
-      final hasFace = biometrics.contains(BiometricType.face);
-      final hasFingerprint = biometrics.contains(BiometricType.fingerprint) ||
-          biometrics.contains(BiometricType.strong);
-      final biometricOnly = hasFace || hasFingerprint;
+    if (!supported) {
+      throw const WalletAuthException(
+        '设备未设置锁屏密码或安全措施，请先在系统设置中启用锁屏保护后再使用冷钱包',
+      );
+    }
 
+    try {
+      // biometricOnly: false — 优先弹出生物识别，失败后自动回退到设备 PIN/图案。
       final ok = await _localAuth.authenticate(
         localizedReason: '请验证身份以访问钱包密钥',
-        options: AuthenticationOptions(
-          biometricOnly: biometricOnly,
+        options: const AuthenticationOptions(
+          biometricOnly: false,
           stickyAuth: true,
           useErrorDialogs: true,
         ),
@@ -452,9 +454,15 @@ class WalletManager {
       if (!ok) {
         throw const WalletAuthException('未通过身份验证');
       }
-    } on PlatformException {
-      // 设备未设置锁屏密码或认证服务不可用，跳过验证。
-      return;
+    } on PlatformException catch (e) {
+      // 区分已知的非致命错误和真正的异常
+      final code = e.code;
+      if (code == 'NotAvailable' || code == 'NotEnrolled') {
+        throw const WalletAuthException(
+          '设备未设置锁屏密码或安全措施，请先在系统设置中启用锁屏保护后再使用冷钱包',
+        );
+      }
+      throw WalletAuthException('认证服务异常：${e.message}，请稍后重试');
     }
   }
 
@@ -462,35 +470,62 @@ class WalletManager {
   // 内部工具
   // ---------------------------------------------------------------------------
 
-  Future<int> _nextWalletIndex() async {
+  /// 原子化创建热钱包：在同一个事务中分配 walletIndex 并写入数据库。
+  Future<WalletProfile> _appendHotWalletAtomic({
+    required String address,
+    required String pubkeyHex,
+    required String seedHex,
+    required String source,
+  }) async {
     final isar = await WalletIsar.instance.db();
-    final rows =
-        await isar.walletProfileEntitys.where().sortByWalletIndex().findAll();
-    if (rows.isEmpty) {
-      return 1;
-    }
 
-    final used = rows.map((e) => e.walletIndex).toSet();
-    var candidate = rows.length + 1;
-    while (used.contains(candidate)) {
-      candidate++;
-    }
-    return candidate;
-  }
-
-  Future<void> _appendHotWallet(WalletProfile profile, String seedHex) async {
-    final isar = await WalletIsar.instance.db();
-    final entity = _toEntity(profile);
-
-    await _writeSeedHex(profile.walletIndex, seedHex);
+    late int walletIndex;
     await isar.writeTxn(() async {
+      final rows = await isar.walletProfileEntitys
+          .where()
+          .sortByWalletIndex()
+          .findAll();
+      final used = rows.map((e) => e.walletIndex).toSet();
+      walletIndex = 1;
+      while (used.contains(walletIndex)) {
+        walletIndex++;
+      }
+
+      final entity = WalletProfileEntity()
+        ..walletIndex = walletIndex
+        ..walletName = '钱包$walletIndex'
+        ..walletIcon = 'wallet'
+        ..balance = 0
+        ..address = address
+        ..pubkeyHex = pubkeyHex
+        ..alg = 'sr25519'
+        ..ss58 = _ss58Format
+        ..createdAtMillis = DateTime.now().millisecondsSinceEpoch
+        ..source = source
+        ..signMode = 'local';
       await isar.walletProfileEntitys.put(entity);
 
       final settings = await _getSettings(isar);
-      settings.activeWalletIndex = profile.walletIndex;
+      settings.activeWalletIndex = walletIndex;
       settings.updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
       await isar.walletSettingsEntitys.put(settings);
     });
+
+    await _writeSeedHex(walletIndex, seedHex);
+
+    return WalletProfile(
+      walletIndex: walletIndex,
+      walletName: '钱包$walletIndex',
+      walletIcon: 'wallet',
+      balance: 0,
+      address: address,
+      pubkeyHex: pubkeyHex,
+      alg: 'sr25519',
+      ss58: _ss58Format,
+      createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+      source: source,
+      signMode: 'local',
+    );
   }
 
   Future<WalletSettingsEntity> _getSettings(Isar isar) async {
@@ -529,6 +564,18 @@ class WalletManager {
     return out;
   }
 
+  /// 检查公钥是否已存在，重复则抛出异常。
+  Future<void> _checkDuplicatePubkey(String pubkeyHex) async {
+    final normalized = pubkeyHex.toLowerCase();
+    final isar = await WalletIsar.instance.db();
+    final rows = await isar.walletProfileEntitys.where().findAll();
+    for (final row in rows) {
+      if (row.pubkeyHex.toLowerCase() == normalized) {
+        throw Exception('该钱包已存在（${row.walletName}），无需重复导入');
+      }
+    }
+  }
+
   WalletProfile _toProfile(WalletProfileEntity row) {
     return WalletProfile(
       walletIndex: row.walletIndex,
@@ -548,20 +595,6 @@ class WalletManager {
     );
   }
 
-  WalletProfileEntity _toEntity(WalletProfile profile) {
-    return WalletProfileEntity()
-      ..walletIndex = profile.walletIndex
-      ..walletName = profile.walletName
-      ..walletIcon = profile.walletIcon
-      ..balance = profile.balance
-      ..address = profile.address
-      ..pubkeyHex = profile.pubkeyHex
-      ..alg = profile.alg
-      ..ss58 = profile.ss58
-      ..createdAtMillis = profile.createdAtMillis
-      ..source = profile.source
-      ..signMode = profile.signMode;
-  }
 }
 
 class _DerivedWallet {

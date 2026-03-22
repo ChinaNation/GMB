@@ -226,15 +226,17 @@ lib/
 - 冷钱包不在本机保存任何密钥材料
 - 本机签名在本地完成，私钥材料不出端
 - seed 读取前强制生物识别/设备密码验证（`_authenticateIfSupported()`），每次签名均需认证
-- 设备无生物识别也无密码时自动跳过验证（`isDeviceSupported()` 返回 false）
+- 设备未启用锁屏时硬拒绝访问，不再跳过验证（`isDeviceSupported()` 返回 false 时抛出异常）
+- 热钱包创建/导入入口前置设备锁检查（`_ensureDeviceSecure()`），未启用锁屏的设备无法创建或导入热钱包
 - seed 读取后进行格式校验（64 位 hex），异常数据立即抛错
 - `wallet.secret.*` 与 `wallet.session.*` 统一命名，避免散落硬编码
 - `getLatestWalletSecret()` / `getWalletSecretByIndex()` 已标记 `@Deprecated`，新代码禁止使用
+- walletIndex 分配与 profile 写入在同一 Isar 事务中完成（`_appendHotWalletAtomic` / `_appendColdWalletAtomic`），防止并发创建/导入时 index 冲突导致密钥覆盖；secure storage 写入在事务成功后执行
 
 ## 8. 主要接口（对外）
 
 - `WalletManager`
-  - `createWallet / importWallet / createColdWallet / importColdWallet`
+  - `createWallet / importWallet / importColdWallet`
   - `deleteWallet / setActiveWallet`
   - `signWithWallet(walletIndex, payload)` — 热钱包 sr25519 签名（seed 不出类）
   - `signUtf8WithWallet(walletIndex, message)` — 热钱包 UTF-8 签名（返回 `WalletSignResult`）
@@ -248,7 +250,7 @@ lib/
 
 - `test/wallet/wallet_manager_test.dart`
   - 热钱包创建/导入/删除/seed 存储联动
-  - 冷钱包创建/导入/无 seed 存储
+  - 冷钱包导入/删除/无 seed 存储
   - seed key 移除后不再读取
 - `test/wallet/seed_derivation_test.dart`
   - 验证 `fromSeed` 与 `fromMnemonic` 产出一致公钥

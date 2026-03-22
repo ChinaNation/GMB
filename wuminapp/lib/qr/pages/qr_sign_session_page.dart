@@ -74,6 +74,7 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
         expectedRequestId: widget.request.requestId,
         expectedPubkey: widget.expectedPubkey,
         expectedPayloadHash: expectedHash,
+        expectedPayloadHex: widget.request.payloadHex,
       );
       if (!mounted) return;
       Navigator.of(context).pop(response);

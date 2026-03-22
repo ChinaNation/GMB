@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 
 import 'runtime_upgrade_service.dart';
 import '../qr/pages/qr_sign_session_page.dart';
+import '../rpc/chain_rpc.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 import '../wallet/capabilities/api_client.dart';
@@ -158,11 +159,13 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
       Future<Uint8List> signCallback(Uint8List payload) async {
         // 管理员操作统一通过 QR 码签名（wumin 冷钱包）
         final qrSigner = QrSigner();
+        final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
-          requestId: 'propose-upgrade-${DateTime.now().millisecondsSinceEpoch}',
+          requestId: QrSigner.generateRequestId(prefix: 'upgrade-'),
           account: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
+          specVersion: rv.specVersion,
           display: {
             'action': 'propose_upgrade',
             'summary': '提交运行时升级提案',
