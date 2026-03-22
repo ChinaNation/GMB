@@ -363,7 +363,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
             color: const Color(0xFF1565C0).withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.system_update_alt,
+          child: const Icon(Icons.arrow_upward,
               size: 18, color: Color(0xFF1565C0)),
         ),
         const SizedBox(width: 10),

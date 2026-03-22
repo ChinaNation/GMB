@@ -38,38 +38,43 @@ const WalletProfileEntitySchema = CollectionSchema(
       name: r'createdAtMillis',
       type: IsarType.long,
     ),
-    r'pubkeyHex': PropertySchema(
+    r'groupNames': PropertySchema(
       id: 4,
+      name: r'groupNames',
+      type: IsarType.string,
+    ),
+    r'pubkeyHex': PropertySchema(
+      id: 5,
       name: r'pubkeyHex',
       type: IsarType.string,
     ),
     r'signMode': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'signMode',
       type: IsarType.string,
     ),
     r'source': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'source',
       type: IsarType.string,
     ),
     r'ss58': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'ss58',
       type: IsarType.long,
     ),
     r'walletIcon': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'walletIcon',
       type: IsarType.string,
     ),
     r'walletIndex': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'walletIndex',
       type: IsarType.long,
     ),
     r'walletName': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'walletName',
       type: IsarType.string,
     )
@@ -136,6 +141,7 @@ int _walletProfileEntityEstimateSize(
   var bytesCount = offsets.last;
   bytesCount += 3 + object.address.length * 3;
   bytesCount += 3 + object.alg.length * 3;
+  bytesCount += 3 + object.groupNames.length * 3;
   bytesCount += 3 + object.pubkeyHex.length * 3;
   bytesCount += 3 + object.signMode.length * 3;
   bytesCount += 3 + object.source.length * 3;
@@ -154,13 +160,14 @@ void _walletProfileEntitySerialize(
   writer.writeString(offsets[1], object.alg);
   writer.writeDouble(offsets[2], object.balance);
   writer.writeLong(offsets[3], object.createdAtMillis);
-  writer.writeString(offsets[4], object.pubkeyHex);
-  writer.writeString(offsets[5], object.signMode);
-  writer.writeString(offsets[6], object.source);
-  writer.writeLong(offsets[7], object.ss58);
-  writer.writeString(offsets[8], object.walletIcon);
-  writer.writeLong(offsets[9], object.walletIndex);
-  writer.writeString(offsets[10], object.walletName);
+  writer.writeString(offsets[4], object.groupNames);
+  writer.writeString(offsets[5], object.pubkeyHex);
+  writer.writeString(offsets[6], object.signMode);
+  writer.writeString(offsets[7], object.source);
+  writer.writeLong(offsets[8], object.ss58);
+  writer.writeString(offsets[9], object.walletIcon);
+  writer.writeLong(offsets[10], object.walletIndex);
+  writer.writeString(offsets[11], object.walletName);
 }
 
 WalletProfileEntity _walletProfileEntityDeserialize(
@@ -174,14 +181,15 @@ WalletProfileEntity _walletProfileEntityDeserialize(
   object.alg = reader.readString(offsets[1]);
   object.balance = reader.readDouble(offsets[2]);
   object.createdAtMillis = reader.readLong(offsets[3]);
+  object.groupNames = reader.readString(offsets[4]);
   object.id = id;
-  object.pubkeyHex = reader.readString(offsets[4]);
-  object.signMode = reader.readString(offsets[5]);
-  object.source = reader.readString(offsets[6]);
-  object.ss58 = reader.readLong(offsets[7]);
-  object.walletIcon = reader.readString(offsets[8]);
-  object.walletIndex = reader.readLong(offsets[9]);
-  object.walletName = reader.readString(offsets[10]);
+  object.pubkeyHex = reader.readString(offsets[5]);
+  object.signMode = reader.readString(offsets[6]);
+  object.source = reader.readString(offsets[7]);
+  object.ss58 = reader.readLong(offsets[8]);
+  object.walletIcon = reader.readString(offsets[9]);
+  object.walletIndex = reader.readLong(offsets[10]);
+  object.walletName = reader.readString(offsets[11]);
   return object;
 }
 
@@ -207,12 +215,14 @@ P _walletProfileEntityDeserializeProp<P>(
     case 6:
       return (reader.readString(offset)) as P;
     case 7:
-      return (reader.readLong(offset)) as P;
-    case 8:
       return (reader.readString(offset)) as P;
-    case 9:
+    case 8:
       return (reader.readLong(offset)) as P;
+    case 9:
+      return (reader.readString(offset)) as P;
     case 10:
+      return (reader.readLong(offset)) as P;
+    case 11:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1063,6 +1073,142 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      groupNamesEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'groupNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      groupNamesGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'groupNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      groupNamesLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'groupNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      groupNamesBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'groupNames',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      groupNamesStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'groupNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      groupNamesEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'groupNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      groupNamesContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'groupNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      groupNamesMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'groupNames',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      groupNamesIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'groupNames',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      groupNamesIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'groupNames',
+        value: '',
       ));
     });
   }
@@ -1981,6 +2127,20 @@ extension WalletProfileEntityQuerySortBy
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      sortByGroupNames() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'groupNames', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      sortByGroupNamesDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'groupNames', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
       sortByPubkeyHex() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'pubkeyHex', Sort.asc);
@@ -2138,6 +2298,20 @@ extension WalletProfileEntityQuerySortThenBy
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      thenByGroupNames() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'groupNames', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      thenByGroupNamesDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'groupNames', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
       thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
@@ -2281,6 +2455,13 @@ extension WalletProfileEntityQueryWhereDistinct
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
+      distinctByGroupNames({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'groupNames', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
       distinctByPubkeyHex({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'pubkeyHex', caseSensitive: caseSensitive);
@@ -2366,6 +2547,13 @@ extension WalletProfileEntityQueryProperty
   }
 
   QueryBuilder<WalletProfileEntity, String, QQueryOperations>
+      groupNamesProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'groupNames');
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, String, QQueryOperations>
       pubkeyHexProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'pubkeyHex');
@@ -2409,6 +2597,729 @@ extension WalletProfileEntityQueryProperty
       walletNameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'walletName');
+    });
+  }
+}
+
+// coverage:ignore-file
+// ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
+
+extension GetWalletGroupEntityCollection on Isar {
+  IsarCollection<WalletGroupEntity> get walletGroupEntitys => this.collection();
+}
+
+const WalletGroupEntitySchema = CollectionSchema(
+  name: r'WalletGroupEntity',
+  id: -5034756919696174632,
+  properties: {
+    r'isDefault': PropertySchema(
+      id: 0,
+      name: r'isDefault',
+      type: IsarType.bool,
+    ),
+    r'name': PropertySchema(
+      id: 1,
+      name: r'name',
+      type: IsarType.string,
+    ),
+    r'sortOrder': PropertySchema(
+      id: 2,
+      name: r'sortOrder',
+      type: IsarType.long,
+    )
+  },
+  estimateSize: _walletGroupEntityEstimateSize,
+  serialize: _walletGroupEntitySerialize,
+  deserialize: _walletGroupEntityDeserialize,
+  deserializeProp: _walletGroupEntityDeserializeProp,
+  idName: r'id',
+  indexes: {
+    r'name': IndexSchema(
+      id: 879695947855722453,
+      name: r'name',
+      unique: true,
+      replace: true,
+      properties: [
+        IndexPropertySchema(
+          name: r'name',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    )
+  },
+  links: {},
+  embeddedSchemas: {},
+  getId: _walletGroupEntityGetId,
+  getLinks: _walletGroupEntityGetLinks,
+  attach: _walletGroupEntityAttach,
+  version: '3.1.0+1',
+);
+
+int _walletGroupEntityEstimateSize(
+  WalletGroupEntity object,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  var bytesCount = offsets.last;
+  bytesCount += 3 + object.name.length * 3;
+  return bytesCount;
+}
+
+void _walletGroupEntitySerialize(
+  WalletGroupEntity object,
+  IsarWriter writer,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  writer.writeBool(offsets[0], object.isDefault);
+  writer.writeString(offsets[1], object.name);
+  writer.writeLong(offsets[2], object.sortOrder);
+}
+
+WalletGroupEntity _walletGroupEntityDeserialize(
+  Id id,
+  IsarReader reader,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  final object = WalletGroupEntity();
+  object.id = id;
+  object.isDefault = reader.readBool(offsets[0]);
+  object.name = reader.readString(offsets[1]);
+  object.sortOrder = reader.readLong(offsets[2]);
+  return object;
+}
+
+P _walletGroupEntityDeserializeProp<P>(
+  IsarReader reader,
+  int propertyId,
+  int offset,
+  Map<Type, List<int>> allOffsets,
+) {
+  switch (propertyId) {
+    case 0:
+      return (reader.readBool(offset)) as P;
+    case 1:
+      return (reader.readString(offset)) as P;
+    case 2:
+      return (reader.readLong(offset)) as P;
+    default:
+      throw IsarError('Unknown property with id $propertyId');
+  }
+}
+
+Id _walletGroupEntityGetId(WalletGroupEntity object) {
+  return object.id;
+}
+
+List<IsarLinkBase<dynamic>> _walletGroupEntityGetLinks(
+    WalletGroupEntity object) {
+  return [];
+}
+
+void _walletGroupEntityAttach(
+    IsarCollection<dynamic> col, Id id, WalletGroupEntity object) {
+  object.id = id;
+}
+
+extension WalletGroupEntityByIndex on IsarCollection<WalletGroupEntity> {
+  Future<WalletGroupEntity?> getByName(String name) {
+    return getByIndex(r'name', [name]);
+  }
+
+  WalletGroupEntity? getByNameSync(String name) {
+    return getByIndexSync(r'name', [name]);
+  }
+
+  Future<bool> deleteByName(String name) {
+    return deleteByIndex(r'name', [name]);
+  }
+
+  bool deleteByNameSync(String name) {
+    return deleteByIndexSync(r'name', [name]);
+  }
+
+  Future<List<WalletGroupEntity?>> getAllByName(List<String> nameValues) {
+    final values = nameValues.map((e) => [e]).toList();
+    return getAllByIndex(r'name', values);
+  }
+
+  List<WalletGroupEntity?> getAllByNameSync(List<String> nameValues) {
+    final values = nameValues.map((e) => [e]).toList();
+    return getAllByIndexSync(r'name', values);
+  }
+
+  Future<int> deleteAllByName(List<String> nameValues) {
+    final values = nameValues.map((e) => [e]).toList();
+    return deleteAllByIndex(r'name', values);
+  }
+
+  int deleteAllByNameSync(List<String> nameValues) {
+    final values = nameValues.map((e) => [e]).toList();
+    return deleteAllByIndexSync(r'name', values);
+  }
+
+  Future<Id> putByName(WalletGroupEntity object) {
+    return putByIndex(r'name', object);
+  }
+
+  Id putByNameSync(WalletGroupEntity object, {bool saveLinks = true}) {
+    return putByIndexSync(r'name', object, saveLinks: saveLinks);
+  }
+
+  Future<List<Id>> putAllByName(List<WalletGroupEntity> objects) {
+    return putAllByIndex(r'name', objects);
+  }
+
+  List<Id> putAllByNameSync(List<WalletGroupEntity> objects,
+      {bool saveLinks = true}) {
+    return putAllByIndexSync(r'name', objects, saveLinks: saveLinks);
+  }
+}
+
+extension WalletGroupEntityQueryWhereSort
+    on QueryBuilder<WalletGroupEntity, WalletGroupEntity, QWhere> {
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterWhere> anyId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(const IdWhereClause.any());
+    });
+  }
+}
+
+extension WalletGroupEntityQueryWhere
+    on QueryBuilder<WalletGroupEntity, WalletGroupEntity, QWhereClause> {
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterWhereClause>
+      idEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: id,
+        upper: id,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterWhereClause>
+      idNotEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            )
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            );
+      } else {
+        return query
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            )
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            );
+      }
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterWhereClause>
+      idGreaterThan(Id id, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.greaterThan(lower: id, includeLower: include),
+      );
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterWhereClause>
+      idLessThan(Id id, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.lessThan(upper: id, includeUpper: include),
+      );
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterWhereClause>
+      idBetween(
+    Id lowerId,
+    Id upperId, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: lowerId,
+        includeLower: includeLower,
+        upper: upperId,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterWhereClause>
+      nameEqualTo(String name) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'name',
+        value: [name],
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterWhereClause>
+      nameNotEqualTo(String name) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'name',
+              lower: [],
+              upper: [name],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'name',
+              lower: [name],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'name',
+              lower: [name],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'name',
+              lower: [],
+              upper: [name],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+}
+
+extension WalletGroupEntityQueryFilter
+    on QueryBuilder<WalletGroupEntity, WalletGroupEntity, QFilterCondition> {
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      idEqualTo(Id value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      idGreaterThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      idLessThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      idBetween(
+    Id lower,
+    Id upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'id',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      isDefaultEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isDefault',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      nameEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      nameGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      nameLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      nameBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'name',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      nameStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      nameEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      nameContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      nameMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'name',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      nameIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'name',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      nameIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'name',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      sortOrderEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sortOrder',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      sortOrderGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'sortOrder',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      sortOrderLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'sortOrder',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterFilterCondition>
+      sortOrderBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'sortOrder',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+}
+
+extension WalletGroupEntityQueryObject
+    on QueryBuilder<WalletGroupEntity, WalletGroupEntity, QFilterCondition> {}
+
+extension WalletGroupEntityQueryLinks
+    on QueryBuilder<WalletGroupEntity, WalletGroupEntity, QFilterCondition> {}
+
+extension WalletGroupEntityQuerySortBy
+    on QueryBuilder<WalletGroupEntity, WalletGroupEntity, QSortBy> {
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      sortByIsDefault() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDefault', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      sortByIsDefaultDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDefault', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      sortByName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      sortByNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      sortBySortOrder() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sortOrder', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      sortBySortOrderDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sortOrder', Sort.desc);
+    });
+  }
+}
+
+extension WalletGroupEntityQuerySortThenBy
+    on QueryBuilder<WalletGroupEntity, WalletGroupEntity, QSortThenBy> {
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy> thenById() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      thenByIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      thenByIsDefault() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDefault', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      thenByIsDefaultDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDefault', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      thenByName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      thenByNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      thenBySortOrder() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sortOrder', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QAfterSortBy>
+      thenBySortOrderDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sortOrder', Sort.desc);
+    });
+  }
+}
+
+extension WalletGroupEntityQueryWhereDistinct
+    on QueryBuilder<WalletGroupEntity, WalletGroupEntity, QDistinct> {
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QDistinct>
+      distinctByIsDefault() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isDefault');
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QDistinct> distinctByName(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'name', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, WalletGroupEntity, QDistinct>
+      distinctBySortOrder() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'sortOrder');
+    });
+  }
+}
+
+extension WalletGroupEntityQueryProperty
+    on QueryBuilder<WalletGroupEntity, WalletGroupEntity, QQueryProperty> {
+  QueryBuilder<WalletGroupEntity, int, QQueryOperations> idProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, bool, QQueryOperations> isDefaultProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isDefault');
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, String, QQueryOperations> nameProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'name');
+    });
+  }
+
+  QueryBuilder<WalletGroupEntity, int, QQueryOperations> sortOrderProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'sortOrder');
     });
   }
 }

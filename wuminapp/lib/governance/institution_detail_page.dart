@@ -446,7 +446,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       return Icons.send_outlined;
     }
     if (proposal.runtimeUpgradeDetail != null) {
-      return Icons.system_update_alt;
+      return Icons.arrow_upward;
     }
     if (proposal.meta.kind == 1) {
       return Icons.groups_outlined;

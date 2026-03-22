@@ -895,8 +895,10 @@ class _TransferProposalDetailPageState
                       ? null
                       : () => _confirmVote(true),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _canVote ? _inkGreen : Colors.grey[300],
+                    backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor:
+                        Colors.green.withValues(alpha: 0.25),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),

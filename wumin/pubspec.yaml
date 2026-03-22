@@ -27,7 +27,9 @@ dependencies:
   # 二维码
   mobile_scanner: ^7.1.4
   qr_flutter: ^4.1.0
-  # 相册
+  # SVG 图标
+  flutter_svg: ^2.0.10+1
+  # 相册图片选择
   image_picker: ^1.1.2
 
 dev_dependencies:
@@ -39,3 +41,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icons/

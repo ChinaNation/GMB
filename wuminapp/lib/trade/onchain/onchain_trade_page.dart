@@ -283,6 +283,9 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
           final requestId = 'tx-${DateTime.now().millisecondsSinceEpoch}';
           final toAddr = _toController.text.trim();
           final amountText = _amountController.text.trim();
+          // 统一格式化为两位小数，与 PayloadDecoder._fenToYuan 对齐
+          final amountFormatted =
+              (double.tryParse(amountText) ?? 0).toStringAsFixed(2);
           final request = qrSigner.buildRequest(
             requestId: requestId,
             account: wallet.address,
@@ -290,10 +293,10 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             payloadHex: '0x${_toHex(payload)}',
             display: {
               'action': 'transfer',
-              'summary': '转账 $amountText $_selectedSymbol 给 $toAddr',
+              'summary': '转账 $amountFormatted $_selectedSymbol 给 $toAddr',
               'fields': {
                 'to': toAddr,
-                'amount_yuan': amountText,
+                'amount_yuan': amountFormatted,
                 'symbol': _selectedSymbol,
               },
             },
@@ -577,6 +580,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   IconButton(
                     tooltip: '我的通讯录',

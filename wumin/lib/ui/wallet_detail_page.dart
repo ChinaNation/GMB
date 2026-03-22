@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:isar/isar.dart';
 
+import '../isar/wallet_isar.dart';
 import '../wallet/wallet_manager.dart';
 
 /// 钱包详情页：名称、地址、公钥、私钥（遮挡）、助记词（遮挡）。
@@ -20,6 +22,47 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   String? _mnemonic;
   bool _seedVisible = false;
   bool _mnemonicVisible = false;
+  List<WalletGroupEntity> _groups = [];
+  late Set<String> _selectedGroups;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedGroups = widget.wallet.groupNames.toSet();
+    _loadGroups();
+  }
+
+  Future<void> _loadGroups() async {
+    final isar = await WalletIsar.instance.db();
+    final groups = await isar.walletGroupEntitys
+        .where()
+        .sortBySortOrder()
+        .findAll();
+    if (!mounted) return;
+    setState(() => _groups = groups);
+  }
+
+  Future<void> _toggleGroup(String groupName, bool selected) async {
+    final updated = Set<String>.from(_selectedGroups);
+    if (selected) {
+      updated.add(groupName);
+    } else {
+      updated.remove(groupName);
+    }
+
+    final isar = await WalletIsar.instance.db();
+    final entity = await isar.walletProfileEntitys
+        .filter()
+        .walletIndexEqualTo(widget.wallet.walletIndex)
+        .findFirst();
+    if (entity == null) return;
+    await isar.writeTxn(() async {
+      entity.groupNames = updated.join(',');
+      await isar.walletProfileEntitys.put(entity);
+    });
+    if (!mounted) return;
+    setState(() => _selectedGroups = updated);
+  }
 
   Future<void> _revealSeed() async {
     final confirmed = await _confirmReveal('私钥');
@@ -99,6 +142,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         children: [
           _buildInfoTile('名称', wallet.walletName, copyable: false),
           const Divider(),
+          _buildGroupSelector(),
+          const Divider(),
           _buildInfoTile('地址', wallet.address),
           const Divider(),
           _buildInfoTile('公钥', '0x${wallet.pubkeyHex}'),
@@ -117,6 +162,43 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
             visible: _mnemonicVisible,
             onReveal: _revealMnemonic,
             onHide: () => setState(() => _mnemonicVisible = false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGroupSelector() {
+    if (_groups.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    // 排除"全部"，它是虚拟分组
+    final selectableGroups = _groups.where((g) => g.name != '全部').toList();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '分组',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 0,
+            children: selectableGroups.map((g) {
+              final checked = _selectedGroups.contains(g.name);
+              return FilterChip(
+                label: Text(g.name),
+                selected: checked,
+                onSelected: (val) => _toggleGroup(g.name, val),
+              );
+            }).toList(),
           ),
         ],
       ),

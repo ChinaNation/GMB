@@ -144,7 +144,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   static const Color _navSelectedColor = Color(0xFF007A74);
   static const Color _navUnselectedColor = Color(0xFF111111);
-  int _currentIndex = 0;
+  int _currentIndex = 2;
   int _pendingVoteCount = 0;
 
   late final List<Widget> _pages = [
@@ -293,8 +293,8 @@ class VotingPage extends StatefulWidget {
 }
 
 class _VotingPageState extends State<VotingPage> {
-  int _selectedTab = 0;
-  static const List<String> _tabs = ['投票', '机构'];
+  int _selectedTab = 1;
+  static const List<String> _tabs = ['投票', '治理', '机构'];
 
   @override
   Widget build(BuildContext context) {
@@ -323,10 +323,17 @@ class _VotingPageState extends State<VotingPage> {
 
     switch (_selectedTab) {
       case 0:
+        return const Center(
+          child: Text(
+            '正在开发中',
+            style: TextStyle(fontSize: 16, color: Colors.black54),
+          ),
+        );
+      case 1:
         return AllProposalsView(
           onPendingVoteCountChanged: widget.onPendingVoteCountChanged,
         );
-      case 1:
+      case 2:
         return const _InstitutionCategoryView(
           nationalCouncil: kNationalCouncil,
           provincialCouncils: kProvincialCouncils,

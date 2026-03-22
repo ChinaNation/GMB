@@ -148,7 +148,7 @@ class ProposalTypesPage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             _ProposalTypeCard(
-              icon: Icons.system_update_alt,
+              icon: Icons.arrow_upward,
               title: '状态升级',
               subtitle: 'Runtime 升级，需联合投票+公民投票',
               color: const Color(0xFF1565C0),

@@ -30,6 +30,24 @@ class WalletProfileEntity {
 
   /// 签名模式：固定 `local`（wumin 只有热钱包）。
   late String signMode;
+
+  /// 所属分组名称，逗号分隔，如 '分组一,分组二'。
+  /// '全部' 是虚拟分组，不存储在此字段中。
+  String groupNames = '';
+}
+
+@collection
+class WalletGroupEntity {
+  Id id = Isar.autoIncrement;
+
+  @Index(unique: true, replace: true)
+  late String name;
+
+  /// 排列顺序（越小越靠前）。
+  int sortOrder = 0;
+
+  /// 是否为默认分组（全部/分组一/分组二），不可删除。
+  bool isDefault = false;
 }
 
 @collection
@@ -90,10 +108,12 @@ class WalletIsar {
       WalletProfileEntitySchema,
       WalletSettingsEntitySchema,
       AppKvEntitySchema,
+      WalletGroupEntitySchema,
     ];
     final isar =
         await Isar.open(schemas, name: 'wumin_wallet', directory: dir);
     await _ensureSettingsRow(isar);
+    await _ensureDefaultGroups(isar);
     return isar;
   }
 
@@ -198,6 +218,23 @@ class WalletIsar {
       }
     }
     return null;
+  }
+
+  static const List<String> _defaultGroupNames = ['全部', '分组一', '分组二'];
+
+  static Future<void> _ensureDefaultGroups(Isar isar) async {
+    final count = await isar.walletGroupEntitys.count();
+    if (count > 0) return;
+    await isar.writeTxn(() async {
+      for (var i = 0; i < _defaultGroupNames.length; i++) {
+        await isar.walletGroupEntitys.put(
+          WalletGroupEntity()
+            ..name = _defaultGroupNames[i]
+            ..sortOrder = i
+            ..isDefault = true,
+        );
+      }
+    });
   }
 
   static Future<void> _ensureSettingsRow(Isar isar) async {

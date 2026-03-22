@@ -119,7 +119,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SquareAvatar(path: _userProfile.avatarPath, size: 84),
           const SizedBox(width: 12),
@@ -140,22 +140,27 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
           ),
-          InkWell(
-            onTap: _openProfileEdit,
-            borderRadius: BorderRadius.circular(8),
-            child: const Padding(
-              padding: EdgeInsets.all(4),
-              child: Icon(
-                Icons.chevron_right,
-                size: 24,
-                color: Colors.white,
-                shadows: [
-                  Shadow(
-                    color: Color(0x80000000),
-                    blurRadius: 10,
-                    offset: Offset(0, 2),
+          SizedBox(
+            height: 84,
+            child: Center(
+              child: InkWell(
+                onTap: _openProfileEdit,
+                borderRadius: BorderRadius.circular(8),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.chevron_right,
+                    size: 24,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(
+                        color: Color(0x80000000),
+                        blurRadius: 10,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),

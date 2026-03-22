@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:isar/isar.dart';
 
+import '../isar/wallet_isar.dart';
 import '../qr/offline_sign_page.dart';
 import '../wallet/wallet_manager.dart';
 import 'create_wallet_page.dart';
+import 'group_management_page.dart';
 import 'import_wallet_page.dart';
 import 'scan_page.dart';
 import 'wallet_detail_page.dart';
@@ -18,24 +22,32 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final WalletManager _walletManager = WalletManager();
   List<WalletProfile> _wallets = [];
+  List<WalletGroupEntity> _groups = [];
+  String _selectedGroup = '全部';
   int? _activeIndex;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadWallets();
+    _loadAll();
   }
 
-  Future<void> _loadWallets() async {
+  Future<void> _loadAll() async {
     setState(() => _loading = true);
     try {
       final wallets = await _walletManager.getWallets();
       final activeIndex = await _walletManager.getActiveWalletIndex();
+      final isar = await WalletIsar.instance.db();
+      final groups = await isar.walletGroupEntitys
+          .where()
+          .sortBySortOrder()
+          .findAll();
       if (!mounted) return;
       setState(() {
         _wallets = wallets;
         _activeIndex = activeIndex;
+        _groups = groups;
         _loading = false;
       });
     } catch (e) {
@@ -45,6 +57,13 @@ class _HomePageState extends State<HomePage> {
         SnackBar(content: Text('加载钱包失败：$e')),
       );
     }
+  }
+
+  Future<void> _loadWallets() => _loadAll();
+
+  List<WalletProfile> get _filteredWallets {
+    if (_selectedGroup == '全部') return _wallets;
+    return _wallets.where((w) => w.inGroup(_selectedGroup)).toList();
   }
 
   Future<void> _openCreateWallet() async {
@@ -258,15 +277,86 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _openGroupManagement() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const GroupManagementPage()),
+    );
+    await _loadAll();
+  }
+
+  Widget _buildGroupRow() {
+    final otherGroups = _groups.where((g) => g.name != '全部').toList();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+      child: Row(
+        children: [
+          // "全部"固定在左侧，不跟随滚动
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: const Text('全部'),
+              selected: _selectedGroup == '全部',
+              onSelected: (_) {
+                setState(() => _selectedGroup = '全部');
+              },
+            ),
+          ),
+          // 其余分组可左右滑动
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: otherGroups.map((g) {
+                  final selected = g.name == _selectedGroup;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(g.name),
+                      selected: selected,
+                      onSelected: (_) {
+                        setState(() => _selectedGroup = g.name);
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            tooltip: '分组管理',
+            onPressed: _openGroupManagement,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildWalletList() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: _wallets.length,
-      itemBuilder: (context, index) {
-        final wallet = _wallets[index];
-        final isActive = wallet.walletIndex == _activeIndex;
-        return _buildWalletCard(wallet, isActive);
-      },
+    final wallets = _filteredWallets;
+    return Column(
+      children: [
+        _buildGroupRow(),
+        Expanded(
+          child: wallets.isEmpty
+              ? Center(
+                  child: Text(
+                    '该分组下没有钱包',
+                    style: TextStyle(color: Colors.grey.shade500),
+                  ),
+                )
+              : ListView.builder(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  itemCount: wallets.length,
+                  itemBuilder: (context, index) {
+                    final wallet = wallets[index];
+                    final isActive = wallet.walletIndex == _activeIndex;
+                    return _buildWalletCard(wallet, isActive);
+                  },
+                ),
+        ),
+      ],
     );
   }
 
@@ -312,30 +402,6 @@ class _HomePageState extends State<HomePage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (isActive) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .primary
-                                  .withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              '当前',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -351,7 +417,11 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.qr_code_scanner),
+                icon: SvgPicture.asset(
+                  'assets/icons/scan-line.svg',
+                  width: 22,
+                  height: 22,
+                ),
                 tooltip: '扫码签名',
                 onPressed: () => _openScan(wallet),
               ),
