@@ -270,7 +270,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
         borderRadius: BorderRadius.circular(12),
         onTap: () => _openWalletDetail(wallet),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -489,7 +489,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
                       crossAxisCount: 2,
                       mainAxisSpacing: 8,
                       crossAxisSpacing: 8,
-                      childAspectRatio: 1.3,
+                      childAspectRatio: 1.8,
                     ),
                     itemCount: wallets.length,
                     itemBuilder: (context, i) {

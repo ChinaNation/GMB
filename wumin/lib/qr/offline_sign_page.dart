@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -27,13 +28,17 @@ class OfflineSignPage extends StatefulWidget {
 }
 
 class _OfflineSignPageState extends State<OfflineSignPage> {
-  final MobileScannerController _controller = MobileScannerController();
+  static const double scanBoxSize = 260;
+  static const double scanBoxOffsetY = -40;
+
+  late final MobileScannerController _controller;
   final OfflineSignService _offlineSignService = OfflineSignService();
   final QrSigner _qrSigner = QrSigner();
 
   Timer? _timer;
   bool _handled = false;
   bool _signing = false;
+  bool _torchOn = false;
   QrSignRequest? _request;
   QrSignResponse? _response;
   OfflineSignVerification? _verification;
@@ -42,9 +47,39 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   @override
   void initState() {
     super.initState();
+    _controller = MobileScannerController(
+      detectionSpeed: DetectionSpeed.normal,
+      facing: CameraFacing.back,
+      torchEnabled: false,
+    );
     final code = widget.initialCode;
     if (code != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _handleCode(code));
+    }
+  }
+
+  Future<void> _toggleTorch() async {
+    await _controller.toggleTorch();
+    setState(() {
+      _torchOn = !_torchOn;
+    });
+  }
+
+  Future<void> _scanFromGallery() async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+    final capture = await _controller.analyzeImage(image.path);
+    if (capture == null || capture.barcodes.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('未识别到二维码')),
+      );
+      return;
+    }
+    final code = capture.barcodes.first.rawValue;
+    if (code != null && code.isNotEmpty) {
+      await _handleCode(code);
     }
   }
 
@@ -197,24 +232,118 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
             _handleCode(code);
           },
         ),
-        Align(
-          alignment: Alignment.topCenter,
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.black54,
-              borderRadius: BorderRadius.circular(12),
+
+        // 扫描框 + 半透明遮罩
+        CustomPaint(
+          painter: _ScanOverlayPainter(
+            scanBoxSize: scanBoxSize,
+            offsetY: scanBoxOffsetY,
+          ),
+          child: const SizedBox.expand(),
+        ),
+
+        // 扫描框四角装饰
+        Center(
+          child: Transform.translate(
+            offset: const Offset(0, scanBoxOffsetY),
+            child: SizedBox(
+              width: scanBoxSize,
+              height: scanBoxSize,
+              child: CustomPaint(
+                painter: _ScanCornerPainter(),
+              ),
             ),
+          ),
+        ),
+
+        // 提示文字
+        Center(
+          child: Transform.translate(
+            offset: const Offset(0, scanBoxOffsetY + scanBoxSize / 2 + 24),
             child: Text(
-              '请扫描在线手机展示的签名请求二维码\n当前钱包：${widget.wallet.walletName}',
+              '扫描签名请求二维码\n当前钱包：${widget.wallet.walletName}',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+          ),
+        ),
+
+        // 底部工具栏：相册 + 手电筒
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 60, left: 48, right: 48),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: _scanFromGallery,
+                      icon: const Icon(Icons.photo_library_outlined),
+                      iconSize: 32,
+                      color: Colors.white,
+                    ),
+                    const Text(
+                      '相册',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ],
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: _toggleTorch,
+                      icon: Icon(
+                        _torchOn
+                            ? Icons.flashlight_on
+                            : Icons.flashlight_off_outlined,
+                      ),
+                      iconSize: 32,
+                      color: _torchOn ? Colors.amber : Colors.white,
+                    ),
+                    Text(
+                      _torchOn ? '关闭' : '手电筒',
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
       ],
     );
+  }
+
+  /// action 标识 → 中文名称。
+  static const _actionLabels = {
+    'transfer': '转账',
+    'propose_transfer': '提案转账',
+    'vote_transfer': '转账投票',
+    'joint_vote': '联合投票',
+    'citizen_vote': '公民投票',
+  };
+
+  /// fields key → 中文标签。
+  static const _fieldLabels = {
+    'to': '收款账户',
+    'amount_yuan': '金额',
+    'symbol': '币种',
+    'beneficiary': '收款账户',
+    'org': '机构',
+    'remark': '备注',
+    'proposal_id': '提案编号',
+    'approve': '投票',
+  };
+
+  /// fields value 转换（如 approve: true → 赞成）。
+  static String _fieldValue(String key, String value) {
+    if (key == 'approve') return value == 'true' ? '赞成' : '反对';
+    return value;
   }
 
   Widget _buildTransactionDetails(
@@ -243,22 +372,31 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
 
     final List<Widget> detailRows;
     if (decoded != null) {
+      final actionLabel = _actionLabels[decoded.action] ?? decoded.action;
       detailRows = [
-        _detailRow('交易类型', decoded.action),
-        _detailRow('摘要', decoded.summary),
-        ...decoded.fields.entries.map((e) => _detailRow(e.key, e.value)),
+        _detailRow('交易类型', actionLabel),
+        ...decoded.fields.entries.map((e) => _detailRow(
+              _fieldLabels[e.key] ?? e.key,
+              _fieldValue(e.key, e.value),
+            )),
       ];
     } else {
       final display = request.display;
+      final action = display['action']?.toString() ?? '未知';
+      final actionLabel = _actionLabels[action] ?? action;
       detailRows = [
-        _detailRow('交易类型', display['action']?.toString() ?? '未知'),
-        _detailRow('摘要', display['summary']?.toString() ?? '无'),
+        _detailRow('交易类型', actionLabel),
       ];
       final fields = display['fields'];
       if (fields is Map) {
         detailRows.addAll(
-          fields.entries
-              .map((e) => _detailRow(e.key.toString(), e.value.toString())),
+          fields.entries.map((e) {
+            final key = e.key.toString();
+            return _detailRow(
+              _fieldLabels[key] ?? key,
+              _fieldValue(key, e.value.toString()),
+            );
+          }),
         );
       }
     }
@@ -318,24 +456,21 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   Widget _detailRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.black54,
-                fontWeight: FontWeight.w500,
-              ),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.black54,
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -372,17 +507,8 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '交易签名',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text('请求 ID：${request.requestId}'),
-                const SizedBox(height: 4),
-                Text('签名账户：${_truncate(request.account)}'),
+                _detailRow('请求 ID', request.requestId),
+                _detailRow('签名账户', request.account),
               ],
             ),
           ),
@@ -488,4 +614,62 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
           : (request != null ? _buildRequestSummary(request) : _buildScanner()),
     );
   }
+}
+
+class _ScanOverlayPainter extends CustomPainter {
+  _ScanOverlayPainter({required this.scanBoxSize, this.offsetY = 0});
+
+  final double scanBoxSize;
+  final double offsetY;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bgPaint = Paint()..color = Colors.black.withAlpha(140);
+    final clearPaint = Paint()..blendMode = BlendMode.clear;
+
+    final center = Offset(size.width / 2, size.height / 2 + offsetY);
+    final rect = Rect.fromCenter(
+      center: center,
+      width: scanBoxSize,
+      height: scanBoxSize,
+    );
+
+    canvas.saveLayer(Offset.zero & size, Paint());
+    canvas.drawRect(Offset.zero & size, bgPaint);
+    canvas.drawRect(rect, clearPaint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _ScanOverlayPainter oldDelegate) =>
+      oldDelegate.scanBoxSize != scanBoxSize || oldDelegate.offsetY != offsetY;
+}
+
+class _ScanCornerPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    const cornerLen = 24.0;
+    const strokeWidth = 4.0;
+
+    final paint = Paint()
+      ..color = Colors.green
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final w = size.width;
+    final h = size.height;
+
+    canvas.drawLine(const Offset(0, 0), const Offset(cornerLen, 0), paint);
+    canvas.drawLine(const Offset(0, 0), const Offset(0, cornerLen), paint);
+    canvas.drawLine(Offset(w, 0), Offset(w - cornerLen, 0), paint);
+    canvas.drawLine(Offset(w, 0), Offset(w, cornerLen), paint);
+    canvas.drawLine(Offset(0, h), Offset(cornerLen, h), paint);
+    canvas.drawLine(Offset(0, h), Offset(0, h - cornerLen), paint);
+    canvas.drawLine(Offset(w, h), Offset(w - cornerLen, h), paint);
+    canvas.drawLine(Offset(w, h), Offset(w, h - cornerLen), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
