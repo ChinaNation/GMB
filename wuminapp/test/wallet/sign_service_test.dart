@@ -37,7 +37,7 @@ void main() {
       );
       final challenge = service.parseChallenge(raw);
 
-      expect(challenge.proto, 'WUMINAPP_LOGIN_V1');
+      expect(challenge.proto, 'WUMIN_LOGIN_V1.0.0');
       expect(challenge.system, 'cpms');
       expect(challenge.challenge, 'req-1');
       expect(challenge.sysPubkey, startsWith('0x'));
@@ -155,7 +155,7 @@ void main() {
 
       expect(
         signMessage,
-        'WUMINAPP_LOGIN_V1|cpms|abc123|$expiresAt',
+        'WUMIN_LOGIN_V1.0.0|cpms|abc123|$expiresAt',
       );
     });
 
@@ -175,7 +175,7 @@ void main() {
       final wallet2 = await walletService.getWalletSecretByIndex(2);
       expect(wallet2, isNotNull);
       expect(receipt['pubkey'], '0x${wallet2!.profile.pubkeyHex}');
-      expect(receipt['proto'], 'WUMINAPP_LOGIN_V1');
+      expect(receipt['proto'], 'WUMIN_LOGIN_V1.0.0');
       expect(receipt['sig_alg'], 'sr25519');
       expect(receipt['signature'], startsWith('0x'));
       // 回执码不再包含 account 字段。
@@ -237,7 +237,6 @@ void main() {
       );
 
       final parsed = QrSigner().parseRequest(bundle.requestJson);
-      expect(parsed.scope, QrSignScope.login);
       expect(parsed.requestId, challenge.challenge);
       expect(parsed.account, coldWallet.address);
       expect(parsed.pubkey, '0x${coldWallet.pubkeyHex}');
@@ -287,7 +286,7 @@ String _challengeJson({
   final iat = issuedAt ?? (expiresAt - LoginService.challengeTtlSeconds);
   return '''
 {
-  "proto": "WUMINAPP_LOGIN_V1",
+  "proto": "WUMIN_LOGIN_V1.0.0",
   "system": "$system",
   "challenge": "$challenge",
   "issued_at": $iat,

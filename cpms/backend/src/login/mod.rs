@@ -359,7 +359,7 @@ async fn auth_qr_challenge(
     let issued_at = Utc::now().timestamp();
     let expire_at = (Utc::now() + Duration::seconds(CHALLENGE_EXPIRES_SECONDS)).timestamp();
     let challenge_payload = format!(
-        "WUMINAPP_LOGIN_V1|{}|{}|{}",
+        "WUMIN_LOGIN_V1.0.0|{}|{}|{}",
         "cpms", challenge_id, expire_at
     );
     let (sys_pubkey, sys_sig) = build_login_qr_system_signature(
@@ -385,7 +385,8 @@ async fn auth_qr_challenge(
     .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save challenge failed"))?;
 
     let login_qr_payload = serde_json::json!({
-        "proto": "WUMINAPP_LOGIN_V1",
+        "proto": "WUMIN_LOGIN_V1.0.0",
+        "type": "challenge",
         "system": "cpms",
         "challenge": challenge_id,
         "issued_at": issued_at,
@@ -780,7 +781,7 @@ async fn build_login_qr_system_signature(
     })?;
     let keypair = mini.expand_to_keypair(schnorrkel::ExpansionMode::Ed25519);
     let message = format!(
-        "WUMINAPP_LOGIN_V1|{}|{}|{}|{}|{}",
+        "WUMIN_LOGIN_V1.0.0|{}|{}|{}|{}|{}",
         system, challenge, issued_at, expires_at, active.pubkey
     );
     let signature = keypair.sign_simple(b"", message.as_bytes());

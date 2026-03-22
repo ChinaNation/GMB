@@ -1,0 +1,124 @@
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:polkadart_keyring/polkadart_keyring.dart';
+import 'package:wumin/signer/payload_decoder.dart';
+
+void main() {
+  group('PayloadDecoder', () {
+    test('decodes transfer_keep_alive (pallet=2 call=3)', () {
+      // 构造：[0x02, 0x03, 0x00 (MultiAddress::Id), 32 bytes addr, Compact amount]
+      final dest = Keyring.sr25519.fromSeed(Uint8List(32));
+      dest.ss58Format = 2027;
+      final destBytes = dest.bytes().toList();
+
+      // Compact(234_00) = 234 元 = 23400 分
+      // 23400 = 0x5B68 => Compact two-byte mode: (23400 << 2) | 1 = 93601 = 0x16DA1
+      // little-endian: [0xA1, 0x6D, 0x01] — wait, two-byte mode only works up to 2^14-1 = 16383
+      // 23400 > 16383 so use four-byte mode: (23400 << 2) | 2 = 93602 = 0x16DA2
+      // little-endian 4 bytes: [0xA2, 0x6D, 0x01, 0x00]
+      final payload = Uint8List.fromList([
+        0x02, 0x03, // pallet + call
+        0x00, // MultiAddress::Id
+        ...destBytes,
+        0xA2, 0x6D, 0x01, 0x00, // Compact(23400)
+      ]);
+
+      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final decoded = PayloadDecoder.decode(hex);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'transfer');
+      expect(decoded.fields['amount_yuan'], '234.00');
+      expect(decoded.fields['to'], dest.address);
+    });
+
+    test('decodes vote_transfer (pallet=19 call=1)', () {
+      // [0x13, 0x01, u64_le proposal_id=42, bool approve=true]
+      final payload = Uint8List.fromList([
+        0x13, 0x01,
+        42, 0, 0, 0, 0, 0, 0, 0, // proposal_id = 42
+        1, // approve = true
+      ]);
+
+      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final decoded = PayloadDecoder.decode(hex);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'vote_transfer');
+      expect(decoded.fields['proposal_id'], '42');
+      expect(decoded.fields['approve'], 'true');
+    });
+
+    test('decodes joint_vote (pallet=9 call=3)', () {
+      // [0x09, 0x03, u64_le proposal_id=7, 48 bytes institution, bool approve=false]
+      final payload = Uint8List.fromList([
+        0x09, 0x03,
+        7, 0, 0, 0, 0, 0, 0, 0, // proposal_id = 7
+        ...List.filled(48, 0), // institution_id
+        0, // approve = false
+      ]);
+
+      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final decoded = PayloadDecoder.decode(hex);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'joint_vote');
+      expect(decoded.fields['proposal_id'], '7');
+      expect(decoded.fields['approve'], 'false');
+      expect(decoded.summary, contains('反对'));
+    });
+
+    test('decodes citizen_vote (pallet=9 call=4)', () {
+      // [0x09, 0x04, u64_le proposal_id=99, 32 bytes binding_id,
+      //  Vec nonce (compact len 0), Vec sig (compact len 0), bool approve=true]
+      final payload = Uint8List.fromList([
+        0x09, 0x04,
+        99, 0, 0, 0, 0, 0, 0, 0, // proposal_id = 99
+        ...List.filled(32, 0), // binding_id
+        0, // Vec nonce len=0
+        0, // Vec sig len=0
+        1, // approve = true
+      ]);
+
+      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final decoded = PayloadDecoder.decode(hex);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'citizen_vote');
+      expect(decoded.fields['proposal_id'], '99');
+      expect(decoded.fields['approve'], 'true');
+    });
+
+    test('returns null for unknown pallet', () {
+      final hex = '0xff01';
+      expect(PayloadDecoder.decode(hex), isNull);
+    });
+
+    test('returns null for too-short input', () {
+      expect(PayloadDecoder.decode('0x02'), isNull);
+    });
+
+    test('Compact encoding mode 1 (two-byte)', () {
+      // Compact(234): value=234, mode 1 => (234 << 2) | 1 = 937 = 0x03A9
+      // little-endian: [0xA9, 0x03]
+      // Use in transfer_keep_alive amount
+      final dest = Keyring.sr25519.fromSeed(Uint8List(32));
+      dest.ss58Format = 2027;
+      final destBytes = dest.bytes().toList();
+
+      final payload = Uint8List.fromList([
+        0x02, 0x03,
+        0x00,
+        ...destBytes,
+        0xA9, 0x03, // Compact(234) two-byte mode
+      ]);
+
+      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final decoded = PayloadDecoder.decode(hex);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.fields['amount_yuan'], '2.34');
+    });
+  });
+}

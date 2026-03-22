@@ -242,9 +242,10 @@ class _AllProposalsViewState extends State<AllProposalsView> {
         } catch (_) {}
       }
 
-      // 匹配当前用户的管理员钱包
+      // 匹配当前用户的管理员冷钱包（管理员操作只允许冷钱包）
       final matchedWallets = <WalletProfile>[];
       for (final w in wallets) {
+        if (w.isHotWallet) continue;
         var pk = w.pubkeyHex.toLowerCase();
         if (pk.startsWith('0x')) pk = pk.substring(2);
         if (admins.contains(pk)) {

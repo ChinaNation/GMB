@@ -183,19 +183,26 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
     setState(() => _submitting = true);
 
     try {
-      final walletManager = WalletManager();
       Future<Uint8List> signCallback(Uint8List payload) async {
-        if (wallet.isHotWallet) {
-          return walletManager.signWithWallet(wallet.walletIndex, payload);
-        }
-        // 冷钱包：QR 扫码签名
+        // 管理员操作统一通过 QR 码签名（wumin 冷钱包）
         final qrSigner = QrSigner();
+        final beneficiary = _beneficiaryController.text.trim();
+        final amountText = _amountController.text.trim();
+        final remarkText = _remarkController.text;
         final request = qrSigner.buildRequest(
-          scope: QrSignScope.onchainTx,
           requestId: 'propose-${DateTime.now().millisecondsSinceEpoch}',
           account: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
+          display: {
+            'action': 'propose_transfer',
+            'summary': '提案转账 $amountText GMB 给 $beneficiary',
+            'fields': {
+              'beneficiary': beneficiary,
+              'amount_yuan': amountText,
+              'remark': remarkText,
+            },
+          },
         );
         final requestJson = qrSigner.encodeRequest(request);
         final response = await Navigator.push<QrSignResponse>(

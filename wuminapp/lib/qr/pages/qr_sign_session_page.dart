@@ -66,10 +66,13 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
     if (raw == null || !mounted) return;
 
     try {
+      final expectedHash =
+          QrSigner.computePayloadHash(widget.request.payloadHex);
       final response = QrSigner().parseResponse(
         raw,
         expectedRequestId: widget.request.requestId,
         expectedPubkey: widget.expectedPubkey,
+        expectedPayloadHash: expectedHash,
       );
       if (!mounted) return;
       Navigator.of(context).pop(response);

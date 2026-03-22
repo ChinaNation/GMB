@@ -155,19 +155,19 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
       if (!mounted) return;
       setState(() => _fetchingSnapshot = false);
 
-      final walletManager = WalletManager();
       Future<Uint8List> signCallback(Uint8List payload) async {
-        if (wallet.isHotWallet) {
-          return walletManager.signWithWallet(wallet.walletIndex, payload);
-        }
-        // 冷钱包：QR 扫码签名
+        // 管理员操作统一通过 QR 码签名（wumin 冷钱包）
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
-          scope: QrSignScope.onchainTx,
           requestId: 'propose-upgrade-${DateTime.now().millisecondsSinceEpoch}',
           account: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
+          display: {
+            'action': 'propose_upgrade',
+            'summary': '提交运行时升级提案',
+            'fields': {},
+          },
         );
         final requestJson = qrSigner.encodeRequest(request);
         final response = await Navigator.push<QrSignResponse>(

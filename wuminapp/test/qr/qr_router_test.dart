@@ -13,7 +13,7 @@ void main() {
   group('QrRouter', () {
     test('should route login challenge', () {
       final raw = jsonEncode({
-        'proto': 'WUMINAPP_LOGIN_V1',
+        'proto': 'WUMIN_LOGIN_V1.0.0',
         'system': 'sfid',
         'challenge': 'abc123',
         'issued_at': 1000,
@@ -62,9 +62,8 @@ void main() {
 
     test('should route qr sign request', () {
       final raw = jsonEncode({
-        'proto': 'WUMINAPP_QR_SIGN_V1',
+        'proto': 'WUMIN_SIGN_V1.0.0',
         'type': 'sign_request',
-        'scope': 'onchain_tx',
         'request_id': 'req-1',
         'account': '5Grw...',
         'pubkey': '0xaabb',
@@ -74,7 +73,7 @@ void main() {
         'expires_at': 1090,
       });
       final result = router.route(raw);
-      expect(result.type, QrRouteType.qrSign);
+      expect(result.type, QrRouteType.sign);
     });
 
     test('should route gmb:// address', () {
