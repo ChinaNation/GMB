@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../signer/offline_sign_service.dart';
 import '../signer/qr_signer.dart';
+import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 
 /// 离线签名页面。
@@ -39,6 +40,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   bool _handled = false;
   bool _signing = false;
   bool _torchOn = false;
+  bool _decodeFailedAcknowledged = false;
   QrSignRequest? _request;
   QrSignResponse? _response;
   OfflineSignVerification? _verification;
@@ -47,6 +49,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   @override
   void initState() {
     super.initState();
+    ScreenshotGuard.enable();
     _controller = MobileScannerController(
       detectionSpeed: DetectionSpeed.normal,
       facing: CameraFacing.back,
@@ -87,6 +90,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   void dispose() {
     _timer?.cancel();
     _controller.dispose();
+    ScreenshotGuard.disable();
     super.dispose();
   }
 
@@ -154,8 +158,37 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       _verification = null;
       _remainingSeconds = 0;
       _signing = false;
+      _decodeFailedAcknowledged = false;
     });
     await _controller.start();
+  }
+
+  Future<void> _acknowledgeDecodeFailed() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('风险确认'),
+        content: const Text(
+          '无法独立验证此交易内容，以下信息完全来自请求方（不可信来源）。\n\n'
+          '如果请求方被篡改，签名后可能造成资产损失。\n\n'
+          '确认你已通过其他渠道核实交易内容？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('我已核实，允许签名'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      setState(() => _decodeFailedAcknowledged = true);
+    }
   }
 
   Future<void> _signRequest() async {
@@ -175,6 +208,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       final response = await _offlineSignService.signParsedRequest(
         walletIndex: widget.wallet.walletIndex,
         request: request,
+        acknowledgeDecodeFailed: _decodeFailedAcknowledged,
       );
       if (!mounted) return;
       setState(() {
@@ -331,6 +365,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   /// fields key → 中文标签。
   static const _fieldLabels = {
     'to': '收款账户',
+    'amount': '金额',
     'amount_yuan': '金额',
     'symbol': '币种',
     'beneficiary': '收款账户',
@@ -482,6 +517,8 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     final verification = _verification;
     final isMismatched =
         verification?.displayMatch == DisplayMatchStatus.mismatched;
+    final isDecodeFailed =
+        verification?.displayMatch == DisplayMatchStatus.decodeFailed;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -517,6 +554,19 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         if (verification != null)
           _buildTransactionDetails(request, verification),
         const SizedBox(height: 16),
+        if (isDecodeFailed && !_decodeFailedAcknowledged) ...[
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: expired ? null : _acknowledgeDecodeFailed,
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.orange,
+              ),
+              child: const Text('我已通过其他渠道核实，允许签名'),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
         Row(
           children: [
             Expanded(
@@ -528,7 +578,10 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton(
-                onPressed: (_signing || expired || isMismatched)
+                onPressed: (_signing ||
+                        expired ||
+                        isMismatched ||
+                        (isDecodeFailed && !_decodeFailedAcknowledged))
                     ? null
                     : _signRequest,
                 child: Text(_signing ? '签名中...' : '确认签名'),

@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:local_auth/local_auth.dart';
@@ -11,6 +12,8 @@ import 'package:qr/qr.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wuminapp_mobile/security/app_lock_service.dart';
+import 'package:wuminapp_mobile/security/pin_input_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
 import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
@@ -1345,9 +1348,11 @@ class _SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<_SettingsPage> {
-  static const String _appLockKey = 'app_lock_enabled';
+  static const String _deviceLockKey = 'device_lock_enabled';
+  static const FlutterSecureStorage _secure = FlutterSecureStorage();
   final LocalAuthentication _localAuth = LocalAuthentication();
-  bool _appLockEnabled = false;
+  bool _deviceLockEnabled = false;
+  bool _pinLockEnabled = false;
   bool _loading = true;
 
   @override
@@ -1357,31 +1362,31 @@ class _SettingsPageState extends State<_SettingsPage> {
   }
 
   Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final deviceLockStr = await _secure.read(key: _deviceLockKey);
+    final pinSet = await AppLockService.isPinSet();
     if (!mounted) return;
     setState(() {
-      _appLockEnabled = prefs.getBool(_appLockKey) ?? false;
+      _deviceLockEnabled = deviceLockStr == 'true';
+      _pinLockEnabled = pinSet;
       _loading = false;
     });
   }
 
-  Future<void> _toggleAppLock(bool value) async {
+  Future<void> _toggleDeviceLock(bool value) async {
     if (value) {
-      // 开启前先检查设备是否支持生物识别或设备密码
       final canCheck = await _localAuth.canCheckBiometrics;
       final isDeviceSupported = await _localAuth.isDeviceSupported();
       if (!canCheck && !isDeviceSupported) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('您的设备不支持生物识别或设备密码，无法开启应用锁')),
+          const SnackBar(content: Text('您的设备不支持生物识别或设备密码，无法开启设备锁')),
         );
         return;
       }
 
-      // 验证一次身份，确认用户可以通过认证
       try {
         final authenticated = await _localAuth.authenticate(
-          localizedReason: '验证身份以开启应用锁',
+          localizedReason: '验证身份以开启设备锁',
           options: const AuthenticationOptions(
             stickyAuth: true,
             biometricOnly: false,
@@ -1397,12 +1402,36 @@ class _SettingsPageState extends State<_SettingsPage> {
       }
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_appLockKey, value);
+    await _secure.write(
+      key: _deviceLockKey,
+      value: value.toString(),
+    );
     if (!mounted) return;
-    setState(() {
-      _appLockEnabled = value;
-    });
+    setState(() => _deviceLockEnabled = value);
+  }
+
+  Future<void> _togglePinLock(bool value) async {
+    if (value) {
+      // 开启：进入设置 PIN 页面
+      final result = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => const PinInputPage(mode: PinInputMode.setup),
+        ),
+      );
+      if (result == true && mounted) {
+        setState(() => _pinLockEnabled = true);
+      }
+    } else {
+      // 关闭：进入验证 PIN 页面（验证通过后删除）
+      final result = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => const PinInputPage(mode: PinInputMode.remove),
+        ),
+      );
+      if (result == true && mounted) {
+        setState(() => _pinLockEnabled = false);
+      }
+    }
   }
 
   @override
@@ -1417,13 +1446,31 @@ class _SettingsPageState extends State<_SettingsPage> {
           : ListView(
               children: [
                 SwitchListTile(
-                  title: const Text('应用锁'),
-                  subtitle: const Text('启动应用时需要生物识别或设备密码'),
-                  value: _appLockEnabled,
-                  onChanged: _toggleAppLock,
+                  title: const Text('设备锁'),
+                  subtitle: Text(
+                    _pinLockEnabled
+                        ? '请先关闭应用锁'
+                        : '启动应用时需要生物识别或设备密码',
+                  ),
+                  value: _deviceLockEnabled,
+                  onChanged: _pinLockEnabled ? null : _toggleDeviceLock,
                   activeThumbColor: Colors.white,
                   activeTrackColor: const Color(0xFF007A74),
-                  secondary: const Icon(Icons.lock_outline),
+                  secondary: const Icon(Icons.fingerprint),
+                ),
+                const Divider(height: 1),
+                SwitchListTile(
+                  title: const Text('应用锁'),
+                  subtitle: Text(
+                    _deviceLockEnabled
+                        ? '请先关闭设备锁'
+                        : '启动应用时需要输入 6 位数字密码',
+                  ),
+                  value: _pinLockEnabled,
+                  onChanged: _deviceLockEnabled ? null : _togglePinLock,
+                  activeThumbColor: Colors.white,
+                  activeTrackColor: const Color(0xFF007A74),
+                  secondary: const Icon(Icons.pin_outlined),
                 ),
               ],
             ),

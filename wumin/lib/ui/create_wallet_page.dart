@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 
 /// 创建新钱包页面。
@@ -16,13 +16,21 @@ class CreateWalletPage extends StatefulWidget {
 class _CreateWalletPageState extends State<CreateWalletPage> {
   final WalletManager _walletManager = WalletManager();
   bool _creating = false;
+  int _wordCount = 12;
   WalletCreationResult? _result;
+
+  @override
+  void dispose() {
+    ScreenshotGuard.disable();
+    super.dispose();
+  }
 
   Future<void> _create() async {
     setState(() => _creating = true);
     try {
-      final result = await _walletManager.createWallet();
+      final result = await _walletManager.createWallet(wordCount: _wordCount);
       if (!mounted) return;
+      await ScreenshotGuard.enable();
       setState(() => _result = result);
     } catch (e) {
       if (!mounted) return;
@@ -32,15 +40,6 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
     } finally {
       if (mounted) setState(() => _creating = false);
     }
-  }
-
-  void _copyMnemonic() {
-    final mnemonic = _result?.mnemonic;
-    if (mnemonic == null) return;
-    Clipboard.setData(ClipboardData(text: mnemonic));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('助记词已复制到剪贴板')),
-    );
   }
 
   void _confirmBackup() {
@@ -80,7 +79,21 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
               '将生成一组助记词，请务必安全保存',
               style: TextStyle(color: Colors.black54),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+            SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(value: 12, label: Text('12 个单词')),
+                ButtonSegment(value: 24, label: Text('24 个单词')),
+              ],
+              selected: {_wordCount},
+              onSelectionChanged: (v) => setState(() => _wordCount = v.first),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _wordCount == 24 ? '256 位熵，安全性更高' : '128 位熵，标准安全强度',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+            const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
               child: FilledButton(
@@ -130,22 +143,12 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    const Text(
-                      '助记词',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.copy, size: 20),
-                      tooltip: '复制',
-                      onPressed: _copyMnemonic,
-                    ),
-                  ],
+                const Text(
+                  '助记词（请手抄备份，不支持复制）',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Wrap(

@@ -4,11 +4,13 @@ import 'package:isar/isar.dart';
 
 import '../isar/wallet_isar.dart';
 import '../qr/offline_sign_page.dart';
+import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 import 'create_wallet_page.dart';
 import 'group_management_page.dart';
 import 'import_wallet_page.dart';
 import 'scan_page.dart';
+import 'settings_page.dart';
 import 'wallet_detail_page.dart';
 
 /// 钱包列表首页。
@@ -26,11 +28,19 @@ class _HomePageState extends State<HomePage> {
   String _selectedGroup = '全部';
   int? _activeIndex;
   bool _loading = true;
+  bool _isRooted = false;
 
   @override
   void initState() {
     super.initState();
     _loadAll();
+    _checkRootStatus();
+  }
+
+  Future<void> _checkRootStatus() async {
+    final rooted = await ScreenshotGuard.isDeviceRooted();
+    if (!mounted) return;
+    setState(() => _isRooted = rooted);
   }
 
   Future<void> _loadAll() async {
@@ -218,7 +228,14 @@ class _HomePageState extends State<HomePage> {
     final hasWallets = _wallets.isNotEmpty;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('公民冷钱包'),
+        leading: IconButton(
+          icon: const Icon(Icons.settings_outlined),
+          tooltip: '设置',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SettingsPage()),
+          ),
+        ),
+        title: const Text('公民钱包'),
         centerTitle: true,
         actions: [
           if (hasWallets)
@@ -231,9 +248,35 @@ class _HomePageState extends State<HomePage> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : hasWallets
-              ? _buildWalletList()
-              : _buildEmptyState(),
+          : Column(
+              children: [
+                if (_isRooted)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    color: Colors.red.shade700,
+                    child: const Row(
+                      children: [
+                        Icon(Icons.warning, color: Colors.white, size: 18),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '检测到设备已 root/越狱，密钥安全无法保障',
+                            style: TextStyle(
+                                color: Colors.white, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: hasWallets
+                      ? _buildWalletList()
+                      : _buildEmptyState(),
+                ),
+              ],
+            ),
     );
   }
 

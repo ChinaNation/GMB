@@ -6,6 +6,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:sr25519/sr25519.dart' as sr25519;
 import 'package:substrate_bip39/crypto_scheme.dart';
 import 'package:wumin/signer/offline_sign_service.dart';
+import 'package:wumin/signer/pallet_registry.dart';
 import 'package:wumin/signer/qr_signer.dart';
 import 'package:wumin/wallet/wallet_manager.dart';
 
@@ -24,7 +25,7 @@ void main() {
     test('signParsedRequest should sign matching request with hot wallet',
         () async {
       final request = QrSigner().buildRequest(
-        requestId: 'offline-req-1',
+        requestId: 'offline-req-test-0001',
         account: hotWallet.address,
         pubkey: '0x${hotWallet.pubkeyHex}',
         payloadHex: '0x01020304',
@@ -37,6 +38,7 @@ void main() {
       final response = await service.signParsedRequest(
         walletIndex: hotWallet.walletIndex,
         request: request,
+        acknowledgeDecodeFailed: true,
       );
 
       expect(response.requestId, request.requestId);
@@ -51,9 +53,52 @@ void main() {
       );
     });
 
+    test('verifyPayload returns decodeFailed for unknown specVersion', () {
+      final request = QrSigner().buildRequest(
+        requestId: 'offline-req-test-spec',
+        account: hotWallet.address,
+        pubkey: '0x${hotWallet.pubkeyHex}',
+        payloadHex: '0x0203000102030405060708091011121314151617181920212223242526272829303132330401',
+        specVersion: 999,
+        display: const <String, dynamic>{
+          'action': 'transfer',
+          'summary': 'test transfer',
+        },
+      );
+
+      final verification = service.verifyPayload(request);
+      expect(verification.displayMatch, DisplayMatchStatus.decodeFailed);
+      expect(verification.decoded, isNull);
+    });
+
+    test('verifyPayload decodes known specVersion', () {
+      // Balances::transfer_keep_alive: pallet=2, call=3
+      // MultiAddress::Id prefix=0x00, then 32 bytes dest, then compact amount
+      final knownSpecVersion = PalletRegistry.supportedSpecVersions.first;
+      final request = QrSigner().buildRequest(
+        requestId: 'offline-req-test-known',
+        account: hotWallet.address,
+        pubkey: '0x${hotWallet.pubkeyHex}',
+        payloadHex: '0x020300aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0491',
+        specVersion: knownSpecVersion,
+        display: const <String, dynamic>{
+          'action': 'transfer',
+          'summary': 'test transfer',
+          'fields': {
+            'symbol': 'GMB',
+          },
+        },
+      );
+
+      final verification = service.verifyPayload(request);
+      // Should decode successfully (matched or at least not null)
+      expect(verification.decoded, isNotNull);
+      expect(verification.decoded!.action, 'transfer');
+    });
+
     test('signParsedRequest should reject mismatched pubkey', () async {
       final request = QrSigner().buildRequest(
-        requestId: 'offline-req-2',
+        requestId: 'offline-req-test-0002',
         account: hotWallet.address,
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',

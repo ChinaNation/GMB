@@ -45,4 +45,4 @@ pub enum VoteStage {
 
 /// 七、决议发行常量
 pub const RESOLUTION_ISSUANCE_MAX_REASON_LEN: u32 = 1024; // 决议发行理由最大长度
-pub const RESOLUTION_ISSUANCE_MAX_ALLOCATIONS: u32 = PRB_COUNT; // 决议发行单次最大分配条目数（与省储行数量一致）
+pub const RESOLUTION_ISSUANCE_MAX_ALLOCATIONS: u32 = PRB_COUNT; // 决议发行单次最大分配条目数（与省储会数量一致）
