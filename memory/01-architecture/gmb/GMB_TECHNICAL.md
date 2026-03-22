@@ -119,7 +119,7 @@
 ## 6. 共享协议与统一口径
 
 ### 6.1 登录扫码协议
-- 协议名：`WUMINAPP_LOGIN_V1`
+- 协议名：`WUMIN_LOGIN_V1.0.0`
 - 相关产品：
   - `wuminapp`
   - `sfid`

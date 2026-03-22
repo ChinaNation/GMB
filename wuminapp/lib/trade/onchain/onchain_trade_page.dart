@@ -281,12 +281,22 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         signCallback = (Uint8List payload) async {
           final qrSigner = QrSigner();
           final requestId = 'tx-${DateTime.now().millisecondsSinceEpoch}';
+          final toAddr = _toController.text.trim();
+          final amountText = _amountController.text.trim();
           final request = qrSigner.buildRequest(
-            scope: QrSignScope.onchainTx,
             requestId: requestId,
             account: wallet.address,
             pubkey: '0x${wallet.pubkeyHex}',
             payloadHex: '0x${_toHex(payload)}',
+            display: {
+              'action': 'transfer',
+              'summary': '转账 $amountText $_selectedSymbol 给 $toAddr',
+              'fields': {
+                'to': toAddr,
+                'amount_yuan': amountText,
+                'symbol': _selectedSymbol,
+              },
+            },
           );
           final requestJson = qrSigner.encodeRequest(request);
 

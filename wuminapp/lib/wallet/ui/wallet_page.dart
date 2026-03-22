@@ -7,8 +7,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qr/qr.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
-import 'package:wuminapp_mobile/qr/pages/qr_offline_sign_page.dart';
-import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
@@ -150,15 +148,6 @@ class _MyWalletPageState extends State<MyWalletPage> {
     }
   }
 
-  Future<void> _openCreateColdWalletPage() async {
-    final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const CreateColdWalletPage()),
-    );
-    if (created == true) {
-      _reload();
-    }
-  }
-
   Future<void> _openImportColdWalletPage() async {
     final imported = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const ImportColdWalletPage()),
@@ -245,18 +234,9 @@ class _MyWalletPageState extends State<MyWalletPage> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.ac_unit),
-                title: const Text('创建冷钱包'),
-                subtitle: const Text('本机不保存私钥'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _openCreateColdWalletPage();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.qr_code_scanner),
+                leading: const Icon(Icons.shield_outlined),
                 title: const Text('导入冷钱包'),
-                subtitle: const Text('通过地址导入'),
+                subtitle: const Text('仅导入公钥，私钥保留在签名设备'),
                 onTap: () {
                   Navigator.of(context).pop();
                   _openImportColdWalletPage();
@@ -349,35 +329,12 @@ class _MyWalletPageState extends State<MyWalletPage> {
                   ),
                 ),
               ),
-              // 底部：扫码图标左下 + GMB 右下
-              Row(
+              // 底部：GMB 右下
+              const Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  if (!_isSelectionMode)
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => QrScanPage(
-                              mode: QrScanMode.login,
-                              walletIndex: wallet.walletIndex,
-                            ),
-                          ),
-                        );
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 8, 12, 0),
-                        child: SvgPicture.asset(
-                          'assets/icons/scan-line.svg',
-                          width: 16,
-                          height: 16,
-                        ),
-                      ),
-                    )
-                  else
-                    const SizedBox(width: 16),
-                  const Text(
+                  SizedBox(width: 16),
+                  Text(
                     'GMB',
                     style: TextStyle(
                       fontSize: 12,
@@ -475,15 +432,9 @@ class _MyWalletPageState extends State<MyWalletPage> {
               onTap: _openImportPage,
             ),
             _buildWalletEntryOption(
-              color: const Color(0xFFFFF4CC),
-              title: '创建冷钱包',
-              description: '创建钱包后，自行保管私钥，本机不保存私钥',
-              onTap: _openCreateColdWalletPage,
-            ),
-            _buildWalletEntryOption(
-              color: const Color(0xFFE6E6FA),
+              color: const Color(0xFFFFF8E1),
               title: '导入冷钱包',
-              description: '导入钱包，本机不保存私钥',
+              description: '仅导入公钥，签名在外部设备',
               onTap: _openImportColdWalletPage,
             ),
           ],
@@ -756,14 +707,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     }
   }
 
-  Future<void> _openOfflineSignPage() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => QrOfflineSignPage(wallet: widget.wallet),
-      ),
-    );
-  }
-
   /// 将地址拆成两行显示，第一行长一些，第二行短一些。
   String _formatAddressTwoLines(String address) {
     if (address.length <= 20) return address;
@@ -983,26 +926,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 ),
               ],
             ),
-            if (widget.wallet.isHotWallet) ...[
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _openOfflineSignPage,
-                  icon: const Icon(Icons.qr_code_scanner_outlined),
-                  label: const Text('离线签名'),
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                '用于另一台设备扫描签名请求二维码并生成签名回执。',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.black54,
-                ),
-              ),
-            ],
             const SizedBox(height: 24),
             // 交易记录标题行
             InkWell(
@@ -1242,13 +1165,13 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('导入钱包')),
+      appBar: AppBar(title: const Text('导入热钱包')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('请输入助记词（至少 12 个单词）：'),
+            const Text('请输入助记词，用空格分隔'),
             const SizedBox(height: 8),
             const Text('仅使用默认派生路径，不暴露自定义路径。'),
             const SizedBox(height: 12),
@@ -1278,97 +1201,7 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
   }
 }
 
-class CreateColdWalletPage extends StatefulWidget {
-  const CreateColdWalletPage({super.key});
-
-  @override
-  State<CreateColdWalletPage> createState() => _CreateColdWalletPageState();
-}
-
-class _CreateColdWalletPageState extends State<CreateColdWalletPage> {
-  bool _isSaving = false;
-
-  Future<void> _create() async {
-    setState(() {
-      _isSaving = true;
-    });
-    try {
-      final created = await WalletManager().createColdWallet();
-      if (!mounted) {
-        return;
-      }
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('请备份助记词'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '⚠️ 冷钱包：本机不保存任何密钥材料。\n'
-                  '助记词是恢复钱包的唯一凭证，请务必离线抄写并妥善保管。',
-                  style:
-                      TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 12),
-                SelectableText(
-                  created.mnemonic,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('我已备份'),
-              ),
-            ],
-          );
-        },
-      );
-      if (!mounted) {
-        return;
-      }
-      Navigator.of(context).pop(true);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('创建冷钱包')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('将创建一个冷钱包（仅存公钥，不存私钥）。'),
-            const SizedBox(height: 8),
-            const Text(
-              '交易和登录需要通过扫码签名完成。',
-              style: TextStyle(color: Colors.black54),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _isSaving ? null : _create,
-              child: Text(_isSaving ? '创建中...' : '确认创建'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
+/// 导入冷钱包页面：仅输入 SS58 地址或公钥，不导入私钥。
 class ImportColdWalletPage extends StatefulWidget {
   const ImportColdWalletPage({super.key});
 
@@ -1390,9 +1223,7 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
       await WalletManager().importColdWallet(
         address: _addressController.text,
       );
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
       setState(() {
@@ -1422,17 +1253,19 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('请输入钱包地址：'),
+            const Text('请输入冷钱包的 SS58 地址或公钥：'),
             const SizedBox(height: 8),
             const Text(
-              '支持 SS58 地址或 0x 开头的账户地址（公钥）。\n冷钱包仅存储公钥，交易和登录需通过扫码签名。',
-              style: TextStyle(color: Colors.black54),
+              '冷钱包仅保存公钥，私钥保留在 Wumin 签名设备上。\n管理员提案和投票将通过扫码签名完成。',
+              style: TextStyle(color: Colors.black54, fontSize: 13),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _addressController,
+              minLines: 2,
+              maxLines: 3,
               decoration: const InputDecoration(
-                hintText: 'SS58 地址或 0x 账户地址',
+                hintText: 'SS58 地址或 0x 开头的公钥',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -1452,3 +1285,5 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
     );
   }
 }
+
+

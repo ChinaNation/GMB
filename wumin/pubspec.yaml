@@ -1,0 +1,41 @@
+name: wumin
+description: GMB 离线签名设备 — 软件形态的硬件钱包。
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # 密钥派生 + 签名
+  polkadart_keyring: ^0.7.0
+  bip39: ^1.0.6
+  bip39_mnemonic: ^3.0.10
+  substrate_bip39: ^0.7.0
+  sr25519: ^0.7.0
+  # 哈希
+  crypto: ^3.0.3
+  # 存储
+  isar: ^3.1.0+1
+  isar_flutter_libs: ^3.1.0+1
+  flutter_secure_storage: ^9.2.2
+  path_provider: ^2.1.4
+  # 生物识别
+  local_auth: ^2.3.0
+  # 二维码
+  mobile_scanner: ^7.1.4
+  qr_flutter: ^4.1.0
+  # 相册
+  image_picker: ^1.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.11
+  isar_generator: ^3.1.0+1
+
+flutter:
+  uses-material-design: true

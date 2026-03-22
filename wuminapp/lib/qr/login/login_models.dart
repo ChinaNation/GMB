@@ -11,7 +11,7 @@ class LoginChallenge {
     required this.raw,
   });
 
-  /// 协议标识，固定 `WUMINAPP_LOGIN_V1`。
+  /// 协议标识，固定 `WUMIN_LOGIN_V1.0.0`。
   final String proto;
 
   /// 目标系统：`sfid` 或 `cpms`。
@@ -34,7 +34,7 @@ class LoginChallenge {
 
   /// 系统对挑战字段的签名（0x + hex）。
   ///
-  /// 签名原文：`proto|system|challenge|issued_at|expires_at|sys_pubkey`
+  /// 签名原文：`WUMIN_LOGIN_V1.0.0|system|challenge|issued_at|expires_at|sys_pubkey`
   final String sysSig;
 
   /// 原始扫码字符串。
@@ -51,27 +51,38 @@ class LoginChallenge {
 class LoginReceipt {
   const LoginReceipt({
     required this.proto,
+    required this.system,
     required this.challenge,
     required this.pubkey,
     required this.sigAlg,
     required this.signature,
+    required this.payloadHash,
     required this.signedAt,
   });
 
   final String proto;
+
+  /// 原样回传来源系统，防跨系统重放。
+  final String system;
   final String challenge;
   final String pubkey;
   final String sigAlg;
   final String signature;
+
+  /// 签名原文的 SHA-256 hex 摘要。
+  final String payloadHash;
   final int signedAt;
 
   Map<String, dynamic> toJson() {
     return {
       'proto': proto,
+      'type': 'receipt',
+      'system': system,
       'challenge': challenge,
       'pubkey': pubkey,
       'sig_alg': sigAlg,
       'signature': signature,
+      'payload_hash': payloadHash,
       'signed_at': signedAt,
     };
   }

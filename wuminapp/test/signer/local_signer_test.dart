@@ -21,7 +21,7 @@ void main() {
       );
       final result = await signer.signUtf8(
         walletSecret: secret,
-        message: 'WUMINAPP_LOGIN_V1|cpms|app|req|c|n|123',
+        message: 'WUMIN_LOGIN_V1.0.0|cpms|app|req|c|n|123',
       );
 
       expect(result.account, secret.profile.address);

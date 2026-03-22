@@ -134,15 +134,15 @@ lib/
 
 - **热钱包**：`LoginService` 解析挑战 → `LoginSystemSignatureVerifier` 验证系统签名 → `WalletManager.signUtf8WithWallet()` 完成 sr25519 签名（seed 不出 `WalletManager`）
 - **冷钱包**：
-  1. `LoginService.buildExternalSignRequest()` 将登录签名原文包装为 `QrSignRequest(scope=login)`
+  1. `LoginService.buildExternalSignRequest()` 将登录签名原文包装为 `QrSignRequest`
   2. 在线手机导航到 `QrSignSessionPage` 展示请求二维码
-  3. 离线设备进入 `QrOfflineSignPage` 扫描请求，并通过 `OfflineSignService` 调用本机热钱包签名
-  4. 在线手机扫描回执后，`LoginService.buildReceiptFromSignature()` 校验签名并生成登录回执
+  3. 离线设备进入 `QrOfflineSignPage` 扫描请求，通过 `OfflineSignService` 交叉验证 display 与 payload 后调用本机热钱包签名
+  4. 在线手机扫描回执后，`LoginService.buildReceiptFromSignature()` 校验签名（含 `payload_hash`）并生成登录回执
 
 ### 4.7 链上交易签名（由 trade/onchain 调用）
 
 - **热钱包**：`WalletManager.signWithWallet()` 签名回调注入 `OnchainTradeService`（seed 不出 WalletManager）；签名前必须重新派生本地公钥，并校验其与当前 `WalletProfile.pubkeyHex` 完全一致，不一致直接拒绝签名
-- **冷钱包**：构造 `QrSignRequest` → 导航到 `QrSignSessionPage` → 展示请求二维码 → 用户用离线设备扫码签名 → 扫描回执二维码 → `QrSigner.parseResponse()` 校验 `request_id + pubkey` → 签名回调注入
+- **冷钱包**：构造 `QrSignRequest`（含 `display` 字段）→ 导航到 `QrSignSessionPage` → 展示请求二维码 → 用户用离线设备扫码签名（离线端通过 `PayloadDecoder` 独立解码 payload 并与 display 交叉验证）→ 扫描回执二维码 → `QrSigner.parseResponse()` 校验 `request_id + pubkey + payload_hash` → 签名回调注入
 
 `OnchainTradeService.submitTransfer()` 接受 `sign` 回调参数，由 UI 层根据 `signMode` 提供不同实现。
 

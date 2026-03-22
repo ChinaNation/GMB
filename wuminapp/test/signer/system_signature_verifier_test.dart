@@ -47,12 +47,12 @@ LoginChallenge _buildSfidChallenge(_KeyFixture signer) {
   final expiresAt = now + 90;
   const challengeToken = 'challenge-token';
   final message = utf8.encode(
-    'WUMINAPP_LOGIN_V1|sfid|$challengeToken|$now|$expiresAt|${signer.pubkeyHex}',
+    'WUMIN_LOGIN_V1.0.0|sfid|$challengeToken|$now|$expiresAt|${signer.pubkeyHex}',
   );
   final signature = signer.pair.sign(Uint8List.fromList(message));
 
   return LoginChallenge(
-    proto: 'WUMINAPP_LOGIN_V1',
+    proto: 'WUMIN_LOGIN_V1.0.0',
     system: 'sfid',
     challenge: challengeToken,
     issuedAt: now,
@@ -69,7 +69,7 @@ LoginChallenge _buildInvalidSignatureChallenge(_KeyFixture signer) {
   const challengeToken = 'challenge-token';
 
   return LoginChallenge(
-    proto: 'WUMINAPP_LOGIN_V1',
+    proto: 'WUMIN_LOGIN_V1.0.0',
     system: 'cpms',
     challenge: challengeToken,
     issuedAt: now,
