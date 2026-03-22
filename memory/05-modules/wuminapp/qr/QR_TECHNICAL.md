@@ -44,10 +44,10 @@ lib/qr/
 
 | 协议常量 | 值 | 用途 |
 | --- | --- | --- |
-| `login` | `WUMINAPP_LOGIN_V1` | 登录挑战/回执 |
+| `login` | `WUMIN_LOGIN_V1.0.0` | 登录挑战/回执 |
 | `transfer` | `WUMINAPP_TRANSFER_V1` | 收款码 |
 | `contact` | `WUMINAPP_CONTACT_V1` | 用户码 |
-| `qrSign` | `WUMINAPP_QR_SIGN_V1` | 扫码签名（外部设备） |
+| `sign` | `WUMIN_SIGN_V1.0.0` | 扫码签名（外部设备） |
 | `legacyUserCard` | `WUMINAPP_USER_CARD_V1` | 旧版用户码（向后兼容） |
 
 ## 4. 路由器（QrRouter）
@@ -67,14 +67,14 @@ lib/qr/
 
 | 类型 | 触发条件 |
 | --- | --- |
-| `login` | `proto == WUMINAPP_LOGIN_V1` |
+| `login` | `proto == WUMIN_LOGIN_V1.0.0` |
 | `transfer` | `proto == WUMINAPP_TRANSFER_V1` |
 | `contact` | `proto == WUMINAPP_CONTACT_V1` 或 `WUMINAPP_USER_CARD_V1` |
-| `qrSign` | `proto == WUMINAPP_QR_SIGN_V1` |
+| `sign` | `proto == WUMIN_SIGN_V1.0.0` |
 | `legacyAddress` | `gmb://account/...` 或裸 SS58 地址 |
 | `unknown` | 无法识别 |
 
-## 5. 登录码协议（WUMINAPP_LOGIN_V1）
+## 5. 登录码协议（WUMIN_LOGIN_V1.0.0）
 
 ### 5.1 系统架构
 
@@ -89,7 +89,7 @@ lib/qr/
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `proto` | string | 是 | 固定 `WUMINAPP_LOGIN_V1` |
+| `proto` | string | 是 | 固定 `WUMIN_LOGIN_V1.0.0` |
 | `system` | string | 是 | `sfid` 或 `cpms` |
 | `challenge` | string | 是 | 随机挑战值 |
 | `issued_at` | int | 是 | 签发时间（秒级 epoch） |
@@ -124,7 +124,7 @@ proto|system|challenge|issued_at|expires_at|sys_pubkey
 ### 5.5 用户签名原文（手机签名）
 
 ```text
-WUMINAPP_LOGIN_V1|system|challenge|expires_at
+WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 ```
 
 说明：不包含 `aud` 字段，系统身份通过 `sys_pubkey`/`sys_sig` 密码学验证。
@@ -133,14 +133,16 @@ WUMINAPP_LOGIN_V1|system|challenge|expires_at
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `proto` | string | 固定 `WUMINAPP_LOGIN_V1` |
+| `proto` | string | 固定 `WUMIN_LOGIN_V1.0.0` |
+| `system` | string | 回执来源系统（`sfid` 或 `cpms`） |
 | `challenge` | string | 与挑战码对应 |
 | `pubkey` | string | 用户公钥（`0x` + hex） |
 | `sig_alg` | string | 固定 `sr25519` |
 | `signature` | string | 签名（`0x` + hex） |
 | `signed_at` | int | 签名时间（秒级 epoch） |
+| `payload_hash` | string | 签名原文的 SHA-256 哈希（`0x` + hex），用于防篡改校验 |
 
-说明：回执码不包含 `account`（地址）字段，仅提供 `pubkey`。
+说明：回执码不包含 `account`（地址）字段，仅提供 `pubkey`。`system` 标识回执来源系统，`payload_hash` 用于服务端验证签名原文未被篡改。
 
 ### 5.7 防重放
 
@@ -252,7 +254,7 @@ WUMINAPP_LOGIN_V1|system|challenge|expires_at
 | `transfer` | 返回 `QrScanTransferResult`（含地址、金额、币种） |
 | `legacyAddress` | 返回 `QrScanTransferResult`（仅地址） |
 | `contact` | 由调用方处理 |
-| `qrSign` | 提示用户在转账页面发起签名后使用 |
+| `sign` | 提示用户在转账页面发起签名后使用 |
 | `unknown` | 提示错误 |
 
 ### 8.3 登录回执页面
@@ -269,8 +271,9 @@ WUMINAPP_LOGIN_V1|system|challenge|expires_at
 
 - `signer/`：
   - `LocalSigner` 执行 sr25519 登录签名
-  - `QrSigner` 提供扫码签名协议（`WUMINAPP_QR_SIGN_V1`）
-  - `OfflineSignService` 为离线设备执行 `sign_request -> sign_response`
+  - `QrSigner` 提供扫码签名协议（`WUMIN_SIGN_V1.0.0`）
+  - `OfflineSignService` 为离线设备执行 `sign_request -> sign_response`（含 payload 交叉验证）
+  - `PayloadDecoder` 独立解码 SCALE call data，用于离线端防盲签验证
 - `wallet/`：
   - `WalletManager` 提供钱包密钥材料
   - `capabilities/sign_service.dart` 已重构为 re-export `qr/login/` 的兼容层
@@ -292,10 +295,14 @@ WUMINAPP_LOGIN_V1|system|challenge|expires_at
 ## 11. 测试覆盖
 
 - `test/qr/qr_router_test.dart`
-  - 各协议路由匹配
+  - 各协议路由匹配（V2 协议标识）
   - `gmb://account/` 和裸 SS58 地址识别
   - 旧版用户码兼容
   - 空值和未知格式处理
+- `test/qr/qr_sign_session_test.dart`
+  - 会话页面展示与倒计时
+  - 取消返回 null
+  - 过期状态 UI
 - `test/wallet/sign_service_test.dart`
   - 挑战解析与校验
   - 签名原文格式（不含 `aud`）
@@ -303,9 +310,21 @@ WUMINAPP_LOGIN_V1|system|challenge|expires_at
   - 防重放
   - 钱包缺失/不匹配
 - `test/signer/qr_signer_test.dart`
-  - 请求/回执编解码往返
+  - V2 请求/回执编解码往返（含 display、payloadHash）
+  - display 校验（缺失 display、缺失 action）
   - 过期校验
-  - `request_id` 匹配校验
+  - `request_id` 和 `payload_hash` 匹配校验
+  - `computePayloadHash` 确定性
+- `test/signer/offline_sign_service_test.dart`
+  - 签名与 display 交叉验证（matched / mismatched / decodeFailed）
+  - display mismatch 阻止签名
+  - pubkey 不匹配拒绝
+  - 冷钱包拒绝
+- `test/signer/payload_decoder_test.dart`
+  - transfer_keep_alive 解码
+  - vote_transfer 解码（赞成/反对）
+  - joint_vote 解码
+  - 未知 pallet / 过短 payload / 空值返回 null
 
 ## 12. 冷钱包扫码签名会话
 
@@ -359,7 +378,12 @@ WUMINAPP_LOGIN_V1|system|challenge|expires_at
 
 ### 12.6 离线执行端页面
 
-`QrOfflineSignPage`：离线设备入口页面，负责扫描 `sign_request`、展示签名摘要、调用 `OfflineSignService` 完成本机签名，并展示 `sign_response` 回执二维码。
+`QrOfflineSignPage`：离线设备入口页面，负责扫描 `sign_request`、调用 `OfflineSignService.verifyPayload()` 交叉验证 display 与 payload、展示验证结果（三态颜色标识）、完成本机签名，并展示 `sign_response` 回执二维码。
+
+交叉验证状态展示：
+- 绿色横幅 — payload 解码与 display 一致（`matched`）
+- 红色横幅 — payload 解码与 display 不一致（`mismatched`），签名按钮禁用
+- 橙色横幅 — payload 无法解码（`decodeFailed`），仅展示 display 内容
 
 ## 13. 后续扩展
 

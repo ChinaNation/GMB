@@ -4,27 +4,29 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../signer/offline_sign_service.dart';
-import '../../signer/qr_signer.dart';
-import '../../wallet/core/wallet_manager.dart';
+import '../signer/offline_sign_service.dart';
+import '../signer/qr_signer.dart';
+import '../wallet/wallet_manager.dart';
 
 /// 离线签名页面。
 ///
-/// 该页面用于“持有私钥的另一台设备”扫描在线手机展示的签名请求二维码，
-/// 并在本机完成签名后展示回执二维码，供在线手机再扫回去。
-class QrOfflineSignPage extends StatefulWidget {
-  const QrOfflineSignPage({
+/// 扫描在线手机展示的签名请求二维码，
+/// 在本机完成签名后展示回执二维码。
+class OfflineSignPage extends StatefulWidget {
+  const OfflineSignPage({
     super.key,
     required this.wallet,
+    this.initialCode,
   });
 
   final WalletProfile wallet;
+  final String? initialCode;
 
   @override
-  State<QrOfflineSignPage> createState() => _QrOfflineSignPageState();
+  State<OfflineSignPage> createState() => _OfflineSignPageState();
 }
 
-class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
+class _OfflineSignPageState extends State<OfflineSignPage> {
   final MobileScannerController _controller = MobileScannerController();
   final OfflineSignService _offlineSignService = OfflineSignService();
   final QrSigner _qrSigner = QrSigner();
@@ -34,13 +36,15 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
   bool _signing = false;
   QrSignRequest? _request;
   QrSignResponse? _response;
+  OfflineSignVerification? _verification;
   int _remainingSeconds = 0;
 
   @override
   void initState() {
     super.initState();
-    if (widget.wallet.isColdWallet) {
-      _remainingSeconds = 0;
+    final code = widget.initialCode;
+    if (code != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _handleCode(code));
     }
   }
 
@@ -69,18 +73,18 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
   }
 
   Future<void> _handleCode(String raw) async {
-    if (_handled) {
-      return;
-    }
+    if (_handled) return;
     _handled = true;
     await _controller.stop();
 
     try {
       final request = _offlineSignService.parseRequest(raw);
+      final verification = _offlineSignService.verifyPayload(request);
       if (!mounted) return;
       setState(() {
         _request = request;
         _response = null;
+        _verification = verification;
       });
       _startCountdown(request);
     } on QrSignException catch (e) {
@@ -112,6 +116,7 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
     setState(() {
       _request = null;
       _response = null;
+      _verification = null;
       _remainingSeconds = 0;
       _signing = false;
     });
@@ -120,9 +125,7 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
 
   Future<void> _signRequest() async {
     final request = _request;
-    if (request == null) {
-      return;
-    }
+    if (request == null) return;
     if (_remainingSeconds <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('签名请求已过期，请重新扫描')),
@@ -144,49 +147,13 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
       });
     } on OfflineSignException catch (e) {
       if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('离线签名失败'),
-          content: Text(e.message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('确定'),
-            ),
-          ],
-        ),
-      );
+      _showError('离线签名失败', e.message);
     } on WalletAuthException catch (e) {
       if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('身份验证'),
-          content: Text(e.message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('确定'),
-            ),
-          ],
-        ),
-      );
+      _showError('身份验证', e.message);
     } catch (e) {
       if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('离线签名失败'),
-          content: Text('$e'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('确定'),
-            ),
-          ],
-        ),
-      );
+      _showError('离线签名失败', '$e');
     } finally {
       if (mounted) {
         setState(() {
@@ -196,14 +163,22 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
     }
   }
 
-  String _scopeLabel(QrSignScope scope) {
-    switch (scope) {
-      case QrSignScope.login:
-        return '登录签名';
-      case QrSignScope.onchainTx:
-        return '链上交易签名';
-    }
+  Future<void> _showError(String title, String message) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
   }
+
 
   String _truncate(String text, {int head = 12, int tail = 8}) {
     if (text.length <= head + tail + 3) return text;
@@ -232,7 +207,7 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              '请用此设备扫描在线手机展示的签名请求二维码\n当前钱包：${widget.wallet.walletName}',
+              '请扫描在线手机展示的签名请求二维码\n当前钱包：${widget.wallet.walletName}',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white),
             ),
@@ -242,8 +217,137 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
     );
   }
 
+  Widget _buildTransactionDetails(
+      QrSignRequest request, OfflineSignVerification verification) {
+    final decoded = verification.decoded;
+    final match = verification.displayMatch;
+
+    final Widget statusBanner;
+    switch (match) {
+      case DisplayMatchStatus.matched:
+        statusBanner = _buildBanner(
+          color: Colors.green,
+          text: '交易内容已独立验证，与摘要一致',
+        );
+      case DisplayMatchStatus.mismatched:
+        statusBanner = _buildBanner(
+          color: Colors.red,
+          text: '警告：交易内容与摘要不符，禁止签名',
+        );
+      case DisplayMatchStatus.decodeFailed:
+        statusBanner = _buildBanner(
+          color: Colors.orange,
+          text: '无法独立验证交易内容，以下信息来自请求方',
+        );
+    }
+
+    final List<Widget> detailRows;
+    if (decoded != null) {
+      detailRows = [
+        _detailRow('交易类型', decoded.action),
+        _detailRow('摘要', decoded.summary),
+        ...decoded.fields.entries.map((e) => _detailRow(e.key, e.value)),
+      ];
+    } else {
+      final display = request.display;
+      detailRows = [
+        _detailRow('交易类型', display['action']?.toString() ?? '未知'),
+        _detailRow('摘要', display['summary']?.toString() ?? '无'),
+      ];
+      final fields = display['fields'];
+      if (fields is Map) {
+        detailRows.addAll(
+          fields.entries
+              .map((e) => _detailRow(e.key.toString(), e.value.toString())),
+        );
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        statusBanner,
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: detailRows,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBanner({required MaterialColor color, required String text}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            color == Colors.green
+                ? Icons.verified
+                : color == Colors.red
+                    ? Icons.dangerous
+                    : Icons.warning_amber,
+            color: color.shade700,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: color.shade700,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.black54,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRequestSummary(QrSignRequest request) {
     final expired = _remainingSeconds <= 0;
+    final verification = _verification;
+    final isMismatched =
+        verification?.displayMatch == DisplayMatchStatus.mismatched;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -261,7 +365,7 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -269,32 +373,24 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _scopeLabel(request.scope),
+                  '交易签名',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text('请求 ID：${request.requestId}'),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Text('签名账户：${_truncate(request.account)}'),
-                const SizedBox(height: 8),
-                Text('签名公钥：${_truncate(request.pubkey)}'),
-                const SizedBox(height: 8),
-                Text(
-                  '负载长度：${(_normalizeHex(request.payloadHex).length ~/ 2)} bytes',
-                ),
               ],
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        if (verification != null)
+          _buildTransactionDetails(request, verification),
         const SizedBox(height: 16),
-        const Text(
-          '确认无误后再签名。签名完成后，本页会生成回执二维码，供在线手机扫描回收。',
-          style: TextStyle(color: Colors.black54),
-        ),
-        const SizedBox(height: 24),
         Row(
           children: [
             Expanded(
@@ -306,7 +402,9 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton(
-                onPressed: (_signing || expired) ? null : _signRequest,
+                onPressed: (_signing || expired || isMismatched)
+                    ? null
+                    : _signRequest,
                 child: Text(_signing ? '签名中...' : '确认签名'),
               ),
             ),
@@ -378,26 +476,11 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.wallet.isColdWallet) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('离线签名'),
-          centerTitle: true,
-        ),
-        body: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text('冷钱包不保存私钥，无法作为离线签名执行端。'),
-          ),
-        ),
-      );
-    }
-
     final request = _request;
     final response = _response;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('离线签名'),
+        title: const Text('扫码签名'),
         centerTitle: true,
       ),
       body: response != null
@@ -405,12 +488,4 @@ class _QrOfflineSignPageState extends State<QrOfflineSignPage> {
           : (request != null ? _buildRequestSummary(request) : _buildScanner()),
     );
   }
-}
-
-String _normalizeHex(String input) {
-  final trimmed = input.trim();
-  if (trimmed.startsWith('0x') || trimmed.startsWith('0X')) {
-    return trimmed.substring(2).toLowerCase();
-  }
-  return trimmed.toLowerCase();
 }

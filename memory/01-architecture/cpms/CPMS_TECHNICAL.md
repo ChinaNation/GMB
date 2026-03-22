@@ -89,12 +89,12 @@
 - 扫码登录：后端生成挑战二维码，手机签名后回传，后端验签并落登录结果，页面轮询拿 token。
 
 ### 6.3 与 wuminapp 对齐口径（当前）
-- 协议：`WUMINAPP_LOGIN_V1`
+- 协议：`WUMIN_LOGIN_V1.0.0`
 - 挑战字段：`proto/system/challenge/issued_at/expires_at/sys_pubkey/sys_sig`
 - 签名原文固定：
 
 ```text
-WUMINAPP_LOGIN_V1|system|challenge|expires_at
+WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 ```
 
 - `origin` 不参与移动端扫码验签，可仅作为网页侧上下文保留。

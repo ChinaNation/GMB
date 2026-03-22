@@ -4,7 +4,7 @@ import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 
 /// 扫码内容的路由分类结果。
 enum QrRouteType {
-  /// 登录挑战码（`WUMINAPP_LOGIN_V1`）。
+  /// 登录挑战码（`WUMIN_LOGIN_V1.0.0`）。
   login,
 
   /// 收款码（`WUMINAPP_TRANSFER_V1`）。
@@ -13,8 +13,8 @@ enum QrRouteType {
   /// 用户码（`WUMINAPP_CONTACT_V1` 或旧版 `WUMINAPP_USER_CARD_V1`）。
   contact,
 
-  /// 扫码签名请求（`WUMINAPP_QR_SIGN_V1`）。
-  qrSign,
+  /// 交易签名请求（`WUMIN_SIGN_V1.0.0`）。
+  sign,
 
   /// 裸 SS58 地址或 `gmb://account/<addr>` — 向后兼容转账。
   legacyAddress,
@@ -77,9 +77,9 @@ class QrRouter {
             raw: raw,
             jsonData: jsonData,
           );
-        case QrProtocols.qrSign:
+        case QrProtocols.sign:
           return QrRouteResult(
-            type: QrRouteType.qrSign,
+            type: QrRouteType.sign,
             raw: raw,
             jsonData: jsonData,
           );

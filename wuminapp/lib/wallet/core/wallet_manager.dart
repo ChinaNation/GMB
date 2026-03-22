@@ -276,34 +276,8 @@ class WalletManager {
   }
 
   // ---------------------------------------------------------------------------
-  // 冷钱包创建 / 导入
+  // 冷钱包导入
   // ---------------------------------------------------------------------------
-
-  /// 创建冷钱包：生成助记词 → 派生地址 → 只存公钥（不存 seed）。
-  /// 助记词仅一次性展示，由用户自行保管。
-  Future<WalletCreationResult> createColdWallet() async {
-    final mnemonic = bip39.generateMnemonic();
-    final seed = await _mnemonicToMiniSecret(mnemonic);
-    final derived = _deriveSr25519FromSeed(seed);
-    final walletIndex = await _nextWalletIndex();
-
-    final profile = WalletProfile(
-      walletIndex: walletIndex,
-      walletName: _defaultWalletName(walletIndex),
-      walletIcon: _defaultWalletIcon(),
-      balance: 0,
-      address: derived.address,
-      pubkeyHex: derived.pubkeyHex,
-      alg: 'sr25519',
-      ss58: _ss58Format,
-      createdAtMillis: DateTime.now().millisecondsSinceEpoch,
-      source: 'created',
-      signMode: 'external',
-    );
-
-    await _appendColdWallet(profile);
-    return WalletCreationResult(profile: profile, mnemonic: mnemonic);
-  }
 
   /// 导入冷钱包：接受 SS58 地址或 0x 开头的 hex 公钥 → 解码公钥 → 只存公钥。
   Future<WalletProfile> importColdWallet({required String address}) async {

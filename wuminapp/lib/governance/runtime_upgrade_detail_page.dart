@@ -38,7 +38,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
   final RuntimeUpgradeService _service = RuntimeUpgradeService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
-  final WalletManager _walletManager = WalletManager();
 
   bool _loading = true;
   bool _submitting = false;
@@ -253,19 +252,17 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     required WalletProfile wallet,
     required Uint8List payload,
     required String requestPrefix,
+    required Map<String, dynamic> display,
   }) async {
-    if (wallet.isHotWallet) {
-      return _walletManager.signWithWallet(wallet.walletIndex, payload);
-    }
-
+    // 管理员投票统一通过 QR 码签名（wumin 冷钱包）
     final qrSigner = QrSigner();
     final request = qrSigner.buildRequest(
-      scope: QrSignScope.onchainTx,
       requestId:
           '$requestPrefix-${wallet.walletIndex}-${DateTime.now().millisecondsSinceEpoch}',
       account: wallet.address,
       pubkey: '0x${wallet.pubkeyHex}',
       payloadHex: '0x${_toHex(payload)}',
+      display: display,
     );
     final requestJson = qrSigner.encodeRequest(request);
     final response = await Navigator.push<QrSignResponse>(
@@ -299,11 +296,22 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         approve: approve,
         fromAddress: voteWallet.address,
         signerPubkey: _hexDecode(voteWallet.pubkeyHex),
-        sign: (payload) => _signPayloadWithWallet(
-          wallet: voteWallet,
-          payload: payload,
-          requestPrefix: approve ? 'runtime-joint-yes' : 'runtime-joint-no',
-        ),
+        sign: (payload) {
+          final voteText = approve ? '赞成' : '反对';
+          return _signPayloadWithWallet(
+            wallet: voteWallet,
+            payload: payload,
+            requestPrefix: approve ? 'runtime-joint-yes' : 'runtime-joint-no',
+            display: {
+              'action': 'joint_vote',
+              'summary': '联合投票 提案 #${widget.proposalId}：$voteText',
+              'fields': {
+                'proposal_id': widget.proposalId.toString(),
+                'approve': approve.toString(),
+              },
+            },
+          );
+        },
       );
 
       if (!mounted) return;
@@ -447,10 +455,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           : _error != null
               ? _buildError()
               : _buildContent(),
-      bottomNavigationBar:
-          (!_loading && _error == null && _hasInstitutionContext)
-              ? _buildVoteButtons()
-              : null,
+      bottomNavigationBar: _buildBottomBar(),
     );
   }
 
@@ -882,7 +887,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(fontSize: 11, color: Colors.grey[500]),
         ),
-        trailing: _buildWalletModeChip(wallet),
+        trailing: const Icon(Icons.shield_outlined, size: 18, color: Colors.orange),
       );
     }
 
@@ -910,7 +915,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  _buildWalletModeChip(wallet),
+                  const Icon(Icons.shield_outlined, size: 18, color: Colors.orange),
                 ],
               ),
             );
@@ -927,26 +932,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     );
   }
 
-  Widget _buildWalletModeChip(WalletProfile wallet) {
-    final isHot = wallet.isHotWallet;
-    final color = isHot ? Colors.green : Colors.orange;
-    final label = isHot ? '热钱包' : '冷钱包';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
-  }
 
   Widget _buildCitizenVotingProgress() {
     return Card(
@@ -992,6 +977,153 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 公民投票阶段判断
+  bool get _citizenVoteOpen =>
+      (_meta?.status == 0) && (_meta?.stage == 2) && _resolvedStatusCode() == 0;
+
+  Widget? _buildBottomBar() {
+    if (_loading || _error != null) return null;
+    // 联合投票阶段：仅管理员显示投票按钮
+    if (_hasInstitutionContext && _jointVoteOpen) {
+      return _buildVoteButtons();
+    }
+    // 公民投票阶段：所有用户显示投票按钮（SFID 绑定校验后续完善）
+    if (_citizenVoteOpen) {
+      return _buildCitizenVoteButtons();
+    }
+    // 非投票阶段但有机构上下文：显示禁用状态的投票按钮
+    if (_hasInstitutionContext) {
+      return _buildVoteButtons();
+    }
+    return null;
+  }
+
+  Widget _buildCitizenVoteButtons() {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+          16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              '公民投票',
+              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _submitting
+                      ? null
+                      : () => _confirmCitizenVote(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor:
+                        Colors.green.withValues(alpha: 0.25),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('赞成'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _submitting
+                      ? null
+                      : () => _confirmCitizenVote(false),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.red.withValues(alpha: 0.25),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('反对'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmCitizenVote(bool approve) {
+    final label = approve ? '赞成' : '反对';
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('确认公民投票$label'),
+        content: Text(
+          '将对此升级提案投"$label"票。投票后不可修改。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _submitCitizenVote(approve);
+            },
+            child: Text(label),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitCitizenVote(bool approve) async {
+    // TODO: 公民投票提交逻辑（需要链上 citizen_vote extrinsic）
+    // 暂时提示功能开发中
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('公民投票功能开发中'),
+        backgroundColor: Colors.orange,
       ),
     );
   }

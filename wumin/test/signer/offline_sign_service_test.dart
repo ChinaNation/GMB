@@ -3,11 +3,11 @@ import 'dart:typed_data';
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
+import 'package:sr25519/sr25519.dart' as sr25519;
 import 'package:substrate_bip39/crypto_scheme.dart';
-import 'package:wuminapp_mobile/signer/offline_sign_service.dart';
-import 'package:wuminapp_mobile/signer/qr_signer.dart';
-import 'package:wuminapp_mobile/signer/system_signature_verifier.dart';
-import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
+import 'package:wumin/signer/offline_sign_service.dart';
+import 'package:wumin/signer/qr_signer.dart';
+import 'package:wumin/wallet/wallet_manager.dart';
 
 void main() {
   group('OfflineSignService', () {
@@ -24,11 +24,14 @@ void main() {
     test('signParsedRequest should sign matching request with hot wallet',
         () async {
       final request = QrSigner().buildRequest(
-        scope: QrSignScope.onchainTx,
         requestId: 'offline-req-1',
         account: hotWallet.address,
         pubkey: '0x${hotWallet.pubkeyHex}',
         payloadHex: '0x01020304',
+        display: const <String, dynamic>{
+          'action': 'test',
+          'summary': 'test payload',
+        },
       );
 
       final response = await service.signParsedRequest(
@@ -39,7 +42,7 @@ void main() {
       expect(response.requestId, request.requestId);
       expect(response.pubkey, '0x${hotWallet.pubkeyHex}');
       expect(
-        Sr25519MessageVerifier().verify(
+        _verifySr25519(
           pubkeyHex: response.pubkey,
           message: Uint8List.fromList(<int>[1, 2, 3, 4]),
           signatureHex: response.signature,
@@ -50,12 +53,15 @@ void main() {
 
     test('signParsedRequest should reject mismatched pubkey', () async {
       final request = QrSigner().buildRequest(
-        scope: QrSignScope.login,
         requestId: 'offline-req-2',
         account: hotWallet.address,
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x0102',
+        display: const <String, dynamic>{
+          'action': 'login',
+          'summary': 'test login',
+        },
       );
 
       expect(
@@ -72,32 +78,49 @@ void main() {
         ),
       );
     });
-
-    test('signParsedRequest should reject cold wallet signer', () async {
-      final coldWallet = await walletManager.buildColdWalletProfile(9);
-      final request = QrSigner().buildRequest(
-        scope: QrSignScope.login,
-        requestId: 'offline-req-3',
-        account: coldWallet.address,
-        pubkey: '0x${coldWallet.pubkeyHex}',
-        payloadHex: '0x0102',
-      );
-
-      expect(
-        () => service.signParsedRequest(
-          walletIndex: coldWallet.walletIndex,
-          request: request,
-        ),
-        throwsA(
-          isA<OfflineSignException>().having(
-            (e) => e.code,
-            'code',
-            OfflineSignErrorCode.coldWalletUnsupported,
-          ),
-        ),
-      );
-    });
   });
+}
+
+bool _verifySr25519({
+  required String pubkeyHex,
+  required Uint8List message,
+  required String signatureHex,
+}) {
+  try {
+    final publicKey = sr25519.PublicKey.newPublicKey(_hexToBytes(pubkeyHex));
+    final signature = sr25519.Signature.fromBytes(
+      Uint8List.fromList(_hexToBytes(signatureHex)),
+    );
+    final (verified, _) =
+        sr25519.Sr25519.verify(publicKey, signature, message);
+    return verified;
+  } catch (_) {
+    return false;
+  }
+}
+
+List<int> _hexToBytes(String input) {
+  final text =
+      (input.startsWith('0x') || input.startsWith('0X'))
+          ? input.substring(2)
+          : input;
+  if (text.isEmpty || text.length.isOdd) return const <int>[];
+  return List<int>.generate(
+    text.length ~/ 2,
+    (i) => int.parse(text.substring(i * 2, i * 2 + 2), radix: 16),
+    growable: false,
+  );
+}
+
+String _toHex(List<int> bytes) {
+  const chars = '0123456789abcdef';
+  final buf = StringBuffer();
+  for (final b in bytes) {
+    buf
+      ..write(chars[(b >> 4) & 0x0f])
+      ..write(chars[b & 0x0f]);
+  }
+  return buf.toString();
 }
 
 class _FakeWalletManager extends WalletManager {
@@ -106,7 +129,6 @@ class _FakeWalletManager extends WalletManager {
       'bottom drive obey lake curtain smoke basket hold race lonely fit walk';
 
   _WalletFixture? _hotFixture;
-  WalletProfile? _coldWallet;
 
   Future<_WalletFixture> _ensureHotFixture() async {
     final existing = _hotFixture;
@@ -141,32 +163,11 @@ class _FakeWalletManager extends WalletManager {
     return _hotFixture!;
   }
 
-  Future<WalletProfile> buildColdWalletProfile(int walletIndex) async {
-    final hot = await _ensureHotFixture();
-    _coldWallet = WalletProfile(
-      walletIndex: walletIndex,
-      walletName: '离线测试冷钱包',
-      walletIcon: 'wallet',
-      balance: 0,
-      address: hot.profile.address,
-      pubkeyHex: hot.profile.pubkeyHex,
-      alg: hot.profile.alg,
-      ss58: hot.profile.ss58,
-      createdAtMillis: hot.profile.createdAtMillis,
-      source: 'test',
-      signMode: 'external',
-    );
-    return _coldWallet!;
-  }
-
   @override
   Future<WalletProfile?> getWalletByIndex(int walletIndex) async {
     final hot = await _ensureHotFixture();
     if (walletIndex == hot.profile.walletIndex) {
       return hot.profile;
-    }
-    if (_coldWallet != null && _coldWallet!.walletIndex == walletIndex) {
-      return _coldWallet;
     }
     return null;
   }
@@ -181,26 +182,6 @@ class _FakeWalletManager extends WalletManager {
     final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(seedBytes));
     pair.ss58Format = _ss58;
     return Uint8List.fromList(pair.sign(payload));
-  }
-
-  List<int> _hexToBytes(String input) {
-    final text = input.startsWith('0x') ? input.substring(2) : input;
-    return List<int>.generate(
-      text.length ~/ 2,
-      (i) => int.parse(text.substring(i * 2, i * 2 + 2), radix: 16),
-      growable: false,
-    );
-  }
-
-  String _toHex(List<int> bytes) {
-    const chars = '0123456789abcdef';
-    final buf = StringBuffer();
-    for (final b in bytes) {
-      buf
-        ..write(chars[(b >> 4) & 0x0f])
-        ..write(chars[b & 0x0f]);
-    }
-    return buf.toString();
   }
 }
 

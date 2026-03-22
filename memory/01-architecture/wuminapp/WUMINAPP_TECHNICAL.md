@@ -106,7 +106,7 @@ wuminapp/
 
 关键口径：
 
-- 登录协议：`WUMINAPP_LOGIN_V1`
+- 登录协议：`WUMIN_LOGIN_V1.0.0`
 - 收款协议：`WUMINAPP_TRANSFER_V1`
 - 用户协议：`WUMINAPP_CONTACT_V1`
 - 登录协议与链上转账/投票签名协议完全分离；前者只用于 `sfid/cpms` 扫码登录，后者只用于链上交易 `payload` 签名
@@ -114,7 +114,7 @@ wuminapp/
 - 登录签名串：
 
 ```text
-WUMINAPP_LOGIN_V1|system|challenge|expires_at
+WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 ```
 
 详细技术文档见：`lib/qr/QR_TECHNICAL.md`
@@ -127,7 +127,7 @@ WUMINAPP_LOGIN_V1|system|challenge|expires_at
 - 模式 B：扫码签名
   - 手机不保存私钥，仅保存钱包地址/公钥
   - 手机生成待签名请求二维码，外部设备签名后返回签名回执二维码
-  - 协议由 `QrSigner` 统一编解码与校验（`WUMINAPP_QR_SIGN_V1`）
+  - 协议由 `QrSigner` 统一编解码与校验（`WUMIN_SIGN_V1.0.0`）
   - 在线手机使用 `QrSignSessionPage`，离线设备使用 `QrOfflineSignPage`
   - 登录挑战先经过 `LoginSystemSignatureVerifier` 校验 `sys_pubkey + sys_sig`
 

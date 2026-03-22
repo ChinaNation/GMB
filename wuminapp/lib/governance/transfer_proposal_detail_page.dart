@@ -39,8 +39,6 @@ class _TransferProposalDetailPageState
 
   final TransferProposalService _proposalService = TransferProposalService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
-  final WalletManager _walletManager = WalletManager();
-
   bool _loading = true;
   String? _error;
   bool _submitting = false;
@@ -103,7 +101,7 @@ class _TransferProposalDetailPageState
         votes[entry.key] = entry.value;
       }
 
-      // 筛选出可投票的管理员钱包（未投票 + 非冷钱包）
+      // 筛选出可投票的管理员钱包（未投票的）
       final votable = <WalletProfile>[];
       for (final w in widget.adminWallets) {
         var pk = w.pubkeyHex.toLowerCase();
@@ -200,7 +198,7 @@ class _TransferProposalDetailPageState
   /// 当前用户是否是此机构的管理员（可能导入了多个管理员钱包）。
   bool get _isCurrentUserAdmin => widget.adminWallets.isNotEmpty;
 
-  /// 是否还有可投票的钱包（未投票 + 非冷钱包）。
+  /// 是否还有可投票的钱包（未投票的管理员钱包）。
   bool get _canVote {
     if (_selectedVoteWallet == null) return false;
     if (_status != _statusVoting) return false;
@@ -228,17 +226,22 @@ class _TransferProposalDetailPageState
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
 
       Future<Uint8List> signCallback(Uint8List payload) async {
-        if (wallet.isHotWallet) {
-          return _walletManager.signWithWallet(wallet.walletIndex, payload);
-        }
-        // 冷钱包：QR 扫码签名
+        // 管理员投票统一通过 QR 码签名（wumin 冷钱包）
         final qrSigner = QrSigner();
+        final voteText = approve ? '赞成' : '反对';
         final request = qrSigner.buildRequest(
-          scope: QrSignScope.onchainTx,
           requestId: 'vote-${DateTime.now().millisecondsSinceEpoch}',
           account: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
+          display: {
+            'action': 'vote_transfer',
+            'summary': '转账提案 #${widget.proposalId} 投票：$voteText',
+            'fields': {
+              'proposal_id': widget.proposalId.toString(),
+              'approve': approve.toString(),
+            },
+          },
         );
         final requestJson = qrSigner.encodeRequest(request);
         final response = await Navigator.push<QrSignResponse>(

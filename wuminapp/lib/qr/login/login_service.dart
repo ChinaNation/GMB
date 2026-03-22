@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:wuminapp_mobile/qr/login/login_models.dart';
 import 'package:wuminapp_mobile/qr/login/login_replay_guard.dart';
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
@@ -170,19 +171,20 @@ class LoginService {
     ].join('|');
   }
 
-  /// 为冷钱包登录构造外部签名请求。
+  /// 计算签名原文的 SHA-256 hex 摘要。
+  static String _computePayloadHash(String signMessage) {
+    final bytes = utf8.encode(signMessage);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  /// 为冷钱包登录构造外部签名请求（通过交易签名协议中继）。
   Future<LoginExternalSignBundle> buildExternalSignRequest(
     LoginChallenge challenge, {
     required WalletProfile wallet,
   }) async {
     await validateSystemSignature(challenge);
     await _replayGuard.assertNotConsumed(challenge.challenge);
-    if (wallet.isHotWallet) {
-      throw const LoginException(
-        LoginErrorCode.invalidField,
-        '当前钱包为热钱包，请直接在本机签名',
-      );
-    }
     if (challenge.isExpired) {
       throw const LoginException(
         LoginErrorCode.expired,
@@ -196,11 +198,17 @@ class LoginService {
     final remaining = challenge.expiresAt - now;
     final ttlSeconds = remaining > 1 ? remaining : 1;
     final request = QrSigner().buildRequest(
-      scope: QrSignScope.login,
       requestId: challenge.challenge,
       account: wallet.address,
       pubkey: '0x${wallet.pubkeyHex}',
       payloadHex: payloadHex,
+      display: {
+        'action': 'login',
+        'summary': '登录 ${challenge.system.toUpperCase()} 系统',
+        'fields': {
+          'system': challenge.system,
+        },
+      },
       nowEpochSeconds: now,
       ttlSeconds: ttlSeconds,
     );
@@ -235,12 +243,6 @@ class LoginService {
           '请先创建或导入钱包',
         );
       }
-      if (active.isColdWallet) {
-        throw const LoginException(
-          LoginErrorCode.walletMissing,
-          '当前为冷钱包，请使用扫码签名',
-        );
-      }
       targetIndex = active.walletIndex;
     }
 
@@ -263,10 +265,12 @@ class LoginService {
 
     final receipt = LoginReceipt(
       proto: QrProtocols.login,
+      system: challenge.system,
       challenge: challenge.challenge,
       pubkey: signed.pubkeyHex,
       sigAlg: signed.sigAlg,
       signature: signed.signatureHex,
+      payloadHash: _computePayloadHash(signMessage),
       signedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
     await _replayGuard.consume(
@@ -302,10 +306,12 @@ class LoginService {
 
     final receipt = LoginReceipt(
       proto: QrProtocols.login,
+      system: challenge.system,
       challenge: challenge.challenge,
       pubkey: pubkeyHex,
       sigAlg: sigAlg,
       signature: signatureHex,
+      payloadHash: _computePayloadHash(signMessage),
       signedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
     await _replayGuard.consume(

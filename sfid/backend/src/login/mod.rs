@@ -459,7 +459,7 @@ pub(crate) async fn admin_auth_qr_challenge(
     let expire_at = now + Duration::seconds(LOGIN_CHALLENGE_TTL_SECONDS);
     let challenge_id = Uuid::new_v4().to_string();
     let challenge_text = format!(
-        "WUMINAPP_LOGIN_V1|{}|{}|{}",
+        "WUMIN_LOGIN_V1.0.0|{}|{}|{}",
         "sfid",
         challenge_id,
         expire_at.timestamp()
@@ -482,7 +482,8 @@ pub(crate) async fn admin_auth_qr_challenge(
         }
     };
     let login_qr_payload = serde_json::json!({
-        "proto": "WUMINAPP_LOGIN_V1",
+        "proto": "WUMIN_LOGIN_V1.0.0",
+        "type": "challenge",
         "system": "sfid",
         "challenge": challenge_id,
         "issued_at": now.timestamp(),
@@ -982,7 +983,7 @@ fn build_login_qr_system_signature(
         .map_err(|_| "signing seed read lock poisoned".to_string())?
         .clone();
     let message = format!(
-        "WUMINAPP_LOGIN_V1|{}|{}|{}|{}|{}",
+        "WUMIN_LOGIN_V1.0.0|{}|{}|{}|{}|{}",
         system, challenge, issued_at, expires_at, sys_pubkey
     );
     let signer =

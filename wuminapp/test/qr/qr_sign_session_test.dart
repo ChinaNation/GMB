@@ -9,15 +9,21 @@ void main() {
     late QrSignRequest request;
     late String requestJson;
 
+    final display = {
+      'action': 'transfer',
+      'summary': '转账 1.00 GMB',
+      'fields': {'amount_yuan': '1.00'},
+    };
+
     setUp(() {
       signer = QrSigner();
       request = signer.buildRequest(
-        scope: QrSignScope.onchainTx,
         requestId: 'tx-test-1234',
         account: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
+        display: display,
       );
       requestJson = signer.encodeRequest(request);
     });
@@ -33,24 +39,21 @@ void main() {
         ),
       );
 
-      // 标题
       expect(find.text('冷钱包签名'), findsOneWidget);
-      // 倒计时状态栏（应包含 "s" 后缀）
       expect(find.textContaining('签名请求有效期剩余'), findsOneWidget);
-      // 提示文字
       expect(find.textContaining('请用离线设备扫描此二维码'), findsOneWidget);
-      // 按钮
       expect(find.text('取消'), findsOneWidget);
       expect(find.text('扫描回执'), findsOneWidget);
     });
 
     testWidgets('cancel should pop with null', (tester) async {
-      QrSignResponse? result = const QrSignResponse(
+      QrSignResponse? result = QrSignResponse(
         proto: 'sentinel',
         requestId: 'sentinel',
         pubkey: 'sentinel',
         sigAlg: 'sentinel',
         signature: 'sentinel',
+        payloadHash: 'sentinel',
         signedAt: 0,
       );
 
@@ -79,7 +82,6 @@ void main() {
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
-      // 点击取消
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
 
@@ -88,14 +90,13 @@ void main() {
 
     testWidgets('should show expired state when request expires',
         (tester) async {
-      // 构建一个已过期的请求
       final expiredRequest = signer.buildRequest(
-        scope: QrSignScope.onchainTx,
         requestId: 'tx-expired-1',
         account: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
+        display: display,
         nowEpochSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 200,
       );
       final expiredJson = signer.encodeRequest(expiredRequest);
@@ -110,10 +111,8 @@ void main() {
         ),
       );
 
-      // 应显示过期提示
       expect(find.textContaining('签名请求已过期'), findsOneWidget);
 
-      // "扫描回执" 按钮应被禁用
       final scanButton = tester.widget<FilledButton>(
         find.widgetWithText(FilledButton, '扫描回执'),
       );

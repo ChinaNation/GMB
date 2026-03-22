@@ -35,11 +35,11 @@ src/login/
 3. 后端验签成功后签发 `access_token`。
 4. 前端轮询 `qr/result` 获取登录成功状态与会话。
 
-二维码登录统一遵循 `WUMINAPP_LOGIN_V1` 协议规范：
+二维码登录统一遵循 `WUMIN_LOGIN_V1.0.0` 协议规范：
 
 - 挑战字段：`proto/system/challenge/issued_at/expires_at/sys_pubkey/sys_sig`
-- 系统签名原文：`WUMINAPP_LOGIN_V1|system|challenge|issued_at|expires_at|sys_pubkey`
-- 手机签名原文：`WUMINAPP_LOGIN_V1|system|challenge|expires_at`
+- 系统签名原文：`WUMIN_LOGIN_V1.0.0|system|challenge|issued_at|expires_at|sys_pubkey`
+- 手机签名原文：`WUMIN_LOGIN_V1.0.0|system|challenge|expires_at`
 - 回执兼容字段：`challenge|challenge_id|request_id`、`pubkey|admin_pubkey|public_key`
 
 ### 5.2 普通 challenge 登录

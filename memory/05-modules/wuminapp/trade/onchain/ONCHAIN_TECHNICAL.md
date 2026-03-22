@@ -65,7 +65,7 @@ onchain/
 
 扫码签名扩展：
 
-- 协议层由 `QrSigner` 提供（`WUMINAPP_QR_SIGN_V1`）
+- 协议层由 `QrSigner` 提供（`WUMIN_SIGN_V1.0.0`）
 - 签名会话页面由 `QrSignSessionPage`（`lib/qr/pages/qr_sign_session_page.dart`）提供
 
 ## 5. 错误处理

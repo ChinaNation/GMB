@@ -72,10 +72,11 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       final wallets = results[1] as List<WalletProfile>;
       final proposals = results[2] as List<ProposalWithDetail>;
 
-      // 收集所有匹配的管理员钱包
+      // 收集匹配的管理员冷钱包（管理员操作统一通过冷钱包 QR 签名）
       final matchedWallets = <WalletProfile>[];
       final matchedPubkeys = <String>{};
       for (final wallet in wallets) {
+        if (wallet.isHotWallet) continue; // 管理员操作只允许冷钱包
         var pubkey = wallet.pubkeyHex.toLowerCase();
         if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
         if (admins.contains(pubkey)) {
