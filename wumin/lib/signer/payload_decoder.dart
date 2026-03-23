@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
+import '../chain/chain_constants.dart';
 import 'pallet_registry.dart';
 
 /// payload_hex 中 call data 的解码结果。
@@ -38,7 +39,7 @@ class DecodedPayload {
 /// 目前仅支持高风险交易类型，不支持的返回 null。
 class PayloadDecoder {
   /// SS58 地址前缀。
-  static const int _ss58Prefix = 2027;
+  static const int _ss58Prefix = ChainConstants.ss58Prefix;
 
   /// 尝试从 payload_hex 中解码交易信息。
   ///

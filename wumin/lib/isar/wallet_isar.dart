@@ -34,6 +34,9 @@ class WalletProfileEntity {
   /// 所属分组名称，逗号分隔，如 '分组一,分组二'。
   /// '全部' 是虚拟分组，不存储在此字段中。
   String groupNames = '';
+
+  /// 排列顺序（越小越靠前）。
+  int sortOrder = 0;
 }
 
 @collection

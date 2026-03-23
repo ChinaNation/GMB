@@ -147,54 +147,65 @@ class SmoldotClientManager {
   /// 获取轻节点状态快照，供后续业务层逐步替代裸 JSON-RPC 读状态。
   Future<LightClientStatusSnapshot?> getStatusSnapshot() async {
     if (!isReady) return null;
+    await ensureSynced();
     return await _chain!.getStatusSnapshot();
   }
 
   /// 原生读取运行时版本 JSON。
   Future<Map<String, dynamic>?> getRuntimeVersionJson() async {
     if (!isReady) return null;
+    await ensureSynced();
     return await _chain!.getRuntimeVersionJson();
   }
 
   /// 原生读取 metadata hex。
   Future<String?> getMetadataHex() async {
     if (!isReady) return null;
+    await ensureSynced();
     return await _chain!.getMetadataHex();
   }
 
   /// 原生读取账户下一个可用 nonce。
   Future<int?> getAccountNextIndex(String accountIdHex) async {
     if (!isReady) return null;
+    await ensureSynced();
+    await _waitForPeer();
     return await _chain!.getAccountNextIndex(accountIdHex);
   }
 
   /// 原生读取指定块高的 block hash。
   Future<String?> getBlockHash(int blockNumber) async {
     if (!isReady) return null;
+    await ensureSynced();
     return await _chain!.getBlockHash(blockNumber);
   }
 
   /// 原生读取指定区块中的 extrinsics。
   Future<List<String>> getBlockExtrinsics(String blockHashHex) async {
     if (!isReady) return const [];
+    await ensureSynced();
     return await _chain!.getBlockExtrinsics(blockHashHex);
   }
 
   /// 原生提交已编码 extrinsic。
   Future<String?> submitExtrinsicHex(String extrinsicHex) async {
     if (!isReady) return null;
+    await ensureSynced();
+    await _waitForPeer();
     return await _chain!.submitExtrinsicHex(extrinsicHex);
   }
 
   /// 原生读取 `System.Account` 快照，供钱包余额迁移使用。
   Future<SystemAccountSnapshot?> getSystemAccountSnapshot(String accountIdHex) async {
     if (!isReady) return null;
+    await ensureSynced();
     return await _chain!.getSystemAccount(accountIdHex);
   }
 
   /// 原生读取单个 storage value（hex）。
   Future<String?> getStorageValueHex(String storageKeyHex) async {
     if (!isReady) return null;
+    await ensureSynced();
     return await _chain!.getStorageValueHex(storageKeyHex);
   }
 
@@ -203,6 +214,7 @@ class SmoldotClientManager {
     if (!isReady || storageKeyHexList.isEmpty) {
       return const {};
     }
+    await ensureSynced();
     return await _chain!.getStorageValuesHex(storageKeyHexList);
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../util/sensitive_page_mixin.dart';
 import '../wallet/wallet_manager.dart';
 import 'widgets/bip39_input.dart';
 
@@ -11,7 +12,8 @@ class ImportWalletPage extends StatefulWidget {
   State<ImportWalletPage> createState() => _ImportWalletPageState();
 }
 
-class _ImportWalletPageState extends State<ImportWalletPage> {
+class _ImportWalletPageState extends State<ImportWalletPage>
+    with SensitivePageMixin {
   final WalletManager _walletManager = WalletManager();
   final TextEditingController _mnemonicController = TextEditingController();
   bool _importing = false;
@@ -52,6 +54,9 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (sensitiveContentHidden) {
+      return buildHiddenPlaceholder(message: '助记词输入已隐藏');
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('导入钱包'),
