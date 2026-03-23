@@ -5,6 +5,7 @@ import UIKit
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var blurView: UIVisualEffectView?
   private var screenshotProtectionEnabled = false
+  private var eventSink: FlutterEventSink?
 
   override func application(
     _ application: UIApplication,
@@ -13,11 +14,12 @@ import UIKit
     let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
 
     if let controller = window?.rootViewController as? FlutterViewController {
-      let channel = FlutterMethodChannel(
+      // MethodChannel: 开关截屏保护、检测越狱
+      let methodChannel = FlutterMethodChannel(
         name: "com.wuminapp.wumin/security",
         binaryMessenger: controller.binaryMessenger
       )
-      channel.setMethodCallHandler { [weak self] call, result in
+      methodChannel.setMethodCallHandler { [weak self] call, result in
         switch call.method {
         case "enableScreenshotProtection":
           self?.screenshotProtectionEnabled = true
@@ -32,8 +34,16 @@ import UIKit
           result(FlutterMethodNotImplemented)
         }
       }
+
+      // EventChannel: 截屏/录屏事件推送给 Flutter
+      let eventChannel = FlutterEventChannel(
+        name: "com.wuminapp.wumin/security_events",
+        binaryMessenger: controller.binaryMessenger
+      )
+      eventChannel.setStreamHandler(SecurityEventStreamHandler(delegate: self))
     }
 
+    // 后台模糊
     NotificationCenter.default.addObserver(
       self,
       selector: #selector(appWillResignActive),
@@ -47,12 +57,30 @@ import UIKit
       object: nil
     )
 
+    // 截屏监听
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(userDidTakeScreenshot),
+      name: UIApplication.userDidTakeScreenshotNotification,
+      object: nil
+    )
+
+    // 录屏监听
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(screenCaptureDidChange),
+      name: UIScreen.capturedDidChangeNotification,
+      object: nil
+    )
+
     return result
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
   }
+
+  // MARK: - 后台模糊
 
   @objc private func appWillResignActive() {
     guard screenshotProtectionEnabled else { return }
@@ -76,6 +104,24 @@ import UIKit
     blurView?.removeFromSuperview()
     blurView = nil
   }
+
+  // MARK: - 截屏/录屏事件
+
+  @objc private func userDidTakeScreenshot() {
+    guard screenshotProtectionEnabled else { return }
+    eventSink?("screenshot_taken")
+  }
+
+  @objc private func screenCaptureDidChange() {
+    guard screenshotProtectionEnabled else { return }
+    if UIScreen.main.isCaptured {
+      eventSink?("screen_recording_started")
+    } else {
+      eventSink?("screen_recording_stopped")
+    }
+  }
+
+  // MARK: - 越狱检测
 
   private static func checkJailbreak() -> Bool {
     #if targetEnvironment(simulator)
@@ -104,5 +150,29 @@ import UIKit
       return false
     }
     #endif
+  }
+}
+
+// MARK: - EventChannel StreamHandler
+
+private class SecurityEventStreamHandler: NSObject, FlutterStreamHandler {
+  weak var delegate: AppDelegate?
+
+  init(delegate: AppDelegate) {
+    self.delegate = delegate
+  }
+
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+    delegate?.eventSink = events
+    // 如果当前正在录屏，立即推送
+    if UIScreen.main.isCaptured {
+      events("screen_recording_started")
+    }
+    return nil
+  }
+
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    delegate?.eventSink = nil
+    return nil
   }
 }

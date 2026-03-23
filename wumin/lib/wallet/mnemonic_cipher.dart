@@ -110,20 +110,33 @@ class MnemonicCipher {
   }
 
   /// 获取或生成 AEK。
+  ///
+  /// 优先从内存缓存读取；未命中则从 SecureStorage 读取；
+  /// 首次使用时生成随机 AEK 并尝试持久化。
+  /// 若 SecureStorage 写入失败，仍使用内存中的 AEK 保证当前会话可用，
+  /// 下次启动会重新生成（此时旧密文不可解密，但不会导致崩溃）。
   static Future<Uint8List> _ensureAek() async {
     final cached = _cachedAek;
     if (cached != null) return cached;
 
-    final stored = await _secure.read(key: _aekKey);
-    if (stored != null && stored.length == _keyLen * 2) {
-      final key = _hexToBytes(stored);
-      _cachedAek = key;
-      return key;
+    try {
+      final stored = await _secure.read(key: _aekKey);
+      if (stored != null && stored.length == _keyLen * 2) {
+        final key = _hexToBytes(stored);
+        _cachedAek = key;
+        return key;
+      }
+    } catch (_) {
+      // SecureStorage 读取失败，继续生成新 AEK
     }
 
-    // 首次使用，生成随机 AEK
+    // 首次使用或读取失败，生成随机 AEK
     final newKey = _randomBytes(_keyLen);
-    await _secure.write(key: _aekKey, value: _toHex(newKey));
+    try {
+      await _secure.write(key: _aekKey, value: _toHex(newKey));
+    } catch (_) {
+      // 持久化失败，AEK 仅在当前会话有效
+    }
     _cachedAek = newKey;
     return newKey;
   }

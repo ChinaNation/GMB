@@ -196,8 +196,6 @@ GMB/
 │         ├── transaction/         # 交易模块（链上链下交易、机构多签账户、多签交易）
 │         ├── otherpallet/         # 其他模块 （身份验证等）
 │         └── primitives/          # 常量库
-│              ├── src/            # 主要常量
-│              └── china/          # 公权账户常量
 │     
 ├── wumin/                   # 冷钱包软件（公民钱包，iOS、Android）
 ├── wuminapp/                # 轻节点软件（热钱包、公民投票、隐私通信、资产管理，iOS、Android）

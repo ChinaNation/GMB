@@ -94,6 +94,32 @@ void main() {
       expect(decrypted, mnemonic);
     });
 
+    test('加密单字符', () async {
+      final encrypted = await MnemonicCipher.encrypt('a');
+      final decrypted = await MnemonicCipher.decrypt(encrypted);
+      expect(decrypted, 'a');
+    });
+
+    test('加密超长字符串（模拟异常输入）', () async {
+      final longText = 'word ' * 500; // 2500 字符
+      final encrypted = await MnemonicCipher.encrypt(longText);
+      final decrypted = await MnemonicCipher.decrypt(encrypted);
+      expect(decrypted, longText);
+    });
+
+    test('并发加密解密共享 AEK 不冲突', () async {
+      const m1 = 'first mnemonic words here';
+      const m2 = 'second mnemonic words here';
+      final futures = await Future.wait([
+        MnemonicCipher.encrypt(m1),
+        MnemonicCipher.encrypt(m2),
+      ]);
+      final d1 = await MnemonicCipher.decrypt(futures[0]);
+      final d2 = await MnemonicCipher.decrypt(futures[1]);
+      expect(d1, m1);
+      expect(d2, m2);
+    });
+
     test('支持中文和特殊字符', () async {
       const text = '测试助记词 with émojis 🔐';
       final encrypted = await MnemonicCipher.encrypt(text);

@@ -53,28 +53,33 @@ const WalletProfileEntitySchema = CollectionSchema(
       name: r'signMode',
       type: IsarType.string,
     ),
-    r'source': PropertySchema(
+    r'sortOrder': PropertySchema(
       id: 7,
+      name: r'sortOrder',
+      type: IsarType.long,
+    ),
+    r'source': PropertySchema(
+      id: 8,
       name: r'source',
       type: IsarType.string,
     ),
     r'ss58': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'ss58',
       type: IsarType.long,
     ),
     r'walletIcon': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'walletIcon',
       type: IsarType.string,
     ),
     r'walletIndex': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'walletIndex',
       type: IsarType.long,
     ),
     r'walletName': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'walletName',
       type: IsarType.string,
     )
@@ -163,11 +168,12 @@ void _walletProfileEntitySerialize(
   writer.writeString(offsets[4], object.groupNames);
   writer.writeString(offsets[5], object.pubkeyHex);
   writer.writeString(offsets[6], object.signMode);
-  writer.writeString(offsets[7], object.source);
-  writer.writeLong(offsets[8], object.ss58);
-  writer.writeString(offsets[9], object.walletIcon);
-  writer.writeLong(offsets[10], object.walletIndex);
-  writer.writeString(offsets[11], object.walletName);
+  writer.writeLong(offsets[7], object.sortOrder);
+  writer.writeString(offsets[8], object.source);
+  writer.writeLong(offsets[9], object.ss58);
+  writer.writeString(offsets[10], object.walletIcon);
+  writer.writeLong(offsets[11], object.walletIndex);
+  writer.writeString(offsets[12], object.walletName);
 }
 
 WalletProfileEntity _walletProfileEntityDeserialize(
@@ -185,11 +191,12 @@ WalletProfileEntity _walletProfileEntityDeserialize(
   object.id = id;
   object.pubkeyHex = reader.readString(offsets[5]);
   object.signMode = reader.readString(offsets[6]);
-  object.source = reader.readString(offsets[7]);
-  object.ss58 = reader.readLong(offsets[8]);
-  object.walletIcon = reader.readString(offsets[9]);
-  object.walletIndex = reader.readLong(offsets[10]);
-  object.walletName = reader.readString(offsets[11]);
+  object.sortOrder = reader.readLong(offsets[7]);
+  object.source = reader.readString(offsets[8]);
+  object.ss58 = reader.readLong(offsets[9]);
+  object.walletIcon = reader.readString(offsets[10]);
+  object.walletIndex = reader.readLong(offsets[11]);
+  object.walletName = reader.readString(offsets[12]);
   return object;
 }
 
@@ -215,14 +222,16 @@ P _walletProfileEntityDeserializeProp<P>(
     case 6:
       return (reader.readString(offset)) as P;
     case 7:
-      return (reader.readString(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 8:
-      return (reader.readLong(offset)) as P;
-    case 9:
       return (reader.readString(offset)) as P;
-    case 10:
+    case 9:
       return (reader.readLong(offset)) as P;
+    case 10:
+      return (reader.readString(offset)) as P;
     case 11:
+      return (reader.readLong(offset)) as P;
+    case 12:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1542,6 +1551,62 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      sortOrderEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sortOrder',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      sortOrderGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'sortOrder',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      sortOrderLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'sortOrder',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      sortOrderBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'sortOrder',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
       sourceEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -2169,6 +2234,20 @@ extension WalletProfileEntityQuerySortBy
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      sortBySortOrder() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sortOrder', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      sortBySortOrderDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sortOrder', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
       sortBySource() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'source', Sort.asc);
@@ -2354,6 +2433,20 @@ extension WalletProfileEntityQuerySortThenBy
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      thenBySortOrder() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sortOrder', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      thenBySortOrderDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sortOrder', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
       thenBySource() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'source', Sort.asc);
@@ -2476,6 +2569,13 @@ extension WalletProfileEntityQueryWhereDistinct
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
+      distinctBySortOrder() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'sortOrder');
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
       distinctBySource({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'source', caseSensitive: caseSensitive);
@@ -2564,6 +2664,12 @@ extension WalletProfileEntityQueryProperty
       signModeProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'signMode');
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, int, QQueryOperations> sortOrderProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'sortOrder');
     });
   }
 

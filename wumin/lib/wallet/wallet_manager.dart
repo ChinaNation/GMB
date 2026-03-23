@@ -7,6 +7,7 @@ import 'package:isar/isar.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:substrate_bip39/crypto_scheme.dart';
+import 'package:wumin/chain/chain_constants.dart';
 import 'package:wumin/isar/wallet_isar.dart';
 import 'package:wumin/wallet/mnemonic_cipher.dart';
 import 'package:wumin/wallet/wallet_secure_keys.dart';
@@ -25,6 +26,7 @@ class WalletProfile {
     required this.source,
     required this.signMode,
     this.groupNames = const [],
+    this.sortOrder = 0,
   });
 
   final int walletIndex;
@@ -41,6 +43,9 @@ class WalletProfile {
 
   /// 所属分组列表（不含"全部"）。
   final List<String> groupNames;
+
+  /// 排列顺序（越小越靠前）。
+  final int sortOrder;
 
   /// 是否属于指定分组（"全部"始终返回 true）。
   bool inGroup(String group) {
@@ -87,7 +92,7 @@ class WalletAuthException implements Exception {
 }
 
 class WalletManager {
-  static const int _ss58Format = 2027;
+  static const int _ss58Format = ChainConstants.ss58Prefix;
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static final LocalAuthentication _localAuth = LocalAuthentication();
 
@@ -98,8 +103,8 @@ class WalletManager {
   Future<List<WalletProfile>> getWallets() async {
     final isar = await WalletIsar.instance.db();
     final rows =
-        await isar.walletProfileEntitys.where().sortByWalletIndex().findAll();
-    return rows.map(_toProfile).toList(growable: false);
+        await isar.walletProfileEntitys.where().sortBySortOrder().findAll();
+    return rows.map(_toProfile).toList();
   }
 
   Future<WalletProfile?> getWallet() async {
@@ -288,6 +293,26 @@ class WalletManager {
     await isar.writeTxn(() async {
       row.walletName = nextName;
       await isar.walletProfileEntitys.put(row);
+    });
+  }
+
+  /// 批量更新钱包排序。
+  ///
+  /// [walletIndexes] 为排序后的 walletIndex 列表，
+  /// 列表位置即为新的 sortOrder 值。
+  Future<void> reorderWallets(List<int> walletIndexes) async {
+    final isar = await WalletIsar.instance.db();
+    await isar.writeTxn(() async {
+      for (var i = 0; i < walletIndexes.length; i++) {
+        final row = await isar.walletProfileEntitys
+            .filter()
+            .walletIndexEqualTo(walletIndexes[i])
+            .findFirst();
+        if (row != null) {
+          row.sortOrder = i;
+          await isar.walletProfileEntitys.put(row);
+        }
+      }
     });
   }
 
@@ -517,6 +542,7 @@ class WalletManager {
     final isar = await WalletIsar.instance.db();
 
     late int walletIndex;
+    late int newSortOrder;
     await isar.writeTxn(() async {
       final rows = await isar.walletProfileEntitys
           .where()
@@ -527,6 +553,12 @@ class WalletManager {
       while (used.contains(walletIndex)) {
         walletIndex++;
       }
+
+      // 新钱包排在最后
+      final maxSort = rows.isEmpty
+          ? -1
+          : rows.map((e) => e.sortOrder).reduce((a, b) => a > b ? a : b);
+      newSortOrder = maxSort + 1;
 
       final entity = WalletProfileEntity()
         ..walletIndex = walletIndex
@@ -539,7 +571,8 @@ class WalletManager {
         ..ss58 = _ss58Format
         ..createdAtMillis = DateTime.now().millisecondsSinceEpoch
         ..source = source
-        ..signMode = 'local';
+        ..signMode = 'local'
+        ..sortOrder = newSortOrder;
       await isar.walletProfileEntitys.put(entity);
 
       final settings = await _getSettings(isar);
@@ -562,6 +595,7 @@ class WalletManager {
       createdAtMillis: DateTime.now().millisecondsSinceEpoch,
       source: source,
       signMode: 'local',
+      sortOrder: newSortOrder,
     );
   }
 
@@ -636,6 +670,7 @@ class WalletManager {
       groupNames: row.groupNames.isEmpty
           ? const []
           : row.groupNames.split(','),
+      sortOrder: row.sortOrder,
     );
   }
 

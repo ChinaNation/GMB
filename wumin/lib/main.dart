@@ -5,6 +5,7 @@ import 'package:local_auth/local_auth.dart';
 import 'security/app_lock_service.dart';
 import 'security/pin_input_page.dart';
 import 'ui/home_page.dart';
+import 'wallet/mnemonic_cipher.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,6 +65,8 @@ class _AppLockGateState extends State<_AppLockGate>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       _pausedAt = DateTime.now();
+      // 进入后台时清除内存中的加密密钥缓存，防止内存转储攻击
+      MnemonicCipher.clearCache();
     } else if (state == AppLifecycleState.resumed && _authenticated) {
       final paused = _pausedAt;
       if (paused != null &&

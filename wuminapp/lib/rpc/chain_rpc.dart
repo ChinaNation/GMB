@@ -15,6 +15,7 @@ class ChainRpc {
     debugPrint('[ChainRpc] 使用 smoldot 轻节点模式');
   }
 
+  static final _keyring = Keyring();
   static final Uint8List _sfidMainAccountKey =
       _buildStorageValueKey('SfidCodeAuth', 'SfidMainAccount');
 
@@ -44,7 +45,7 @@ class ChainRpc {
   /// 查询账户下一个可用 nonce（含交易池中的 pending 交易）。
   Future<int> fetchNonce(String ss58Address) async {
     // 中文注释：轻节点模式先在 Dart 侧解出 accountId，再交给原生 runtime call，避免继续依赖 legacy `system_accountNextIndex`。
-    final accountIdHex = '0x${_hexEncode(Keyring().decodeAddress(ss58Address))}';
+    final accountIdHex = '0x${_hexEncode(_keyring.decodeAddress(ss58Address))}';
     final result =
         await SmoldotClientManager.instance.getAccountNextIndex(accountIdHex);
     if (result == null) {
@@ -139,15 +140,43 @@ class ChainRpc {
   RuntimeMetadata? _cachedMetadata;
   String? _cachedCurrentSfidMainPubkeyHex;
 
+  static const _submitMaxRetries = 3;
+  static const _submitRetryDelay = Duration(seconds: 2);
+
   /// 提交已签名的 extrinsic，返回交易哈希（32 字节）。
+  ///
+  /// 遇到瞬断类错误（timeout、channel closed、peers=0）自动重试，
+  /// 最多 [_submitMaxRetries] 次，每次间隔 [_submitRetryDelay]。
   Future<Uint8List> submitExtrinsic(Uint8List encoded) async {
     final hex = '0x${_hexEncode(encoded)}';
 
-    final result = await SmoldotClientManager.instance.submitExtrinsicHex(hex);
-    if (result == null || result.isEmpty) {
-      throw StateError('smoldot 轻节点未返回交易哈希');
+    for (var attempt = 1; attempt <= _submitMaxRetries; attempt++) {
+      try {
+        final result =
+            await SmoldotClientManager.instance.submitExtrinsicHex(hex);
+        if (result == null || result.isEmpty) {
+          throw StateError('smoldot 轻节点未返回交易哈希');
+        }
+        return _hexDecode(_stripHexPrefix(result));
+      } catch (e) {
+        final msg = e.toString().toLowerCase();
+        final isTransient = msg.contains('timeout') ||
+            msg.contains('channel closed') ||
+            msg.contains('no node') ||
+            msg.contains('peers');
+        if (!isTransient || attempt == _submitMaxRetries) {
+          rethrow;
+        }
+        debugPrint(
+          '[ChainRpc] submitExtrinsic 失败（瞬断），'
+          '${_submitRetryDelay.inSeconds}s 后重试 '
+          '($attempt/$_submitMaxRetries): $e',
+        );
+        await Future<void>.delayed(_submitRetryDelay);
+      }
     }
-    return _hexDecode(_stripHexPrefix(result));
+    // 不应到达此处
+    throw StateError('submitExtrinsic 重试次数已用尽');
   }
 
   // ──── 链上状态查询 ────

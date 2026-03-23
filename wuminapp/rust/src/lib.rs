@@ -701,6 +701,7 @@ pub unsafe extern "C" fn smoldot_get_block_hash(
     };
 
     match block_on_native_capability(chain_handle, move |chain_wrapper, client_wrapper| async move {
+        // 优先查本地缓存（快路径，无网络开销）。
         let known_block_hash_future = {
             let client = client_wrapper.client.lock();
             client
@@ -708,7 +709,6 @@ pub unsafe extern "C" fn smoldot_get_block_hash(
                 .map_err(|error| error.to_string())?
         };
 
-        // 中文注释：块高到哈希的解析只认轻节点本地链视图与最近块缓存，不再回退 legacy `chain_getBlockHash`。
         if let Some(block_hash) = known_block_hash_future
             .await
             .map_err(|error| error.to_string())?
@@ -716,9 +716,21 @@ pub unsafe extern "C" fn smoldot_get_block_hash(
             return Ok(format!("0x{}", hex::encode(block_hash)));
         }
 
-        Err(format!(
-            "Block hash for height {block_number} is not available in the local light-client cache"
-        ))
+        // 本地缓存未命中，回退到 JSON-RPC（通过 smoldot P2P 网络查询）。
+        let result = native_json_rpc_request(
+            Arc::clone(&chain_wrapper),
+            Arc::clone(&client_wrapper),
+            "chain_getBlockHash",
+            json!([block_number]),
+        )
+        .await?;
+
+        result
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| format!(
+                "chain_getBlockHash returned non-string for height {block_number}"
+            ))
     }) {
         Ok(block_hash) => string_into_raw(block_hash, error_out),
         Err(message) => {
@@ -1131,6 +1143,11 @@ async fn dispatch_native_response(
     false
 }
 
+/// 在 tokio runtime 上同步执行原生 capability 闭包。
+///
+/// # Safety (threading)
+/// 必须从非 tokio 线程调用（即 Dart FFI 同步回调线程）。
+/// 如果从 tokio runtime 内部调用会导致死锁。
 fn block_on_native_capability<T, F, Fut>(
     chain_handle: ChainHandle,
     f: F,

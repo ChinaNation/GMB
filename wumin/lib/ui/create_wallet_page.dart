@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../util/screenshot_guard.dart';
+import '../util/sensitive_page_mixin.dart';
 import '../wallet/wallet_manager.dart';
 
 /// 创建新钱包页面。
@@ -13,24 +13,18 @@ class CreateWalletPage extends StatefulWidget {
   State<CreateWalletPage> createState() => _CreateWalletPageState();
 }
 
-class _CreateWalletPageState extends State<CreateWalletPage> {
+class _CreateWalletPageState extends State<CreateWalletPage>
+    with SensitivePageMixin {
   final WalletManager _walletManager = WalletManager();
   bool _creating = false;
   int _wordCount = 12;
   WalletCreationResult? _result;
-
-  @override
-  void dispose() {
-    ScreenshotGuard.disable();
-    super.dispose();
-  }
 
   Future<void> _create() async {
     setState(() => _creating = true);
     try {
       final result = await _walletManager.createWallet(wordCount: _wordCount);
       if (!mounted) return;
-      await ScreenshotGuard.enable();
       setState(() => _result = result);
     } catch (e) {
       if (!mounted) return;
@@ -48,6 +42,10 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 截屏/录屏时隐藏助记词展示
+    if (sensitiveContentHidden && _result != null) {
+      return buildHiddenPlaceholder(message: '助记词已隐藏');
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('创建钱包'),

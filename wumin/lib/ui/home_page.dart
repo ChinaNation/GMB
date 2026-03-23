@@ -33,7 +33,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _loadAll();
+    _loadAll(showLoading: true);
     _checkRootStatus();
   }
 
@@ -43,8 +43,8 @@ class _HomePageState extends State<HomePage> {
     setState(() => _isRooted = rooted);
   }
 
-  Future<void> _loadAll() async {
-    setState(() => _loading = true);
+  Future<void> _loadAll({bool showLoading = false}) async {
+    if (showLoading) setState(() => _loading = true);
     try {
       final wallets = await _walletManager.getWallets();
       final activeIndex = await _walletManager.getActiveWalletIndex();
@@ -388,14 +388,31 @@ class _HomePageState extends State<HomePage> {
                     style: TextStyle(color: Colors.grey.shade500),
                   ),
                 )
-              : ListView.builder(
+              : ReorderableListView.builder(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: wallets.length,
+                  onReorder: (oldIndex, newIndex) =>
+                      _onReorder(wallets, oldIndex, newIndex),
+                  proxyDecorator: (child, index, animation) {
+                    return AnimatedBuilder(
+                      animation: animation,
+                      builder: (context, child) => Material(
+                        elevation: 4,
+                        borderRadius: BorderRadius.circular(12),
+                        child: child,
+                      ),
+                      child: child,
+                    );
+                  },
                   itemBuilder: (context, index) {
                     final wallet = wallets[index];
                     final isActive = wallet.walletIndex == _activeIndex;
-                    return _buildWalletCard(wallet, isActive);
+                    return _buildWalletCard(
+                      wallet,
+                      isActive,
+                      key: ValueKey(wallet.walletIndex),
+                    );
                   },
                 ),
         ),
@@ -403,8 +420,40 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildWalletCard(WalletProfile wallet, bool isActive) {
+  Future<void> _onReorder(
+    List<WalletProfile> displayedWallets,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    if (newIndex > oldIndex) newIndex--;
+    if (oldIndex == newIndex) return;
+
+    // 找到在全量列表中的真实索引
+    final movedWalletIndex = displayedWallets[oldIndex].walletIndex;
+    final targetWalletIndex = displayedWallets[newIndex].walletIndex;
+
+    final fromGlobal =
+        _wallets.indexWhere((w) => w.walletIndex == movedWalletIndex);
+    var toGlobal =
+        _wallets.indexWhere((w) => w.walletIndex == targetWalletIndex);
+
+    if (fromGlobal < 0 || toGlobal < 0) return;
+
+    final item = _wallets.removeAt(fromGlobal);
+    // removeAt 后索引可能偏移
+    if (fromGlobal < toGlobal) toGlobal--;
+    _wallets.insert(toGlobal, item);
+
+    setState(() {});
+
+    // 持久化新顺序
+    final indexes = _wallets.map((w) => w.walletIndex).toList();
+    await _walletManager.reorderWallets(indexes);
+  }
+
+  Widget _buildWalletCard(WalletProfile wallet, bool isActive, {Key? key}) {
     return Card(
+      key: key,
       margin: const EdgeInsets.symmetric(vertical: 6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
