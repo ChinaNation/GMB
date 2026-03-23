@@ -68,10 +68,10 @@ export function MiningDashboardSection() {
   return (
     <>
       <section className="section mining-section">
-        <h2>挖矿收益</h2>
+        <h2>挖矿实际收益</h2>
         <div className="mining-income-grid">
           <div className="metric-card">
-            <div className="metric-label">收益总额</div>
+            <div className="metric-label">实际到账收益总额</div>
             <div className="metric-value">
               {loading ? (
                 '加载中...'
@@ -84,7 +84,7 @@ export function MiningDashboardSection() {
             </div>
           </div>
           <div className="metric-card">
-            <div className="metric-label">累计手续费收益</div>
+            <div className="metric-label">累计手续费到账收益</div>
             <div className="metric-value">
               {loading ? (
                 '加载中...'
@@ -97,7 +97,7 @@ export function MiningDashboardSection() {
             </div>
           </div>
           <div className="metric-card">
-            <div className="metric-label">累计挖矿奖励</div>
+            <div className="metric-label">累计铸块奖励到账</div>
             <div className="metric-value">
               {loading ? (
                 '加载中...'
@@ -110,7 +110,7 @@ export function MiningDashboardSection() {
             </div>
           </div>
           <div className="metric-card">
-            <div className="metric-label">今日收益</div>
+            <div className="metric-label">今日实际到账收益</div>
             <div className="metric-value">
               {loading ? (
                 '加载中...'
@@ -163,7 +163,7 @@ export function MiningDashboardSection() {
               <tr>
                 <th>区块高度</th>
                 <th>时间</th>
-                <th>手续费</th>
+                <th>手续费到账收益</th>
                 <th>铸块奖励</th>
                 <th>区块作者</th>
               </tr>

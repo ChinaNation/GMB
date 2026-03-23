@@ -66,7 +66,11 @@ fn build_chain_node() {
             .unwrap_or_else(|e| panic!("copy node binary (arch) failed: {e}"));
 
         // sha256
-        if let Ok(sha_output) = Command::new("shasum").args(["-a", "256"]).arg(&sidecar).output() {
+        if let Ok(sha_output) = Command::new("shasum")
+            .args(["-a", "256"])
+            .arg(&sidecar)
+            .output()
+        {
             let sha_line = String::from_utf8_lossy(&sha_output.stdout);
             let sha = sha_line.split_whitespace().next().unwrap_or("");
             let sha_file = binaries_dir.join("citizenchain-node.sha256");

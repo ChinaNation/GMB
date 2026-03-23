@@ -107,13 +107,23 @@ class OnchainTradeService {
         continue;
       }
       try {
-        final confirmed = await _onchainRpc.isTxConfirmed(
+        // 使用交易哈希 + nonce 双重检查，避免误判丢失的交易为已确认
+        final result = await _onchainRpc.checkTxStatus(
           pubkeyHex: wallet.pubkeyHex,
           usedNonce: record.usedNonce!,
+          txHash: record.txHash,
         );
-        if (confirmed) {
-          final updated = record.copyWith(status: OnchainTxStatus.confirmed);
-          await _repository.upsert(updated);
+        switch (result) {
+          case TxConfirmResult.confirmed:
+            final updated =
+                record.copyWith(status: OnchainTxStatus.confirmed);
+            await _repository.upsert(updated);
+          case TxConfirmResult.lost:
+            // 交易丢失：nonce 被其他交易消耗，本笔从未上链
+            final updated = record.copyWith(status: OnchainTxStatus.failed);
+            await _repository.upsert(updated);
+          case TxConfirmResult.pending:
+            break; // 继续等待
         }
       } catch (_) {
         // 节点不可达时跳过，下次轮询重试

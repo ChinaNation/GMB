@@ -23,7 +23,7 @@ const DAY_MS: u64 = 86_400_000;
 const RESOURCE_CACHE_TTL_MS: u64 = 5_000;
 const NODE_DATA_SIZE_CACHE_TTL_MS: u64 = 60_000;
 const INCOME_DAY_KEEP: u64 = 400;
-const MINING_CACHE_VERSION: u32 = 1;
+const MINING_CACHE_VERSION: u32 = 2;
 const MINING_CACHE_FILENAME: &str = "mining-dashboard-cache.json";
 const CACHE_PERSIST_MIN_INTERVAL_MS: u64 = 60_000;
 const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
@@ -210,12 +210,10 @@ fn migrate_mining_cache(
 ) -> Result<(MiningComputationCache, Option<u32>), String> {
     match cache.cache_version {
         MINING_CACHE_VERSION => Ok((cache, None)),
-        0 => {
+        0 | 1 => {
             let from = cache.cache_version;
+            cache = MiningComputationCache::default();
             cache.cache_version = MINING_CACHE_VERSION;
-            while cache.recent_records.len() > RECENT_RECORD_LIMIT {
-                cache.recent_records.pop_back();
-            }
             Ok((cache, Some(from)))
         }
         other => Err(format!(
@@ -316,7 +314,12 @@ fn utc_day(ms: u64) -> u64 {
 }
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(method, params, rpc::RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
+    rpc::rpc_post(
+        method,
+        params,
+        rpc::RPC_REQUEST_TIMEOUT,
+        MAX_RPC_RESPONSE_BYTES,
+    )
 }
 
 fn ensure_expected_rpc_node_uncached() -> Result<(), String> {
@@ -424,6 +427,16 @@ fn scale_u64_from_storage_hex(hex: &str) -> Option<u64> {
     Some(u64::from_le_bytes(raw))
 }
 
+fn decode_hex_account_id_32(hex: &str) -> Option<[u8; 32]> {
+    let bytes = hex_to_bytes(hex)?;
+    if bytes.len() != 32 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&bytes);
+    Some(out)
+}
+
 fn twox_128(input: &[u8]) -> [u8; 16] {
     let mut h1 = twox_hash::XxHash64::with_seed(0);
     h1.write(input);
@@ -436,6 +449,13 @@ fn twox_128(input: &[u8]) -> [u8; 16] {
     out
 }
 
+fn blake2_128(input: &[u8]) -> [u8; 16] {
+    let hash = blake2b_simd::Params::new().hash_length(16).hash(input);
+    let mut out = [0u8; 16];
+    out.copy_from_slice(hash.as_bytes());
+    out
+}
+
 fn timestamp_now_storage_key() -> String {
     TIMESTAMP_NOW_STORAGE_KEY_CACHE
         .get_or_init(|| {
@@ -445,6 +465,44 @@ fn timestamp_now_storage_key() -> String {
             format!("0x{}", hex::encode(key))
         })
         .clone()
+}
+
+fn reward_wallet_storage_key(miner_account: &[u8; 32]) -> String {
+    let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
+    key.extend_from_slice(&twox_128(b"FullnodePowReward"));
+    key.extend_from_slice(&twox_128(b"RewardWalletByMiner"));
+    key.extend_from_slice(&blake2_128(miner_account));
+    key.extend_from_slice(miner_account);
+    format!("0x{}", hex::encode(key))
+}
+
+fn reward_wallet_bound_at_block(miner_account_hex: &str, block_hash: &str) -> Result<bool, String> {
+    let miner_account = decode_hex_account_id_32(miner_account_hex)
+        .ok_or_else(|| format!("矿工账号格式无效：{miner_account_hex}"))?;
+    let raw = rpc_post(
+        "state_getStorage",
+        Value::Array(vec![
+            Value::String(reward_wallet_storage_key(&miner_account)),
+            Value::String(block_hash.to_string()),
+        ]),
+    )?;
+    let Some(encoded) = raw.as_str() else {
+        return Ok(false);
+    };
+    Ok(!encoded.trim_start_matches("0x").is_empty())
+}
+
+fn fullnode_fee_income_fen(total_fee_fen: u128) -> u128 {
+    let total_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT
+        .saturating_add(primitives::core_const::ONCHAIN_FEE_NRC_PERCENT)
+        .saturating_add(primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT);
+    if total_percent == 0 {
+        return 0;
+    }
+    // 中文注释：与 runtime 的 `Imbalance::ration(80, 20)` 对齐，采用整数向下取整。
+    total_fee_fen.saturating_mul(u128::from(
+        primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT,
+    )) / u128::from(total_percent)
 }
 
 fn format_2_decimals_fen(amount_fen: u128) -> String {
@@ -669,13 +727,28 @@ fn refresh_cache(
                 .unwrap_or(false);
 
             if is_local_author {
-                working.total_fee_fen = working.total_fee_fen.saturating_add(block.fee_fen);
+                // 中文注释：挖矿页要显示“矿工实际到账收益”，
+                // 未绑定奖励钱包时手续费份额会被销毁，因此这里只在区块当时已绑定时计入 80% 分成。
+                let fee_income_fen = if block.fee_fen == 0 {
+                    0
+                } else {
+                    match reward_wallet_bound_at_block(&block.author, &block.hash) {
+                        Ok(true) => fullnode_fee_income_fen(block.fee_fen),
+                        Ok(false) => 0,
+                        Err(_) => {
+                            stats.fee_query_failures = stats.fee_query_failures.saturating_add(1);
+                            0
+                        }
+                    }
+                };
+
+                working.total_fee_fen = working.total_fee_fen.saturating_add(fee_income_fen);
                 working.total_reward_fen =
                     working.total_reward_fen.saturating_add(block.reward_fen);
 
                 if let Some(ms) = block.timestamp_ms {
                     let day = utc_day(ms);
-                    let income = block.fee_fen.saturating_add(block.reward_fen);
+                    let income = fee_income_fen.saturating_add(block.reward_fen);
                     let entry = working.income_by_utc_day.entry(day).or_insert(0);
                     *entry = entry.saturating_add(income);
                 }
@@ -683,7 +756,7 @@ fn refresh_cache(
                 working.recent_records.push_front(CachedBlockRecord {
                     block_height: block.height,
                     timestamp_ms: block.timestamp_ms,
-                    fee_fen: block.fee_fen,
+                    fee_fen: fee_income_fen,
                     block_reward_fen: block.reward_fen,
                     author: block.author.clone(),
                 });
@@ -731,7 +804,10 @@ fn merge_warnings(items: Vec<String>) -> Option<String> {
 fn warning_from_stats(stats: &RefreshStats) -> Option<String> {
     let mut parts: Vec<String> = Vec::new();
     if stats.fee_query_failures > 0 {
-        parts.push(format!("{} 笔交易手续费估算失败", stats.fee_query_failures));
+        parts.push(format!(
+            "{} 个区块的手续费收益统计失败",
+            stats.fee_query_failures
+        ));
     }
     if stats.timestamp_query_failures > 0 {
         parts.push(format!(
@@ -874,8 +950,7 @@ fn collect_resource_usage(app: &AppHandle) -> ResourceUsage {
     if let Ok(status) = home::current_status(app) {
         if let Some(pid) = status.pid {
             let sys = System::new_with_specifics(
-                RefreshKind::nothing()
-                    .with_processes(ProcessRefreshKind::nothing().with_memory()),
+                RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing().with_memory()),
             );
             let sysinfo_pid = sysinfo::Pid::from_u32(pid);
             if let Some(proc) = sys.process(sysinfo_pid) {
@@ -890,24 +965,22 @@ fn collect_resource_usage(app: &AppHandle) -> ResourceUsage {
     }
 
     // CPU 哈希率：通过节点 RPC 获取（mining_cpuHashrate 返回 H/s，u64 整数）。
-    let cpu_hashrate_mhs: Option<f64> =
-        match rpc_post("mining_cpuHashrate", Value::Array(vec![])) {
-            Ok(val) => {
-                let hs = val.as_u64().unwrap_or(0) as f64;
-                Some(hs / 1_000_000.0) // H/s → MH/s
-            }
-            Err(_) => None,
-        };
+    let cpu_hashrate_mhs: Option<f64> = match rpc_post("mining_cpuHashrate", Value::Array(vec![])) {
+        Ok(val) => {
+            let hs = val.as_u64().unwrap_or(0) as f64;
+            Some(hs / 1_000_000.0) // H/s → MH/s
+        }
+        Err(_) => None,
+    };
 
     // GPU 哈希率：通过节点 RPC 获取（mining_gpuHashrate 返回 H/s，u64 整数）。
-    let gpu_hashrate_mhs: Option<f64> =
-        match rpc_post("mining_gpuHashrate", Value::Array(vec![])) {
-            Ok(val) => {
-                let hs = val.as_u64().unwrap_or(0) as f64;
-                Some(hs / 1_000_000.0) // H/s → MH/s
-            }
-            Err(_) => None, // 节点未启用 GPU 或 RPC 不可用
-        };
+    let gpu_hashrate_mhs: Option<f64> = match rpc_post("mining_gpuHashrate", Value::Array(vec![])) {
+        Ok(val) => {
+            let hs = val.as_u64().unwrap_or(0) as f64;
+            Some(hs / 1_000_000.0) // H/s → MH/s
+        }
+        Err(_) => None, // 节点未启用 GPU 或 RPC 不可用
+    };
 
     ResourceUsage {
         cpu_hashrate_mhs,
@@ -1053,7 +1126,7 @@ mod tests {
     use std::collections::{HashMap, VecDeque};
 
     #[test]
-    fn migrate_mining_cache_upgrades_v0_to_current() {
+    fn migrate_mining_cache_resets_legacy_profit_semantics() {
         let mut recent_records = VecDeque::new();
         recent_records.push_back(CachedBlockRecord {
             block_height: 1,
@@ -1077,8 +1150,28 @@ mod tests {
         let (migrated, migrated_from) = migrate_mining_cache(legacy).unwrap();
         assert_eq!(migrated.cache_version, MINING_CACHE_VERSION);
         assert_eq!(migrated_from, Some(0));
-        assert_eq!(migrated.last_processed_height, 10);
-        assert_eq!(migrated.recent_records.len(), 1);
+        assert_eq!(migrated.last_processed_height, 0);
+        assert!(migrated.recent_records.is_empty());
+        assert_eq!(migrated.total_fee_fen, 0);
+        assert_eq!(migrated.total_reward_fen, 0);
+    }
+
+    #[test]
+    fn migrate_mining_cache_resets_v1_cache() {
+        let legacy = MiningComputationCache {
+            cache_version: 1,
+            last_processed_height: 99,
+            total_fee_fen: 123,
+            total_reward_fen: 456,
+            ..MiningComputationCache::default()
+        };
+
+        let (migrated, migrated_from) = migrate_mining_cache(legacy).unwrap();
+        assert_eq!(migrated.cache_version, MINING_CACHE_VERSION);
+        assert_eq!(migrated_from, Some(1));
+        assert_eq!(migrated.last_processed_height, 0);
+        assert_eq!(migrated.total_fee_fen, 0);
+        assert_eq!(migrated.total_reward_fen, 0);
     }
 
     #[test]

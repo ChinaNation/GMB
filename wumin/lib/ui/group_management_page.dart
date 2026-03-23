@@ -14,7 +14,8 @@ class GroupManagementPage extends StatefulWidget {
 }
 
 class _GroupManagementPageState extends State<GroupManagementPage> {
-  static const int maxGroups = 20;
+  // 总分组数上限，包含默认分组“全部 / 分组一 / 分组二”。
+  static const int maxGroups = 50;
 
   List<WalletGroupEntity> _groups = [];
 

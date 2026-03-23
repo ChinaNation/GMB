@@ -218,11 +218,9 @@ fn restore_grandpa_persisted_state(
     backup: &GrandpaPersistedStateBackup,
 ) -> Result<(), String> {
     match &backup.meta {
-        Some(meta) => save_grandpa_meta(
-            app,
-            meta.institution_name.clone(),
-            meta.pubkey_hex.clone(),
-        )?,
+        Some(meta) => {
+            save_grandpa_meta(app, meta.institution_name.clone(), meta.pubkey_hex.clone())?
+        }
         None => clear_grandpa_meta(app)?,
     }
 
@@ -288,7 +286,12 @@ fn grandpa_pubkey_from_private_hex(key_hex: &str) -> Result<String, String> {
 }
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(method, params, rpc::RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
+    rpc::rpc_post(
+        method,
+        params,
+        rpc::RPC_REQUEST_TIMEOUT,
+        MAX_RPC_RESPONSE_BYTES,
+    )
 }
 
 fn node_roles() -> Result<Vec<String>, String> {

@@ -1,77 +1,36 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart'
     show HttpProvider, Hasher, RuntimeMetadata, RuntimeVersion;
 
+import 'smoldot_client.dart';
+
+/// citizenchain RPC 客户端。
+///
+/// 默认使用 smoldot 轻节点（P2P 网络，无需远程 RPC 服务器）。
+/// 如果设置了 WUMINAPP_RPC_URL 环境变量或构造时传入 rpcUrl，
+/// 则回退到传统 HTTP RPC 模式（仅用于开发调试）。
 class ChainRpc {
   ChainRpc({String? rpcUrl}) {
-    if (rpcUrl != null && rpcUrl.isNotEmpty) {
-      _nodes = [rpcUrl];
+    // 如果显式指定了 RPC URL 或环境变量中有配置，使用传统 HTTP RPC 模式
+    final explicitUrl =
+        rpcUrl ?? const String.fromEnvironment('WUMINAPP_RPC_URL');
+    if (explicitUrl.isNotEmpty) {
+      _useSmoldot = false;
+      _rpcProvider = HttpProvider(Uri.parse(explicitUrl));
+      debugPrint('[ChainRpc] 使用 HTTP RPC 模式: $explicitUrl');
     } else {
-      const fromDefine = String.fromEnvironment('WUMINAPP_RPC_URL');
-      if (fromDefine.isNotEmpty) {
-        _nodes = [fromDefine];
-      } else {
-        // 本地节点放最前，其余节点随机打乱
-        final remote = List.of(_defaultNodes.skip(1))..shuffle(Random());
-        _nodes = [_defaultNodes.first, ...remote];
-      }
+      _useSmoldot = true;
+      debugPrint('[ChainRpc] 使用 smoldot 轻节点模式');
     }
   }
 
-  late final List<String> _nodes;
-  HttpProvider? _provider;
-  int _currentIndex = 0;
+  /// 是否使用 smoldot 轻节点模式。
+  late final bool _useSmoldot;
 
-  static const _defaultNodes = [
-    'http://127.0.0.1:9944',
-    'http://nrcgch.wuminapp.com:9944',
-    'http://prczss.wuminapp.com:9944',
-    'http://prclns.wuminapp.com:9944',
-    'http://prcgds.wuminapp.com:9944',
-    'http://prcgxs.wuminapp.com:9944',
-    'http://prcfjs.wuminapp.com:9944',
-    'http://prchns.wuminapp.com:9944',
-    'http://prcyns.wuminapp.com:9944',
-    'http://prcgzs.wuminapp.com:9944',
-    'http://prchus.wuminapp.com:9944',
-    'http://prcjxs.wuminapp.com:9944',
-    'http://prczjs.wuminapp.com:9944',
-    'http://prcjss.wuminapp.com:9944',
-    'http://prcsds.wuminapp.com:9944',
-    'http://prcsxs.wuminapp.com:9944',
-    'http://prches.wuminapp.com:9944',
-    'http://prchbs.wuminapp.com:9944',
-    'http://prchis.wuminapp.com:9944',
-    'http://prcsis.wuminapp.com:9944',
-    'http://prccqs.wuminapp.com:9944',
-    'http://prcscs.wuminapp.com:9944',
-    'http://prcgss.wuminapp.com:9944',
-    'http://prcbps.wuminapp.com:9944',
-    'http://prchas.wuminapp.com:9944',
-    'http://prcsjs.wuminapp.com:9944',
-    'http://prcljs.wuminapp.com:9944',
-    'http://prcjls.wuminapp.com:9944',
-    'http://prclis.wuminapp.com:9944',
-    'http://prcnxs.wuminapp.com:9944',
-    'http://prcqhs.wuminapp.com:9944',
-    'http://prcahs.wuminapp.com:9944',
-    'http://prctws.wuminapp.com:9944',
-    'http://prcxzs.wuminapp.com:9944',
-    'http://prcxjs.wuminapp.com:9944',
-    'http://prcxks.wuminapp.com:9944',
-    'http://prcals.wuminapp.com:9944',
-    'http://prccls.wuminapp.com:9944',
-    'http://prctss.wuminapp.com:9944',
-    'http://prchxs.wuminapp.com:9944',
-    'http://prckls.wuminapp.com:9944',
-    'http://prchts.wuminapp.com:9944',
-    'http://prcrhs.wuminapp.com:9944',
-    'http://prcxas.wuminapp.com:9944',
-    'http://prchjs.wuminapp.com:9944',
-  ];
+  /// HTTP RPC 模式下的 provider（仅在非 smoldot 模式下使用）。
+  HttpProvider? _rpcProvider;
 
   // twox_128("System") + twox_128("Account")
   static final Uint8List _systemAccountPrefix = _hexDecode(
@@ -81,8 +40,17 @@ class ChainRpc {
   static final Uint8List _sfidMainAccountKey =
       _buildStorageValueKey('SfidCodeAuth', 'SfidMainAccount');
 
-  /// 当前活跃节点的 HTTP URL（可用于推导 WebSocket URL）。
-  String get currentNodeUrl => _nodes[_currentIndex];
+  /// 当前是否为轻节点模式。
+  bool get isLightClient => _useSmoldot;
+
+  /// 当前活跃节点的 HTTP URL（WebSocket 回退模式使用）。
+  ///
+  /// smoldot 模式下返回空字符串（ChainEventSubscription 会自动
+  /// 检测 smoldot 状态，不依赖此值）。
+  String get currentNodeUrl {
+    if (_useSmoldot) return '';
+    return _rpcProvider?.url.toString() ?? '';
+  }
 
   // ──── 批量查询 ────
 
@@ -145,6 +113,37 @@ class ChainRpc {
         await _rpcCall('chain_getHeader', [hashHex]) as Map<String, dynamic>;
     final blockNumber = int.parse(header['number'] as String);
     return (blockHash: blockHash, blockNumber: blockNumber);
+  }
+
+  /// 获取指定区块中所有 extrinsic 的 blake2_256 哈希。
+  ///
+  /// 用于交易确认：在链上区块中搜索指定 txHash 是否存在。
+  Future<List<String>?> fetchBlockExtrinsicHashes(int blockNumber) async {
+    try {
+      final blockHashHex =
+          await _rpcCall('chain_getBlockHash', [blockNumber]) as String;
+      final block = await _rpcCall('chain_getBlock', [blockHashHex])
+          as Map<String, dynamic>;
+      final extrinsics =
+          (block['block'] as Map<String, dynamic>)['extrinsics'] as List<dynamic>;
+
+      final hashes = <String>[];
+      for (final ext in extrinsics) {
+        final extHex = ext as String;
+        final extBytes = _hexDecode(extHex.substring(2));
+        // blake2_256 哈希
+        final hash = _blake2b256(extBytes);
+        hashes.add('0x${_hexEncode(hash)}');
+      }
+      return hashes;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Uint8List _blake2b256(Uint8List data) {
+    // 使用 polkadart 的 Hasher
+    return Uint8List.fromList(Hasher.blake2b256.hash(data));
   }
 
   /// 获取运行时 metadata（含 registry，用于 extrinsic 编码）。结果缓存。
@@ -291,52 +290,48 @@ class ChainRpc {
     return value;
   }
 
-  static const _maxRetries = 3;
-  static const _requestTimeout = Duration(seconds: 8);
+  static const _smoldotRpcTimeout = Duration(minutes: 2);
+  static const _httpRpcTimeout = Duration(seconds: 30);
 
-  /// 发送 JSON-RPC 请求，自动故障切换（最多尝试 3 个节点）。
+  static const _smoldotMaxRetries = 3;
+  static const _smoldotRetryDelay = Duration(seconds: 2);
+
+  /// 发送 JSON-RPC 请求。
   ///
-  /// 区分两类错误：
-  /// - 网络错误（超时、连接拒绝）：切换节点重试
-  /// - RPC 业务错误（链返回 error）：直接抛出，不重试
+  /// - smoldot 模式：通过轻节点 P2P 网络发送，遇到"No node available"自动重试
+  /// - HTTP RPC 模式：通过 HTTP 发送到远程节点（开发用）
   Future<dynamic> _rpcCall(String method, List<dynamic> params) async {
-    final maxAttempts =
-        _nodes.length < _maxRetries ? _nodes.length : _maxRetries;
-    final tried = <int>{};
-    while (tried.length < maxAttempts) {
-      final provider = _getProvider();
-      tried.add(_currentIndex);
-      try {
-        final response =
-            await provider.send(method, params).timeout(_requestTimeout);
-        if (response.error != null) {
-          // RPC 业务错误：链收到了请求但拒绝了，不需要重试其他节点
-          throw Exception('${response.error}');
+    if (_useSmoldot) {
+      // smoldot P2P 连接可能短暂中断，遇到 -32000/-32800 错误时自动重试。
+      for (var attempt = 1; attempt <= _smoldotMaxRetries; attempt++) {
+        try {
+          return await SmoldotClientManager.instance
+              .request(method, params)
+              .timeout(_smoldotRpcTimeout);
+        } on Exception catch (e) {
+          final msg = e.toString();
+          final isTransient = msg.contains('No node available') ||
+              msg.contains('-32000') ||
+              msg.contains('-32800') ||
+              msg.contains('Failed to retrieve');
+          if (!isTransient || attempt == _smoldotMaxRetries) {
+            rethrow;
+          }
+          debugPrint('[ChainRpc] $method 失败（peers 暂时为 0），${_smoldotRetryDelay.inSeconds}s 后重试 ($attempt/$_smoldotMaxRetries)');
+          await Future<void>.delayed(_smoldotRetryDelay);
         }
-        return response.result;
-      } on Exception catch (e) {
-        final msg = e.toString();
-        // 如果是链返回的业务错误（非网络问题），直接抛出不重试
-        if (msg.contains('code') ||
-            msg.contains('1010') ||
-            msg.contains('1012') ||
-            msg.contains('Extrinsic') ||
-            msg.contains('decode')) {
-          debugPrint('RPC business error on ${_nodes[_currentIndex]}: $e');
-          rethrow;
-        }
-        // 网络错误：切换节点重试
-        debugPrint('RPC node ${_nodes[_currentIndex]} network error: $e');
-        _provider = null;
-        _currentIndex = (_currentIndex + 1) % _nodes.length;
       }
+      // 不应到达此处
+      throw Exception('RPC 重试次数已用尽');
+    } else {
+      // 传统 HTTP RPC 模式（开发调试用）
+      final response =
+          await _rpcProvider!.send(method, params).timeout(_httpRpcTimeout);
+      if (response.error != null) {
+        throw Exception('${response.error}');
+      }
+      return response.result;
     }
-    throw Exception('RPC 节点不可达（已尝试 $maxAttempts 个节点）');
-  }
-
-  HttpProvider _getProvider() {
-    _provider ??= HttpProvider(Uri.parse(_nodes[_currentIndex]));
-    return _provider!;
   }
 
   static Uint8List _pubkeyHexToBytes(String hex) {

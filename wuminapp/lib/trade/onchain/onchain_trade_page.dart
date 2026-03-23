@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
@@ -226,8 +227,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '余额不足，可用余额：${availableBalance.toStringAsFixed(2)} 元'
-            '（已扣除 ED ${_edYuan.toStringAsFixed(2)} 元）',
+            '余额不足，可用余额：${AmountFormat.format(availableBalance, symbol: '')} 元'
+            '（已扣除 ED ${AmountFormat.format(_edYuan, symbol: '')} 元）',
           ),
         ),
       );
@@ -246,7 +247,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             Text('预估手续费：$estimatedFee $_selectedSymbol'),
             const Divider(height: 16),
             Text(
-              '合计：${(amount + estimatedFee).toStringAsFixed(2)} $_selectedSymbol',
+              '合计：${AmountFormat.format(amount + estimatedFee, symbol: _selectedSymbol)}',
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ],
@@ -273,10 +274,13 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       final Future<Uint8List> Function(Uint8List payload) signCallback;
 
       if (wallet.isHotWallet) {
-        // 热钱包：通过 WalletManager 签名，seed 不出类。
+        // 热钱包：先验证设备密码/生物识别，再构造交易。
+        // 密码验证必须在 RPC 调用之前，避免用户等 RPC 后才弹密码框。
         final walletManager = WalletManager();
-        signCallback = (payload) =>
-            walletManager.signWithWallet(wallet.walletIndex, payload);
+        await walletManager.authenticateForSigning();
+        // 验证通过后，签名回调跳过二次验证
+        signCallback = (payload) => walletManager.signWithWalletNoAuth(
+            wallet.walletIndex, payload);
       } else {
         // 冷钱包：扫码签名。
         signCallback = (Uint8List payload) async {
@@ -296,12 +300,12 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             specVersion: rv.specVersion,
             display: {
               'action': 'transfer',
+              'action_label': '转账',
               'summary': '转账 $amountFormatted $_selectedSymbol 给 $toAddr',
-              'fields': {
-                'to': toAddr,
-                'amount_yuan': amountFormatted,
-                'symbol': _selectedSymbol,
-              },
+              'fields': [
+                {'key': 'to', 'label': '收款账户', 'value': toAddr},
+                {'key': 'amount_yuan', 'label': '金额', 'value': '$amountFormatted $_selectedSymbol', 'format': 'currency'},
+              ],
             },
           );
           final requestJson = qrSigner.encodeRequest(request);

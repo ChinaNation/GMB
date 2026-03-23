@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_repository.dart';
 
@@ -158,7 +159,7 @@ class TxRecordTile extends StatelessWidget {
       ),
       isThreeLine: true,
       trailing: Text(
-        '${_isSend ? "-" : "+"}${record.amount.toStringAsFixed(2)}',
+        '${_isSend ? "-" : "+"}${AmountFormat.format(record.amount, symbol: '')}',
         style: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w700,
@@ -259,7 +260,7 @@ class TxRecordDetailPage extends StatelessWidget {
             child: Column(
               children: [
                 Text(
-                  '${_isSend ? "-" : "+"}${record.amount.toStringAsFixed(2)} ${record.symbol}',
+                  '${_isSend ? "-" : "+"}${AmountFormat.format(record.amount, symbol: record.symbol)}',
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w700,

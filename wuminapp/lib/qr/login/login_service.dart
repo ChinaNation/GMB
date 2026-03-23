@@ -204,10 +204,11 @@ class LoginService {
       payloadHex: payloadHex,
       display: {
         'action': 'login',
+        'action_label': '登录',
         'summary': '登录 ${challenge.system.toUpperCase()} 系统',
-        'fields': {
-          'system': challenge.system,
-        },
+        'fields': [
+          {'key': 'system', 'label': '系统', 'value': challenge.system},
+        ],
       },
       nowEpochSeconds: now,
       ttlSeconds: ttlSeconds,

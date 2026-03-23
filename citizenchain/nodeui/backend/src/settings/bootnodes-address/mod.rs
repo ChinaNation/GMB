@@ -220,8 +220,8 @@ pub fn set_bootnode_key(
     }
     let institution_name = find_genesis_bootnode_name_by_peer_id(&derived_peer_id)?;
 
-    let secret_bytes = decode_hex_32_strict(&normalized)
-        .map_err(|_| "node-key hex decode failed".to_string())?;
+    let secret_bytes =
+        decode_hex_32_strict(&normalized).map_err(|_| "node-key hex decode failed".to_string())?;
     write_secret_ed25519(&app, &secret_bytes)?;
     save_bootnode_meta(&app, &derived_peer_id, institution_name.clone())?;
 
@@ -234,7 +234,9 @@ pub fn set_bootnode_key(
             wait_peer_id_applied(&app, &derived_peer_id)?;
             Ok(())
         })() {
-            if let Err(e) = security::append_audit_log(&app, "set_bootnode_key", "saved_restart_failed") {
+            if let Err(e) =
+                security::append_audit_log(&app, "set_bootnode_key", "saved_restart_failed")
+            {
                 eprintln!("[审计] set_bootnode_key saved_restart_failed 日志写入失败: {e}");
             }
             return Err(format!(

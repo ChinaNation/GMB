@@ -394,4 +394,3 @@ pub(crate) fn ensure_unlock_password(password: &str) -> Result<&str, String> {
     }
     Ok(trimmed)
 }
-
