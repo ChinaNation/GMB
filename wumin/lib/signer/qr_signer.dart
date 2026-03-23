@@ -125,6 +125,7 @@ class QrSignResponse {
 class QrSigner {
   static const String protocol = 'WUMIN_SIGN_V1.0.0';
   static const int defaultTtlSeconds = 90;
+  static const int maxTtlSeconds = 300;
   static const int maxClockSkewSeconds = 30;
   static const int maxPayloadChars = 32768;
   static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9._:-]{16,128}$');
@@ -452,6 +453,11 @@ class QrSigner {
     if (expiresAt <= issuedAt) {
       throw const QrSignException(
           QrSignErrorCode.invalidField, 'expires_at 必须晚于 issued_at');
+    }
+    // 有效期不得超过 maxTtlSeconds，防止恶意构造超长有效期请求
+    if (expiresAt - issuedAt > maxTtlSeconds) {
+      throw const QrSignException(
+          QrSignErrorCode.invalidField, '签名请求有效期超出允许范围');
     }
     if (issuedAt > now + maxClockSkewSeconds) {
       throw const QrSignException(

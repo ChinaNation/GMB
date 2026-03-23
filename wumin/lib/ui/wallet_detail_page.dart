@@ -37,14 +37,39 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
 
   @override
   void dispose() {
-    if (_screenshotGuardActive) ScreenshotGuard.disable();
+    if (_screenshotGuardActive) {
+      ScreenshotGuard.onSecurityEvent = null;
+      ScreenshotGuard.disable();
+    }
     super.dispose();
   }
 
   void _enableScreenshotGuard() {
     if (!_screenshotGuardActive) {
       _screenshotGuardActive = true;
+      ScreenshotGuard.onSecurityEvent = _onSecurityEvent;
       ScreenshotGuard.enable();
+    }
+  }
+
+  /// iOS 截屏/录屏事件：立即隐藏已展示的私钥和助记词。
+  void _onSecurityEvent(String event) {
+    if (!mounted) return;
+    if (event == 'screenshot_taken' || event == 'screen_recording_started') {
+      setState(() {
+        _seedVisible = false;
+        _mnemonicVisible = false;
+        _seedHex = null;
+        _mnemonic = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(event == 'screenshot_taken'
+              ? '检测到截屏，密钥信息已隐藏。请勿截屏保存密钥。'
+              : '检测到屏幕录制，密钥信息已隐藏'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
