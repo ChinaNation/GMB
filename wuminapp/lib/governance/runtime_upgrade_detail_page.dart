@@ -306,11 +306,17 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             requestPrefix: approve ? 'runtime-joint-yes' : 'runtime-joint-no',
             display: {
               'action': 'joint_vote',
+              'action_label': '联合投票',
               'summary': '联合投票 提案 #${widget.proposalId}：$voteText',
-              'fields': {
-                'proposal_id': widget.proposalId.toString(),
-                'approve': approve.toString(),
-              },
+              'fields': [
+                {'key': 'proposal_id', 'label': '提案编号', 'value': widget.proposalId.toString()},
+                {'key': 'approve', 'label': '投票', 'value': approve.toString()},
+                if (_proposalInfo != null) ...{
+                  {'key': 'proposer', 'label': '提案人', 'value': _proposalInfo!.proposer},
+                  {'key': 'reason', 'label': '提案理由', 'value': _proposalInfo!.reason},
+                  {'key': 'code_hash', 'label': '代码哈希', 'value': _proposalInfo!.codeHashHex},
+                },
+              ],
             },
           );
         },

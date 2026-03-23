@@ -1136,8 +1136,7 @@ pub async fn start_node(app: AppHandle, unlock_password: String) -> Result<NodeS
     tauri::async_runtime::spawn(async move {
         // 等待 RPC 就绪（节点刚启动可能还未开始监听）
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-        if let Err(err) =
-            crate::settings::fee_address::sync_saved_reward_wallet_inner(&app2).await
+        if let Err(err) = crate::settings::fee_address::sync_saved_reward_wallet_inner(&app2).await
         {
             eprintln!("[reward-wallet] 启动后自动同步链上绑定失败: {err}");
         }

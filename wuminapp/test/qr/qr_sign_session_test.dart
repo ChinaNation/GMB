@@ -11,8 +11,11 @@ void main() {
 
     final display = {
       'action': 'transfer',
+      'action_label': '转账',
       'summary': '转账 1.00 GMB',
-      'fields': {'amount_yuan': '1.00'},
+      'fields': [
+        {'key': 'amount_yuan', 'label': '金额', 'value': '1.00 GMB', 'format': 'currency'},
+      ],
     };
 
     setUp(() {

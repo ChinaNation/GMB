@@ -212,6 +212,26 @@ pub fn mainnet_config_genesis() -> Value {
     build_genesis()
 }
 
+/// 开发链 genesis：GRANDPA 只用 Alice 密钥（单节点即可 finalize）。
+#[cfg(feature = "std")]
+pub fn dev_config_genesis() -> Value {
+    let mut genesis = build_genesis();
+
+    // 中文注释：覆盖 GRANDPA 权威列表，只留一个 well-known 密钥（//Alice 的 ed25519 公钥），
+    // 使单节点开发链也能 finalize 区块。
+    let alice_grandpa_hex = "88dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee";
+    let alice_grandpa_ss58 = grandpa_key_hex_to_genesis_ss58(alice_grandpa_hex);
+    let root = genesis.as_object_mut().unwrap();
+    root.insert(
+        "grandpa".into(),
+        json!({
+            "authorities": [[alice_grandpa_ss58, 1]],
+        }),
+    );
+
+    genesis
+}
+
 /// Provides the JSON representation of predefined genesis config for given `id`.
 pub fn get_preset(id: &PresetId) -> Option<Vec<u8>> {
     #[cfg(not(feature = "std"))]
@@ -223,7 +243,7 @@ pub fn get_preset(id: &PresetId) -> Option<Vec<u8>> {
     #[cfg(feature = "std")]
     {
         let patch = match id.as_ref() {
-            sp_genesis_builder::DEV_RUNTIME_PRESET => mainnet_config_genesis(),
+            sp_genesis_builder::DEV_RUNTIME_PRESET => dev_config_genesis(),
             sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET => mainnet_config_genesis(),
             _ => return None,
         };

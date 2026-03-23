@@ -77,9 +77,9 @@ class OfflineSignService {
     }
 
     final displayFields = request.display['fields'];
-    if (displayFields is Map) {
+    if (displayFields is List) {
       for (final entry in decoded.fields.entries) {
-        final displayValue = displayFields[entry.key]?.toString();
+        final displayValue = _findFieldValue(displayFields, entry.key);
         if (displayValue != null && displayValue != entry.value) {
           return OfflineSignVerification(
             decoded: decoded,
@@ -183,6 +183,16 @@ class OfflineSignService {
       payloadHash: payloadHash,
       signedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
+  }
+
+  /// 从 display.fields（List 格式）中按 key 查找 value。
+  static String? _findFieldValue(List<dynamic> fields, String key) {
+    for (final field in fields) {
+      if (field is Map && field['key']?.toString() == key) {
+        return field['value']?.toString();
+      }
+    }
+    return null;
   }
 
   List<int> _hexToBytes(String input) {

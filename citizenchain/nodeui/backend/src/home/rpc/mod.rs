@@ -233,10 +233,7 @@ fn get_total_issuance_sync(app: AppHandle) -> Result<TotalIssuance, String> {
     }
 
     let key = total_issuance_storage_key();
-    let raw = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key)]),
-    )?;
+    let raw = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     let amount = raw
         .as_str()
         .and_then(scale_u128_from_storage_hex)
@@ -260,9 +257,7 @@ pub async fn get_total_issuance(app: AppHandle) -> Result<TotalIssuance, String>
 
 /// Substrate 标准 Blake2_128Concat：blake2b_128(data) ++ data。
 fn blake2b_128(input: &[u8]) -> [u8; 16] {
-    let hash = blake2b_simd::Params::new()
-        .hash_length(16)
-        .hash(input);
+    let hash = blake2b_simd::Params::new().hash_length(16).hash(input);
     let mut out = [0u8; 16];
     out.copy_from_slice(hash.as_bytes());
     out
@@ -314,10 +309,7 @@ fn get_total_stake_sync(app: AppHandle) -> Result<TotalStake, String> {
     // 批量构造 43 个存储键，逐个查询。
     for bank in CHINA_CH.iter() {
         let key = system_account_storage_key(&bank.keyless_address);
-        let raw = match rpc_post(
-            "state_getStorage",
-            Value::Array(vec![Value::String(key)]),
-        ) {
+        let raw = match rpc_post("state_getStorage", Value::Array(vec![Value::String(key)])) {
             Ok(v) => v,
             Err(_) => continue, // 单个查询失败跳过，不中断
         };

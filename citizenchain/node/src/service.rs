@@ -154,6 +154,20 @@ fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceErr
     Ok(())
 }
 
+/// 开发链模式下注入 well-known 的 Alice GRANDPA 密钥，使单节点也能 finalize 区块。
+fn ensure_dev_grandpa_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceError> {
+    let gran_keys = keystore.ed25519_public_keys(sp_consensus_grandpa::KEY_TYPE);
+    if !gran_keys.is_empty() {
+        return Ok(());
+    }
+    // 中文注释：使用 Alice 的 ed25519 密钥 URI（//Alice），与 dev genesis 中配置的唯一权威一致。
+    keystore
+        .ed25519_generate_new(sp_consensus_grandpa::KEY_TYPE, Some("//Alice"))
+        .map_err(|e| ServiceError::Other(format!("failed to generate dev grandpa key: {e}")))?;
+    eprintln!("开发链：已注入 Alice GRANDPA 密钥，单节点可 finalize");
+    Ok(())
+}
+
 fn start_cpu_miner<Proof: Send + 'static>(
     worker: MiningHandle<Block, SimplePow, (), Proof>,
     num_threads: usize,
@@ -423,6 +437,7 @@ pub fn new_full<
     let role = config.role;
     let name = config.network.node_name.clone();
     let enable_grandpa = !config.disable_grandpa;
+    let is_dev_chain = config.chain_spec.chain_type() == sc_service::ChainType::Development;
     let prometheus_registry = config.prometheus_registry().cloned();
 
     // GPU 哈希率函数指针：仅在 gpu-mining feature 且用户启用 GPU 时传入。
@@ -477,6 +492,12 @@ pub fn new_full<
 
     // 中文注释：本链制度要求"安装全节点软件即可参与挖矿"，不再依赖 authority 角色开关。
     ensure_powr_key(&keystore)?;
+
+    // 中文注释：开发链模式下注入 Alice 的 GRANDPA 密钥，使单节点也能 finalize 区块。
+    // 正式链有 44 个权威节点的独立密钥，不走此逻辑。
+    if is_dev_chain {
+        ensure_dev_grandpa_key(&keystore)?;
+    }
 
     let proposer_factory = sc_basic_authorship::ProposerFactory::new(
         task_manager.spawn_handle(),
@@ -555,12 +576,14 @@ pub fn new_full<
                 .iter()
                 .any(|local| id.encode() == local.encode())
         });
-        let grandpa_keystore = if role.is_authority() && has_local_grandpa_authority {
+        // 中文注释：开发链模式下，即使不是 authority 角色也激活 GRANDPA 投票，
+        // 使单节点可以 finalize 区块。正式链要求 authority 角色。
+        let grandpa_keystore = if (role.is_authority() || is_dev_chain) && has_local_grandpa_authority {
             Some(keystore.clone())
         } else {
             None
         };
-        if role.is_authority() && grandpa_keystore.is_none() {
+        if (role.is_authority() || is_dev_chain) && grandpa_keystore.is_none() {
             eprintln!(
                 "WARNING: authority role enabled but no matching local GRANDPA key for current authority set; this node will not cast finality votes."
             );
@@ -569,7 +592,8 @@ pub fn new_full<
             gossip_duration: Duration::from_millis(333),
             justification_generation_period: GRANDPA_JUSTIFICATION_PERIOD,
             name: Some(name),
-            observer_enabled: !role.is_authority() || grandpa_keystore.is_none(),
+            // 中文注释：开发链单节点必须关闭 observer 模式才能主动投票。
+            observer_enabled: (!role.is_authority() && !is_dev_chain) || grandpa_keystore.is_none(),
             keystore: grandpa_keystore,
             local_role: role,
             telemetry: telemetry.as_ref().map(|x| x.handle()),

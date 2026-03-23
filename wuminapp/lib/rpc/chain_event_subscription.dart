@@ -4,23 +4,70 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-/// 链节点 WebSocket 事件订阅。
+import 'smoldot_client.dart';
+
+/// 链事件订阅：监听新区块头通知。
 ///
-/// 订阅新区块头通知，连接断开时自动重连。
+/// 自动选择模式：
+/// - smoldot 轻节点就绪时，通过 smoldot JSON-RPC 订阅（无需外部连接）
+/// - 否则回退到 WebSocket 连接远程 RPC 节点（开发调试用）
 class ChainEventSubscription {
-  WebSocketChannel? _channel;
   final StreamController<ChainEvent> _eventController =
       StreamController<ChainEvent>.broadcast();
-  String? _httpUrl;
   bool _disposed = false;
+
+  // ──── smoldot 模式 ────
+  StreamSubscription<dynamic>? _smoldotSub;
+
+  // ──── WebSocket 回退模式 ────
+  WebSocketChannel? _channel;
+  String? _httpUrl;
   Timer? _reconnectTimer;
 
   /// 新区块等事件流。
   Stream<ChainEvent> get events => _eventController.stream;
 
-  /// 连接到链节点 WebSocket（将 http:// 转为 ws://）。
+  /// 开始订阅新区块头。
+  ///
+  /// [httpUrl] 仅在 WebSocket 回退模式下使用（smoldot 模式忽略此参数）。
   void connect(String httpUrl) {
     if (_disposed) return;
+
+    if (SmoldotClientManager.instance.isReady) {
+      _connectSmoldot();
+    } else {
+      _connectWebSocket(httpUrl);
+    }
+  }
+
+  // ──── smoldot 订阅 ────
+
+  void _connectSmoldot() {
+    debugPrint('[ChainSub] 使用 smoldot 轻节点订阅新区块');
+    try {
+      final stream = SmoldotClientManager.instance
+          .subscribe('chain_subscribeNewHeads', []);
+      _smoldotSub = stream.listen(
+        (_) {
+          if (!_disposed) {
+            _eventController.add(ChainEvent.newBlock);
+          }
+        },
+        onError: (Object e) {
+          debugPrint('[ChainSub] smoldot 订阅错误: $e');
+        },
+        onDone: () {
+          debugPrint('[ChainSub] smoldot 订阅结束');
+        },
+      );
+    } catch (e) {
+      debugPrint('[ChainSub] smoldot 订阅启动失败: $e');
+    }
+  }
+
+  // ──── WebSocket 回退 ────
+
+  void _connectWebSocket(String httpUrl) {
     _httpUrl = httpUrl;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
@@ -29,10 +76,12 @@ class ChainEventSubscription {
         .replaceFirst('http://', 'ws://')
         .replaceFirst('https://', 'wss://');
 
+    debugPrint('[ChainSub] 使用 WebSocket 回退模式: $wsUrl');
+
     try {
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
     } catch (e) {
-      debugPrint('[ChainWS] connect error: $e');
+      debugPrint('[ChainSub] WebSocket 连接错误: $e');
       _scheduleReconnect();
       return;
     }
@@ -49,27 +98,23 @@ class ChainEventSubscription {
       (message) {
         try {
           final json = jsonDecode(message as String) as Map<String, dynamic>;
-          _handleMessage(json);
+          // subscription 通知的结构：{ jsonrpc, method, params: { subscription, result } }
+          if (json.containsKey('params')) {
+            _eventController.add(ChainEvent.newBlock);
+          }
         } catch (e) {
-          debugPrint('[ChainWS] message parse error: $e');
+          debugPrint('[ChainSub] WebSocket 消息解析错误: $e');
         }
       },
       onError: (Object e) {
-        debugPrint('[ChainWS] stream error: $e');
+        debugPrint('[ChainSub] WebSocket 流错误: $e');
         _scheduleReconnect();
       },
       onDone: () {
-        debugPrint('[ChainWS] stream done, will reconnect');
+        debugPrint('[ChainSub] WebSocket 流结束，准备重连');
         _scheduleReconnect();
       },
     );
-  }
-
-  void _handleMessage(Map<String, dynamic> json) {
-    // subscription 通知的结构：{ jsonrpc, method, params: { subscription, result } }
-    if (json.containsKey('params')) {
-      _eventController.add(ChainEvent.newBlock);
-    }
   }
 
   void _scheduleReconnect() {
@@ -77,8 +122,8 @@ class ChainEventSubscription {
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(const Duration(seconds: 3), () {
       if (!_disposed && _httpUrl != null) {
-        debugPrint('[ChainWS] reconnecting...');
-        connect(_httpUrl!);
+        debugPrint('[ChainSub] WebSocket 重连中...');
+        _connectWebSocket(_httpUrl!);
       }
     });
   }
@@ -86,6 +131,12 @@ class ChainEventSubscription {
   /// 断开连接并释放资源。
   void disconnect() {
     _disposed = true;
+
+    // 清理 smoldot 订阅
+    _smoldotSub?.cancel();
+    _smoldotSub = null;
+
+    // 清理 WebSocket 回退
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _channel?.sink.close();

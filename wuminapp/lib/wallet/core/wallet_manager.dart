@@ -495,6 +495,46 @@ class WalletManager {
   ///
   /// seed 仅在本方法内短暂存在，签名完成后立即清零，不对外暴露。
   /// 每次调用均触发生物/密码认证（设备未启用锁屏时拒绝访问）。
+  /// 预先验证设备密码/生物识别。
+  ///
+  /// 在构造交易前调用，确保用户先验证身份，再等待 RPC 数据。
+  Future<void> authenticateForSigning() async {
+    await _authenticateIfSupported();
+  }
+
+  /// 签名（跳过认证，调用方需确保已调用 authenticateForSigning）。
+  Future<Uint8List> signWithWalletNoAuth(
+      int walletIndex, Uint8List payload) async {
+    final isar = await WalletIsar.instance.db();
+    final row = await isar.walletProfileEntitys
+        .filter()
+        .walletIndexEqualTo(walletIndex)
+        .findFirst();
+    if (row == null) {
+      throw const WalletAuthException('未找到指定钱包');
+    }
+    final profile = _toProfile(row);
+    if (profile.isColdWallet) {
+      throw const WalletAuthException('当前钱包为冷钱包，请使用扫码签名');
+    }
+    final seedHex = await _readSeedHexRaw(walletIndex);
+    if (seedHex == null) {
+      throw const WalletAuthException('密钥不可用，请重新导入钱包');
+    }
+    final seedBytes = Uint8List.fromList(_hexToBytes(seedHex));
+    try {
+      final pair = Keyring.sr25519.fromSeed(seedBytes);
+      pair.ss58Format = profile.ss58;
+      final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
+      if (localPubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
+        throw const WalletAuthException('本地签名密钥与当前钱包不一致，请重新导入钱包');
+      }
+      return Uint8List.fromList(pair.sign(payload));
+    } finally {
+      seedBytes.fillRange(0, seedBytes.length, 0);
+    }
+  }
+
   Future<Uint8List> signWithWallet(int walletIndex, Uint8List payload) async {
     await _authenticateIfSupported();
     final isar = await WalletIsar.instance.db();
