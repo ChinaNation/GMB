@@ -14,6 +14,7 @@ def generate_ultra_safe_batch(count, output_file="vault_without_salt.json"):
             "subkey", "generate", 
             "--scheme", "sr25519", 
             "--words", "24",
+            "--network", "2027",
             "--output-type", "json"
         ]
         

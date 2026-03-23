@@ -19,9 +19,6 @@ class TransferProposalService {
 
   final ChainRpc _rpc;
 
-  /// 当前 RPC 节点的 HTTP URL（用于推导 WebSocket URL）。
-  String get rpcNodeUrl => _rpc.currentNodeUrl;
-
   // ──── 常量 ────
 
   /// DuoqianTransferPow pallet index（runtime pallet_index=19）。

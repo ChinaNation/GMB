@@ -17,18 +17,13 @@ import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 初始化 smoldot 轻节点（如果未设置 WUMINAPP_RPC_URL 环境变量）。
-  // 设置了 WUMINAPP_RPC_URL 时跳过轻节点初始化，使用传统 HTTP RPC 模式。
-  const rpcUrl = String.fromEnvironment('WUMINAPP_RPC_URL');
-  if (rpcUrl.isEmpty) {
-    // 先销毁可能残留的旧实例（hot restart 场景），再重新初始化。
-    // 防止 Rust tokio 线程持有已删除的 Dart FFI 回调导致 SIGABRT。
-    SmoldotClientManager.instance.dispose();
-    try {
-      await SmoldotClientManager.instance.initialize();
-    } catch (e) {
-      debugPrint('[main] smoldot 轻节点初始化失败: $e');
-    }
+  // 先销毁可能残留的旧实例（hot restart 场景），再重新初始化。
+  // 防止 Rust tokio 线程持有已删除的 Dart FFI 回调导致 SIGABRT。
+  SmoldotClientManager.instance.dispose();
+  try {
+    await SmoldotClientManager.instance.initialize();
+  } catch (e) {
+    debugPrint('[main] smoldot 轻节点初始化失败: $e');
   }
 
   runApp(const WuminApp());

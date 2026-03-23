@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
+import 'package:wumin/signer/pallet_registry.dart';
 import 'package:wumin/signer/payload_decoder.dart';
 
 void main() {
@@ -25,7 +26,7 @@ void main() {
       ]);
 
       final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hex, specVersion: PalletRegistry.supportedSpecVersions.first);
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'transfer');
@@ -42,7 +43,7 @@ void main() {
       ]);
 
       final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hex, specVersion: PalletRegistry.supportedSpecVersions.first);
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'vote_transfer');
@@ -60,7 +61,7 @@ void main() {
       ]);
 
       final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hex, specVersion: PalletRegistry.supportedSpecVersions.first);
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'joint_vote');
@@ -82,7 +83,7 @@ void main() {
       ]);
 
       final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hex, specVersion: PalletRegistry.supportedSpecVersions.first);
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'citizen_vote');
@@ -92,11 +93,19 @@ void main() {
 
     test('returns null for unknown pallet', () {
       final hex = '0xff01';
-      expect(PayloadDecoder.decode(hex), isNull);
+      expect(PayloadDecoder.decode(hex, specVersion: PalletRegistry.supportedSpecVersions.first), isNull);
     });
 
     test('returns null for too-short input', () {
-      expect(PayloadDecoder.decode('0x02'), isNull);
+      expect(PayloadDecoder.decode('0x02', specVersion: PalletRegistry.supportedSpecVersions.first), isNull);
+    });
+
+    test('returns null for unsupported specVersion', () {
+      expect(PayloadDecoder.decode('0x0203', specVersion: 999), isNull);
+    });
+
+    test('returns null for null specVersion', () {
+      expect(PayloadDecoder.decode('0x0203'), isNull);
     });
 
     test('Compact encoding mode 1 (two-byte)', () {
@@ -115,7 +124,7 @@ void main() {
       ]);
 
       final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex);
+      final decoded = PayloadDecoder.decode(hex, specVersion: PalletRegistry.supportedSpecVersions.first);
 
       expect(decoded, isNotNull);
       expect(decoded!.fields['amount_yuan'], '2.34 GMB');

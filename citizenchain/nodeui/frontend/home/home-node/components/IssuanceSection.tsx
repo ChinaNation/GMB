@@ -1,3 +1,4 @@
+import { formatAmount } from '../../../format';
 import type { TotalIssuance, TotalStake } from '../../../types';
 
 type Props = {
@@ -15,7 +16,7 @@ export function IssuanceSection({ issuance, stake }: Props) {
           <div className="metric-value">
             {issuance.totalIssuance ? (
               <>
-                {issuance.totalIssuance}元
+                {formatAmount(issuance.totalIssuance)}元
                 <span className="metric-value-currency">（公民币）</span>
               </>
             ) : (
@@ -28,7 +29,7 @@ export function IssuanceSection({ issuance, stake }: Props) {
           <div className="metric-value">
             {stake.totalStake ? (
               <>
-                {stake.totalStake}元
+                {formatAmount(stake.totalStake)}元
                 <span className="metric-value-currency">（公民币）</span>
               </>
             ) : (
