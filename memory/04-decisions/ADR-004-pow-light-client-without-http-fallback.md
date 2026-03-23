@@ -22,7 +22,7 @@ ADR-002 决定让 `wuminapp` 从 HTTP RPC 迁移到 `smoldot` 轻节点，并保
 
 1. `wuminapp` 只保留轻节点模式，不再保留 HTTP RPC 回退能力，不再保留 `WUMINAPP_RPC_URL` 这一类主干能力开关。
 2. `citizenchain` 保持 `PoW + GRANDPA`，不为了适配上游轻节点而回退到 Aura / BABE。
-3. 维护一份自有 GitHub fork，作为 `PoW` 轻节点内核的权威上游；主仓库内只保留一个无 `.git` 的固定快照副本，放在 `wuminapp/third_party/smoldot-pow/`。
+3. 维护一份自有 GitHub fork，作为 `PoW` 轻节点内核的权威上游；主仓库通过 Git submodule 引用 `wuminapp/third_party/smoldot-pow/`，不再把整套内核源码作为普通文件跟踪。
 4. `wuminapp/rust` 不再把 Flutter 侧暴露为“任意 JSON-RPC 方法透传器”，而是提供面向 App 业务的轻节点能力接口。
 5. 轻节点 Rust 层负责：
    - PoW 头部校验
@@ -42,6 +42,7 @@ ADR-002 决定让 `wuminapp` 从 HTTP RPC 迁移到 `smoldot` 轻节点，并保
 - `wallet`、`governance`、`trade/onchain` 相关读取逻辑都要迁移到新接口
 - `app-run.sh` / `app-clean-run.sh` 等启动脚本不再接受 HTTP RPC 回退配置
 - CI 与发布流程必须增加 PoW 轻节点专项验证，确保没有回退开关也能正常工作
+- `GMB` 主仓库需要维护 `.gitmodules` 与 submodule 提交指针，发布时显式记录引用到的 `smoldot-pow` 提交
 
 ## 备选方案
 
@@ -55,7 +56,7 @@ ADR-002 决定让 `wuminapp` 从 HTTP RPC 迁移到 `smoldot` 轻节点，并保
 ## 后续动作
 
 1. 建立自有 `smoldot` PoW fork，并固定上游基线提交。
-2. 将主仓库中的临时 `smoldot/` 迁入 `wuminapp/third_party/smoldot-pow/`，去除嵌套 `.git`，补齐来源说明文档。
+2. 将主仓库中的临时 `smoldot/` 迁入 `wuminapp/third_party/smoldot-pow/`，完成独立仓库发布，并把主仓库引用方式收口为 Git submodule。
 3. 在 `wuminapp/rust` 内实现 PoW 专用轻节点能力层，替代当前 JSON-RPC 透传。
 4. 分阶段迁移 `wallet`、`governance`、`trade/onchain` 到 typed capability。
 5. 删除 HTTP RPC 相关脚本、环境变量、文档与残留。
