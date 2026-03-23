@@ -20,7 +20,7 @@
 补充说明：
 
 - 当前 `smoldot` Dart 绑定已从 pub.dev 依赖切换为仓库内本地 fork：`wuminapp/third_party/smoldot-dart`
-- 当前 `smoldot-light` Rust 内核固定快照位于：`wuminapp/third_party/smoldot-pow`
+- 当前 `smoldot-light` Rust 内核通过 Git submodule 位于：`wuminapp/third_party/smoldot-pow`
 - 这两层收编的目的，是为后续 PoW 专用 typed capability 改造建立可控演进入口
 
 ## 2. 目录结构
