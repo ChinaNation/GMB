@@ -15,8 +15,9 @@ dependencies:
   bip39_mnemonic: ^3.0.10
   substrate_bip39: ^0.7.0
   sr25519: ^0.7.0
-  # 哈希
+  # 哈希 + 加密
   crypto: ^3.0.3
+  pointycastle: ^3.9.1
   # 存储
   isar: ^3.1.0+1
   isar_flutter_libs: ^3.1.0+1

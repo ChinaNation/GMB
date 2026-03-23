@@ -1,5 +1,8 @@
 # RPC 模块技术文档（当前实现态）
 
+> 说明：本文描述的是当前代码实现态。
+> 当前实现已切为“PoW 专用轻节点 + 无 HTTP 回退”，以 [ADR-004](../../04-decisions/ADR-004-pow-light-client-without-http-fallback.md) 与 [POW 轻节点长期落地方案](./POW_LIGHT_CLIENT_ROADMAP.md) 为准。
+
 ## 1. 模块定位
 
 `lib/rpc/` 是手机 App 与区块链节点通信的唯一收口模块。
@@ -7,12 +10,18 @@
 职责：
 
 - 默认通过 `smoldot` 轻节点接入 citizenchain P2P 网络
-- 在开发调试场景下回退到 HTTP JSON-RPC
 - 提供底层 JSON-RPC 调用能力
+- 提供轻节点状态快照等逐步收口中的 typed capability
 - 链上状态查询（余额、nonce、metadata 等）
 - 链上交易构造与提交（转账、未来的投票/提案）
 
 约束：所有链上通信必须通过本模块，业务模块不直接建立 RPC 连接。
+
+补充说明：
+
+- 当前 `smoldot` Dart 绑定已从 pub.dev 依赖切换为仓库内本地 fork：`wuminapp/third_party/smoldot-dart`
+- 当前 `smoldot-light` Rust 内核固定快照位于：`wuminapp/third_party/smoldot-pow`
+- 这两层收编的目的，是为后续 PoW 专用 typed capability 改造建立可控演进入口
 
 ## 2. 目录结构
 
@@ -27,19 +36,12 @@ lib/rpc/
 ## 3. 通信架构
 
 ```text
-默认：
 手机 App  --smoldot-->  bootNodes / P2P 网络
-
-调试回退：
-手机 App  --HTTP JSON-RPC-->  指定节点 :9944
 ```
 
 - 默认协议：`smoldot` 轻客户端 + Substrate JSON-RPC
-- 回退协议：HTTP JSON-RPC
-- 回退端口：9944（与 P2P 端口 30333 不同）
-- 回退模式下，节点仍需开启 `--rpc-external --rpc-cors=all`
 
-## 4. chainspec 与回退模式
+## 4. chainspec 与轻节点模式
 
 默认模式下，App 从 `assets/chainspec.json` 加载链规格，并使用其中的 `bootNodes` 加入网络。
 
@@ -49,34 +51,52 @@ lib/rpc/
 - 如果打进 App 的 chainspec 错了，轻节点即使“连上了”，也可能连到错误链或错误引导节点
 - `bootNodes` 的来源应以 `citizenchain/node/src/chain_spec.rs` 为准
 
-### 4.1 地址覆盖
-
-支持通过环境变量切换到 HTTP RPC 回退模式：
-
-```bash
-flutter run --dart-define=WUMINAPP_RPC_URL=http://127.0.0.1:9944
-```
-
-设置后 App 不再使用 `smoldot`，而是只访问该单一 RPC 地址。用于本地开发调试。
-
-手机访问某个 RPC 地址时，不要求一定连公网互联网，但要求手机对该地址具备网络可达性：
-
-- `http://10.x.x.x:9944` / `http://192.168.x.x:9944`：手机与节点必须处于同一局域网、热点、VPN 或 USB 网络共享链路
-- `http://<公网域名>:9944`：手机需要普通互联网连接
-- `http://127.0.0.1:9944`：只对手机自身有效，真机调试时不能拿来访问电脑上的节点
-
 ## 5. 连接与同步策略
 
 1. App 启动时初始化 `SmoldotClientManager`
 2. 轻节点加入 `chainspec.json` 指定的 citizenchain 网络
 3. `ChainRpc` 在发起余额、nonce、metadata、storage、extrinsic 等链上请求前，先等待轻节点完成同步
 4. 同步完成后才继续真正的 JSON-RPC 请求，避免把“尚未同步”误判成“链上没有数据”
-5. 开发调试时如设置 `WUMINAPP_RPC_URL`，则直接走 HTTP RPC，不经过轻节点同步门槛
 
 补充说明：
 
 - 钱包余额不更新的首要风险点，不是 UI，而是“轻节点已初始化但尚未同步完成”时过早查询链上状态
 - `smoldot` 返回 JSON-RPC error 时必须抛出，不能把错误吞成 `null`，否则上层会把真实故障误判为余额为 0 或账户不存在
+- 当前代码已新增 `SmoldotClientManager.getStatusSnapshot()`，作为结构化轻节点状态接口；其底层已改为 Rust 原生 capability，不再由 Dart 层拼装 `system_health`
+- 当前代码已继续下沉原生能力：
+  - `smoldot_get_status_snapshot`
+  - `smoldot_get_system_account`
+  - `smoldot_get_storage_value`
+  - `smoldot_get_storage_values`
+  - `smoldot_get_runtime_version`
+  - `smoldot_get_metadata`
+  - `smoldot_get_account_next_index`
+  - `smoldot_get_block_hash`
+  - `smoldot_get_block_extrinsics`
+  - `smoldot_submit_extrinsic`
+  这些导出已经存在于 Rust FFI 与本地 Dart bindings 中，轻节点链上读取主路径已从 Dart 层裸 RPC 下沉到 Rust 原生 capability
+- 当前代码已开始切换业务主路径：
+  - `ChainRpc.fetchBalance()` 在轻节点模式下已优先走 `SmoldotClientManager.getSystemAccountSnapshot()`
+  - `ChainRpc.fetchConfirmedNonce()` 在轻节点模式下已优先走原生 `System.Account` 快照中的 nonce
+  - `ChainRpc.fetchStorage()` / `fetchStorageBatch()` 在轻节点模式下已改走原生 storage 读取
+  - `ChainRpc.fetchRuntimeVersion()` / `fetchMetadata()` 在轻节点模式下已改走原生 capability
+  - `ChainRpc.fetchLatestBlock()` 在轻节点模式下已改为复用状态快照中的 `bestBlock`
+  - `ChainRpc.fetchNonce()` / `fetchGenesisHash()` / `fetchBlockExtrinsicHashes()` / `submitExtrinsic()` 在轻节点模式下已切到原生 capability
+- 2026-03-23 新增状态能力治理：
+  - `smoldot_get_status_snapshot` 底层已不再经 `system_health` 包装，而是直接读取 `sync_service/runtime_service`
+  - 本地 `smoldot-dart` 的 `Chain.getInfo()` / `getPeerCount()` / `getStatus()` / `getBestBlock*()` 也已统一收口到原生 status snapshot
+- 2026-03-23 新增链数据能力治理：
+  - `smoldot_get_runtime_version` / `smoldot_get_metadata` 已改为读取 runtime service / runtime call，不再走 `state_getRuntimeVersion` / `state_getMetadata`
+  - `smoldot_get_account_next_index` 已改为 runtime call `AccountNonceApi_account_nonce`，不再依赖 `system_accountNextIndex`
+  - `smoldot_get_block_hash` 已改为“最近块缓存 + 当前同步视图”双层原生路径，不再保留 `chain_getBlockHash`
+  - `smoldot_get_block_extrinsics` 已改为只走按 block hash 下载 block body 的轻节点原生路径，不再保留 `chain_getBlock` 兜底
+  - `smoldot_get_storage_value` / `smoldot_get_storage_values` / `smoldot_get_system_account` 已改为只走 `sync_service.storage_query` proof 读取，不再保留 `state_getStorage` 兜底
+- 2026-03-23 本地探针验证结果：
+  - `status`、`runtimeVersion`、`metadata`、`System.Account`、单个 storage、批量 storage、`accountNextIndex`、`genesisHash`、`block_extrinsics` 都已可在 smoldot 路径稳定读出
+  - 对拍本地全节点后，`System.Account` 空账户返回 `null`，`:code` 与 `state_queryStorageAt` 的大值返回和全节点一致
+  - 当前探针账户 Alice 在 dev 链上不存在，因此余额为空是链上事实，不是轻节点读取失败
+  - 当前同一份轻量探针已不再出现 `system_health` / `state_getRuntimeVersion` / `chain_getBlockHash` / `chain_getBlock` / `state_getStorage` 的 legacy warning
+  - 当前链上读取主路径已不再保留 legacy fallback；剩余工作主要是发布前真机验证与写路径持续治理
 
 ## 6. chain_rpc.dart — 底层 RPC 方法
 
@@ -86,7 +106,7 @@ flutter run --dart-define=WUMINAPP_RPC_URL=http://127.0.0.1:9944
 
 1. 将 `pubkeyHex` 转为 32 字节 AccountId
 2. 构造 `System.Account` storage key（见 6.5）
-3. 调用 `state_getStorage`
+3. 轻节点模式优先通过 `smoldot_get_system_account` / `smoldot_get_storage_value` 走 storage proof 读取
 4. 解码 SCALE 编码的 `AccountInfo`，提取 `free` 余额
 5. 分 → 元，返回 `double`
 
@@ -94,25 +114,32 @@ flutter run --dart-define=WUMINAPP_RPC_URL=http://127.0.0.1:9944
 
 `ChainRpc.fetchNonce(String ss58Address) → Future<int>`
 
-调用 `system_accountNextIndex`，返回下一个可用 nonce（含交易池 pending）。
+- 调用原生 `smoldot_get_account_next_index`
+- 返回下一个可用 nonce（含交易池 pending）
 
 ### 6.3 运行时版本
 
 `ChainRpc.fetchRuntimeVersion() → Future<RuntimeVersion>`
 
-调用 `state_getRuntimeVersion`，返回 `specVersion` + `transactionVersion`。
+- 调用原生 `smoldot_get_runtime_version`
 
 ### 6.4 链信息查询
 
 - `fetchGenesisHash() → Future<Uint8List>` — 创世块哈希（缓存）
+  - 调用原生 `smoldot_get_block_hash(0)`，优先命中创世块快路径
 - `fetchLatestBlock() → Future<({Uint8List blockHash, int blockNumber})>` — 最新块
+  - 复用 `status snapshot.bestBlockHash/bestBlockNumber`
 - `fetchMetadata() → Future<RuntimeMetadata>` — 运行时 metadata（缓存，含 registry）
+  - 调用原生 `smoldot_get_metadata`
+- `fetchBlockExtrinsicHashes(int blockNumber) → Future<List<String>?>` — 区块 extrinsic 哈希列表
+  - 先通过 `smoldot_get_block_hash` 解析块 hash，再通过 `smoldot_get_block_extrinsics` 下载 block body
 
 ### 6.5 Extrinsic 提交
 
 `ChainRpc.submitExtrinsic(Uint8List encoded) → Future<Uint8List>`
 
-调用 `author_submitExtrinsic`，返回交易哈希 32 字节。
+- 调用原生 `smoldot_submit_extrinsic`
+- 返回交易哈希 32 字节
 
 ### 6.6 Storage Key 计算
 
@@ -202,9 +229,8 @@ citizenchain 使用自定义 `PowOnchainChargeAdapter`，标准 `payment_queryIn
 
 - 轻节点未同步完成：等待同步完成后再读链上状态；超时则抛出异常
 - `smoldot` 返回 JSON-RPC error：直接抛出异常，禁止吞成空结果
-- HTTP RPC 回退模式请求失败：抛出异常，由调用方 UI 展示错误提示
-- 账户不存在（`state_getStorage` 返回 `null`）：返回余额 `0.0`，不报错
-- 交易提交失败（`author_submitExtrinsic` 返回错误）：抛出异常，由 service 层包装为 `OnchainTradeException`
+- 账户不存在（`System.Account` / storage proof 返回空值）：返回余额 `0.0`，不报错
+- 交易提交失败（`smoldot_submit_extrinsic` 返回错误）：抛出异常，由 service 层包装为 `OnchainTradeException`
 
 ## 10. 调用方
 

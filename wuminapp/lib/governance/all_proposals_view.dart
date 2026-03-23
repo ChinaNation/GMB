@@ -20,7 +20,7 @@ import 'transfer_proposal_service.dart';
 /// 1. 本地内存缓存（ProposalCache）
 /// 2. 批量查询（fetchStorageBatch）
 /// 3. 分页加载（ScrollController 滚动触发）
-/// 4. WebSocket 订阅（新区块自动检测新提案）
+/// 4. 轻节点新区块订阅（新区块自动检测新提案）
 class AllProposalsView extends StatefulWidget {
   const AllProposalsView({
     super.key,
@@ -44,7 +44,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
   final VoteChecker _voteChecker = VoteChecker();
   final ScrollController _scrollController = ScrollController();
 
-  // WebSocket 订阅
+  // 轻节点新区块订阅
   ChainEventSubscription? _subscription;
   StreamSubscription<ChainEvent>? _eventSub;
 
@@ -69,7 +69,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     super.initState();
     _scrollController.addListener(_onScroll);
     _loadFirstPage();
-    _startWebSocket();
+    _startChainSubscription();
   }
 
   @override
@@ -80,11 +80,11 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     super.dispose();
   }
 
-  // ──── WebSocket ────
+  // ──── 轻节点订阅 ────
 
-  void _startWebSocket() {
+  void _startChainSubscription() {
     _subscription = ChainEventSubscription();
-    _subscription!.connect(_proposalService.rpcNodeUrl);
+    _subscription!.connect();
     _eventSub = _subscription!.events.listen((event) {
       if (event == ChainEvent.newBlock) {
         _checkForNewProposals();

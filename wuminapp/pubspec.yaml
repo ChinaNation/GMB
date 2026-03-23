@@ -24,7 +24,9 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   image_picker: ^1.1.2
   crypto: ^3.0.3
-  smoldot: ^0.1.1
+  # 中文注释：切换为仓库内本地 fork，后续 Dart FFI 能力扩展随主仓库一起演进。
+  smoldot:
+    path: third_party/smoldot-dart
   web_socket_channel: ^3.0.1
   isar: ^3.1.0+1
   isar_flutter_libs: ^3.1.0+1

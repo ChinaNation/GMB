@@ -409,7 +409,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(
-                      '可用余额：${_currentWallet!.balance.toStringAsFixed(2)} 元',
+                      '可用余额：${AmountFormat.format(_currentWallet!.balance, symbol: '')} 元',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.grey.shade600,

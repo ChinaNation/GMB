@@ -93,9 +93,9 @@ class SmoldotClientManager {
     // 超时后仍然发请求（让 smoldot 返回具体错误，由上层重试处理）
   }
 
-  /// 创建 JSON-RPC 订阅，返回事件流。
+  /// 创建轻节点订阅，返回事件流。
   ///
-  /// 用于替代 WebSocket 的 chain_subscribeNewHeads 等订阅。
+  /// 当前用于接收 `chain_subscribeNewHeads` 等链事件。
   Stream<dynamic> subscribe(String method, List<dynamic> params) {
     _ensureReady();
     return _chain!.subscribe(method, params);
@@ -142,6 +142,68 @@ class SmoldotClientManager {
   Future<int> getPeerCount() async {
     if (!isReady) return 0;
     return await _chain!.getPeerCount();
+  }
+
+  /// 获取轻节点状态快照，供后续业务层逐步替代裸 JSON-RPC 读状态。
+  Future<LightClientStatusSnapshot?> getStatusSnapshot() async {
+    if (!isReady) return null;
+    return await _chain!.getStatusSnapshot();
+  }
+
+  /// 原生读取运行时版本 JSON。
+  Future<Map<String, dynamic>?> getRuntimeVersionJson() async {
+    if (!isReady) return null;
+    return await _chain!.getRuntimeVersionJson();
+  }
+
+  /// 原生读取 metadata hex。
+  Future<String?> getMetadataHex() async {
+    if (!isReady) return null;
+    return await _chain!.getMetadataHex();
+  }
+
+  /// 原生读取账户下一个可用 nonce。
+  Future<int?> getAccountNextIndex(String accountIdHex) async {
+    if (!isReady) return null;
+    return await _chain!.getAccountNextIndex(accountIdHex);
+  }
+
+  /// 原生读取指定块高的 block hash。
+  Future<String?> getBlockHash(int blockNumber) async {
+    if (!isReady) return null;
+    return await _chain!.getBlockHash(blockNumber);
+  }
+
+  /// 原生读取指定区块中的 extrinsics。
+  Future<List<String>> getBlockExtrinsics(String blockHashHex) async {
+    if (!isReady) return const [];
+    return await _chain!.getBlockExtrinsics(blockHashHex);
+  }
+
+  /// 原生提交已编码 extrinsic。
+  Future<String?> submitExtrinsicHex(String extrinsicHex) async {
+    if (!isReady) return null;
+    return await _chain!.submitExtrinsicHex(extrinsicHex);
+  }
+
+  /// 原生读取 `System.Account` 快照，供钱包余额迁移使用。
+  Future<SystemAccountSnapshot?> getSystemAccountSnapshot(String accountIdHex) async {
+    if (!isReady) return null;
+    return await _chain!.getSystemAccount(accountIdHex);
+  }
+
+  /// 原生读取单个 storage value（hex）。
+  Future<String?> getStorageValueHex(String storageKeyHex) async {
+    if (!isReady) return null;
+    return await _chain!.getStorageValueHex(storageKeyHex);
+  }
+
+  /// 原生批量读取多个 storage value（hex）。
+  Future<Map<String, String?>> getStorageValuesHex(List<String> storageKeyHexList) async {
+    if (!isReady || storageKeyHexList.isEmpty) {
+      return const {};
+    }
+    return await _chain!.getStorageValuesHex(storageKeyHexList);
   }
 
   /// 释放资源。App 退出时调用。

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../util/amount_format.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'admin_list_page.dart';
 import 'institution_admin_service.dart';
@@ -440,7 +441,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     final status = _statusLabel(proposal.meta.status);
     final transferDetail = proposal.transferDetail;
     if (transferDetail != null) {
-      return '${transferDetail.amountYuan.toStringAsFixed(2)} 元 · $status';
+      return '${AmountFormat.format(transferDetail.amountYuan, symbol: '')} 元 · $status';
     }
     if (proposal.runtimeUpgradeDetail != null) {
       return 'Runtime 升级 · $status';
