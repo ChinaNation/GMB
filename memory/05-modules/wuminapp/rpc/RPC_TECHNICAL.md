@@ -6,8 +6,8 @@
 
 职责：
 
-- 维护 44 个引导节点的 RPC 地址列表
-- 节点自动选择与故障切换
+- 默认通过 `smoldot` 轻节点接入 citizenchain P2P 网络
+- 在开发调试场景下回退到 HTTP JSON-RPC
 - 提供底层 JSON-RPC 调用能力
 - 链上状态查询（余额、nonce、metadata 等）
 - 链上交易构造与提交（转账、未来的投票/提案）
@@ -27,30 +27,37 @@ lib/rpc/
 ## 3. 通信架构
 
 ```text
-手机 App  --HTTP JSON-RPC-->  引导节点 :9944
+默认：
+手机 App  --smoldot-->  bootNodes / P2P 网络
+
+调试回退：
+手机 App  --HTTP JSON-RPC-->  指定节点 :9944
 ```
 
-- 协议：Substrate 标准 JSON-RPC（HTTP 模式）
-- 端口：9944（与 P2P 端口 30333 不同）
-- 节点要求：引导节点启动时须添加 `--rpc-external --rpc-cors=all`
+- 默认协议：`smoldot` 轻客户端 + Substrate JSON-RPC
+- 回退协议：HTTP JSON-RPC
+- 回退端口：9944（与 P2P 端口 30333 不同）
+- 回退模式下，节点仍需开启 `--rpc-external --rpc-cors=all`
 
-## 4. 节点列表
+## 4. chainspec 与回退模式
 
-内置 44 个引导节点的 RPC 地址，域名来源于 `citizenchain/node/src/chain_spec.rs` 中的 P2P 引导节点定义。
+默认模式下，App 从 `assets/chainspec.json` 加载链规格，并使用其中的 `bootNodes` 加入网络。
 
-RPC 地址格式：`http://<域名>:9944`
+当前要求：
 
-完整节点列表见 `WUMINAPP_TECHNICAL.md` 第 6.2 节。
+- `chainspec.json` 必须与目标链的 genesis / properties / bootNodes 一致
+- 如果打进 App 的 chainspec 错了，轻节点即使“连上了”，也可能连到错误链或错误引导节点
+- `bootNodes` 的来源应以 `citizenchain/node/src/chain_spec.rs` 为准
 
 ### 4.1 地址覆盖
 
-支持通过环境变量覆盖默认节点：
+支持通过环境变量切换到 HTTP RPC 回退模式：
 
 ```bash
 flutter run --dart-define=WUMINAPP_RPC_URL=http://127.0.0.1:9944
 ```
 
-设置后 App 仅使用该单一地址，不走节点列表。用于本地开发调试。
+设置后 App 不再使用 `smoldot`，而是只访问该单一 RPC 地址。用于本地开发调试。
 
 手机访问某个 RPC 地址时，不要求一定连公网互联网，但要求手机对该地址具备网络可达性：
 
@@ -58,14 +65,18 @@ flutter run --dart-define=WUMINAPP_RPC_URL=http://127.0.0.1:9944
 - `http://<公网域名>:9944`：手机需要普通互联网连接
 - `http://127.0.0.1:9944`：只对手机自身有效，真机调试时不能拿来访问电脑上的节点
 
-## 5. 节点选择策略
+## 5. 连接与同步策略
 
-1. 本地节点（`127.0.0.1:9944`）放最前，其余 43 个节点随机打乱
-2. 依次尝试连接，使用第一个可达的节点
-3. 缓存当前可用节点，后续请求复用
-4. 当前节点请求失败时，标记为不可用，自动切换到下一个
-5. 最多尝试 3 个节点，全部不可达时抛出异常
-6. 单节点超时：8 秒
+1. App 启动时初始化 `SmoldotClientManager`
+2. 轻节点加入 `chainspec.json` 指定的 citizenchain 网络
+3. `ChainRpc` 在发起余额、nonce、metadata、storage、extrinsic 等链上请求前，先等待轻节点完成同步
+4. 同步完成后才继续真正的 JSON-RPC 请求，避免把“尚未同步”误判成“链上没有数据”
+5. 开发调试时如设置 `WUMINAPP_RPC_URL`，则直接走 HTTP RPC，不经过轻节点同步门槛
+
+补充说明：
+
+- 钱包余额不更新的首要风险点，不是 UI，而是“轻节点已初始化但尚未同步完成”时过早查询链上状态
+- `smoldot` 返回 JSON-RPC error 时必须抛出，不能把错误吞成 `null`，否则上层会把真实故障误判为余额为 0 或账户不存在
 
 ## 6. chain_rpc.dart — 底层 RPC 方法
 
@@ -189,8 +200,9 @@ citizenchain 使用自定义 `PowOnchainChargeAdapter`，标准 `payment_queryIn
 
 ## 9. 错误处理
 
-- 单节点请求失败：静默切换下一节点，不中断业务
-- 全部节点不可达：抛出异常，由调用方 UI 展示错误提示
+- 轻节点未同步完成：等待同步完成后再读链上状态；超时则抛出异常
+- `smoldot` 返回 JSON-RPC error：直接抛出异常，禁止吞成空结果
+- HTTP RPC 回退模式请求失败：抛出异常，由调用方 UI 展示错误提示
 - 账户不存在（`state_getStorage` 返回 `null`）：返回余额 `0.0`，不报错
 - 交易提交失败（`author_submitExtrinsic` 返回错误）：抛出异常，由 service 层包装为 `OnchainTradeException`
 

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../util/amount_format.dart';
 import '../rpc/chain_event_subscription.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'institution_admin_service.dart';
@@ -410,7 +411,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                     const SizedBox(height: 2),
                     Text(
                       detail != null
-                          ? '转账 ${detail.amountYuan.toStringAsFixed(2)} 元'
+                          ? '转账 ${AmountFormat.format(detail.amountYuan, symbol: '')} 元'
                           : upgradeDetail != null
                               ? 'Runtime 升级'
                               : meta.kind == 1

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../wallet/wallet_manager.dart';
 import 'widgets/bip39_input.dart';
@@ -35,8 +34,6 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
     setState(() => _importing = true);
     try {
       final profile = await _walletManager.importWallet(mnemonic);
-      // 导入成功后清空剪贴板，防止助记词残留
-      await Clipboard.setData(const ClipboardData(text: ''));
       _mnemonicController.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

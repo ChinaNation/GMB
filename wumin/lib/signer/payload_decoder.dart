@@ -126,8 +126,7 @@ class PayloadDecoder {
       summary: '转账 $amountYuan GMB 给 ${_truncateAddress(toAddress)}',
       fields: {
         'to': toAddress,
-        'amount_yuan': amountYuan,
-        'symbol': 'GMB',
+        'amount_yuan': '$amountYuan GMB',
       },
     );
   }
@@ -176,7 +175,7 @@ class PayloadDecoder {
       fields: {
         'org': orgName,
         'beneficiary': beneficiary,
-        'amount_yuan': amountYuan,
+        'amount_yuan': '$amountYuan GMB',
         'remark': remark,
       },
     );

@@ -243,17 +243,18 @@ class _TransferProposalDetailPageState
           specVersion: rv.specVersion,
           display: {
             'action': 'vote_transfer',
+            'action_label': '转账投票',
             'summary': '转账提案 #${widget.proposalId} 投票：$voteText',
-            'fields': {
-              'proposal_id': widget.proposalId.toString(),
-              'approve': approve.toString(),
+            'fields': [
+              {'key': 'proposal_id', 'label': '提案编号', 'value': widget.proposalId.toString()},
+              {'key': 'approve', 'label': '投票', 'value': approve.toString()},
               if (_proposalInfo != null) ...{
-                'to': _proposalInfo!.beneficiary,
-                'amount_yuan': '${_proposalInfo!.amountYuan.toStringAsFixed(2)} GMB',
+                {'key': 'beneficiary', 'label': '收款账户', 'value': _proposalInfo!.beneficiary},
+                {'key': 'amount_yuan', 'label': '金额', 'value': '${_proposalInfo!.amountYuan.toStringAsFixed(2)} GMB', 'format': 'currency'},
                 if (_proposalInfo!.remark.isNotEmpty)
-                  'remark': _proposalInfo!.remark,
+                  {'key': 'remark', 'label': '备注', 'value': _proposalInfo!.remark},
               },
-            },
+            ],
           },
         );
         final requestJson = qrSigner.encodeRequest(request);

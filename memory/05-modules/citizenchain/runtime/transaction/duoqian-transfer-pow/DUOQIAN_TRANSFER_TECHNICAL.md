@@ -16,13 +16,19 @@
 
 - 本模块仅处理治理机构（已在链上预置 `duoqian_address` 的 NRC/PRC/PRB 机构）的转账。
 - 非治理机构（通过 `duoqian-transaction-pow` 注册的多签地址）不在本模块范围。
+- 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `voting-engine-system` 的 `InternalVoteEngine`。
+
+补充说明：
+- 只要某类内置机构被本模块的 `institution_org()` / `institution_pallet_address()` 正式识别，
+- 且对应管理员与阈值已接入 runtime 的 `RuntimeInternalAdminProvider / RuntimeInternalThresholdProvider`，
+- 这类机构就可以直接复用本模块和内部投票引擎发起转账提案，不需要新增转账 pallet。
 
 ### 0.3 与 `duoqian-transaction-pow` 的关系
 
 | 模块 | 职责 | 地址类型 | 审批方式 |
 | --- | --- | --- | --- |
-| `duoqian-transaction-pow` | 多签名地址的注册、创建、关闭 | 注册的非治理机构 | 离线 M-of-N 签名一次性提交 |
+| `duoqian-transaction-pow` | 多签名地址的注册、创建、关闭 | 注册的非治理机构 | `sfid` 主签名登记 + `ORG_DUOQIAN` 内部投票 |
 | `duoqian-transfer-pow` | 治理机构多签名地址转账 | 预置的治理机构 | 链上内部投票引擎（逐票投票） |
 
 ### 0.4 与 `resolution-destro-gov` 的关系

@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Android 正式签名文件与本地签名配置不能入库
+/android/key.properties
+*.jks
+*.keystore

@@ -74,7 +74,12 @@ pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
     };
     Ok(NodeStatus {
         running: managed_running,
-        state: if managed_running { "running" } else { "stopped" }.to_string(),
+        state: if managed_running {
+            "running"
+        } else {
+            "stopped"
+        }
+        .to_string(),
         pid: managed_pid,
     })
 }

@@ -11,8 +11,12 @@ void main() {
         '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
     final display = {
       'action': 'transfer',
+      'action_label': '转账',
       'summary': '转账 100.00 GMB',
-      'fields': {'to': account, 'amount_yuan': '100.00'},
+      'fields': [
+        {'key': 'to', 'label': '收款账户', 'value': account},
+        {'key': 'amount_yuan', 'label': '金额', 'value': '100.00 GMB', 'format': 'currency'},
+      ],
     };
 
     final signer = QrSigner();

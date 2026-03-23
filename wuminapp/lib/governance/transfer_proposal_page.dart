@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
+import '../util/amount_format.dart';
 import 'institution_data.dart';
 import 'transfer_proposal_service.dart';
 import '../qr/pages/qr_scan_page.dart';
@@ -154,7 +155,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       const ed = 1.11;
       if (amount + fee + ed > _availableBalance!) {
         setState(() => _amountError =
-            '余额不足（需保留 ${ed.toStringAsFixed(2)} 元 ED + ${fee.toStringAsFixed(2)} 元手续费）');
+            '余额不足（需保留 ${AmountFormat.format(ed, symbol: '')} 元 ED + ${AmountFormat.format(fee, symbol: '')} 元手续费）');
         return false;
       }
     }
@@ -202,12 +203,14 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
           specVersion: rv.specVersion,
           display: {
             'action': 'propose_transfer',
-            'summary': '提案转账 $amountFormatted GMB 给 $beneficiary',
-            'fields': {
-              'beneficiary': beneficiary,
-              'amount_yuan': amountFormatted,
-              'remark': remarkText,
-            },
+            'action_label': '提案转账',
+            'summary': '${OrgType.label(widget.institution.orgType)} 提案转账 $amountFormatted GMB 给 $beneficiary',
+            'fields': [
+              {'key': 'org', 'label': '付款机构', 'value': OrgType.label(widget.institution.orgType)},
+              {'key': 'beneficiary', 'label': '收款账户', 'value': beneficiary},
+              {'key': 'amount_yuan', 'label': '金额', 'value': '$amountFormatted GMB', 'format': 'currency'},
+              {'key': 'remark', 'label': '备注', 'value': remarkText},
+            ],
           },
         );
         final requestJson = qrSigner.encodeRequest(request);
@@ -374,7 +377,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
           // ──── 预估手续费 ────
           _buildInfoRow(
             '预估手续费',
-            _estimatedFee > 0 ? '${_estimatedFee.toStringAsFixed(2)} 元' : '--',
+            _estimatedFee > 0 ? '${AmountFormat.format(_estimatedFee, symbol: '')} 元' : '--',
           ),
           const SizedBox(height: 8),
 
@@ -384,7 +387,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
             _loadingBalance
                 ? '查询中...'
                 : _availableBalance != null
-                    ? '${_availableBalance!.toStringAsFixed(2)} 元'
+                    ? '${AmountFormat.format(_availableBalance!, symbol: '')} 元'
                     : '查询失败',
           ),
           const SizedBox(height: 16),

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../util/amount_format.dart';
 import '../signer/offline_sign_service.dart';
 import '../signer/qr_signer.dart';
 import '../util/screenshot_guard.dart';
@@ -160,7 +161,13 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       _signing = false;
       _decodeFailedAcknowledged = false;
     });
-    await _controller.start();
+    // 等 MobileScanner widget 重新挂载后再启动 controller，
+    // 否则 camera preview 和 widget 绑定不上会白屏。
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (mounted) {
+        await _controller.start();
+      }
+    });
   }
 
   Future<void> _acknowledgeDecodeFailed() async {
@@ -353,32 +360,30 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     );
   }
 
-  /// action 标识 → 中文名称。
-  static const _actionLabels = {
-    'transfer': '转账',
-    'propose_transfer': '提案转账',
-    'vote_transfer': '转账投票',
-    'joint_vote': '联合投票',
-    'citizen_vote': '公民投票',
-  };
-
-  /// fields key → 中文标签。
-  static const _fieldLabels = {
-    'to': '收款账户',
-    'amount': '金额',
-    'amount_yuan': '金额',
-    'symbol': '币种',
-    'beneficiary': '收款账户',
-    'org': '机构',
-    'remark': '备注',
-    'proposal_id': '提案编号',
-    'approve': '投票',
-  };
-
   /// fields value 转换（如 approve: true → 赞成）。
   static String _fieldValue(String key, String value) {
     if (key == 'approve') return value == 'true' ? '赞成' : '反对';
     return value;
+  }
+
+  /// 从 display.fields（List 格式）中按 key 查找 value。
+  static String? _findFieldValue(List<dynamic> fields, String key) {
+    for (final field in fields) {
+      if (field is Map && field['key']?.toString() == key) {
+        return field['value']?.toString();
+      }
+    }
+    return null;
+  }
+
+  /// 从 display.fields（List 格式）中按 key 查找 label。
+  static String? _findFieldLabel(List<dynamic> fields, String key) {
+    for (final field in fields) {
+      if (field is Map && field['key']?.toString() == key) {
+        return field['label']?.toString();
+      }
+    }
+    return null;
   }
 
   Widget _buildTransactionDetails(
@@ -405,31 +410,41 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         );
     }
 
+    final display = request.display;
+    final actionLabel = display['action_label']?.toString() ??
+        display['action']?.toString() ??
+        '未知';
+
     final List<Widget> detailRows;
     if (decoded != null) {
-      final actionLabel = _actionLabels[decoded.action] ?? decoded.action;
+      // 解码成功：使用解码结果展示，label 从 display.fields 中获取
+      final displayFields = display['fields'];
       detailRows = [
         _detailRow('交易类型', actionLabel),
-        ...decoded.fields.entries.map((e) => _detailRow(
-              _fieldLabels[e.key] ?? e.key,
-              _fieldValue(e.key, e.value),
-            )),
+        ...decoded.fields.entries.map((e) {
+          final label = (displayFields is List)
+              ? _findFieldLabel(displayFields, e.key) ?? e.key
+              : e.key;
+          return _detailRow(label, _fieldValue(e.key, e.value));
+        }),
       ];
     } else {
-      final display = request.display;
-      final action = display['action']?.toString() ?? '未知';
-      final actionLabel = _actionLabels[action] ?? action;
+      // 解码失败：直接使用 display.fields 渲染
       detailRows = [
         _detailRow('交易类型', actionLabel),
       ];
       final fields = display['fields'];
-      if (fields is Map) {
+      if (fields is List) {
         detailRows.addAll(
-          fields.entries.map((e) {
-            final key = e.key.toString();
+          fields.whereType<Map>().map((field) {
+            final key = field['key']?.toString() ?? '';
+            final label = field['label']?.toString() ?? key;
+            final value = field['value']?.toString() ?? '';
+            final format = field['format']?.toString();
+            final displayValue = _fieldValue(key, value);
             return _detailRow(
-              _fieldLabels[key] ?? key,
-              _fieldValue(key, e.value.toString()),
+              label,
+              format == 'currency' ? AmountFormat.formatString(displayValue) : displayValue,
             );
           }),
         );
@@ -491,21 +506,22 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   Widget _detailRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            label,
+            '$label  ',
             style: const TextStyle(
               color: Colors.black54,
               fontWeight: FontWeight.w500,
               fontSize: 13,
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -632,22 +648,12 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
           style: const TextStyle(color: Colors.black54),
         ),
         const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _resetToScanner,
-                child: const Text('继续签名'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('完成'),
-              ),
-            ),
-          ],
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('完成'),
+          ),
         ),
       ],
     );

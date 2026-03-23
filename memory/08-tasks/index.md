@@ -15,8 +15,19 @@
 - `memory/08-tasks/open/20260321-190000-分离离线签名功能到独立-wumin-app-软件硬件钱包.md`
 - `memory/08-tasks/open/20260322-123405-补齐-china-机构常量模块接入并纳入-primitives-模块树.md`
 - `memory/08-tasks/open/20260322-124030-审查-wumin-冷钱包与-wuminapp-我的钱包功能的安全漏洞-实现缺口与改进建议-并按严重级别输出具体问题.md`
+- `memory/08-tasks/open/20260322-141500-分析-duoqian-transfer-pow-与-duoqian-transaction-pow-并记录-pending-残留风险.md`
+- `memory/08-tasks/open/20260322-161510-修复-wumin-安卓-release构建并梳理apk打包前置条件.md`
+- `memory/08-tasks/open/20260322-170838-检查-wuminapp-切换-smoldot-轻节点后能连接节点但钱包余额无法更新的问题并定位故障点.md`
+- `memory/08-tasks/open/20260322-175545-整理-wumin-正式发布状态并替换logo与应用名版本号.md`
+- `memory/08-tasks/open/20260322-180850-新增-wumin-github-actions-正式打包流程并说明离线usb安装.md`
+- `memory/08-tasks/open/20260322-200357-移除-wumin-与-wuminapp-导入钱包后误触发剪贴板提示.md`
+- `memory/08-tasks/open/20260322-204540-调整-wumin-冷钱包总分组上限为50个.md`
+- `memory/08-tasks/open/20260322-smoldot-步骤1-集成smoldot替换chainrpc底层provider.md`
+- `memory/08-tasks/open/20260322-smoldot-步骤2-重写区块订阅用smoldot原生订阅替换websocket.md`
+- `memory/08-tasks/open/20260322-smoldot-步骤3-适配服务层和交易提交移除rpc节点残留.md`
 - `memory/08-tasks/open/20260322-公民投票完整实现.md`
 - `memory/08-tasks/open/20260322-冷钱包安全审计修复-跨产品同步.md`
+- `memory/08-tasks/open/20260323-094248-修复-nodeui-挖矿页面收益统计口径-按区块当时的真实到账规则显示矿工实际收益-未绑定奖励钱包时手续费应视为销毁且不计入矿工收益-铸块奖励计入矿工自身账户-已绑定时手续费-80-与铸块奖励按链上实际收款钱包统计-并同步调整页面文案-缓存迁移与模块文档.md`
 
 ## done
 

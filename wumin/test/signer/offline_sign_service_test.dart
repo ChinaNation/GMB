@@ -83,10 +83,11 @@ void main() {
         specVersion: knownSpecVersion,
         display: const <String, dynamic>{
           'action': 'transfer',
+          'action_label': '转账',
           'summary': 'test transfer',
-          'fields': {
-            'symbol': 'GMB',
-          },
+          'fields': [
+            {'key': 'amount_yuan', 'label': '金额', 'value': '0.01 GMB', 'format': 'currency'},
+          ],
         },
       );
 

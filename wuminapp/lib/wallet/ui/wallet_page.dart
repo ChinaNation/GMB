@@ -13,6 +13,7 @@ import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_repository.dart';
 import 'package:wuminapp_mobile/user/user_service.dart' show UserProfileService;
 import 'package:wuminapp_mobile/ui/widgets/bip39_input.dart';
+import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/util/screenshot_guard.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
@@ -259,7 +260,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
             : null);
 
     // 根据金额长度自动选择字号
-    final balanceStr = wallet.balance.toStringAsFixed(2);
+    final balanceStr = AmountFormat.format(wallet.balance, symbol: '');
     final balanceFontSize = balanceStr.length > 10
         ? 16.0
         : balanceStr.length > 7
@@ -891,7 +892,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          widget.wallet.balance.toStringAsFixed(2),
+                          AmountFormat.format(widget.wallet.balance, symbol: ''),
                           style: const TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.w700,
@@ -1259,8 +1260,6 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
     });
     try {
       await WalletManager().importWallet(_mnemonicController.text);
-      // 导入成功后清空剪贴板，防止助记词残留
-      await Clipboard.setData(const ClipboardData(text: ''));
       _mnemonicController.clear();
       if (!mounted) {
         return;
@@ -1397,5 +1396,4 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
     );
   }
 }
-
 

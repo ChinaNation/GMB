@@ -168,8 +168,9 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
           specVersion: rv.specVersion,
           display: {
             'action': 'propose_upgrade',
+            'action_label': '升级提案',
             'summary': '提交运行时升级提案',
-            'fields': {},
+            'fields': [],
           },
         );
         final requestJson = qrSigner.encodeRequest(request);

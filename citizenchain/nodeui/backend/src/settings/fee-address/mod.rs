@@ -191,9 +191,7 @@ fn twox_128(input: &[u8]) -> [u8; 16] {
 }
 
 fn blake2b_128(input: &[u8]) -> [u8; 16] {
-    let hash = blake2b_simd::Params::new()
-        .hash_length(16)
-        .hash(input);
+    let hash = blake2b_simd::Params::new().hash_length(16).hash(input);
     let mut out = [0u8; 16];
     out.copy_from_slice(hash.as_bytes());
     out
@@ -272,8 +270,8 @@ pub(crate) async fn sync_saved_reward_wallet_inner(app: &AppHandle) -> Result<()
         let target_wallet = account_id_from_address(&normalized)?;
 
         // 从 keystore 文件名读取矿工公钥（不读取私钥）
-        let miner_hex = local_powr_miner_account_hex(&app_clone)?
-            .ok_or("未找到矿工公钥，请先启动节点")?;
+        let miner_hex =
+            local_powr_miner_account_hex(&app_clone)?.ok_or("未找到矿工公钥，请先启动节点")?;
         let miner_bytes = decode_hex_32_with_optional_0x(&miner_hex)?;
 
         if target_wallet == miner_bytes {
@@ -294,8 +292,8 @@ pub(crate) async fn sync_saved_reward_wallet_inner(app: &AppHandle) -> Result<()
             if hex_val.is_empty() {
                 None
             } else {
-                let bytes = hex::decode(hex_val)
-                    .map_err(|e| format!("解码链上绑定数据失败: {e}"))?;
+                let bytes =
+                    hex::decode(hex_val).map_err(|e| format!("解码链上绑定数据失败: {e}"))?;
                 Some(decode_storage_account_id(&bytes)?)
             }
         } else {
@@ -368,11 +366,9 @@ pub async fn set_reward_wallet(
             Ok(Err(err)) => ("failed", err),
             Err(_) => ("timeout", "链上绑定超时".to_string()),
         };
-        if let Err(e) = security::append_audit_log(
-            &app2,
-            "set_reward_wallet",
-            &format!("chain_bind_{status}"),
-        ) {
+        if let Err(e) =
+            security::append_audit_log(&app2, "set_reward_wallet", &format!("chain_bind_{status}"))
+        {
             eprintln!("[审计] set_reward_wallet chain_bind_{status} 日志写入失败: {e}");
         }
         let _ = app2.emit(

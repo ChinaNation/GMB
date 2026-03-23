@@ -29,7 +29,7 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'transfer');
-      expect(decoded.fields['amount_yuan'], '234.00');
+      expect(decoded.fields['amount_yuan'], '234.00 GMB');
       expect(decoded.fields['to'], dest.address);
     });
 
@@ -118,7 +118,7 @@ void main() {
       final decoded = PayloadDecoder.decode(hex);
 
       expect(decoded, isNotNull);
-      expect(decoded!.fields['amount_yuan'], '2.34');
+      expect(decoded!.fields['amount_yuan'], '2.34 GMB');
     });
   });
 }

@@ -1,0 +1,6 @@
+# Android 正式签名本地配置示例。
+# 使用时复制为同目录下的 key.properties，并填入你自己的真实密码与签名文件路径。
+storePassword=请替换为你的keystore密码
+keyPassword=请替换为你的key密码
+keyAlias=upload
+storeFile=/Users/rhett/keys/wumin-release.jks
