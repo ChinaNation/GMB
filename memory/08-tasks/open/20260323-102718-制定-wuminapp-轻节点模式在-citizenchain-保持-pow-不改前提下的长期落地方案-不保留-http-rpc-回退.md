@@ -94,16 +94,18 @@
 ## 当前结论
 
 - `wuminapp` 不适合继续把 `smoldot` 当作 App 内嵌 legacy JSON-RPC 服务器使用
-- 长期方案应转为“自有 GitHub fork + 主仓库固定快照 + Rust typed capability + Flutter 只走轻节点能力层”
+- 长期方案应转为“自有 GitHub fork + 主仓库 submodule 引用 + Rust typed capability + Flutter 只走轻节点能力层”
 - 根目录临时 `smoldot/` 必须后续迁入 `wuminapp` 模块内治理，不能继续以未跟踪嵌套仓库形态存在
 
 ## 当前进展
 
 - 已完成第 1 步的仓库治理落地：
   - 根目录临时 `smoldot/` 已收编到 `wuminapp/third_party/smoldot-pow/`
-  - 收编目录已剔除嵌套 `.git` 与 `target/` 编译残留
+  - 收编目录已剔除早期临时嵌套 `.git` 与 `target/` 编译残留
   - `wuminapp/rust/Cargo.toml` 已改为引用 `../third_party/smoldot-pow/light-base`
   - 已新增 `wuminapp/third_party/smoldot-pow/UPSTREAM.md` 记录基线提交与 PoW 改动文件
+  - `wuminapp/third_party/smoldot-pow` 当前已发布到 `https://github.com/ChinaNation/smoldot-pow`
+  - `GMB` 主仓库已开始把该目录收口为 Git submodule，只保留提交指针与 `.gitmodules`
 - 已继续推进 Dart 侧治理：
   - pub.dev `smoldot` 包已收编到 `wuminapp/third_party/smoldot-dart/`
   - `wuminapp/pubspec.yaml` 已改为 path 依赖本地 `smoldot` package
