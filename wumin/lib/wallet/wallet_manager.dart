@@ -8,6 +8,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:substrate_bip39/crypto_scheme.dart';
 import 'package:wumin/isar/wallet_isar.dart';
+import 'package:wumin/wallet/mnemonic_cipher.dart';
 import 'package:wumin/wallet/wallet_secure_keys.dart';
 
 class WalletProfile {
@@ -179,18 +180,22 @@ class WalletManager {
     final strength = wordCount == 24 ? 256 : 128;
     final mnemonic = bip39.generateMnemonic(strength: strength);
     final seed = await _mnemonicToMiniSecret(mnemonic);
-    final derived = _deriveSr25519FromSeed(seed);
+    try {
+      final derived = _deriveSr25519FromSeed(seed);
 
-    // walletIndex 分配和写入在同一个事务中完成，避免并发冲突。
-    final profile = await _appendHotWalletAtomic(
-      address: derived.address,
-      pubkeyHex: derived.pubkeyHex,
-      seedHex: _toHex(seed),
-      source: 'created',
-    );
+      // walletIndex 分配和写入在同一个事务中完成，避免并发冲突。
+      final profile = await _appendHotWalletAtomic(
+        address: derived.address,
+        pubkeyHex: derived.pubkeyHex,
+        seedHex: _toHex(seed),
+        source: 'created',
+      );
 
-    await _writeMnemonic(profile.walletIndex, mnemonic);
-    return WalletCreationResult(profile: profile, mnemonic: mnemonic);
+      await _writeMnemonic(profile.walletIndex, mnemonic);
+      return WalletCreationResult(profile: profile, mnemonic: mnemonic);
+    } finally {
+      _zeroList(seed);
+    }
   }
 
   Future<WalletProfile> importWallet(String mnemonic) async {
@@ -200,21 +205,25 @@ class WalletManager {
     }
 
     final seed = await _mnemonicToMiniSecret(trimmed);
-    final derived = _deriveSr25519FromSeed(seed);
+    try {
+      final derived = _deriveSr25519FromSeed(seed);
 
-    // 检测重复：同一公钥的钱包已存在则拒绝
-    await _checkDuplicatePubkey(derived.pubkeyHex);
+      // 检测重复：同一公钥的钱包已存在则拒绝
+      await _checkDuplicatePubkey(derived.pubkeyHex);
 
-    // walletIndex 分配和写入在同一个事务中完成，避免并发冲突。
-    final profile = await _appendHotWalletAtomic(
-      address: derived.address,
-      pubkeyHex: derived.pubkeyHex,
-      seedHex: _toHex(seed),
-      source: 'imported',
-    );
+      // walletIndex 分配和写入在同一个事务中完成，避免并发冲突。
+      final profile = await _appendHotWalletAtomic(
+        address: derived.address,
+        pubkeyHex: derived.pubkeyHex,
+        seedHex: _toHex(seed),
+        source: 'imported',
+      );
 
-    await _writeMnemonic(profile.walletIndex, trimmed);
-    return profile;
+      await _writeMnemonic(profile.walletIndex, trimmed);
+      return profile;
+    } finally {
+      _zeroList(seed);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -255,10 +264,16 @@ class WalletManager {
   // 更新
   // ---------------------------------------------------------------------------
 
+  /// 钱包名称最大字符数。
+  static const int maxWalletNameLength = 5;
+
   Future<void> renameWallet(int walletIndex, String walletName) async {
     final nextName = walletName.trim();
     if (nextName.isEmpty) {
       throw Exception('钱包名称不能为空');
+    }
+    if (nextName.runes.length > maxWalletNameLength) {
+      throw Exception('钱包名称最多$maxWalletNameLength个字');
     }
 
     final isar = await WalletIsar.instance.db();
@@ -362,12 +377,18 @@ class WalletManager {
   }
 
   _DerivedWallet _deriveSr25519FromSeed(List<int> seed) {
-    final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(seed));
-    pair.ss58Format = _ss58Format;
-    final pubkeyBytes = pair.bytes().toList(growable: false);
-    final pubkeyHex = _toHex(pubkeyBytes);
-    final address = pair.address;
-    return _DerivedWallet(address: address, pubkeyHex: pubkeyHex);
+    // 拷贝一份用于 Keyring，用完即清零
+    final seedBytes = Uint8List.fromList(seed);
+    try {
+      final pair = Keyring.sr25519.fromSeed(seedBytes);
+      pair.ss58Format = _ss58Format;
+      final pubkeyBytes = pair.bytes().toList(growable: false);
+      final pubkeyHex = _toHex(pubkeyBytes);
+      final address = pair.address;
+      return _DerivedWallet(address: address, pubkeyHex: pubkeyHex);
+    } finally {
+      seedBytes.fillRange(0, seedBytes.length, 0);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -399,11 +420,27 @@ class WalletManager {
       WalletSecureKeys.mnemonicV1(walletIndex);
 
   Future<void> _writeMnemonic(int walletIndex, String mnemonic) async {
-    await _secureStorage.write(key: _mnemonicKey(walletIndex), value: mnemonic);
+    // AES-256-GCM 加密后存储
+    final encrypted = await MnemonicCipher.encrypt(mnemonic);
+    await _secureStorage.write(key: _mnemonicKey(walletIndex), value: encrypted);
   }
 
   Future<String?> _readMnemonic(int walletIndex) async {
-    return _secureStorage.read(key: _mnemonicKey(walletIndex));
+    final stored = await _secureStorage.read(key: _mnemonicKey(walletIndex));
+    if (stored == null) return null;
+
+    // 兼容旧版明文格式：检测到明文则自动迁移为加密格式，
+    // 迁移后从密文重新解密返回，不直接返回明文引用。
+    if (!MnemonicCipher.isEncrypted(stored)) {
+      final encrypted = await MnemonicCipher.encrypt(stored);
+      await _secureStorage.write(
+        key: _mnemonicKey(walletIndex),
+        value: encrypted,
+      );
+      return MnemonicCipher.decrypt(encrypted);
+    }
+
+    return MnemonicCipher.decrypt(stored);
   }
 
   Future<void> _deleteMnemonic(int walletIndex) async {
@@ -541,6 +578,13 @@ class WalletManager {
       await isar.walletSettingsEntitys.put(created);
     });
     return created;
+  }
+
+  /// 将 seed / 密钥字节列表填零，防止内存残留。
+  static void _zeroList(List<int> bytes) {
+    for (var i = 0; i < bytes.length; i++) {
+      bytes[i] = 0;
+    }
   }
 
   String _toHex(List<int> bytes) {

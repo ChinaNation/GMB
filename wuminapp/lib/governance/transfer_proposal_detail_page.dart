@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
+import '../util/amount_format.dart';
 import 'institution_data.dart';
 import 'institution_admin_service.dart';
 import 'proposal_context.dart';
@@ -250,7 +251,7 @@ class _TransferProposalDetailPageState
               {'key': 'approve', 'label': '投票', 'value': approve.toString()},
               if (_proposalInfo != null) ...{
                 {'key': 'beneficiary', 'label': '收款账户', 'value': _proposalInfo!.beneficiary},
-                {'key': 'amount_yuan', 'label': '金额', 'value': '${_proposalInfo!.amountYuan.toStringAsFixed(2)} GMB', 'format': 'currency'},
+                {'key': 'amount_yuan', 'label': '金额', 'value': AmountFormat.format(_proposalInfo!.amountYuan), 'format': 'currency'},
                 if (_proposalInfo!.remark.isNotEmpty)
                   {'key': 'remark', 'label': '备注', 'value': _proposalInfo!.remark},
               },
@@ -490,7 +491,7 @@ class _TransferProposalDetailPageState
               const Divider(height: 20),
               _buildInfoRow(
                 '转账金额',
-                '${info.amountYuan.toStringAsFixed(2)} 元',
+                '${AmountFormat.format(info.amountYuan, symbol: '')} 元',
               ),
               const Divider(height: 20),
               _buildInfoRow(

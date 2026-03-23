@@ -50,7 +50,7 @@ class ProposalCache {
     _runtimeUpgradeDetailCache.clear();
   }
 
-  /// 使单个提案缓存失效（WebSocket 推送新区块时用）。
+  /// 使单个提案缓存失效（轻节点推送新区块时用）。
   static void invalidate(int proposalId) {
     _metaCache.remove(proposalId);
     _transferDetailCache.remove(proposalId);

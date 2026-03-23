@@ -26,6 +26,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   bool _screenshotGuardActive = false;
   List<WalletGroupEntity> _groups = [];
   late Set<String> _selectedGroups;
+  bool _groupsExpanded = false;
 
   @override
   void initState() {
@@ -191,32 +192,56 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     }
     // 排除"全部"，它是虚拟分组
     final selectableGroups = _groups.where((g) => g.name != '全部').toList();
+    if (selectableGroups.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '分组',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey.shade600,
-              fontWeight: FontWeight.w500,
+          // 「分组」+ 箭头，点击展开/收起
+          GestureDetector(
+            onTap: () => setState(() => _groupsExpanded = !_groupsExpanded),
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              children: [
+                Text(
+                  '分组',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                Icon(
+                  _groupsExpanded
+                      ? Icons.keyboard_arrow_down
+                      : Icons.keyboard_arrow_right,
+                  size: 20,
+                  color: Colors.grey.shade500,
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 8,
-            runSpacing: 0,
-            children: selectableGroups.map((g) {
-              final checked = _selectedGroups.contains(g.name);
-              return FilterChip(
-                label: Text(g.name),
-                selected: checked,
-                onSelected: (val) => _toggleGroup(g.name, val),
-              );
-            }).toList(),
-          ),
+          // 展开后显示全部分组 chip
+          if (_groupsExpanded) ...[
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              runSpacing: 0,
+              children: selectableGroups.map((g) {
+                final checked = _selectedGroups.contains(g.name);
+                return FilterChip(
+                  label: Text(g.name),
+                  selected: checked,
+                  onSelected: (val) => _toggleGroup(g.name, val),
+                );
+              }).toList(),
+            ),
+          ],
         ],
       ),
     );

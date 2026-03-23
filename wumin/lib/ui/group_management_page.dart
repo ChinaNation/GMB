@@ -37,6 +37,9 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
     });
   }
 
+  /// 分组名称最大字符数。
+  static const int maxGroupNameLength = 5;
+
   Future<void> _addGroup() async {
     if (_groups.length >= maxGroups) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -47,6 +50,13 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
 
     final name = await _showNameDialog(title: '新建分组');
     if (name == null || name.isEmpty) return;
+    if (name.runes.length > maxGroupNameLength) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('分组名称最多5个字')),
+      );
+      return;
+    }
 
     // 检查重名
     if (_groups.any((g) => g.name == name)) {
@@ -75,6 +85,13 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
       initialValue: group.name,
     );
     if (name == null || name.isEmpty || name == group.name) return;
+    if (name.runes.length > maxGroupNameLength) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('分组名称最多5个字')),
+      );
+      return;
+    }
 
     if (_groups.any((g) => g.name == name)) {
       if (!mounted) return;

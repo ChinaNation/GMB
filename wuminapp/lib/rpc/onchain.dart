@@ -153,7 +153,7 @@ class OnchainRpc {
   /// 在最近区块中搜索指定交易哈希。
   Future<bool> _findTxInRecentBlocks(String txHash) async {
     final latestBlock = await _rpc.fetchLatestBlock();
-    final searchDepth = 50; // 最多回溯 50 个区块
+    const searchDepth = 50; // 最多回溯 50 个区块
     final startBlock = latestBlock.blockNumber;
     final endBlock = (startBlock - searchDepth).clamp(1, startBlock);
 

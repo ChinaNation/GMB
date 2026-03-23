@@ -1064,10 +1064,9 @@ packages:
   smoldot:
     dependency: "direct main"
     description:
-      name: smoldot
-      sha256: "1775ad6e13a6b29a37f13b8b1a266d68f702458e2866e7cf97eab3e3353d0679"
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/smoldot-dart"
+      relative: true
+    source: path
     version: "0.1.1"
   source_gen:
     dependency: transitive

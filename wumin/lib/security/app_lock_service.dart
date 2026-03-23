@@ -7,6 +7,7 @@ import 'package:isar/isar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../isar/wallet_isar.dart';
+import '../wallet/mnemonic_cipher.dart';
 
 /// 应用锁（6 位 PIN）服务。
 ///
@@ -114,6 +115,9 @@ class AppLockService {
   // ---------------------------------------------------------------------------
 
   static Future<void> wipeAllData() async {
+    // 先清除内存中的加密密钥缓存
+    MnemonicCipher.clearCache();
+
     try {
       final isar = await WalletIsar.instance.db();
       await isar.close(deleteFromDisk: true);
@@ -135,14 +139,14 @@ class AppLockService {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
-  /// PBKDF2-HMAC-SHA256，10 万次迭代。
+  /// PBKDF2-HMAC-SHA256，100 万次迭代。
   ///
-  /// 单次 SHA-256 在 GPU 上每秒可尝试数亿次，
-  /// PBKDF2 将每次尝试成本提高到毫秒级，有效防止暴力破解 6 位 PIN。
+  /// 6 位 PIN 仅有 100 万种组合，高迭代次数确保 GPU 暴力穷举
+  /// 需要数天至数周。在中端手机上单次验证约 1–1.5 秒，可接受。
   static String _hash(String pin, String salt) {
     final saltBytes = utf8.encode(salt);
     final pinBytes = utf8.encode(pin);
-    return _pbkdf2HmacSha256(pinBytes, saltBytes, 100000, 32);
+    return _pbkdf2HmacSha256(pinBytes, saltBytes, 1000000, 32);
   }
 
   static String _pbkdf2HmacSha256(

@@ -1,5 +1,7 @@
 # ADR-002: wuminapp 从 HTTP RPC 迁移到 smoldot 轻节点
 
+> 说明：本文记录的是最初迁移决策。针对 `citizenchain = PoW + GRANDPA` 且 `wuminapp` 不再保留 HTTP 回退的长期路线，现以 ADR-004 为准。
+
 ## 背景
 
 wuminapp 原先通过 HTTP RPC（HttpProvider）连接 44 个远程全节点访问 citizenchain。随着用户增长，这种架构面临以下问题：

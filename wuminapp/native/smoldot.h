@@ -113,6 +113,117 @@ void smoldot_free_string(char *ptr);
  */
 char *smoldot_version(void);
 
+/**
+ * 获取轻节点状态快照，返回 JSON 字符串。
+ *
+ * # Safety
+ * - `chain_handle` 必须是有效链句柄
+ * - 返回字符串需由 `smoldot_free_string` 释放
+ */
+char *smoldot_get_status_snapshot(SmoldotChainHandle chain_handle, char **error_out);
+
+/**
+ * 获取运行时版本，返回 JSON 字符串。
+ *
+ * # Safety
+ * - `chain_handle` 必须是有效链句柄
+ * - 返回字符串需由 `smoldot_free_string` 释放
+ */
+char *smoldot_get_runtime_version(SmoldotChainHandle chain_handle, char **error_out);
+
+/**
+ * 获取运行时 metadata hex。
+ *
+ * # Safety
+ * - `chain_handle` 必须是有效链句柄
+ * - 返回字符串需由 `smoldot_free_string` 释放
+ */
+char *smoldot_get_metadata(SmoldotChainHandle chain_handle, char **error_out);
+
+/**
+ * 获取账户下一个可用 nonce，返回十进制字符串。
+ *
+ * # Safety
+ * - `chain_handle` 必须是有效链句柄
+ * - `account_id_hex` 必须是合法的 32 字节 hex 字符串
+ * - 返回字符串需由 `smoldot_free_string` 释放
+ */
+char *smoldot_get_account_next_index(SmoldotChainHandle chain_handle,
+                                     const char *account_id_hex,
+                                     char **error_out);
+
+/**
+ * 获取指定块高的 block hash。
+ *
+ * # Safety
+ * - `chain_handle` 必须是有效链句柄
+ * - `block_number` 必须是合法十进制字符串
+ * - 返回字符串需由 `smoldot_free_string` 释放
+ */
+char *smoldot_get_block_hash(SmoldotChainHandle chain_handle,
+                             const char *block_number,
+                             char **error_out);
+
+/**
+ * 获取指定区块中的 extrinsics 列表，返回 JSON 数组字符串。
+ *
+ * # Safety
+ * - `chain_handle` 必须是有效链句柄
+ * - `block_hash_hex` 必须是合法 UTF-8
+ * - 返回字符串需由 `smoldot_free_string` 释放
+ */
+char *smoldot_get_block_extrinsics(SmoldotChainHandle chain_handle,
+                                   const char *block_hash_hex,
+                                   char **error_out);
+
+/**
+ * 提交已编码 extrinsic，返回交易哈希 hex。
+ *
+ * # Safety
+ * - `chain_handle` 必须是有效链句柄
+ * - `extrinsic_hex` 必须是合法 UTF-8
+ * - 返回字符串需由 `smoldot_free_string` 释放
+ */
+char *smoldot_submit_extrinsic(SmoldotChainHandle chain_handle,
+                               const char *extrinsic_hex,
+                               char **error_out);
+
+/**
+ * 读取 `System.Account`，返回 JSON 字符串。
+ *
+ * # Safety
+ * - `chain_handle` 必须是有效链句柄
+ * - `account_id_hex` 必须是合法的 32 字节 hex 字符串
+ * - 返回字符串需由 `smoldot_free_string` 释放
+ */
+char *smoldot_get_system_account(SmoldotChainHandle chain_handle,
+                                 const char *account_id_hex,
+                                 char **error_out);
+
+/**
+ * 读取任意 storage value，返回 JSON 字符串。
+ *
+ * # Safety
+ * - `chain_handle` 必须是有效链句柄
+ * - `storage_key_hex` 必须是合法 hex 字符串
+ * - 返回字符串需由 `smoldot_free_string` 释放
+ */
+char *smoldot_get_storage_value(SmoldotChainHandle chain_handle,
+                                const char *storage_key_hex,
+                                char **error_out);
+
+/**
+ * 批量读取多个 storage value，返回 JSON 对象字符串。
+ *
+ * # Safety
+ * - `chain_handle` 必须是有效链句柄
+ * - `storage_keys_json` 必须是 JSON 数组字符串
+ * - 返回字符串需由 `smoldot_free_string` 释放
+ */
+char *smoldot_get_storage_values(SmoldotChainHandle chain_handle,
+                                 const char *storage_keys_json,
+                                 char **error_out);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
