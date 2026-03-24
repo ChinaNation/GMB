@@ -189,6 +189,59 @@ class ChainRpc {
     return snapshot.freeYuan ?? 0.0;
   }
 
+  /// System.Account storage key 前缀（twox128("System") + twox128("Account")）。
+  static final Uint8List _systemAccountPrefix = _hexDecode(
+      '26aa394eea5630e07c48ae0c9558cef7b99d880ec681799c0cf30e8886371da9');
+
+  /// 批量查询多个账户的链上余额，返回 pubkeyHex → yuan 的映射。
+  ///
+  /// 一次 storage proof 请求查询所有账户，比逐个调用 [fetchBalance] 更高效。
+  /// 账户不存在时对应值为 0.0。
+  Future<Map<String, double>> fetchBalances(List<String> pubkeyHexList) async {
+    if (pubkeyHexList.isEmpty) return {};
+
+    // 1. 为每个账户构建 System.Account storage key
+    final keyToPubkey = <String, String>{};
+    final storageKeys = <String>[];
+    for (final pubkeyHex in pubkeyHexList) {
+      final accountId = _hexDecode(
+          pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex);
+      final blake2 = Hasher.blake2b128.hash(accountId);
+      final fullKey = Uint8List(_systemAccountPrefix.length + blake2.length + accountId.length);
+      fullKey.setAll(0, _systemAccountPrefix);
+      fullKey.setAll(_systemAccountPrefix.length, blake2);
+      fullKey.setAll(_systemAccountPrefix.length + blake2.length, accountId);
+      final keyHex = '0x${_hexEncode(fullKey)}';
+      storageKeys.add(keyHex);
+      keyToPubkey[keyHex] = pubkeyHex;
+    }
+
+    // 2. 一次批量查询
+    final batchResult = await fetchStorageBatch(storageKeys);
+
+    // 3. 解码每个账户的余额
+    final balances = <String, double>{};
+    for (final entry in keyToPubkey.entries) {
+      final data = batchResult[entry.key];
+      balances[entry.value] = _decodeBalanceFromAccountData(data);
+    }
+    return balances;
+  }
+
+  /// 从 System.Account 的 SCALE 编码数据中解码 free 余额（yuan）。
+  ///
+  /// AccountInfo 布局：nonce(u32) + consumers(u32) + providers(u32) + sufficients(u32) + free(u128) + ...
+  /// free 在 offset 16，长度 16 字节，little-endian u128。
+  static double _decodeBalanceFromAccountData(Uint8List? data) {
+    if (data == null || data.length < 32) return 0.0;
+    // 读 u128 little-endian at offset 16
+    var fen = BigInt.zero;
+    for (var i = 0; i < 16; i++) {
+      fen += BigInt.from(data[16 + i]) << (i * 8);
+    }
+    return fen.toDouble() / 100.0;
+  }
+
   /// 读取链上当前 SFID 主验签公钥（32 字节 AccountId）。
   ///
   /// 存储项：`SfidCodeAuth::SfidMainAccount`，类型为 `Option<AccountId32>`。

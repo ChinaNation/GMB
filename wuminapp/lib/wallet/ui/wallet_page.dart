@@ -70,16 +70,24 @@ class _MyWalletPageState extends State<MyWalletPage> {
       final wallets = await _walletService.getWallets();
       bool updated = false;
       bool hasError = false;
-      for (final wallet in wallets) {
+
+      if (wallets.isEmpty) {
+        // 无钱包，跳过
+      } else {
         try {
-          final balance = await _chainRpc.fetchBalance(wallet.pubkeyHex);
-          if (balance != wallet.balance) {
-            await _walletService.setWalletBalance(wallet.walletIndex, balance);
-            updated = true;
+          // 批量查询所有钱包余额（一次网络请求）
+          final pubkeys = wallets.map((w) => w.pubkeyHex).toList();
+          final balances = await _chainRpc.fetchBalances(pubkeys);
+          for (final wallet in wallets) {
+            final balance = balances[wallet.pubkeyHex] ?? 0.0;
+            if (balance != wallet.balance) {
+              await _walletService.setWalletBalance(
+                  wallet.walletIndex, balance);
+              updated = true;
+            }
           }
         } catch (e) {
-          debugPrint(
-              'wallet balance refresh failed: ${wallet.address}, err=$e');
+          debugPrint('wallet batch balance refresh failed: $e');
           hasError = true;
         }
       }
