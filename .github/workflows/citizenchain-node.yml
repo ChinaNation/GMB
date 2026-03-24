@@ -70,3 +70,14 @@ jobs:
       - name: 运行 node 测试
         working-directory: citizenchain
         run: cargo test --release -p node
+
+      - name: 编译 node 二进制（dev-chain）
+        working-directory: citizenchain
+        run: cargo build --release -p node --features dev-chain
+
+      - name: 上传 node 二进制
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenchain-node-linux-amd64
+          path: citizenchain/target/release/node
+          retention-days: 30
