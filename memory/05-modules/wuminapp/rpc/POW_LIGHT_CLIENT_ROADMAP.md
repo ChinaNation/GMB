@@ -36,6 +36,40 @@
 - 真机验证（peer 重连、finalized sync 可靠性）
 - 删除 Rust/Dart 中已废弃的旧同步 FFI 函数
 
+**2026-03-23 新增优化方向：**
+
+### 优化 A：同步状态缓存（冷启动加速）
+
+现状：每次 app 启动从零同步区块头，耗时 1-2 分钟。
+
+方案：smoldot 原生支持通过 `databaseContent` 参数恢复同步进度。
+
+实现路径：
+- 只改 `smoldot_client.dart` 的 `initialize()` 和 `_waitForSync()`
+- 启动时：从 SharedPreferences 读取 `smoldot_db_cache` → 传入 `addChain(databaseContent: cached)`
+- 同步完成后：通过 JSON-RPC `chainHead_unstable_finalizedDatabase` 导出 → 写回 SharedPreferences
+- 不需要新增 FFI 函数，`addChain` 已支持 `databaseContent` 参数，`request()` 已支持 JSON-RPC 调用
+- 缓存大小典型 1-50 KB，SharedPreferences 完全承受
+
+效果：冷启动从分钟级降到秒级。
+
+### 优化 B：批量余额查询（减少网络往返）
+
+现状：`wallet_page.dart` 逐个钱包调用 `fetchBalance()`，N 个钱包 = N 次 storage proof 请求。
+
+方案：在 Dart 层构建所有钱包的 System.Account storage key，用已有的 `fetchStorageBatch()` 一次查完。
+
+实现路径：
+- `chain_rpc.dart` 新增 `fetchBalances(List<String> pubkeyHexList)`：
+  1. 构建 storage key：常量 prefix `26aa394eea5630e07c48ae0c9558cef7b99d880ec681799c0cf30e8886371da9` + `blake2b_128(accountId) + accountId`
+  2. 调用已有的 `fetchStorageBatch(allKeys)` — 一次网络请求
+  3. 从返回的 SCALE 字节 offset 16 读 u128 little-endian 解码余额，除以 100 得 yuan
+  - blake2b_128 用 polkadart 已有的 `Hasher.blake2b128`
+- `wallet_page.dart` 的 `_refreshBalancesFromChain()` 改为收集所有 pubkeyHex 后一次调用 `fetchBalances()`
+- 不需要改 Rust
+
+效果：N 次网络往返变 1 次。
+
 ## 3. 目标架构
 
 ```text
