@@ -1,0 +1,20 @@
+[Unit]
+Description=CitizenChain Node
+After=network.target
+
+[Service]
+Type=simple
+User=citizenchain
+ExecStart=/opt/citizenchain/node \
+  --chain dev \
+  --base-path /opt/citizenchain/data \
+  --port 30333 \
+  --rpc-port 9944 \
+  --rpc-methods Unsafe \
+  --rpc-cors all \
+  --no-prometheus
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
