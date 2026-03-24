@@ -1,7 +1,14 @@
 import subprocess
 import json
 
-def generate_ultra_safe_batch(count, output_file="vault_without_salt.json"):
+def format_item_as_text(item):
+    return "\n".join([
+        f"第 {item['order']} 组",
+        f"助记词: {item['mnemonic']}",
+        f"公钥: {item['public_key']}",
+    ])
+
+def generate_ultra_safe_batch(count, output_file="vault_without_salt.txt"):
     all_keys = []
     
     print(f"\n🚀 开始执行高安全随机生成流程 (无盐值)...")
@@ -14,7 +21,6 @@ def generate_ultra_safe_batch(count, output_file="vault_without_salt.json"):
             "subkey", "generate", 
             "--scheme", "sr25519", 
             "--words", "24",
-            "--network", "2027",
             "--output-type", "json"
         ]
         
@@ -35,15 +41,22 @@ def generate_ultra_safe_batch(count, output_file="vault_without_salt.json"):
             
             print(f"[+] 第 {i} 组生成成功")
             
+        except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or "").strip()
+            print(f"[-] 第 {i} 组生成失败: {stderr or e}")
         except Exception as e:
             print(f"[-] 第 {i} 组生成失败: {e}")
 
-    # 4. 写入 JSON 文件
+    # 4. 写入 TXT 文件，方便离线查看和传递
     with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(all_keys, f, indent=4, ensure_ascii=False)
+        if all_keys:
+            content = "\n\n".join(format_item_as_text(item) for item in all_keys)
+            f.write(content + "\n")
+        else:
+            f.write("未生成任何数据。\n")
     
     print(f"\n✨ 完成！结果已存入：{output_file}")
-    print("⚠️ 提示：此 JSON 文件不包含任何盐值，每组密钥都是随机生成的助记词。")
+    print("⚠️ 提示：此 TXT 文件不包含任何盐值，每组密钥都是随机生成的助记词。")
 
 if __name__ == "__main__":
     try:
