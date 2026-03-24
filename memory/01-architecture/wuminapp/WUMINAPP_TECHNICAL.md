@@ -15,7 +15,7 @@
 - App：Flutter + Dart
 - 手机机密存储：`flutter_secure_storage`（Keychain/Keystore）
 - 手机业务存储：Isar
-- 链上通信：直连引导节点 Substrate JSON-RPC（`lib/rpc/`）
+- 链上通信：smoldot PoW 轻节点 + Rust 原生 typed capability（异步 FFI，不阻塞主线程）（`lib/rpc/` + `third_party/smoldot-dart/` + `rust/`）
 - 外部接口：HTTP API（由 SFID/网关系统提供，仅用于 SFID 绑定、管理员目录等非链上查询场景）
 
 ## 3. 当前目录结构

@@ -19,15 +19,22 @@
 
 ## 2. 当前已确认的问题
 
-当前实现能建立 `smoldot` 连接，但余额与批量 storage 查询不能正常工作，症状已经指向“轻节点内核与 Flutter 接口设计不匹配”，而不是钱包页面本身。
+~~当前实现能建立 `smoldot` 连接，但余额与批量 storage 查询不能正常工作，症状已经指向”轻节点内核与 Flutter 接口设计不匹配”，而不是钱包页面本身。~~
 
-当前主要缺口：
+**2026-03-23 已解决：** FFI 桥接层已从同步 `block_on` 迁移到异步 `DartCallback` 回调模式（`spawn_native_capability_async`），不再阻塞 Dart 主线程。`Future.wait` 并行查询已生效，余额刷新失败时 UI 会提示用户。
 
-- Rust 依赖临时指向根目录 `smoldot/`，不利于版本治理与协作提交
-- Flutter 主链路仍以 legacy JSON-RPC 为核心接口
-- `wallet` 依赖 `state_getStorage`
-- `governance` 依赖 `state_queryStorageAt`
-- 现有设计把“轻节点”当作“App 内嵌 RPC 服务器”，而不是“PoW 轻节点能力内核”
+~~当前主要缺口：~~（以下已全部解决）
+
+- ~~Rust 依赖临时指向根目录 `smoldot/`，不利于版本治理与协作提交~~ → 已收编为 `third_party/smoldot-pow` submodule
+- ~~Flutter 主链路仍以 legacy JSON-RPC 为核心接口~~ → 已切到 Rust 原生 typed capability
+- ~~`wallet` 依赖 `state_getStorage`~~ → 已走 `smoldot_get_system_account_async`
+- ~~`governance` 依赖 `state_queryStorageAt`~~ → 已走 `smoldot_get_storage_value_async` / `smoldot_get_storage_values_async`
+- ~~现有设计把”轻节点”当作”App 内嵌 RPC 服务器”，而不是”PoW 轻节点能力内核”~~ → 已重构为 typed capability 架构
+
+当前剩余工作：
+
+- 真机验证（peer 重连、finalized sync 可靠性）
+- 删除 Rust/Dart 中已废弃的旧同步 FFI 函数
 
 ## 3. 目标架构
 

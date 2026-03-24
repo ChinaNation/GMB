@@ -4,10 +4,25 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:smoldot/smoldot.dart';
 
+/// 链健康状态。
+enum ChainHealthStatus {
+  /// 轻节点未初始化。
+  uninitialized,
+  /// 正在同步区块头。
+  syncing,
+  /// 链可用，读写正常。
+  operational,
+  /// 链暂不可用（storage proof 下载失败等瞬断场景）。
+  degraded,
+}
+
 /// citizenchain 轻节点客户端管理器（全局单例）。
 ///
 /// 基于 smoldot 轻客户端，App 启动时初始化，加载 chainspec 后
 /// 加入 citizenchain P2P 网络。提供 JSON-RPC 请求和订阅接口。
+///
+/// 所有链上读操作内置瞬断重试（最多 2 次，间隔 1 秒），
+/// 并维护 [healthStatus] 供 UI 层展示链状态。
 class SmoldotClientManager {
   SmoldotClientManager._();
 
@@ -20,8 +35,88 @@ class SmoldotClientManager {
   bool _synced = false;
   Future<void>? _syncFuture;
 
+  /// 当前链健康状态。
+  ChainHealthStatus _healthStatus = ChainHealthStatus.uninitialized;
+  ChainHealthStatus get healthStatus => _healthStatus;
+
+  /// 最近一次链操作错误信息（仅 degraded 时有值）。
+  String? _lastError;
+  String? get lastError => _lastError;
+
+  static const _readMaxRetries = 2;
+  static const _readRetryDelay = Duration(seconds: 1);
+
+  /// 通用读操作包装：瞬断重试 + 健康状态更新。
+  ///
+  /// 所有链上读操作（余额、nonce、metadata、storage 等）统一走此方法，
+  /// 避免每个调用点各自重复重试逻辑。
+  Future<T> _withRetry<T>(String debugLabel, Future<T> Function() action) async {
+    for (var attempt = 1; attempt <= _readMaxRetries; attempt++) {
+      try {
+        final result = await action();
+        // 成功 → 恢复健康状态
+        if (_healthStatus == ChainHealthStatus.degraded) {
+          _healthStatus = ChainHealthStatus.operational;
+          _lastError = null;
+          debugPrint('[Smoldot] 链操作恢复正常');
+        }
+        return result;
+      } catch (e) {
+        final msg = e.toString().toLowerCase();
+        final isTransient = msg.contains('timeout') ||
+            msg.contains('proof') ||
+            msg.contains('channel closed') ||
+            msg.contains('no node') ||
+            msg.contains('peers') ||
+            msg.contains('inaccessible');
+        if (!isTransient || attempt == _readMaxRetries) {
+          _healthStatus = ChainHealthStatus.degraded;
+          _lastError = '$debugLabel 失败: $e';
+          debugPrint('[Smoldot] $_lastError (attempt $attempt/$_readMaxRetries)');
+          rethrow;
+        }
+        debugPrint(
+          '[Smoldot] $debugLabel 瞬断，${_readRetryDelay.inSeconds}s 后重试 '
+          '($attempt/$_readMaxRetries): $e',
+        );
+        await Future<void>.delayed(_readRetryDelay);
+      }
+    }
+    // 不应到达
+    throw StateError('$debugLabel 重试次数已用尽');
+  }
+
   /// 轻节点是否已初始化并加入链。
   bool get isReady => _initialized && _chain != null;
+
+  /// 打印当前轻节点诊断信息到 debugPrint，用于排查连接/同步/读取问题。
+  Future<void> printDiagnostics() async {
+    debugPrint('╔══════ Smoldot 诊断 ══════');
+    debugPrint('║ initialized: $_initialized');
+    debugPrint('║ chain: ${_chain != null ? "已加入" : "null"}');
+    debugPrint('║ synced: $_synced');
+    debugPrint('║ healthStatus: $_healthStatus');
+    debugPrint('║ lastError: $_lastError');
+    if (_chain != null) {
+      try {
+        final snapshot = await _chain!.getStatusSnapshot();
+        debugPrint('║ peerCount: ${snapshot.peerCount}');
+        debugPrint('║ isSyncing: ${snapshot.isSyncing}');
+        debugPrint('║ bestBlock: #${snapshot.bestBlockNumber} ${snapshot.bestBlockHash}');
+        debugPrint('║ finalizedBlock: #${snapshot.finalizedBlockNumber} ${snapshot.finalizedBlockHash}');
+      } catch (e) {
+        debugPrint('║ getStatusSnapshot 失败: $e');
+      }
+      try {
+        final nonce = await _chain!.getAccountNextIndex(
+            '0x0000000000000000000000000000000000000000000000000000000000000000');
+        debugPrint('║ accountNextIndex(zero): $nonce');
+      } catch (e) {
+        debugPrint('║ accountNextIndex 失败: $e');
+      }
+    }
+    debugPrint('╚══════════════════════════');
+  }
 
   /// 初始化 smoldot 轻客户端并加入 citizenchain。
   ///
@@ -50,6 +145,7 @@ class SmoldotClientManager {
     _initialized = true;
     _synced = false;
     _syncFuture = null;
+    _healthStatus = ChainHealthStatus.syncing;
     debugPrint('[Smoldot] 轻节点已启动，正在同步区块头...');
   }
 
@@ -135,6 +231,7 @@ class SmoldotClientManager {
     debugPrint('[Smoldot] 等待轻节点同步完成...');
     await _chain!.waitUntilSynced(timeout: timeout);
     _synced = true;
+    _healthStatus = ChainHealthStatus.operational;
     debugPrint('[Smoldot] 区块头同步完成');
   }
 
@@ -148,21 +245,21 @@ class SmoldotClientManager {
   Future<LightClientStatusSnapshot?> getStatusSnapshot() async {
     if (!isReady) return null;
     await ensureSynced();
-    return await _chain!.getStatusSnapshot();
+    return _withRetry('getStatusSnapshot', () => _chain!.getStatusSnapshot());
   }
 
   /// 原生读取运行时版本 JSON。
   Future<Map<String, dynamic>?> getRuntimeVersionJson() async {
     if (!isReady) return null;
     await ensureSynced();
-    return await _chain!.getRuntimeVersionJson();
+    return _withRetry('getRuntimeVersion', () => _chain!.getRuntimeVersionJson());
   }
 
   /// 原生读取 metadata hex。
   Future<String?> getMetadataHex() async {
     if (!isReady) return null;
     await ensureSynced();
-    return await _chain!.getMetadataHex();
+    return _withRetry('getMetadata', () => _chain!.getMetadataHex());
   }
 
   /// 原生读取账户下一个可用 nonce。
@@ -170,21 +267,23 @@ class SmoldotClientManager {
     if (!isReady) return null;
     await ensureSynced();
     await _waitForPeer();
-    return await _chain!.getAccountNextIndex(accountIdHex);
+    return _withRetry('getAccountNextIndex',
+        () => _chain!.getAccountNextIndex(accountIdHex));
   }
 
   /// 原生读取指定块高的 block hash。
   Future<String?> getBlockHash(int blockNumber) async {
     if (!isReady) return null;
     await ensureSynced();
-    return await _chain!.getBlockHash(blockNumber);
+    return _withRetry('getBlockHash', () => _chain!.getBlockHash(blockNumber));
   }
 
   /// 原生读取指定区块中的 extrinsics。
   Future<List<String>> getBlockExtrinsics(String blockHashHex) async {
     if (!isReady) return const [];
     await ensureSynced();
-    return await _chain!.getBlockExtrinsics(blockHashHex);
+    return _withRetry('getBlockExtrinsics',
+        () => _chain!.getBlockExtrinsics(blockHashHex));
   }
 
   /// 原生提交已编码 extrinsic。
@@ -192,21 +291,24 @@ class SmoldotClientManager {
     if (!isReady) return null;
     await ensureSynced();
     await _waitForPeer();
-    return await _chain!.submitExtrinsicHex(extrinsicHex);
+    return _withRetry('submitExtrinsic',
+        () => _chain!.submitExtrinsicHex(extrinsicHex));
   }
 
   /// 原生读取 `System.Account` 快照，供钱包余额迁移使用。
   Future<SystemAccountSnapshot?> getSystemAccountSnapshot(String accountIdHex) async {
     if (!isReady) return null;
     await ensureSynced();
-    return await _chain!.getSystemAccount(accountIdHex);
+    return _withRetry('getSystemAccount',
+        () => _chain!.getSystemAccount(accountIdHex));
   }
 
   /// 原生读取单个 storage value（hex）。
   Future<String?> getStorageValueHex(String storageKeyHex) async {
     if (!isReady) return null;
     await ensureSynced();
-    return await _chain!.getStorageValueHex(storageKeyHex);
+    return _withRetry('getStorageValue',
+        () => _chain!.getStorageValueHex(storageKeyHex));
   }
 
   /// 原生批量读取多个 storage value（hex）。
@@ -215,7 +317,8 @@ class SmoldotClientManager {
       return const {};
     }
     await ensureSynced();
-    return await _chain!.getStorageValuesHex(storageKeyHexList);
+    return _withRetry('getStorageValues',
+        () => _chain!.getStorageValuesHex(storageKeyHexList));
   }
 
   /// 释放资源。App 退出时调用。
@@ -227,6 +330,8 @@ class SmoldotClientManager {
     _initialized = false;
     _synced = false;
     _syncFuture = null;
+    _healthStatus = ChainHealthStatus.uninitialized;
+    _lastError = null;
     debugPrint('[Smoldot] 轻节点已关闭');
   }
 
