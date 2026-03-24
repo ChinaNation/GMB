@@ -460,6 +460,7 @@ pub fn new_full<
         let client = client.clone();
         let pool = transaction_pool.clone();
         let keystore = keystore_container.keystore();
+        let chain_spec = config.chain_spec.cloned_box();
 
         Box::new(move |_| {
             let deps = crate::rpc::FullDeps {
@@ -468,6 +469,7 @@ pub fn new_full<
                 keystore: keystore.clone(),
                 cpu_hashrate_fn: cpu_hashrate as fn() -> f64,
                 gpu_hashrate_fn,
+                chain_spec: chain_spec.cloned_box(),
             };
             crate::rpc::create_full(deps).map_err(Into::into)
         })
