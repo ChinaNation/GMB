@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smoldot/smoldot.dart';
 
 /// 链健康状态。
@@ -118,9 +119,15 @@ class SmoldotClientManager {
     debugPrint('╚══════════════════════════');
   }
 
+  static const _dbCacheKey = 'smoldot_db_cache';
+  /// 导出数据库的最大字节数（256 KB，足够存同步进度和已知 peer）。
+  static const _dbExportMaxSize = 256 * 1024;
+
   /// 初始化 smoldot 轻客户端并加入 citizenchain。
   ///
   /// 从 assets/chainspec.json 加载链规格文件。
+  /// 如果上次运行有缓存的同步数据库，会通过 `databaseContent` 恢复，
+  /// 大幅缩短区块头同步时间。
   /// 如果已初始化则直接返回。
   Future<void> initialize() async {
     if (_initialized) return;
@@ -137,9 +144,18 @@ class SmoldotClientManager {
     // 2. 从 assets 加载 citizenchain 链规格文件
     final chainSpec = await rootBundle.loadString('assets/chainspec.json');
 
-    // 3. 加入 citizenchain P2P 网络
+    // 3. 加载缓存的同步数据库（如果有）
+    final cachedDb = await _loadCachedDatabase();
+    if (cachedDb != null) {
+      debugPrint('[Smoldot] 已加载同步缓存 (${cachedDb.length} bytes)');
+    }
+
+    // 4. 加入 citizenchain P2P 网络
     _chain = await _client!.addChain(
-      AddChainConfig(chainSpec: chainSpec),
+      AddChainConfig(
+        chainSpec: chainSpec,
+        databaseContent: cachedDb,
+      ),
     );
 
     _initialized = true;
@@ -147,6 +163,39 @@ class SmoldotClientManager {
     _syncFuture = null;
     _healthStatus = ChainHealthStatus.syncing;
     debugPrint('[Smoldot] 轻节点已启动，正在同步区块头...');
+  }
+
+  /// 从 SharedPreferences 加载缓存的 smoldot 同步数据库。
+  Future<String?> _loadCachedDatabase() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_dbCacheKey);
+    } catch (e) {
+      debugPrint('[Smoldot] 加载同步缓存失败: $e');
+      return null;
+    }
+  }
+
+  /// 通过 JSON-RPC 导出当前同步数据库并写入 SharedPreferences。
+  Future<void> _saveDatabaseCache() async {
+    if (!isReady) return;
+    try {
+      final result = await _chain!.request(
+        'chainHead_unstable_finalizedDatabase',
+        [_dbExportMaxSize],
+      );
+      if (result.isError || result.result == null) {
+        debugPrint('[Smoldot] 导出同步数据库失败: ${result.error}');
+        return;
+      }
+      final dbContent = result.result as String;
+      if (dbContent.isEmpty) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_dbCacheKey, dbContent);
+      debugPrint('[Smoldot] 同步缓存已保存 (${dbContent.length} bytes)');
+    } catch (e) {
+      debugPrint('[Smoldot] 保存同步缓存失败: $e');
+    }
   }
 
   static const _peerWaitInterval = Duration(milliseconds: 500);
@@ -233,6 +282,9 @@ class SmoldotClientManager {
     _synced = true;
     _healthStatus = ChainHealthStatus.operational;
     debugPrint('[Smoldot] 区块头同步完成');
+
+    // 同步完成后异步保存数据库缓存，下次启动可快速恢复
+    unawaited(_saveDatabaseCache());
   }
 
   /// 获取当前连接的 P2P 节点数。

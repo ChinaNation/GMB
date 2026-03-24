@@ -221,20 +221,54 @@ citizenchain 使用自定义 `PowOnchainChargeAdapter`，标准 `payment_queryIn
 - 公式：`fee = max(amount_fen × 0.001, 10 fen)`
 - 舍入：half-up 到 fen 精度（与 Rust `mul_perbill_round` 一致）
 
-## 8. 依赖
+## 8. 待实施优化
+
+### 8.1 同步状态缓存（冷启动加速）
+
+改动范围：`smoldot_client.dart`
+
+```text
+启动时：SharedPreferences.read('smoldot_db_cache')
+        → addChain(chainSpec, databaseContent: cached)
+        → 只同步缓存之后的新区块头
+
+同步后：chain.request('chainHead_unstable_finalizedDatabase', [maxSize])
+        → SharedPreferences.write('smoldot_db_cache', result)
+```
+
+不需要新增 FFI 函数。`addChain` 已支持 `databaseContent`，`request()` 已支持任意 JSON-RPC。
+
+### 8.2 批量余额查询（减少网络往返）
+
+改动范围：`chain_rpc.dart` + `wallet_page.dart`
+
+新增 `ChainRpc.fetchBalances(List<String> pubkeyHexList) → Future<Map<String, double>>`：
+
+```text
+1. 对每个 pubkeyHex 构建 System.Account storage key：
+   key = SYSTEM_ACCOUNT_PREFIX + blake2b_128(accountId) + accountId
+2. 调用已有的 fetchStorageBatch(allKeys) — 一次 storage proof 请求
+3. 对每个返回值：从 SCALE 字节 offset 16 读 u128 LE → ÷100 → yuan
+```
+
+`wallet_page.dart` 的 `_refreshBalancesFromChain()` 改为一次调用 `fetchBalances(allPubkeys)`。
+
+不需要改 Rust。blake2b_128 用 polkadart 已有的 `Hasher.blake2b128`。
+
+## 9. 依赖
 
 - `polkadart`：RPC Provider、Hasher、SigningPayload、ExtrinsicPayload、RuntimeMetadata
 - `polkadart_keyring`：SR25519 签名、SS58 地址解码
 - `polkadart_scale_codec`：CompactBigIntCodec、ByteOutput
 
-## 9. 错误处理
+## 10. 错误处理
 
 - 轻节点未同步完成：等待同步完成后再读链上状态；超时则抛出异常
 - `smoldot` 返回 JSON-RPC error：直接抛出异常，禁止吞成空结果
 - 账户不存在（`System.Account` / storage proof 返回空值）：返回余额 `0.0`，不报错
 - 交易提交失败（`smoldot_submit_extrinsic` 返回错误）：抛出异常，由 service 层包装为 `OnchainTradeException`
 
-## 10. 调用方
+## 11. 调用方
 
 | 模块 | 用途 | 状态 |
 | --- | --- | --- |
