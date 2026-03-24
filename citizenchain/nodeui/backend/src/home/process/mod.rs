@@ -873,6 +873,8 @@ fn spawn_node(
         .arg("--rpc-cors")
         .arg("all")
         .arg("--no-prometheus")
+        .arg("--bootnodes")
+        .arg("/ip4/147.224.14.117/tcp/30333/ws/p2p/12D3KooWCbzGSMnRUmNkfE4kNPxQRzzVH7Ac9drR5fF7vJwUdTBa")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
