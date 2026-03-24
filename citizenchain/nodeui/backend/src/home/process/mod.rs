@@ -837,9 +837,8 @@ fn verify_start_unlock_password(app: &AppHandle, unlock_password: &str) -> Resul
 // 启动命令只拼接固定参数，敏感密钥通过本地文件或 keystore 注入，
 // 避免把明文秘密直接暴露在命令行参数或环境变量里。
 //
-// 引导节点密钥：直接写入 Substrate 标准路径
-// `<base-path>/chains/citizenchain/network/secret_ed25519`（原始 32 字节二进制），
-// 节点启动时自动加载，无需 `--node-key-file` 参数。
+// 引导节点密钥：存放在 `<base-path>/node-key/secret_ed25519`，
+// 通过 `--node-key-file` 显式加载，使 dev 链和正式链共用同一个 Peer ID。
 fn spawn_node(
     app: &AppHandle,
     node_bin: &Path,
@@ -858,8 +857,15 @@ fn spawn_node(
     cmd.arg("--chain").arg("dev");
 
     cmd.arg("--base-path")
-        .arg(base_path)
-        .arg("--rpc-port")
+        .arg(&base_path);
+
+    // 如果存在统一的节点身份密钥，通过 --node-key-file 显式加载
+    let node_key_file = base_path.join("node-key").join("secret_ed25519");
+    if node_key_file.is_file() {
+        cmd.arg("--node-key-file").arg(&node_key_file);
+    }
+
+    cmd.arg("--rpc-port")
         .arg(rpc_port.to_string())
         .arg("--unsafe-rpc-external")
         .arg("--rpc-methods")
