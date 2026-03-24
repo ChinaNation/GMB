@@ -16,8 +16,9 @@ use tauri::AppHandle;
 
 const PEER_ID_WAIT_TIMEOUT: Duration = Duration::from_secs(20);
 const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(250);
-const SUBSTRATE_CHAIN_ID: &str = "citizenchain";
 const SUBSTRATE_SECRET_ED25519: &str = "secret_ed25519";
+/// 节点身份密钥统一存放目录（不依赖链 ID，dev/正式链共用）。
+const NODE_KEY_DIR: &str = "node-key";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -83,12 +84,16 @@ fn clear_bootnode_meta(app: &AppHandle) -> Result<(), String> {
 }
 
 fn has_secret_ed25519(app: &AppHandle) -> Result<bool, String> {
-    let secret_path = crate::shared::keystore::node_data_dir(app)?
-        .join("chains")
-        .join(SUBSTRATE_CHAIN_ID)
-        .join("network")
-        .join(SUBSTRATE_SECRET_ED25519);
+    let secret_path = node_key_path(app)?;
     Ok(secret_path.is_file())
+}
+
+/// 返回节点身份密钥的统一路径：`<node-data>/node-key/secret_ed25519`。
+/// 不依赖链 ID，dev 链和正式链共用同一个身份。
+fn node_key_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(crate::shared::keystore::node_data_dir(app)?
+        .join(NODE_KEY_DIR)
+        .join(SUBSTRATE_SECRET_ED25519))
 }
 
 pub(crate) fn genesis_bootnode_options() -> Result<Vec<GenesisBootnodeOption>, String> {
@@ -132,21 +137,22 @@ fn peer_id_from_node_key_hex(node_key_hex: &str) -> Result<String, String> {
     Ok(peer_id.to_string())
 }
 
-/// 将引导节点私钥以原始 32 字节写入 Substrate 的 `secret_ed25519` 文件。
+/// 将引导节点私钥以原始 32 字节写入 `<node-data>/node-key/secret_ed25519`。
+///
+/// 密钥存放在节点根目录下而非 `chains/<id>/network/` 中，
+/// 使 dev 链和正式链共用同一个 Peer ID 身份。
+/// 节点启动时通过 `--node-key-file` 参数显式加载。
 fn write_secret_ed25519(app: &AppHandle, secret_bytes: &[u8]) -> Result<(), String> {
-    let network_dir = crate::shared::keystore::node_data_dir(app)?
-        .join("chains")
-        .join(SUBSTRATE_CHAIN_ID)
-        .join("network");
-    fs::create_dir_all(&network_dir)
-        .map_err(|e| format!("create network dir failed ({}): {e}", network_dir.display()))?;
+    let secret_path = node_key_path(app)?;
+    let key_dir = secret_path.parent().ok_or("node-key dir resolve failed")?;
+    fs::create_dir_all(key_dir)
+        .map_err(|e| format!("create node-key dir failed ({}): {e}", key_dir.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&network_dir, fs::Permissions::from_mode(0o700))
-            .map_err(|e| format!("set network dir permission failed: {e}"))?;
+        fs::set_permissions(key_dir, fs::Permissions::from_mode(0o700))
+            .map_err(|e| format!("set node-key dir permission failed: {e}"))?;
     }
-    let secret_path = network_dir.join(SUBSTRATE_SECRET_ED25519);
     security::write_secret_bytes_atomic(&secret_path, secret_bytes)
         .map_err(|e| format!("write secret_ed25519 failed: {e}"))
 }
