@@ -25,11 +25,13 @@ case "$MODE" in
       echo "错误: 未找到监听 9944 端口的节点进程"
       exit 1
     fi
-    NODE_BIN=$(ps -p "$NODE_PID" -o command= | awk '{print $1}')
+    # 节点二进制路径可能含空格（macOS Application Support），用 --chain 参数位置截取
+    FULL_CMD=$(ps -p "$NODE_PID" -o command=)
+    NODE_BIN=$(echo "$FULL_CMD" | sed 's/ --chain .*//')
     echo "节点二进制: $NODE_BIN"
 
     # 获取节点的 --chain 参数
-    CHAIN_ARG=$(ps -p "$NODE_PID" -o command= | grep -o '\-\-chain [^ ]*' | awk '{print $2}' || echo "dev")
+    CHAIN_ARG=$(echo "$FULL_CMD" | grep -o '\-\-chain [^ ]*' | awk '{print $2}' || echo "dev")
     echo "链类型: $CHAIN_ARG"
     "$NODE_BIN" build-spec --chain="$CHAIN_ARG" --raw 2>/dev/null > "$OUTPUT"
 
