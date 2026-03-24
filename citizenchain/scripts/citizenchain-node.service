@@ -12,7 +12,8 @@ ExecStart=/opt/citizenchain/node \
   --rpc-port 9944 \
   --rpc-methods Unsafe \
   --rpc-cors all \
-  --no-prometheus
+  --no-prometheus \
+  --listen-addr /ip4/0.0.0.0/tcp/30333/ws
 Restart=always
 RestartSec=5
 
