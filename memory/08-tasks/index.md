@@ -29,6 +29,10 @@
 - `memory/08-tasks/open/20260322-冷钱包安全审计修复-跨产品同步.md`
 - `memory/08-tasks/open/20260323-094248-修复-nodeui-挖矿页面收益统计口径-按区块当时的真实到账规则显示矿工实际收益-未绑定奖励钱包时手续费应视为销毁且不计入矿工收益-铸块奖励计入矿工自身账户-已绑定时手续费-80-与铸块奖励按链上实际收款钱包统计-并同步调整页面文案-缓存迁移与模块文档.md`
 - `memory/08-tasks/open/20260323-102718-制定-wuminapp-轻节点模式在-citizenchain-保持-pow-不改前提下的长期落地方案-不保留-http-rpc-回退.md`
+- `memory/08-tasks/open/20260323-182300-在-wumin-copy-中做最小改动-只增加粘贴助记词导入钱包功能-不修改包名-存储结构或其他流程.md`
+- `memory/08-tasks/open/20260323-182718-新增脚本-cd-gmb-wuminapp-scripts-wumin-run-sh-用于运行-安装-wumin-冷钱包-参考现有-wuminapp-scripts-app-run-sh.md`
+- `memory/08-tasks/open/20260323-183617-将目录-wumin-copy-重命名为-wumincopy-并同步修正脚本入口与任务卡中的路径引用.md`
+- `memory/08-tasks/open/20260323-wumin-分组折叠与测试覆盖完善.md`
 
 ## done
 
@@ -42,3 +46,4 @@
 - `memory/08-tasks/done/20260320-runtime-integration-retroactive.md`
 - `memory/08-tasks/done/20260321-074809-生成-sfid-env-dev-local-本地开发环境文件-并确保与当前启动脚本和后端必需环境变量一致.md`
 - `memory/08-tasks/done/20260321-082100-将-wuminapp-手机启动脚本补充-wuminapp-api-base-url-并指向云服务器-147-224-14-117-的-sfid-接口-避免真机回落到-127-0-0-1:8787-导致-runtime-升级提案提交失败.md`
+- `memory/08-tasks/done/20260323-173653-将-tools-zhujichi-py-从输出-json-改为输出-txt-并验证生成结果.md`

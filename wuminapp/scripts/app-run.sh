@@ -3,6 +3,7 @@
 #
 # 固定使用 smoldot 轻节点连接区块链（无需 RPC 服务器）。
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$(dirname "$0")/.."
 
 ENV_FILE="../sfid/.env.dev.local"
@@ -29,7 +30,6 @@ DART_DEFINES=(--dart-define=WUMINAPP_API_BASE_URL="$WUMINAPP_API_BASE_URL")
 echo "[启动模式] smoldot 轻节点"
 
 # 确保 Rust 原生库已编译（增量构建，未改动时秒过）
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEVICE_LINE=$(flutter devices --machine 2>/dev/null | python3 -c "
 import sys, json
 try:
