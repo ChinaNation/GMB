@@ -63,18 +63,20 @@ lib/rpc/
 - 钱包余额不更新的首要风险点，不是 UI，而是“轻节点已初始化但尚未同步完成”时过早查询链上状态
 - `smoldot` 返回 JSON-RPC error 时必须抛出，不能把错误吞成 `null`，否则上层会把真实故障误判为余额为 0 或账户不存在
 - 当前代码已新增 `SmoldotClientManager.getStatusSnapshot()`，作为结构化轻节点状态接口；其底层已改为 Rust 原生 capability，不再由 Dart 层拼装 `system_health`
-- 当前代码已继续下沉原生能力：
-  - `smoldot_get_status_snapshot`
-  - `smoldot_get_system_account`
-  - `smoldot_get_storage_value`
-  - `smoldot_get_storage_values`
-  - `smoldot_get_runtime_version`
-  - `smoldot_get_metadata`
-  - `smoldot_get_account_next_index`
-  - `smoldot_get_block_hash`
-  - `smoldot_get_block_extrinsics`
-  - `smoldot_submit_extrinsic`
-  这些导出已经存在于 Rust FFI 与本地 Dart bindings 中，轻节点链上读取主路径已从 Dart 层裸 RPC 下沉到 Rust 原生 capability
+- 当前代码已继续下沉原生能力，且已完成 **异步 FFI 迁移**：
+  - `smoldot_get_status_snapshot_async`
+  - `smoldot_get_system_account_async`
+  - `smoldot_get_storage_value_async`
+  - `smoldot_get_storage_values_async`
+  - `smoldot_get_runtime_version_async`
+  - `smoldot_get_metadata_async`
+  - `smoldot_get_account_next_index_async`
+  - `smoldot_get_block_hash_async`
+  - `smoldot_get_block_extrinsics_async`
+  - `smoldot_submit_extrinsic_async`
+  这些异步导出通过 `DartCallback` 回调模式返回结果，不阻塞 Dart 主线程。
+  旧的同步版本（不带 `_async` 后缀）已标记废弃，后续将删除。
+  Dart 侧通过 `NativeCapabilityHandler`（`chain.dart`）统一管理异步回调注册
 - 当前代码已开始切换业务主路径：
   - `ChainRpc.fetchBalance()` 在轻节点模式下已优先走 `SmoldotClientManager.getSystemAccountSnapshot()`
   - `ChainRpc.fetchConfirmedNonce()` 在轻节点模式下已优先走原生 `System.Account` 快照中的 nonce
@@ -106,7 +108,7 @@ lib/rpc/
 
 1. 将 `pubkeyHex` 转为 32 字节 AccountId
 2. 构造 `System.Account` storage key（见 6.5）
-3. 轻节点模式优先通过 `smoldot_get_system_account` / `smoldot_get_storage_value` 走 storage proof 读取
+3. 轻节点模式通过 `smoldot_get_system_account_async` 异步走 storage proof 读取
 4. 解码 SCALE 编码的 `AccountInfo`，提取 `free` 余额
 5. 分 → 元，返回 `double`
 
@@ -114,7 +116,7 @@ lib/rpc/
 
 `ChainRpc.fetchNonce(String ss58Address) → Future<int>`
 
-- 调用原生 `smoldot_get_account_next_index`
+- 调用原生 `smoldot_get_account_next_index_async`
 - 返回下一个可用 nonce（含交易池 pending）
 
 ### 6.3 运行时版本

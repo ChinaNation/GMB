@@ -1,8 +1,72 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:ffi';
+import 'package:ffi/ffi.dart';
 import 'bindings.dart';
 import 'types.dart';
 import 'json_rpc.dart';
+
+// ──── 原生 capability 异步回调管理器 ────
+
+/// 全局回调注册表（NativeCallable.listener 回调在全局上下文执行）。
+final Map<int, Completer<String>> _capabilityCallbackRegistry = {};
+int _capabilityCallbackNextId = 0;
+
+/// 原生回调入口：Rust 异步操作完成后通过 DartCallback 调用此函数。
+void _capabilityCallback(int callbackId, int result, Pointer<Utf8> error) {
+  final completer = _capabilityCallbackRegistry.remove(callbackId);
+  if (completer == null) return;
+
+  if (error != nullptr) {
+    final errorMsg = error.toDartString();
+    completer.completeError(SmoldotException('Native capability error: $errorMsg'));
+  } else {
+    final responsePtr = Pointer<Utf8>.fromAddress(result);
+    final responseStr = responsePtr.toDartString();
+    completer.complete(responseStr);
+  }
+}
+
+/// 原生 capability 异步调度器。
+///
+/// 复用 smoldot-dart 已有的 NativeCallable.listener + Completer 模式，
+/// 为所有 typed capability API 提供不阻塞 Dart 主线程的异步 FFI 调用。
+class NativeCapabilityHandler {
+  late final NativeCallable<DartCallbackNative> _nativeCallable;
+  late final Pointer<NativeFunction<DartCallbackNative>> _nativeCallback;
+
+  NativeCapabilityHandler() {
+    _nativeCallable =
+        NativeCallable<DartCallbackNative>.listener(_capabilityCallback);
+    _nativeCallback = _nativeCallable.nativeFunction;
+  }
+
+  /// 发起异步 FFI 调用，返回 Future<String>。
+  ///
+  /// [invoke] 回调接收 callbackId 和 callback 指针，负责调用对应的
+  /// bindings.*Async 方法。Rust 侧完成后通过 DartCallback 回调结果。
+  Future<String> call(
+    void Function(int callbackId,
+        Pointer<NativeFunction<DartCallbackNative>> callback) invoke,
+  ) {
+    final id = _capabilityCallbackNextId++;
+    final completer = Completer<String>();
+    _capabilityCallbackRegistry[id] = completer;
+    try {
+      invoke(id, _nativeCallback);
+    } catch (e) {
+      _capabilityCallbackRegistry.remove(id);
+      completer.completeError(e);
+    }
+    return completer.future;
+  }
+
+  void dispose() {
+    _nativeCallable.close();
+  }
+}
+
+// ──── Chain ────
 
 /// Represents a blockchain chain managed by smoldot
 ///
@@ -24,6 +88,9 @@ class Chain {
   /// JSON-RPC handler for this chain
   late final JsonRpcHandler _jsonRpc;
 
+  /// 异步原生 capability 调度器
+  late final NativeCapabilityHandler _capability;
+
   /// Whether the chain has been disposed
   bool _isDisposed = false;
 
@@ -41,6 +108,7 @@ class Chain {
       bindings: bindings,
       clientHandle: clientHandle,
     );
+    _capability = NativeCapabilityHandler();
   }
 
   /// Whether this chain has been disposed
@@ -140,41 +208,81 @@ class Chain {
   /// 中文注释：把轻节点可观察状态收口成结构化对象，避免业务层继续直接拼裸 RPC。
   Future<LightClientStatusSnapshot> getStatusSnapshot() async {
     _ensureNotDisposed();
-    final snapshotJson = bindings.getStatusSnapshotJson(chainId);
+    final json = await _capability.call((callbackId, callback) {
+      bindings.getStatusSnapshotAsync(
+        chainHandle: chainId,
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
     return LightClientStatusSnapshot.fromJson(
-      jsonDecode(snapshotJson) as Map<String, dynamic>,
+      jsonDecode(json) as Map<String, dynamic>,
     );
   }
 
   /// 原生读取运行时版本。
   Future<Map<String, dynamic>> getRuntimeVersionJson() async {
     _ensureNotDisposed();
-    final snapshotJson = bindings.getRuntimeVersionJson(chainId);
-    return jsonDecode(snapshotJson) as Map<String, dynamic>;
+    final json = await _capability.call((callbackId, callback) {
+      bindings.getRuntimeVersionAsync(
+        chainHandle: chainId,
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
+    return jsonDecode(json) as Map<String, dynamic>;
   }
 
   /// 原生读取 metadata hex。
   Future<String> getMetadataHex() async {
     _ensureNotDisposed();
-    return bindings.getMetadataHex(chainId);
+    return _capability.call((callbackId, callback) {
+      bindings.getMetadataAsync(
+        chainHandle: chainId,
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
   }
 
   /// 原生读取账户下一个可用 nonce。
   Future<int> getAccountNextIndex(String accountIdHex) async {
     _ensureNotDisposed();
-    return int.parse(bindings.getAccountNextIndex(chainId, accountIdHex));
+    final result = await _capability.call((callbackId, callback) {
+      bindings.getAccountNextIndexAsync(
+        chainHandle: chainId,
+        accountIdHex: accountIdHex,
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
+    return int.parse(result);
   }
 
   /// 原生读取指定块高的 block hash。
   Future<String> getBlockHash(int blockNumber) async {
     _ensureNotDisposed();
-    return bindings.getBlockHash(chainId, blockNumber);
+    return _capability.call((callbackId, callback) {
+      bindings.getBlockHashAsync(
+        chainHandle: chainId,
+        blockNumber: blockNumber.toString(),
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
   }
 
   /// 原生读取指定区块的 extrinsics 列表。
   Future<List<String>> getBlockExtrinsics(String blockHashHex) async {
     _ensureNotDisposed();
-    final responseJson = bindings.getBlockExtrinsicsJson(chainId, blockHashHex);
+    final responseJson = await _capability.call((callbackId, callback) {
+      bindings.getBlockExtrinsicsAsync(
+        chainHandle: chainId,
+        blockHashHex: blockHashHex,
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
     final response = jsonDecode(responseJson) as List<dynamic>;
     return response.cast<String>();
   }
@@ -182,22 +290,43 @@ class Chain {
   /// 原生提交已编码 extrinsic。
   Future<String> submitExtrinsicHex(String extrinsicHex) async {
     _ensureNotDisposed();
-    return bindings.submitExtrinsicHex(chainId, extrinsicHex);
+    return _capability.call((callbackId, callback) {
+      bindings.submitExtrinsicAsync(
+        chainHandle: chainId,
+        extrinsicHex: extrinsicHex,
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
   }
 
   /// 原生读取 `System.Account`。
   Future<SystemAccountSnapshot> getSystemAccount(String accountIdHex) async {
     _ensureNotDisposed();
-    final snapshotJson = bindings.getSystemAccountJson(chainId, accountIdHex);
+    final json = await _capability.call((callbackId, callback) {
+      bindings.getSystemAccountAsync(
+        chainHandle: chainId,
+        accountIdHex: accountIdHex,
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
     return SystemAccountSnapshot.fromJson(
-      jsonDecode(snapshotJson) as Map<String, dynamic>,
+      jsonDecode(json) as Map<String, dynamic>,
     );
   }
 
   /// 原生读取单个 storage value。
   Future<String?> getStorageValueHex(String storageKeyHex) async {
     _ensureNotDisposed();
-    final responseJson = bindings.getStorageValueJson(chainId, storageKeyHex);
+    final responseJson = await _capability.call((callbackId, callback) {
+      bindings.getStorageValueAsync(
+        chainHandle: chainId,
+        storageKeyHex: storageKeyHex,
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
     final response = jsonDecode(responseJson) as Map<String, dynamic>;
     if (response['exists'] != true) {
       return null;
@@ -208,8 +337,14 @@ class Chain {
   /// 原生批量读取多个 storage value。
   Future<Map<String, String?>> getStorageValuesHex(List<String> storageKeys) async {
     _ensureNotDisposed();
-    final responseJson =
-        bindings.getStorageValuesJson(chainId, jsonEncode(storageKeys));
+    final responseJson = await _capability.call((callbackId, callback) {
+      bindings.getStorageValuesAsync(
+        chainHandle: chainId,
+        storageKeysJson: jsonEncode(storageKeys),
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
     final response = jsonDecode(responseJson) as Map<String, dynamic>;
     return response.map(
       (key, value) => MapEntry(key, value == null ? null : value as String),
@@ -257,6 +392,7 @@ class Chain {
     }
 
     _jsonRpc.dispose();
+    _capability.dispose();
     _isDisposed = true;
   }
 

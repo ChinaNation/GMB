@@ -514,6 +514,10 @@ pub unsafe extern "C" fn smoldot_version() -> *mut c_char {
 /// # Safety
 /// - `chain_handle` 必须是有效链句柄
 /// - 返回字符串需由 `smoldot_free_string` 释放
+// 以下同步版本已废弃，请使用对应的 *_async 版本。
+// 保留仅为编译兼容，后续将删除。
+
+#[deprecated(note = "Use smoldot_get_status_snapshot_async instead")]
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_status_snapshot(
     chain_handle: ChainHandle,
@@ -551,6 +555,7 @@ pub unsafe extern "C" fn smoldot_get_status_snapshot(
 /// # Safety
 /// - `chain_handle` 必须是有效链句柄
 /// - 返回字符串需由 `smoldot_free_string` 释放
+#[deprecated(note = "Use smoldot_get_runtime_version_async instead")]
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_runtime_version(
     chain_handle: ChainHandle,
@@ -594,6 +599,7 @@ pub unsafe extern "C" fn smoldot_get_runtime_version(
 /// # Safety
 /// - `chain_handle` 必须是有效链句柄
 /// - 返回字符串需由 `smoldot_free_string` 释放
+#[deprecated(note = "Use smoldot_get_metadata_async instead")]
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_metadata(
     chain_handle: ChainHandle,
@@ -623,6 +629,7 @@ pub unsafe extern "C" fn smoldot_get_metadata(
 /// - `chain_handle` 必须是有效链句柄
 /// - `account_id_hex` 必须是合法的 32 字节 hex 字符串
 /// - 返回字符串需由 `smoldot_free_string` 释放
+#[deprecated(note = "Use smoldot_get_account_next_index_async instead")]
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_account_next_index(
     chain_handle: ChainHandle,
@@ -673,6 +680,7 @@ pub unsafe extern "C" fn smoldot_get_account_next_index(
 /// - `chain_handle` 必须是有效链句柄
 /// - `block_number` 必须是合法十进制字符串
 /// - 返回字符串需由 `smoldot_free_string` 释放
+#[deprecated(note = "Use smoldot_get_block_hash_async instead")]
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_block_hash(
     chain_handle: ChainHandle,
@@ -746,6 +754,7 @@ pub unsafe extern "C" fn smoldot_get_block_hash(
 /// - `chain_handle` 必须是有效链句柄
 /// - `block_hash_hex` 必须是合法 UTF-8
 /// - 返回字符串需由 `smoldot_free_string` 释放
+#[deprecated(note = "Use smoldot_get_block_extrinsics_async instead")]
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_block_extrinsics(
     chain_handle: ChainHandle,
@@ -815,6 +824,7 @@ pub unsafe extern "C" fn smoldot_get_block_extrinsics(
 /// - `chain_handle` 必须是有效链句柄
 /// - `extrinsic_hex` 必须是合法 UTF-8
 /// - 返回字符串需由 `smoldot_free_string` 释放
+#[deprecated(note = "Use smoldot_submit_extrinsic_async instead")]
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_submit_extrinsic(
     chain_handle: ChainHandle,
@@ -862,6 +872,7 @@ pub unsafe extern "C" fn smoldot_submit_extrinsic(
 /// - `chain_handle` 必须是有效链句柄
 /// - `account_id_hex` 必须是合法的 32 字节 hex 字符串
 /// - 返回字符串需由 `smoldot_free_string` 释放
+#[deprecated(note = "Use smoldot_get_system_account_async instead")]
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_system_account(
     chain_handle: ChainHandle,
@@ -957,6 +968,7 @@ pub unsafe extern "C" fn smoldot_get_system_account(
 /// - `chain_handle` 必须是有效链句柄
 /// - `storage_key_hex` 必须是合法 hex 字符串
 /// - 返回字符串需由 `smoldot_free_string` 释放
+#[deprecated(note = "Use smoldot_get_storage_value_async instead")]
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_storage_value(
     chain_handle: ChainHandle,
@@ -1012,6 +1024,7 @@ pub unsafe extern "C" fn smoldot_get_storage_value(
 /// - `chain_handle` 必须是有效链句柄
 /// - `storage_keys_json` 必须是 JSON 数组字符串
 /// - 返回字符串需由 `smoldot_free_string` 释放
+#[deprecated(note = "Use smoldot_get_storage_values_async instead")]
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_storage_values(
     chain_handle: ChainHandle,
@@ -1075,6 +1088,521 @@ pub unsafe extern "C" fn smoldot_get_storage_values(
             std::ptr::null_mut()
         }
     }
+}
+
+// ──── 异步 FFI 导出（不阻塞 Dart 主线程） ────
+
+/// 异步回调辅助：在独立线程上执行 async 闭包，完成后通过 DartCallback 回调。
+///
+/// 使用 `std::thread::spawn` + `runtime.block_on` 而非 `tokio::spawn`，
+/// 因为 smoldot 的部分原生 API 返回的 Future 没有 `Send` 约束。
+/// 独立线程上的 `block_on` 不阻塞 Dart 主线程，同时兼容非 Send futures。
+fn spawn_native_capability_async<F, Fut>(
+    chain_handle: ChainHandle,
+    callback_id: i64,
+    callback: DartCallback,
+    f: F,
+) -> Result<(), String>
+where
+    F: FnOnce(Arc<SmoldotChainWrapper>, Arc<SmoldotClientWrapper>) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = Result<String, String>>,
+{
+    let chain_wrapper = get_chain_wrapper(chain_handle)?;
+    let client_wrapper = get_client_wrapper(chain_wrapper.client_handle)?;
+    std::thread::spawn(move || {
+        let result = client_wrapper.runtime.block_on(f(
+            Arc::clone(&chain_wrapper),
+            Arc::clone(&client_wrapper),
+        ));
+        match result {
+            Ok(json_str) => {
+                let cstr = CString::new(json_str)
+                    .unwrap_or_else(|_| CString::new("{}").unwrap());
+                unsafe { callback(callback_id, cstr.as_ptr() as i64, std::ptr::null()) };
+                std::mem::forget(cstr);
+            }
+            Err(msg) => {
+                let cstr = CString::new(msg)
+                    .unwrap_or_else(|_| CString::new("Unknown error").unwrap());
+                unsafe { callback(callback_id, 0, cstr.as_ptr()) };
+                std::mem::forget(cstr);
+            }
+        }
+    });
+    Ok(())
+}
+
+/// 异步 FFI 入口的错误处理宏：参数校验失败时设置 error_out 并返回 -1。
+macro_rules! async_ffi_entry {
+    ($chain_handle:expr, $callback_id:expr, $callback:expr, $error_out:expr, $body:expr) => {
+        match spawn_native_capability_async($chain_handle, $callback_id, $callback, $body) {
+            Ok(()) => 0,
+            Err(message) => {
+                set_error($error_out, &message);
+                -1
+            }
+        }
+    };
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smoldot_get_status_snapshot_async(
+    chain_handle: ChainHandle,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+        |chain_wrapper, client_wrapper| async move {
+            let snapshot_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_status_snapshot(chain_wrapper.chain_id)
+                    .map_err(|error| error.to_string())?
+            };
+            let snapshot = snapshot_future.await.map_err(|error| error.to_string())?;
+            Ok(json!({
+                "peerCount": snapshot.peer_count,
+                "isSyncing": snapshot.is_syncing,
+                "bestBlockNumber": snapshot.best_block_number,
+                "bestBlockHash": format!("0x{}", hex::encode(snapshot.best_block_hash)),
+                "finalizedBlockNumber": snapshot.finalized_block_number,
+                "finalizedBlockHash": format!("0x{}", hex::encode(snapshot.finalized_block_hash)),
+            })
+            .to_string())
+        }
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smoldot_get_runtime_version_async(
+    chain_handle: ChainHandle,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+        |chain_wrapper, client_wrapper| async move {
+            let snapshot_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_runtime_version_snapshot(chain_wrapper.chain_id)
+                    .map_err(|error| error.to_string())?
+            };
+            let runtime_version = snapshot_future.await.map_err(|error| error.to_string())?;
+            let apis = runtime_version
+                .apis
+                .iter()
+                .map(|(name_hash, version)| json!([format!("0x{}", hex::encode(name_hash)), *version]))
+                .collect::<Vec<_>>();
+            Ok(json!({
+                "specName": runtime_version.spec_name,
+                "implName": runtime_version.impl_name,
+                "authoringVersion": runtime_version.authoring_version,
+                "specVersion": runtime_version.spec_version,
+                "implVersion": runtime_version.impl_version,
+                "transactionVersion": runtime_version.transaction_version,
+                "stateVersion": runtime_version.state_version,
+                "apis": apis,
+            })
+            .to_string())
+        }
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smoldot_get_metadata_async(
+    chain_handle: ChainHandle,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+        |chain_wrapper, client_wrapper| async move {
+            let metadata_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_metadata(chain_wrapper.chain_id)
+                    .map_err(|error| error.to_string())?
+            };
+            let metadata = metadata_future.await.map_err(|error| error.to_string())?;
+            Ok(format!("0x{}", hex::encode(metadata)))
+        }
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smoldot_get_account_next_index_async(
+    chain_handle: ChainHandle,
+    account_id_hex: *const c_char,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    if account_id_hex.is_null() {
+        set_error(error_out, "account_id_hex is null");
+        return -1;
+    }
+    let account_id_hex = match CStr::from_ptr(account_id_hex).to_str() {
+        Ok(value) => value.to_string(),
+        Err(_) => {
+            set_error(error_out, "Invalid UTF-8 in account_id_hex");
+            return -1;
+        }
+    };
+    let account_id = match decode_account_id_hex(&account_id_hex) {
+        Ok(bytes) => bytes,
+        Err(message) => {
+            set_error(error_out, &message);
+            return -1;
+        }
+    };
+
+    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+        move |chain_wrapper, client_wrapper| async move {
+            let next_index_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_account_next_index(chain_wrapper.chain_id, account_id)
+                    .map_err(|error| error.to_string())?
+            };
+            let next_index = next_index_future.await.map_err(|error| error.to_string())?;
+            Ok(next_index.to_string())
+        }
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smoldot_get_block_hash_async(
+    chain_handle: ChainHandle,
+    block_number: *const c_char,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    if block_number.is_null() {
+        set_error(error_out, "block_number is null");
+        return -1;
+    }
+    let block_number = match CStr::from_ptr(block_number).to_str() {
+        Ok(value) => value,
+        Err(_) => {
+            set_error(error_out, "Invalid UTF-8 in block_number");
+            return -1;
+        }
+    };
+    let block_number = match block_number.parse::<u64>() {
+        Ok(value) => value,
+        Err(error) => {
+            set_error(error_out, &format!("Invalid block_number: {error}"));
+            return -1;
+        }
+    };
+
+    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+        move |chain_wrapper, client_wrapper| async move {
+            let known_block_hash_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_known_block_hash(chain_wrapper.chain_id, block_number)
+                    .map_err(|error| error.to_string())?
+            };
+            if let Some(block_hash) = known_block_hash_future
+                .await
+                .map_err(|error| error.to_string())?
+            {
+                return Ok(format!("0x{}", hex::encode(block_hash)));
+            }
+            let result = native_json_rpc_request(
+                Arc::clone(&chain_wrapper),
+                Arc::clone(&client_wrapper),
+                "chain_getBlockHash",
+                json!([block_number]),
+            )
+            .await?;
+            result
+                .as_str()
+                .map(|s| s.to_string())
+                .ok_or_else(|| format!(
+                    "chain_getBlockHash returned non-string for height {block_number}"
+                ))
+        }
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smoldot_get_block_extrinsics_async(
+    chain_handle: ChainHandle,
+    block_hash_hex: *const c_char,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    if block_hash_hex.is_null() {
+        set_error(error_out, "block_hash_hex is null");
+        return -1;
+    }
+    let block_hash_hex = match CStr::from_ptr(block_hash_hex).to_str() {
+        Ok(value) => value.to_string(),
+        Err(_) => {
+            set_error(error_out, "Invalid UTF-8 in block_hash_hex");
+            return -1;
+        }
+    };
+    let block_hash = match decode_prefixed_hex(&block_hash_hex) {
+        Ok(bytes) => match <[u8; 32]>::try_from(bytes.as_slice()) {
+            Ok(hash) => hash,
+            Err(_) => {
+                set_error(error_out, "block_hash_hex must decode to 32 bytes");
+                return -1;
+            }
+        },
+        Err(message) => {
+            set_error(error_out, &message);
+            return -1;
+        }
+    };
+
+    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+        move |chain_wrapper, client_wrapper| async move {
+            let native_extrinsics_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_block_extrinsics(chain_wrapper.chain_id, block_hash)
+                    .map_err(|error| error.to_string())?
+            };
+            let values = match native_extrinsics_future.await {
+                Ok(extrinsics) => extrinsics
+                    .into_iter()
+                    .map(|extrinsic| format!("0x{}", hex::encode(extrinsic)))
+                    .collect::<Vec<_>>(),
+                Err(error) => {
+                    return Err(format!(
+                        "Failed to download block body for {block_hash_hex}: {error}"
+                    ))
+                }
+            };
+            serde_json::to_string(&values)
+                .map_err(|error| format!("Failed to encode block extrinsics JSON: {error}"))
+        }
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smoldot_submit_extrinsic_async(
+    chain_handle: ChainHandle,
+    extrinsic_hex: *const c_char,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    if extrinsic_hex.is_null() {
+        set_error(error_out, "extrinsic_hex is null");
+        return -1;
+    }
+    let extrinsic_hex = match CStr::from_ptr(extrinsic_hex).to_str() {
+        Ok(value) => value.to_string(),
+        Err(_) => {
+            set_error(error_out, "Invalid UTF-8 in extrinsic_hex");
+            return -1;
+        }
+    };
+
+    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+        move |chain_wrapper, client_wrapper| async move {
+            let result = native_json_rpc_request(
+                Arc::clone(&chain_wrapper),
+                Arc::clone(&client_wrapper),
+                "author_submitExtrinsic",
+                json!([extrinsic_hex]),
+            )
+            .await?;
+            let tx_hash = result
+                .as_str()
+                .ok_or_else(|| "author_submitExtrinsic result is not a string".to_string())?;
+            Ok(tx_hash.to_string())
+        }
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smoldot_get_system_account_async(
+    chain_handle: ChainHandle,
+    account_id_hex: *const c_char,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    if account_id_hex.is_null() {
+        set_error(error_out, "account_id_hex is null");
+        return -1;
+    }
+    let account_id_hex = match CStr::from_ptr(account_id_hex).to_str() {
+        Ok(value) => value,
+        Err(_) => {
+            set_error(error_out, "Invalid UTF-8 in account_id_hex");
+            return -1;
+        }
+    };
+    let account_id = match decode_account_id_hex(account_id_hex) {
+        Ok(bytes) => bytes,
+        Err(message) => {
+            set_error(error_out, &message);
+            return -1;
+        }
+    };
+
+    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+        move |chain_wrapper, client_wrapper| async move {
+            let storage_key = build_system_account_storage_key(&account_id);
+            let storage_key_bytes = decode_prefixed_hex(&storage_key)?;
+            let native_storage_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_storage_values(chain_wrapper.chain_id, vec![storage_key_bytes])
+                    .map_err(|error| error.to_string())?
+            };
+            let storage_value_hex = native_storage_future
+                .await
+                .map_err(|error| error.to_string())?
+                .pop()
+                .flatten()
+                .map(|value_bytes| format!("0x{}", hex::encode(value_bytes)));
+
+            if storage_value_hex.is_none() {
+                return Ok(json!({
+                    "storageKey": storage_key,
+                    "exists": false,
+                })
+                .to_string());
+            }
+
+            let value_hex = storage_value_hex.unwrap();
+            let value_bytes = decode_prefixed_hex(&value_hex)?;
+            let nonce = if value_bytes.len() >= 4 {
+                Some(u32::from_le_bytes([
+                    value_bytes[0], value_bytes[1], value_bytes[2], value_bytes[3],
+                ]) as u64)
+            } else {
+                None
+            };
+            let free_fen = if value_bytes.len() >= 32 {
+                Some(read_u128_le_string(&value_bytes, 16)?)
+            } else {
+                None
+            };
+
+            Ok(json!({
+                "storageKey": storage_key,
+                "exists": true,
+                "valueHex": value_hex,
+                "nonce": nonce,
+                "freeFen": free_fen,
+            })
+            .to_string())
+        }
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smoldot_get_storage_value_async(
+    chain_handle: ChainHandle,
+    storage_key_hex: *const c_char,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    if storage_key_hex.is_null() {
+        set_error(error_out, "storage_key_hex is null");
+        return -1;
+    }
+    let storage_key_hex = match CStr::from_ptr(storage_key_hex).to_str() {
+        Ok(value) => value.to_string(),
+        Err(_) => {
+            set_error(error_out, "Invalid UTF-8 in storage_key_hex");
+            return -1;
+        }
+    };
+    let storage_key_bytes = match decode_prefixed_hex(&storage_key_hex) {
+        Ok(bytes) => bytes,
+        Err(message) => {
+            set_error(error_out, &message);
+            return -1;
+        }
+    };
+
+    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+        move |chain_wrapper, client_wrapper| async move {
+            let native_storage_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_storage_values(chain_wrapper.chain_id, vec![storage_key_bytes])
+                    .map_err(|error| error.to_string())?
+            };
+            let storage_value = native_storage_future
+                .await
+                .map_err(|error| error.to_string())?
+                .pop()
+                .flatten();
+            Ok(json_storage_value_response_from_bytes(&storage_key_hex, storage_value).to_string())
+        }
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smoldot_get_storage_values_async(
+    chain_handle: ChainHandle,
+    storage_keys_json: *const c_char,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    if storage_keys_json.is_null() {
+        set_error(error_out, "storage_keys_json is null");
+        return -1;
+    }
+    let storage_keys_json = match CStr::from_ptr(storage_keys_json).to_str() {
+        Ok(value) => value.to_string(),
+        Err(_) => {
+            set_error(error_out, "Invalid UTF-8 in storage_keys_json");
+            return -1;
+        }
+    };
+    let storage_keys: Vec<String> = match serde_json::from_str(&storage_keys_json) {
+        Ok(value) => value,
+        Err(error) => {
+            set_error(error_out, &format!("Failed to parse storage_keys_json: {error}"));
+            return -1;
+        }
+    };
+
+    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+        move |chain_wrapper, client_wrapper| async move {
+            let decoded_storage_keys = storage_keys
+                .iter()
+                .map(|storage_key_hex| decode_prefixed_hex(storage_key_hex))
+                .collect::<Result<Vec<_>, _>>()?;
+            let native_storage_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_storage_values(chain_wrapper.chain_id, decoded_storage_keys)
+                    .map_err(|error| error.to_string())?
+            };
+            let native_values = native_storage_future
+                .await
+                .map_err(|error| error.to_string())?;
+            let mut values = serde_json::Map::with_capacity(storage_keys.len());
+            for (storage_key_hex, storage_value) in
+                storage_keys.iter().zip(native_values.into_iter())
+            {
+                let value_hex = storage_value
+                    .map(|value_bytes| Value::String(format!("0x{}", hex::encode(value_bytes))))
+                    .unwrap_or(Value::Null);
+                values.insert(storage_key_hex.clone(), value_hex);
+            }
+            Ok(Value::Object(values).to_string())
+        }
+    )
 }
 
 // Helper functions

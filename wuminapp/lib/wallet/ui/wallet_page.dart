@@ -8,6 +8,7 @@ import 'package:qr/qr.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
+import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_repository.dart';
@@ -63,8 +64,12 @@ class _MyWalletPageState extends State<MyWalletPage> {
       _balanceRefreshing = true;
     });
     try {
+      // 诊断：打印轻节点状态，帮助定位链路问题
+      await SmoldotClientManager.instance.printDiagnostics();
+
       final wallets = await _walletService.getWallets();
       bool updated = false;
+      bool hasError = false;
       for (final wallet in wallets) {
         try {
           final balance = await _chainRpc.fetchBalance(wallet.pubkeyHex);
@@ -75,6 +80,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
         } catch (e) {
           debugPrint(
               'wallet balance refresh failed: ${wallet.address}, err=$e');
+          hasError = true;
         }
       }
       if (!mounted) return;
@@ -82,6 +88,17 @@ class _MyWalletPageState extends State<MyWalletPage> {
         setState(() {
           _walletsFuture = _walletService.getWallets();
         });
+      }
+      if (hasError) {
+        final health = SmoldotClientManager.instance.healthStatus;
+        final msg = health == ChainHealthStatus.syncing
+            ? '轻节点正在同步，请稍后再试'
+            : health == ChainHealthStatus.degraded
+                ? '区块链暂不可用，请检查网络连接'
+                : '余额刷新失败';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
       }
     } finally {
       if (mounted) {

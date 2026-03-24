@@ -28,4 +28,23 @@ fi
 DART_DEFINES=(--dart-define=WUMINAPP_API_BASE_URL="$WUMINAPP_API_BASE_URL")
 echo "[启动模式] smoldot 轻节点"
 
+# 确保 Rust 原生库已编译（增量构建，未改动时秒过）
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEVICE_LINE=$(flutter devices --machine 2>/dev/null | python3 -c "
+import sys, json
+try:
+    devices = json.load(sys.stdin)
+    for d in devices:
+        p = d.get('targetPlatform','')
+        if 'android' in p:
+            print('android'); break
+        elif 'ios' in p:
+            print('ios'); break
+    else:
+        print('android')
+except:
+    print('android')
+" 2>/dev/null || echo "android")
+"$SCRIPT_DIR/build-smoldot-native.sh" "$DEVICE_LINE"
+
 flutter run "${DART_DEFINES[@]}"

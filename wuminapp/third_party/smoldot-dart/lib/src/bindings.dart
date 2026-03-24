@@ -171,6 +171,36 @@ typedef SmoldotGetStorageValuesDart = Pointer<Utf8> Function(
   Pointer<Pointer<Utf8>> errorOut,
 );
 
+// ──── 异步 FFI 类型声明（不阻塞 Dart 主线程） ────
+
+typedef SmoldotAsyncNoArgNative = Int32 Function(
+  ChainHandle chainHandle,
+  Int64 callbackId,
+  Pointer<NativeFunction<DartCallbackNative>> callback,
+  Pointer<Pointer<Utf8>> errorOut,
+);
+typedef SmoldotAsyncNoArgDart = int Function(
+  int chainHandle,
+  int callbackId,
+  Pointer<NativeFunction<DartCallbackNative>> callback,
+  Pointer<Pointer<Utf8>> errorOut,
+);
+
+typedef SmoldotAsyncOneArgNative = Int32 Function(
+  ChainHandle chainHandle,
+  Pointer<Utf8> arg1,
+  Int64 callbackId,
+  Pointer<NativeFunction<DartCallbackNative>> callback,
+  Pointer<Pointer<Utf8>> errorOut,
+);
+typedef SmoldotAsyncOneArgDart = int Function(
+  int chainHandle,
+  Pointer<Utf8> arg1,
+  int callbackId,
+  Pointer<NativeFunction<DartCallbackNative>> callback,
+  Pointer<Pointer<Utf8>> errorOut,
+);
+
 /// FFI bindings for smoldot-light native library
 class SmoldotBindings {
   late final DynamicLibrary _library;
@@ -195,6 +225,18 @@ class SmoldotBindings {
   late final SmoldotGetSystemAccountDart _getSystemAccount;
   late final SmoldotGetStorageValueDart _getStorageValue;
   late final SmoldotGetStorageValuesDart _getStorageValues;
+
+  // 异步版本
+  late final SmoldotAsyncNoArgDart _getStatusSnapshotAsync;
+  late final SmoldotAsyncNoArgDart _getRuntimeVersionAsync;
+  late final SmoldotAsyncNoArgDart _getMetadataAsync;
+  late final SmoldotAsyncOneArgDart _getAccountNextIndexAsync;
+  late final SmoldotAsyncOneArgDart _getBlockHashAsync;
+  late final SmoldotAsyncOneArgDart _getBlockExtrinsicsAsync;
+  late final SmoldotAsyncOneArgDart _submitExtrinsicAsync;
+  late final SmoldotAsyncOneArgDart _getSystemAccountAsync;
+  late final SmoldotAsyncOneArgDart _getStorageValueAsync;
+  late final SmoldotAsyncOneArgDart _getStorageValuesAsync;
 
   /// Initialize the bindings by loading the native library
   SmoldotBindings() {
@@ -250,6 +292,30 @@ class SmoldotBindings {
         SmoldotGetStorageValueDart>('smoldot_get_storage_value');
     _getStorageValues = _library.lookupFunction<SmoldotGetStorageValuesNative,
         SmoldotGetStorageValuesDart>('smoldot_get_storage_values');
+
+    // 异步版本
+    _getStatusSnapshotAsync = _library.lookupFunction<SmoldotAsyncNoArgNative,
+        SmoldotAsyncNoArgDart>('smoldot_get_status_snapshot_async');
+    _getRuntimeVersionAsync = _library.lookupFunction<SmoldotAsyncNoArgNative,
+        SmoldotAsyncNoArgDart>('smoldot_get_runtime_version_async');
+    _getMetadataAsync = _library.lookupFunction<SmoldotAsyncNoArgNative,
+        SmoldotAsyncNoArgDart>('smoldot_get_metadata_async');
+    _getAccountNextIndexAsync = _library.lookupFunction<
+        SmoldotAsyncOneArgNative,
+        SmoldotAsyncOneArgDart>('smoldot_get_account_next_index_async');
+    _getBlockHashAsync = _library.lookupFunction<SmoldotAsyncOneArgNative,
+        SmoldotAsyncOneArgDart>('smoldot_get_block_hash_async');
+    _getBlockExtrinsicsAsync = _library.lookupFunction<
+        SmoldotAsyncOneArgNative,
+        SmoldotAsyncOneArgDart>('smoldot_get_block_extrinsics_async');
+    _submitExtrinsicAsync = _library.lookupFunction<SmoldotAsyncOneArgNative,
+        SmoldotAsyncOneArgDart>('smoldot_submit_extrinsic_async');
+    _getSystemAccountAsync = _library.lookupFunction<SmoldotAsyncOneArgNative,
+        SmoldotAsyncOneArgDart>('smoldot_get_system_account_async');
+    _getStorageValueAsync = _library.lookupFunction<SmoldotAsyncOneArgNative,
+        SmoldotAsyncOneArgDart>('smoldot_get_storage_value_async');
+    _getStorageValuesAsync = _library.lookupFunction<SmoldotAsyncOneArgNative,
+        SmoldotAsyncOneArgDart>('smoldot_get_storage_values_async');
   }
 
   // ===== Core Client Functions =====
@@ -462,7 +528,9 @@ class SmoldotBindings {
     }
   }
 
-  /// 获取原生轻节点状态快照 JSON。
+  // ──── 以下同步方法已废弃（阻塞 Dart 主线程），请使用对应的 *Async 版本 ────
+
+  @Deprecated('Use getStatusSnapshotAsync instead')
   String getStatusSnapshotJson(int chainHandle) {
     final errorOutPtr = _allocator<Pointer<Utf8>>();
     errorOutPtr.value = nullptr;
@@ -487,7 +555,7 @@ class SmoldotBindings {
     }
   }
 
-  /// 获取原生运行时版本 JSON。
+  @Deprecated('Use getRuntimeVersionAsync instead')
   String getRuntimeVersionJson(int chainHandle) {
     final errorOutPtr = _allocator<Pointer<Utf8>>();
     errorOutPtr.value = nullptr;
@@ -512,7 +580,7 @@ class SmoldotBindings {
     }
   }
 
-  /// 获取原生 metadata hex。
+  @Deprecated('Use getMetadataAsync instead')
   String getMetadataHex(int chainHandle) {
     final errorOutPtr = _allocator<Pointer<Utf8>>();
     errorOutPtr.value = nullptr;
@@ -537,7 +605,7 @@ class SmoldotBindings {
     }
   }
 
-  /// 获取账户下一个可用 nonce。
+  @Deprecated('Use getAccountNextIndexAsync instead')
   String getAccountNextIndex(int chainHandle, String accountIdHex) {
     final errorOutPtr = _allocator<Pointer<Utf8>>();
     errorOutPtr.value = nullptr;
@@ -565,7 +633,7 @@ class SmoldotBindings {
     }
   }
 
-  /// 获取指定块高的 block hash。
+  @Deprecated('Use getBlockHashAsync instead')
   String getBlockHash(int chainHandle, int blockNumber) {
     final errorOutPtr = _allocator<Pointer<Utf8>>();
     errorOutPtr.value = nullptr;
@@ -593,7 +661,7 @@ class SmoldotBindings {
     }
   }
 
-  /// 获取指定区块中的 extrinsics JSON。
+  @Deprecated('Use getBlockExtrinsicsAsync instead')
   String getBlockExtrinsicsJson(int chainHandle, String blockHashHex) {
     final errorOutPtr = _allocator<Pointer<Utf8>>();
     errorOutPtr.value = nullptr;
@@ -621,7 +689,7 @@ class SmoldotBindings {
     }
   }
 
-  /// 提交已编码 extrinsic，返回交易哈希 hex。
+  @Deprecated('Use submitExtrinsicAsync instead')
   String submitExtrinsicHex(int chainHandle, String extrinsicHex) {
     final errorOutPtr = _allocator<Pointer<Utf8>>();
     errorOutPtr.value = nullptr;
@@ -649,7 +717,7 @@ class SmoldotBindings {
     }
   }
 
-  /// 获取原生 `System.Account` 快照 JSON。
+  @Deprecated('Use getSystemAccountAsync instead')
   String getSystemAccountJson(int chainHandle, String accountIdHex) {
     final errorOutPtr = _allocator<Pointer<Utf8>>();
     errorOutPtr.value = nullptr;
@@ -676,7 +744,7 @@ class SmoldotBindings {
     }
   }
 
-  /// 获取单个 storage value JSON。
+  @Deprecated('Use getStorageValueAsync instead')
   String getStorageValueJson(int chainHandle, String storageKeyHex) {
     final errorOutPtr = _allocator<Pointer<Utf8>>();
     errorOutPtr.value = nullptr;
@@ -703,7 +771,7 @@ class SmoldotBindings {
     }
   }
 
-  /// 获取多个 storage value JSON。
+  @Deprecated('Use getStorageValuesAsync instead')
   String getStorageValuesJson(int chainHandle, String storageKeysJson) {
     final errorOutPtr = _allocator<Pointer<Utf8>>();
     errorOutPtr.value = nullptr;
@@ -730,4 +798,144 @@ class SmoldotBindings {
       _allocator.free(errorOutPtr);
     }
   }
+
+  // ──── 异步版本（不阻塞 Dart 主线程） ────
+
+  void _invokeAsyncNoArg(
+    SmoldotAsyncNoArgDart fn, {
+    required int chainHandle,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+    required String debugName,
+  }) {
+    final errorOutPtr = _allocator<Pointer<Utf8>>();
+    errorOutPtr.value = nullptr;
+    try {
+      final result = fn(chainHandle, callbackId, callback, errorOutPtr);
+      if (errorOutPtr.value != nullptr) {
+        final error = errorOutPtr.value.toDartString();
+        _freeString(errorOutPtr.value);
+        throw Exception('$debugName failed: $error');
+      }
+      if (result != 0) {
+        throw Exception('$debugName failed: error code $result');
+      }
+    } finally {
+      _allocator.free(errorOutPtr);
+    }
+  }
+
+  void _invokeAsyncOneArg(
+    SmoldotAsyncOneArgDart fn, {
+    required int chainHandle,
+    required String arg,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+    required String debugName,
+  }) {
+    final errorOutPtr = _allocator<Pointer<Utf8>>();
+    errorOutPtr.value = nullptr;
+    final argPtr = arg.toNativeUtf8(allocator: _allocator);
+    try {
+      final result = fn(chainHandle, argPtr, callbackId, callback, errorOutPtr);
+      if (errorOutPtr.value != nullptr) {
+        final error = errorOutPtr.value.toDartString();
+        _freeString(errorOutPtr.value);
+        throw Exception('$debugName failed: $error');
+      }
+      if (result != 0) {
+        throw Exception('$debugName failed: error code $result');
+      }
+    } finally {
+      _allocator.free(argPtr);
+      _allocator.free(errorOutPtr);
+    }
+  }
+
+  void getStatusSnapshotAsync({
+    required int chainHandle,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncNoArg(_getStatusSnapshotAsync,
+      chainHandle: chainHandle, callbackId: callbackId,
+      callback: callback, debugName: 'getStatusSnapshotAsync');
+
+  void getRuntimeVersionAsync({
+    required int chainHandle,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncNoArg(_getRuntimeVersionAsync,
+      chainHandle: chainHandle, callbackId: callbackId,
+      callback: callback, debugName: 'getRuntimeVersionAsync');
+
+  void getMetadataAsync({
+    required int chainHandle,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncNoArg(_getMetadataAsync,
+      chainHandle: chainHandle, callbackId: callbackId,
+      callback: callback, debugName: 'getMetadataAsync');
+
+  void getAccountNextIndexAsync({
+    required int chainHandle,
+    required String accountIdHex,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncOneArg(_getAccountNextIndexAsync,
+      chainHandle: chainHandle, arg: accountIdHex, callbackId: callbackId,
+      callback: callback, debugName: 'getAccountNextIndexAsync');
+
+  void getBlockHashAsync({
+    required int chainHandle,
+    required String blockNumber,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncOneArg(_getBlockHashAsync,
+      chainHandle: chainHandle, arg: blockNumber, callbackId: callbackId,
+      callback: callback, debugName: 'getBlockHashAsync');
+
+  void getBlockExtrinsicsAsync({
+    required int chainHandle,
+    required String blockHashHex,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncOneArg(_getBlockExtrinsicsAsync,
+      chainHandle: chainHandle, arg: blockHashHex, callbackId: callbackId,
+      callback: callback, debugName: 'getBlockExtrinsicsAsync');
+
+  void submitExtrinsicAsync({
+    required int chainHandle,
+    required String extrinsicHex,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncOneArg(_submitExtrinsicAsync,
+      chainHandle: chainHandle, arg: extrinsicHex, callbackId: callbackId,
+      callback: callback, debugName: 'submitExtrinsicAsync');
+
+  void getSystemAccountAsync({
+    required int chainHandle,
+    required String accountIdHex,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncOneArg(_getSystemAccountAsync,
+      chainHandle: chainHandle, arg: accountIdHex, callbackId: callbackId,
+      callback: callback, debugName: 'getSystemAccountAsync');
+
+  void getStorageValueAsync({
+    required int chainHandle,
+    required String storageKeyHex,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncOneArg(_getStorageValueAsync,
+      chainHandle: chainHandle, arg: storageKeyHex, callbackId: callbackId,
+      callback: callback, debugName: 'getStorageValueAsync');
+
+  void getStorageValuesAsync({
+    required int chainHandle,
+    required String storageKeysJson,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncOneArg(_getStorageValuesAsync,
+      chainHandle: chainHandle, arg: storageKeysJson, callbackId: callbackId,
+      callback: callback, debugName: 'getStorageValuesAsync');
 }
