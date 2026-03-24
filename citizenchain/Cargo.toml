@@ -91,6 +91,7 @@ sc-executor = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch 
 sc-network = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-offchain = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-service = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
+
 sc-telemetry = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-transaction-pool = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-transaction-pool-api = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }

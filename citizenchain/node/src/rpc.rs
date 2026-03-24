@@ -40,6 +40,8 @@ pub struct FullDeps<C, P> {
     pub cpu_hashrate_fn: fn() -> f64,
     /// GPU 哈希率查询函数（仅在 gpu-mining feature 启用且有 GPU 时为 Some）。
     pub gpu_hashrate_fn: Option<fn() -> f64>,
+    /// Chain spec（用于 sync_state_genSyncSpec RPC，供轻节点获取 lightSyncState）。
+    pub chain_spec: Box<dyn sc_chain_spec::ChainSpec + Send>,
 }
 
 /// 构造并签名一笔交易，提交到交易池。
@@ -196,10 +198,77 @@ where
         keystore,
         cpu_hashrate_fn,
         gpu_hashrate_fn,
+        chain_spec,
     } = deps;
 
     module.merge(System::new(client.clone(), pool.clone()).into_rpc())?;
     module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
+    // sync_state_genSyncSpec: 返回包含 lightSyncState 的 chainspec 快照，
+    // 供 smoldot 轻节点跳过历史区块头验证。
+    // 标准 sc-sync-state-rpc 依赖 BABE，citizenchain 用 PoW 没有 BABE，
+    // 因此用自定义实现：从 chain_spec + 当前 finalized header + GRANDPA authority set 构造。
+    {
+        let client = client.clone();
+        let chain_spec_for_rpc = chain_spec;
+        module.register_method("sync_state_genSyncSpec", move |_params, _, _| {
+            use jsonrpsee::types::error::ErrorObject;
+
+            // 1. 解析原始 chain_spec JSON
+            let spec_json_str = chain_spec_for_rpc.as_json(true)
+                .map_err(|e| ErrorObject::owned(-1, format!("chain_spec 序列化失败: {e}"), None::<()>))?;
+            let mut spec: serde_json::Value = serde_json::from_str(&spec_json_str)
+                .map_err(|e| ErrorObject::owned(-1, format!("chain_spec JSON 解析失败: {e}"), None::<()>))?;
+
+            // 2. 获取 finalized block header
+            let finalized_hash = client.info().finalized_hash;
+            let finalized_header = client.header(finalized_hash)
+                .map_err(|e| ErrorObject::owned(-1, format!("获取 finalized header 失败: {e}"), None::<()>))?
+                .ok_or_else(|| ErrorObject::owned(-1, "finalized header 不存在", None::<()>))?;
+            let finalized_header_hex = format!("0x{}", hex::encode(finalized_header.encode()));
+
+            // 3. 读取 GRANDPA authority set（从 storage 中读取 Grandpa::CurrentSetId 和 Grandpa::Authorities）
+            let grandpa_set_id_key = {
+                let mut k = Vec::new();
+                k.extend_from_slice(&sp_io::hashing::twox_128(b"Grandpa"));
+                k.extend_from_slice(&sp_io::hashing::twox_128(b"CurrentSetId"));
+                k
+            };
+            let set_id_bytes = client
+                .storage(finalized_hash, &sp_storage::StorageKey(grandpa_set_id_key))
+                .map_err(|e| ErrorObject::owned(-1, format!("读取 GRANDPA set_id 失败: {e}"), None::<()>))?;
+            let set_id: u64 = set_id_bytes
+                .map(|d| u64::decode(&mut &d.0[..]).unwrap_or(0))
+                .unwrap_or(0);
+
+            let grandpa_authorities_key = {
+                let mut k = Vec::new();
+                k.extend_from_slice(&sp_io::hashing::twox_128(b"Grandpa"));
+                k.extend_from_slice(&sp_io::hashing::twox_128(b"Authorities"));
+                k
+            };
+            let auth_bytes = client
+                .storage(finalized_hash, &sp_storage::StorageKey(grandpa_authorities_key))
+                .map_err(|e| ErrorObject::owned(-1, format!("读取 GRANDPA authorities 失败: {e}"), None::<()>))?;
+
+            // Authorities 是 BoundedVec<(AuthorityId, u64)>，SCALE 编码
+            // 直接转成 hex 传给 smoldot
+            let authorities_hex = auth_bytes
+                .map(|d| format!("0x{}", hex::encode(&d.0)))
+                .unwrap_or_default();
+
+            // 4. 构造 lightSyncState
+            let light_sync_state = serde_json::json!({
+                "finalizedBlockHeader": finalized_header_hex,
+                "grandpaAuthoritySet": {
+                    "currentAuthorities": authorities_hex,
+                    "setId": set_id,
+                }
+            });
+            spec["lightSyncState"] = light_sync_state;
+
+            Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(spec)
+        })?;
+    }
 
     // CPU 哈希率 RPC：mining_cpuHashrate
     // 返回值：当前 CPU 全线程合计哈希率（hashes/sec），u64 整数。

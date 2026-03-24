@@ -24,6 +24,7 @@ clap = { workspace = true }
 futures = { workspace = true }
 jsonrpsee = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, default-features = true }
 primitives = { path = "../runtime/primitives" }
 ocl = { version = "0.19", optional = true }
 
@@ -39,6 +40,7 @@ sc-executor = { workspace = true, default-features = true }
 sc-network = { workspace = true, default-features = true }
 sc-offchain = { workspace = true, default-features = true }
 sc-service = { workspace = true, default-features = true }
+
 sc-telemetry = { workspace = true, default-features = true }
 sc-transaction-pool = { workspace = true, default-features = true }
 sc-transaction-pool-api = { workspace = true, default-features = true }
