@@ -47,15 +47,30 @@ case "$MODE" in
     fi
     echo "本机 IP: $LOCAL_IP"
 
-    # 4. 替换 chainspec 中的 bootnode 为真实值
+    # 4. 获取 lightSyncState（smoldot 用来跳过历史区块验证）
+    echo "获取 lightSyncState..."
+    LIGHT_SYNC_STATE=$(curl -s -H "Content-Type: application/json" \
+      -d '{"id":1,"jsonrpc":"2.0","method":"sync_state_genSyncSpec","params":[true]}' \
+      "$NODE_RPC" | python3 -c "import sys,json; r=json.load(sys.stdin).get('result',{}); print(json.dumps(r.get('lightSyncState')) if 'lightSyncState' in r else '')" 2>/dev/null || true)
+
+    # 5. 替换 chainspec 中的 bootnode，并注入 lightSyncState
     python3 -c "
 import json
 with open('$OUTPUT') as f:
     spec = json.load(f)
 spec['bootNodes'] = ['/ip4/$LOCAL_IP/tcp/30333/ws/p2p/$REAL_PEER_ID']
+light_sync = '$LIGHT_SYNC_STATE'
+if light_sync:
+    try:
+        spec['lightSyncState'] = json.loads(light_sync)
+        print('lightSyncState: 已注入（smoldot 将跳过历史区块验证）')
+    except json.JSONDecodeError:
+        print('lightSyncState: 解析失败，跳过')
+else:
+    print('lightSyncState: 节点未返回，跳过（首次同步将从创世块开始）')
+print('bootNodes:', spec['bootNodes'])
 with open('$OUTPUT', 'w') as f:
     json.dump(spec, f, indent=2)
-print('bootNodes:', spec['bootNodes'])
 "
     ;;
 
