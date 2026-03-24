@@ -176,6 +176,7 @@ GMB/
 
 ### 7.2 `tools/`
 - 提供环境安装、辅助脚本、身份相关工具
+- `tools/zhujichi.py` 用于批量生成助记词与公钥清单，当前默认输出为 `vault_without_salt.txt` 纯文本文件
 - 不承载产品主业务逻辑
 
 ### 7.3 `docs/`

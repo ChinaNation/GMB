@@ -224,6 +224,63 @@ char *smoldot_get_storage_values(SmoldotChainHandle chain_handle,
                                  const char *storage_keys_json,
                                  char **error_out);
 
+int smoldot_get_status_snapshot_async(SmoldotChainHandle chain_handle,
+                                      int64_t callback_id,
+                                      SmoldotDartCallback callback,
+                                      char **error_out);
+
+int smoldot_get_runtime_version_async(SmoldotChainHandle chain_handle,
+                                      int64_t callback_id,
+                                      SmoldotDartCallback callback,
+                                      char **error_out);
+
+int smoldot_get_metadata_async(SmoldotChainHandle chain_handle,
+                               int64_t callback_id,
+                               SmoldotDartCallback callback,
+                               char **error_out);
+
+int smoldot_get_account_next_index_async(SmoldotChainHandle chain_handle,
+                                         const char *account_id_hex,
+                                         int64_t callback_id,
+                                         SmoldotDartCallback callback,
+                                         char **error_out);
+
+int smoldot_get_block_hash_async(SmoldotChainHandle chain_handle,
+                                 const char *block_number,
+                                 int64_t callback_id,
+                                 SmoldotDartCallback callback,
+                                 char **error_out);
+
+int smoldot_get_block_extrinsics_async(SmoldotChainHandle chain_handle,
+                                       const char *block_hash_hex,
+                                       int64_t callback_id,
+                                       SmoldotDartCallback callback,
+                                       char **error_out);
+
+int smoldot_submit_extrinsic_async(SmoldotChainHandle chain_handle,
+                                   const char *extrinsic_hex,
+                                   int64_t callback_id,
+                                   SmoldotDartCallback callback,
+                                   char **error_out);
+
+int smoldot_get_system_account_async(SmoldotChainHandle chain_handle,
+                                     const char *account_id_hex,
+                                     int64_t callback_id,
+                                     SmoldotDartCallback callback,
+                                     char **error_out);
+
+int smoldot_get_storage_value_async(SmoldotChainHandle chain_handle,
+                                    const char *storage_key_hex,
+                                    int64_t callback_id,
+                                    SmoldotDartCallback callback,
+                                    char **error_out);
+
+int smoldot_get_storage_values_async(SmoldotChainHandle chain_handle,
+                                     const char *storage_keys_json,
+                                     int64_t callback_id,
+                                     SmoldotDartCallback callback,
+                                     char **error_out);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
