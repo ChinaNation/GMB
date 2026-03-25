@@ -163,11 +163,11 @@ fn build_genesis() -> Value {
         })
         .collect();
 
-    // 中文注释：最终性公钥从本文件固定清单读取，不依赖 CHINA_CB 动态映射。
-    let grandpa_authorities_json: Vec<Value> = GRANDPA_AUTHORITY_KEYS_HEX
-        .iter()
-        .map(|hex_key| json!([grandpa_key_hex_to_genesis_ss58(hex_key), 1]))
-        .collect();
+    // 中文注释：正式链开发期 GRANDPA 只使用国储会（NRC）的第 1 把密钥，单节点即可 finalize。
+    // 切换到运行期时通过 SwitchToProduction migration 扩展到全部 44 个权威。
+    let grandpa_authorities_json: Vec<Value> = vec![
+        json!([grandpa_key_hex_to_genesis_ss58(GRANDPA_AUTHORITY_KEYS_HEX[0]), 1]),
+    ];
 
     let mut genesis = serde_json::to_value(crate::RuntimeGenesisConfig::default())
         .expect("default runtime genesis config should serialize");
@@ -206,30 +206,10 @@ fn build_genesis() -> Value {
     genesis
 }
 
-/// Return the mainnet genesis config.
+/// 返回 citizenchain 创世配置。
 #[cfg(feature = "std")]
-pub fn mainnet_config_genesis() -> Value {
+pub fn genesis_config() -> Value {
     build_genesis()
-}
-
-/// 开发链 genesis：GRANDPA 只用 Alice 密钥（单节点即可 finalize）。
-#[cfg(feature = "std")]
-pub fn dev_config_genesis() -> Value {
-    let mut genesis = build_genesis();
-
-    // 中文注释：覆盖 GRANDPA 权威列表，只留一个 well-known 密钥（//Alice 的 ed25519 公钥），
-    // 使单节点开发链也能 finalize 区块。
-    let alice_grandpa_hex = "88dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee";
-    let alice_grandpa_ss58 = grandpa_key_hex_to_genesis_ss58(alice_grandpa_hex);
-    let root = genesis.as_object_mut().unwrap();
-    root.insert(
-        "grandpa".into(),
-        json!({
-            "authorities": [[alice_grandpa_ss58, 1]],
-        }),
-    );
-
-    genesis
 }
 
 /// Provides the JSON representation of predefined genesis config for given `id`.
@@ -243,8 +223,7 @@ pub fn get_preset(id: &PresetId) -> Option<Vec<u8>> {
     #[cfg(feature = "std")]
     {
         let patch = match id.as_ref() {
-            sp_genesis_builder::DEV_RUNTIME_PRESET => dev_config_genesis(),
-            sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET => mainnet_config_genesis(),
+            sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET => genesis_config(),
             _ => return None,
         };
         Some(
@@ -258,7 +237,6 @@ pub fn get_preset(id: &PresetId) -> Option<Vec<u8>> {
 /// List of supported presets.
 pub fn preset_names() -> Vec<PresetId> {
     vec![
-        PresetId::from(sp_genesis_builder::DEV_RUNTIME_PRESET),
         PresetId::from(sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET),
     ]
 }
@@ -272,8 +250,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn mainnet_genesis_contains_nrc_and_all_shengbank_balances() {
-        let patch = mainnet_config_genesis();
+    fn genesis_contains_nrc_and_all_shengbank_balances() {
+        let patch = genesis_config();
         let balances = patch["balances"]["balances"]
             .as_array()
             .expect("balances.balances should be an array");
@@ -283,8 +261,8 @@ mod tests {
     }
 
     #[test]
-    fn mainnet_genesis_issuance_goes_entirely_to_nrc() {
-        let patch = mainnet_config_genesis();
+    fn genesis_issuance_goes_entirely_to_nrc() {
+        let patch = genesis_config();
         let balances = patch["balances"]["balances"]
             .as_array()
             .expect("balances.balances should be an array");
@@ -328,8 +306,8 @@ mod tests {
     }
 
     #[test]
-    fn mainnet_genesis_omits_national_institutional_registry_without_runtime_pallet() {
-        let patch = mainnet_config_genesis();
+    fn genesis_omits_national_institutional_registry_without_runtime_pallet() {
+        let patch = genesis_config();
         assert!(
             patch.get("nationalInstitutionalRegistry").is_none(),
             "nationalInstitutionalRegistry should be absent until the runtime pallet is wired into genesis"
@@ -376,8 +354,8 @@ mod tests {
     }
 
     #[test]
-    fn mainnet_genesis_json_deserializes_into_runtime_genesis_config() {
-        let patch = mainnet_config_genesis();
+    fn genesis_json_deserializes_into_runtime_genesis_config() {
+        let patch = genesis_config();
         let parsed: Result<RuntimeGenesisConfig, _> = serde_json::from_value(patch);
         assert!(
             parsed.is_ok(),
@@ -387,8 +365,8 @@ mod tests {
     }
 
     #[test]
-    fn mainnet_genesis_account_strings_deserialize_individually() {
-        let patch = mainnet_config_genesis();
+    fn genesis_account_strings_deserialize_individually() {
+        let patch = genesis_config();
 
         for entry in patch["balances"]["balances"]
             .as_array()
@@ -431,8 +409,8 @@ mod tests {
     }
 
     #[test]
-    fn mainnet_genesis_top_level_sections_deserialize_individually() {
-        let patch = mainnet_config_genesis();
+    fn genesis_top_level_sections_deserialize_individually() {
+        let patch = genesis_config();
 
         let balances: Result<pallet_balances::GenesisConfig<crate::Runtime>, _> =
             serde_json::from_value(patch["balances"].clone());

@@ -25,6 +25,3 @@ std = [
     "sp-core/std",
     "sp-runtime/std",
 ]
-
-## 开发链模式：6秒出块、极低难度，仅用于本地开发调试
-dev-chain = []
