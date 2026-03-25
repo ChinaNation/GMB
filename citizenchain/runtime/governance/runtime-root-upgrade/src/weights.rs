@@ -5,14 +5,14 @@
 //! DATE: 2026-03-16, STEPS: `50`, REPEAT: `20`, LOW RANGE: `[]`, HIGH RANGE: `[]`
 //! WORST CASE MAP SIZE: `1000000`
 //! HOSTNAME: `runnervm46oaq`, CPU: `AMD EPYC 7763 64-Core Processor`
-//! WASM-EXECUTION: `Compiled`, CHAIN: `Some("mainnet")`, DB CACHE: 1024
+//! WASM-EXECUTION: `Compiled`, CHAIN: `Some("citizenchain")`, DB CACHE: 1024
 
 // Executed Command:
 // /home/runner/work/GMB/GMB/citizenchain/target/release/node
 // benchmark
 // pallet
 // --chain
-// mainnet
+// citizenchain
 // --pallet
 // runtime_root_upgrade
 // --extrinsic

@@ -6,7 +6,6 @@ After=network.target
 Type=simple
 User=citizenchain
 ExecStart=/opt/citizenchain/node \
-  --chain dev \
   --base-path /opt/citizenchain/data \
   --port 30333 \
   --rpc-port 9944 \

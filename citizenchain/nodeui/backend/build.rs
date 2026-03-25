@@ -32,14 +32,6 @@ fn build_chain_node() {
         "node",
     ];
 
-    // dev-chain feature 传递
-    let feature_flag;
-    if cfg!(feature = "dev-chain") {
-        feature_flag = "dev-chain".to_string();
-        args.push("--features");
-        args.push(&feature_flag);
-    }
-
     eprintln!("[build.rs] 编译链节点...");
 
     let status = Command::new("cargo")

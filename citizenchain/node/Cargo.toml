@@ -100,5 +100,3 @@ try-runtime = [
 	"citizenchain/try-runtime",
 	"sp-runtime/try-runtime",
 ]
-## 开发链模式：6秒出块、极低难度
-dev-chain = ["citizenchain/dev-chain", "primitives/dev-chain"]

@@ -41,3 +41,9 @@
 - CPU/GPU 矿工外层循环在获取 metadata 后检查 `pool_ready() == 0`
 - 为空则 sleep 500ms 后 continue，不进入哈希搜索
 - 编译通过（`cargo check --package citizenchain`）
+
+### 2026-03-25 修复创世引导期死锁
+
+问题：清链重启后交易池为空 → 矿工跳过挖矿 → 不出块 → 无法提交交易 → 启动死锁。
+
+修复：在 `pool_ready` 闭包中增加创世引导期判断（`best_number < 10` 时返回 1），允许前 10 个空块出块，引导期后恢复空块跳过逻辑。仅改动 `service.rs` 中闭包构造处，CPU/GPU 矿工代码无需修改。

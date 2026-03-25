@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 【开发模式】不清库，继续启动开发链节点
+# 不清库，继续启动节点
 set -euo pipefail
 
 # ── 退出时杀掉所有节点子进程，防止孤儿进程 ──
@@ -20,5 +20,5 @@ cleanup() {
 trap cleanup EXIT INT TERM HUP
 
 cd "$(dirname "$0")/../nodeui"
-echo "==> 启动 nodeui（开发链：保留现有链数据，不清库）..."
-cargo tauri dev --features dev-chain
+echo "==> 启动 nodeui（保留现有链数据，不清库）..."
+cargo tauri dev
