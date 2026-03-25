@@ -434,12 +434,12 @@ mod tests {
                 ORG_NRC | ORG_PRC => CHINA_CB
                     .iter()
                     .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                    .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
                 ORG_PRB => CHINA_CH
                     .iter()
                     .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                    .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
                 _ => false,
             }
@@ -481,15 +481,15 @@ mod tests {
     }
 
     fn nrc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CB[0].admins[index])
+        AccountId32::new(CHINA_CB[0].duoqian_admins[index])
     }
 
     fn prc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CB[1].admins[index])
+        AccountId32::new(CHINA_CB[1].duoqian_admins[index])
     }
 
     fn prb_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CH[0].admins[index])
+        AccountId32::new(CHINA_CH[0].duoqian_admins[index])
     }
 
     fn nrc_pallet_id() -> InstitutionPalletId {

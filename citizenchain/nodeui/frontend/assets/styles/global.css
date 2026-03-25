@@ -566,3 +566,979 @@ select option:checked {
   height: auto;
   border-radius: 8px;
 }
+
+/* ── 治理页面 ── */
+
+.governance-section {
+  padding: 0 4px;
+}
+
+.governance-section h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  color: #111827;
+}
+
+.institution-group {
+  margin-bottom: 16px;
+}
+
+.institution-group-header {
+  cursor: pointer;
+  user-select: none;
+  font-size: 15px;
+  color: #374151;
+  margin: 0 0 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.collapse-arrow {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 11px;
+  transition: transform 0.15s;
+}
+
+.collapse-arrow.collapsed {
+  transform: rotate(-90deg);
+}
+
+.institution-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.institution-card {
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfdff;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.institution-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 1px 4px rgba(0, 140, 180, 0.12);
+}
+
+.institution-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.institution-card-meta {
+  margin-top: 4px;
+}
+
+.institution-card-type {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* 机构详情页 */
+
+.back-button {
+  background: transparent;
+  color: var(--primary);
+  border: none;
+  padding: 4px 0;
+  font-size: 14px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.back-button:hover {
+  text-decoration: underline;
+}
+
+.institution-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.institution-info-section {
+  margin-bottom: 16px;
+}
+
+.institution-info-section h3 {
+  font-size: 14px;
+  color: #374151;
+  margin: 0 0 6px;
+}
+
+.shenfen-id,
+.duoqian-address {
+  display: block;
+  font-size: 12px;
+  color: #4b5563;
+  background: #f3f4f6;
+  padding: 6px 8px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+.no-data {
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.admin-index {
+  font-size: 12px;
+  color: #6b7280;
+  min-width: 24px;
+}
+
+.admin-pubkey {
+  font-size: 12px;
+  color: #4b5563;
+  word-break: break-all;
+}
+
+/* ── 治理子 Tab ── */
+
+.governance-sub-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 4px;
+}
+
+.governance-sub-tabs button {
+  background: rgba(0, 140, 180, 0.12);
+  color: #000000;
+  border: none;
+  padding: 4px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  min-width: 88px;
+  border-radius: 6px;
+}
+
+.governance-sub-tabs button.active {
+  background: var(--primary);
+  color: #ffffff;
+}
+
+/* ── 提案列表 ── */
+
+.proposal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.proposal-card {
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfdff;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.proposal-card:hover {
+  border-color: var(--primary);
+}
+
+.proposal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.proposal-id {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.proposal-status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.status-0 {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.status-1 {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-2 {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-3 {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.proposal-card-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.proposal-tag {
+  font-size: 11px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.institution-tag {
+  color: var(--primary);
+  background: rgba(0, 140, 180, 0.08);
+}
+
+.proposal-summary {
+  font-size: 13px;
+  color: #4b5563;
+  line-height: 1.4;
+}
+
+.load-more-button {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px;
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.load-more-button:hover {
+  background: rgba(0, 140, 180, 0.06);
+}
+
+/* ── 提案详情 ── */
+
+.proposal-institution-name {
+  font-size: 14px;
+  color: #6b7280;
+  margin: -8px 0 12px;
+}
+
+.status-text-0 { color: #1e40af; }
+.status-text-1 { color: #065f46; }
+.status-text-2 { color: #991b1b; }
+.status-text-3 { color: #92400e; }
+
+.proposal-detail-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-row {
+  display: flex;
+  gap: 12px;
+}
+
+.detail-label {
+  font-size: 13px;
+  color: #6b7280;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.detail-value {
+  font-size: 13px;
+  color: #111827;
+  word-break: break-all;
+}
+
+/* ── 投票进度条 ── */
+
+.vote-tally {
+  margin-bottom: 12px;
+}
+
+.vote-tally-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.vote-tally-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.vote-tally-counts {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.vote-threshold {
+  color: #9ca3af;
+  margin-left: 4px;
+}
+
+.vote-tally-bar {
+  height: 8px;
+  background: #fee2e2;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.vote-tally-bar-yes {
+  height: 100%;
+  background: #10b981;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+/* ── 冷钱包管理 ── */
+
+.wallet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.wallet-header h2 {
+  margin: 0;
+}
+
+.wallet-add-button {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.wallet-hint {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0 0 12px;
+}
+
+.wallet-form {
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f9fafb;
+  margin-bottom: 16px;
+}
+
+.wallet-form h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: #111827;
+}
+
+.wallet-form-field {
+  margin-bottom: 10px;
+}
+
+.wallet-form-field label {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.wallet-form-field input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.wallet-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.wallet-form-actions button {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.cancel-button {
+  background: transparent;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+.danger-button {
+  background: #ef4444;
+  color: #fff;
+}
+
+.wallet-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.wallet-card {
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfdff;
+}
+
+.wallet-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.wallet-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.wallet-delete-button {
+  background: transparent;
+  color: #ef4444;
+  border: none;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  min-width: auto;
+}
+
+.wallet-delete-button:hover {
+  text-decoration: underline;
+}
+
+.wallet-card-address code {
+  font-size: 12px;
+  color: #4b5563;
+  word-break: break-all;
+}
+
+.wallet-card-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.wallet-delete-confirm {
+  margin-top: 8px;
+  padding: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+}
+
+.wallet-delete-confirm p {
+  font-size: 13px;
+  color: #991b1b;
+  margin: 0 0 6px;
+}
+
+.wallet-delete-confirm input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  font-size: 13px;
+  margin-bottom: 6px;
+  box-sizing: border-box;
+}
+
+/* ── 管理员识别 ── */
+
+.institution-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.institution-title-row h2 {
+  margin: 0;
+}
+
+.admin-badge {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: #d1fae5;
+  color: #065f46;
+  font-weight: 500;
+}
+
+.admin-wallet-notice {
+  font-size: 13px;
+  color: #065f46;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+}
+
+.section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vote-entry-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-weight: 500;
+  margin-right: 6px;
+}
+
+.proposal-card.clickable {
+  cursor: pointer;
+}
+
+.proposal-card-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.admin-item.my-wallet {
+  background: #ecfdf5;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.my-wallet-tag {
+  font-size: 11px;
+  color: #065f46;
+  margin-left: 6px;
+}
+
+/* ── 投票操作区 ── */
+
+.vote-action-section {
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ecfdf5;
+  margin-bottom: 16px;
+}
+
+.vote-action-hint {
+  font-size: 13px;
+  color: #065f46;
+  margin: 0 0 10px;
+}
+
+.vote-action-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.vote-button {
+  padding: 8px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  min-width: 80px;
+}
+
+.vote-yes {
+  background: #10b981;
+  color: #fff;
+}
+
+.vote-yes:disabled {
+  background: #a7f3d0;
+  color: #6ee7b7;
+  cursor: not-allowed;
+}
+
+.vote-no {
+  background: #ef4444;
+  color: #fff;
+}
+
+.vote-no:disabled {
+  background: #fecaca;
+  color: #f87171;
+  cursor: not-allowed;
+}
+
+.vote-action-pending {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 8px 0 0;
+}
+
+/* ── 投票签名弹窗 ── */
+
+.vote-signing-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.vote-signing-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 400px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+}
+
+.vote-signing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.vote-signing-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #111827;
+}
+
+.vote-signing-close {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0;
+  min-width: auto;
+  line-height: 1;
+}
+
+.vote-signing-body {
+  padding: 16px;
+}
+
+.vote-signing-field {
+  margin-bottom: 14px;
+}
+
+.vote-signing-field label {
+  display: block;
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.vote-signing-field select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.vote-direction-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.vote-dir-btn {
+  flex: 1;
+  padding: 10px;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #374151;
+  transition: all 0.15s;
+}
+
+.vote-dir-btn.selected-yes {
+  border-color: #10b981;
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.vote-dir-btn.selected-no {
+  border-color: #ef4444;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.vote-signing-confirm {
+  width: 100%;
+  padding: 10px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.vote-signing-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* QR 码显示 */
+
+.qr-step {
+  text-align: center;
+}
+
+.qr-instruction {
+  font-size: 13px;
+  color: #4b5563;
+  margin: 0 0 12px;
+}
+
+.qr-container {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  margin-bottom: 12px;
+}
+
+.qr-countdown {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0 0 12px;
+}
+
+/* 摄像头扫描 */
+
+.scanner-container {
+  width: 320px;
+  height: 320px;
+  margin: 0 auto 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid #dbe2ea;
+}
+
+/* ── QrScanner 组件 ── */
+
+.qr-scanner-wrapper {
+  position: relative;
+  width: 320px;
+  height: 260px;
+  margin: 0 auto 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+}
+
+.qr-scanner-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.qr-scanner-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qr-scanner-frame {
+  width: 200px;
+  height: 200px;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 8px;
+  box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.3);
+}
+
+/* 投票成功 */
+
+.vote-success {
+  text-align: center;
+  padding: 16px 0;
+}
+
+.vote-success p {
+  font-size: 16px;
+  font-weight: 600;
+  color: #065f46;
+  margin: 0 0 8px;
+}
+
+.tx-hash {
+  display: block;
+  font-size: 11px;
+  color: #6b7280;
+  word-break: break-all;
+  background: #f3f4f6;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+
+/* ── 投票状态已完成 ── */
+
+.vote-status-done {
+  text-align: center;
+  padding: 4px 0;
+}
+
+.vote-status-icon {
+  font-size: 15px;
+  font-weight: 600;
+  color: #065f46;
+}
+
+.vote-result-tag {
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  margin-left: 6px;
+}
+.vote-yes-tag { background: #d1fae5; color: #065f46; }
+.vote-no-tag { background: #fee2e2; color: #991b1b; }
+.vote-pending-tag { background: #e5e7eb; color: #6b7280; }
+
+.vote-button-inline {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+  margin-left: 6px;
+  min-width: auto;
+}
+.vote-button-inline:hover { opacity: 0.85; }
+
+.metric-label-id {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 400;
+  margin-left: 16px;
+  word-break: break-all;
+}
+
+/* ── 发起提案按钮 ── */
+
+.create-proposal-button {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  min-width: auto;
+}
+
+.create-proposal-form {
+  max-width: 500px;
+}
+
+/* ── 提案类型入口网格 ── */
+
+.proposal-type-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.proposal-type-button {
+  padding: 8px 18px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  min-width: auto;
+  transition: background 0.15s;
+}
+
+.proposal-type-button:hover:not(:disabled) {
+  background: rgba(0, 140, 180, 0.08);
+}
+
+.proposal-type-button:disabled {
+  border-color: #d1d5db;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* ── 身份ID / 多签地址一行 ── */
+
+.institution-id-inline {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  background: #f3f4f6;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+
+.institution-id-inline code {
+  font-size: 12px;
+  color: #4b5563;
+  word-break: break-all;
+  background: transparent;
+  padding: 0;
+}

@@ -16,7 +16,7 @@ fn decode_account<T: pallet::Config>(raw: [u8; 32]) -> T::AccountId {
 }
 
 fn nrc_admin<T: pallet::Config>() -> T::AccountId {
-    decode_account::<T>(CHINA_CB[0].admins[0])
+    decode_account::<T>(CHINA_CB[0].duoqian_admins[0])
 }
 
 fn prc_recipients<T: pallet::Config>() -> BoundedVec<T::AccountId, T::MaxAllocations> {

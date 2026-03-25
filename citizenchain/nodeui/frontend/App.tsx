@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { GovernanceSection } from './governance/GovernanceSection';
 import { HomeNodeSection } from './home/home-node';
 import { MiningDashboardSection } from './mining/mining-dashboard';
 import { NetworkOverviewSection } from './network/network-overview';
@@ -8,6 +9,7 @@ import { SettingsSection } from './settings/settings-panel';
 type TabKey =
   | 'home'
   | 'mining'
+  | 'governance'
   | 'network'
   | 'whitepaper'
   | 'party'
@@ -23,6 +25,7 @@ export default function App() {
       <nav className="top-nav">
         <button className={tab === 'home' ? 'active' : ''} onClick={() => setTab('home')}>首页</button>
         <button className={tab === 'mining' ? 'active' : ''} onClick={() => setTab('mining')}>挖矿</button>
+        <button className={tab === 'governance' ? 'active' : ''} onClick={() => setTab('governance')}>治理</button>
         <button className={tab === 'network' ? 'active' : ''} onClick={() => setTab('network')}>网络</button>
         <button className={tab === 'whitepaper' ? 'active' : ''} onClick={() => setTab('whitepaper')}>白皮书</button>
         <button className={tab === 'party' ? 'active' : ''} onClick={() => setTab('party')}>公民党</button>
@@ -42,6 +45,10 @@ export default function App() {
 
           {tab === 'mining' ? (
             <MiningDashboardSection />
+          ) : null}
+
+          {tab === 'governance' ? (
+            <GovernanceSection />
           ) : null}
 
           {tab === 'network' ? (
