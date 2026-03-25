@@ -15,6 +15,8 @@
 - 修改数据库模型前必须先确认影响范围
 - 修改链上资格和权限规则前必须先确认
 - 修改二维码结构和 permit 结构前必须同步更新文档与测试
+- 修改 `citizenchain/runtime` 中会影响 `wuminapp` 在线端或 `wumin` 冷钱包二维码签名/验签兼容性的内容前，必须先同步更新双端代码、文档与测试；未完成双端更新前，不允许继续修改 runtime
+- 上述兼容性触发项至少包括：`spec_version` / `transaction_version`、`construct_runtime!` 中的 pallet index、相关 call index、签名载荷编码依赖、冷钱包 `pallet_registry` / `payload_decoder` 所依赖的运行时索引与版本
 - 不允许删除、迁出或重命名 AI 编程系统核心基础设施
 
 ## 3. 代码与文档规则

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_repository.dart';
@@ -118,10 +119,14 @@ class OnchainTradeService {
             final updated =
                 record.copyWith(status: OnchainTxStatus.confirmed);
             await _repository.upsert(updated);
+            // 交易上链确认，清除本地 nonce 缓存，下次从链上重新获取。
+            NonceManager.instance.reset(record.fromAddress);
           case TxConfirmResult.lost:
             // 交易丢失：nonce 被其他交易消耗，本笔从未上链
             final updated = record.copyWith(status: OnchainTxStatus.failed);
             await _repository.upsert(updated);
+            // 交易丢失，同样清除缓存以重新同步链上 nonce。
+            NonceManager.instance.reset(record.fromAddress);
           case TxConfirmResult.pending:
             break; // 继续等待
         }

@@ -57,10 +57,10 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-    AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance, Hash,
-    Nonce, PalletInfo, ResolutionIssuanceIss, Runtime, RuntimeCall, RuntimeEvent,
-    RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System, VotingEngineSystem,
-    BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    AccountId, Address, Balance, Balances, Block, BlockNumber, ChainPhaseControl,
+    CitizenLightnodeIssuance, Hash, Nonce, PalletInfo, ResolutionIssuanceIss, Runtime, RuntimeCall,
+    RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
+    VotingEngineSystem, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 #[cfg(not(feature = "runtime-benchmarks"))]
 use super::{ResolutionIssuanceGov, RuntimeRootUpgrade};
@@ -93,6 +93,27 @@ pub fn is_keyless_account(address: &AccountId) -> bool {
     primitives::china::china_ch::CHINA_CH
         .iter()
         .any(|n| address == &AccountId::new(n.keyless_address))
+}
+
+fn is_reserved_fee_account(address: &AccountId) -> bool {
+    primitives::china::china_ch::CHINA_CH.iter().any(|n| {
+        primitives::china::china_ch::shenfen_fee_id_to_bytes(n.shenfen_fee_id)
+            .map(|pid| {
+                let fee_account: AccountId = PalletId(pid).into_account_truncating();
+                address == &fee_account
+            })
+            .unwrap_or(false)
+    })
+}
+
+fn is_reserved_duoqian_account(address: &AccountId) -> bool {
+    let raw: &[u8] = address.as_ref();
+    if raw.len() != 32 {
+        return false;
+    }
+    let mut addr = [0u8; 32];
+    addr.copy_from_slice(raw);
+    primitives::china::china_zb::is_reserved_duoqian_address(&addr)
 }
 
 fn is_keyless_multi_address(address: &Address) -> bool {
@@ -304,22 +325,22 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                 );
                 onchain_transaction_pow::AmountExtractResult::Amount(value)
             }
-            RuntimeCall::DuoqianTransactionPow(
-                duoqian_transaction_pow::pallet::Call::propose_create { amount, .. },
+            RuntimeCall::DuoqianManagePow(
+                duoqian_manage_pow::pallet::Call::propose_create { amount, .. },
             ) => onchain_transaction_pow::AmountExtractResult::Amount(*amount),
-            RuntimeCall::DuoqianTransactionPow(
-                duoqian_transaction_pow::pallet::Call::propose_close {
+            RuntimeCall::DuoqianManagePow(
+                duoqian_manage_pow::pallet::Call::propose_close {
                     duoqian_address, ..
                 },
             ) => onchain_transaction_pow::AmountExtractResult::Amount(Balances::free_balance(
                 duoqian_address,
             )),
             // 投票调用不涉及资金转移，无金额
-            RuntimeCall::DuoqianTransactionPow(
-                duoqian_transaction_pow::pallet::Call::vote_create { .. },
+            RuntimeCall::DuoqianManagePow(
+                duoqian_manage_pow::pallet::Call::vote_create { .. },
             ) => onchain_transaction_pow::AmountExtractResult::NoAmount,
-            RuntimeCall::DuoqianTransactionPow(
-                duoqian_transaction_pow::pallet::Call::vote_close { .. },
+            RuntimeCall::DuoqianManagePow(
+                duoqian_manage_pow::pallet::Call::vote_close { .. },
             ) => onchain_transaction_pow::AmountExtractResult::NoAmount,
             // 中文注释：以下调用类型明确属于“无金额交易”，放行且不计算手续费。
             RuntimeCall::System(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
@@ -353,7 +374,7 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                 onchain_transaction_pow::AmountExtractResult::NoAmount
             }
             RuntimeCall::GrandpaKeyGov(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
-            RuntimeCall::DuoqianTransactionPow(_) => {
+            RuntimeCall::DuoqianManagePow(_) => {
                 onchain_transaction_pow::AmountExtractResult::NoAmount
             }
             // 机构转账提案/投票：全部免费（手续费在投票通过执行转账时由 pallet 内部扣取并分账）
@@ -416,7 +437,7 @@ impl fullnode_pow_reward::Config for Runtime {
 
 pub struct RuntimeDuoqianAddressValidator;
 
-impl duoqian_transaction_pow::DuoqianAddressValidator<AccountId>
+impl duoqian_manage_pow::DuoqianAddressValidator<AccountId>
     for RuntimeDuoqianAddressValidator
 {
     fn is_valid(address: &AccountId) -> bool {
@@ -461,14 +482,43 @@ pub struct RuntimeDuoqianReservedAddressChecker;
 pub struct RuntimeSfidInstitutionVerifier;
 
 pub struct RuntimeProtectedSourceChecker;
+pub struct RuntimeInstitutionAssetGuard;
 
-impl duoqian_transaction_pow::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
+impl duoqian_manage_pow::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
     fn is_protected(address: &AccountId) -> bool {
         is_keyless_account(address)
     }
 }
 
-impl duoqian_transaction_pow::DuoqianReservedAddressChecker<AccountId>
+impl institution_asset_guard::InstitutionAssetGuard<AccountId> for RuntimeInstitutionAssetGuard {
+    fn can_spend(
+        source: &AccountId,
+        action: institution_asset_guard::InstitutionAssetAction,
+    ) -> bool {
+        if is_keyless_account(source) {
+            return false;
+        }
+
+        if is_reserved_duoqian_account(source) {
+            return matches!(
+                action,
+                institution_asset_guard::InstitutionAssetAction::DuoqianTransferExecute
+                    | institution_asset_guard::InstitutionAssetAction::DuoqianCloseExecute
+            );
+        }
+
+        if is_reserved_fee_account(source) {
+            return matches!(
+                action,
+                institution_asset_guard::InstitutionAssetAction::OffchainFeeSweepExecute
+            );
+        }
+
+        true
+    }
+}
+
+impl duoqian_manage_pow::DuoqianReservedAddressChecker<AccountId>
     for RuntimeDuoqianReservedAddressChecker
 {
     fn is_reserved(address: &AccountId) -> bool {
@@ -492,26 +542,20 @@ impl duoqian_transaction_pow::DuoqianReservedAddressChecker<AccountId>
             return true;
         }
 
-        let raw: &[u8] = address.as_ref();
-        if raw.len() != 32 {
-            return false;
-        }
-        let mut addr = [0u8; 32];
-        addr.copy_from_slice(raw);
-        primitives::china::china_zb::is_reserved_duoqian_address(&addr)
+        is_reserved_duoqian_account(address)
     }
 }
 
 impl
-    duoqian_transaction_pow::SfidInstitutionVerifier<
-        duoqian_transaction_pow::pallet::RegisterNonceOf<Runtime>,
-        duoqian_transaction_pow::pallet::RegisterSignatureOf<Runtime>,
+    duoqian_manage_pow::SfidInstitutionVerifier<
+        duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
+        duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
     > for RuntimeSfidInstitutionVerifier
 {
     fn verify_institution_registration(
         sfid_id: &[u8],
-        nonce: &duoqian_transaction_pow::pallet::RegisterNonceOf<Runtime>,
-        signature: &duoqian_transaction_pow::pallet::RegisterSignatureOf<Runtime>,
+        nonce: &duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
+        signature: &duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
@@ -546,13 +590,14 @@ impl
     }
 }
 
-impl duoqian_transaction_pow::Config for Runtime {
+impl duoqian_manage_pow::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = voting_engine_system::Pallet<Runtime>;
     type AddressValidator = RuntimeDuoqianAddressValidator;
     type ReservedAddressChecker = RuntimeDuoqianReservedAddressChecker;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
+    type InstitutionAssetGuard = RuntimeInstitutionAssetGuard;
     type SfidInstitutionVerifier = RuntimeSfidInstitutionVerifier;
     type MaxAdmins = ConstU32<64>;
     type MaxSfidIdLength = ConstU32<96>;
@@ -560,7 +605,7 @@ impl duoqian_transaction_pow::Config for Runtime {
     type MaxRegisterSignatureLength = ConstU32<64>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<111>;
-    type WeightInfo = duoqian_transaction_pow::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = duoqian_manage_pow::weights::SubstrateWeight<Runtime>;
 }
 
 fn current_sfid_verify_public() -> Option<sr25519::Public> {
@@ -798,10 +843,7 @@ impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runt
 
 impl duoqian_transfer_pow::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type Currency = Balances;
     type MaxRemarkLen = ConstU32<256>;
-    type InternalVoteEngine = VotingEngineSystem;
-    type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type FeeRouter = TransferFeeRouter;
     type WeightInfo = duoqian_transfer_pow::weights::SubstrateWeight<Runtime>;
 }
@@ -914,6 +956,7 @@ impl runtime_root_upgrade::Config for Runtime {
     type NrcProposeOrigin = EnsureNrcAdmin;
     type JointVoteEngine = VotingEngineSystem;
     type RuntimeCodeExecutor = RuntimeSetCodeExecutor;
+    type DeveloperUpgradeCheck = ChainPhaseControl;
     type MaxReasonLen = RuntimeUpgradeMaxReasonLen;
     type MaxRuntimeCodeSize = RuntimeUpgradeMaxCodeSize;
     type MaxSnapshotNonceLength = ConstU32<64>;
@@ -1008,11 +1051,15 @@ impl pow_difficulty_module::Config for Runtime {
     type WeightInfo = pow_difficulty_module::weights::SubstrateWeight<Runtime>;
 }
 
+impl chain_phase_control::Config for Runtime {
+    type WeightInfo = chain_phase_control::weights::SubstrateWeight<Runtime>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::ResolutionDestroGov;
-    use duoqian_transaction_pow::DuoqianReservedAddressChecker;
+    use duoqian_manage_pow::DuoqianReservedAddressChecker;
     use frame_support::assert_ok;
     use frame_support::traits::Currency;
     use primitives::china::china_cb::{
@@ -1192,18 +1239,18 @@ mod tests {
 
             let duoqian_address = AccountId::new([77u8; 32]);
             let beneficiary = AccountId::new([78u8; 32]);
-            let sfid_id: duoqian_transaction_pow::pallet::SfidIdOf<Runtime> =
+            let sfid_id: duoqian_manage_pow::pallet::SfidIdOf<Runtime> =
                 b"GFR-LN001-CB0C-runtime-20260222"
                     .to_vec()
                     .try_into()
                     .expect("sfid id should fit");
-            let admins: duoqian_transaction_pow::pallet::DuoqianAdminsOf<Runtime> =
+            let admins: duoqian_manage_pow::pallet::DuoqianAdminsOf<Runtime> =
                 vec![who.clone(), admin2.clone()]
                     .try_into()
                     .expect("admins should fit");
 
-            let create_call = RuntimeCall::DuoqianTransactionPow(
-                duoqian_transaction_pow::pallet::Call::propose_create {
+            let create_call = RuntimeCall::DuoqianManagePow(
+                duoqian_manage_pow::pallet::Call::propose_create {
                     sfid_id,
                     admin_count: 2,
                     duoqian_admins: admins.clone(),
@@ -1222,8 +1269,8 @@ mod tests {
             }
 
             let _ = Balances::deposit_creating(&duoqian_address, 777);
-            let close_call = RuntimeCall::DuoqianTransactionPow(
-                duoqian_transaction_pow::pallet::Call::propose_close {
+            let close_call = RuntimeCall::DuoqianManagePow(
+                duoqian_manage_pow::pallet::Call::propose_close {
                     duoqian_address,
                     beneficiary,
                 },
@@ -1567,9 +1614,9 @@ mod tests {
             let main: AccountId = MultiSigner::from(pair.public()).into_account();
             sfid_code_auth::pallet::SfidMainAccount::<Runtime>::put(main);
             let sfid_id = b"GFR-LN001-CB0C-000000001-20260222";
-            let register_nonce: duoqian_transaction_pow::pallet::RegisterNonceOf<Runtime> =
+            let register_nonce: duoqian_manage_pow::pallet::RegisterNonceOf<Runtime> =
                 b"register-nonce".to_vec().try_into().expect("nonce should fit");
-            let register_signature: duoqian_transaction_pow::pallet::RegisterSignatureOf<Runtime> =
+            let register_signature: duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime> =
                 pair.sign(&blake2_256(
                     &(
                         b"GMB_SFID_INSTITUTION_V1",
@@ -1584,9 +1631,9 @@ mod tests {
                 .try_into()
                 .expect("signature should fit");
             assert!(
-                <RuntimeSfidInstitutionVerifier as duoqian_transaction_pow::SfidInstitutionVerifier<
-                    duoqian_transaction_pow::pallet::RegisterNonceOf<Runtime>,
-                    duoqian_transaction_pow::pallet::RegisterSignatureOf<Runtime>,
+                <RuntimeSfidInstitutionVerifier as duoqian_manage_pow::SfidInstitutionVerifier<
+                    duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
+                    duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id.as_slice(),
                     &register_nonce,
@@ -1594,12 +1641,12 @@ mod tests {
                 )
             );
 
-            let bad_signature: duoqian_transaction_pow::pallet::RegisterSignatureOf<Runtime> =
+            let bad_signature: duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime> =
                 vec![9u8; 63].try_into().expect("signature should fit");
             assert!(
-                !<RuntimeSfidInstitutionVerifier as duoqian_transaction_pow::SfidInstitutionVerifier<
-                    duoqian_transaction_pow::pallet::RegisterNonceOf<Runtime>,
-                    duoqian_transaction_pow::pallet::RegisterSignatureOf<Runtime>,
+                !<RuntimeSfidInstitutionVerifier as duoqian_manage_pow::SfidInstitutionVerifier<
+                    duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
+                    duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id.as_slice(),
                     &register_nonce,
@@ -1625,7 +1672,7 @@ impl voting_engine_system::InternalAdminProvider<AccountId> for RuntimeInternalA
                     return false;
                 };
                 if let Some(duoqian) =
-                    duoqian_transaction_pow::DuoqianAccounts::<Runtime>::get(&account)
+                    duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(&account)
                 {
                     duoqian.duoqian_admins.iter().any(|admin| admin == who)
                 } else {
@@ -1663,7 +1710,7 @@ impl voting_engine_system::InternalThresholdProvider for RuntimeInternalThreshol
             voting_engine_system::internal_vote::ORG_DUOQIAN => {
                 // institution 48 字节 → 解码为 AccountId32 → 查 DuoqianAccounts
                 let account = AccountId::decode(&mut &institution[..32]).ok()?;
-                let duoqian = duoqian_transaction_pow::DuoqianAccounts::<Runtime>::get(&account)?;
+                let duoqian = duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(&account)?;
                 Some(duoqian.threshold)
             }
             _ => None,
@@ -1679,7 +1726,7 @@ impl voting_engine_system::InternalAdminCountProvider for RuntimeInternalAdminCo
             // 注册多签机构：从 DuoqianAccounts 读取当前管理员人数
             voting_engine_system::internal_vote::ORG_DUOQIAN => {
                 let account = AccountId::decode(&mut &institution[..32]).ok()?;
-                let duoqian = duoqian_transaction_pow::DuoqianAccounts::<Runtime>::get(&account)?;
+                let duoqian = duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(&account)?;
                 u32::try_from(duoqian.duoqian_admins.len()).ok()
             }
             // 治理机构：从 admins_origin_gov 读取当前管理员人数

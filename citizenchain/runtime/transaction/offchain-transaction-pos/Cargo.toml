@@ -20,6 +20,7 @@ log = { version = "0.4", default-features = false }
 
 primitives = { path = "../../primitives", default-features = false }
 voting-engine-system = { path = "../../governance/voting-engine-system", default-features = false }
+institution-asset-guard = { path = "../institution-asset-guard", default-features = false }
 
 [features]
 default = ["std"]
@@ -42,4 +43,5 @@ std = [
     "log/std",
     "primitives/std",
     "voting-engine-system/std",
+    "institution-asset-guard/std",
 ]

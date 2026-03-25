@@ -3,5 +3,5 @@
   "identifier": "main-capability",
   "description": "Main window capability for local-only nodeui operations",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:default"]
 }

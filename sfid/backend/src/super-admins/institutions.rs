@@ -1095,7 +1095,7 @@ async fn submit_register_sfid_institution_extrinsic(
             .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?,
     );
     let payload = tx(
-        "DuoqianTransactionPow",
+        "DuoqianManagePow",
         "register_sfid_institution",
         vec![
             Value::from_bytes(sfid_id.as_bytes().to_vec()),

@@ -1,0 +1,18 @@
+[package]
+name = "institution-asset-guard"  # 机构账户资金操作白名单公共模块
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+license = "MIT"
+
+[dependencies]
+codec = { workspace = true, features = ["max-encoded-len"] }
+scale-info = { workspace = true }
+
+[features]
+default = ["std"]
+std = [
+    "codec/std",
+    "scale-info/std",
+]

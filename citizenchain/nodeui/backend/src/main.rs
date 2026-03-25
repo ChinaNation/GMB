@@ -12,10 +12,10 @@ use home::{
     RuntimeState,
 };
 use governance::{
-    build_joint_vote_request, build_propose_transfer_request, build_vote_request,
-    check_admin_wallets, check_vote_status, get_governance_overview, get_institution_detail,
-    get_institution_proposals, get_next_proposal_id, get_proposal_detail, get_proposal_page,
-    submit_propose_transfer, submit_vote,
+    build_developer_upgrade_request, build_joint_vote_request, build_propose_transfer_request,
+    build_vote_request, check_admin_wallets, check_vote_status, get_governance_overview,
+    get_institution_detail, get_institution_proposals, get_next_proposal_id, get_proposal_detail,
+    get_proposal_page, submit_developer_upgrade, submit_propose_transfer, submit_vote,
 };
 use mining::mining_dashboard::get_mining_dashboard;
 use network::network_overview::get_network_overview;
@@ -31,6 +31,7 @@ use std::sync::Mutex;
 fn main() {
     // main.rs 仅负责应用初始化和命令注册，业务逻辑下沉到 home/mining/network/other/settings 模块。
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState(Mutex::new(RuntimeState {
             local_node: None,
             node_key_file: None,
@@ -69,6 +70,8 @@ fn main() {
             build_joint_vote_request,
             build_propose_transfer_request,
             submit_propose_transfer,
+            build_developer_upgrade_request,
+            submit_developer_upgrade,
             submit_vote,
             check_vote_status
         ])

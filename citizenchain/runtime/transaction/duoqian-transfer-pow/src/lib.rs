@@ -11,7 +11,7 @@ use primitives::china::china_ch::{
     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
 use voting_engine_system::{
-    internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
+    internal_vote::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
     InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED,
 };
 
@@ -21,7 +21,9 @@ mod benchmarks;
 pub mod weights;
 
 type BalanceOf<T> =
-    <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+    <<T as duoqian_manage_pow::Config>::Currency as Currency<
+        <T as frame_system::Config>::AccountId,
+    >>::Balance;
 
 /// 转账动作：记录一次转账提案的完整业务参数。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
@@ -82,38 +84,37 @@ fn institution_pallet_address(institution: InstitutionPalletId) -> Option<[u8; 3
         .map(|n| n.duoqian_address)
 }
 
+fn institution_id_has_zero_suffix(institution: InstitutionPalletId) -> bool {
+    institution[32..].iter().all(|b| *b == 0)
+}
+
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    use duoqian_transaction_pow::ProtectedSourceChecker;
+    use duoqian_manage_pow::ProtectedSourceChecker;
     use frame_support::traits::ExistenceRequirement;
     use frame_support::traits::OnUnbalanced;
+    use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
     use voting_engine_system::InternalAdminProvider;
     use voting_engine_system::InternalVoteEngine;
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + voting_engine_system::Config {
+    pub trait Config:
+        frame_system::Config + voting_engine_system::Config + duoqian_manage_pow::Config
+    {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-
-        type Currency: Currency<Self::AccountId>;
 
         /// 备注最大长度
         #[pallet::constant]
         type MaxRemarkLen: Get<u32>;
 
-        /// 内部投票引擎
-        type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
-
-        /// 受保护地址检查器（复用 duoqian-transaction-pow 的 trait）
-        type ProtectedSourceChecker: duoqian_transaction_pow::ProtectedSourceChecker<
-            Self::AccountId,
-        >;
-
         /// 手续费分账路由（复用 PowOnchainFeeRouter）
         type FeeRouter: frame_support::traits::OnUnbalanced<
-            <Self::Currency as Currency<Self::AccountId>>::NegativeImbalance,
+            <<Self as duoqian_manage_pow::Config>::Currency as Currency<
+                Self::AccountId,
+            >>::NegativeImbalance,
         >;
 
         /// Weight 配置
@@ -164,6 +165,7 @@ pub mod pallet {
         InvalidInstitution,
         InstitutionOrgMismatch,
         UnauthorizedAdmin,
+        InstitutionSpendNotAllowed,
         ZeroAmount,
         AmountBelowExistentialDeposit,
         SelfTransferNotAllowed,
@@ -191,21 +193,22 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
-            let actual_org = institution_org(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let (actual_org, institution_account) = Self::resolve_institution_account(institution)?;
             ensure!(actual_org == org, Error::<T>::InstitutionOrgMismatch);
             ensure!(
                 Self::is_internal_admin(org, institution, &who),
                 Error::<T>::UnauthorizedAdmin
             );
-
-            // 获取机构 duoqian_address
-            let raw_account =
-                institution_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
-            let institution_account = T::AccountId::decode(&mut &raw_account[..])
-                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
+            ensure!(
+                <T as duoqian_manage_pow::Config>::InstitutionAssetGuard::can_spend(
+                    &institution_account,
+                    InstitutionAssetAction::DuoqianTransferExecute,
+                ),
+                Error::<T>::InstitutionSpendNotAllowed
+            );
 
             // 转账金额必须 >= ED，防止收款地址不存在时创建失败
-            let ed = T::Currency::minimum_balance();
+            let ed = <T as duoqian_manage_pow::Config>::Currency::minimum_balance();
             ensure!(amount >= ed, Error::<T>::AmountBelowExistentialDeposit);
 
             // 不允许自转账
@@ -216,7 +219,9 @@ pub mod pallet {
 
             // 不允许转到受保护地址（质押地址）
             ensure!(
-                !T::ProtectedSourceChecker::is_protected(&beneficiary),
+                !<T as duoqian_manage_pow::Config>::ProtectedSourceChecker::is_protected(
+                    &beneficiary,
+                ),
                 Error::<T>::BeneficiaryIsProtectedAddress
             );
 
@@ -229,7 +234,8 @@ pub mod pallet {
             let total = amount
                 .checked_add(&fee)
                 .ok_or(Error::<T>::InsufficientBalance)?;
-            let free = T::Currency::free_balance(&institution_account);
+            let free =
+                <T as duoqian_manage_pow::Config>::Currency::free_balance(&institution_account);
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
@@ -237,7 +243,11 @@ pub mod pallet {
 
             // 创建内部投票提案
             let proposal_id =
-                T::InternalVoteEngine::create_internal_proposal(who.clone(), org, institution)?;
+                <T as duoqian_manage_pow::Config>::InternalVoteEngine::create_internal_proposal(
+                    who.clone(),
+                    org,
+                    institution,
+                )?;
 
             let action = TransferAction {
                 institution,
@@ -280,13 +290,18 @@ pub mod pallet {
                 &mut &data[..],
             )
             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-            let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let org =
+                Self::resolve_actual_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 Self::is_internal_admin(org, action.institution, &who),
                 Error::<T>::UnauthorizedAdmin
             );
 
-            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
+            <T as duoqian_manage_pow::Config>::InternalVoteEngine::cast_internal_vote(
+                who.clone(),
+                proposal_id,
+                approve,
+            )?;
 
             Self::deposit_event(Event::<T>::TransferVoteSubmitted {
                 proposal_id,
@@ -323,6 +338,49 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        fn registered_duoqian_account(
+            institution: InstitutionPalletId,
+        ) -> Result<T::AccountId, Error<T>> {
+            ensure!(
+                institution_id_has_zero_suffix(institution),
+                Error::<T>::InvalidInstitution
+            );
+            let account = T::AccountId::decode(&mut &institution[..32])
+                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
+            let duoqian = duoqian_manage_pow::DuoqianAccounts::<T>::get(&account)
+                .ok_or(Error::<T>::InvalidInstitution)?;
+            ensure!(
+                duoqian.status == duoqian_manage_pow::DuoqianStatus::Active,
+                Error::<T>::InvalidInstitution
+            );
+            Ok(account)
+        }
+
+        fn resolve_actual_org(institution: InstitutionPalletId) -> Option<u8> {
+            if let Some(org) = institution_org(institution) {
+                return Some(org);
+            }
+            if Self::registered_duoqian_account(institution).is_ok() {
+                return Some(ORG_DUOQIAN);
+            }
+            None
+        }
+
+        fn resolve_institution_account(
+            institution: InstitutionPalletId,
+        ) -> Result<(u8, T::AccountId), Error<T>> {
+            if let Some(actual_org) = institution_org(institution) {
+                let raw_account =
+                    institution_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
+                let institution_account = T::AccountId::decode(&mut &raw_account[..])
+                    .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
+                return Ok((actual_org, institution_account));
+            }
+
+            let institution_account = Self::registered_duoqian_account(institution)?;
+            Ok((ORG_DUOQIAN, institution_account))
+        }
+
         fn is_internal_admin(
             org: u8,
             institution: InstitutionPalletId,
@@ -351,11 +409,14 @@ pub mod pallet {
                 &mut &data[..],
             )
             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-
-            let raw_account = institution_pallet_address(action.institution)
-                .ok_or(Error::<T>::InvalidInstitution)?;
-            let institution_account = T::AccountId::decode(&mut &raw_account[..])
-                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
+            let (_, institution_account) = Self::resolve_institution_account(action.institution)?;
+            ensure!(
+                <T as duoqian_manage_pow::Config>::InstitutionAssetGuard::can_spend(
+                    &institution_account,
+                    InstitutionAssetAction::DuoqianTransferExecute,
+                ),
+                Error::<T>::InstitutionSpendNotAllowed
+            );
 
             // ── 计算手续费（复用 onchain-transaction-pow 公共接口） ──
             let amount_u128: u128 = action.amount.saturated_into();
@@ -367,15 +428,16 @@ pub mod pallet {
                 .ok_or(Error::<T>::InsufficientBalance)?;
 
             // ── 余额检查：需要 total + ED ──
-            let free = T::Currency::free_balance(&institution_account);
-            let ed = T::Currency::minimum_balance();
+            let free =
+                <T as duoqian_manage_pow::Config>::Currency::free_balance(&institution_account);
+            let ed = <T as duoqian_manage_pow::Config>::Currency::minimum_balance();
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
             ensure!(free >= required, Error::<T>::InsufficientBalance);
 
             // ── 执行转账 ──
-            T::Currency::transfer(
+            <T as duoqian_manage_pow::Config>::Currency::transfer(
                 &institution_account,
                 &action.beneficiary,
                 action.amount,
@@ -384,7 +446,7 @@ pub mod pallet {
             .map_err(|_| Error::<T>::TransferFailed)?;
 
             // ── 手续费：从机构账户扣取，通过 FeeRouter 按现有规则分账 ──
-            let fee_imbalance = T::Currency::withdraw(
+            let fee_imbalance = <T as duoqian_manage_pow::Config>::Currency::withdraw(
                 &institution_account,
                 fee,
                 frame_support::traits::WithdrawReasons::FEE,
@@ -450,6 +512,9 @@ mod tests {
         pub type VotingEngineSystem = voting_engine_system;
 
         #[runtime::pallet_index(3)]
+        pub type DuoqianManagePow = duoqian_manage_pow;
+
+        #[runtime::pallet_index(4)]
         pub type DuoqianTransferPow = super;
     }
 
@@ -476,6 +541,36 @@ mod tests {
         type RuntimeFreezeReason = RuntimeFreezeReason;
         type DoneSlashHandler = ();
         type WeightInfo = ();
+    }
+
+    pub struct TestAddressValidator;
+    impl duoqian_manage_pow::DuoqianAddressValidator<AccountId32> for TestAddressValidator {
+        fn is_valid(address: &AccountId32) -> bool {
+            address != &AccountId32::new([0u8; 32])
+        }
+    }
+
+    pub struct TestReservedAddressChecker;
+    impl duoqian_manage_pow::DuoqianReservedAddressChecker<AccountId32> for TestReservedAddressChecker {
+        fn is_reserved(address: &AccountId32) -> bool {
+            *address == AccountId32::new([0xAA; 32])
+        }
+    }
+
+    pub struct TestSfidInstitutionVerifier;
+    impl
+        duoqian_manage_pow::SfidInstitutionVerifier<
+            duoqian_manage_pow::pallet::RegisterNonceOf<Test>,
+            duoqian_manage_pow::pallet::RegisterSignatureOf<Test>,
+        > for TestSfidInstitutionVerifier
+    {
+        fn verify_institution_registration(
+            _sfid_id: &[u8],
+            nonce: &duoqian_manage_pow::pallet::RegisterNonceOf<Test>,
+            signature: &duoqian_manage_pow::pallet::RegisterSignatureOf<Test>,
+        ) -> bool {
+            !nonce.is_empty() && signature.as_slice() == b"register-ok"
+        }
     }
 
     pub struct TestSfidEligibility;
@@ -538,19 +633,80 @@ mod tests {
                     .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                     .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
+                ORG_DUOQIAN => {
+                    let Ok(account) = AccountId32::decode(&mut &institution[..32]) else {
+                        return false;
+                    };
+                    if let Some(duoqian) = duoqian_manage_pow::DuoqianAccounts::<Test>::get(&account)
+                    {
+                        duoqian.duoqian_admins.iter().any(|admin| admin == who)
+                    } else {
+                        false
+                    }
+                }
                 _ => false,
+            }
+        }
+    }
+
+    pub struct TestInternalAdminCountProvider;
+    impl voting_engine_system::InternalAdminCountProvider for TestInternalAdminCountProvider {
+        fn admin_count(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+            match org {
+                ORG_NRC | ORG_PRC => CHINA_CB
+                    .iter()
+                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok()),
+                ORG_PRB => CHINA_CH
+                    .iter()
+                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok()),
+                ORG_DUOQIAN => {
+                    let account = AccountId32::decode(&mut &institution[..32]).ok()?;
+                    let duoqian = duoqian_manage_pow::DuoqianAccounts::<Test>::get(&account)?;
+                    u32::try_from(duoqian.duoqian_admins.len()).ok()
+                }
+                _ => None,
+            }
+        }
+    }
+
+    pub struct TestInternalThresholdProvider;
+    impl voting_engine_system::InternalThresholdProvider for TestInternalThresholdProvider {
+        fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+            match org {
+                ORG_NRC | ORG_PRC | ORG_PRB => {
+                    voting_engine_system::internal_vote::governance_org_pass_threshold(org)
+                }
+                ORG_DUOQIAN => {
+                    let account = AccountId32::decode(&mut &institution[..32]).ok()?;
+                    let duoqian = duoqian_manage_pow::DuoqianAccounts::<Test>::get(&account)?;
+                    Some(duoqian.threshold)
+                }
+                _ => None,
             }
         }
     }
 
     thread_local! {
         static PROTECTED_ADDRESS: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
+        static DENIED_SPEND_SOURCE: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
     }
 
     pub struct TestProtectedSourceChecker;
-    impl duoqian_transaction_pow::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
+    impl duoqian_manage_pow::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
         fn is_protected(address: &AccountId32) -> bool {
             PROTECTED_ADDRESS.with(|pa| pa.borrow().as_ref() == Some(address))
+        }
+    }
+
+    pub struct TestInstitutionAssetGuard;
+    impl institution_asset_guard::InstitutionAssetGuard<AccountId32> for TestInstitutionAssetGuard {
+        fn can_spend(
+            source: &AccountId32,
+            _action: institution_asset_guard::InstitutionAssetAction,
+        ) -> bool {
+            DENIED_SPEND_SOURCE.with(|blocked| blocked.borrow().as_ref() != Some(source))
         }
     }
 
@@ -569,25 +725,39 @@ mod tests {
         type MaxProposalsPerExpiry = ConstU32<128>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
-        type MaxJointDecisionApprovals = ConstU32<32>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
-        type InternalThresholdProvider = ();
+        type InternalAdminCountProvider = TestInternalAdminCountProvider;
+        type InternalThresholdProvider = TestInternalThresholdProvider;
         type MaxProposalDataLen = ConstU32<1024>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
-        type JointInstitutionDecisionVerifier = ();
         type TimeProvider = TestTimeProvider;
+        type WeightInfo = ();
+    }
+
+    impl duoqian_manage_pow::pallet::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type Currency = Balances;
+        type InternalVoteEngine = voting_engine_system::Pallet<Test>;
+        type AddressValidator = TestAddressValidator;
+        type ReservedAddressChecker = TestReservedAddressChecker;
+        type ProtectedSourceChecker = TestProtectedSourceChecker;
+        type InstitutionAssetGuard = TestInstitutionAssetGuard;
+        type SfidInstitutionVerifier = TestSfidInstitutionVerifier;
+        type MaxAdmins = ConstU32<10>;
+        type MaxSfidIdLength = ConstU32<96>;
+        type MaxRegisterNonceLength = ConstU32<64>;
+        type MaxRegisterSignatureLength = ConstU32<64>;
+        type MinCreateAmount = ConstU128<111>;
+        type MinCloseBalance = ConstU128<111>;
         type WeightInfo = ();
     }
 
     impl pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
-        type Currency = Balances;
         type MaxRemarkLen = ConstU32<256>;
-        type InternalVoteEngine = voting_engine_system::Pallet<Test>;
-        type ProtectedSourceChecker = TestProtectedSourceChecker;
         type FeeRouter = ();
         type WeightInfo = ();
     }
@@ -620,6 +790,22 @@ mod tests {
         let raw =
             institution_pallet_address(institution).expect("institution pallet address must exist");
         AccountId32::new(raw)
+    }
+
+    fn registered_duoqian_account() -> AccountId32 {
+        AccountId32::new([0x55; 32])
+    }
+
+    fn registered_duoqian_institution() -> InstitutionPalletId {
+        duoqian_manage_pow::account_to_institution_id(&registered_duoqian_account())
+    }
+
+    fn registered_duoqian_admin(index: usize) -> AccountId32 {
+        match index {
+            0 => AccountId32::new([0x31; 32]),
+            1 => AccountId32::new([0x32; 32]),
+            _ => AccountId32::new([0x33; 32]),
+        }
     }
 
     /// 收款人：使用一个不是管理员也不是机构的普通地址
@@ -744,6 +930,64 @@ mod tests {
             assert_eq!(Balances::free_balance(&inst_account), 6_990);
             assert_eq!(Balances::free_balance(&dest), 3_000);
             assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
+        });
+    }
+
+    #[test]
+    fn registered_duoqian_transfer_executes_when_yes_votes_reach_threshold() {
+        new_test_ext().execute_with(|| {
+            let institution = registered_duoqian_institution();
+            let inst_account = registered_duoqian_account();
+            let dest = beneficiary();
+            let admins = BoundedVec::try_from(vec![
+                registered_duoqian_admin(0),
+                registered_duoqian_admin(1),
+                registered_duoqian_admin(2),
+            ])
+            .expect("admins should fit");
+
+            duoqian_manage_pow::DuoqianAccounts::<Test>::insert(
+                &inst_account,
+                duoqian_manage_pow::DuoqianAccount {
+                    admin_count: 3,
+                    threshold: 2,
+                    duoqian_admins: admins,
+                    creator: registered_duoqian_admin(0),
+                    created_at: 1,
+                    status: duoqian_manage_pow::DuoqianStatus::Active,
+                },
+            );
+            let _ = Balances::deposit_creating(&inst_account, 10_000);
+
+            assert_ok!(DuoqianTransferPow::propose_transfer(
+                RuntimeOrigin::signed(registered_duoqian_admin(0)),
+                ORG_DUOQIAN,
+                institution,
+                dest.clone(),
+                1_500,
+                BoundedVec::default(),
+            ));
+            let pid = last_proposal_id();
+
+            assert_ok!(DuoqianTransferPow::vote_transfer(
+                RuntimeOrigin::signed(registered_duoqian_admin(0)),
+                pid,
+                true
+            ));
+            assert_ok!(DuoqianTransferPow::vote_transfer(
+                RuntimeOrigin::signed(registered_duoqian_admin(1)),
+                pid,
+                true
+            ));
+
+            assert_eq!(Balances::free_balance(&inst_account), 8_490);
+            assert_eq!(Balances::free_balance(&dest), 1_500);
+            assert_eq!(
+                voting_engine_system::Pallet::<Test>::proposals(pid)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_EXECUTED
+            );
         });
     }
 
@@ -1220,6 +1464,30 @@ mod tests {
                 ),
                 Error::<Test>::BeneficiaryIsProtectedAddress
             );
+        });
+    }
+
+    #[test]
+    fn institution_spend_guard_blocks_transfer_proposal() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let source = institution_account(institution);
+            let dest = beneficiary();
+            DENIED_SPEND_SOURCE.with(|blocked| *blocked.borrow_mut() = Some(source.clone()));
+
+            assert_noop!(
+                DuoqianTransferPow::propose_transfer(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    ORG_NRC,
+                    institution,
+                    dest,
+                    100,
+                    BoundedVec::default(),
+                ),
+                Error::<Test>::InstitutionSpendNotAllowed
+            );
+
+            DENIED_SPEND_SOURCE.with(|blocked| *blocked.borrow_mut() = None);
         });
     }
 

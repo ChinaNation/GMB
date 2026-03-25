@@ -4,11 +4,13 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'institution_admin_service.dart';
 import 'institution_data.dart';
+import 'pending_vote_store.dart';
 import 'proposal_context.dart';
 import 'runtime_upgrade_service.dart';
 import 'transfer_proposal_service.dart' show ProposalMeta;
 import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
+import '../rpc/onchain.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 
@@ -60,6 +62,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   List<WalletProfile> _votableWallets = const [];
   WalletProfile? _selectedVoteWallet;
 
+  // 已提交投票但尚未上链确认的管理员公钥集合
+  Set<String> _pendingPubkeys = const {};
+
   @override
   void initState() {
     super.initState();
@@ -83,8 +88,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   bool get _allImportedAdminsVoted {
     if (!_isAdmin) return false;
     for (final wallet in widget.adminWallets) {
-      final vote = _adminVotes[_normalizeHex(wallet.pubkeyHex)];
-      if (vote == null) return false;
+      final pk = _normalizeHex(wallet.pubkeyHex);
+      final vote = _adminVotes[pk];
+      if (vote == null && !_pendingPubkeys.contains(pk)) return false;
     }
     return true;
   }
@@ -136,6 +142,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       Map<String, bool?> adminVotes = const {};
       List<WalletProfile> votableWallets = const [];
       WalletProfile? selectedVoteWallet = _selectedVoteWallet;
+      Set<String> pendingPubkeys = const {};
 
       if (institution != null) {
         admins = (results[4] as List<String>)
@@ -164,8 +171,17 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           for (final entry in voteResults) entry.key: entry.value,
         };
 
+        // 检查待确认投票
+        final pendingRecords = await PendingVoteStore.instance.confirmAll(
+          'runtime_upgrade',
+          widget.proposalId,
+          OnchainRpc(),
+        );
+        final pendingPks = pendingRecords.map((r) => r.walletPubkey).toSet();
+
         votableWallets = matchedAdminWallets.where((wallet) {
-          return adminVotes[_normalizeHex(wallet.pubkeyHex)] == null;
+          final pk = _normalizeHex(wallet.pubkeyHex);
+          return adminVotes[pk] == null && !pendingPks.contains(pk);
         }).toList(growable: false)
           ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
 
@@ -175,6 +191,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           selectedVoteWallet =
               votableWallets.isNotEmpty ? votableWallets.first : null;
         }
+
+        pendingPubkeys = pendingPks;
       }
 
       if (!mounted) return;
@@ -187,6 +205,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         _institutionVote = institutionVote;
         _institutionAdminTally = institutionAdminTally;
         _adminVotes = adminVotes;
+        _pendingPubkeys = pendingPubkeys;
         _votableWallets = votableWallets;
         _selectedVoteWallet = selectedVoteWallet;
         _loading = false;
@@ -292,7 +311,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
     try {
       final institutionBytes = _shenfenIdToFixed48(institution.shenfenId);
-      final txHash = await _service.submitJointVote(
+      final result = await _service.submitJointVote(
         proposalId: widget.proposalId,
         institutionId48: institutionBytes,
         approve: approve,
@@ -322,10 +341,22 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         },
       );
 
+      // 持久化待确认投票记录
+      final pubkey = _normalizeHex(voteWallet.pubkeyHex);
+      await PendingVoteStore.instance.save(PendingVoteRecord(
+        proposalType: 'runtime_upgrade',
+        proposalId: widget.proposalId,
+        walletPubkey: pubkey,
+        approve: approve,
+        txHash: result.txHash,
+        usedNonce: result.usedNonce,
+        createdAt: DateTime.now(),
+      ));
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('联合投票已提交：${_truncateAddress(txHash)}'),
+          content: Text('联合投票已提交：${_truncateAddress(result.txHash)}'),
           backgroundColor: _inkGreen,
         ),
       );

@@ -1,6 +1,6 @@
 # DUOQIAN_TECHNICAL
 
-模块：`duoqian-transaction-pow`  
+模块：`duoqian-manage-pow`  
 范围：SFID 机构登记、注册型多签机构创建、注册型多签机构关闭（当前实现）
 
 ## 0. 功能需求
@@ -36,6 +36,7 @@
 - 发起人必须是该多签账户管理员之一。
 - 多签账户余额必须同时满足 `free_balance >= MinCloseBalance` 和 `reserved_balance == 0`。
 - `beneficiary` 不能等于多签地址自身，且不能是保留地址、非法地址或受保护地址。
+- `duoqian_address` 的资金转出必须同时通过 `institution-asset-guard` 白名单检查。
 - 关闭提案成功后，提案和业务动作统一写入内部投票引擎。
 
 ### 0.6 存储与制度边界
@@ -187,7 +188,7 @@
 
 | 模块 | 职责 | 地址类型 | 当前审批方式 |
 | --- | --- | --- | --- |
-| `duoqian-transaction-pow` | SFID 登记、机构创建、机构关闭 | 注册型多签机构 | `sfid` 主签名登记 + 内部投票引擎 `ORG_DUOQIAN` |
+| `duoqian-manage-pow` | SFID 登记、机构创建、机构关闭 | 注册型多签机构 | `sfid` 主签名登记 + 内部投票引擎 `ORG_DUOQIAN` |
 | `duoqian-transfer-pow` | 机构多签地址转账 | 当前只覆盖内置治理机构 | 内部投票引擎 |
 
 本模块当前不负责机构转账。

@@ -17,6 +17,7 @@ use frame_support::{
     Blake2_128Concat, PalletId,
 };
 use frame_system::pallet_prelude::*;
+use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
 use scale_info::TypeInfo;
 use sp_runtime::traits::{AccountIdConversion, SaturatedConversion, Saturating, Zero};
 use sp_std::vec::Vec;
@@ -207,6 +208,7 @@ pub mod pallet {
 
         type OffchainBatchVerifier: OffchainBatchVerifier;
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
+        type InstitutionAssetGuard: institution_asset_guard::InstitutionAssetGuard<Self::AccountId>;
         type WeightInfo: crate::weights::WeightInfo;
     }
 
@@ -2234,6 +2236,13 @@ pub mod pallet {
             let mut total_transfer_u128: u128 = 0;
             let mut total_fee_u128: u128 = 0;
             for item in batch.iter() {
+                ensure!(
+                    T::InstitutionAssetGuard::can_spend(
+                        &item.payer,
+                        InstitutionAssetAction::OffchainBatchDebit,
+                    ),
+                    Error::<T>::ProtectedSource
+                );
                 // 中文注释：单条批次项按“主金额到账 + 链下手续费入 fee_account”两笔转账执行，
                 // 任意一步失败都会被外围 with_transaction 回滚，避免批次半成功。
                 T::Currency::transfer(
@@ -2432,6 +2441,13 @@ pub mod pallet {
                 );
                 ensure!(
                     !T::ProtectedSourceChecker::is_protected(&item.payer),
+                    Error::<T>::ProtectedSource
+                );
+                ensure!(
+                    T::InstitutionAssetGuard::can_spend(
+                        &item.payer,
+                        InstitutionAssetAction::OffchainBatchDebit,
+                    ),
                     Error::<T>::ProtectedSource
                 );
                 let bound = RecipientClearingInstitution::<T>::get(&item.recipient)
@@ -2783,6 +2799,13 @@ pub mod pallet {
                 !T::ProtectedSourceChecker::is_protected(&fee_account),
                 Error::<T>::ProtectedSource
             );
+            ensure!(
+                T::InstitutionAssetGuard::can_spend(
+                    &fee_account,
+                    InstitutionAssetAction::OffchainFeeSweepExecute,
+                ),
+                Error::<T>::ProtectedSource
+            );
 
             let amount_u128: u128 = action.amount.saturated_into();
             let fee_balance_u128: u128 = T::Currency::free_balance(&fee_account).saturated_into();
@@ -3095,6 +3118,19 @@ mod tests {
         }
     }
 
+    pub struct TestInternalAdminCountProvider;
+    impl voting_engine_system::InternalAdminCountProvider for TestInternalAdminCountProvider {
+        fn admin_count(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+            match org {
+                voting_engine_system::internal_vote::ORG_PRB => CHINA_CH
+                    .iter()
+                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok()),
+                _ => None,
+            }
+        }
+    }
+
     pub struct TestTimeProvider;
     impl frame_support::traits::UnixTime for TestTimeProvider {
         fn now() -> core::time::Duration {
@@ -3110,15 +3146,14 @@ mod tests {
         type MaxProposalsPerExpiry = ConstU32<128>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
-        type MaxJointDecisionApprovals = ConstU32<32>;
         type MaxProposalDataLen = ConstU32<256>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
+        type InternalAdminCountProvider = TestInternalAdminCountProvider;
         type InternalThresholdProvider = ();
-        type JointInstitutionDecisionVerifier = ();
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
@@ -3140,6 +3175,7 @@ mod tests {
         type InternalVoteEngine = voting_engine_system::Pallet<Test>;
         type OffchainBatchVerifier = TestOffchainBatchVerifier;
         type ProtectedSourceChecker = ();
+        type InstitutionAssetGuard = ();
         type WeightInfo = ();
     }
 

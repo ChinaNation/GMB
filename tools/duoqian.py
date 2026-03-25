@@ -2,7 +2,7 @@
 """
 重新计算 citizenchain/runtime/primitives/china 中所有 duoqian_address。
 
-算法（与 duoqian-transaction-pow pallet 完全一致）：
+算法（与 duoqian-manage-pow pallet 完全一致）：
   address = blake2b_256("DUOQIAN_SFID_V1" || ss58_prefix_u16_le || sfid_id_bytes)
 
 SS58 前缀 2027 (0xEB07 小端) 作为链域标识，不同链不同前缀，地址自然不同。
@@ -131,7 +131,7 @@ def recompute_zb(
 
     lines = [
         '//! 汇总 citizenchain/runtime/primitives/china 目录下所有制度保留 duoqian_address。',
-        '//! 用于禁止 duoqian-transaction-pow 抢注这些机构地址。',
+        '//! 用于禁止 duoqian-manage-pow 抢注这些机构地址。',
         '',
         'use hex_literal::hex;',
         '',

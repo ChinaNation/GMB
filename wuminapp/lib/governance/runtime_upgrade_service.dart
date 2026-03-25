@@ -7,6 +7,7 @@ import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../rpc/chain_rpc.dart';
+import '../rpc/nonce_manager.dart';
 import 'transfer_proposal_service.dart' show ProposalMeta;
 
 /// Runtime upgrade 提案链上交互服务。
@@ -38,8 +39,8 @@ class RuntimeUpgradeService {
 
   /// 提交 propose_runtime_upgrade extrinsic。
   ///
-  /// 返回交易哈希 hex（含 0x 前缀）。
-  Future<String> submitProposeRuntimeUpgrade({
+  /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。
+  Future<({String txHash, int usedNonce})> submitProposeRuntimeUpgrade({
     required String reason,
     required Uint8List wasmCode,
     required int eligibleTotal,
@@ -65,7 +66,9 @@ class RuntimeUpgradeService {
   }
 
   /// 提交机构管理员的联合投票。
-  Future<String> submitJointVote({
+  ///
+  /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。
+  Future<({String txHash, int usedNonce})> submitJointVote({
     required int proposalId,
     required Uint8List institutionId48,
     required bool approve,
@@ -396,7 +399,9 @@ class RuntimeUpgradeService {
   }
 
   /// 签名并提交 extrinsic。
-  Future<String> _signAndSubmit({
+  ///
+  /// 返回交易哈希和使用的 nonce（用于链上确认跟踪）。
+  Future<({String txHash, int usedNonce})> _signAndSubmit({
     required Uint8List callData,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -412,7 +417,10 @@ class RuntimeUpgradeService {
         '[RuntimeUpgrade] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
-      _rpc.fetchNonce(fromAddress),
+      NonceManager.instance.getNextNonce(
+        address: fromAddress,
+        fetchChainNonce: _rpc.fetchNonce,
+      ),
       _rpc.fetchLatestBlock(),
     ]);
     final runtimeVersion = results[0] as dynamic;
@@ -459,8 +467,9 @@ class RuntimeUpgradeService {
     try {
       final txHash = await _rpc.submitExtrinsic(encoded);
       debugPrint('[RuntimeUpgrade] 提交成功: 0x${_hexEncode(txHash)}');
-      return '0x${_hexEncode(txHash)}';
+      return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
     } catch (e) {
+      NonceManager.instance.rollback(fromAddress);
       debugPrint('[RuntimeUpgrade] 提交失败，原始错误: $e');
       rethrow;
     }

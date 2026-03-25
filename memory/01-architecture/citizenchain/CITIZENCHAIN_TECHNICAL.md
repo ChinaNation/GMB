@@ -148,7 +148,7 @@ citizenchain/
 - 负责链上交易手续费、链下交易手续费、机构多签交易能力。
 
 当前模块：
-- `duoqian-transaction-pow`
+- `duoqian-manage-pow`
 - `offchain-transaction-pos`
 - `onchain-transaction-pow`
 
@@ -209,7 +209,7 @@ citizenchain/
 - `runtime/issuance/shengbank-stake-interest/SHENGBANK_TECHNICAL.md`
 
 ### 12.3 交易
-- `runtime/transaction/duoqian-transaction-pow/DUOQIAN_TECHNICAL.md`
+- `runtime/transaction/duoqian-manage-pow/DUOQIAN_TECHNICAL.md`
 - `runtime/transaction/offchain-transaction-pos/OFFCHAIN_TECHNICAL.md`
 - `runtime/transaction/onchain-transaction-pow/ONCHAIN_TECHNICAL.md`
 

@@ -1,5 +1,5 @@
 [package]
-name = "duoqian-transaction-pow"  # 多签名链上交易模块
+name = "duoqian-manage-pow"  # 多签名链上交易模块
 edition.workspace = true
 version.workspace = true
 authors.workspace = true
@@ -16,6 +16,7 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 sfid-code-auth = { path = "../../otherpallet/sfid-code-auth", default-features = false }
 voting-engine-system = { path = "../../governance/voting-engine-system", default-features = false }
+institution-asset-guard = { path = "../institution-asset-guard", default-features = false }
 
 [features]
 default = ["std"]
@@ -36,6 +37,7 @@ std = [
     "sp-std/std",
     "sfid-code-auth/std",
     "voting-engine-system/std",
+    "institution-asset-guard/std",
 ]
 
 [dev-dependencies]

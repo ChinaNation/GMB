@@ -3,6 +3,7 @@
 use codec::{Decode, Encode};
 use futures::FutureExt;
 use citizenchain::{self, apis::RuntimeApi, opaque::Block};
+use chain_phase_control::ChainPhaseApi;
 use pow_difficulty_module::PowDifficultyApi;
 use sc_client_api::{Backend, BlockBackend};
 use sc_consensus_pow::{MiningHandle, PowAlgorithm, PowBlockImport};
@@ -60,7 +61,7 @@ pub type Service = sc_service::PartialComponents<
 
 // PoW 作者密钥类型：纯 PoW 链使用独立 key type，避免与 Aura 语义混用。
 const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
-const POW_MINING_TIMEOUT_SECS: u64 = 10;
+const POW_MINING_TIMEOUT_SECS: u64 = 2;
 const POW_PROPOSAL_BUILD_SECS: u64 = 2;
 const GRANDPA_JUSTIFICATION_PERIOD: u32 = 64;
 
@@ -173,11 +174,13 @@ fn start_cpu_miner<Proof: Send + 'static>(
     num_threads: usize,
     epoch: Instant,
     pool_ready: Arc<dyn Fn() -> usize + Send + Sync>,
+    target_block_time_ms: u64,
 ) {
     // 提交门控，防止"早产块"触发 timestamp inherent 的 future 校验失败。
     // 使用全局 AtomicU64 (LAST_SUBMIT_NS) 存储上次成功提交的时刻（自 epoch 的纳秒数），
     // 避免 Mutex 在 sleep 期间持锁阻塞其他线程。CPU 和 GPU 矿工共享此门控。
-    let min_submit_interval = Duration::from_millis(primitives::pow_const::MILLISECS_PER_BLOCK);
+    // 中文注释：出块目标时间从 chain-phase-control Runtime API 读取，替代编译期常量。
+    let min_submit_interval = Duration::from_millis(target_block_time_ms);
     let stride = (num_threads as u64).max(1);
 
     for thread_id in 0..num_threads {
@@ -260,10 +263,21 @@ fn start_cpu_miner<Proof: Send + 'static>(
                         let submitted = futures::executor::block_on(worker.submit(nonce.encode()));
 
                         if submitted {
-                            // 只有成功出块才更新门控时刻，防止失败的提交
-                            // 不断重置计时器导致后续线程永远等 6 分钟。
                             let submit_ns = epoch.elapsed().as_nanos() as u64;
-                            LAST_SUBMIT_NS.store(submit_ns, Ordering::Release);
+                            if pool_ready() > 0 {
+                                // 提交后交易池仍有待处理交易 → 当前块是旧 Proposal（不含新交易）。
+                                // 将门控起点前移半个周期，使下一个块只需等 MinPeriod
+                                // （target_block_time / 2）即可提交，而非完整出块间隔。
+                                // 这既保证 timestamp inherent 校验通过（MinPeriod ≤ MAX_DRIFT + elapsed），
+                                // 又让包含交易的真实块能尽快上链。
+                                let half_ns = min_submit_interval.as_nanos() as u64 / 2;
+                                LAST_SUBMIT_NS.store(
+                                    submit_ns.saturating_sub(half_ns),
+                                    Ordering::Release,
+                                );
+                            } else {
+                                LAST_SUBMIT_NS.store(submit_ns, Ordering::Release);
+                            }
                         }
                         break;
                     }
@@ -567,14 +581,31 @@ pub fn new_full<
         Arc::new(move || pool.status().ready)
     };
 
+    // 中文注释：从 chain-phase-control 链上存储读取动态出块目标时间，
+    // 替代编译期常量 MILLISECS_PER_BLOCK。若 API 调用失败，回退到常量默认值。
+    let target_block_time_ms = {
+        use sp_blockchain::HeaderBackend;
+        let best = client.info().best_hash;
+        client
+            .runtime_api()
+            .target_block_time_ms(best)
+            .unwrap_or(primitives::pow_const::MILLISECS_PER_BLOCK)
+    };
+
     if mining_threads > 0 {
-        start_cpu_miner(worker.clone(), mining_threads, miner_epoch, pool_ready.clone());
+        start_cpu_miner(
+            worker.clone(),
+            mining_threads,
+            miner_epoch,
+            pool_ready.clone(),
+            target_block_time_ms,
+        );
     }
 
     // GPU 矿工（仅在 gpu-mining feature 编译时可用）。
     #[cfg(feature = "gpu-mining")]
     if let Some(device) = gpu_device {
-        match crate::gpu_miner::try_start(worker.clone(), device, miner_epoch, pool_ready.clone()) {
+        match crate::gpu_miner::try_start(worker.clone(), device, miner_epoch, pool_ready.clone(), target_block_time_ms) {
             Ok(()) => log::info!("GPU miner started on device {}", device),
             Err(e) => log::warn!("GPU not available, CPU only: {}", e),
         }

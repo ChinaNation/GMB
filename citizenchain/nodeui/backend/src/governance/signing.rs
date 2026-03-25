@@ -369,6 +369,106 @@ pub fn build_propose_transfer_sign_request(
     })
 }
 
+/// 构建 developer_direct_upgrade 签名请求（开发期快捷升级：pallet=13, call=2）。
+/// wasm_path 为编译产物的绝对路径，后端直接读文件。
+pub fn build_developer_upgrade_sign_request(
+    pubkey_hex: &str,
+    wasm_path: &str,
+) -> Result<VoteSignRequestResult, String> {
+    // 验证公钥
+    let pubkey_clean = pubkey_hex
+        .strip_prefix("0x")
+        .unwrap_or(pubkey_hex)
+        .to_ascii_lowercase();
+    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("公钥格式无效，应为 64 位十六进制".to_string());
+    }
+    let pubkey_bytes = hex::decode(&pubkey_clean)
+        .map_err(|e| format!("公钥解码失败: {e}"))?;
+
+    // 读取 WASM 文件
+    let wasm_code = std::fs::read(wasm_path)
+        .map_err(|e| format!("读取 WASM 文件失败: {e}"))?;
+    if wasm_code.is_empty() {
+        return Err("WASM 文件为空".to_string());
+    }
+    let wasm_size_mb = wasm_code.len() as f64 / 1_048_576.0;
+    if wasm_code.len() > 5 * 1_048_576 {
+        return Err(format!("WASM 文件超过 5MB 上限，当前 {wasm_size_mb:.2} MB"));
+    }
+
+    let (spec_version, tx_version) = fetch_runtime_version()?;
+    let genesis_hash = fetch_genesis_hash()?;
+    let (block_hash, block_number) = fetch_latest_block()?;
+    let nonce = fetch_nonce(&pubkey_clean)?;
+
+    // call data: [0x0d][0x02][compact_len(wasm)][wasm_bytes]
+    // pallet 13 = RuntimeRootUpgrade, call 2 = developer_direct_upgrade
+    let wasm_len_compact = encode_compact_u32(wasm_code.len() as u32);
+    let mut call_data = Vec::with_capacity(2 + wasm_len_compact.len() + wasm_code.len());
+    call_data.push(13u8); // RuntimeRootUpgrade pallet
+    call_data.push(2u8);  // developer_direct_upgrade call
+    call_data.extend_from_slice(&wasm_len_compact);
+    call_data.extend_from_slice(&wasm_code);
+
+    let payload = build_signing_payload(
+        &call_data, &genesis_hash, &block_hash, block_number,
+        nonce, spec_version, tx_version,
+    );
+    let payload_hash = sha256_hash(&payload);
+    let request_id = generate_request_id("devupg");
+    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
+
+    let display = serde_json::json!({
+        "action": "developer_direct_upgrade",
+        "action_label": "开发期 runtime 直接升级",
+        "summary": format!("直接升级 runtime（{wasm_size_mb:.2} MB）"),
+        "fields": [
+            { "key": "wasm_size", "label": "WASM 大小", "value": format!("{wasm_size_mb:.2} MB") },
+            { "key": "wasm_hash", "label": "代码哈希", "value": format!("0x{}", hex::encode(sha256_hash(&wasm_code))) }
+        ]
+    });
+
+    let now = now_secs();
+    let request = QrSignRequest {
+        proto: PROTOCOL_VERSION.to_string(),
+        msg_type: "sign_request".to_string(),
+        request_id: request_id.clone(),
+        account: account_ss58,
+        pubkey: format!("0x{pubkey_clean}"),
+        sig_alg: "sr25519".to_string(),
+        payload_hex: format!("0x{}", hex::encode(&payload)),
+        issued_at: now,
+        expires_at: now + DEFAULT_TTL_SECS,
+        display,
+        spec_version: Some(spec_version),
+    };
+
+    let request_json = serde_json::to_string(&request)
+        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+
+    Ok(VoteSignRequestResult {
+        request_json,
+        request_id,
+        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
+        sign_nonce: nonce,
+        sign_block_number: block_number,
+    })
+}
+
+/// 构建 developer_direct_upgrade 的 call_data（供 submit 时重建）。
+pub fn build_developer_upgrade_call_data(wasm_path: &str) -> Result<Vec<u8>, String> {
+    let wasm_code = std::fs::read(wasm_path)
+        .map_err(|e| format!("读取 WASM 文件失败: {e}"))?;
+    let wasm_len_compact = encode_compact_u32(wasm_code.len() as u32);
+    let mut call_data = Vec::with_capacity(2 + wasm_len_compact.len() + wasm_code.len());
+    call_data.push(13u8);
+    call_data.push(2u8);
+    call_data.extend_from_slice(&wasm_len_compact);
+    call_data.extend_from_slice(&wasm_code);
+    Ok(call_data)
+}
+
 /// Compact<u32> 编码（公开版本，供 mod.rs 调用）。
 pub fn encode_compact_u32_pub(value: u32) -> Vec<u8> {
     encode_compact_u32(value)

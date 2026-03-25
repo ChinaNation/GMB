@@ -17,6 +17,7 @@ sp-api = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 primitives = { path = "../../primitives", default-features = false }
+chain-phase-control = { path = "../chain-phase-control", default-features = false }
 
 [features]
 default = ["std"]
@@ -37,6 +38,7 @@ std = [
     "sp-runtime/std",
     "sp-std/std",
     "primitives/std",
+    "chain-phase-control/std",
 ]
 
 [dev-dependencies]

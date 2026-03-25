@@ -25,6 +25,9 @@ class OrgType {
   /// 省储行 Provincial Reserve Bank
   static const int prb = 2;
 
+  /// 注册型多签机构
+  static const int duoqian = 3;
+
   static String label(int orgType) {
     switch (orgType) {
       case nrc:
@@ -33,6 +36,8 @@ class OrgType {
         return '省储会';
       case prb:
         return '省储行';
+      case duoqian:
+        return '注册多签机构';
       default:
         return '未知';
     }
@@ -46,6 +51,7 @@ class InstitutionInfo {
     required this.shenfenId,
     required this.orgType,
     required this.duoqianAddress,
+    this.internalThresholdOverride,
   });
 
   /// 显示名称。
@@ -62,8 +68,16 @@ class InstitutionInfo {
   /// 来源于 primitives 中的 `duoqian_address` 字段。
   final String duoqianAddress;
 
+  /// 注册型机构的动态阈值覆盖。
+  final int? internalThresholdOverride;
+
+  /// 是否为注册型多签机构。
+  bool get isRegisteredDuoqian =>
+      orgType == OrgType.duoqian && isRegisteredDuoqianIdentity(shenfenId);
+
   /// 内部投票通过阈值。
   int get internalThreshold {
+    if (internalThresholdOverride != null) return internalThresholdOverride!;
     switch (orgType) {
       case OrgType.nrc:
         return 13;
@@ -71,6 +85,8 @@ class InstitutionInfo {
         return 6;
       case OrgType.prb:
         return 6;
+      case OrgType.duoqian:
+        return 0;
       default:
         return 0;
     }
@@ -88,6 +104,23 @@ class InstitutionInfo {
         return 0;
     }
   }
+
+  InstitutionInfo copyWith({
+    String? name,
+    String? shenfenId,
+    int? orgType,
+    String? duoqianAddress,
+    int? internalThresholdOverride,
+  }) {
+    return InstitutionInfo(
+      name: name ?? this.name,
+      shenfenId: shenfenId ?? this.shenfenId,
+      orgType: orgType ?? this.orgType,
+      duoqianAddress: duoqianAddress ?? this.duoqianAddress,
+      internalThresholdOverride:
+          internalThresholdOverride ?? this.internalThresholdOverride,
+    );
+  }
 }
 
 /// 链上联合投票总票数。
@@ -96,6 +129,36 @@ int get jointVoteTotal =>
 
 /// 链上联合投票立即通过阈值。
 const int jointVotePassThreshold = 105;
+
+const String _registeredDuoqianPrefix = 'duoqian:';
+
+bool isRegisteredDuoqianIdentity(String institutionIdentity) {
+  return institutionIdentity.startsWith(_registeredDuoqianPrefix);
+}
+
+String registeredDuoqianIdentity(String duoqianAddress) {
+  return '$_registeredDuoqianPrefix${_normalizeHex(duoqianAddress)}';
+}
+
+String? registeredDuoqianAddressFromIdentity(String institutionIdentity) {
+  if (!isRegisteredDuoqianIdentity(institutionIdentity)) return null;
+  final hex = _normalizeHex(
+    institutionIdentity.substring(_registeredDuoqianPrefix.length),
+  );
+  if (hex.length != 64) return null;
+  return hex;
+}
+
+List<int> institutionIdentityToPalletId(String institutionIdentity) {
+  final duoqianAddress =
+      registeredDuoqianAddressFromIdentity(institutionIdentity);
+  if (duoqianAddress != null) {
+    final result = List<int>.filled(48, 0);
+    result.setAll(0, _hexDecode(duoqianAddress));
+    return result;
+  }
+  return _shenfenIdToFixed48(institutionIdentity);
+}
 
 /// 通过 48 字节 InstitutionPalletId 反查机构信息。
 /// shenfenId UTF-8 右补零到 48 字节后与 palletIdBytes 比较。
@@ -106,9 +169,20 @@ InstitutionInfo? findInstitutionByPalletId(List<int> palletIdBytes) {
     ...kProvincialCouncils,
     ...kProvincialBanks
   ]) {
-    final encoded = _shenfenIdToFixed48(inst.shenfenId);
+    final encoded = institutionIdentityToPalletId(inst.shenfenId);
     if (_bytesEqual(encoded, palletIdBytes)) return inst;
   }
+
+  if (_looksLikeRegisteredInstitutionId(palletIdBytes)) {
+    final duoqianAddress = _hexEncode(palletIdBytes.sublist(0, 32));
+    return InstitutionInfo(
+      name: '注册多签机构 ${duoqianAddress.substring(0, 8)}',
+      shenfenId: registeredDuoqianIdentity(duoqianAddress),
+      orgType: OrgType.duoqian,
+      duoqianAddress: duoqianAddress,
+    );
+  }
+
   return null;
 }
 
@@ -127,6 +201,33 @@ bool _bytesEqual(List<int> a, List<int> b) {
     if (a[i] != b[i]) return false;
   }
   return true;
+}
+
+bool _looksLikeRegisteredInstitutionId(List<int> palletIdBytes) {
+  if (palletIdBytes.length != 48) return false;
+  for (var i = 32; i < 48; i++) {
+    if (palletIdBytes[i] != 0) return false;
+  }
+  return true;
+}
+
+List<int> _hexDecode(String hex) {
+  final clean = _normalizeHex(hex);
+  return List<int>.generate(
+    clean.length ~/ 2,
+    (index) =>
+        int.parse(clean.substring(index * 2, index * 2 + 2), radix: 16),
+    growable: false,
+  );
+}
+
+String _hexEncode(List<int> bytes) {
+  return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+}
+
+String _normalizeHex(String hex) {
+  final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
+  return clean.toLowerCase();
 }
 
 /// 国储会（1 个）。

@@ -7,6 +7,7 @@ import { ProposalListView } from './ProposalListView';
 import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateProposalPage } from './CreateProposalPage';
 import { ColdWalletManager } from './ColdWalletManager';
+import { DeveloperUpgradePage } from './DeveloperUpgradePage';
 import type { AdminWalletMatch } from './governance-types';
 
 /// 国储会 shenfenId（只有 1 个，直接进详情）。
@@ -18,11 +19,12 @@ type GovernanceView =
   | { page: 'prc' }
   | { page: 'prb' }
   | { page: 'wallets' }
+  | { page: 'dev-upgrade' }
   | { page: 'institution-detail'; shenfenId: string; backTab: SubTab }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; shenfenId?: string; backTab: SubTab }
   | { page: 'create-proposal'; shenfenId: string; orgType: number; institutionName: string; duoqianAddress: string; adminWallets: AdminWalletMatch[]; backTab: SubTab };
 
-type SubTab = 'proposals' | 'nrc' | 'prc' | 'prb' | 'wallets';
+type SubTab = 'proposals' | 'nrc' | 'prc' | 'prb' | 'wallets' | 'dev-upgrade';
 
 export function GovernanceSection() {
   const [view, setView] = useState<GovernanceView>({ page: 'proposals' });
@@ -94,6 +96,7 @@ export function GovernanceSection() {
         <button className={activeTab === 'prc' ? 'active' : ''} onClick={() => switchTab('prc')}>省储会</button>
         <button className={activeTab === 'prb' ? 'active' : ''} onClick={() => switchTab('prb')}>省储行</button>
         <button className={activeTab === 'wallets' ? 'active' : ''} onClick={() => switchTab('wallets')}>钱包管理</button>
+        <button className={activeTab === 'dev-upgrade' ? 'active' : ''} onClick={() => switchTab('dev-upgrade')}>开发升级</button>
       </div>
 
       {activeTab === 'proposals' && (
@@ -127,6 +130,8 @@ export function GovernanceSection() {
       )}
 
       {activeTab === 'wallets' && <ColdWalletManager />}
+
+      {activeTab === 'dev-upgrade' && <DeveloperUpgradePage />}
     </div>
   );
 }
