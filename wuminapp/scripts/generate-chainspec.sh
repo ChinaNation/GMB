@@ -2,8 +2,8 @@
 # 从 citizenchain 导出 chainspec JSON 文件供 smoldot 轻节点使用。
 #
 # 用法：
-#   ./scripts/generate-chainspec.sh                          # 从本机运行中的节点导出（自动修正 bootnode）
-#   ./scripts/generate-chainspec.sh build-spec [dev|mainnet] # 用 citizenchain 二进制导出
+#   ./scripts/generate-chainspec.sh              # 从本机运行中的节点导出（自动修正 bootnode）
+#   ./scripts/generate-chainspec.sh build-spec   # 用 citizenchain 二进制导出
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -25,15 +25,13 @@ case "$MODE" in
       echo "错误: 未找到监听 9944 端口的节点进程"
       exit 1
     fi
-    # 节点二进制路径可能含空格（macOS Application Support），用 --chain 参数位置截取
+    # 节点二进制路径可能含空格（macOS Application Support），用 --base-path 参数位置截取
     FULL_CMD=$(ps -p "$NODE_PID" -o command=)
-    NODE_BIN=$(echo "$FULL_CMD" | sed 's/ --chain .*//')
+    NODE_BIN=$(echo "$FULL_CMD" | sed 's/ --base-path .*//')
     echo "节点二进制: $NODE_BIN"
 
-    # 获取节点的 --chain 参数
-    CHAIN_ARG=$(echo "$FULL_CMD" | grep -o '\-\-chain [^ ]*' | awk '{print $2}' || echo "dev")
-    echo "链类型: $CHAIN_ARG"
-    "$NODE_BIN" build-spec --chain="$CHAIN_ARG" --raw 2>/dev/null > "$OUTPUT"
+    # citizenchain 只有一条链，build-spec 不需要 --chain 参数
+    "$NODE_BIN" build-spec --raw 2>/dev/null > "$OUTPUT"
 
     # 2. 获取运行中节点的真实 Peer ID
     REAL_PEER_ID=$(curl -s -H "Content-Type: application/json" \
@@ -74,15 +72,14 @@ with open('$OUTPUT', 'w') as f:
       exit 1
     fi
 
-    CHAIN="${2:-dev}"
-    echo "=== 用 build-spec 导出 $CHAIN chainspec ==="
-    "$CHAIN_BINARY" build-spec --chain="$CHAIN" --raw > "$OUTPUT"
+    echo "=== 用 build-spec 导出 chainspec ==="
+    "$CHAIN_BINARY" build-spec --raw > "$OUTPUT"
     ;;
 
   *)
     echo "用法:"
-    echo "  $0                          # 自动导出并修正 bootnode（推荐）"
-    echo "  $0 build-spec [dev|mainnet] # 仅用二进制导出（不修正 bootnode）"
+    echo "  $0              # 自动导出并修正 bootnode（推荐）"
+    echo "  $0 build-spec   # 仅用二进制导出（不修正 bootnode）"
     exit 1
     ;;
 esac
