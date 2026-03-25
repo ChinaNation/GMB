@@ -1,0 +1,235 @@
+// 创建转账提案页面：表单 + QR 签名流程。
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
+import { api, sanitizeError } from '../api';
+import { QrScanner } from './QrScanner';
+import type { AdminWalletMatch, VoteSignRequestResult } from './governance-types';
+
+type Props = {
+  shenfenId: string;
+  orgType: number;
+  institutionName: string;
+  duoqianAddress: string;
+  adminWallets: AdminWalletMatch[];
+  onBack: () => void;
+  onSuccess: () => void;
+};
+
+type Step = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
+
+export function CreateProposalPage({
+  shenfenId, orgType, institutionName, duoqianAddress, adminWallets, onBack, onSuccess,
+}: Props) {
+  const [step, setStep] = useState<Step>('form');
+
+  // 表单
+  const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
+    adminWallets.length === 1 ? adminWallets[0] : null
+  );
+  const [beneficiary, setBeneficiary] = useState('');
+  const [amountYuan, setAmountYuan] = useState('');
+  const [remark, setRemark] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // QR 签名
+  const [signRequest, setSignRequest] = useState<VoteSignRequestResult | null>(null);
+  const [requestJson, setRequestJson] = useState('');
+  const [countdown, setCountdown] = useState(90);
+  const [error, setError] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
+
+  // 用 ref 持有最新值，避免摄像头回调中的闭包过期
+  const formValuesRef = useRef({ beneficiary: '', amountYuan: 0, remark: '' });
+  const signRequestRef = useRef(signRequest);
+  const selectedWalletRef = useRef(selectedWallet);
+  signRequestRef.current = signRequest;
+  selectedWalletRef.current = selectedWallet;
+
+
+  useEffect(() => {
+    if (step !== 'qr') return;
+    if (countdown <= 0) {
+      setError('签名请求已过期，请重新操作');
+      setStep('error');
+      return;
+    }
+    const timer = setTimeout(() => setCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [step, countdown]);
+
+  const validateForm = (): string | null => {
+    if (!selectedWallet) return '请选择管理员钱包';
+    if (!beneficiary.trim()) return '请输入收款地址';
+    const amount = parseFloat(amountYuan);
+    if (isNaN(amount) || amount < 1.11) return '转账金额不能低于 1.11 元';
+    const remarkBytes = new TextEncoder().encode(remark);
+    if (remarkBytes.length > 256) return `备注超过 256 字节（当前 ${remarkBytes.length}）`;
+    return null;
+  };
+
+  const handleSubmit = async () => {
+    const err = validateForm();
+    if (err) { setFormError(err); return; }
+    setFormError(null);
+    setSubmitting(true);
+
+    try {
+      const amount = parseFloat(amountYuan);
+      formValuesRef.current = { beneficiary: beneficiary.trim(), amountYuan: amount, remark };
+
+      const result = await api.buildProposeTransferRequest(
+        selectedWallet!.pubkeyHex, shenfenId, orgType,
+        beneficiary.trim(), amount, remark,
+      );
+
+      setSignRequest(result);
+      setRequestJson(result.requestJson);
+      setCountdown(90);
+      setStep('qr');
+    } catch (e) {
+      setFormError(sanitizeError(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 扫描结果处理（通过 ref 读取最新值）
+  const handleScanResult = useCallback(async (responseText: string) => {
+    const req = signRequestRef.current;
+    const wallet = selectedWalletRef.current;
+    if (!req || !wallet) {
+      setError('签名请求数据丢失，请重试');
+      setStep('error');
+      return;
+    }
+    setStep('submit');
+    try {
+      const { beneficiary: ben, amountYuan: amt, remark: rmk } = formValuesRef.current;
+      const result = await api.submitProposeTransfer(
+        req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
+        shenfenId, orgType, ben, amt, rmk,
+        req.signNonce, req.signBlockNumber, responseText,
+      );
+      setTxHash(result.txHash);
+      setStep('done');
+    } catch (e) {
+      setError(sanitizeError(e));
+      setStep('error');
+    }
+  }, [shenfenId, orgType]);
+
+  return (
+    <div className="governance-section">
+      <button className="back-button" onClick={onBack}>← 返回</button>
+      <h2>发起转账提案</h2>
+      <p className="proposal-institution-name">{institutionName}</p>
+
+      {step === 'form' && (
+        <div className="create-proposal-form">
+          {formError && <div className="error">{formError}</div>}
+
+          {adminWallets.length > 1 && (
+            <div className="wallet-form-field">
+              <label>发起管理员</label>
+              <select
+                value={selectedWallet?.pubkeyHex || ''}
+                onChange={(e) => {
+                  const w = adminWallets.find((w) => w.pubkeyHex === e.target.value);
+                  setSelectedWallet(w || null);
+                }}
+              >
+                <option value="">请选择…</option>
+                {adminWallets.map((w) => (
+                  <option key={w.pubkeyHex} value={w.pubkeyHex}>{w.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="wallet-form-field">
+            <label>转出地址（机构多签）</label>
+            <input type="text" value={`0x${duoqianAddress}`} disabled />
+          </div>
+
+          <div className="wallet-form-field">
+            <label>收款地址（SS58）</label>
+            <input
+              type="text" value={beneficiary}
+              onChange={(e) => setBeneficiary(e.target.value)}
+              placeholder="输入 SS58 格式收款地址"
+              disabled={submitting}
+            />
+          </div>
+
+          <div className="wallet-form-field">
+            <label>转账金额（元，最少 1.11）</label>
+            <input
+              type="number" value={amountYuan}
+              onChange={(e) => setAmountYuan(e.target.value)}
+              placeholder="0.00" min="1.11" step="0.01"
+              disabled={submitting}
+            />
+          </div>
+
+          <div className="wallet-form-field">
+            <label>备注（可选，最长 256 字节）</label>
+            <input
+              type="text" value={remark}
+              onChange={(e) => setRemark(e.target.value)}
+              placeholder="转账备注" disabled={submitting}
+            />
+          </div>
+
+          <button
+            className="vote-signing-confirm"
+            onClick={handleSubmit}
+            disabled={submitting || !selectedWallet || !beneficiary.trim() || !amountYuan}
+          >
+            {submitting ? '生成中…' : '生成签名请求'}
+          </button>
+        </div>
+      )}
+
+      {step === 'qr' && (
+        <div className="vote-signing-body qr-step">
+          <p className="qr-instruction">用 wumin 离线设备扫描此二维码完成签名</p>
+          <div className="qr-container">
+            <QRCodeSVG value={requestJson} size={280} level="L" />
+          </div>
+          <p className="qr-countdown">剩余 <strong>{countdown}</strong> 秒</p>
+          <button className="vote-signing-confirm" onClick={() => setStep('scan')}>已签名，扫描回执</button>
+        </div>
+      )}
+
+      {step === 'scan' && (
+        <div className="vote-signing-body">
+          <p className="qr-instruction">将签名回执二维码对准摄像头</p>
+          <QrScanner onScan={handleScanResult} onError={(e) => { setError(e); setStep('error'); }} />
+          <button className="cancel-button" onClick={() => setStep('qr')}>返回</button>
+        </div>
+      )}
+
+      {step === 'submit' && (
+        <div className="vote-signing-body"><p className="qr-instruction">正在提交提案到链…</p></div>
+      )}
+
+      {step === 'done' && (
+        <div className="vote-signing-body">
+          <div className="vote-success">
+            <p>提案已提交</p>
+            {txHash && <code className="tx-hash">交易哈希: {txHash}</code>}
+          </div>
+          <button className="vote-signing-confirm" onClick={onSuccess}>完成</button>
+        </div>
+      )}
+
+      {step === 'error' && (
+        <div className="vote-signing-body">
+          <div className="error">{error}</div>
+          <button className="vote-signing-confirm" onClick={() => { setError(null); setStep('form'); }}>重试</button>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -21,7 +21,7 @@ fn prc_institution() -> InstitutionPalletId {
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {
-    decode_account::<T>(CHINA_CB[1].admins[index])
+    decode_account::<T>(CHINA_CB[1].duoqian_admins[index])
 }
 
 #[benchmarks]

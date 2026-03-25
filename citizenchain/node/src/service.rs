@@ -172,6 +172,7 @@ fn start_cpu_miner<Proof: Send + 'static>(
     worker: MiningHandle<Block, SimplePow, (), Proof>,
     num_threads: usize,
     epoch: Instant,
+    pool_ready: Arc<dyn Fn() -> usize + Send + Sync>,
 ) {
     // 提交门控，防止"早产块"触发 timestamp inherent 的 future 校验失败。
     // 使用全局 AtomicU64 (LAST_SUBMIT_NS) 存储上次成功提交的时刻（自 epoch 的纳秒数），
@@ -182,6 +183,7 @@ fn start_cpu_miner<Proof: Send + 'static>(
     for thread_id in 0..num_threads {
         let worker = worker.clone();
         let epoch = epoch;
+        let pool_ready = pool_ready.clone();
         thread::spawn(move || {
             // 哈希率采样：仅 thread 0 每 SAMPLE_INTERVAL 次哈希统计一次，乘以线程数得到总哈希率。
             const SAMPLE_INTERVAL: u64 = 100_000;
@@ -193,6 +195,12 @@ fn start_cpu_miner<Proof: Send + 'static>(
                     thread::sleep(Duration::from_millis(200));
                     continue;
                 };
+
+                // 空块不提交：交易池无待打包交易时不挖矿，避免产生空块。
+                if pool_ready() == 0 {
+                    thread::sleep(Duration::from_millis(500));
+                    continue;
+                }
 
                 let build_version = worker.version();
 
@@ -551,14 +559,22 @@ pub fn new_full<
     // 所有矿工线程共享的时间基准，用于无锁提交门控。
     let miner_epoch = Instant::now();
 
+    // 空块不提交：构造一个闭包，返回交易池中待打包的交易数。
+    // CPU 和 GPU 矿工在交易池为空时跳过挖矿，避免产生空块。
+    let pool_ready: Arc<dyn Fn() -> usize + Send + Sync> = {
+        use sc_transaction_pool_api::TransactionPool;
+        let pool = transaction_pool.clone();
+        Arc::new(move || pool.status().ready)
+    };
+
     if mining_threads > 0 {
-        start_cpu_miner(worker.clone(), mining_threads, miner_epoch);
+        start_cpu_miner(worker.clone(), mining_threads, miner_epoch, pool_ready.clone());
     }
 
     // GPU 矿工（仅在 gpu-mining feature 编译时可用）。
     #[cfg(feature = "gpu-mining")]
     if let Some(device) = gpu_device {
-        match crate::gpu_miner::try_start(worker.clone(), device, miner_epoch) {
+        match crate::gpu_miner::try_start(worker.clone(), device, miner_epoch, pool_ready.clone()) {
             Ok(()) => log::info!("GPU miner started on device {}", device),
             Err(e) => log::warn!("GPU not available, CPU only: {}", e),
         }

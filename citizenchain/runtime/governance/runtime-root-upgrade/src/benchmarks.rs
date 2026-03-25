@@ -25,7 +25,7 @@ fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
 }
 
 fn nrc_admin<T: Config>() -> T::AccountId {
-    decode_account::<T>(CHINA_CB[0].admins[0])
+    decode_account::<T>(CHINA_CB[0].duoqian_admins[0])
 }
 
 fn reason_max<T: Config>() -> ReasonOf<T> {

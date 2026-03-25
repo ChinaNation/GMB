@@ -1,5 +1,5 @@
 //! 国储会 + 43 个初始省储会常量=china_cb.rs
-//! 其中 admins 为该节点的创世管理员公钥数组，用于多签权限控制，可通过内部投票更换。
+//! 其中 duoqian_admins 为该节点的创世管理员公钥数组，用于多签权限控制，可通过内部投票更换。
 
 use hex_literal::hex;
 
@@ -9,7 +9,7 @@ pub struct ChinaCb {
     pub shenfen_name: &'static str,
     pub duoqian_address: [u8; 32],
     pub grandpa_key: [u8; 32],
-    pub admins: &'static [[u8; 32]],
+    pub duoqian_admins: &'static [[u8; 32]],
 }
 
 /// 将 shenfen_id 编码为固定 48 字节机构标识（右侧补零）。
@@ -30,7 +30,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "国家储备委员会",
         duoqian_address: hex!("a4dcfcee4629dbd67ebcb271aadf2d79b3b0b72c133156c57f136426b819216e"),
         grandpa_key: hex!("3719c39cf92462da2e22a7dfa760f463c801dd86a27a4151d24935e42692e5b5"),
-        admins: &[
+        duoqian_admins: &[
             hex!("6832b6f09d231e1ddf34be1a81f68eb958da88be370f999e2d98f3407cb72d05"),
             hex!("1e425ee2b68dc715e64f88d5a604b697a29a0bcd593086a501f0d1f9d07b9e6e"),
             hex!("18c6c0bd35409e920beada1e0c5f6c38187f70092e50d110a97da1620559c36c"),
@@ -57,7 +57,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "中枢省储备委员会",
         duoqian_address: hex!("005860c65dfa43d1efd730560d35fdab296841cfce863039614a690ddd456860"),
         grandpa_key: hex!("14803cd63d5ad6c76e0141f730f18f2c4a30ecfaa3631681e490cb5e25ca0958"),
-        admins: &[
+        duoqian_admins: &[
             hex!("36e64c89c71651e470b897c0014d9c64edfdc5a27d70acd80020d1cb1cdfc614"),
             hex!("de7aaa6ddcbd4f57b553040857a67f29345e22dfd3846cdefaa01e4b3a14346b"),
             hex!("aedee0cf57ec6e2013f64a70c5f8f6b2e40ebfe679733ffa0fe13022c0a86461"),
@@ -74,7 +74,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "岭南省储备委员会",
         duoqian_address: hex!("979ddbbac4c3df93e37b410999ff614265d8c5295faa705e795525405b10b8ea"),
         grandpa_key: hex!("8d9de5d1b44d39f9567b76a5348d68a497d06b73215d5e89bfdf4f6a6b2f36aa"),
-        admins: &[
+        duoqian_admins: &[
             hex!("c24043655f86afe9e38f811eb9a5ccd3fadb0c01461ba5c50c4650c91e1cbd6c"),
             hex!("b2b9d0eea8f6c52e02fd110fa117fbec2c54d622c5075407be6bc4fc71f8bd50"),
             hex!("8e0eca16c4220dcfef2f08fb69941328b8e5c9b3d71296b3c5efd6bb8c9a495a"),
@@ -91,7 +91,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "广东省储备委员会",
         duoqian_address: hex!("58438c61071a1a52a24b01f414bd5f30c2d01b749f0fc0d7dee628d8a734bf3b"),
         grandpa_key: hex!("febdaa3b1c416bffc6ba1e13f799b5295c4644a0d695fe6da7bff3cf6754a903"),
-        admins: &[
+        duoqian_admins: &[
             hex!("9ef3f954efcadd7019c09d1648f9f00db94d31773281a764493a602107fab653"),
             hex!("e44c7e0f27c0ac64b00126b7091bd8d35fe0054100147f197bea17fc48bb5828"),
             hex!("da5fd44b006fef980c014a5334f81be7174bee7d515e1321d66cbd368f2d0167"),
@@ -108,7 +108,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "广西省储备委员会",
         duoqian_address: hex!("bf2d2a5bcfdf09556a8c8bce39831f466a7538372231505bd6426a92a1a6e9b6"),
         grandpa_key: hex!("669d64a0c7c7ba5be629580d8898f9003105b13d18372392cd85562b2782b233"),
-        admins: &[
+        duoqian_admins: &[
             hex!("2ccc2bcf757337b58afcc51a0bf97d49884e7e6d43f3adfe812299f6a1374820"),
             hex!("76771cdae903f483004a5dc5583ddce579068b6eea7c4cafe4592a0303e84c72"),
             hex!("9e86d42aad2fc479d980fc2df04e4c09f2294208b2af6b95762d5d0de6681352"),
@@ -125,7 +125,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "福建省储备委员会",
         duoqian_address: hex!("27e246c446b60d8503e393e1e49ec554cd48bc3ec68df74a20c0b776a04c8cea"),
         grandpa_key: hex!("8860948348df8b4efe240829671408476643dbf8d2e07d0bca8f3ea6271c5c51"),
-        admins: &[
+        duoqian_admins: &[
             hex!("4ab76c9f6d49a57b1e869265716911f08195f5a744cbf4d103a336b7c38bbb4e"),
             hex!("ca3d90624d3b9cad85c8041fab2301be4c87cedecba181ff68802d41c1d5f50a"),
             hex!("5a6fae4ed279becd917947366f09c02c1073441d281baeb7099c96fe7bac9457"),
@@ -142,7 +142,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "海南省储备委员会",
         duoqian_address: hex!("72142867d115388200dbd0f8d6279b6c96bf6399d7bf09a691d513e49a104689"),
         grandpa_key: hex!("2d6cfe57d3212c066260cb568645ed0d442a632b24031930b97ca3242111e021"),
-        admins: &[
+        duoqian_admins: &[
             hex!("f433269884a6d155667b13eccddf666f0d47cb319f2db7028d13243d3a98cd04"),
             hex!("38bbd516c9594e8f15bc58ddd5ce6744deb228770cbbe5d8a50eced8170b3537"),
             hex!("b6a1c4aa905ab8302df0f216784358293e2ba27e4f17e90932df7cb2c289d71f"),
@@ -159,7 +159,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "云南省储备委员会",
         duoqian_address: hex!("ca96f91555a850e99e0f1f62ec4937d69ef52ebf88dd4b501f9d4298e9104dc6"),
         grandpa_key: hex!("26498679676d181b1346964f5815b94bf766bd284d529ce8e5625547af1fbab3"),
-        admins: &[
+        duoqian_admins: &[
             hex!("b8fc3fa57be8aa1fc4a520aa1d5432a947845b77a08fe169f4f7a03511eb526c"),
             hex!("f097b4960e84d71c0a4fadd91f9d113a8ee8c51cd0286fcc00e55c18e188eb73"),
             hex!("2e5829df2acf77b37c414159c5828a295e4a8add871d9563a5757f83e345056d"),
@@ -176,7 +176,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "贵州省储备委员会",
         duoqian_address: hex!("35b4b1bee060112b348478f77e4075be5ec2d969e313ebfd9b26cf519390d05a"),
         grandpa_key: hex!("1c03da677a1ae2e9b4907dc72016ea65adc3d20711f93b8e96f2aa75468072c0"),
-        admins: &[
+        duoqian_admins: &[
             hex!("e0fb43daac7243a64e90b95250e4ffac3d47549c72b53b086785c902365ed148"),
             hex!("28e876572c7db085cc95436a3a4f365f601836ebac52a1c191a4a44eb50de841"),
             hex!("3216ccf91dfc6db934068b4c08eda97b64ecab09970116706e190b7bb0ec0e77"),
@@ -193,7 +193,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "湖南省储备委员会",
         duoqian_address: hex!("b49be3e53ffc0086f74aa4080d49600a6de3a43229d00811e1ce513624ac96f5"),
         grandpa_key: hex!("4b9547092662fba8d70658eee8c999c5f5044b2574054a3ce62b2ed19b5645d1"),
-        admins: &[
+        duoqian_admins: &[
             hex!("7ca56451d3543ee5740951272dcb89e40891ed4f0fad3a4bb097de86705e847c"),
             hex!("c8d10b00136eaadf749e56a99a9016c283adcb60eb36b742077b845128cfc517"),
             hex!("4293d2ce86b81783e76ef44404fcb2eab3b2f9286d4ac8d51cc61a991ceeb964"),
@@ -210,7 +210,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "江西省储备委员会",
         duoqian_address: hex!("0950cef8244e929f363946110a75d91e00671cb14e5e67b145d42d4826e0be9b"),
         grandpa_key: hex!("782c1fc618af8c3e1eb225f1b068eb35dfc54e3db2c8067a0ddb55308d62a3d4"),
-        admins: &[
+        duoqian_admins: &[
             hex!("443e0e4a4a215622010f4410f77d5f154721c1a10e9f951591e0481023447322"),
             hex!("a00c9599a98af6ecc0eeb88875d6b1e4cde4d40e7120c2742d4cd560fcfbf736"),
             hex!("9c6becc31ad6592cd526a653e5f5baadae85fbfc02ef319ead983df19d39d174"),
@@ -227,7 +227,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "浙江省储备委员会",
         duoqian_address: hex!("45b50263c9438e8642932bc23c1c5d86ec72dd42adcb1dea95e8204e6922dde4"),
         grandpa_key: hex!("a2a7643951e81f6189834bd5c70ee27eddd402ac7c4ef749f40955042b4bb43e"),
-        admins: &[
+        duoqian_admins: &[
             hex!("962634d0a5d6f037d3571742d5166ceb496249667b4b767ca9f468e23d03ed24"),
             hex!("aa62b7f79b26f549f996a7d781dd3f8001e2bef9b5542d8816436aeda32ab704"),
             hex!("84a82b7a35c126a70eda469d46e16f965e9f3bf2eb916e4a9ffcd9cf2c7f7728"),
@@ -244,7 +244,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "江苏省储备委员会",
         duoqian_address: hex!("fcd48c7f4357b0bc6419cf3be4adbe83f9e2bd59003367ecfa7ae171e422e930"),
         grandpa_key: hex!("a3819330ccac67a93f09679f81e919e5cc2eedf7166e69a62d402be6ec39de2a"),
-        admins: &[
+        duoqian_admins: &[
             hex!("beab132b103ef629f7e4015df7510180cee2e61b034cd0e91f888201828ce34f"),
             hex!("905af596cfc37f099038c89110b02157d1f76c17bb959dcb7e7cfdc31e4d570e"),
             hex!("86b5bc1043de6391ab23178662025d178defa1c292c650f70d94d8ea0984273a"),
@@ -261,7 +261,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "山东省储备委员会",
         duoqian_address: hex!("979570fa62d1963802150c9ed4c75ebde4f223db00420e624f11a08403a3a6cd"),
         grandpa_key: hex!("ecbfcf8a0c4e9954f0d8ea71d85b91ad0142b5c5821a74fab99a041be4192948"),
-        admins: &[
+        duoqian_admins: &[
             hex!("34917d22a17b566faf9af6787385a689b1f64e8acd1da183132dd28b0dc85c7c"),
             hex!("965b89310f32bba16311632d62814c06bf1b516410c7647e4eb1d935eac54336"),
             hex!("e0e0c9fb6627ffcb22cedd547dd969a83047f2e4a7d4c9218968a9178ee3ae78"),
@@ -278,7 +278,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "山西省储备委员会",
         duoqian_address: hex!("0f2a278947e933750b3cc14c9613299c7670b95dfd8ef719f9de56d290495122"),
         grandpa_key: hex!("63e4ac90760504c650773312df9c4ce2faec662c544aeec9c6fcad41654a78c8"),
-        admins: &[
+        duoqian_admins: &[
             hex!("0420f71558255ad2eb00e00aeb82e4c31e4d0618f71e7fd2480ae5b7acebc071"),
             hex!("929eb08e413356702c791556d154e3df085d04d536bf2133dfaebaca4d960676"),
             hex!("72042d75896d2f9eeb161c02e313a53850a18f18d329d37c2c7adcf9f7289128"),
@@ -295,7 +295,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "河南省储备委员会",
         duoqian_address: hex!("b0f272d9ac4caeb41f463549732bbeddce3e0bf422450f5ab2627b684cb2e24b"),
         grandpa_key: hex!("e9227e239d61c3ba1463ac0b2206cecf35ebe73a48c7a702a76aeac20327c653"),
-        admins: &[
+        duoqian_admins: &[
             hex!("ce08dab991bd8b5cd37bc7a11d360ca5b5157bc021606088901d6ff685971a24"),
             hex!("82f7cf995d842c30baed04d0c05984a65b52eaea87e0ecc7fa18c8bd3dd5d336"),
             hex!("e87b795d3bfe235d706913e453949538012d2f5fe819aa7fbd8974991432db72"),
@@ -312,7 +312,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "河北省储备委员会",
         duoqian_address: hex!("216ad2c3fd9715de1ae1854fd4216b3fe6f9245767575fbd855b80c87060c664"),
         grandpa_key: hex!("7ce0745ab3270b66570b4b2fa7ef0ea2fd4df5065488c05282cd8ed8c938c199"),
-        admins: &[
+        duoqian_admins: &[
             hex!("4e3df6bdac65b48ea340a09463d64bd071aede8b7837bb951c20836c6925693c"),
             hex!("1a5e281c02a62c179e3bf6044f9321a76db4dbb446b74d78a515f74b6616934d"),
             hex!("842b630532ab7a2dd99765dad1b71e3dae11f7c0e3f53d73402a85ea733ae25f"),
@@ -329,7 +329,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "湖北省储备委员会",
         duoqian_address: hex!("d43bde789ab9b4fa011ac54fcec77047928de324e812b12be7c3d611f107c637"),
         grandpa_key: hex!("b10a24b974dabe5f008973007ea3fb67c4af2c7ae77b71f01e0249ac366daab8"),
-        admins: &[
+        duoqian_admins: &[
             hex!("0ccde5b418f9fc572d28afa64d3a4b474d4590438e1edcea4031959d6f01a946"),
             hex!("0a8130175c6563770cb7a25caa3710f7077137da913b9f463da39b009d501b5a"),
             hex!("0670ecd2c3bfd67d70a66bb125d438c50113d800acf8c398c794ebf212217130"),
@@ -346,7 +346,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "陕西省储备委员会",
         duoqian_address: hex!("037afa9fa24097b480ef7d35c142e874f3ac78139cd9edfd20fca3ab0e483986"),
         grandpa_key: hex!("14cd5c8e07f738cc3719b4e66c33d81fa3a4baf6f6e50ae1d48d4e2ffb8e47b2"),
-        admins: &[
+        duoqian_admins: &[
             hex!("5c652aa8012ce7fba7665b6836116651cdc290e1c4ce17b926944351389af75e"),
             hex!("dcea950deb017614ab6d2d70a69472f5697d3921b4c32145ba359e663a4bab3e"),
             hex!("3a256a29d5e8751d5ce2775c9a4f94a6d057e1488aa9fb247f032533f07d9256"),
@@ -363,7 +363,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "重庆省储备委员会",
         duoqian_address: hex!("fca5f44d8fe158205bb9adb859adf60f4683ec0ac0c122677517914ed220b753"),
         grandpa_key: hex!("599aa6bb3cf9d48d99599de3c5948308e32dbb427f49346cdab95fe82863b747"),
-        admins: &[
+        duoqian_admins: &[
             hex!("2ef4db13e343f5395c9dda46c323d7ffb592d96f4af55d06f9088a54c7c2ae48"),
             hex!("6c974aa78b7ef6a9f1ce0adf6632bafdaadab49d05b06624eba7f1c7f5ce825b"),
             hex!("faf86edf3aa251e36ec809503359ec35bb783b57fb753b0c61b85da98b01e159"),
@@ -380,7 +380,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "四川省储备委员会",
         duoqian_address: hex!("7b0e36626b4906b36fe60cbc22376deae4b2b6b25f1dc48447cb1339a63be972"),
         grandpa_key: hex!("26daeb08619448a235d712daa63bf81b97710f684801d22c847624e070e4f600"),
-        admins: &[
+        duoqian_admins: &[
             hex!("16212ee287e95f381f1e85e036af61c79e361411b9fb8b7f0ab9b7dcf4347230"),
             hex!("9a3208b10edb6dd02fcfe1d29aa1d181d9d1b12dd227686684de9515f3fda025"),
             hex!("8ec314048205ba56fbe1804c858431f47318d3fbfeeeb4300c6bdcd1e2d7df2c"),
@@ -397,7 +397,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "甘肃省储备委员会",
         duoqian_address: hex!("86afdddf3d531f775fd46b5b6aca115bc281d06b16434b188f44a5b6e758796c"),
         grandpa_key: hex!("fa9e7becc8a5984cf15c50ca83e3918adc79521281e2d75ebfcccb7d3e5be8f3"),
-        admins: &[
+        duoqian_admins: &[
             hex!("869bb482411a81f4e3b6264cb0ee292b684c003446dc434164d987bdb831c30b"),
             hex!("cca18ed750841384f46e7c017babf3ab1b30176ad12bc4fdffa88a939059c51a"),
             hex!("fe6a75310a2dbc95e24b06483d30108c5303596f86775f17a7810a2fbb451609"),
@@ -414,7 +414,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "北平省储备委员会",
         duoqian_address: hex!("db80eef695bef0ef0268059a027b4d0641a4d59a11d562f1a53cd2c3587aca59"),
         grandpa_key: hex!("e0dfc5bde6f32d6d41648006c69f6489dea06c37259c57b716ff025fa4fa31af"),
-        admins: &[
+        duoqian_admins: &[
             hex!("721b9533444e208d357ee90bfcf0e2eee6f27e0f90df6c4a5e17e3d5a5105233"),
             hex!("cabb2777b049e3e4f7833c65b8cd99596fc7d202946f49a588181d18fa94204d"),
             hex!("8a9d559f5fd16ef10b7923f993d0acc8cbaafa59875a0a0bc537acaa0697a01a"),
@@ -431,7 +431,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "海滨省储备委员会",
         duoqian_address: hex!("e58770d249bd55f63eb052e93b54557e4d565feebc284f6bb8398b238af30529"),
         grandpa_key: hex!("015829c6f8588903ecbf17207b5fad6d5e766f7512325b13850b43ddd2886305"),
-        admins: &[
+        duoqian_admins: &[
             hex!("aae591c8f6a4ab4dd02a9c6e07685da23b2e678df559e0444bc84b1897a58478"),
             hex!("56eed859f11c6b7ca8d5149c650d24f4ceab6a9eb7ffefd852dbb4899efd4544"),
             hex!("5cd2b74bbdc0b3af323de618cad0527699111eb36b3f65a84f0bee7b27e2b75f"),
@@ -448,7 +448,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "松江省储备委员会",
         duoqian_address: hex!("d8c2177ef57b4ca651460f233cc39f7af405a5442937026a697cc4852e56e2d8"),
         grandpa_key: hex!("1527123566372a8082a2d1b62f2dbd00ae3c56f2f71b51b8228178400774c3f3"),
-        admins: &[
+        duoqian_admins: &[
             hex!("f209b25849cf6a8b4067b853c969def73a60bb29cd11804b1a121ba98508653b"),
             hex!("9859508da9b3d0ae9265fed1303fee110b4f4a38ea5336ee26a4ee94f8e19d5d"),
             hex!("f23d8d6b3063fcce72a65c0c1ea6b7fa3c3f4b38adec7a341918254b124ed046"),
@@ -465,7 +465,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "龙江省储备委员会",
         duoqian_address: hex!("4bcca0d178ed251c23391f34d9c72214af1656c5431dbbbf8e191785a9b0d0a0"),
         grandpa_key: hex!("db5d32816bddb7a0e1d0d17d3863923eb32f76eed87604d0d410a74900195b87"),
-        admins: &[
+        duoqian_admins: &[
             hex!("da4c7a7d4d3a2bf0ad33d0fce6f0a48aceb60a29f3de3d1fbce7034d4e04c620"),
             hex!("aab062939efedeedd4f8e753ab067feb13b527d51369fef66a550106c5a39166"),
             hex!("829740f3a8b2a75fcad7a8c59e5738bb698c4d43fb1eaaafc80dc566446d105d"),
@@ -482,7 +482,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "吉林省储备委员会",
         duoqian_address: hex!("9c52a4de06b27c9cca3fb4b8f2a1794f2dfdc0ee09a8a0286041218075e9be00"),
         grandpa_key: hex!("9ffdedc39ab82f7766022a3b53149ffb0f2611567961c0570880adab1a01af88"),
-        admins: &[
+        duoqian_admins: &[
             hex!("f4845565b8c154dcbfd80c9ce7519058afe55f143433b06fa0d537ad7360cd1a"),
             hex!("02c548a209c4051c3ca2fdf74cd6c68234d74fe6374b74d95411227e04d45265"),
             hex!("745d18680cd4fcf3f21b6146e40e35c5275f5bd1bc1d209ccdecc00dcb5ea750"),
@@ -499,7 +499,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "辽宁省储备委员会",
         duoqian_address: hex!("69f2eb3f9f161ef9f469010acec759e40a9e8974fbf43249149472ed68bf43c4"),
         grandpa_key: hex!("8133cf439c9142737b34655c48658135d7f946c9d60615a80ed14bad4fec1141"),
-        admins: &[
+        duoqian_admins: &[
             hex!("5ce10023b13c3820b38b2eaa2b25f38d423c8ebff8fa9987da6043d2301bb41f"),
             hex!("56786015541de3069ace6e483b1f90af157b52b0caeca1f14f0783d7ce1a6878"),
             hex!("da198ab6b20dbea0a83ffc2fb52f7467414af14822bf748e8fff506cf0376b08"),
@@ -516,7 +516,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "宁夏省储备委员会",
         duoqian_address: hex!("e8f661615592fe19d33a8424d61b647ccdd7c4244349484d651e4851680caf27"),
         grandpa_key: hex!("94a7d8f2f0b613dbb1509cc31ffa832188af9f547a0ce25ffe4be56a1cb10e07"),
-        admins: &[
+        duoqian_admins: &[
             hex!("04379eb91f117b2783a9c768025eb37f77107f4b8a8642bf0beb96be544ea34b"),
             hex!("4cb11155c0eadb7d1f93324171f080f5661a62259f741b542fb069724c08c840"),
             hex!("7236ae7d43e3d62838a4c43b23cbd56a015660f0668b6056ce108eefa68ea46b"),
@@ -533,7 +533,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "青海省储备委员会",
         duoqian_address: hex!("5fbca2c6f277e9382747bdbbdfc170c3f83d563d3acd1a4fec3aa7ff81aca71b"),
         grandpa_key: hex!("6c5ee4dd2a7b9f82a2f04e9eb3bf5ba970adce79cffa662d2dc84adc4ce42492"),
-        admins: &[
+        duoqian_admins: &[
             hex!("1cb7f16cda56e42c93f76460247a84de444a6f24164442c782e5e96535011778"),
             hex!("22ac04c138217754099d4a414df855f8d400bbe14309a6d56e8f6f0115200866"),
             hex!("f88db68796417f9dc971ecf6bc191fde31d07626c6c4bb29c7d2ec6505e2382c"),
@@ -550,7 +550,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "安徽省储备委员会",
         duoqian_address: hex!("53aa5754796f98f8f6fb74f0302ea381936b6b06d48c17e455bc64725e8af35b"),
         grandpa_key: hex!("903f1fcba7a60aeca0221c0fe9dad52b28437775732360a318bc07326638dd39"),
-        admins: &[
+        duoqian_admins: &[
             hex!("92a4067c099c83db7853da7e8dc923ee6aceb09bd30feb547f3ed77a4e3bd74f"),
             hex!("dc610ead08eee19c0b2ac5dbefa6058b2fd392170e0e250188d141241c69e26b"),
             hex!("8a38abf3c492cf4946d7cc56485b8c101f60b51c535386e985cb7f9bfa33a54c"),
@@ -567,7 +567,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "台湾省储备委员会",
         duoqian_address: hex!("fe6d7dcc07faaae8face0c0fdd66de2933dea83d9bd0df25bd571979bdd55859"),
         grandpa_key: hex!("2f0fcd64f31a318077484148bdf3db0d95de25860764985214356dc3371d598e"),
-        admins: &[
+        duoqian_admins: &[
             hex!("14dd7aa11f3c8d7745ac0bce6d160701ebe1f382a3b9f503e258ca34c5730835"),
             hex!("700da7732d20b2c1d668381a04396e826834e326b318228443ebdf814c72da67"),
             hex!("70d00e52a19908624c6db321a1f55b816264bd257cb636bbed584af8366c3118"),
@@ -584,7 +584,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "西藏省储备委员会",
         duoqian_address: hex!("f3e4b26435892b5e0330028690498f309dc5eaec1ba91942cc0902d13c71a4df"),
         grandpa_key: hex!("eaf447ce1635e7165e9588b6d2864ddf31e2a33ccff69f7a46d69ee2317b4a52"),
-        admins: &[
+        duoqian_admins: &[
             hex!("6c3b884d685780ebd05603dd24d467033316b1ccc91dd9b85714978de4c7c632"),
             hex!("f0ee0d300c114090fbba602a484558f31cb110b34546257e31e3463891b89f42"),
             hex!("36c856452191f55d0214ba53e685f965b0ef5ef21b8cc007b72e52f5aa6da17b"),
@@ -601,7 +601,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "新疆省储备委员会",
         duoqian_address: hex!("a809b8e77ad103708a77b3be1d2277555eedbf0d433f436f9901d46bdb217c79"),
         grandpa_key: hex!("004de5bc4fa8fe5cdce4c1cb00ddce6db55ce5926b8189741cb3cd43d8155f99"),
-        admins: &[
+        duoqian_admins: &[
             hex!("d0a03917c1501fd6e37bfa574a9f9c7415af43982e44d8bd2f2262a7241c9366"),
             hex!("34b8fb4e24fb4a45960b8f842ef55150988633f607dd745583726a35c6b52c64"),
             hex!("06f061f330578f10d9ac0c30f684ecd93f86b00a79189b5255e2f11b34bd8364"),
@@ -618,7 +618,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "西康省储备委员会",
         duoqian_address: hex!("f4937d7a2c61c57cdf5079d25e0d9ff8e189b668a98b0489ab946e065a6c1c63"),
         grandpa_key: hex!("ad9ea30f1f967672f8d1b7aabbd8443d860dd2af2e9c9fd9b6a0358fe1690d20"),
-        admins: &[
+        duoqian_admins: &[
             hex!("0881de91b1a1ab4c57b89be8f7e630af9aada874fdb8acfd45f5975db173d467"),
             hex!("d4f2c0eaa56597aa19567734c7387d507fb2bddfc33c63aaee1cc0e132f9eb6f"),
             hex!("28586edd920320c323e2390108cabacf62972bf35f7cae7af0b541a8b7b5be42"),
@@ -635,7 +635,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "阿里省储备委员会",
         duoqian_address: hex!("969316fc4c788f7c9e1b96cd6a33ade8f40acd759b353502f64b3a3427e569c1"),
         grandpa_key: hex!("e1dfa8bc752665d0becd9287b28415ced4193371f7cde21e244a8f5b6a1a1a48"),
-        admins: &[
+        duoqian_admins: &[
             hex!("e8e3c20ca22c65654c68335a7a140287c6df906e971065485794a839aa4c766c"),
             hex!("ea6abd091bb012beb14a7322ebcc8d65407379ddf9de0eb5d0f6883f2783220c"),
             hex!("e657f8f30589169abd250e2d5b10f7ae33629a0e8ef5108f035d23303be84e31"),
@@ -652,7 +652,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "葱岭省储备委员会",
         duoqian_address: hex!("6e08fcbf5a5c3429b5c408da8b8bc558feb9581ab50b758cd5c89fd7c1db3263"),
         grandpa_key: hex!("ad5fa47ad61097e5dbe077066f34e3cdba31ca0194c184fe556a2f62c4c18172"),
-        admins: &[
+        duoqian_admins: &[
             hex!("a87c4b41c8d1494e2e05fb30f7c263b393c8f77701952f6a18e8561238749571"),
             hex!("4209862188320e1bcfddda367da543dd62bfd1ff187bae7fb50bf74e8e38331b"),
             hex!("d07db0a48948480f917c7652daba071f581ab2c90275ca11257a902f9bfa6e74"),
@@ -669,7 +669,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "天山省储备委员会",
         duoqian_address: hex!("6ce2b03f2b129a204f332da81a61b1248f53efbf08848a77a6fa39ddd3c2b8b2"),
         grandpa_key: hex!("ae47a89d45e0649ac98aa832eb7d6ae10d6111b30cf64eb118c428c24a00081d"),
-        admins: &[
+        duoqian_admins: &[
             hex!("24acc05f6487a97c7ffc6a319cc532cca81e05f26935e56f3867bd54ddf57274"),
             hex!("568f7c9301c1a56fd66e4e6b1d4e80f19f92fc8c1f25388f7f4a432b08fb111d"),
             hex!("24c44b770b9be1d1bd7c34c8f39b718511ddb87576506d2954d073f2256ad608"),
@@ -686,7 +686,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "河西省储备委员会",
         duoqian_address: hex!("584dc4763c2a9998f137b96e55a9984e3ccb4436aefed3667b5ee33ae4f7b9d1"),
         grandpa_key: hex!("82842c89fe9ce2eca5df47ad92d787e255c0b0dd3ec18947b801077b57743520"),
-        admins: &[
+        duoqian_admins: &[
             hex!("fa350c6790bdce5f2f39b8ff4dc7994200e6e7b79a77ab0e7707190472e61d07"),
             hex!("722ac6c1f12fad76210455629115e9f4aadb9bfa1bd61676b366c807fabf8d63"),
             hex!("22941c3a0375aeb90c08fe9af7ea32c7937810b6f0bcd153745da19704eb1219"),
@@ -703,7 +703,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "昆仑省储备委员会",
         duoqian_address: hex!("51041527a777faa5df81ea521fd19b1981712c9bff15056fa44fd0de2696c20e"),
         grandpa_key: hex!("4684cd4740972bca1df018cce973771df605cf404c3762c1976f52f9700db391"),
-        admins: &[
+        duoqian_admins: &[
             hex!("32320497967509f7db42bd389f6087e30235557abc0cc1c29142446f5d8b9b3f"),
             hex!("480cba2bc9ac30646fc03497ac8d154cbeb5a9b72faded8ad3f9111c91eeaa20"),
             hex!("522116712bd131d4875e3d860c410151d70a5a504c746237912a91f639c15023"),
@@ -720,7 +720,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "河套省储备委员会",
         duoqian_address: hex!("44a0d06f571743e1a513d28dad6e6609445451f23c6929387372f0dc9bd761d3"),
         grandpa_key: hex!("87f64d53701b846b019341f356e738a87d6c20b244bf2e2d89351717b385a8f3"),
-        admins: &[
+        duoqian_admins: &[
             hex!("1a3356518d94c59d2a2f182955d5d05806cfe80c927042e6f6928555bf4f657c"),
             hex!("90f6deed86cce12a9766a55a8db95b08c4061ba88151e3749ec764c28eb7d349"),
             hex!("282b05d98c99c3637de456f6aa51d073d29066f1e89f0da91619c70f3fe6964f"),
@@ -737,7 +737,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "热河省储备委员会",
         duoqian_address: hex!("7a2703df0624d7d7afab04a169dd04ef9a89991ee76f059c586aaf376437e653"),
         grandpa_key: hex!("e7ef1b4ae92e95e9c8b3fb5856e86ea77f596e82c75af20802d61106ca26a25d"),
-        admins: &[
+        duoqian_admins: &[
             hex!("045a9f06c01d50bd09ab61a58e35889263df42399069754ed316504f151c3f74"),
             hex!("c8fb7f296f0c860e8c5f3edca93d6632985e61b89b0c2ab9e6dc00736e615204"),
             hex!("06a3cae0b46e3d3711e37942c7438112ef83f8b4f738bdbad698f2949d72440b"),
@@ -754,7 +754,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "兴安省储备委员会",
         duoqian_address: hex!("3a4d16f29220b431fd778bba9ff0d0b1e1ee8958e3b36fb22512160d6b4eca0f"),
         grandpa_key: hex!("0bde5599cdd158c196a45025689be5166a0e4e0ef9e932523040debed85f8b59"),
-        admins: &[
+        duoqian_admins: &[
             hex!("f8fe916bd56ee3af0267fcd5ab1de6f09e2efe4efd8c2bb3cc4d90b91a50211c"),
             hex!("7c70bee976cacf0fbf9e08e781a100fae11e0574cf5b13bfb067878758e27345"),
             hex!("5800fac49cc52072463f85e12e15e1fc931631cccc23961ce9e7b69dea9f8009"),
@@ -771,7 +771,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         shenfen_name: "合江省储备委员会",
         duoqian_address: hex!("8ce152ac8c86e441ebcba60f515d5530492b42d9eb3335d99b526471a76d3495"),
         grandpa_key: hex!("a69514c16012e39f3bc49941afa58871aeb46bbfb7825bd296133bad9cd0db9a"),
-        admins: &[
+        duoqian_admins: &[
             hex!("e2df7a8927683de5554e541d4e1d028fb159cf42d5663cdef310f16a177f2369"),
             hex!("4455c00ff6b4918ff744038c61cb92d194cba08ed156b111c9e9ac0643074a04"),
             hex!("e09e8a9388265d592beb486b5fd806db5941e5c162d25b969438ab2291886a17"),

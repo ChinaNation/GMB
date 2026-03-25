@@ -220,6 +220,7 @@ pub fn try_start<Proof: Send + 'static>(
     worker: MiningHandle<Block, SimplePow, (), Proof>,
     device_index: usize,
     epoch: Instant,
+    pool_ready: std::sync::Arc<dyn Fn() -> usize + Send + Sync>,
 ) -> Result<(), String> {
     let miner = GpuMiner::try_init(device_index)?;
 
@@ -233,6 +234,12 @@ pub fn try_start<Proof: Send + 'static>(
                 thread::sleep(Duration::from_millis(200));
                 continue;
             };
+
+            // 空块不提交：交易池无待打包交易时不挖矿，避免产生空块。
+            if pool_ready() == 0 {
+                thread::sleep(Duration::from_millis(500));
+                continue;
+            }
 
             let build_version = worker.version();
 

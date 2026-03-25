@@ -161,7 +161,7 @@ pub mod pallet {
                     continue;
                 };
                 let admins: Vec<T::AccountId> = node
-                    .admins
+                    .duoqian_admins
                     .iter()
                     .map(|raw| {
                         T::AccountId::decode(&mut &raw[..])
@@ -179,7 +179,7 @@ pub mod pallet {
                     continue;
                 };
                 let admins: Vec<T::AccountId> = node
-                    .admins
+                    .duoqian_admins
                     .iter()
                     .map(|raw| {
                         T::AccountId::decode(&mut &raw[..])
@@ -547,12 +547,12 @@ mod tests {
                 ORG_NRC | ORG_PRC => CHINA_CB
                     .iter()
                     .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .map(|n| n.admins.iter().any(|admin| *admin == who_raw))
+                    .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_raw))
                     .unwrap_or(false),
                 ORG_PRB => CHINA_CH
                     .iter()
                     .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .map(|n| n.admins.iter().any(|admin| *admin == who_raw))
+                    .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_raw))
                     .unwrap_or(false),
                 _ => false,
             }
@@ -604,11 +604,11 @@ mod tests {
     }
 
     fn nrc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CB[0].admins[index])
+        AccountId32::new(CHINA_CB[0].duoqian_admins[index])
     }
 
     fn prc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CB[1].admins[index])
+        AccountId32::new(CHINA_CB[1].duoqian_admins[index])
     }
 
     fn nrc_pallet_id() -> InstitutionPalletId {
@@ -627,7 +627,7 @@ mod tests {
     }
 
     fn prb_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CH[0].admins[index])
+        AccountId32::new(CHINA_CH[0].duoqian_admins[index])
     }
 
     /// 获取最近一次 create_internal_proposal 分配的 proposal_id。

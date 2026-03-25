@@ -60,7 +60,7 @@ mod benchmarks {
 
     #[benchmark]
     fn joint_vote() -> Result<(), BenchmarkError> {
-        let who = decode_account::<T>(CHINA_CB[0].admins[0])?;
+        let who = decode_account::<T>(CHINA_CB[0].duoqian_admins[0])?;
         let institution = nrc_institution()?;
         let now = frame_system::Pallet::<T>::block_number();
         let end = now.saturating_add(100u32.saturated_into());
@@ -91,7 +91,7 @@ mod benchmarks {
     #[benchmark]
     fn citizen_vote() -> Result<(), BenchmarkError> {
         let proposal_id = 2u64;
-        let who = decode_account::<T>(CHINA_CB[0].admins[0])?;
+        let who = decode_account::<T>(CHINA_CB[0].duoqian_admins[0])?;
         let now = frame_system::Pallet::<T>::block_number();
         let end = now.saturating_add(100u32.saturated_into());
         Proposals::<T>::insert(

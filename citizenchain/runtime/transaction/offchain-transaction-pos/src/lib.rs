@@ -3088,7 +3088,7 @@ mod tests {
                 voting_engine_system::internal_vote::ORG_PRB => CHINA_CH
                     .iter()
                     .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                    .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
                 _ => false,
             }
@@ -3148,7 +3148,7 @@ mod tests {
     }
 
     fn prb_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CH[0].admins[index])
+        AccountId32::new(CHINA_CH[0].duoqian_admins[index])
     }
 
     fn prb_account() -> AccountId32 {

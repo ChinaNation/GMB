@@ -860,7 +860,7 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 
     #[cfg(feature = "runtime-benchmarks")]
     fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
-        let admin = AccountId::new(primitives::china::china_cb::CHINA_CB[0].admins[0]);
+        let admin = AccountId::new(primitives::china::china_cb::CHINA_CB[0].duoqian_admins[0]);
         Ok(RuntimeOrigin::from(frame_system::RawOrigin::Signed(admin)))
     }
 }
@@ -1118,7 +1118,7 @@ mod tests {
             let issuance_before = Balances::total_issuance();
 
             assert_ok!(ResolutionDestroGov::propose_destroy(
-                RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].admins[0])),
+                RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].duoqian_admins[0])),
                 voting_engine_system::internal_vote::ORG_NRC,
                 nrc_institution,
                 destroy_amount,
@@ -1128,7 +1128,7 @@ mod tests {
 
             for i in 0..13 {
                 assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].admins[i])),
+                    RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].duoqian_admins[i])),
                     pid,
                     true,
                 ));
@@ -1330,7 +1330,7 @@ mod tests {
 
             // 通过 voting-engine-system 的 ProposalData 写入提案数据（模块已无本地存储）
             let proposal_id = 7u64;
-            let proposer = AccountId::new(CHINA_CB[0].admins[0]);
+            let proposer = AccountId::new(CHINA_CB[0].duoqian_admins[0]);
             let reason: runtime_root_upgrade::pallet::ReasonOf<Runtime> =
                 b"upgrade".to_vec().try_into().expect("reason");
             let code: runtime_root_upgrade::pallet::CodeOf<Runtime> =
@@ -1539,7 +1539,7 @@ mod tests {
     fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
         new_test_ext().execute_with(|| {
             let nrc_id = reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("nrc id");
-            let nrc_admin = AccountId::new(CHINA_CB[0].admins[0]);
+            let nrc_admin = AccountId::new(CHINA_CB[0].duoqian_admins[0]);
             let outsider = AccountId::new([99u8; 32]);
 
             let ok_origin = RuntimeOrigin::signed(nrc_admin.clone());
