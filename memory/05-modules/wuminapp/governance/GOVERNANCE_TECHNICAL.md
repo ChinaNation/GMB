@@ -497,11 +497,11 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 | `lib/rpc/chain_rpc.dart` | RPC 服务（含 `fetchStorage` 公开方法） |
 | `lib/main.dart` | 机构列表结构化（`InstitutionInfo`）+ 卡片点击跳转 |
 
-## 8. 注册多签机构（duoqian-transaction-pow）
+## 8. 注册多签机构（duoqian-manage-pow）
 
 ### 8.1 概述
 
-`duoqian-transaction-pow` 模块为非治理机构提供多人管理的公共支出账户。所有操作（创建、关闭）通过投票引擎的内部投票机制执行，与治理机构（NRC/PRC/PRB）使用同一套投票、存储、清理基础设施。
+`duoqian-manage-pow` 模块为非治理机构提供多人管理的公共支出账户。创建、关闭和转账都复用投票引擎的内部投票机制，与治理机构（NRC/PRC/PRB）使用同一套投票、存储、清理基础设施。
 
 ### 8.2 机构类型
 
@@ -542,11 +542,21 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 2. 其他管理员调用 `vote_close` → 投票引擎记票
 3. 达到 threshold → 自动执行：`Currency::transfer` 转出全部余额 + 删除 `DuoqianAccounts`
 
-### 8.7 关键文件
+### 8.7 转账接入
+
+- `wuminapp` 现已把注册型机构也编码为 `InstitutionPalletId(48)`：
+  - 治理机构：`shenfen_id` UTF-8 右补零到 48 字节
+  - 注册型机构：`duoqian_address(32) + 16 字节 0`
+- `TransferProposalService` 会统一按这套编码查询活跃提案、过滤机构提案并构造 `propose_transfer` call data。
+- `InstitutionAdminService` 对注册型机构不再查 `AdminsOriginGov.CurrentAdmins`，而是直接读取 `DuoqianManagePow.DuoqianAccounts`，从中解码管理员列表和动态阈值。
+- 冷钱包二维码协议未变，只是 `org = 3` 的摘要显示改为“注册多签机构”。
+
+### 8.8 关键文件
 
 | 文件 | 说明 |
 | --- | --- |
-| `duoqian-transaction-pow/src/lib.rs` | 注册、创建、关闭业务逻辑 |
+| `duoqian-manage-pow/src/lib.rs` | 注册、创建、关闭业务逻辑 |
+| `duoqian-transfer-pow/src/lib.rs` | 注册型多签机构转账复用现有提案/投票/执行流程 |
 | `voting-engine-system/src/internal_vote.rs` | 投票引擎（含 ORG_DUOQIAN 支持） |
 | `voting-engine-system/src/lib.rs` | InternalThresholdProvider trait |
 | `runtime/src/configs/mod.rs` | RuntimeInternalThresholdProvider + RuntimeInternalAdminProvider |
@@ -563,7 +573,7 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 - `lib/governance/transfer_proposal_service.dart`
 - `lib/rpc/chain_rpc.dart`
 - `citizenchain/transaction/duoqian-transfer-pow/src/lib.rs`
-- `citizenchain/transaction/duoqian-transaction-pow/src/lib.rs`
+- `citizenchain/transaction/duoqian-manage-pow/src/lib.rs`
 - `citizenchain/governance/voting-engine-system/src/lib.rs`
 - `citizenchain/governance/voting-engine-system/src/internal_vote.rs`
 - `citizenchain/governance/voting-engine-system/src/joint_vote.rs`

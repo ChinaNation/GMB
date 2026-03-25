@@ -13,6 +13,7 @@ use frame_support::{
     BoundedVec,
 };
 use frame_system::pallet_prelude::*;
+use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
 use scale_info::TypeInfo;
 use sp_runtime::traits::{Hash, Zero};
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
@@ -175,6 +176,7 @@ pub mod pallet {
         type AddressValidator: DuoqianAddressValidator<Self::AccountId>;
         type ReservedAddressChecker: DuoqianReservedAddressChecker<Self::AccountId>;
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
+        type InstitutionAssetGuard: institution_asset_guard::InstitutionAssetGuard<Self::AccountId>;
         type SfidInstitutionVerifier:
             SfidInstitutionVerifier<RegisterNonceOf<Self>, RegisterSignatureOf<Self>>;
 
@@ -661,6 +663,13 @@ pub mod pallet {
                 Error::<T>::ProtectedSource
             );
             ensure!(
+                T::InstitutionAssetGuard::can_spend(
+                    &duoqian_address,
+                    InstitutionAssetAction::DuoqianCloseExecute,
+                ),
+                Error::<T>::ProtectedSource
+            );
+            ensure!(
                 beneficiary != duoqian_address,
                 Error::<T>::InvalidBeneficiary
             );
@@ -861,6 +870,13 @@ pub mod pallet {
             proposal_id: u64,
             action: &CloseDuoqianAction<T::AccountId>,
         ) -> DispatchResult {
+            ensure!(
+                T::InstitutionAssetGuard::can_spend(
+                    &action.duoqian_address,
+                    InstitutionAssetAction::DuoqianCloseExecute,
+                ),
+                Error::<T>::ProtectedSource
+            );
             let all_balance = T::Currency::free_balance(&action.duoqian_address);
 
             T::Currency::transfer(
@@ -1000,6 +1016,26 @@ mod tests {
         }
     }
 
+    thread_local! {
+        static DENIED_CLOSE_SOURCE: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
+    }
+
+    pub struct TestInstitutionAssetGuard;
+    impl institution_asset_guard::InstitutionAssetGuard<AccountId32> for TestInstitutionAssetGuard {
+        fn can_spend(
+            source: &AccountId32,
+            action: institution_asset_guard::InstitutionAssetAction,
+        ) -> bool {
+            if !matches!(
+                action,
+                institution_asset_guard::InstitutionAssetAction::DuoqianCloseExecute
+            ) {
+                return true;
+            }
+            DENIED_CLOSE_SOURCE.with(|blocked| blocked.borrow().as_ref() != Some(source))
+        }
+    }
+
     pub struct TestSfidEligibility;
     impl voting_engine_system::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
         for TestSfidEligibility
@@ -1058,6 +1094,18 @@ mod tests {
         }
     }
 
+    pub struct TestInternalAdminCountProvider;
+    impl voting_engine_system::InternalAdminCountProvider for TestInternalAdminCountProvider {
+        fn admin_count(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+            if org != ORG_DUOQIAN {
+                return None;
+            }
+            let account = AccountId32::decode(&mut &institution[..32]).ok()?;
+            let duoqian = DuoqianAccounts::<Test>::get(&account)?;
+            u32::try_from(duoqian.duoqian_admins.len()).ok()
+        }
+    }
+
     /// 测试用 InternalThresholdProvider：从 DuoqianAccounts 读取阈值
     pub struct TestInternalThresholdProvider;
     impl voting_engine_system::InternalThresholdProvider for TestInternalThresholdProvider {
@@ -1086,15 +1134,14 @@ mod tests {
         type MaxProposalsPerExpiry = ConstU32<128>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
-        type MaxJointDecisionApprovals = ConstU32<32>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
         type InternalAdminProvider = TestInternalAdminProvider;
+        type InternalAdminCountProvider = TestInternalAdminCountProvider;
         type InternalThresholdProvider = TestInternalThresholdProvider;
         type MaxProposalDataLen = ConstU32<4096>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
-        type JointInstitutionDecisionVerifier = ();
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
@@ -1106,6 +1153,7 @@ mod tests {
         type AddressValidator = TestAddressValidator;
         type ReservedAddressChecker = TestReservedAddressChecker;
         type ProtectedSourceChecker = TestProtectedSourceChecker;
+        type InstitutionAssetGuard = TestInstitutionAssetGuard;
         type SfidInstitutionVerifier = TestSfidInstitutionVerifier;
         type MaxAdmins = ConstU32<10>;
         type MaxSfidIdLength = ConstU32<96>;
@@ -1397,6 +1445,47 @@ mod tests {
                 Duoqian::propose_close(RuntimeOrigin::signed(admin(1)), duoqian_address, admin(4),),
                 Error::<Test>::DuoqianNotActive
             );
+        });
+    }
+
+    #[test]
+    fn propose_close_is_blocked_when_institution_guard_denies_source() {
+        new_test_ext().execute_with(|| {
+            let (sfid, duoqian_address) = register_sfid_and_get_address("F002");
+            let admins = make_admins(&[1, 2, 3]);
+
+            assert_ok!(Duoqian::propose_create(
+                RuntimeOrigin::signed(admin(1)),
+                sfid,
+                3,
+                admins,
+                2,
+                1_000,
+            ));
+            let create_pid = last_proposal_id();
+            assert_ok!(Duoqian::vote_create(
+                RuntimeOrigin::signed(admin(1)),
+                create_pid,
+                true
+            ));
+            assert_ok!(Duoqian::vote_create(
+                RuntimeOrigin::signed(admin(2)),
+                create_pid,
+                true
+            ));
+
+            DENIED_CLOSE_SOURCE.with(|blocked| *blocked.borrow_mut() = Some(duoqian_address.clone()));
+
+            assert_noop!(
+                Duoqian::propose_close(
+                    RuntimeOrigin::signed(admin(1)),
+                    duoqian_address,
+                    admin(4),
+                ),
+                Error::<Test>::ProtectedSource
+            );
+
+            DENIED_CLOSE_SOURCE.with(|blocked| *blocked.borrow_mut() = None);
         });
     }
 

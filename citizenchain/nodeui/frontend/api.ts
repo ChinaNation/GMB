@@ -125,4 +125,14 @@ export const api = {
       shenfenId, orgType, beneficiaryAddress, amountYuan, remark,
       signNonce, signBlockNumber, responseJson,
     }),
+  buildDeveloperUpgradeRequest: (pubkeyHex: string, wasmPath: string) =>
+    invoke<VoteSignRequestResult>('build_developer_upgrade_request', { pubkeyHex, wasmPath }),
+  submitDeveloperUpgrade: (
+    requestId: string, expectedPubkeyHex: string, expectedPayloadHash: string,
+    wasmPath: string, signNonce: number, signBlockNumber: number, responseJson: string,
+  ) =>
+    invoke<VoteSubmitResult>('submit_developer_upgrade', {
+      requestId, expectedPubkeyHex, expectedPayloadHash,
+      wasmPath, signNonce, signBlockNumber, responseJson,
+    }),
 };

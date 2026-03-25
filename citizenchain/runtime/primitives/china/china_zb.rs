@@ -1,5 +1,5 @@
 //! 汇总 runtime/primitives/china 目录下所有制度保留 duoqian_address。
-//! 用于禁止 duoqian-transaction-pow 抢注这些机构地址。
+//! 用于禁止 duoqian-manage-pow 抢注这些机构地址。
 
 use hex_literal::hex;
 

@@ -78,7 +78,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
     //   the compatible custom types.
-    spec_version: 2,
+    spec_version: 3,
     impl_version: 1,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 1,
@@ -331,7 +331,7 @@ mod runtime {
 
     // 多签交易模块：duoqian_address 创建/注销与半数签名校验
     #[runtime::pallet_index(17)]
-    pub type DuoqianTransactionPow = duoqian_transaction_pow;
+    pub type DuoqianManagePow = duoqian_manage_pow;
 
     // PoW 动态难度调整模块：每 600 块根据实际出块速度自动调整挖矿难度
     #[runtime::pallet_index(18)]
@@ -340,6 +340,10 @@ mod runtime {
     // 机构多签名地址转账模块：治理机构内部投票通过后从 duoqian_address 转账
     #[runtime::pallet_index(19)]
     pub type DuoqianTransferPow = duoqian_transfer_pow;
+
+    // 链阶段控制模块：存储开发期/运行期阶段、出块目标时间、开发者直升开关
+    #[runtime::pallet_index(20)]
+    pub type ChainPhaseControl = chain_phase_control;
 }
 
 #[cfg(test)]
