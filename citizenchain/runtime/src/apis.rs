@@ -41,8 +41,8 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-    AccountId, Balance, Block, Executive, Grandpa, InherentDataExt, Nonce, PowDifficulty, Runtime,
-    RuntimeCall, RuntimeGenesisConfig, System, TransactionPayment, VERSION,
+    AccountId, Balance, Block, ChainPhaseControl, Executive, Grandpa, InherentDataExt, Nonce,
+    PowDifficulty, Runtime, RuntimeCall, RuntimeGenesisConfig, System, TransactionPayment, VERSION,
 };
 
 impl_runtime_apis! {
@@ -275,6 +275,12 @@ impl_runtime_apis! {
     impl pow_difficulty_module::PowDifficultyApi<Block> for Runtime {
         fn current_pow_difficulty() -> u64 {
             PowDifficulty::current_difficulty()
+        }
+    }
+
+    impl chain_phase_control::ChainPhaseApi<Block> for Runtime {
+        fn target_block_time_ms() -> u64 {
+            ChainPhaseControl::target_block_time_ms()
         }
     }
 

@@ -129,6 +129,16 @@ class ProposalContextResolver {
     List<String> admins;
     try {
       admins = await _adminService.fetchAdmins(institution.shenfenId);
+      if (institution.isRegisteredDuoqian) {
+        final threshold = await _adminService.fetchThreshold(
+          institution.shenfenId,
+        );
+        if (threshold != null) {
+          institution = institution.copyWith(
+            internalThresholdOverride: threshold,
+          );
+        }
+      }
     } catch (_) {
       admins = const [];
     }
@@ -179,6 +189,16 @@ class ProposalContextResolver {
       List<String> admins;
       try {
         admins = await _adminService.fetchAdmins(institution.shenfenId);
+        if (institution.isRegisteredDuoqian) {
+          final threshold = await _adminService.fetchThreshold(
+            institution.shenfenId,
+          );
+          if (threshold != null) {
+            institution = institution.copyWith(
+              internalThresholdOverride: threshold,
+            );
+          }
+        }
       } catch (_) {
         admins = const [];
       }

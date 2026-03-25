@@ -6,6 +6,7 @@ import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'chain_rpc.dart';
+import 'nonce_manager.dart';
 
 /// 交易确认状态。
 enum TxConfirmResult {
@@ -58,7 +59,10 @@ class OnchainRpc {
     // 2. 并行获取动态参数
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
-      _rpc.fetchNonce(fromAddress),
+      NonceManager.instance.getNextNonce(
+        address: fromAddress,
+        fetchChainNonce: _rpc.fetchNonce,
+      ),
       _rpc.fetchLatestBlock(),
     ]);
     final runtimeVersion = results[0] as dynamic;
@@ -100,9 +104,14 @@ class OnchainRpc {
     );
     final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
 
-    // 7. 提交
-    final txHash = await _rpc.submitExtrinsic(encoded);
-    return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
+    // 7. 提交（失败时回退 nonce，避免跳号）
+    try {
+      final txHash = await _rpc.submitExtrinsic(encoded);
+      return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
+    } catch (e) {
+      NonceManager.instance.rollback(fromAddress);
+      rethrow;
+    }
   }
 
   /// 检查交易是否已被链上确认。

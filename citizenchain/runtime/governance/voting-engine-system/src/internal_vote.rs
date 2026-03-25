@@ -24,7 +24,7 @@ use crate::{
 pub const ORG_NRC: u8 = 0;
 pub const ORG_PRC: u8 = 1;
 pub const ORG_PRB: u8 = 2;
-/// 注册多签机构（duoqian-transaction-pow），阈值从链上 DuoqianAccounts 动态读取。
+/// 注册多签机构（duoqian-manage-pow），阈值从链上 DuoqianAccounts 动态读取。
 pub const ORG_DUOQIAN: u8 = 3;
 
 pub fn is_valid_org(org: u8) -> bool {

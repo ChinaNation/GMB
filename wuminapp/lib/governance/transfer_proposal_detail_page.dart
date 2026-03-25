@@ -5,10 +5,12 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import '../util/amount_format.dart';
 import 'institution_data.dart';
 import 'institution_admin_service.dart';
+import 'pending_vote_store.dart';
 import 'proposal_context.dart';
 import 'transfer_proposal_service.dart';
 import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
+import '../rpc/onchain.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 
@@ -69,6 +71,9 @@ class _TransferProposalDetailPageState
   List<WalletProfile> _votableWallets = const [];
   WalletProfile? _selectedVoteWallet;
 
+  // 已提交投票但尚未上链确认的管理员公钥集合
+  Set<String> _pendingPubkeys = const {};
+
   @override
   void initState() {
     super.initState();
@@ -107,12 +112,20 @@ class _TransferProposalDetailPageState
         votes[entry.key] = entry.value;
       }
 
-      // 筛选出可投票的管理员钱包（未投票的）
+      // 检查待确认投票：先批量确认，再获取仍在等待的记录
+      final pendingRecords = await PendingVoteStore.instance.confirmAll(
+        'transfer',
+        widget.proposalId,
+        OnchainRpc(),
+      );
+      final pendingPks = pendingRecords.map((r) => r.walletPubkey).toSet();
+
+      // 筛选出可投票的管理员钱包（未投票且无待确认投票的）
       final votable = <WalletProfile>[];
       for (final w in widget.adminWallets) {
         var pk = w.pubkeyHex.toLowerCase();
         if (pk.startsWith('0x')) pk = pk.substring(2);
-        if (admins.contains(pk) && votes[pk] == null) {
+        if (admins.contains(pk) && votes[pk] == null && !pendingPks.contains(pk)) {
           votable.add(w);
         }
       }
@@ -124,6 +137,7 @@ class _TransferProposalDetailPageState
         _yesCount = tally.yes;
         _noCount = tally.no;
         _adminVotes = votes;
+        _pendingPubkeys = pendingPks;
         _votableWallets = votable;
         _selectedVoteWallet = votable.isNotEmpty ? votable.first : null;
         _proposalInfo = proposalInfo;
@@ -211,13 +225,15 @@ class _TransferProposalDetailPageState
     return _votableWallets.isNotEmpty;
   }
 
-  /// 所有管理员钱包都已投过票。
+  /// 所有管理员钱包都已投过票或正在投票中。
   bool get _allVoted {
     if (widget.adminWallets.isEmpty) return false;
     for (final w in widget.adminWallets) {
       var pk = w.pubkeyHex.toLowerCase();
       if (pk.startsWith('0x')) pk = pk.substring(2);
-      if (_adminVotes[pk] == null) return false;
+      if (_adminVotes[pk] == null && !_pendingPubkeys.contains(pk)) {
+        return false;
+      }
     }
     return true;
   }
@@ -272,7 +288,7 @@ class _TransferProposalDetailPageState
         return Uint8List.fromList(_hexDecode(response.signature));
       }
 
-      final txHash = await _proposalService.submitVoteTransfer(
+      final result = await _proposalService.submitVoteTransfer(
         proposalId: widget.proposalId,
         approve: approve,
         fromAddress: wallet.address,
@@ -280,10 +296,23 @@ class _TransferProposalDetailPageState
         sign: signCallback,
       );
 
+      // 持久化待确认投票记录
+      var pubkey = wallet.pubkeyHex.toLowerCase();
+      if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
+      await PendingVoteStore.instance.save(PendingVoteRecord(
+        proposalType: 'transfer',
+        proposalId: widget.proposalId,
+        walletPubkey: pubkey,
+        approve: approve,
+        txHash: result.txHash,
+        usedNonce: result.usedNonce,
+        createdAt: DateTime.now(),
+      ));
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('投票已提交：${_truncateAddress(txHash)}'),
+          content: Text('投票已提交：${_truncateAddress(result.txHash)}'),
           backgroundColor: _inkGreen,
         ),
       );
@@ -727,7 +756,7 @@ class _TransferProposalDetailPageState
                     ],
                   ],
                 ),
-                trailing: _buildVoteStatusChip(vote),
+                trailing: _buildVoteStatusChip(vote, pubkey),
               );
             }),
           ],
@@ -736,7 +765,8 @@ class _TransferProposalDetailPageState
     );
   }
 
-  Widget _buildVoteStatusChip(bool? vote) {
+  Widget _buildVoteStatusChip(bool? vote, String pubkey) {
+    // 链上已确认的投票结果优先
     if (vote == true) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -767,6 +797,37 @@ class _TransferProposalDetailPageState
             fontWeight: FontWeight.w600,
             color: Colors.red,
           ),
+        ),
+      );
+    } else if (_pendingPubkeys.contains(pubkey)) {
+      // 已提交但尚未上链确认
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 10,
+              height: 10,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: Colors.orange[700],
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '投票中',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.orange[700],
+              ),
+            ),
+          ],
         ),
       );
     } else {

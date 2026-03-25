@@ -39,7 +39,7 @@ frame_benchmarking::define_benchmarks!(
     [admins_origin_gov, AdminsOriginGov]
     [resolution_destro_gov, ResolutionDestroGov]
     [grandpa_key_gov, GrandpaKeyGov]
-    [duoqian_transaction_pow, DuoqianTransactionPow]
+    [duoqian_manage_pow, DuoqianManagePow]
     [duoqian_transfer_pow, DuoqianTransferPow]
     [voting_engine_system, VotingEngineSystem]
     [runtime_root_upgrade, RuntimeRootUpgrade]

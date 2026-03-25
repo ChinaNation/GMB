@@ -4,18 +4,22 @@
 
 ### 0.1 核心职责
 
-`duoqian-transfer-pow` 负责治理机构（国储会/省储会/省储行）通过内部投票引擎发起多签名地址转账：
+`duoqian-transfer-pow` 负责机构多签名地址通过内部投票引擎发起转账：
 
 - 机构管理员发起转账提案，指定收款地址、金额和备注。
 - 机构管理员通过内部投票引擎逐票投票。
 - 投票通过后执行转账：从机构 `duoqian_address` 向收款地址划转资金。
 - 手续费在投票通过后由 pallet 内部从机构 `duoqian_address` 扣取，通过 `onchain-transaction-pow::calculate_onchain_fee()` 计算。
 - 管理员个人账户不承担任何费用。
+- 覆盖两类来源：
+  - 创世预置的治理机构 `duoqian_address`（NRC / PRC / PRB）
+  - `duoqian-manage-pow` 注册并激活的 `ORG_DUOQIAN` 多签地址
 
 ### 0.2 功能边界
 
-- 本模块仅处理治理机构（已在链上预置 `duoqian_address` 的 NRC/PRC/PRB 机构）的转账。
-- 非治理机构（通过 `duoqian-transaction-pow` 注册的多签地址）不在本模块范围。
+- 本模块处理两类机构转账：
+  - 创世预置的治理机构（NRC / PRC / PRB）
+  - `duoqian-manage-pow` 注册并处于 Active 状态的多签机构（`ORG_DUOQIAN`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `voting-engine-system` 的 `InternalVoteEngine`。
 
@@ -24,12 +28,12 @@
 - 且对应管理员与阈值已接入 runtime 的 `RuntimeInternalAdminProvider / RuntimeInternalThresholdProvider`，
 - 这类机构就可以直接复用本模块和内部投票引擎发起转账提案，不需要新增转账 pallet。
 
-### 0.3 与 `duoqian-transaction-pow` 的关系
+### 0.3 与 `duoqian-manage-pow` 的关系
 
 | 模块 | 职责 | 地址类型 | 审批方式 |
 | --- | --- | --- | --- |
-| `duoqian-transaction-pow` | 多签名地址的注册、创建、关闭 | 注册的非治理机构 | `sfid` 主签名登记 + `ORG_DUOQIAN` 内部投票 |
-| `duoqian-transfer-pow` | 治理机构多签名地址转账 | 预置的治理机构 | 链上内部投票引擎（逐票投票） |
+| `duoqian-manage-pow` | 多签名地址的注册、创建、关闭 | 注册的非治理机构 | `sfid` 主签名登记 + `ORG_DUOQIAN` 内部投票 |
+| `duoqian-transfer-pow` | 多签名地址转账 | 预置治理机构 + 注册型 Active 多签机构 | 链上内部投票引擎（逐票投票） |
 
 ### 0.4 与 `resolution-destro-gov` 的关系
 
@@ -52,7 +56,16 @@
 
 ### 1.2 duoqian_address 来源
 
-治理机构的 `duoqian_address` 预置于 `runtime/primitives/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/china/china_ch.rs`（PRB）中，通过 `institution_pallet_address(institution_id)` 查找。
+`duoqian_address` 现有两种来源：
+
+- 治理机构：预置于 `runtime/primitives/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/china/china_ch.rs`（PRB）中，通过 `institution_pallet_address(institution_id)` 查找。
+- 注册型机构：`InstitutionPalletId(48)` 采用 `duoqian_address(32) + 16 字节 0` 编码，再从 `duoqian-manage-pow::DuoqianAccounts` 读取 Active 账户。
+
+### 1.3 institution-asset-guard 边界
+
+- 本模块在 `propose_transfer` 和 `try_execute_transfer` 两个阶段都会调用 `institution-asset-guard`。
+- 当前 runtime 规则下，制度保留 `duoqian_address` 只允许本模块这类治理执行动作内部扣款。
+- 这样可以防止其他交易模块绕开治理流程直接动用机构主账户余额。
 
 ## 2. Extrinsic 接口
 
@@ -61,7 +74,7 @@
 ```rust
 pub fn propose_transfer(
     origin: OriginFor<T>,
-    org: u8,                           // 机构类型：0=NRC, 1=PRC, 2=PRB
+    org: u8,                           // 机构类型：0=NRC, 1=PRC, 2=PRB, 3=DUOQIAN
     institution: InstitutionPalletId,   // 机构 pallet id [u8; 48]
     beneficiary: T::AccountId,          // 收款地址
     amount: BalanceOf<T>,               // 转账金额
@@ -73,7 +86,9 @@ pub fn propose_transfer(
 
 1. `origin` 必须是 `signed`，提取 `proposer = ensure_signed(origin)`。
 2. `amount > 0`。
-3. `institution` 必须是有效的治理机构（在 CHINA_CB 或 CHINA_CH 中存在）。
+3. `institution` 必须是有效机构：
+   - 治理机构：在 CHINA_CB / CHINA_CH 中存在；
+   - 注册型机构：能解码出 `duoqian_address`，且在 `DuoqianAccounts` 中存在并处于 Active。
 4. `org` 必须与 `institution` 的实际机构类型匹配。
 5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验）。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
@@ -355,8 +370,8 @@ pub trait Config: frame_system::Config + voting_engine_system::Config {
     /// 内部投票引擎
     type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
 
-    /// 受保护地址检查器（复用 duoqian-transaction-pow 的 trait）
-    type ProtectedSourceChecker: duoqian_transaction_pow::ProtectedSourceChecker<Self::AccountId>;
+    /// 受保护地址检查器（复用 duoqian-manage-pow 的 trait）
+    type ProtectedSourceChecker: duoqian_manage_pow::ProtectedSourceChecker<Self::AccountId>;
 
     /// 手续费分账路由（复用 PowOnchainFeeRouter）
     type FeeRouter: frame_support::traits::OnUnbalanced<

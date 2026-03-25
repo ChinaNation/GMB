@@ -221,12 +221,13 @@ pub fn try_start<Proof: Send + 'static>(
     device_index: usize,
     epoch: Instant,
     pool_ready: std::sync::Arc<dyn Fn() -> usize + Send + Sync>,
+    target_block_time_ms: u64,
 ) -> Result<(), String> {
     let miner = GpuMiner::try_init(device_index)?;
 
     thread::spawn(move || {
-        let min_submit_interval =
-            Duration::from_millis(primitives::pow_const::MILLISECS_PER_BLOCK);
+        // 中文注释：出块目标时间从 chain-phase-control Runtime API 读取，替代编译期常量。
+        let min_submit_interval = Duration::from_millis(target_block_time_ms);
         let batch_size = miner.batch_size;
 
         loop {
@@ -289,7 +290,16 @@ pub fn try_start<Proof: Send + 'static>(
                             futures::executor::block_on(worker.submit(nonce.encode()));
                         if submitted {
                             let submit_ns = epoch.elapsed().as_nanos() as u64;
-                            LAST_SUBMIT_NS.store(submit_ns, Ordering::Release);
+                            if pool_ready() > 0 {
+                                // 与 CPU 矿工同理：空块后缩短门控为 MinPeriod。
+                                let half_ns = min_submit_interval.as_nanos() as u64 / 2;
+                                LAST_SUBMIT_NS.store(
+                                    submit_ns.saturating_sub(half_ns),
+                                    Ordering::Release,
+                                );
+                            } else {
+                                LAST_SUBMIT_NS.store(submit_ns, Ordering::Release);
+                            }
                         }
                         break;
                     }

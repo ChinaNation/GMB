@@ -7,6 +7,7 @@ import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../rpc/chain_rpc.dart';
+import '../rpc/nonce_manager.dart';
 import 'institution_data.dart';
 import 'proposal_cache.dart';
 import 'runtime_upgrade_service.dart';
@@ -37,8 +38,8 @@ class TransferProposalService {
 
   /// 提交 propose_transfer extrinsic。
   ///
-  /// 返回交易哈希 hex（含 0x 前缀）。
-  Future<String> submitProposeTransfer({
+  /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。
+  Future<({String txHash, int usedNonce})> submitProposeTransfer({
     required InstitutionInfo institution,
     required String beneficiaryAddress,
     required double amountYuan,
@@ -49,7 +50,7 @@ class TransferProposalService {
   }) async {
     final callData = _buildProposeTransferCall(
       org: institution.orgType,
-      shenfenId: institution.shenfenId,
+      institutionIdentity: institution.shenfenId,
       beneficiaryAddress: beneficiaryAddress,
       amountFen: BigInt.from((amountYuan * 100).round()),
       remark: remark,
@@ -64,8 +65,8 @@ class TransferProposalService {
 
   /// 提交 vote_transfer extrinsic。
   ///
-  /// 返回交易哈希 hex（含 0x 前缀）。
-  Future<String> submitVoteTransfer({
+  /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。
+  Future<({String txHash, int usedNonce})> submitVoteTransfer({
     required int proposalId,
     required bool approve,
     required String fromAddress,
@@ -99,7 +100,7 @@ class TransferProposalService {
     final key = _buildStorageKey(
       'VotingEngineSystem',
       'ActiveProposalsByInstitution',
-      _shenfenIdToFixed48(shenfenId),
+      _institutionIdentityToFixed48(shenfenId),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null || data.isEmpty) return const [];
@@ -366,7 +367,7 @@ class TransferProposalService {
     if (nextId == 0) return const <ProposalWithDetail>[];
 
     final yearStartId = _currentYearStartId(nextId);
-    final institutionBytes = _shenfenIdToFixed48(shenfenId);
+    final institutionBytes = _institutionIdentityToFixed48(shenfenId);
     final visibleProposals = <ProposalWithDetail>[];
 
     const pageSize = 100;
@@ -401,7 +402,7 @@ class TransferProposalService {
   Future<List<TransferProposalInfo>> fetchAllInstitutionProposals(
       String shenfenId) async {
     final visibleProposals = await fetchInstitutionVisibleProposals(shenfenId);
-    final institutionBytes = _shenfenIdToFixed48(shenfenId);
+    final institutionBytes = _institutionIdentityToFixed48(shenfenId);
     final proposals = <TransferProposalInfo>[];
 
     for (final proposal in visibleProposals) {
@@ -627,7 +628,7 @@ class TransferProposalService {
   /// 格式：[0x13][0x00][org:u8][institution:48bytes][0x00+beneficiary:32bytes][Compact amount][Vec remark]
   Uint8List _buildProposeTransferCall({
     required int org,
-    required String shenfenId,
+    required String institutionIdentity,
     required String beneficiaryAddress,
     required BigInt amountFen,
     required String remark,
@@ -640,7 +641,7 @@ class TransferProposalService {
     output.pushByte(org);
 
     // institution: [u8; 48]
-    output.write(_shenfenIdToFixed48(shenfenId));
+    output.write(_institutionIdentityToFixed48(institutionIdentity));
 
     // beneficiary: AccountId32 = 32 bytes（不是 MultiAddress，无 0x00 前缀）
     final beneficiaryId = Keyring().decodeAddress(beneficiaryAddress);
@@ -681,7 +682,9 @@ class TransferProposalService {
   }
 
   /// 签名并提交 extrinsic（复用 onchain.dart 的流程）。
-  Future<String> _signAndSubmit({
+  ///
+  /// 返回交易哈希和使用的 nonce（用于链上确认跟踪）。
+  Future<({String txHash, int usedNonce})> _signAndSubmit({
     required Uint8List callData,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -697,7 +700,10 @@ class TransferProposalService {
         '[TransferProposal] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
-      _rpc.fetchNonce(fromAddress),
+      NonceManager.instance.getNextNonce(
+        address: fromAddress,
+        fetchChainNonce: _rpc.fetchNonce,
+      ),
       _rpc.fetchLatestBlock(),
     ]);
     final runtimeVersion = results[0] as dynamic;
@@ -744,8 +750,9 @@ class TransferProposalService {
     try {
       final txHash = await _rpc.submitExtrinsic(encoded);
       debugPrint('[TransferProposal] 提交成功: 0x${_hexEncode(txHash)}');
-      return '0x${_hexEncode(txHash)}';
+      return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
     } catch (e) {
+      NonceManager.instance.rollback(fromAddress);
       debugPrint('[TransferProposal] 提交失败，原始错误: $e');
       rethrow;
     }
@@ -776,14 +783,8 @@ class TransferProposalService {
 
   // ──── 内部：编码工具 ────
 
-  Uint8List _shenfenIdToFixed48(String shenfenId) {
-    final raw = utf8.encode(shenfenId);
-    if (raw.isEmpty || raw.length > 48) {
-      throw ArgumentError('shenfenId 长度必须在 1..48 字节');
-    }
-    final out = Uint8List(48);
-    out.setAll(0, raw);
-    return out;
+  Uint8List _institutionIdentityToFixed48(String institutionIdentity) {
+    return Uint8List.fromList(institutionIdentityToPalletId(institutionIdentity));
   }
 
   /// 将 BigInt 编码为 u128 little-endian（16 字节）。

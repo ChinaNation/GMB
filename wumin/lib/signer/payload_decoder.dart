@@ -348,6 +348,8 @@ class PayloadDecoder {
         return '省储会';
       case 2:
         return '省储行';
+      case 3:
+        return '注册多签机构';
       default:
         return '机构$org';
     }

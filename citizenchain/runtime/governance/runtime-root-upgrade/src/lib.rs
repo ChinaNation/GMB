@@ -15,6 +15,7 @@ pub trait RuntimeCodeExecutor {
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use chain_phase_control::DeveloperUpgradeCheck;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use sp_runtime::{traits::Hash, DispatchError};
@@ -88,6 +89,9 @@ pub mod pallet {
         type JointVoteEngine: JointVoteEngine<Self::AccountId>;
         type RuntimeCodeExecutor: RuntimeCodeExecutor;
 
+        /// 开发者直升 runtime 开关检查（由 chain-phase-control 注入）。
+        type DeveloperUpgradeCheck: chain_phase_control::DeveloperUpgradeCheck;
+
         #[pallet::constant]
         type MaxReasonLen: Get<u32>;
 
@@ -128,6 +132,11 @@ pub mod pallet {
             proposal_id: u64,
             code_hash: T::Hash,
         },
+        /// 开发期直接升级成功（不走投票）。
+        DeveloperDirectUpgradeExecuted {
+            who: T::AccountId,
+            code_hash: T::Hash,
+        },
     }
 
     #[pallet::error]
@@ -138,6 +147,8 @@ pub mod pallet {
         ProposalNotVoting,
         JointVoteCreateFailed,
         RuntimeCodeMissing,
+        /// 开发者直升已关闭（链已进入运行期）。
+        DeveloperUpgradeDisabled,
     }
 
     #[pallet::call]
@@ -191,6 +202,29 @@ pub mod pallet {
                 proposer,
                 code_hash,
             });
+            Ok(())
+        }
+
+        /// 开发期快捷通道：NRC 管理员直接 set_code，不走投票。
+        /// 仅在 chain-phase-control 的 DeveloperUpgradeEnabled 为 true 时可用。
+        /// 链进入运行期后此调用永久失效，升级必须走 propose_runtime_upgrade 联合投票。
+        #[pallet::call_index(2)]
+        #[pallet::weight(
+            <<T as frame_system::Config>::SystemWeightInfo as frame_system::weights::WeightInfo>::set_code()
+        )]
+        pub fn developer_direct_upgrade(
+            origin: OriginFor<T>,
+            code: CodeOf<T>,
+        ) -> DispatchResult {
+            let who = T::NrcProposeOrigin::ensure_origin(origin)?;
+            ensure!(
+                T::DeveloperUpgradeCheck::is_enabled(),
+                Error::<T>::DeveloperUpgradeDisabled
+            );
+            ensure!(!code.is_empty(), Error::<T>::EmptyRuntimeCode);
+            let code_hash = T::Hashing::hash(code.as_slice());
+            T::RuntimeCodeExecutor::execute_runtime_code(code.as_slice())?;
+            Self::deposit_event(Event::<T>::DeveloperDirectUpgradeExecuted { who, code_hash });
             Ok(())
         }
 
@@ -432,11 +466,23 @@ mod tests {
         type WeightInfo = ();
     }
 
+    /// 测试用开发者直升开关：默认开启，可通过 thread_local 控制。
+    thread_local! {
+        static DEV_UPGRADE_ENABLED: RefCell<bool> = const { RefCell::new(true) };
+    }
+    pub struct TestDeveloperUpgradeCheck;
+    impl chain_phase_control::DeveloperUpgradeCheck for TestDeveloperUpgradeCheck {
+        fn is_enabled() -> bool {
+            DEV_UPGRADE_ENABLED.with(|v| *v.borrow())
+        }
+    }
+
     impl pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type NrcProposeOrigin = EnsureNrcAdminForTest;
         type JointVoteEngine = TestJointVoteEngine;
         type RuntimeCodeExecutor = TestRuntimeCodeExecutor;
+        type DeveloperUpgradeCheck = TestDeveloperUpgradeCheck;
         type MaxReasonLen = ConstU32<64>;
         type MaxRuntimeCodeSize = ConstU32<1024>;
         type MaxSnapshotNonceLength = ConstU32<64>;
@@ -469,6 +515,7 @@ mod tests {
             RUNTIME_CODE_EXECUTED.with(|v| *v.borrow_mut() = false);
             EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = false);
             NEXT_JOINT_ID.with(|id| *id.borrow_mut() = 100);
+            DEV_UPGRADE_ENABLED.with(|v| *v.borrow_mut() = true);
         });
         ext
     }
@@ -662,6 +709,61 @@ mod tests {
             assert_noop!(
                 RuntimeRootUpgrade::on_joint_vote_finalized(999, true),
                 pallet::Error::<Test>::ProposalNotFound
+            );
+        });
+    }
+
+    // ─── developer_direct_upgrade 测试 ─────────────────────────────────
+
+    #[test]
+    fn developer_direct_upgrade_succeeds_when_enabled() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(RuntimeRootUpgrade::developer_direct_upgrade(
+                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                code_ok(),
+            ));
+            let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
+            assert!(code_executed, "runtime code executor should be called");
+        });
+    }
+
+    #[test]
+    fn developer_direct_upgrade_fails_when_disabled() {
+        new_test_ext().execute_with(|| {
+            DEV_UPGRADE_ENABLED.with(|v| *v.borrow_mut() = false);
+            assert_noop!(
+                RuntimeRootUpgrade::developer_direct_upgrade(
+                    RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                    code_ok(),
+                ),
+                pallet::Error::<Test>::DeveloperUpgradeDisabled
+            );
+        });
+    }
+
+    #[test]
+    fn developer_direct_upgrade_rejects_non_nrc_admin() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                RuntimeRootUpgrade::developer_direct_upgrade(
+                    RuntimeOrigin::signed(AccountId32::new([2u8; 32])),
+                    code_ok(),
+                ),
+                sp_runtime::DispatchError::BadOrigin
+            );
+        });
+    }
+
+    #[test]
+    fn developer_direct_upgrade_rejects_empty_code() {
+        new_test_ext().execute_with(|| {
+            let empty_code: pallet::CodeOf<Test> = vec![].try_into().expect("empty code");
+            assert_noop!(
+                RuntimeRootUpgrade::developer_direct_upgrade(
+                    RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                    empty_code,
+                ),
+                pallet::Error::<Test>::EmptyRuntimeCode
             );
         });
     }
