@@ -148,7 +148,7 @@ impl InternalAdminCountProvider for () {
                 CHINA_CB
                     .iter()
                     .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .and_then(|n| u32::try_from(n.admins.len()).ok())
+                    .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok())
             }
             internal_vote::ORG_PRB => {
                 use primitives::china::china_ch::{
@@ -157,7 +157,7 @@ impl InternalAdminCountProvider for () {
                 CHINA_CH
                     .iter()
                     .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .and_then(|n| u32::try_from(n.admins.len()).ok())
+                    .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok())
             }
             _ => None,
         }
@@ -1370,7 +1370,7 @@ mod tests {
     }
 
     fn nrc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CB[0].admins[index])
+        AccountId32::new(CHINA_CB[0].duoqian_admins[index])
     }
 
     fn all_prc_institutions() -> Vec<(InstitutionPalletId, AccountId32)> {
@@ -1381,7 +1381,7 @@ mod tests {
                 (
                     reserve_pallet_id_to_bytes(n.shenfen_id)
                         .expect("prc id should be shenfen_id bytes"),
-                    AccountId32::new(n.admins[0]),
+                    AccountId32::new(n.duoqian_admins[0]),
                 )
             })
             .collect()
@@ -1394,30 +1394,30 @@ mod tests {
                 (
                     shengbank_pallet_id_to_bytes(n.shenfen_id)
                         .expect("prb id should be shenfen_id bytes"),
-                    AccountId32::new(n.admins[0]),
+                    AccountId32::new(n.duoqian_admins[0]),
                 )
             })
             .collect()
     }
 
     fn prc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CB[1].admins[index])
+        AccountId32::new(CHINA_CB[1].duoqian_admins[index])
     }
 
     fn prb_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CH[0].admins[index])
+        AccountId32::new(CHINA_CH[0].duoqian_admins[index])
     }
 
     fn institution_admins(institution: InstitutionPalletId) -> Vec<AccountId32> {
         CHINA_CB
             .iter()
             .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-            .map(|n| n.admins.iter().copied().map(AccountId32::new).collect())
+            .map(|n| n.duoqian_admins.iter().copied().map(AccountId32::new).collect())
             .or_else(|| {
                 CHINA_CH
                     .iter()
                     .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .map(|n| n.admins.iter().copied().map(AccountId32::new).collect())
+                    .map(|n| n.duoqian_admins.iter().copied().map(AccountId32::new).collect())
             })
             .expect("institution should have admins")
     }

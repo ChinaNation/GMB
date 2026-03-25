@@ -33,6 +33,9 @@
 - `memory/08-tasks/open/20260323-182718-新增脚本-cd-gmb-wuminapp-scripts-wumin-run-sh-用于运行-安装-wumin-冷钱包-参考现有-wuminapp-scripts-app-run-sh.md`
 - `memory/08-tasks/open/20260323-183617-将目录-wumin-copy-重命名为-wumincopy-并同步修正脚本入口与任务卡中的路径引用.md`
 - `memory/08-tasks/open/20260323-wumin-分组折叠与测试覆盖完善.md`
+- `memory/08-tasks/open/20260324-nodeui-governance-tab.md`
+- `memory/08-tasks/open/20260324-skip-empty-blocks.md`
+- `memory/08-tasks/open/20260324-chain-phase-control.md`
 
 ## done
 

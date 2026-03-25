@@ -33,7 +33,7 @@ use crate::nrc_pallet_id_bytes;
 fn is_nrc_admin_account(who: &[u8; 32]) -> bool {
     CHINA_CB
         .first()
-        .map(|n| n.admins.iter().any(|admin| admin == who))
+        .map(|n| n.duoqian_admins.iter().any(|admin| admin == who))
         .unwrap_or(false)
 }
 
@@ -124,12 +124,12 @@ fn is_joint_admin<T: Config>(
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
                 .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_PRB => CHINA_CH
                 .iter()
                 .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             _ => false,
         }
