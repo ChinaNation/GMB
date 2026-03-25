@@ -13,7 +13,7 @@ use crate::{
     ResolutionIssuanceExecutor, ResolutionReasonOf,
 };
 
-// 中文注释：这里显式对齐当前 mainnet runtime 的上限，若治理常量变更需要同步更新 benchmark 范围。
+// 中文注释：这里显式对齐当前 runtime 的上限，若治理常量变更需要同步更新 benchmark 范围。
 const BENCH_MAX_REASON_LEN: u32 = 1024;
 const BENCH_MAX_ALLOCATIONS: u32 = 43;
 const BENCH_AMOUNT_PER_RECIPIENT: u128 = 1_000;

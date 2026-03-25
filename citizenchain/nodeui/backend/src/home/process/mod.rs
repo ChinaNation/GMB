@@ -852,10 +852,6 @@ fn spawn_node(
 
     let mut cmd = Command::new(node_bin);
 
-    // 开发链模式：使用 --chain dev（单节点、无 bootnodes、快速出块）
-    #[cfg(feature = "dev-chain")]
-    cmd.arg("--chain").arg("dev");
-
     cmd.arg("--base-path")
         .arg(&base_path);
 

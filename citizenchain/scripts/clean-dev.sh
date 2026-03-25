@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 【开发模式】杀所有节点进程 + 清除所有节点数据 + 重新编译并启动（全新创世）
+# 杀所有节点进程 + 清除所有节点数据 + 重新编译并启动（全新创世）
 set -euo pipefail
 
 APP_DATA_DIR="$HOME/Library/Application Support/org.chinanation.citizenchain.desktop"
@@ -41,5 +41,5 @@ echo "    已清除"
 
 # ── 3. 重新编译并启动 ──
 cd "$(dirname "$0")/../nodeui"
-echo "==> 重新编译并启动 nodeui（开发链：30秒出块，全新创世）..."
-cargo tauri dev --features dev-chain
+echo "==> 重新编译并启动 nodeui（全新创世）..."
+cargo tauri dev
