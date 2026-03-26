@@ -870,7 +870,7 @@ fn spawn_node(
         .arg("all")
         .arg("--no-prometheus")
         .arg("--bootnodes")
-        .arg("/ip4/147.224.14.117/tcp/30333/ws/p2p/12D3KooWCbzGSMnRUmNkfE4kNPxQRzzVH7Ac9drR5fF7vJwUdTBa")
+        .arg("/ip4/147.224.14.117/tcp/30333/ws/p2p/12D3KooWHepcMGD3h9VC1XNWmrac3pXo63RimV5jhTU2nC2TLAyS")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
