@@ -12,12 +12,11 @@ pub struct ChinaJy {
 
 pub const EMPTY_DUOQIAN_ADMINS: &[[u8; 32]] = &[[0u8; 32]; 5];
 
-pub const CHINA_JY: &[ChinaJy] = &[
-    ChinaJy {
-        shenfen_id: "GFR-BP001-JY0E-413041075-20260221",
-        shenfen_name: "公民教育委员会",
-        duoqian_address: hex!("51bbd8bd50c4b0bb091e2a4c979f592afc1a11e9a0d2344ff9890be5061b68ce"),
-        duoqian_admins: &[
+pub const CHINA_JY: &[ChinaJy] = &[ChinaJy {
+    shenfen_id: "GFR-BP001-JY0E-413041075-20260221",
+    shenfen_name: "公民教育委员会",
+    duoqian_address: hex!("51bbd8bd50c4b0bb091e2a4c979f592afc1a11e9a0d2344ff9890be5061b68ce"),
+    duoqian_admins: &[
         hex!("54e0451ef8d23e2f79d28756567dcdbc3fd475e7fc090b8c655ad243655f8231"),
         hex!("c48d9b25e6bf3fee1c8002bb7e91112a54a44fb99317483bd5dc73416eb48904"),
         hex!("e0751a2fd67acb376168f7dc385c3db123efe7dba845e9d6792229ddec030032"),
@@ -27,6 +26,5 @@ pub const CHINA_JY: &[ChinaJy] = &[
         hex!("564d5f9f00f8575246c06477d73d92afb3c8bce348bd38c27eef1a357aa97d5c"),
         hex!("3c0542b668553d0f574b17acca2bbe1db516860bce4973c2faa05a73d80d5a12"),
         hex!("102525e5bb8054175b1609d528c09b2289c44807896aaa56fdfda66487c7f247"),
-        ],
-    },
-];
+    ],
+}];

@@ -1,8 +1,8 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
+use citizenchain::{self, apis::RuntimeApi, opaque::Block};
 use codec::{Decode, Encode};
 use futures::FutureExt;
-use citizenchain::{self, apis::RuntimeApi, opaque::Block};
 use genesis_pallet::GenesisPalletApi;
 use pow_difficulty_module::PowDifficultyApi;
 use sc_client_api::{Backend, BlockBackend};
@@ -12,7 +12,7 @@ use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_api::ProvideRuntimeApi;
-use sp_consensus::NoNetwork;
+use sp_consensus::{NoNetwork, SyncOracle};
 use sp_core::{crypto::KeyTypeId, hashing::blake2_256, U256};
 use sp_keystore::Keystore;
 use sp_runtime::traits::{Block as BlockT, IdentifyAccount};
@@ -197,8 +197,7 @@ fn start_cpu_miner<Proof: Send + 'static>(
                 // 每轮 metadata 变化时基址自动更换；同一轮内各线程搜索的 nonce 集合完全不重叠。
                 let random_base = {
                     let seed_bytes = metadata.pre_hash.as_ref();
-                    let seed =
-                        u64::from_le_bytes(seed_bytes[..8].try_into().unwrap_or([0u8; 8]));
+                    let seed = u64::from_le_bytes(seed_bytes[..8].try_into().unwrap_or([0u8; 8]));
                     // CPU 使用低半区 nonce（bit 63 = 0），高半区留给 GPU。
                     seed & 0x7FFFFFFFFFFFFFFF
                 };
@@ -215,8 +214,7 @@ fn start_cpu_miner<Proof: Send + 'static>(
                         if sample_count >= SAMPLE_INTERVAL {
                             let elapsed = sample_start.elapsed();
                             if elapsed.as_nanos() > 0 {
-                                let per_thread =
-                                    sample_count as f64 / elapsed.as_secs_f64();
+                                let per_thread = sample_count as f64 / elapsed.as_secs_f64();
                                 let total = per_thread * stride as f64;
                                 CPU_HASHRATE.store(total.to_bits(), Ordering::Relaxed);
                             }
@@ -257,10 +255,8 @@ fn start_cpu_miner<Proof: Send + 'static>(
                                 // 这既保证 timestamp inherent 校验通过（MinPeriod ≤ MAX_DRIFT + elapsed），
                                 // 又让包含交易的真实块能尽快上链。
                                 let half_ns = min_submit_interval.as_nanos() as u64 / 2;
-                                LAST_SUBMIT_NS.store(
-                                    submit_ns.saturating_sub(half_ns),
-                                    Ordering::Release,
-                                );
+                                LAST_SUBMIT_NS
+                                    .store(submit_ns.saturating_sub(half_ns), Ordering::Release);
                             } else {
                                 LAST_SUBMIT_NS.store(submit_ns, Ordering::Release);
                             }
@@ -376,6 +372,19 @@ pub fn new_full<
         other: (block_import, grandpa_link, mut telemetry),
     } = new_partial(&config)?;
 
+    let keystore = keystore_container.keystore();
+    let role = config.role;
+    let name = config.network.node_name.clone();
+    let enable_grandpa = !config.disable_grandpa;
+    let local_grandpa_keys = keystore.ed25519_public_keys(sp_consensus_grandpa::KEY_TYPE);
+    let current_authorities = grandpa_link.shared_authority_set().current_authorities();
+    let has_local_grandpa_authority = enable_grandpa
+        && current_authorities.iter().any(|(id, _)| {
+            local_grandpa_keys
+                .iter()
+                .any(|local| id.encode() == local.encode())
+        });
+
     let mut net_config = sc_network::config::FullNetworkConfiguration::<
         Block,
         <Block as sp_runtime::traits::Block>::Hash,
@@ -391,13 +400,19 @@ pub fn new_full<
             .expect("Genesis block exists; qed"),
         &config.chain_spec,
     );
-    let (grandpa_protocol_config, grandpa_notification_service) =
-        sc_consensus_grandpa::grandpa_peers_set_config::<_, N>(
-            grandpa_protocol_name.clone(),
-            metrics.clone(),
-            peer_store_handle,
-        );
-    net_config.add_notification_protocol(grandpa_protocol_config);
+    let mut grandpa_notification_service = None;
+    if has_local_grandpa_authority {
+        let (grandpa_protocol_config, notification_service) =
+            sc_consensus_grandpa::grandpa_peers_set_config::<_, N>(
+                grandpa_protocol_name.clone(),
+                metrics.clone(),
+                peer_store_handle,
+            );
+        // 中文注释：普通节点默认不再注册 GRANDPA 网络协议，避免留下无人消费的协议接收端，
+        // 造成连接建立后立刻被 `EssentialTaskClosed` 打断。
+        net_config.add_notification_protocol(grandpa_protocol_config);
+        grandpa_notification_service = Some(notification_service);
+    }
 
     let warp_sync = Arc::new(sc_consensus_grandpa::warp_proof::NetworkProvider::new(
         backend.clone(),
@@ -442,9 +457,6 @@ pub fn new_full<
         );
     }
 
-    let role = config.role;
-    let name = config.network.node_name.clone();
-    let enable_grandpa = !config.disable_grandpa;
     let prometheus_registry = config.prometheus_registry().cloned();
 
     // GPU 哈希率函数指针：仅在 gpu-mining feature 且用户启用 GPU 时传入。
@@ -482,7 +494,6 @@ pub fn new_full<
         })
     };
 
-    let keystore = keystore_container.keystore();
     let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         network: Arc::new(network.clone()),
         client: client.clone(),
@@ -554,17 +565,28 @@ pub fn new_full<
 
     // 空块不提交：构造一个闭包，返回交易池中待打包的交易数。
     // CPU 和 GPU 矿工在交易池为空时跳过挖矿，避免产生空块。
-    // 创世引导期（前 10 个块）：始终返回 1，允许空块出块，避免清链重启后的启动死锁。
+    // 额外门控：节点必须先接入网络并完成主要同步，才允许恢复正常出块，
+    // 避免清库后的普通节点在未连上现网前先本地起出一条分叉链。
     let pool_ready: Arc<dyn Fn() -> usize + Send + Sync> = {
         use sc_transaction_pool_api::TransactionPool;
         use sp_blockchain::HeaderBackend;
         let pool = transaction_pool.clone();
         let client_for_pool = client.clone();
+        let sync_service_for_pool = sync_service.clone();
         Arc::new(move || {
-            let best_number = client_for_pool.info().best_number;
-            if best_number < 10 {
-                return 1;
+            // 中文注释：没有同步 peer 或仍在 major sync 时，一律禁止本地挖矿，
+            // 防止离线状态继续出块并与现网分叉。
+            if sync_service_for_pool.is_offline() || sync_service_for_pool.is_major_syncing() {
+                return 0;
             }
+
+            let best_number = client_for_pool.info().best_number;
+            // 中文注释：清库后的全新节点必须先从网络导入至少 1 个块，
+            // 才允许参与后续出块，避免本地从 genesis 自己起链。
+            if best_number == 0 {
+                return 0;
+            }
+
             pool.status().ready
         })
     };
@@ -593,7 +615,13 @@ pub fn new_full<
     // GPU 矿工（仅在 gpu-mining feature 编译时可用）。
     #[cfg(feature = "gpu-mining")]
     if let Some(device) = gpu_device {
-        match crate::gpu_miner::try_start(worker.clone(), device, miner_epoch, pool_ready.clone(), target_block_time_ms) {
+        match crate::gpu_miner::try_start(
+            worker.clone(),
+            device,
+            miner_epoch,
+            pool_ready.clone(),
+            target_block_time_ms,
+        ) {
             Ok(()) => log::info!("GPU miner started on device {}", device),
             Err(e) => log::warn!("GPU not available, CPU only: {}", e),
         }
@@ -606,55 +634,46 @@ pub fn new_full<
     drop(worker);
 
     if enable_grandpa {
-        let local_grandpa_keys = keystore.ed25519_public_keys(sp_consensus_grandpa::KEY_TYPE);
-        let current_authorities = grandpa_link.shared_authority_set().current_authorities();
-        let has_local_grandpa_authority = current_authorities.iter().any(|(id, _)| {
-            local_grandpa_keys
-                .iter()
-                .any(|local| id.encode() == local.encode())
-        });
-        // 中文注释：持有匹配 GRANDPA 密钥的节点即可参与最终性投票。
-        // 开发期只有 1 个权威（NRC），运行期扩展到 44 个权威。
-        let grandpa_keystore = if has_local_grandpa_authority {
-            Some(keystore.clone())
-        } else {
-            None
-        };
-        if role.is_authority() && grandpa_keystore.is_none() {
-            eprintln!(
-                "WARNING: no matching local GRANDPA key for current authority set; this node will not cast finality votes."
+        // 中文注释：只有本地持有且匹配当前 authority set 的 GRANDPA 私钥，才允许启动 voter。
+        // 没有匹配私钥的普通节点既不启动 voter，也不再注册 GRANDPA 协议，避免网络层留下空接收端。
+        if has_local_grandpa_authority {
+            let grandpa_config = sc_consensus_grandpa::Config {
+                gossip_duration: Duration::from_millis(333),
+                justification_generation_period: GRANDPA_JUSTIFICATION_PERIOD,
+                name: Some(name),
+                observer_enabled: false,
+                keystore: Some(keystore.clone()),
+                local_role: role,
+                telemetry: telemetry.as_ref().map(|x| x.handle()),
+                protocol_name: grandpa_protocol_name,
+            };
+
+            let grandpa_params = sc_consensus_grandpa::GrandpaParams {
+                config: grandpa_config,
+                link: grandpa_link,
+                network: network.clone(),
+                sync: Arc::new(sync_service),
+                notification_service: grandpa_notification_service
+                    .expect("matching GRANDPA authority must own notification service"),
+                voting_rule: sc_consensus_grandpa::VotingRulesBuilder::default().build(),
+                prometheus_registry,
+                shared_voter_state: sc_consensus_grandpa::SharedVoterState::empty(),
+                telemetry: telemetry.as_ref().map(|x| x.handle()),
+                offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool),
+            };
+
+            task_manager.spawn_essential_handle().spawn_blocking(
+                "grandpa-voter",
+                None,
+                sc_consensus_grandpa::run_grandpa_voter(grandpa_params)?,
             );
+        } else if role.is_authority() {
+            log::warn!(
+                "missing matching GRANDPA key for current authority set; skip starting grandpa-voter"
+            );
+        } else {
+            log::info!("no matching GRANDPA key found locally; grandpa-voter is disabled");
         }
-        let grandpa_config = sc_consensus_grandpa::Config {
-            gossip_duration: Duration::from_millis(333),
-            justification_generation_period: GRANDPA_JUSTIFICATION_PERIOD,
-            name: Some(name),
-            // 中文注释：持有 GRANDPA 密钥的节点关闭 observer 模式以主动投票。
-            observer_enabled: grandpa_keystore.is_none(),
-            keystore: grandpa_keystore,
-            local_role: role,
-            telemetry: telemetry.as_ref().map(|x| x.handle()),
-            protocol_name: grandpa_protocol_name,
-        };
-
-        let grandpa_params = sc_consensus_grandpa::GrandpaParams {
-            config: grandpa_config,
-            link: grandpa_link,
-            network: network.clone(),
-            sync: Arc::new(sync_service),
-            notification_service: grandpa_notification_service,
-            voting_rule: sc_consensus_grandpa::VotingRulesBuilder::default().build(),
-            prometheus_registry,
-            shared_voter_state: sc_consensus_grandpa::SharedVoterState::empty(),
-            telemetry: telemetry.as_ref().map(|x| x.handle()),
-            offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool),
-        };
-
-        task_manager.spawn_essential_handle().spawn_blocking(
-            "grandpa-voter",
-            None,
-            sc_consensus_grandpa::run_grandpa_voter(grandpa_params)?,
-        );
     }
 
     Ok(task_manager)

@@ -115,12 +115,20 @@ pub mod pallet {
         type MaxCredentialSignatureLength: Get<u32>;
 
         /// 中文注释：SFID 系统绑定验签器（外部接口桥接点）。
-        type SfidVerifier:
-            SfidVerifier<Self::AccountId, Self::Hash, NonceOf<Self>, SignatureOf<Self>>;
+        type SfidVerifier: SfidVerifier<
+            Self::AccountId,
+            Self::Hash,
+            NonceOf<Self>,
+            SignatureOf<Self>,
+        >;
 
         /// 中文注释：公民投票实时验签器。
-        type SfidVoteVerifier:
-            SfidVoteVerifier<Self::AccountId, Self::Hash, NonceOf<Self>, SignatureOf<Self>>;
+        type SfidVoteVerifier: SfidVoteVerifier<
+            Self::AccountId,
+            Self::Hash,
+            NonceOf<Self>,
+            SignatureOf<Self>,
+        >;
 
         /// 中文注释：绑定后回调到发行模块发放认证奖励。
         type OnSfidBound: OnSfidBound<Self::AccountId, Self::Hash> + OnSfidBoundWeight;
@@ -150,8 +158,7 @@ pub mod pallet {
     /// 中文注释：已消费的绑定 nonce，防止同一条绑定消息重放。
     #[pallet::storage]
     #[pallet::getter(fn used_bind_nonce)]
-    pub type UsedBindNonce<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
+    pub type UsedBindNonce<T: Config> = StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
     /// 中文注释：公民投票验签 nonce（提案 + binding_id + nonce 三元维度）防重放。
     #[pallet::storage]
@@ -275,10 +282,7 @@ pub mod pallet {
             T::WeightInfo::bind_sfid()
                 .saturating_add(T::OnSfidBound::on_sfid_bound_weight())
         )]
-        pub fn bind_sfid(
-            origin: OriginFor<T>,
-            credential: CredentialOf<T>,
-        ) -> DispatchResult {
+        pub fn bind_sfid(origin: OriginFor<T>, credential: CredentialOf<T>) -> DispatchResult {
             let who = ensure_signed(origin)?;
             ensure!(
                 !credential.bind_nonce.is_empty(),
@@ -502,13 +506,8 @@ mod tests {
     }
 
     pub struct TestSfidVerifier;
-    impl
-        SfidVerifier<
-            u64,
-            <Test as frame_system::Config>::Hash,
-            NonceOf<Test>,
-            SignatureOf<Test>,
-        > for TestSfidVerifier
+    impl SfidVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, SignatureOf<Test>>
+        for TestSfidVerifier
     {
         fn verify(_account: &u64, credential: &CredentialOf<Test>) -> bool {
             !credential.bind_nonce.is_empty() && credential.signature.as_slice() == b"bind-ok"
@@ -608,7 +607,10 @@ mod tests {
                 BindingIdToAccount::<Test>::get(credential.binding_id),
                 Some(1)
             );
-            assert_eq!(AccountToBindingId::<Test>::get(1), Some(credential.binding_id));
+            assert_eq!(
+                AccountToBindingId::<Test>::get(1),
+                Some(credential.binding_id)
+            );
             assert_eq!(BoundCount::<Test>::get(), 1);
         });
     }
@@ -619,10 +621,7 @@ mod tests {
             let first = bind_credential(b"binding-a", "same-nonce", "bind-ok");
             let second = bind_credential(b"binding-b", "same-nonce", "bind-ok");
 
-            assert_ok!(SfidCodeAuth::bind_sfid(
-                RuntimeOrigin::signed(1),
-                first
-            ));
+            assert_ok!(SfidCodeAuth::bind_sfid(RuntimeOrigin::signed(1), first));
             assert_noop!(
                 SfidCodeAuth::bind_sfid(RuntimeOrigin::signed(2), second),
                 Error::<Test>::BindNonceAlreadyUsed
@@ -657,7 +656,10 @@ mod tests {
         new_test_ext().execute_with(|| {
             let credential = bind_credential(b"binding-vote", "bind-nonce", "bind-ok");
             let binding_id = credential.binding_id;
-            assert_ok!(SfidCodeAuth::bind_sfid(RuntimeOrigin::signed(1), credential));
+            assert_ok!(SfidCodeAuth::bind_sfid(
+                RuntimeOrigin::signed(1),
+                credential
+            ));
 
             assert!(<Pallet<Test> as SfidEligibilityProvider<
                 u64,

@@ -144,17 +144,15 @@ class SmoldotClientManager {
     // 2. 从 assets 加载 citizenchain 链规格文件
     final chainSpec = await rootBundle.loadString('assets/chainspec.json');
 
-    // 3. 加载缓存的同步数据库（如果有）
-    final cachedDb = await _loadCachedDatabase();
-    if (cachedDb != null) {
-      debugPrint('[Smoldot] 已加载同步缓存 (${cachedDb.length} bytes)');
-    }
+    // 3. 清除旧的同步缓存（避免残留 ban 信息阻止连接引导节点）
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_dbCacheKey);
+    debugPrint('[Smoldot] 已清除旧同步缓存');
 
-    // 4. 加入 citizenchain P2P 网络
+    // 4. 加入 citizenchain P2P 网络（不使用缓存，从零开始发现节点）
     _chain = await _client!.addChain(
       AddChainConfig(
         chainSpec: chainSpec,
-        databaseContent: cachedDb,
       ),
     );
 

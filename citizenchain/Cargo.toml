@@ -1,6 +1,7 @@
 [workspace]                                  # 公民币区块链主体的子工作空间
 members = [
     "node",                                  # 链节点程序
+    "vendor/sc-consensus-grandpa",           # 本地覆盖的 GRANDPA voter 持久化实现
     "runtime",                               # 链上运行时
     "runtime/primitives",                    # 运行时共享常量与基础类型
 
@@ -57,17 +58,32 @@ serde      = { version = "1.0.197", default-features = false, features = ["deriv
 serde_json = { version = "1.0.114", default-features = false, features = ["alloc"] }
 clap       = { version = "4.5.3", features = ["derive"] }
 futures    = { version = "0.3.30", features = ["thread-pool"] }
+futures-timer = { version = "3.0.2" }
 jsonrpsee  = { version = "0.24.2", features = ["server"] }
 arrayvec   = { version = "0.7.6", default-features = false }
+array-bytes = { version = "6.2.2", default-features = false }
+ahash = { version = "0.8.2" }
+assert_matches = { version = "1.5.0" }
+async-trait = { version = "0.1.88" }
+dyn-clone = { version = "1.0.16" }
+finality-grandpa = { version = "0.16.3", default-features = false }
+log = { version = "0.4.22", default-features = false }
+parking_lot = { version = "0.12.1", default-features = false }
+rand = { version = "0.8.5", default-features = false }
+thiserror = { version = "1.0.64" }
+tokio = { version = "1.45.0", default-features = false }
 
 # SDK 核心零件 (统一使用 stable2512)
 sp-api = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
+sp-application-crypto = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
+sp-arithmetic = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-block-builder = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-blockchain = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-consensus = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-consensus-grandpa = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-consensus-pow = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-core = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
+sp-crypto-hashing = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-genesis-builder = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-inherents = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-io = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
@@ -78,25 +94,36 @@ sp-runtime = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch =
 sp-session = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-storage = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-std = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
+sp-tracing = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-transaction-pool = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-timestamp = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sp-version = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 
 sc-basic-authorship = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
+sc-block-builder = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sc-cli = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-client-api = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-consensus = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
-sc-consensus-grandpa = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
+sc-consensus-grandpa = { path = "vendor/sc-consensus-grandpa" }
 sc-consensus-pow = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-chain-spec = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-executor = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-network = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
+sc-network-common = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
+sc-network-gossip = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
+sc-network-sync = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
+sc-network-test = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
+sc-network-types = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 sc-offchain = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-service = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
+sc-utils = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 
+fork-tree = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
+prometheus-endpoint = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false, package = "substrate-prometheus-endpoint" }
 sc-telemetry = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-transaction-pool = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-transaction-pool-api = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
+substrate-test-runtime-client = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 
 frame-executive = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }
 frame-support = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = false }

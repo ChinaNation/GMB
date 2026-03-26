@@ -147,6 +147,59 @@ pub(crate) fn rpc_post(
     Ok(json.get("result").cloned().unwrap_or(Value::Null))
 }
 
+/// 向指定 URL 发送 JSON-RPC 请求（用于远程 bootnode 查询）。
+pub(crate) fn rpc_post_url(
+    url: &str,
+    method: &str,
+    params: Value,
+    request_timeout: Duration,
+    max_response_bytes: u64,
+) -> Result<Value, String> {
+    let payload = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": method,
+        "params": params,
+    });
+    let client = rpc_http_client()?;
+    let response = client
+        .post(url)
+        .timeout(request_timeout)
+        .json(&payload)
+        .send()
+        .map_err(|e| format!("RPC 请求失败 ({url}): {e}"))?;
+    if response.status() != reqwest::StatusCode::OK {
+        return Err(format!("RPC HTTP 状态异常 ({url}): {}", response.status()));
+    }
+    if let Some(content_length) = response.content_length() {
+        if content_length > max_response_bytes {
+            return Err(format!(
+                "RPC 响应体过大 ({url}): {} bytes (limit {})",
+                content_length, max_response_bytes
+            ));
+        }
+    }
+
+    let mut limited_reader = response.take(max_response_bytes.saturating_add(1));
+    let mut body: Vec<u8> = Vec::new();
+    limited_reader
+        .read_to_end(&mut body)
+        .map_err(|e| format!("RPC 读取失败 ({url}): {e}"))?;
+    if body.len() as u64 > max_response_bytes {
+        return Err(format!(
+            "RPC 响应体超过限制 ({url}): {} bytes",
+            max_response_bytes
+        ));
+    }
+
+    let json: Value =
+        serde_json::from_slice(&body).map_err(|e| format!("RPC JSON 解析失败 ({url}): {e}"))?;
+    if let Some(err) = json.get("error") {
+        return Err(format!("RPC 返回错误 ({url}): {err}"));
+    }
+    Ok(json.get("result").cloned().unwrap_or(Value::Null))
+}
+
 /// 获取本地 RPC 节点的 genesis hash 并缓存。
 /// 首次连接时从 `chain_getBlockHash(0)` 获取并存储，后续直接返回缓存。
 pub(crate) fn cached_genesis_hash() -> Result<String, String> {

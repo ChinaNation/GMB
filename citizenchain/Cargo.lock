@@ -630,6 +630,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "assert_matches"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
+
+[[package]]
 name = "async-channel"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3101,6 +3107,7 @@ dependencies = [
  "num-traits 0.2.19",
  "parity-scale-codec",
  "parking_lot 0.12.5",
+ "rand 0.8.5",
  "scale-info",
 ]
 
@@ -6230,6 +6237,7 @@ dependencies = [
  "hex",
  "hex-literal",
  "jsonrpsee",
+ "log",
  "ocl",
  "onchain-transaction-pow",
  "pallet-transaction-payment",
@@ -6872,6 +6880,21 @@ dependencies = [
  "sp-api",
  "sp-runtime",
  "sp-weights",
+]
+
+[[package]]
+name = "pallet-utility"
+version = "45.0.0"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix#98b4699f56674f0bc645cc9f45dc835d53a59d91"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
 ]
 
 [[package]]
@@ -9068,10 +9091,10 @@ dependencies = [
 [[package]]
 name = "sc-consensus-grandpa"
 version = "0.40.0"
-source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix#98b4699f56674f0bc645cc9f45dc835d53a59d91"
 dependencies = [
  "ahash 0.8.12",
  "array-bytes 6.2.3",
+ "assert_matches",
  "async-trait",
  "dyn-clone",
  "finality-grandpa",
@@ -9090,6 +9113,7 @@ dependencies = [
  "sc-network-common",
  "sc-network-gossip",
  "sc-network-sync",
+ "sc-network-test",
  "sc-network-types",
  "sc-telemetry",
  "sc-transaction-pool-api",
@@ -9103,10 +9127,14 @@ dependencies = [
  "sp-consensus-grandpa",
  "sp-core",
  "sp-crypto-hashing 0.1.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix)",
+ "sp-keyring",
  "sp-keystore",
  "sp-runtime",
+ "sp-tracing",
  "substrate-prometheus-endpoint",
+ "substrate-test-runtime-client",
  "thiserror 1.0.69",
+ "tokio",
 ]
 
 [[package]]
@@ -9410,6 +9438,39 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
+]
+
+[[package]]
+name = "sc-network-test"
+version = "0.8.0"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix#98b4699f56674f0bc645cc9f45dc835d53a59d91"
+dependencies = [
+ "async-channel 1.9.0",
+ "async-trait",
+ "futures 0.3.32",
+ "futures-timer",
+ "libp2p",
+ "log",
+ "parking_lot 0.12.5",
+ "rand 0.8.5",
+ "sc-block-builder",
+ "sc-client-api",
+ "sc-consensus",
+ "sc-network",
+ "sc-network-common",
+ "sc-network-light",
+ "sc-network-sync",
+ "sc-network-types",
+ "sc-service",
+ "sc-utils",
+ "sp-blockchain",
+ "sp-consensus",
+ "sp-core",
+ "sp-runtime",
+ "sp-tracing",
+ "substrate-test-runtime",
+ "substrate-test-runtime-client",
+ "tokio",
 ]
 
 [[package]]
@@ -11599,6 +11660,95 @@ dependencies = [
  "prometheus",
  "thiserror 1.0.69",
  "tokio",
+]
+
+[[package]]
+name = "substrate-test-client"
+version = "2.0.1"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix#98b4699f56674f0bc645cc9f45dc835d53a59d91"
+dependencies = [
+ "array-bytes 6.2.3",
+ "async-trait",
+ "futures 0.3.32",
+ "parity-scale-codec",
+ "sc-client-api",
+ "sc-client-db",
+ "sc-consensus",
+ "sc-executor",
+ "sc-service",
+ "serde",
+ "serde_json",
+ "sp-blockchain",
+ "sp-consensus",
+ "sp-core",
+ "sp-keyring",
+ "sp-keystore",
+ "sp-runtime",
+ "tokio",
+]
+
+[[package]]
+name = "substrate-test-runtime"
+version = "2.0.0"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix#98b4699f56674f0bc645cc9f45dc835d53a59d91"
+dependencies = [
+ "array-bytes 6.2.3",
+ "frame-executive",
+ "frame-metadata-hash-extension",
+ "frame-support",
+ "frame-system",
+ "frame-system-rpc-runtime-api",
+ "log",
+ "pallet-babe",
+ "pallet-balances",
+ "pallet-timestamp",
+ "pallet-utility",
+ "parity-scale-codec",
+ "sc-service",
+ "scale-info",
+ "serde_json",
+ "sp-api",
+ "sp-application-crypto",
+ "sp-block-builder",
+ "sp-consensus-aura",
+ "sp-consensus-babe",
+ "sp-consensus-grandpa",
+ "sp-core",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix)",
+ "sp-debug-derive",
+ "sp-externalities",
+ "sp-genesis-builder",
+ "sp-inherents",
+ "sp-io",
+ "sp-keyring",
+ "sp-offchain",
+ "sp-runtime",
+ "sp-session",
+ "sp-state-machine",
+ "sp-transaction-pool",
+ "sp-trie",
+ "sp-version",
+ "substrate-wasm-builder",
+ "tracing",
+ "trie-db",
+]
+
+[[package]]
+name = "substrate-test-runtime-client"
+version = "2.0.0"
+source = "git+https://github.com/ChinaNation/polkadot-sdk.git?branch=ss58-2027-fix#98b4699f56674f0bc645cc9f45dc835d53a59d91"
+dependencies = [
+ "futures 0.3.32",
+ "sc-block-builder",
+ "sc-client-api",
+ "sc-consensus",
+ "sp-api",
+ "sp-blockchain",
+ "sp-consensus",
+ "sp-core",
+ "sp-runtime",
+ "substrate-test-client",
+ "substrate-test-runtime",
 ]
 
 [[package]]

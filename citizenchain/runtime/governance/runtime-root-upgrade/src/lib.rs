@@ -15,9 +15,9 @@ pub trait RuntimeCodeExecutor {
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    use genesis_pallet::DeveloperUpgradeCheck;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
+    use genesis_pallet::DeveloperUpgradeCheck;
     use sp_runtime::{traits::Hash, DispatchError};
     use voting_engine_system::{JointVoteEngine, STATUS_EXECUTED};
 
@@ -212,10 +212,7 @@ pub mod pallet {
         #[pallet::weight(
             <<T as frame_system::Config>::SystemWeightInfo as frame_system::weights::WeightInfo>::set_code()
         )]
-        pub fn developer_direct_upgrade(
-            origin: OriginFor<T>,
-            code: CodeOf<T>,
-        ) -> DispatchResult {
+        pub fn developer_direct_upgrade(origin: OriginFor<T>, code: CodeOf<T>) -> DispatchResult {
             let who = T::NrcProposeOrigin::ensure_origin(origin)?;
             ensure!(
                 T::DeveloperUpgradeCheck::is_enabled(),

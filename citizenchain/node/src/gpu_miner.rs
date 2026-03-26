@@ -158,9 +158,7 @@ impl GpuMiner {
             .map_err(|e| format!("build kernel: {e}"))?;
 
         unsafe {
-            kernel
-                .enq()
-                .map_err(|e| format!("enqueue kernel: {e}"))?;
+            kernel.enq().map_err(|e| format!("enqueue kernel: {e}"))?;
         }
 
         // Read back results.
@@ -247,8 +245,7 @@ pub fn try_start<Proof: Send + 'static>(
             // GPU uses upper nonce space (bit 63 = 1).
             let random_base = {
                 let seed_bytes = metadata.pre_hash.as_ref();
-                let seed =
-                    u64::from_le_bytes(seed_bytes[..8].try_into().unwrap_or([0u8; 8]));
+                let seed = u64::from_le_bytes(seed_bytes[..8].try_into().unwrap_or([0u8; 8]));
                 seed | 0x8000000000000000
             };
             let mut nonce_base = random_base;
@@ -286,17 +283,14 @@ pub fn try_start<Proof: Send + 'static>(
                             break;
                         }
 
-                        let submitted =
-                            futures::executor::block_on(worker.submit(nonce.encode()));
+                        let submitted = futures::executor::block_on(worker.submit(nonce.encode()));
                         if submitted {
                             let submit_ns = epoch.elapsed().as_nanos() as u64;
                             if pool_ready() > 0 {
                                 // 与 CPU 矿工同理：空块后缩短门控为 MinPeriod。
                                 let half_ns = min_submit_interval.as_nanos() as u64 / 2;
-                                LAST_SUBMIT_NS.store(
-                                    submit_ns.saturating_sub(half_ns),
-                                    Ordering::Release,
-                                );
+                                LAST_SUBMIT_NS
+                                    .store(submit_ns.saturating_sub(half_ns), Ordering::Release);
                             } else {
                                 LAST_SUBMIT_NS.store(submit_ns, Ordering::Release);
                             }

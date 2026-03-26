@@ -61,6 +61,9 @@ pub(crate) struct InstitutionCatalogEntry {
     pub role: String,
     pub peer_id: String,
     pub grandpa_pubkey_hex: String,
+    /// 引导节点域名（如 `nrcgch.wuminapp.com`），用于远程 RPC 查询。
+    #[serde(default)]
+    pub domain: String,
 }
 
 static INSTITUTION_CATALOG: OnceLock<Vec<InstitutionCatalogEntry>> = OnceLock::new();
@@ -131,6 +134,7 @@ fn parse_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>, String> {
             role: entry.role.clone(),
             peer_id: peer_id.to_string(),
             grandpa_pubkey_hex: grandpa.to_ascii_lowercase(),
+            domain: entry.domain.trim().to_string(),
         });
     }
 

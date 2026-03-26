@@ -93,4 +93,3 @@ pub fn chain_config() -> Result<ChainSpec, String> {
         .with_properties(chain_properties())
         .build())
 }
-

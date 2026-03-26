@@ -4,8 +4,8 @@ use crate::{
     cli::{Cli, Subcommand},
     service,
 };
-use frame_benchmarking_cli::{BenchmarkCmd, ExtrinsicFactory, SUBSTRATE_REFERENCE_HARDWARE};
 use citizenchain::{Block, EXISTENTIAL_DEPOSIT};
+use frame_benchmarking_cli::{BenchmarkCmd, ExtrinsicFactory, SUBSTRATE_REFERENCE_HARDWARE};
 use primitives::core_const::{SS58_FORMAT, SUPPORT_URL};
 use sc_cli::SubstrateCli;
 use sc_service::PartialComponents;
@@ -218,16 +218,22 @@ pub fn run() -> sc_cli::Result<()> {
             let runner = cli.create_runner(&cli.run)?;
             runner.run_node_until_exit(|config| async move {
                 match config.network.network_backend {
-                    sc_network::config::NetworkBackendType::Libp2p => service::new_full::<
-                        sc_network::NetworkWorker<
-                            citizenchain::opaque::Block,
-                            <citizenchain::opaque::Block as sp_runtime::traits::Block>::Hash,
-                        >,
-                    >(config, mining_threads, gpu_device)
-                    .map_err(sc_cli::Error::Service),
+                    sc_network::config::NetworkBackendType::Libp2p => {
+                        service::new_full::<
+                            sc_network::NetworkWorker<
+                                citizenchain::opaque::Block,
+                                <citizenchain::opaque::Block as sp_runtime::traits::Block>::Hash,
+                            >,
+                        >(config, mining_threads, gpu_device)
+                        .map_err(sc_cli::Error::Service)
+                    }
                     sc_network::config::NetworkBackendType::Litep2p => {
-                        service::new_full::<sc_network::Litep2pNetworkBackend>(config, mining_threads, gpu_device)
-                            .map_err(sc_cli::Error::Service)
+                        service::new_full::<sc_network::Litep2pNetworkBackend>(
+                            config,
+                            mining_threads,
+                            gpu_device,
+                        )
+                        .map_err(sc_cli::Error::Service)
                     }
                 }
             })
