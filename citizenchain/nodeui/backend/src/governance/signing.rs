@@ -415,7 +415,6 @@ pub fn build_developer_upgrade_sign_request(
         &call_data, &genesis_hash, &block_hash, block_number,
         nonce, spec_version, tx_version,
     );
-    let payload_hash = sha256_hash(&payload);
     let request_id = generate_request_id("devupg");
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
@@ -426,6 +425,9 @@ pub fn build_developer_upgrade_sign_request(
     let payload_for_qr = blake2b_simd::Params::new()
         .hash_length(32)
         .hash(&payload);
+    // 中文注释：expected_payload_hash 必须基于 QR 中实际发送的 payload_hex 计算，
+    // 因为 wumin 返回的 payload_hash 是对收到的 payload_hex 做 SHA-256。
+    let payload_hash = sha256_hash(payload_for_qr.as_bytes());
 
     let display = serde_json::json!({
         "action": "developer_direct_upgrade",
