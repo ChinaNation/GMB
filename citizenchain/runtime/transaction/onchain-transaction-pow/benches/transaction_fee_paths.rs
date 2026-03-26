@@ -136,10 +136,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
         .build_storage()
         .expect("system genesis build should succeed");
     pallet_balances::GenesisConfig::<Test> {
-        balances: vec![
-            (account(1), 1_000_000),
-            (account(2), 1_000_000),
-        ],
+        balances: vec![(account(1), 1_000_000), (account(2), 1_000_000)],
         dev_accounts: None,
     }
     .assimilate_storage(&mut storage)

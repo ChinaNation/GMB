@@ -57,8 +57,8 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-    AccountId, Address, Balance, Balances, Block, BlockNumber, GenesisPallet,
-    CitizenLightnodeIssuance, Hash, Nonce, PalletInfo, ResolutionIssuanceIss, Runtime, RuntimeCall,
+    AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance,
+    GenesisPallet, Hash, Nonce, PalletInfo, ResolutionIssuanceIss, Runtime, RuntimeCall,
     RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
     VotingEngineSystem, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
@@ -325,23 +325,23 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                 );
                 onchain_transaction_pow::AmountExtractResult::Amount(value)
             }
-            RuntimeCall::DuoqianManagePow(
-                duoqian_manage_pow::pallet::Call::propose_create { amount, .. },
-            ) => onchain_transaction_pow::AmountExtractResult::Amount(*amount),
-            RuntimeCall::DuoqianManagePow(
-                duoqian_manage_pow::pallet::Call::propose_close {
-                    duoqian_address, ..
-                },
-            ) => onchain_transaction_pow::AmountExtractResult::Amount(Balances::free_balance(
+            RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::propose_create {
+                amount,
+                ..
+            }) => onchain_transaction_pow::AmountExtractResult::Amount(*amount),
+            RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::propose_close {
+                duoqian_address,
+                ..
+            }) => onchain_transaction_pow::AmountExtractResult::Amount(Balances::free_balance(
                 duoqian_address,
             )),
             // 投票调用不涉及资金转移，无金额
-            RuntimeCall::DuoqianManagePow(
-                duoqian_manage_pow::pallet::Call::vote_create { .. },
-            ) => onchain_transaction_pow::AmountExtractResult::NoAmount,
-            RuntimeCall::DuoqianManagePow(
-                duoqian_manage_pow::pallet::Call::vote_close { .. },
-            ) => onchain_transaction_pow::AmountExtractResult::NoAmount,
+            RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::vote_create {
+                ..
+            }) => onchain_transaction_pow::AmountExtractResult::NoAmount,
+            RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::vote_close {
+                ..
+            }) => onchain_transaction_pow::AmountExtractResult::NoAmount,
             // 中文注释：以下调用类型明确属于“无金额交易”，放行且不计算手续费。
             RuntimeCall::System(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
             RuntimeCall::Timestamp(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
@@ -437,9 +437,7 @@ impl fullnode_pow_reward::Config for Runtime {
 
 pub struct RuntimeDuoqianAddressValidator;
 
-impl duoqian_manage_pow::DuoqianAddressValidator<AccountId>
-    for RuntimeDuoqianAddressValidator
-{
+impl duoqian_manage_pow::DuoqianAddressValidator<AccountId> for RuntimeDuoqianAddressValidator {
     fn is_valid(address: &AccountId) -> bool {
         // 中文注释：禁止黑洞地址。
         if address == &AccountId::new([0u8; 32]) {
@@ -1254,15 +1252,14 @@ mod tests {
                     .try_into()
                     .expect("admins should fit");
 
-            let create_call = RuntimeCall::DuoqianManagePow(
-                duoqian_manage_pow::pallet::Call::propose_create {
+            let create_call =
+                RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::propose_create {
                     sfid_id,
                     admin_count: 2,
                     duoqian_admins: admins.clone(),
                     threshold: 2,
                     amount: 1_000,
-                },
-            );
+                });
             let create_amount = <PowTxAmountExtractor as onchain_transaction_pow::CallAmount<
                 AccountId,
                 RuntimeCall,
@@ -1274,12 +1271,11 @@ mod tests {
             }
 
             let _ = Balances::deposit_creating(&duoqian_address, 777);
-            let close_call = RuntimeCall::DuoqianManagePow(
-                duoqian_manage_pow::pallet::Call::propose_close {
+            let close_call =
+                RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::propose_close {
                     duoqian_address,
                     beneficiary,
-                },
-            );
+                });
             let close_amount = <PowTxAmountExtractor as onchain_transaction_pow::CallAmount<
                 AccountId,
                 RuntimeCall,
@@ -1620,9 +1616,12 @@ mod tests {
             sfid_code_auth::pallet::SfidMainAccount::<Runtime>::put(main);
             let sfid_id = b"GFR-LN001-CB0C-000000001-20260222";
             let register_nonce: duoqian_manage_pow::pallet::RegisterNonceOf<Runtime> =
-                b"register-nonce".to_vec().try_into().expect("nonce should fit");
-            let register_signature: duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime> =
-                pair.sign(&blake2_256(
+                b"register-nonce"
+                    .to_vec()
+                    .try_into()
+                    .expect("nonce should fit");
+            let register_signature: duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime> = pair
+                .sign(&blake2_256(
                     &(
                         b"GMB_SFID_INSTITUTION_V1",
                         frame_system::Pallet::<Runtime>::block_hash(0),
@@ -1676,8 +1675,7 @@ impl voting_engine_system::InternalAdminProvider<AccountId> for RuntimeInternalA
                 let Ok(account) = AccountId::decode(&mut &institution[..32]) else {
                     return false;
                 };
-                if let Some(duoqian) =
-                    duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(&account)
+                if let Some(duoqian) = duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(&account)
                 {
                     duoqian.duoqian_admins.iter().any(|admin| admin == who)
                 } else {

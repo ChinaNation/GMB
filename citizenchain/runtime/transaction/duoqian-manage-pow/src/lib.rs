@@ -57,8 +57,11 @@ impl<AccountId> ProtectedSourceChecker<AccountId> for () {
 
 /// SFID 机构登记验签抽象：链上只信任 SFID 对 `sfid_id + register_nonce` 的主公钥签名。
 pub trait SfidInstitutionVerifier<Nonce, Signature> {
-    fn verify_institution_registration(sfid_id: &[u8], nonce: &Nonce, signature: &Signature)
-        -> bool;
+    fn verify_institution_registration(
+        sfid_id: &[u8],
+        nonce: &Nonce,
+        signature: &Signature,
+    ) -> bool;
 }
 
 impl<Nonce, Signature> SfidInstitutionVerifier<Nonce, Signature> for () {
@@ -177,8 +180,10 @@ pub mod pallet {
         type ReservedAddressChecker: DuoqianReservedAddressChecker<Self::AccountId>;
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
         type InstitutionAssetGuard: institution_asset_guard::InstitutionAssetGuard<Self::AccountId>;
-        type SfidInstitutionVerifier:
-            SfidInstitutionVerifier<RegisterNonceOf<Self>, RegisterSignatureOf<Self>>;
+        type SfidInstitutionVerifier: SfidInstitutionVerifier<
+            RegisterNonceOf<Self>,
+            RegisterSignatureOf<Self>,
+        >;
 
         #[pallet::constant]
         type MaxAdmins: Get<u32>;
@@ -246,7 +251,8 @@ pub mod pallet {
     /// 已消费的机构登记 nonce，防止 proof 重放。
     #[pallet::storage]
     #[pallet::getter(fn used_register_nonce)]
-    pub type UsedRegisterNonce<T: Config> = StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
+    pub type UsedRegisterNonce<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -996,8 +1002,7 @@ mod tests {
     }
 
     pub struct TestSfidInstitutionVerifier;
-    impl
-        SfidInstitutionVerifier<RegisterNonceOf<Test>, RegisterSignatureOf<Test>>
+    impl SfidInstitutionVerifier<RegisterNonceOf<Test>, RegisterSignatureOf<Test>>
         for TestSfidInstitutionVerifier
     {
         fn verify_institution_registration(
@@ -1474,14 +1479,11 @@ mod tests {
                 true
             ));
 
-            DENIED_CLOSE_SOURCE.with(|blocked| *blocked.borrow_mut() = Some(duoqian_address.clone()));
+            DENIED_CLOSE_SOURCE
+                .with(|blocked| *blocked.borrow_mut() = Some(duoqian_address.clone()));
 
             assert_noop!(
-                Duoqian::propose_close(
-                    RuntimeOrigin::signed(admin(1)),
-                    duoqian_address,
-                    admin(4),
-                ),
+                Duoqian::propose_close(RuntimeOrigin::signed(admin(1)), duoqian_address, admin(4),),
                 Error::<Test>::ProtectedSource
             );
 

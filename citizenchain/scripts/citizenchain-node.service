@@ -12,6 +12,7 @@ ExecStart=/opt/citizenchain/node \
   --rpc-methods Unsafe \
   --rpc-cors all \
   --no-prometheus \
+  --state-pruning archive \
   --trie-cache-size 268435456 \
   --listen-addr /ip4/0.0.0.0/tcp/30333/ws
 Restart=always

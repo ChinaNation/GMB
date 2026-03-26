@@ -215,8 +215,8 @@ pub mod pallet {
             };
 
             // 已绑定钱包则发到钱包，未绑定则默认发到矿工自身账户。
-            let recipient = RewardWalletByMiner::<T>::get(&author)
-                .unwrap_or_else(|| author.clone());
+            let recipient =
+                RewardWalletByMiner::<T>::get(&author).unwrap_or_else(|| author.clone());
 
             // 发放固定的全节点 PoW 铸块奖励
             // 中文注释：奖励金额完全由制度常量决定，绑定表只决定”发给谁”，不影响”发多少”。

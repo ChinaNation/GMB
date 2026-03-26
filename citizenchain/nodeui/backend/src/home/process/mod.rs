@@ -861,6 +861,21 @@ fn spawn_node(
         cmd.arg("--node-key-file").arg(&node_key_file);
     }
 
+    // 如果存在外部 chainspec.json，使用它启动以保证跨平台 genesis hash 一致。
+    // 查找顺序：citizenchain 项目根目录（开发期）→ app data 目录（发布后）。
+    let chainspec_candidates = [
+        std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../chainspec.json")),
+        crate::shared::security::app_data_dir(app)
+            .map(|d| d.join("chainspec.json"))
+            .unwrap_or_default(),
+    ];
+    for cs in &chainspec_candidates {
+        if cs.is_file() {
+            cmd.arg("--chain").arg(cs);
+            break;
+        }
+    }
+
     cmd.arg("--rpc-port")
         .arg(rpc_port.to_string())
         .arg("--unsafe-rpc-external")

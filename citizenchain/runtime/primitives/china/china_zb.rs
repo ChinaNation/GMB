@@ -285,7 +285,5 @@ pub const CHINA_RESERVED_DUOQIAN_ADDRESSES: &[[u8; 32]; 277] = &[
 
 /// 检查给定地址是否属于制度保留 duoqian_address。
 pub fn is_reserved_duoqian_address(addr: &[u8; 32]) -> bool {
-    CHINA_RESERVED_DUOQIAN_ADDRESSES
-        .binary_search(addr)
-        .is_ok()
+    CHINA_RESERVED_DUOQIAN_ADDRESSES.binary_search(addr).is_ok()
 }

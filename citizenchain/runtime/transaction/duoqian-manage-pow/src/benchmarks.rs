@@ -123,7 +123,7 @@ mod benchmarks {
             RawOrigin::Signed(relayer.clone()),
             sfid_id.clone(),
             register_nonce,
-            signature
+            signature,
         );
 
         assert_eq!(

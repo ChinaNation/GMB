@@ -360,6 +360,65 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
         }
     }
 
+    // 遍历所有引导节点远程查询 system_peers，汇总全网轻节点（按 peerId 去重）。
+    // 使用多线程并行查询，总超时 5 秒，避免阻塞 UI。
+    {
+        const REMOTE_RPC_TIMEOUT: Duration = Duration::from_secs(3);
+        const REMOTE_RPC_PORT: u16 = 9944;
+        let bootnode_domains: Vec<String> = bootnodes
+            .iter()
+            .filter(|n| !n.domain.is_empty())
+            .map(|n| n.domain.clone())
+            .collect();
+
+        let (tx, rx) = std::sync::mpsc::channel::<HashSet<String>>();
+        let active_threads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        for domain in bootnode_domains {
+            let tx = tx.clone();
+            let active = active_threads.clone();
+            active.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            std::thread::spawn(move || {
+                let url = format!("http://{}:{}/", domain, REMOTE_RPC_PORT);
+                let mut light_pids = HashSet::new();
+                if let Ok(peers) = rpc::rpc_post_url(
+                    &url,
+                    "system_peers",
+                    Value::Array(vec![]),
+                    REMOTE_RPC_TIMEOUT,
+                    MAX_RPC_RESPONSE_BYTES,
+                ) {
+                    if let Some(arr) = peers.as_array() {
+                        for p in arr {
+                            let is_light =
+                                p.get("roles").map(extract_light_role).unwrap_or(false);
+                            if is_light {
+                                if let Some(pid_raw) = p.get("peerId").and_then(Value::as_str) {
+                                    if let Some(pid) = normalize_peer_id(pid_raw) {
+                                        light_pids.insert(pid);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                let _ = tx.send(light_pids);
+                active.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            });
+        }
+        drop(tx); // 关闭发送端，让 rx 在所有线程结束后自然终止
+
+        // 最多等 5 秒收集所有线程的结果
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while let Ok(light_pids) =
+            rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+        {
+            for pid in light_pids {
+                let _ = remote_light_peer_ids.insert(pid);
+            }
+        }
+    }
+
     if status.running {
         if rpc_ready {
             match rpc_post("system_localPeerId", Value::Array(vec![])) {

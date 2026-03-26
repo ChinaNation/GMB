@@ -1412,12 +1412,24 @@ mod tests {
         CHINA_CB
             .iter()
             .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-            .map(|n| n.duoqian_admins.iter().copied().map(AccountId32::new).collect())
+            .map(|n| {
+                n.duoqian_admins
+                    .iter()
+                    .copied()
+                    .map(AccountId32::new)
+                    .collect()
+            })
             .or_else(|| {
                 CHINA_CH
                     .iter()
                     .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .map(|n| n.duoqian_admins.iter().copied().map(AccountId32::new).collect())
+                    .map(|n| {
+                        n.duoqian_admins
+                            .iter()
+                            .copied()
+                            .map(AccountId32::new)
+                            .collect()
+                    })
             })
             .expect("institution should have admins")
     }
