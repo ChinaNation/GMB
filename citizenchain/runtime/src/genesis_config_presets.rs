@@ -121,9 +121,23 @@ fn build_genesis() -> Value {
         .and_then(|n| AccountId::decode(&mut &n.duoqian_address[..]).ok())
         .expect("NRC pallet_address must decode to AccountId");
 
-    // 中文注释：创世发行全额存入国储会多签地址。
+    // 中文注释：每位国储会管理员创世预置 1000 万元（单位：分）。
+    let admin_each: u128 = 1_000_000_000_00; // 1000万元 = 10亿分
+    let nrc_admins = &CHINA_CB
+        .first()
+        .expect("CHINA_CB must have NRC entry")
+        .duoqian_admins;
+    let admin_total: u128 = admin_each * nrc_admins.len() as u128;
+
+    // 中文注释：国储会多签地址 = 创世发行总量 - 管理员预置总额，总量不变。
     let mut genesis_balances: Vec<(AccountId, u128)> =
-        vec![(nrc_account.clone(), GENESIS_ISSUANCE)];
+        vec![(nrc_account.clone(), GENESIS_ISSUANCE - admin_total)];
+
+    // 中文注释：19 位管理员各自获得创世余额。
+    genesis_balances.extend(nrc_admins.iter().map(|key| {
+        let account = AccountId::new(*key);
+        (account, admin_each)
+    }));
 
     // 中文注释：省储行创立发行在创世时直接预置到各自 keyless_address（无私钥永久质押地址）。
     genesis_balances.extend(
