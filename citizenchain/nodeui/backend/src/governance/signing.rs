@@ -419,6 +419,14 @@ pub fn build_developer_upgrade_sign_request(
     let request_id = generate_request_id("devupg");
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
+    // 中文注释：Substrate sr25519 签名规则——payload > 256 字节时实际签的是 blake2_256(payload)。
+    // runtime WASM payload 远超 256 字节，QR 码装不下完整 payload。
+    // 因此 QR 请求中只放 blake2_256(payload)（32 字节），冷钱包对它签名的结果
+    // 与对完整 payload 签名的结果一致（sr25519 内部会自动 hash）。
+    let payload_for_qr = blake2b_simd::Params::new()
+        .hash_length(32)
+        .hash(&payload);
+
     let display = serde_json::json!({
         "action": "developer_direct_upgrade",
         "action_label": "开发期 runtime 直接升级",
@@ -437,7 +445,7 @@ pub fn build_developer_upgrade_sign_request(
         account: account_ss58,
         pubkey: format!("0x{pubkey_clean}"),
         sig_alg: "sr25519".to_string(),
-        payload_hex: format!("0x{}", hex::encode(&payload)),
+        payload_hex: format!("0x{}", hex::encode(payload_for_qr.as_bytes())),
         issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
         display,
