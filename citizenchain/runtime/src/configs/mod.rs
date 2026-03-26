@@ -57,7 +57,7 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-    AccountId, Address, Balance, Balances, Block, BlockNumber, ChainPhaseControl,
+    AccountId, Address, Balance, Balances, Block, BlockNumber, GenesisPallet,
     CitizenLightnodeIssuance, Hash, Nonce, PalletInfo, ResolutionIssuanceIss, Runtime, RuntimeCall,
     RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
     VotingEngineSystem, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
@@ -956,7 +956,7 @@ impl runtime_root_upgrade::Config for Runtime {
     type NrcProposeOrigin = EnsureNrcAdmin;
     type JointVoteEngine = VotingEngineSystem;
     type RuntimeCodeExecutor = RuntimeSetCodeExecutor;
-    type DeveloperUpgradeCheck = ChainPhaseControl;
+    type DeveloperUpgradeCheck = GenesisPallet;
     type MaxReasonLen = RuntimeUpgradeMaxReasonLen;
     type MaxRuntimeCodeSize = RuntimeUpgradeMaxCodeSize;
     type MaxSnapshotNonceLength = ConstU32<64>;
@@ -1051,8 +1051,13 @@ impl pow_difficulty_module::Config for Runtime {
     type WeightInfo = pow_difficulty_module::weights::SubstrateWeight<Runtime>;
 }
 
-impl chain_phase_control::Config for Runtime {
-    type WeightInfo = chain_phase_control::weights::SubstrateWeight<Runtime>;
+frame_support::parameter_types! {
+    pub const MaxDeclarationLen: u32 = 2048;
+}
+
+impl genesis_pallet::Config for Runtime {
+    type WeightInfo = genesis_pallet::weights::SubstrateWeight<Runtime>;
+    type MaxDeclarationLen = MaxDeclarationLen;
 }
 
 #[cfg(test)]

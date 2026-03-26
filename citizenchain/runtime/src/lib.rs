@@ -341,9 +341,9 @@ mod runtime {
     #[runtime::pallet_index(19)]
     pub type DuoqianTransferPow = duoqian_transfer_pow;
 
-    // 链阶段控制模块：存储开发期/运行期阶段、出块目标时间、开发者直升开关
+    // 创世模块：存储创世期/运行期阶段、出块目标时间、开发者直升开关、创世常量
     #[runtime::pallet_index(20)]
-    pub type ChainPhaseControl = chain_phase_control;
+    pub type GenesisPallet = genesis_pallet;
 }
 
 #[cfg(test)]

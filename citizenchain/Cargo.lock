@@ -1293,20 +1293,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chain-phase-control"
-version = "1.0.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "sp-api",
- "sp-io",
- "sp-runtime",
-]
-
-[[package]]
 name = "chrono"
 version = "0.4.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1401,7 +1387,6 @@ name = "citizenchain"
 version = "1.0.0"
 dependencies = [
  "admins-origin-gov",
- "chain-phase-control",
  "citizen-lightnode-issuance",
  "duoqian-manage-pow",
  "duoqian-transfer-pow",
@@ -1415,6 +1400,7 @@ dependencies = [
  "frame-system-rpc-runtime-api",
  "frame-try-runtime",
  "fullnode-pow-reward",
+ "genesis-pallet",
  "grandpa-key-gov",
  "hex",
  "hex-literal",
@@ -3742,6 +3728,20 @@ dependencies = [
  "typenum",
  "version_check",
  "zeroize",
+]
+
+[[package]]
+name = "genesis-pallet"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-api",
+ "sp-io",
+ "sp-runtime",
 ]
 
 [[package]]
@@ -6219,7 +6219,6 @@ checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
 name = "node"
 version = "1.0.0"
 dependencies = [
- "chain-phase-control",
  "citizenchain",
  "clap",
  "frame-benchmarking-cli",
@@ -6227,6 +6226,7 @@ dependencies = [
  "frame-system",
  "fullnode-pow-reward",
  "futures 0.3.32",
+ "genesis-pallet",
  "hex",
  "hex-literal",
  "jsonrpsee",
@@ -7651,10 +7651,10 @@ dependencies = [
 name = "pow-difficulty-module"
 version = "1.0.0"
 dependencies = [
- "chain-phase-control",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "genesis-pallet",
  "pallet-timestamp",
  "parity-scale-codec",
  "primitives",
@@ -8577,10 +8577,10 @@ dependencies = [
 name = "runtime-root-upgrade"
 version = "1.0.0"
 dependencies = [
- "chain-phase-control",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "genesis-pallet",
  "parity-scale-codec",
  "primitives",
  "scale-info",

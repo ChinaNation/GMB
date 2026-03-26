@@ -47,14 +47,14 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    /// Pallet 配置：需要 frame_system、pallet_timestamp、chain_phase_control 作为超特征。
+    /// Pallet 配置：需要 frame_system、pallet_timestamp、genesis_pallet 作为超特征。
     /// pallet_timestamp：读取当前块时间戳。
-    /// chain_phase_control：读取链上动态出块目标时间（替代编译期常量）。
+    /// genesis_pallet：读取链上动态出块目标时间（替代编译期常量）。
     #[pallet::config]
     pub trait Config:
         frame_system::Config<RuntimeEvent: From<Event<Self>>>
         + pallet_timestamp::Config
-        + chain_phase_control::Config
+        + genesis_pallet::Config
     {
         type WeightInfo: crate::weights::WeightInfo;
     }
@@ -141,10 +141,10 @@ pub mod pallet {
                 // ── 调整块：计算新难度 ────────────────────────────────────────
                 if let Some(start_ms) = WindowStartMs::<T>::get() {
                     let actual_window_ms = now_ms.saturating_sub(start_ms).max(1);
-                    // 中文注释：从 chain-phase-control 链上存储读取动态出块目标时间，
+                    // 中文注释：从 genesis-pallet 链上存储读取动态出块目标时间，
                     // 替代编译期常量 DIFFICULTY_TARGET_WINDOW_MS。
                     let target_block_time =
-                        chain_phase_control::Pallet::<T>::target_block_time_ms();
+                        genesis_pallet::Pallet::<T>::target_block_time_ms();
                     let target_window_ms =
                         DIFFICULTY_ADJUSTMENT_INTERVAL as u64 * target_block_time;
                     let old_difficulty = CurrentDifficulty::<T>::get();
@@ -203,7 +203,7 @@ mod tests {
     use sp_runtime::{traits::IdentityLookup, BuildStorage};
 
     type Block = frame_system::mocking::MockBlock<Test>;
-    /// 测试用目标窗口时长：与 chain-phase-control 默认的 30_000ms 对齐。
+    /// 测试用目标窗口时长：与 genesis-pallet 默认的 30_000ms 对齐。
     const DIFFICULTY_TARGET_WINDOW_MS: u64 =
         DIFFICULTY_ADJUSTMENT_INTERVAL as u64 * MILLISECS_PER_BLOCK;
     const FIRST_ADJUST_BLOCK: u64 = DIFFICULTY_ADJUSTMENT_INTERVAL as u64 + 1;
@@ -229,7 +229,7 @@ mod tests {
         #[runtime::pallet_index(2)]
         pub type PowDifficulty = super;
         #[runtime::pallet_index(3)]
-        pub type ChainPhaseControl = chain_phase_control;
+        pub type GenesisPallet = genesis_pallet;
     }
 
     #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -246,8 +246,13 @@ mod tests {
         type WeightInfo = ();
     }
 
-    impl chain_phase_control::Config for Test {
+    frame_support::parameter_types! {
+        pub const MaxDeclarationLen: u32 = 2048;
+    }
+
+    impl genesis_pallet::Config for Test {
         type WeightInfo = ();
+        type MaxDeclarationLen = MaxDeclarationLen;
     }
 
     impl Config for Test {
@@ -260,9 +265,9 @@ mod tests {
             .expect("frame system genesis storage should build");
         let mut ext = sp_io::TestExternalities::new(storage);
         ext.execute_with(|| {
-            // 中文注释：测试环境下把 chain-phase-control 的出块目标时间
+            // 中文注释：测试环境下把 genesis-pallet 的出块目标时间
             // 与 pow_const::MILLISECS_PER_BLOCK 对齐，确保难度调整逻辑一致。
-            chain_phase_control::TargetBlockTimeMs::<Test>::put(MILLISECS_PER_BLOCK);
+            genesis_pallet::TargetBlockTimeMs::<Test>::put(MILLISECS_PER_BLOCK);
         });
         ext
     }

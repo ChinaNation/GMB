@@ -17,7 +17,7 @@ members = [
     "runtime/issuance/shengbank-stake-interest",   # 发行-省储行质押利息模块 pallet
     "runtime/otherpallet/sfid-code-auth",          # 其他-SFID 绑定与资格校验模块 pallet
     "runtime/otherpallet/pow-difficulty-module",   # 其他-PoW 动态难度调整模块 pallet
-    "runtime/otherpallet/chain-phase-control",   # 其他-链阶段控制模块 pallet
+    "runtime/genesis",                           # 创世模块 pallet
 
     "runtime/transaction/offchain-transaction-pos", # 交易-链下交易手续费模块 pallet
     "runtime/transaction/onchain-transaction-pow",  # 交易-链上交易手续费模块 pallet
