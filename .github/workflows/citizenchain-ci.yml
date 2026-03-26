@@ -1,27 +1,29 @@
-name: CitizenChain NodeUI CI
+name: CitizenChain CI
 
 on:
   push:
     branches: [main]
     paths:
-      - ".github/workflows/citizenchain-nodeui.yml"
-      - ".github/scripts/prepare-nodeui-sidecar.sh"
-      - "citizenchain/nodeui/**"
+      - ".github/workflows/citizenchain-ci.yml"
+      - "citizenchain/**"
   pull_request:
     branches: [main]
     paths:
-      - ".github/workflows/citizenchain-nodeui.yml"
-      - ".github/scripts/prepare-nodeui-sidecar.sh"
-      - "citizenchain/nodeui/**"
+      - ".github/workflows/citizenchain-ci.yml"
+      - "citizenchain/**"
   workflow_dispatch:
 
 concurrency:
-  group: citizenchain-nodeui-${{ github.ref }}
+  group: citizenchain-ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
 jobs:
-  nodeui:
-    name: nodeui 前后端构建检查
+  build:
+    name: 编译 node + nodeui
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
@@ -65,9 +67,30 @@ jobs:
       - name: 缓存 Rust 依赖
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "citizenchain-nodeui"
+          shared-key: "citizenchain"
           workspaces: |
+            citizenchain -> target
             citizenchain/nodeui -> target
+
+      # ── node ──
+
+      - name: 编译 node
+        working-directory: citizenchain
+        run: cargo build --release -p node
+
+      - name: 运行 node 测试
+        working-directory: citizenchain
+        run: cargo test --release -p node
+
+      - name: 上传 node 二进制
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenchain-node-linux-amd64
+          path: citizenchain/target/release/node
+          retention-days: 30
+          overwrite: true
+
+      # ── nodeui（自动绑定 node：build.rs 编译 node 并复制到 sidecar）──
 
       - name: 安装前端依赖
         run: npm --prefix citizenchain/nodeui/frontend ci
@@ -75,5 +98,5 @@ jobs:
       - name: 构建前端
         run: npm --prefix citizenchain/nodeui/frontend run build
 
-      - name: 编译 backend
+      - name: 编译 nodeui backend
         run: cargo check --manifest-path citizenchain/nodeui/backend/Cargo.toml
