@@ -400,19 +400,15 @@ pub fn new_full<
             .expect("Genesis block exists; qed"),
         &config.chain_spec,
     );
-    let mut grandpa_notification_service = None;
-    if has_local_grandpa_authority {
-        let (grandpa_protocol_config, notification_service) =
-            sc_consensus_grandpa::grandpa_peers_set_config::<_, N>(
-                grandpa_protocol_name.clone(),
-                metrics.clone(),
-                peer_store_handle,
-            );
-        // 中文注释：普通节点默认不再注册 GRANDPA 网络协议，避免留下无人消费的协议接收端，
-        // 造成连接建立后立刻被 `EssentialTaskClosed` 打断。
-        net_config.add_notification_protocol(grandpa_protocol_config);
-        grandpa_notification_service = Some(notification_service);
-    }
+    // 中文注释：所有节点统一注册 GRANDPA 网络协议，保证协议栈一致，避免协议协商不对称导致连接断开。
+    // 权威节点启动 grandpa-voter 消费 notification_service；普通节点启动 grandpa-observer 消费。
+    let (grandpa_protocol_config, grandpa_notification_service) =
+        sc_consensus_grandpa::grandpa_peers_set_config::<_, N>(
+            grandpa_protocol_name.clone(),
+            metrics.clone(),
+            peer_store_handle,
+        );
+    net_config.add_notification_protocol(grandpa_protocol_config);
 
     let warp_sync = Arc::new(sc_consensus_grandpa::warp_proof::NetworkProvider::new(
         backend.clone(),
@@ -634,9 +630,8 @@ pub fn new_full<
     drop(worker);
 
     if enable_grandpa {
-        // 中文注释：只有本地持有且匹配当前 authority set 的 GRANDPA 私钥，才允许启动 voter。
-        // 没有匹配私钥的普通节点既不启动 voter，也不再注册 GRANDPA 协议，避免网络层留下空接收端。
         if has_local_grandpa_authority {
+            // 中文注释：权威节点启动 grandpa-voter，参与最终性投票。
             let grandpa_config = sc_consensus_grandpa::Config {
                 gossip_duration: Duration::from_millis(333),
                 justification_generation_period: GRANDPA_JUSTIFICATION_PERIOD,
@@ -653,8 +648,7 @@ pub fn new_full<
                 link: grandpa_link,
                 network: network.clone(),
                 sync: Arc::new(sync_service),
-                notification_service: grandpa_notification_service
-                    .expect("matching GRANDPA authority must own notification service"),
+                notification_service: grandpa_notification_service,
                 voting_rule: sc_consensus_grandpa::VotingRulesBuilder::default().build(),
                 prometheus_registry,
                 shared_voter_state: sc_consensus_grandpa::SharedVoterState::empty(),
@@ -667,12 +661,31 @@ pub fn new_full<
                 None,
                 sc_consensus_grandpa::run_grandpa_voter(grandpa_params)?,
             );
-        } else if role.is_authority() {
-            log::warn!(
-                "missing matching GRANDPA key for current authority set; skip starting grandpa-voter"
-            );
         } else {
-            log::info!("no matching GRANDPA key found locally; grandpa-voter is disabled");
+            // 中文注释：普通节点启动 grandpa-observer，只接收最终性结果不投票，
+            // 同时消费 notification_service 避免空接收端导致 EssentialTaskClosed。
+            let grandpa_config = sc_consensus_grandpa::Config {
+                gossip_duration: Duration::from_millis(333),
+                justification_generation_period: GRANDPA_JUSTIFICATION_PERIOD,
+                name: Some(name),
+                observer_enabled: false,
+                keystore: None,
+                local_role: role,
+                telemetry: telemetry.as_ref().map(|x| x.handle()),
+                protocol_name: grandpa_protocol_name,
+            };
+
+            task_manager.spawn_handle().spawn_blocking(
+                "grandpa-observer",
+                None,
+                sc_consensus_grandpa::run_grandpa_observer(
+                    grandpa_config,
+                    grandpa_link,
+                    network.clone(),
+                    Arc::new(sync_service),
+                    grandpa_notification_service,
+                )?,
+            );
         }
     }
 
