@@ -1,5 +1,5 @@
 [package]
-name = "chain-phase-control"  # 链阶段控制模块：开发期/运行期切换
+name = "genesis-pallet"  # 创世模块：创世期/运行期切换 + 创世常量存储
 edition.workspace = true
 version.workspace = true
 authors.workspace = true

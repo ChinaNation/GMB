@@ -30,7 +30,7 @@ use primitives::{
     china::china_cb::CHINA_CB,
     china::china_ch::CHINA_CH,
     core_const::SS58_FORMAT,
-    genesis::GENESIS_ISSUANCE,
+    genesis::{CITIZENS, COUNTRY, GENESIS_CITIZEN_MAX, GENESIS_ISSUANCE},
 };
 #[cfg(feature = "std")]
 use serde_json::{json, Value};
@@ -200,6 +200,18 @@ fn build_genesis() -> Value {
         "resolutionIssuanceGov".into(),
         json!({
             "allowedRecipients": issuance_allowed_recipients_json,
+        }),
+    );
+
+    // 中文注释：创世常量写入 genesis-pallet 链上存储。
+    let citizens_bytes: Vec<u8> = CITIZENS.as_bytes().to_vec();
+    let country_bytes: Vec<u8> = COUNTRY.as_bytes().to_vec();
+    root.insert(
+        "genesisPallet".into(),
+        json!({
+            "citizensDeclaration": citizens_bytes,
+            "countryDeclaration": country_bytes,
+            "citizenMax": GENESIS_CITIZEN_MAX,
         }),
     );
 
