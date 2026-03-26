@@ -131,6 +131,17 @@ pub mod pallet {
                 return;
             }
 
+            // 中文注释：拒绝空块。每个区块至少包含 1 个固有交易（timestamp::set），
+            // 若 extrinsic 总数 ≤ 1 说明没有用户交易，属于空块。
+            // 跳过前 10 个已上链区块以兼容历史数据。
+            if block_num > 10 {
+                let extrinsic_count = frame_system::Pallet::<T>::extrinsic_count();
+                assert!(
+                    extrinsic_count > 1,
+                    "空块不允许上链：区块必须包含至少一笔用户交易"
+                );
+            }
+
             let interval = DIFFICULTY_ADJUSTMENT_INTERVAL;
 
             // 以 block 1 的时间戳作为首窗口起点，则首个有效窗口应在 block (interval + 1)
@@ -190,6 +201,7 @@ pub mod pallet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codec::Encode;
     use frame_support::{
         derive_impl,
         traits::{Hooks, Time},
@@ -277,6 +289,12 @@ mod tests {
             let now_ms = Timestamp::now().saturating_add(block_time_ms);
             System::set_block_number(block);
             Timestamp::set_timestamp(now_ms);
+            // 模拟区块含有 2 个 extrinsic（1 inherent + 1 用户交易），绕过空块拒绝检查
+            // 模拟 2 个 extrinsic（1 inherent + 1 用户交易）
+            sp_io::storage::set(
+                frame_support::storage::storage_prefix(b"System", b"ExtrinsicCount").as_ref(),
+                &2u32.encode(),
+            );
             PowDifficulty::on_finalize(block);
         }
     }
@@ -343,6 +361,11 @@ mod tests {
             WindowStartMs::<Test>::put(999);
             System::set_block_number(FIRST_ADJUST_BLOCK);
             Timestamp::set_timestamp(1_000);
+            // 模拟 2 个 extrinsic（1 inherent + 1 用户交易）
+            sp_io::storage::set(
+                frame_support::storage::storage_prefix(b"System", b"ExtrinsicCount").as_ref(),
+                &2u32.encode(),
+            );
             PowDifficulty::on_finalize(FIRST_ADJUST_BLOCK);
             assert_eq!(
                 PowDifficulty::current_difficulty(),
@@ -353,6 +376,11 @@ mod tests {
             WindowStartMs::<Test>::put(0);
             System::set_block_number(SECOND_ADJUST_BLOCK);
             Timestamp::set_timestamp(1_000_000_000);
+            // 模拟 2 个 extrinsic（1 inherent + 1 用户交易）
+            sp_io::storage::set(
+                frame_support::storage::storage_prefix(b"System", b"ExtrinsicCount").as_ref(),
+                &2u32.encode(),
+            );
             PowDifficulty::on_finalize(SECOND_ADJUST_BLOCK);
             assert_eq!(
                 PowDifficulty::current_difficulty(),
@@ -368,6 +396,11 @@ mod tests {
             WindowStartMs::<Test>::put(999);
             System::set_block_number(FIRST_ADJUST_BLOCK);
             Timestamp::set_timestamp(1_000);
+            // 模拟 2 个 extrinsic（1 inherent + 1 用户交易）
+            sp_io::storage::set(
+                frame_support::storage::storage_prefix(b"System", b"ExtrinsicCount").as_ref(),
+                &2u32.encode(),
+            );
 
             PowDifficulty::on_finalize(FIRST_ADJUST_BLOCK);
 
@@ -382,6 +415,11 @@ mod tests {
             WindowStartMs::<Test>::put(0);
             System::set_block_number(FIRST_ADJUST_BLOCK);
             Timestamp::set_timestamp(DIFFICULTY_TARGET_WINDOW_MS);
+            // 模拟 2 个 extrinsic（1 inherent + 1 用户交易）
+            sp_io::storage::set(
+                frame_support::storage::storage_prefix(b"System", b"ExtrinsicCount").as_ref(),
+                &2u32.encode(),
+            );
 
             PowDifficulty::on_finalize(FIRST_ADJUST_BLOCK);
 
@@ -393,6 +431,29 @@ mod tests {
                 actual_window_ms: DIFFICULTY_TARGET_WINDOW_MS,
                 target_window_ms: DIFFICULTY_TARGET_WINDOW_MS,
             }));
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "空块不允许上链")]
+    fn rejects_empty_block_after_block_10() {
+        new_test_ext().execute_with(|| {
+            // block 11 开始检查空块
+            System::set_block_number(11);
+            Timestamp::set_timestamp(330_000);
+            // 测试环境 extrinsic_count 为 0，触发空块拒绝
+            PowDifficulty::on_finalize(11);
+        });
+    }
+
+    #[test]
+    fn allows_empty_block_at_or_before_block_10() {
+        new_test_ext().execute_with(|| {
+            // block 10 及之前不检查空块
+            System::set_block_number(10);
+            Timestamp::set_timestamp(300_000);
+            // 不应 panic
+            PowDifficulty::on_finalize(10);
         });
     }
 }
