@@ -226,7 +226,7 @@ pub fn try_start<Proof: Send + 'static>(
     let miner = GpuMiner::try_init(device_index)?;
 
     thread::spawn(move || {
-        // 中文注释：出块目标时间从 chain-phase-control Runtime API 读取，替代编译期常量。
+        // 中文注释：出块目标时间从 genesis-pallet Runtime API 读取，替代编译期常量。
         let min_submit_interval = Duration::from_millis(target_block_time_ms);
         let batch_size = miner.batch_size;
 

@@ -76,7 +76,7 @@ runtime-root-upgrade = { path = "governance/runtime-root-upgrade", default-featu
 resolution-destro-gov = { path = "governance/resolution-destro-gov", default-features = false }
 duoqian-transfer-pow = { path = "transaction/duoqian-transfer-pow", default-features = false }
 institution-asset-guard = { path = "transaction/institution-asset-guard", default-features = false }
-chain-phase-control = { path = "otherpallet/chain-phase-control", default-features = false }
+genesis-pallet = { path = "genesis", default-features = false }
 
 [build-dependencies]
 substrate-wasm-builder = { optional = true, workspace = true, default-features = true }
@@ -111,7 +111,7 @@ std = [
 	"resolution-destro-gov/std",
 	"duoqian-transfer-pow/std",
 	"institution-asset-guard/std",
-	"chain-phase-control/std",
+	"genesis-pallet/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
 	"pallet-transaction-payment/std",
@@ -159,7 +159,7 @@ runtime-benchmarks = [
 	"resolution-destro-gov/runtime-benchmarks",
 	"duoqian-transfer-pow/runtime-benchmarks",
 	"institution-asset-guard/std",
-	"chain-phase-control/runtime-benchmarks",
+	"genesis-pallet/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 try-runtime = [
@@ -187,7 +187,7 @@ try-runtime = [
 	"resolution-destro-gov/try-runtime",
 	"duoqian-transfer-pow/try-runtime",
 	"institution-asset-guard/std",
-	"chain-phase-control/try-runtime",
+	"genesis-pallet/try-runtime",
 	"sp-runtime/try-runtime",
 ]
 

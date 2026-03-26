@@ -3,7 +3,7 @@
 use codec::{Decode, Encode};
 use futures::FutureExt;
 use citizenchain::{self, apis::RuntimeApi, opaque::Block};
-use chain_phase_control::ChainPhaseApi;
+use genesis_pallet::GenesisPalletApi;
 use pow_difficulty_module::PowDifficultyApi;
 use sc_client_api::{Backend, BlockBackend};
 use sc_consensus_pow::{MiningHandle, PowAlgorithm, PowBlockImport};
@@ -165,7 +165,7 @@ fn start_cpu_miner<Proof: Send + 'static>(
     // 提交门控，防止"早产块"触发 timestamp inherent 的 future 校验失败。
     // 使用全局 AtomicU64 (LAST_SUBMIT_NS) 存储上次成功提交的时刻（自 epoch 的纳秒数），
     // 避免 Mutex 在 sleep 期间持锁阻塞其他线程。CPU 和 GPU 矿工共享此门控。
-    // 中文注释：出块目标时间从 chain-phase-control Runtime API 读取，替代编译期常量。
+    // 中文注释：出块目标时间从 genesis-pallet Runtime API 读取，替代编译期常量。
     let min_submit_interval = Duration::from_millis(target_block_time_ms);
     let stride = (num_threads as u64).max(1);
 
@@ -569,7 +569,7 @@ pub fn new_full<
         })
     };
 
-    // 中文注释：从 chain-phase-control 链上存储读取动态出块目标时间，
+    // 中文注释：从 genesis-pallet 链上存储读取动态出块目标时间，
     // 替代编译期常量 MILLISECS_PER_BLOCK。若 API 调用失败，回退到常量默认值。
     let target_block_time_ms = {
         use sp_blockchain::HeaderBackend;

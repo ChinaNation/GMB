@@ -15,7 +15,7 @@ pub trait RuntimeCodeExecutor {
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    use chain_phase_control::DeveloperUpgradeCheck;
+    use genesis_pallet::DeveloperUpgradeCheck;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use sp_runtime::{traits::Hash, DispatchError};
@@ -89,8 +89,8 @@ pub mod pallet {
         type JointVoteEngine: JointVoteEngine<Self::AccountId>;
         type RuntimeCodeExecutor: RuntimeCodeExecutor;
 
-        /// 开发者直升 runtime 开关检查（由 chain-phase-control 注入）。
-        type DeveloperUpgradeCheck: chain_phase_control::DeveloperUpgradeCheck;
+        /// 开发者直升 runtime 开关检查（由 genesis-pallet 注入）。
+        type DeveloperUpgradeCheck: genesis_pallet::DeveloperUpgradeCheck;
 
         #[pallet::constant]
         type MaxReasonLen: Get<u32>;
@@ -206,7 +206,7 @@ pub mod pallet {
         }
 
         /// 开发期快捷通道：NRC 管理员直接 set_code，不走投票。
-        /// 仅在 chain-phase-control 的 DeveloperUpgradeEnabled 为 true 时可用。
+        /// 仅在 genesis-pallet 的 DeveloperUpgradeEnabled 为 true 时可用。
         /// 链进入运行期后此调用永久失效，升级必须走 propose_runtime_upgrade 联合投票。
         #[pallet::call_index(2)]
         #[pallet::weight(
@@ -471,7 +471,7 @@ mod tests {
         static DEV_UPGRADE_ENABLED: RefCell<bool> = const { RefCell::new(true) };
     }
     pub struct TestDeveloperUpgradeCheck;
-    impl chain_phase_control::DeveloperUpgradeCheck for TestDeveloperUpgradeCheck {
+    impl genesis_pallet::DeveloperUpgradeCheck for TestDeveloperUpgradeCheck {
         fn is_enabled() -> bool {
             DEV_UPGRADE_ENABLED.with(|v| *v.borrow())
         }

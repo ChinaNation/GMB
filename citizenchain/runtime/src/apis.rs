@@ -41,7 +41,7 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-    AccountId, Balance, Block, ChainPhaseControl, Executive, Grandpa, InherentDataExt, Nonce,
+    AccountId, Balance, Block, GenesisPallet, Executive, Grandpa, InherentDataExt, Nonce,
     PowDifficulty, Runtime, RuntimeCall, RuntimeGenesisConfig, System, TransactionPayment, VERSION,
 };
 
@@ -278,9 +278,9 @@ impl_runtime_apis! {
         }
     }
 
-    impl chain_phase_control::ChainPhaseApi<Block> for Runtime {
+    impl genesis_pallet::GenesisPalletApi<Block> for Runtime {
         fn target_block_time_ms() -> u64 {
-            ChainPhaseControl::target_block_time_ms()
+            GenesisPallet::target_block_time_ms()
         }
     }
 

@@ -17,7 +17,7 @@ sp-io = { workspace = true }
 
 primitives = { path = "../../primitives", default-features = false }
 voting-engine-system = { path = "../voting-engine-system", default-features = false }
-chain-phase-control = { path = "../../otherpallet/chain-phase-control", default-features = false }
+genesis-pallet = { path = "../../genesis", default-features = false }
 
 [features]
 default = ["std"]
@@ -31,7 +31,7 @@ std = [
     "sp-io/std",
     "primitives/std",
     "voting-engine-system/std",
-    "chain-phase-control/std",
+    "genesis-pallet/std",
 ]
 runtime-benchmarks = [
     "frame-benchmarking/runtime-benchmarks",
