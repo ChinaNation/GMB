@@ -133,8 +133,8 @@ pub mod pallet {
 
             // 中文注释：拒绝空块。每个区块至少包含 1 个固有交易（timestamp::set），
             // 若 extrinsic 总数 ≤ 1 说明没有用户交易，属于空块。
-            // 跳过前 10 个已上链区块以兼容历史数据。
-            if block_num > 10 {
+            // 创世块（block 0）无时间戳注入，已在上方 now_ms == 0 处跳过。
+            if block_num > 0 {
                 let extrinsic_count = frame_system::Pallet::<T>::extrinsic_count();
                 assert!(
                     extrinsic_count > 1,
@@ -436,24 +436,12 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "空块不允许上链")]
-    fn rejects_empty_block_after_block_10() {
+    fn rejects_empty_block() {
         new_test_ext().execute_with(|| {
-            // block 11 开始检查空块
-            System::set_block_number(11);
-            Timestamp::set_timestamp(330_000);
+            System::set_block_number(1);
+            Timestamp::set_timestamp(30_000);
             // 测试环境 extrinsic_count 为 0，触发空块拒绝
-            PowDifficulty::on_finalize(11);
-        });
-    }
-
-    #[test]
-    fn allows_empty_block_at_or_before_block_10() {
-        new_test_ext().execute_with(|| {
-            // block 10 及之前不检查空块
-            System::set_block_number(10);
-            Timestamp::set_timestamp(300_000);
-            // 不应 panic
-            PowDifficulty::on_finalize(10);
+            PowDifficulty::on_finalize(1);
         });
     }
 }
