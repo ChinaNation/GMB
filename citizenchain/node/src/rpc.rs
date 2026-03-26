@@ -12,18 +12,16 @@ use codec::{Decode, Encode};
 use jsonrpsee::RpcModule;
 use sc_client_api::StorageProvider;
 use sc_transaction_pool_api::{TransactionPool, TransactionSource};
+use sp_api::Core as CoreApi;
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_core::crypto::KeyTypeId;
 use sp_keystore::Keystore;
 use sp_runtime::{
-    generic::Era,
-    traits::IdentifyAccount,
-    MultiSigner, OpaqueExtrinsic, SaturatedConversion,
+    generic::Era, traits::IdentifyAccount, MultiSigner, OpaqueExtrinsic, SaturatedConversion,
 };
 use substrate_frame_rpc_system::AccountNonceApi;
-use sp_api::Core as CoreApi;
 
 /// PoW 矿工密钥类型（与 service.rs 中 POW_AUTHOR_KEY_TYPE 一致）。
 const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
@@ -134,9 +132,8 @@ where
             (),
         ),
     );
-    let signature = raw_payload.using_encoded(|payload| {
-        keystore.sr25519_sign(POW_AUTHOR_KEY_TYPE, &public, payload)
-    });
+    let signature = raw_payload
+        .using_encoded(|payload| keystore.sr25519_sign(POW_AUTHOR_KEY_TYPE, &public, payload));
     let signature = signature
         .map_err(|e| ErrorObject::owned(-1, format!("keystore 签名失败: {e}"), None::<()>))?
         .ok_or_else(|| ErrorObject::owned(-1, "keystore 未返回签名", None::<()>))?;
@@ -214,15 +211,21 @@ where
             use jsonrpsee::types::error::ErrorObject;
 
             // 1. 解析原始 chain_spec JSON
-            let spec_json_str = chain_spec_for_rpc.as_json(true)
-                .map_err(|e| ErrorObject::owned(-1, format!("chain_spec 序列化失败: {e}"), None::<()>))?;
-            let mut spec: serde_json::Value = serde_json::from_str(&spec_json_str)
-                .map_err(|e| ErrorObject::owned(-1, format!("chain_spec JSON 解析失败: {e}"), None::<()>))?;
+            let spec_json_str = chain_spec_for_rpc.as_json(true).map_err(|e| {
+                ErrorObject::owned(-1, format!("chain_spec 序列化失败: {e}"), None::<()>)
+            })?;
+            let mut spec: serde_json::Value =
+                serde_json::from_str(&spec_json_str).map_err(|e| {
+                    ErrorObject::owned(-1, format!("chain_spec JSON 解析失败: {e}"), None::<()>)
+                })?;
 
             // 2. 获取 finalized block header
             let finalized_hash = client.info().finalized_hash;
-            let finalized_header = client.header(finalized_hash)
-                .map_err(|e| ErrorObject::owned(-1, format!("获取 finalized header 失败: {e}"), None::<()>))?
+            let finalized_header = client
+                .header(finalized_hash)
+                .map_err(|e| {
+                    ErrorObject::owned(-1, format!("获取 finalized header 失败: {e}"), None::<()>)
+                })?
                 .ok_or_else(|| ErrorObject::owned(-1, "finalized header 不存在", None::<()>))?;
             let finalized_header_hex = format!("0x{}", hex::encode(finalized_header.encode()));
 
@@ -235,7 +238,9 @@ where
             };
             let set_id_bytes = client
                 .storage(finalized_hash, &sp_storage::StorageKey(grandpa_set_id_key))
-                .map_err(|e| ErrorObject::owned(-1, format!("读取 GRANDPA set_id 失败: {e}"), None::<()>))?;
+                .map_err(|e| {
+                    ErrorObject::owned(-1, format!("读取 GRANDPA set_id 失败: {e}"), None::<()>)
+                })?;
             let set_id: u64 = set_id_bytes
                 .map(|d| u64::decode(&mut &d.0[..]).unwrap_or(0))
                 .unwrap_or(0);
@@ -247,8 +252,17 @@ where
                 k
             };
             let auth_bytes = client
-                .storage(finalized_hash, &sp_storage::StorageKey(grandpa_authorities_key))
-                .map_err(|e| ErrorObject::owned(-1, format!("读取 GRANDPA authorities 失败: {e}"), None::<()>))?;
+                .storage(
+                    finalized_hash,
+                    &sp_storage::StorageKey(grandpa_authorities_key),
+                )
+                .map_err(|e| {
+                    ErrorObject::owned(
+                        -1,
+                        format!("读取 GRANDPA authorities 失败: {e}"),
+                        None::<()>,
+                    )
+                })?;
 
             // Authorities 是 BoundedVec<(AuthorityId, u64)>，SCALE 编码
             // 直接转成 hex 传给 smoldot
@@ -279,9 +293,7 @@ where
     // GPU 哈希率 RPC：mining_gpuHashrate
     // 返回值：当前 GPU 哈希率（hashes/sec），u64 整数。
     if let Some(get_hashrate) = gpu_hashrate_fn {
-        module.register_method("mining_gpuHashrate", move |_, _, _| {
-            get_hashrate() as u64
-        })?;
+        module.register_method("mining_gpuHashrate", move |_, _, _| get_hashrate() as u64)?;
     }
 
     // reward_bindWallet(wallet_ss58: String)
@@ -331,8 +343,7 @@ where
             if hash_bytes.len() != 32 {
                 return Err(ErrorObject::owned(-1, "区块哈希长度错误", None::<()>));
             }
-            let block_hash =
-                sp_core::H256::from_slice(&hash_bytes);
+            let block_hash = sp_core::H256::from_slice(&hash_bytes);
 
             // System::Events 的 storage key = twox_128("System") ++ twox_128("Events")
             let key = {

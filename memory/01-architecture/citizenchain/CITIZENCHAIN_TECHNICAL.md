@@ -112,11 +112,16 @@ citizenchain/
 - 当前新区块生产采用 PoW。
 - 节点使用独立 `powr` key type 生成 / 管理本地 PoW 作者身份。
 - 首次启动若不存在 `powr` 密钥，节点会自动生成。
+- 普通节点清库或首次安装后，必须先从现网导入区块，未接入网络或仍处于主同步阶段时禁止本地先出块，避免节点自发形成离线分叉。
 
 ### 8.2 最终性
 - 最终性使用 GRANDPA。
 - GRANDPA 最终性密钥治理能力由治理模块承接，而不是硬编码在 UI 或脚本层。
 - 最终性是否推进取决于 GRANDPA authority 是否按当前链配置正确上线并参与投票。
+- 节点刚安装完成时默认是普通同步节点；只有在本地导入 GRANDPA 私钥且该公钥匹配当前 authority set 后，节点才会切换为 GRANDPA 节点。
+- 只有本地持有且匹配当前 authority set 的 GRANDPA 私钥节点，才会注册 GRANDPA 网络协议并启动 `grandpa-voter` 参与最终性投票。
+- 普通节点不再注册 GRANDPA 网络协议，避免出现“协议已声明但无人消费”而触发 `EssentialTaskClosed` 并打断现网连接的回归。
+- GRANDPA 持久化仅保留恢复与 proof 所需的覆盖写状态；按轮次追加的 `concluded_rounds` 已在本地 vendored `sc-consensus-grandpa` 中停用，用于限制多节点长期运行时的 AUX 膨胀。
 
 ### 8.3 链身份
 - 地址显示格式使用自定义 `SS58 = 2027`。

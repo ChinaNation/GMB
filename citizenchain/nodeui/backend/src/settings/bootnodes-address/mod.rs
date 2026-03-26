@@ -36,6 +36,7 @@ pub struct GenesisBootnodeOption {
     pub name: String,
     pub role: String,
     pub peer_id: String,
+    pub domain: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -103,6 +104,7 @@ pub(crate) fn genesis_bootnode_options() -> Result<Vec<GenesisBootnodeOption>, S
             name: entry.name,
             role: entry.role,
             peer_id: entry.peer_id,
+            domain: entry.domain,
         })
         .collect::<Vec<GenesisBootnodeOption>>();
     if options.is_empty() {

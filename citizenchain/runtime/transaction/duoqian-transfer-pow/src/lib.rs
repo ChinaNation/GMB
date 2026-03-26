@@ -20,10 +20,9 @@ pub use pallet::*;
 mod benchmarks;
 pub mod weights;
 
-type BalanceOf<T> =
-    <<T as duoqian_manage_pow::Config>::Currency as Currency<
-        <T as frame_system::Config>::AccountId,
-    >>::Balance;
+type BalanceOf<T> = <<T as duoqian_manage_pow::Config>::Currency as Currency<
+    <T as frame_system::Config>::AccountId,
+>>::Balance;
 
 /// 转账动作：记录一次转账提案的完整业务参数。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
@@ -290,8 +289,8 @@ pub mod pallet {
                 &mut &data[..],
             )
             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-            let org =
-                Self::resolve_actual_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let org = Self::resolve_actual_org(action.institution)
+                .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 Self::is_internal_admin(org, action.institution, &who),
                 Error::<T>::UnauthorizedAdmin
@@ -370,8 +369,8 @@ pub mod pallet {
             institution: InstitutionPalletId,
         ) -> Result<(u8, T::AccountId), Error<T>> {
             if let Some(actual_org) = institution_org(institution) {
-                let raw_account =
-                    institution_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
+                let raw_account = institution_pallet_address(institution)
+                    .ok_or(Error::<T>::InvalidInstitution)?;
                 let institution_account = T::AccountId::decode(&mut &raw_account[..])
                     .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
                 return Ok((actual_org, institution_account));
@@ -637,7 +636,8 @@ mod tests {
                     let Ok(account) = AccountId32::decode(&mut &institution[..32]) else {
                         return false;
                     };
-                    if let Some(duoqian) = duoqian_manage_pow::DuoqianAccounts::<Test>::get(&account)
+                    if let Some(duoqian) =
+                        duoqian_manage_pow::DuoqianAccounts::<Test>::get(&account)
                     {
                         duoqian.duoqian_admins.iter().any(|admin| admin == who)
                     } else {

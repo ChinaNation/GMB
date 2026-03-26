@@ -369,15 +369,14 @@ mod tests {
         let institution =
             shenfen_id_to_fixed48(CHINA_CB[0].shenfen_id).expect("NRC shenfen_id must be valid");
         let beneficiary = AccountId::new([99u8; 32]);
-        let call = RuntimeCall::DuoqianTransferPow(
-            duoqian_transfer_pow::pallet::Call::propose_transfer {
+        let call =
+            RuntimeCall::DuoqianTransferPow(duoqian_transfer_pow::pallet::Call::propose_transfer {
                 org: 0,
                 institution,
                 beneficiary,
                 amount: 10000,
                 remark: BoundedVec::default(),
-            },
-        );
+            });
         let signer = AccountId::new([1u8; 32]);
         // 机构转账提案/投票为 NoAmount（免费），手续费在 pallet 内部扣取，
         // RuntimeFeePayerExtractor 不再参与。

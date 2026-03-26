@@ -143,8 +143,7 @@ pub mod pallet {
                     let actual_window_ms = now_ms.saturating_sub(start_ms).max(1);
                     // 中文注释：从 genesis-pallet 链上存储读取动态出块目标时间，
                     // 替代编译期常量 DIFFICULTY_TARGET_WINDOW_MS。
-                    let target_block_time =
-                        genesis_pallet::Pallet::<T>::target_block_time_ms();
+                    let target_block_time = genesis_pallet::Pallet::<T>::target_block_time_ms();
                     let target_window_ms =
                         DIFFICULTY_ADJUSTMENT_INTERVAL as u64 * target_block_time;
                     let old_difficulty = CurrentDifficulty::<T>::get();

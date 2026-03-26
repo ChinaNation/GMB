@@ -6,17 +6,7 @@ use scale_info::TypeInfo;
 /// 机构账户资金动作枚举。
 ///
 /// 这里只描述“内部动钱”的执行动作，不描述提案、投票、管理员变更等纯治理动作。
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Encode,
-    Decode,
-    TypeInfo,
-    MaxEncodedLen,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub enum InstitutionAssetAction {
     /// 机构多签转账执行：从 `duoqian_address` 向外部收款地址转账，并扣手续费。
     DuoqianTransferExecute,

@@ -23,6 +23,7 @@ hex-literal = "0.4"
 clap = { workspace = true }
 futures = { workspace = true }
 jsonrpsee = { workspace = true }
+log = { workspace = true, default-features = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, default-features = true }
 primitives = { path = "../runtime/primitives" }

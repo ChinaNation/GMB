@@ -165,9 +165,10 @@ fn build_genesis() -> Value {
 
     // 中文注释：正式链开发期 GRANDPA 只使用国储会（NRC）的第 1 把密钥，单节点即可 finalize。
     // 切换到运行期时通过 SwitchToProduction migration 扩展到全部 44 个权威。
-    let grandpa_authorities_json: Vec<Value> = vec![
-        json!([grandpa_key_hex_to_genesis_ss58(GRANDPA_AUTHORITY_KEYS_HEX[0]), 1]),
-    ];
+    let grandpa_authorities_json: Vec<Value> = vec![json!([
+        grandpa_key_hex_to_genesis_ss58(GRANDPA_AUTHORITY_KEYS_HEX[0]),
+        1
+    ])];
 
     let mut genesis = serde_json::to_value(crate::RuntimeGenesisConfig::default())
         .expect("default runtime genesis config should serialize");
@@ -248,9 +249,9 @@ pub fn get_preset(id: &PresetId) -> Option<Vec<u8>> {
 
 /// List of supported presets.
 pub fn preset_names() -> Vec<PresetId> {
-    vec![
-        PresetId::from(sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET),
-    ]
+    vec![PresetId::from(
+        sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET,
+    )]
 }
 
 #[cfg(all(test, feature = "std"))]
