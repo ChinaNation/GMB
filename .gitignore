@@ -1,6 +1,7 @@
 /target
 .claude/
 citizenchain/target
+citizenchain/scripts
 target/
 citizenchain/citizenui/target/
 citizenchain/citizenui/desktop/src-tauri/binaries/
