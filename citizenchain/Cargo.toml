@@ -1,7 +1,7 @@
 [workspace]                                  # 公民币区块链主体的子工作空间
 members = [
     "node",                                  # 链节点程序
-    "vendor/sc-consensus-grandpa",           # 本地覆盖的 GRANDPA voter 持久化实现
+    "node/vendor",                           # 本地覆盖的 GRANDPA voter 持久化实现
     "runtime",                               # 链上运行时
     "runtime/primitives",                    # 运行时共享常量与基础类型
 
@@ -104,7 +104,7 @@ sc-block-builder = { git = "https://github.com/ChinaNation/polkadot-sdk.git", br
 sc-cli = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-client-api = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-consensus = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
-sc-consensus-grandpa = { path = "vendor/sc-consensus-grandpa" }
+sc-consensus-grandpa = { path = "node/vendor" }
 sc-consensus-pow = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-chain-spec = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 sc-executor = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
