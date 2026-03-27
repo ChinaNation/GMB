@@ -33,9 +33,11 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   const [voteStatuses, setVoteStatuses] = useState<Record<string, UserVoteStatus>>({});
   const [detectedAdminWallets, setDetectedAdminWallets] = useState<AdminWalletMatch[]>([]);
   const [resolvedShenfenId, setResolvedShenfenId] = useState<string | undefined>(externalShenfenId);
-  // 投票中（已提交但未确认上链）的钱包 pubkey 集合
-  const [pendingVotes, setPendingVotes] = useState<Set<string>>(new Set());
+  // 投票中（已提交但未确认上链）的钱包 pubkey → 提交时间
+  const [pendingVotes, setPendingVotes] = useState<Map<string, number>>(new Map());
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 超过 5 分钟未确认的投票视为丢失
+  const PENDING_TIMEOUT_MS = 5 * 60 * 1000;
 
   const adminWallets = externalAdminWallets.length > 0 ? externalAdminWallets : detectedAdminWallets;
   const shenfenId = resolvedShenfenId;
@@ -65,13 +67,15 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
     } catch (_) {}
     if (curInst && curSid) {
       const statuses = await fetchVoteStatuses(proposalId, curInst.admins, curSid);
-      // 已确认上链的投票，从 pending 中移除
+      // 已确认上链的投票或超时的投票，从 pending 中移除
       setPendingVotes((prev) => {
-        const next = new Set(prev);
-        for (const pk of prev) {
+        const next = new Map(prev);
+        const now = Date.now();
+        for (const [pk, submittedAt] of prev) {
           const vs = statuses[pk];
           const voted = vs && (vs.internalVote != null || vs.jointVote != null);
-          if (voted) next.delete(pk);
+          const timedOut = now - submittedAt > PENDING_TIMEOUT_MS;
+          if (voted || timedOut) next.delete(pk);
         }
         return next;
       });
@@ -121,7 +125,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   // 投票提交成功回调：标记为 pending，关闭弹窗
   const handleVoteSuccess = useCallback((txHash: string) => {
     if (votingWallet) {
-      setPendingVotes((prev) => new Set(prev).add(votingWallet.pubkeyHex.toLowerCase()));
+      setPendingVotes((prev) => new Map(prev).set(votingWallet.pubkeyHex.toLowerCase(), Date.now()));
     }
     setVotingWallet(null);
     // 立即刷新一次

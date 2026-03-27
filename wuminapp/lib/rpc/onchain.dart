@@ -114,21 +114,30 @@ class OnchainRpc {
     }
   }
 
+  /// 交易提交后超过此时间仍未被打包，判定为丢失（节点重启 / 交易池清空等）。
+  static const _txLostTimeout = Duration(minutes: 5);
+
   /// 检查交易是否已被链上确认。
   ///
   /// 返回三种状态：
   /// - `confirmed` — 交易哈希在链上找到，真正确认
-  /// - `lost` — nonce 已被其他交易消耗，本笔交易丢失
+  /// - `lost` — nonce 已被其他交易消耗，或超时未打包
   /// - `pending` — 尚未确认，继续等待
   Future<TxConfirmResult> checkTxStatus({
     required String pubkeyHex,
     required int usedNonce,
     required String txHash,
+    DateTime? createdAt,
   }) async {
     final confirmedNonce = await _rpc.fetchConfirmedNonce(pubkeyHex);
 
     if (confirmedNonce <= usedNonce) {
-      // 链上 nonce 还没到这笔交易，仍在等待
+      // 链上 nonce 还没到这笔交易。
+      // 如果已超时，判定为丢失（交易池可能已清空）。
+      if (createdAt != null &&
+          DateTime.now().difference(createdAt) > _txLostTimeout) {
+        return TxConfirmResult.lost;
+      }
       return TxConfirmResult.pending;
     }
 

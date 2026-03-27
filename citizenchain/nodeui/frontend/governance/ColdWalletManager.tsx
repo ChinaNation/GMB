@@ -159,7 +159,7 @@ export function ColdWalletManager() {
                 <code>{w.address}</code>
               </div>
               <div className="wallet-card-meta">
-                <span className="wallet-card-pubkey">公钥: 0x{w.pubkeyHex.slice(0, 16)}…</span>
+                <span className="wallet-card-pubkey">公钥: 0x{w.pubkeyHex}</span>
                 <span className="wallet-card-time">
                   {new Date(w.createdAtMs).toLocaleDateString()}
                 </span>

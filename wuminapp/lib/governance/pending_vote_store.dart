@@ -140,6 +140,7 @@ class PendingVoteStore {
           pubkeyHex: record.walletPubkey,
           usedNonce: record.usedNonce,
           txHash: record.txHash,
+          createdAt: record.createdAt,
         );
         if (result == TxConfirmResult.pending) {
           stillPending.add(record);

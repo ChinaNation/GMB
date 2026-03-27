@@ -554,6 +554,16 @@ fn decode_scale_compact_u32_prefix(bytes: &[u8]) -> Option<(usize, usize)> {
     }
 }
 
+/// 将 "0x{hex}" 格式的矿工公钥转为 SS58 地址显示，失败时原样返回。
+fn hex_author_to_ss58(author_hex: &str) -> String {
+    let stripped = author_hex.strip_prefix("0x").unwrap_or(author_hex);
+    let Ok(bytes) = hex::decode(stripped) else {
+        return author_hex.to_string();
+    };
+    crate::governance::signing::pubkey_to_ss58(&bytes)
+        .unwrap_or_else(|_| author_hex.to_string())
+}
+
 fn author_from_pow_digest_logs(logs: &[Value]) -> Option<String> {
     for log in logs {
         let Some(s) = log.as_str() else {
@@ -854,7 +864,7 @@ fn dashboard_from_cache(
             timestamp_ms: row.timestamp_ms,
             fee: format_2_decimals_fen(row.fee_fen),
             block_reward: format_2_decimals_fen(row.block_reward_fen),
-            author: row.author.clone(),
+            author: hex_author_to_ss58(&row.author),
         })
         .collect();
 

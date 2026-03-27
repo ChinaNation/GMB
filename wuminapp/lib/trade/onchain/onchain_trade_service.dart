@@ -113,6 +113,7 @@ class OnchainTradeService {
           pubkeyHex: wallet.pubkeyHex,
           usedNonce: record.usedNonce!,
           txHash: record.txHash,
+          createdAt: record.createdAt,
         );
         switch (result) {
           case TxConfirmResult.confirmed:
