@@ -122,7 +122,7 @@ fn build_genesis() -> Value {
         .expect("NRC pallet_address must decode to AccountId");
 
     // 中文注释：每位国储会管理员创世预置 1000 万元（单位：分）。
-    let admin_each: u128 = 1_000_000_000_00; // 1000万元 = 10亿分
+    let admin_each: u128 = 1_000_000_000; // 1000万元 = 10亿分
     let nrc_admins = &CHINA_CB
         .first()
         .expect("CHINA_CB must have NRC entry")
