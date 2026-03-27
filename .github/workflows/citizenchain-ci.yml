@@ -22,25 +22,59 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  build:
-    name: 编译 node + nodeui
+  # ────────────────────────────────────────────────
+  # Job 1: 编译 WASM（仅 Linux，一次编译供所有平台使用）
+  # ────────────────────────────────────────────────
+  build-wasm:
+    name: 编译 WASM
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
 
-      - name: 安装 Rust 工具链（版本与 citizenchain/rust-toolchain.toml 一致）
+      - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@1.94.0
         with:
           targets: wasm32v1-none
           components: rust-src
 
-      - name: 安装 Node.js
-        uses: actions/setup-node@v4
+      - name: 安装 protobuf
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: citizenchain/nodeui/frontend/package-lock.json
+          shared-key: "citizenchain-wasm"
+          workspaces: citizenchain -> target
+
+      - name: 编译 runtime（触发 wasm-builder）
+        working-directory: citizenchain
+        run: cargo build --release -p citizenchain
+
+      - name: 上传 WASM 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenchain-wasm
+          path: |
+            citizenchain/target/release/wbuild/citizenchain/citizenchain.wasm
+            citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.wasm
+            citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
+          retention-days: 30
+          overwrite: true
+
+  # ────────────────────────────────────────────────
+  # Job 2: Linux — 仅编译 node
+  # ────────────────────────────────────────────────
+  build-linux:
+    name: 编译 node (Linux)
+    runs-on: ubuntu-latest
+    needs: build-wasm
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@1.94.0
 
       - name: 安装 Linux 构建依赖
         run: |
@@ -50,11 +84,6 @@ jobs:
             llvm \
             llvm-dev \
             libclang-dev \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
             protobuf-compiler \
             libpam0g-dev
 
@@ -67,12 +96,17 @@ jobs:
       - name: 缓存 Rust 依赖
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "citizenchain"
-          workspaces: |
-            citizenchain -> target
-            citizenchain/nodeui -> target
+          shared-key: "citizenchain-linux"
+          workspaces: citizenchain -> target
 
-      # ── node ──
+      - name: 下载 WASM 产物
+        uses: actions/download-artifact@v4
+        with:
+          name: citizenchain-wasm
+          path: wasm-artifact
+
+      - name: 设置 WASM_FILE
+        run: echo "WASM_FILE=${{ github.workspace }}/wasm-artifact/citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm" >> "$GITHUB_ENV"
 
       - name: 编译 node
         working-directory: citizenchain
@@ -90,13 +124,145 @@ jobs:
           retention-days: 30
           overwrite: true
 
-      # ── nodeui（自动绑定 node：build.rs 编译 node 并复制到 sidecar）──
+  # ────────────────────────────────────────────────
+  # Job 3: macOS — 编译 node + nodeui
+  # ────────────────────────────────────────────────
+  build-macos:
+    name: 编译 node + nodeui (macOS)
+    runs-on: macos-latest
+    needs: build-wasm
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
 
-      - name: 安装前端依赖
-        run: npm --prefix citizenchain/nodeui/frontend ci
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@1.94.0
 
-      - name: 构建前端
-        run: npm --prefix citizenchain/nodeui/frontend run build
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: citizenchain/nodeui/frontend/package-lock.json
+
+      - name: 安装 protobuf
+        run: brew install protobuf
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenchain-macos"
+          workspaces: |
+            citizenchain -> target
+            citizenchain/nodeui -> target
+
+      - name: 下载 WASM 产物
+        uses: actions/download-artifact@v4
+        with:
+          name: citizenchain-wasm
+          path: wasm-artifact
+
+      - name: 设置 WASM_FILE
+        run: echo "WASM_FILE=${{ github.workspace }}/wasm-artifact/citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm" >> "$GITHUB_ENV"
+
+      - name: 编译 node
+        working-directory: citizenchain
+        run: cargo build --release -p node
+
+      - name: 安装前端依赖并构建
+        run: |
+          npm --prefix citizenchain/nodeui/frontend ci
+          npm --prefix citizenchain/nodeui/frontend run build
 
       - name: 编译 nodeui backend
-        run: cargo check --manifest-path citizenchain/nodeui/backend/Cargo.toml
+        run: cargo build --release --manifest-path citizenchain/nodeui/backend/Cargo.toml
+
+      - name: 上传 node 二进制
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenchain-node-macos
+          path: citizenchain/target/release/node
+          retention-days: 30
+          overwrite: true
+
+      - name: 上传 nodeui 二进制
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenchain-nodeui-macos
+          path: citizenchain/nodeui/target/release/nodeui-desktop-shell
+          retention-days: 30
+          overwrite: true
+
+  # ────────────────────────────────────────────────
+  # Job 4: Windows — 编译 node + nodeui
+  # ────────────────────────────────────────────────
+  build-windows:
+    name: 编译 node + nodeui (Windows)
+    runs-on: windows-latest
+    needs: build-wasm
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@1.94.0
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: citizenchain/nodeui/frontend/package-lock.json
+
+      - name: 安装 protobuf
+        run: choco install protoc -y
+
+      - name: 安装 LLVM 并配置环境变量
+        run: |
+          choco install llvm -y
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\lib" >> $env:GITHUB_ENV
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenchain-windows"
+          workspaces: |
+            citizenchain -> target
+            citizenchain/nodeui -> target
+
+      - name: 下载 WASM 产物
+        uses: actions/download-artifact@v4
+        with:
+          name: citizenchain-wasm
+          path: wasm-artifact
+
+      - name: 设置 WASM_FILE
+        run: echo "WASM_FILE=${{ github.workspace }}\wasm-artifact\citizenchain\target\release\wbuild\citizenchain\citizenchain.compact.compressed.wasm" >> $env:GITHUB_ENV
+
+      - name: 编译 node
+        working-directory: citizenchain
+        run: cargo build --release -p node
+
+      - name: 安装前端依赖并构建
+        run: |
+          npm --prefix citizenchain/nodeui/frontend ci
+          npm --prefix citizenchain/nodeui/frontend run build
+
+      - name: 编译 nodeui backend
+        run: cargo build --release --manifest-path citizenchain/nodeui/backend/Cargo.toml
+
+      - name: 上传 node 二进制
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenchain-node-windows
+          path: citizenchain/target/release/node.exe
+          retention-days: 30
+          overwrite: true
+
+      - name: 上传 nodeui 二进制
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenchain-nodeui-windows
+          path: citizenchain/nodeui/target/release/nodeui-desktop-shell.exe
+          retention-days: 30
+          overwrite: true
