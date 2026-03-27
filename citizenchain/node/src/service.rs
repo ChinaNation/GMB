@@ -569,6 +569,7 @@ pub fn new_full<
         let pool = transaction_pool.clone();
         let client_for_pool = client.clone();
         let sync_service_for_pool = sync_service.clone();
+        let is_bootnode = has_local_grandpa_authority;
         Arc::new(move || {
             // 中文注释：没有同步 peer 或仍在 major sync 时，一律禁止本地挖矿，
             // 防止离线状态继续出块并与现网分叉。
@@ -577,9 +578,10 @@ pub fn new_full<
             }
 
             let best_number = client_for_pool.info().best_number;
-            // 中文注释：清库后的全新节点必须先从网络导入至少 1 个块，
+            // 中文注释：清库后的非引导节点必须先从网络导入至少 1 个块，
             // 才允许参与后续出块，避免本地从 genesis 自己起链。
-            if best_number == 0 {
+            // 引导节点（GRANDPA 权威）允许从 block 0 出块。
+            if best_number == 0 && !is_bootnode {
                 return 0;
             }
 
