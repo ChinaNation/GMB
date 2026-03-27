@@ -2,6 +2,7 @@
 
 mod institution;
 pub mod proposal;
+pub mod sfid_api;
 pub mod signing;
 mod storage_keys;
 pub mod types;
@@ -534,6 +535,92 @@ pub async fn submit_developer_upgrade(
     })
     .await
     .map_err(|e| format!("submit developer upgrade task failed: {e}"))?
+}
+
+/// 构建 propose_runtime_upgrade 签名请求的返回值（包含 SFID 快照数据）。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposeUpgradeRequestResult {
+    pub request_json: String,
+    pub request_id: String,
+    pub expected_payload_hash: String,
+    pub sign_nonce: u32,
+    pub sign_block_number: u64,
+    pub eligible_total: u64,
+    pub snapshot_nonce: String,
+    pub snapshot_signature: String,
+}
+
+/// 构建 Runtime 升级提案签名请求 QR JSON（需要节点运行）。
+#[tauri::command]
+pub async fn build_propose_upgrade_request(
+    app: AppHandle,
+    pubkey_hex: String,
+    wasm_path: String,
+    reason: String,
+) -> Result<ProposeUpgradeRequestResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法构建签名请求".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let (sign_result, snapshot) =
+            signing::build_propose_runtime_upgrade_sign_request(&pubkey_hex, &wasm_path, &reason)?;
+        Ok(ProposeUpgradeRequestResult {
+            request_json: sign_result.request_json,
+            request_id: sign_result.request_id,
+            expected_payload_hash: sign_result.expected_payload_hash,
+            sign_nonce: sign_result.sign_nonce,
+            sign_block_number: sign_result.sign_block_number,
+            eligible_total: snapshot.eligible_total,
+            snapshot_nonce: snapshot.snapshot_nonce,
+            snapshot_signature: snapshot.signature,
+        })
+    })
+    .await
+    .map_err(|e| format!("build propose upgrade request task failed: {e}"))?
+}
+
+/// 验证签名响应并提交 Runtime 升级提案。
+#[tauri::command]
+pub async fn submit_propose_upgrade(
+    app: AppHandle,
+    request_id: String,
+    expected_pubkey_hex: String,
+    expected_payload_hash: String,
+    wasm_path: String,
+    reason: String,
+    eligible_total: u64,
+    snapshot_nonce: String,
+    snapshot_signature: String,
+    sign_nonce: u32,
+    sign_block_number: u64,
+    response_json: String,
+) -> Result<signing::VoteSubmitResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法提交提案".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let call_data = signing::build_propose_runtime_upgrade_call_data(
+            &wasm_path,
+            &reason,
+            eligible_total,
+            &snapshot_nonce,
+            &snapshot_signature,
+        )?;
+        signing::verify_and_submit(
+            &request_id,
+            &expected_pubkey_hex,
+            &expected_payload_hash,
+            &call_data,
+            sign_nonce,
+            sign_block_number,
+            &response_json,
+        )
+    })
+    .await
+    .map_err(|e| format!("submit propose upgrade task failed: {e}"))?
 }
 
 /// 验证签名响应并提交转账提案（专用命令，后端构建 call data）。

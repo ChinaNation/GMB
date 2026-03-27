@@ -22,7 +22,7 @@ env:
 
 jobs:
   build-macos:
-    name: 编译 node + nodeui (macOS)
+    name: 打包 公民链.dmg (macOS)
     runs-on: macos-latest
     steps:
       - name: 拉取代码
@@ -69,26 +69,44 @@ jobs:
         working-directory: citizenchain
         run: cargo build --release -p node
 
+      - name: 准备 sidecar
+        run: |
+          BACKEND_DIR=citizenchain/nodeui/backend
+          BINARIES_DIR=$BACKEND_DIR/binaries
+          NODE_BIN=citizenchain/target/release/node
+          TARGET_TRIPLE=$(rustc -vV | sed -n 's/host: //p')
+
+          mkdir -p "$BINARIES_DIR"
+          cp "$NODE_BIN" "$BINARIES_DIR/citizenchain-node"
+          cp "$NODE_BIN" "$BINARIES_DIR/citizenchain-node-${TARGET_TRIPLE}"
+          shasum -a 256 "$BINARIES_DIR/citizenchain-node" | awk '{print $1}' > "$BINARIES_DIR/citizenchain-node.sha256"
+
+          echo "sidecar 已准备: $(ls -lh $BINARIES_DIR/)"
+
       - name: 安装前端依赖并构建
         run: |
           npm --prefix citizenchain/nodeui/frontend ci
           npm --prefix citizenchain/nodeui/frontend run build
 
-      - name: 编译 nodeui backend
-        run: cargo build --release --manifest-path citizenchain/nodeui/backend/Cargo.toml
+      - name: 安装 Tauri CLI
+        run: cargo install tauri-cli --locked
 
-      - name: 上传 node 二进制
+      - name: Tauri 打包
+        working-directory: citizenchain/nodeui/backend
+        env:
+          SKIP_NODE_BUILD: "1"
+        run: cargo tauri build --ci
+
+      - name: 重命名产物
+        run: |
+          DMG=$(find citizenchain/nodeui/target/release/bundle/dmg -name '*.dmg' | head -1)
+          cp "$DMG" "公民链.dmg"
+          echo "产出: 公民链.dmg ($(du -h 公民链.dmg | cut -f1))"
+
+      - name: 上传 公民链.dmg
         uses: actions/upload-artifact@v4
         with:
-          name: citizenchain-node-macos
-          path: citizenchain/target/release/node
-          retention-days: 30
-          overwrite: true
-
-      - name: 上传 nodeui 二进制
-        uses: actions/upload-artifact@v4
-        with:
-          name: citizenchain-nodeui-macos
-          path: citizenchain/nodeui/target/release/nodeui-desktop-shell
+          name: 公民链-macos
+          path: 公民链.dmg
           retention-days: 30
           overwrite: true

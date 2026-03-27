@@ -10,11 +10,12 @@ type Props = {
   onBack: () => void;
   onSelectProposal?: (proposalId: number, adminWallets: AdminWalletMatch[], shenfenId: string) => void;
   onCreateProposal?: (shenfenId: string, orgType: number, institutionName: string, duoqianAddress: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateRuntimeUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
   /** 隐藏返回按钮（用于直接作为 Tab 内容显示时）。 */
   hideBackButton?: boolean;
 };
 
-export function InstitutionDetailPage({ shenfenId, onBack, onSelectProposal, onCreateProposal, hideBackButton }: Props) {
+export function InstitutionDetailPage({ shenfenId, onBack, onSelectProposal, onCreateProposal, onCreateRuntimeUpgrade, hideBackButton }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [adminWallets, setAdminWallets] = useState<AdminWalletMatch[]>([]);
@@ -110,7 +111,10 @@ export function InstitutionDetailPage({ shenfenId, onBack, onSelectProposal, onC
               <>
                 <button className="proposal-type-button" disabled title="即将上线">决议发行</button>
                 <button className="proposal-type-button" disabled title="即将上线">验证密钥</button>
-                <button className="proposal-type-button" disabled title="即将上线">状态升级</button>
+                <button
+                  className="proposal-type-button"
+                  onClick={() => onCreateRuntimeUpgrade?.(adminWallets)}
+                >状态升级</button>
               </>
             )}
           </div>

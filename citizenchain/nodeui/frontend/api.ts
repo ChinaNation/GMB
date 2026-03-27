@@ -3,6 +3,7 @@ import type {
   AdminWalletMatch,
   ColdWalletList,
   GovernanceOverview,
+  ProposeUpgradeRequestResult,
   UserVoteStatus,
   VoteSignRequestResult,
   VoteSubmitResult,
@@ -123,6 +124,19 @@ export const api = {
     invoke<VoteSubmitResult>('submit_propose_transfer', {
       requestId, expectedPubkeyHex, expectedPayloadHash,
       shenfenId, orgType, beneficiaryAddress, amountYuan, remark,
+      signNonce, signBlockNumber, responseJson,
+    }),
+  buildProposeUpgradeRequest: (pubkeyHex: string, wasmPath: string, reason: string) =>
+    invoke<ProposeUpgradeRequestResult>('build_propose_upgrade_request', { pubkeyHex, wasmPath, reason }),
+  submitProposeUpgrade: (
+    requestId: string, expectedPubkeyHex: string, expectedPayloadHash: string,
+    wasmPath: string, reason: string, eligibleTotal: number,
+    snapshotNonce: string, snapshotSignature: string,
+    signNonce: number, signBlockNumber: number, responseJson: string,
+  ) =>
+    invoke<VoteSubmitResult>('submit_propose_upgrade', {
+      requestId, expectedPubkeyHex, expectedPayloadHash,
+      wasmPath, reason, eligibleTotal, snapshotNonce, snapshotSignature,
       signNonce, signBlockNumber, responseJson,
     }),
   buildDeveloperUpgradeRequest: (pubkeyHex: string, wasmPath: string) =>

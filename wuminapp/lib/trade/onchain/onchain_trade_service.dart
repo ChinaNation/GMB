@@ -1,29 +1,24 @@
 import 'dart:typed_data';
 
-import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
-import 'package:wuminapp_mobile/trade/onchain/onchain_trade_repository.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 class OnchainTradeService {
   OnchainTradeService({
     WalletManager? walletManager,
-    OnchainTradeRepository? repository,
     OnchainRpc? onchainRpc,
   })  : _walletManager = walletManager ?? WalletManager(),
-        _repository = repository ?? LocalOnchainTradeRepository(),
         _onchainRpc = onchainRpc ?? OnchainRpc();
 
   final WalletManager _walletManager;
-  final OnchainTradeRepository _repository;
   final OnchainRpc _onchainRpc;
 
   Future<WalletProfile?> getCurrentWallet() {
     return _walletManager.getWallet();
   }
 
-  /// 提交转账交易。
+  /// 提交转账交易，返回 pending 记录（仅在内存中，不持久化）。
   ///
   /// [sign] 回调由调用方根据钱包模式提供：
   /// - 热钱包：从 seed 派生密钥对，本机签名
@@ -70,7 +65,7 @@ class OnchainTradeService {
 
     final estimatedFee = OnchainRpc.estimateTransferFeeYuan(draft.amount);
     final now = DateTime.now();
-    final record = OnchainTxRecord(
+    return OnchainTxRecord(
       txHash: result.txHash,
       fromAddress: wallet.address,
       toAddress: toAddress,
@@ -81,61 +76,6 @@ class OnchainTradeService {
       usedNonce: result.usedNonce,
       estimatedFee: estimatedFee,
     );
-    await _repository.save(record);
-    return record;
-  }
-
-  Future<List<OnchainTxRecord>> listRecentRecords() async {
-    final all = await _repository.listRecent();
-    final wallet = await _walletManager.getWallet();
-    if (wallet == null) {
-      return const <OnchainTxRecord>[];
-    }
-    return all.where((it) => it.fromAddress == wallet.address).toList();
-  }
-
-  Future<List<OnchainTxRecord>> refreshPendingRecords() async {
-    final wallet = await _walletManager.getWallet();
-    if (wallet == null) return const <OnchainTxRecord>[];
-
-    final records = await _repository.listRecent();
-    for (final record in records) {
-      if (onchainTxStatusIsFinal(record.status)) continue;
-      if (record.usedNonce == null) {
-        // 旧记录无 nonce，无法精确判断，直接标记为已确认
-        final updated = record.copyWith(status: OnchainTxStatus.confirmed);
-        await _repository.upsert(updated);
-        continue;
-      }
-      try {
-        // 使用交易哈希 + nonce 双重检查，避免误判丢失的交易为已确认
-        final result = await _onchainRpc.checkTxStatus(
-          pubkeyHex: wallet.pubkeyHex,
-          usedNonce: record.usedNonce!,
-          txHash: record.txHash,
-          createdAt: record.createdAt,
-        );
-        switch (result) {
-          case TxConfirmResult.confirmed:
-            final updated =
-                record.copyWith(status: OnchainTxStatus.confirmed);
-            await _repository.upsert(updated);
-            // 交易上链确认，清除本地 nonce 缓存，下次从链上重新获取。
-            NonceManager.instance.reset(record.fromAddress);
-          case TxConfirmResult.lost:
-            // 交易丢失：nonce 被其他交易消耗，本笔从未上链
-            final updated = record.copyWith(status: OnchainTxStatus.failed);
-            await _repository.upsert(updated);
-            // 交易丢失，同样清除缓存以重新同步链上 nonce。
-            NonceManager.instance.reset(record.fromAddress);
-          case TxConfirmResult.pending:
-            break; // 继续等待
-        }
-      } catch (_) {
-        // 节点不可达时跳过，下次轮询重试
-      }
-    }
-    return listRecentRecords();
   }
 
   List<int> _hexToBytes(String input) {

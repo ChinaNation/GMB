@@ -47,29 +47,6 @@ class WalletSettingsEntity {
 }
 
 @collection
-class TxRecordEntity {
-  Id id = Isar.autoIncrement;
-
-  @Index(unique: true, replace: true)
-  late String txHash;
-
-  late String fromAddress;
-  late String toAddress;
-  late double amount;
-  late String symbol;
-
-  @Index()
-  late int createdAtMillis;
-
-  late String status;
-  String? failureReason;
-
-  int? usedNonce;
-
-  double? estimatedFee;
-}
-
-@collection
 class AdminRoleCacheEntity {
   Id id = Isar.autoIncrement;
 
@@ -155,7 +132,6 @@ class WalletIsar {
     final schemas = [
       WalletProfileEntitySchema,
       WalletSettingsEntitySchema,
-      TxRecordEntitySchema,
       AdminRoleCacheEntitySchema,
       ObservedAccountEntitySchema,
       LoginReplayEntitySchema,
