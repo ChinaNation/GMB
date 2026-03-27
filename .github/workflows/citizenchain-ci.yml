@@ -29,8 +29,8 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v4
 
-      - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@stable
+      - name: 安装 Rust 工具链（版本与 citizenchain/rust-toolchain.toml 一致）
+        uses: dtolnay/rust-toolchain@1.94.0
         with:
           targets: wasm32v1-none
           components: rust-src
