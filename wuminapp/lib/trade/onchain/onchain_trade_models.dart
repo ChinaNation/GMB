@@ -4,34 +4,6 @@ enum OnchainTxStatus {
   failed,
 }
 
-OnchainTxStatus onchainTxStatusFromString(String raw) {
-  switch (raw.toLowerCase()) {
-    case 'confirmed':
-      return OnchainTxStatus.confirmed;
-    case 'failed':
-      return OnchainTxStatus.failed;
-    case 'pending':
-    default:
-      return OnchainTxStatus.pending;
-  }
-}
-
-String onchainTxStatusToString(OnchainTxStatus status) {
-  switch (status) {
-    case OnchainTxStatus.pending:
-      return 'pending';
-    case OnchainTxStatus.confirmed:
-      return 'confirmed';
-    case OnchainTxStatus.failed:
-      return 'failed';
-  }
-}
-
-bool onchainTxStatusIsFinal(OnchainTxStatus status) {
-  return status == OnchainTxStatus.confirmed ||
-      status == OnchainTxStatus.failed;
-}
-
 enum OnchainTradeErrorCode {
   walletMissing,
   walletMismatch,
@@ -63,6 +35,7 @@ class OnchainTransferDraft {
   final String symbol;
 }
 
+/// 刚提交的 pending 交易记录（仅内存中，不持久化）。
 class OnchainTxRecord {
   const OnchainTxRecord({
     required this.txHash,
@@ -87,66 +60,4 @@ class OnchainTxRecord {
   final String? failureReason;
   final int? usedNonce;
   final double? estimatedFee;
-
-  OnchainTxRecord copyWith({
-    String? txHash,
-    String? fromAddress,
-    String? toAddress,
-    double? amount,
-    String? symbol,
-    DateTime? createdAt,
-    OnchainTxStatus? status,
-    String? failureReason,
-    bool clearFailureReason = false,
-    int? usedNonce,
-    double? estimatedFee,
-  }) {
-    return OnchainTxRecord(
-      txHash: txHash ?? this.txHash,
-      fromAddress: fromAddress ?? this.fromAddress,
-      toAddress: toAddress ?? this.toAddress,
-      amount: amount ?? this.amount,
-      symbol: symbol ?? this.symbol,
-      createdAt: createdAt ?? this.createdAt,
-      status: status ?? this.status,
-      failureReason:
-          clearFailureReason ? null : (failureReason ?? this.failureReason),
-      usedNonce: usedNonce ?? this.usedNonce,
-      estimatedFee: estimatedFee ?? this.estimatedFee,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'txHash': txHash,
-      'fromAddress': fromAddress,
-      'toAddress': toAddress,
-      'amount': amount,
-      'symbol': symbol,
-      'createdAtMillis': createdAt.millisecondsSinceEpoch,
-      'status': onchainTxStatusToString(status),
-      'failureReason': failureReason,
-      'usedNonce': usedNonce,
-      'estimatedFee': estimatedFee,
-    };
-  }
-
-  factory OnchainTxRecord.fromJson(Map<String, dynamic> json) {
-    return OnchainTxRecord(
-      txHash: json['txHash']?.toString() ?? '',
-      fromAddress: json['fromAddress']?.toString() ?? '',
-      toAddress: json['toAddress']?.toString() ?? '',
-      amount: (json['amount'] as num?)?.toDouble() ?? 0,
-      symbol: json['symbol']?.toString() ?? 'GMB',
-      createdAt: DateTime.fromMillisecondsSinceEpoch(
-        (json['createdAtMillis'] as num?)?.toInt() ??
-            DateTime.now().millisecondsSinceEpoch,
-      ),
-      status:
-          onchainTxStatusFromString(json['status']?.toString() ?? 'pending'),
-      failureReason: json['failureReason']?.toString(),
-      usedNonce: (json['usedNonce'] as num?)?.toInt(),
-      estimatedFee: (json['estimatedFee'] as num?)?.toDouble(),
-    );
-  }
 }

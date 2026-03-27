@@ -44,6 +44,7 @@ class _TransferProposalDetailPageState
   static const int _statusVoting = 0;
   static const int _statusPassed = 1;
   static const int _statusRejected = 2;
+  static const int _statusExecuted = 3;
 
   final TransferProposalService _proposalService = TransferProposalService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
@@ -195,8 +196,10 @@ class _TransferProposalDetailPageState
         return '已通过';
       case _statusRejected:
         return '已拒绝';
+      case _statusExecuted:
+        return '已执行';
       default:
-        return '执行失败';
+        return '未知';
     }
   }
 
@@ -208,8 +211,10 @@ class _TransferProposalDetailPageState
         return Colors.green;
       case _statusRejected:
         return Colors.red;
+      case _statusExecuted:
+        return Colors.green;
       default:
-        return Colors.orange;
+        return Colors.grey;
     }
   }
 
