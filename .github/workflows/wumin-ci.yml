@@ -1,20 +1,21 @@
-name: Wumin Release APK
+name: Wumin CI
 
 on:
   push:
     branches: [main]
     paths:
-      - ".github/workflows/wumin-release.yml"
+      - ".github/workflows/wumin-ci.yml"
       - "wumin/**"
+      - "citizenchain/runtime/src/lib.rs"
   workflow_dispatch:
 
 concurrency:
-  group: wumin-release-${{ github.ref }}
+  group: wumin-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  release-apk:
-    name: wumin 正式签名 APK
+  build-apk:
+    name: 构建 公民钱包.apk
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
@@ -24,6 +25,12 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+
+      - name: 同步 runtime spec_version
+        run: |
+          SPEC=$(grep 'spec_version:' citizenchain/runtime/src/lib.rs | grep -o '[0-9]*')
+          sed -i "s/supportedSpecVersions = {[^}]*}/supportedSpecVersions = {$SPEC}/" wumin/lib/signer/pallet_registry.dart
+          echo "冷钱包 spec_version 已同步为 {$SPEC}"
 
       - name: 安装依赖
         working-directory: wumin
@@ -63,11 +70,18 @@ jobs:
 
       - name: 构建正式 APK
         working-directory: wumin
-        run: bash scripts/build-release-apk.sh
+        run: flutter build apk --release
 
-      - name: 上传 APK
+      - name: 重命名产物
+        run: |
+          cp wumin/build/app/outputs/flutter-apk/app-release.apk wumin/build/app/outputs/flutter-apk/公民钱包.apk
+          echo "产出: 公民钱包.apk"
+
+      - name: 上传 公民钱包.apk
         uses: actions/upload-artifact@v4
         with:
-          name: wumin-release-apk
+          name: 公民钱包
           path: wumin/build/app/outputs/flutter-apk/公民钱包.apk
+          retention-days: 30
+          overwrite: true
           if-no-files-found: error
