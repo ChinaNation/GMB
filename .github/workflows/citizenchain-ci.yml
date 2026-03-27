@@ -105,8 +105,11 @@ jobs:
           name: citizenchain-wasm
           path: wasm-artifact
 
+      - name: 确认 WASM 文件位置
+        run: ls -la wasm-artifact/
+
       - name: 设置 WASM_FILE
-        run: echo "WASM_FILE=${{ github.workspace }}/wasm-artifact/citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm" >> "$GITHUB_ENV"
+        run: echo "WASM_FILE=${{ github.workspace }}/wasm-artifact/citizenchain.compact.compressed.wasm" >> "$GITHUB_ENV"
 
       - name: 编译 node
         working-directory: citizenchain
@@ -181,8 +184,11 @@ jobs:
           name: citizenchain-wasm
           path: wasm-artifact
 
+      - name: 确认 WASM 文件位置
+        run: ls -la wasm-artifact/
+
       - name: 设置 WASM_FILE
-        run: echo "WASM_FILE=${{ github.workspace }}/wasm-artifact/citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm" >> "$GITHUB_ENV"
+        run: echo "WASM_FILE=${{ github.workspace }}/wasm-artifact/citizenchain.compact.compressed.wasm" >> "$GITHUB_ENV"
 
       - name: 编译 node
         working-directory: citizenchain
@@ -255,8 +261,11 @@ jobs:
           name: citizenchain-wasm
           path: wasm-artifact
 
+      - name: 确认 WASM 文件位置
+        run: dir wasm-artifact\
+
       - name: 设置 WASM_FILE
-        run: echo "WASM_FILE=${{ github.workspace }}\wasm-artifact\citizenchain\target\release\wbuild\citizenchain\citizenchain.compact.compressed.wasm" >> $env:GITHUB_ENV
+        run: echo "WASM_FILE=${{ github.workspace }}\wasm-artifact\citizenchain.compact.compressed.wasm" >> $env:GITHUB_ENV
 
       - name: 编译 node
         working-directory: citizenchain
