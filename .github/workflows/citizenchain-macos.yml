@@ -1,0 +1,94 @@
+name: CitizenChain macOS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/citizenchain-macos.yml"
+      - "citizenchain/node/**"
+      - "citizenchain/nodeui/**"
+      - "citizenchain/runtime/**"
+      - "citizenchain/Cargo.toml"
+      - "citizenchain/Cargo.lock"
+  workflow_dispatch:
+
+concurrency:
+  group: citizenchain-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build-macos:
+    name: 编译 node + nodeui (macOS)
+    runs-on: macos-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@1.94.0
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: citizenchain/nodeui/frontend/package-lock.json
+
+      - name: 安装构建依赖
+        run: brew install protobuf llvm
+
+      - name: 配置 LLVM 环境变量
+        run: |
+          echo "LLVM_CONFIG_PATH=$(brew --prefix llvm)/bin/llvm-config" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenchain-macos"
+          workspaces: |
+            citizenchain -> target
+            citizenchain/nodeui -> target
+
+      - name: 下载最新 WASM 产物
+        run: gh run download --name citizenchain-wasm --dir wasm-artifact -R ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: 确认 WASM 文件位置
+        run: ls -la wasm-artifact/
+
+      - name: 设置 WASM_FILE
+        run: echo "WASM_FILE=${{ github.workspace }}/wasm-artifact/citizenchain.compact.compressed.wasm" >> "$GITHUB_ENV"
+
+      - name: 编译 node
+        working-directory: citizenchain
+        run: cargo build --release -p node
+
+      - name: 安装前端依赖并构建
+        run: |
+          npm --prefix citizenchain/nodeui/frontend ci
+          npm --prefix citizenchain/nodeui/frontend run build
+
+      - name: 编译 nodeui backend
+        run: cargo build --release --manifest-path citizenchain/nodeui/backend/Cargo.toml
+
+      - name: 上传 node 二进制
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenchain-node-macos
+          path: citizenchain/target/release/node
+          retention-days: 30
+          overwrite: true
+
+      - name: 上传 nodeui 二进制
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenchain-nodeui-macos
+          path: citizenchain/nodeui/target/release/nodeui-desktop-shell
+          retention-days: 30
+          overwrite: true

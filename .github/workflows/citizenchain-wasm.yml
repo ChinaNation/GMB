@@ -1,0 +1,57 @@
+name: CitizenChain WASM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/citizenchain-wasm.yml"
+      - "citizenchain/runtime/**"
+      - "citizenchain/Cargo.toml"
+      - "citizenchain/Cargo.lock"
+  workflow_dispatch:
+
+concurrency:
+  group: citizenchain-wasm-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build-wasm:
+    name: 编译 WASM
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          targets: wasm32v1-none
+          components: rust-src
+
+      - name: 安装 protobuf
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenchain-wasm"
+          workspaces: citizenchain -> target
+
+      - name: 编译 runtime（触发 wasm-builder）
+        working-directory: citizenchain
+        run: cargo build --release -p citizenchain
+
+      - name: 上传 WASM 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenchain-wasm
+          path: |
+            citizenchain/target/release/wbuild/citizenchain/citizenchain.wasm
+            citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.wasm
+            citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
+          retention-days: 30
+          overwrite: true
