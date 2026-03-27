@@ -106,7 +106,6 @@ class OfflineSignService {
   Future<QrSignResponse> signParsedRequest({
     required int walletIndex,
     required QrSignRequest request,
-    bool acknowledgeDecodeFailed = false,
   }) async {
     // 签名时再次校验过期，防止用户在 UI 上停留太久后点击签名。
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -151,11 +150,10 @@ class OfflineSignService {
         '交易内容与摘要不符，拒绝签名',
       );
     }
-    if (verification.displayMatch == DisplayMatchStatus.decodeFailed &&
-        !acknowledgeDecodeFailed) {
+    if (verification.displayMatch == DisplayMatchStatus.decodeFailed) {
       throw const OfflineSignException(
         OfflineSignErrorCode.displayMismatch,
-        '无法独立验证交易内容，需用户确认风险后才能签名',
+        '无法独立验证交易内容，禁止签名。请升级冷钱包。',
       );
     }
 

@@ -41,7 +41,6 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   bool _handled = false;
   bool _signing = false;
   bool _torchOn = false;
-  bool _decodeFailedAcknowledged = false;
   QrSignRequest? _request;
   QrSignResponse? _response;
   OfflineSignVerification? _verification;
@@ -159,7 +158,6 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       _verification = null;
       _remainingSeconds = 0;
       _signing = false;
-      _decodeFailedAcknowledged = false;
     });
     // 等 MobileScanner widget 重新挂载后再启动 controller，
     // 否则 camera preview 和 widget 绑定不上会白屏。
@@ -168,34 +166,6 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         await _controller.start();
       }
     });
-  }
-
-  Future<void> _acknowledgeDecodeFailed() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('风险确认'),
-        content: const Text(
-          '无法独立验证此交易内容，以下信息完全来自请求方（不可信来源）。\n\n'
-          '如果请求方被篡改，签名后可能造成资产损失。\n\n'
-          '确认你已通过其他渠道核实交易内容？',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('我已核实，允许签名'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && mounted) {
-      setState(() => _decodeFailedAcknowledged = true);
-    }
   }
 
   Future<void> _signRequest() async {
@@ -215,7 +185,6 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       final response = await _offlineSignService.signParsedRequest(
         walletIndex: widget.wallet.walletIndex,
         request: request,
-        acknowledgeDecodeFailed: _decodeFailedAcknowledged,
       );
       if (!mounted) return;
       setState(() {
@@ -570,15 +539,21 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         if (verification != null)
           _buildTransactionDetails(request, verification),
         const SizedBox(height: 16),
-        if (isDecodeFailed && !_decodeFailedAcknowledged) ...[
-          SizedBox(
+        if (isDecodeFailed) ...[
+          Container(
             width: double.infinity,
-            child: FilledButton(
-              onPressed: expired ? null : _acknowledgeDecodeFailed,
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.orange,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.red.shade200),
+            ),
+            child: Text(
+              '无法独立验证交易内容，禁止签名。请升级冷钱包后重试。',
+              style: TextStyle(
+                color: Colors.red.shade700,
+                fontWeight: FontWeight.w600,
               ),
-              child: const Text('我已通过其他渠道核实，允许签名'),
             ),
           ),
           const SizedBox(height: 8),
@@ -594,10 +569,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton(
-                onPressed: (_signing ||
-                        expired ||
-                        isMismatched ||
-                        (isDecodeFailed && !_decodeFailedAcknowledged))
+                onPressed: (_signing || expired || isMismatched || isDecodeFailed)
                     ? null
                     : _signRequest,
                 child: Text(_signing ? '签名中...' : '确认签名'),
