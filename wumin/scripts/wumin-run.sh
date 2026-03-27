@@ -6,10 +6,42 @@ WUMIN_DIR="$SCRIPT_DIR/.."
 REPO_ROOT="$SCRIPT_DIR/../.."
 cd "$WUMIN_DIR"
 
-echo "==> 同步 runtime spec_version..."
-SPEC=$(grep 'spec_version:' "$REPO_ROOT/citizenchain/runtime/src/lib.rs" | grep -o '[0-9]*')
-sed -i '' "s/supportedSpecVersions = {[^}]*}/supportedSpecVersions = {$SPEC}/" lib/signer/pallet_registry.dart
-echo "    冷钱包 spec_version 已同步为 {$SPEC}"
+echo "==> 同步 runtime spec_version 和 pallet 索引..."
+RUNTIME_LIB="$REPO_ROOT/citizenchain/runtime/src/lib.rs"
+REGISTRY="lib/signer/pallet_registry.dart"
+
+# 同步 spec_version
+SPEC=$(grep 'spec_version:' "$RUNTIME_LIB" | grep -o '[0-9]*')
+sed -i '' "s/supportedSpecVersions = {[^}]*}/supportedSpecVersions = {$SPEC}/" "$REGISTRY"
+
+# 从 runtime pallet_index 宏提取 pallet 索引
+extract_pallet_index() {
+  grep -A1 "pallet_index($1)" "$RUNTIME_LIB" | grep "pub type $2" > /dev/null && echo "$1"
+}
+BALANCES_IDX=$(grep -B1 'pub type Balances' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
+DUOQIAN_IDX=$(grep -B1 'pub type DuoqianTransferPow' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
+VOTING_IDX=$(grep -B1 'pub type VotingEngineSystem' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
+
+sed -i '' "s/balancesPallet = [0-9]*/balancesPallet = $BALANCES_IDX/" "$REGISTRY"
+sed -i '' "s/duoqianTransferPowPallet = [0-9]*/duoqianTransferPowPallet = $DUOQIAN_IDX/" "$REGISTRY"
+sed -i '' "s/votingEngineSystemPallet = [0-9]*/votingEngineSystemPallet = $VOTING_IDX/" "$REGISTRY"
+
+# 从各 pallet crate 提取 call_index
+TRANSFER_PALLET="$REPO_ROOT/citizenchain/runtime/transaction/duoqian-transfer-pow/src/lib.rs"
+VOTING_PALLET="$REPO_ROOT/citizenchain/runtime/governance/voting-engine-system/src/lib.rs"
+
+PROPOSE_CALL=$(grep -B2 'fn propose_transfer' "$TRANSFER_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
+VOTE_CALL=$(grep -B2 'fn vote_transfer' "$TRANSFER_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
+JOINT_CALL=$(grep -B2 'fn joint_vote' "$VOTING_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
+CITIZEN_CALL=$(grep -B2 'fn citizen_vote' "$VOTING_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
+
+sed -i '' "s/proposeTransferCall = [0-9]*/proposeTransferCall = $PROPOSE_CALL/" "$REGISTRY"
+sed -i '' "s/voteTransferCall = [0-9]*/voteTransferCall = $VOTE_CALL/" "$REGISTRY"
+sed -i '' "s/jointVoteCall = [0-9]*/jointVoteCall = $JOINT_CALL/" "$REGISTRY"
+sed -i '' "s/citizenVoteCall = [0-9]*/citizenVoteCall = $CITIZEN_CALL/" "$REGISTRY"
+
+echo "    spec_version={$SPEC} Balances=$BALANCES_IDX DuoqianTransfer=$DUOQIAN_IDX VotingEngine=$VOTING_IDX"
+echo "    propose=$PROPOSE_CALL vote=$VOTE_CALL joint=$JOINT_CALL citizen=$CITIZEN_CALL"
 
 echo "==> 清空构建缓存..."
 flutter clean
