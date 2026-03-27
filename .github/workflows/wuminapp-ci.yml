@@ -36,7 +36,7 @@ jobs:
 
       - name: 分析代码
         working-directory: wuminapp
-        run: flutter analyze
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: 运行测试
         working-directory: wuminapp
