@@ -11,7 +11,9 @@ fn main() {
         let wasm_path = std::path::Path::new(&wasm_file)
             .canonicalize()
             .unwrap_or_else(|e| panic!("WASM_FILE path not found: {wasm_file}: {e}"));
-        let wasm_path_str = wasm_path.display();
+        // Windows canonicalize() returns \\?\D:\... with backslashes
+        // Replace backslashes with forward slashes for include_bytes! compatibility
+        let wasm_path_str = wasm_path.display().to_string().replace('\\', "/");
 
         std::fs::write(
             &dest,
