@@ -30,13 +30,14 @@
 - `memory/08-tasks/open/20260325-141845-将-duoqian-manage-pow-注册型多签地址接入-duoqian-transfer-pow-转账功能.md`
 - `memory/08-tasks/open/20260325-150802-为-sfid-机构生成流程新增独立机构名称字段并用于-wuminapp-与-wumin-显示.md`
 - `memory/08-tasks/open/20260325-232827-排查出块记录中区块高度-时间-手续费到账收益-铸块奖励-区块作者不显示的原因.md`
+- `memory/08-tasks/open/20260325-genesis-bootstrap.md`
+- `memory/08-tasks/open/20260325-remove-dev-chain.md`
+- `memory/08-tasks/open/20260325-最后一次开发者直升-从开发期切换到运行期.md`
 - `memory/08-tasks/open/20260326-011500-收敛-grandpa-voter-启动条件并停止-concluded-rounds-追加持久化.md`
 - `memory/08-tasks/open/20260326-103500-清库后节点必须先同步网络再允许出块-禁止本地先起分叉.md`
 - `memory/08-tasks/open/20260326-104800-删除前10块自动引导出块逻辑-普通节点只允许同步现网后出块.md`
 - `memory/08-tasks/open/20260326-112500-修复普通节点关闭-grandpa-voter-后网络连接被-grandpa-协议空接收端打断.md`
-- `memory/08-tasks/open/20260325-genesis-bootstrap.md`
-- `memory/08-tasks/open/20260325-remove-dev-chain.md`
-- `memory/08-tasks/open/20260325-最后一次开发者直升-从开发期切换到运行期.md`
+- `memory/08-tasks/open/20260327-083033-全面检查-grandpa-为什么不工作-不验证区块-基于代码-配置-日志和运行行为定位根因.md`
 
 ## done
 
