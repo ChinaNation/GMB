@@ -136,13 +136,26 @@ pub fn get_cold_wallets(app: AppHandle) -> Result<ColdWalletList, String> {
         wallets: wallets
             .into_iter()
             .map(|w| ColdWallet {
-                address: w.address,
+                address: ensure_ss58(&w.address, &w.pubkey_hex),
                 pubkey_hex: w.pubkey_hex,
                 name: w.name,
                 created_at_ms: w.created_at_ms,
             })
             .collect(),
     })
+}
+
+/// 确保地址为 SS58 格式。如果已有地址是 hex 格式，从 pubkey_hex 转换。
+fn ensure_ss58(address: &str, pubkey_hex: &str) -> String {
+    if !address.starts_with("0x") && !address.starts_with("0X") {
+        return address.to_string();
+    }
+    if let Ok(bytes) = hex::decode(pubkey_hex) {
+        if let Ok(ss58) = crate::governance::signing::pubkey_to_ss58(&bytes) {
+            return ss58;
+        }
+    }
+    address.to_string()
 }
 
 /// 导入冷钱包。
@@ -186,9 +199,11 @@ pub fn add_cold_wallet(
         return Err(format!("冷钱包数量已达上限 {MAX_COLD_WALLETS} 个").to_string());
     }
 
-    // 添加
+    // 添加：地址统一存为 SS58 格式
+    let ss58_address = crate::governance::signing::pubkey_to_ss58(&pubkey_bytes)
+        .unwrap_or(normalized);
     wallets.push(StoredColdWallet {
-        address: normalized,
+        address: ss58_address,
         pubkey_hex: pubkey_hex.clone(),
         name,
         created_at_ms: now_ms(),

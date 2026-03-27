@@ -855,7 +855,7 @@ fn encode_compact_u32(value: u32) -> Vec<u8> {
 }
 
 /// 将 32 字节公钥编码为 SS58 地址（prefix=2027）。
-fn pubkey_to_ss58(pubkey: &[u8]) -> Result<String, String> {
+pub(crate) fn pubkey_to_ss58(pubkey: &[u8]) -> Result<String, String> {
     if pubkey.len() != 32 {
         return Err("公钥长度必须为 32 字节".to_string());
     }
