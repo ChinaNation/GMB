@@ -479,6 +479,200 @@ pub fn build_developer_upgrade_call_data(wasm_path: &str) -> Result<Vec<u8>, Str
     Ok(call_data)
 }
 
+/// 构建 propose_runtime_upgrade 签名请求。
+///
+/// 额外返回 SFID 快照数据，供 submit 时重建 call_data。
+pub fn build_propose_runtime_upgrade_sign_request(
+    pubkey_hex: &str,
+    wasm_path: &str,
+    reason: &str,
+) -> Result<(VoteSignRequestResult, super::sfid_api::PopulationSnapshot), String> {
+    let pubkey_clean = pubkey_hex
+        .strip_prefix("0x")
+        .unwrap_or(pubkey_hex)
+        .to_ascii_lowercase();
+    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("公钥格式无效，应为 64 位十六进制".to_string());
+    }
+    let pubkey_bytes = hex::decode(&pubkey_clean)
+        .map_err(|e| format!("公钥解码失败: {e}"))?;
+
+    // 读取 WASM 文件
+    let wasm_code = std::fs::read(wasm_path)
+        .map_err(|e| format!("读取 WASM 文件失败: {e}"))?;
+    if wasm_code.is_empty() {
+        return Err("WASM 文件为空".to_string());
+    }
+    let wasm_size_mb = wasm_code.len() as f64 / 1_048_576.0;
+    if wasm_code.len() > 5 * 1_048_576 {
+        return Err(format!("WASM 文件超过 5MB 上限，当前 {wasm_size_mb:.2} MB"));
+    }
+
+    let reason_bytes = reason.as_bytes();
+    if reason_bytes.is_empty() {
+        return Err("升级理由不能为空".to_string());
+    }
+
+    // 获取 SFID 人口快照
+    let snapshot = super::sfid_api::fetch_population_snapshot(&pubkey_clean)?;
+
+    // 构建 call_data
+    let call_data = build_propose_runtime_upgrade_call_data_inner(
+        &wasm_code, reason_bytes, &snapshot,
+    )?;
+
+    let (spec_version, tx_version) = fetch_runtime_version()?;
+    let genesis_hash = fetch_genesis_hash()?;
+    let (block_hash, block_number) = fetch_latest_block()?;
+    let nonce = fetch_nonce(&pubkey_clean)?;
+
+    let payload = build_signing_payload(
+        &call_data, &genesis_hash, &block_hash, block_number,
+        nonce, spec_version, tx_version,
+    );
+    let request_id = generate_request_id("upgrade");
+    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
+
+    let payload_for_qr = blake2b_simd::Params::new()
+        .hash_length(32)
+        .hash(&payload);
+    let payload_hash = sha256_hash(payload_for_qr.as_bytes());
+
+    let display = serde_json::json!({
+        "action": "propose_runtime_upgrade",
+        "action_label": "Runtime 升级提案",
+        "summary": format!("提交运行时升级提案（{wasm_size_mb:.2} MB）"),
+        "fields": [
+            { "key": "reason", "label": "升级理由", "value": reason },
+            { "key": "wasm_size", "label": "WASM 大小", "value": format!("{wasm_size_mb:.2} MB") },
+            { "key": "wasm_hash", "label": "代码哈希", "value": format!("0x{}", hex::encode(sha256_hash(&wasm_code))) },
+            { "key": "eligible_total", "label": "公民人数", "value": snapshot.eligible_total.to_string() }
+        ]
+    });
+
+    let now = now_secs();
+    let request = QrSignRequest {
+        proto: PROTOCOL_VERSION.to_string(),
+        msg_type: "sign_request".to_string(),
+        request_id: request_id.clone(),
+        account: account_ss58,
+        pubkey: format!("0x{pubkey_clean}"),
+        sig_alg: "sr25519".to_string(),
+        payload_hex: format!("0x{}", hex::encode(payload_for_qr.as_bytes())),
+        issued_at: now,
+        expires_at: now + DEFAULT_TTL_SECS,
+        display,
+        spec_version: Some(spec_version),
+    };
+
+    let request_json = serde_json::to_string(&request)
+        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+
+    Ok((
+        VoteSignRequestResult {
+            request_json,
+            request_id,
+            expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
+            sign_nonce: nonce,
+            sign_block_number: block_number,
+        },
+        snapshot,
+    ))
+}
+
+/// 构建 propose_runtime_upgrade 的 call_data（供 submit 时重建）。
+pub fn build_propose_runtime_upgrade_call_data(
+    wasm_path: &str,
+    reason: &str,
+    eligible_total: u64,
+    snapshot_nonce: &str,
+    snapshot_signature: &str,
+) -> Result<Vec<u8>, String> {
+    let wasm_code = std::fs::read(wasm_path)
+        .map_err(|e| format!("读取 WASM 文件失败: {e}"))?;
+    let nonce_bytes = snapshot_nonce.as_bytes();
+    let sig_hex = snapshot_signature
+        .strip_prefix("0x")
+        .unwrap_or(snapshot_signature);
+    let sig_bytes = hex::decode(sig_hex)
+        .map_err(|e| format!("snapshot signature 解码失败: {e}"))?;
+
+    let snapshot = super::sfid_api::PopulationSnapshot {
+        eligible_total,
+        snapshot_nonce: snapshot_nonce.to_string(),
+        signature: snapshot_signature.to_string(),
+    };
+    let _ = &snapshot; // used below via fields
+
+    let reason_bytes = reason.as_bytes();
+
+    // [13][0][compact(reason)][compact(wasm)][u64_le][compact(nonce)][compact(sig)]
+    let reason_compact = encode_compact_u32(reason_bytes.len() as u32);
+    let wasm_compact = encode_compact_u32(wasm_code.len() as u32);
+    let nonce_compact = encode_compact_u32(nonce_bytes.len() as u32);
+    let sig_compact = encode_compact_u32(sig_bytes.len() as u32);
+
+    let mut call_data = Vec::with_capacity(
+        2 + reason_compact.len() + reason_bytes.len()
+            + wasm_compact.len() + wasm_code.len()
+            + 8
+            + nonce_compact.len() + nonce_bytes.len()
+            + sig_compact.len() + sig_bytes.len(),
+    );
+    call_data.push(13u8); // RuntimeRootUpgrade pallet
+    call_data.push(0u8);  // propose_runtime_upgrade call
+    call_data.extend_from_slice(&reason_compact);
+    call_data.extend_from_slice(reason_bytes);
+    call_data.extend_from_slice(&wasm_compact);
+    call_data.extend_from_slice(&wasm_code);
+    call_data.extend_from_slice(&eligible_total.to_le_bytes());
+    call_data.extend_from_slice(&nonce_compact);
+    call_data.extend_from_slice(nonce_bytes);
+    call_data.extend_from_slice(&sig_compact);
+    call_data.extend_from_slice(&sig_bytes);
+    Ok(call_data)
+}
+
+/// 内部版本：从已加载的数据构建 call_data。
+fn build_propose_runtime_upgrade_call_data_inner(
+    wasm_code: &[u8],
+    reason_bytes: &[u8],
+    snapshot: &super::sfid_api::PopulationSnapshot,
+) -> Result<Vec<u8>, String> {
+    let nonce_bytes = snapshot.snapshot_nonce.as_bytes();
+    let sig_hex = snapshot
+        .signature
+        .strip_prefix("0x")
+        .unwrap_or(&snapshot.signature);
+    let sig_bytes = hex::decode(sig_hex)
+        .map_err(|e| format!("snapshot signature 解码失败: {e}"))?;
+
+    let reason_compact = encode_compact_u32(reason_bytes.len() as u32);
+    let wasm_compact = encode_compact_u32(wasm_code.len() as u32);
+    let nonce_compact = encode_compact_u32(nonce_bytes.len() as u32);
+    let sig_compact = encode_compact_u32(sig_bytes.len() as u32);
+
+    let mut call_data = Vec::with_capacity(
+        2 + reason_compact.len() + reason_bytes.len()
+            + wasm_compact.len() + wasm_code.len()
+            + 8
+            + nonce_compact.len() + nonce_bytes.len()
+            + sig_compact.len() + sig_bytes.len(),
+    );
+    call_data.push(13u8);
+    call_data.push(0u8);
+    call_data.extend_from_slice(&reason_compact);
+    call_data.extend_from_slice(reason_bytes);
+    call_data.extend_from_slice(&wasm_compact);
+    call_data.extend_from_slice(wasm_code);
+    call_data.extend_from_slice(&snapshot.eligible_total.to_le_bytes());
+    call_data.extend_from_slice(&nonce_compact);
+    call_data.extend_from_slice(nonce_bytes);
+    call_data.extend_from_slice(&sig_compact);
+    call_data.extend_from_slice(&sig_bytes);
+    Ok(call_data)
+}
+
 /// Compact<u32> 编码（公开版本，供 mod.rs 调用）。
 pub fn encode_compact_u32_pub(value: u32) -> Vec<u8> {
     encode_compact_u32(value)

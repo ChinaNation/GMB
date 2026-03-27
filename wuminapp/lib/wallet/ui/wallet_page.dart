@@ -9,9 +9,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
-import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
+import 'package:wuminapp_mobile/wallet/capabilities/api_client.dart';
+import 'package:wuminapp_mobile/wallet/models/server_tx_record.dart';
 import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
-import 'package:wuminapp_mobile/trade/onchain/onchain_trade_repository.dart';
 import 'package:wuminapp_mobile/user/user_service.dart' show UserProfileService;
 import 'package:wuminapp_mobile/ui/widgets/bip39_input.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
@@ -622,14 +622,14 @@ class WalletDetailPage extends StatefulWidget {
 
 class _WalletDetailPageState extends State<WalletDetailPage> {
   final WalletManager _walletService = WalletManager();
-  final OnchainTradeRepository _txRepo = LocalOnchainTradeRepository();
+  final ApiClient _api = ApiClient();
   final GlobalKey _qrKey = GlobalKey();
   late String _walletName;
   bool _isEditingName = false;
   bool _hasChanged = false;
   bool _isSavingQr = false;
   late final TextEditingController _nameEditController;
-  List<OnchainTxRecord> _recentRecords = const [];
+  List<ServerTxRecord> _recentRecords = const [];
   bool _screenshotGuardActive = false;
 
   @override
@@ -648,18 +648,18 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   }
 
   Future<void> _loadRecentRecords() async {
-    final all = await _txRepo.listRecent();
-    final addr = widget.wallet.address.toLowerCase();
-    final filtered = all
-        .where((r) =>
-            r.fromAddress.toLowerCase() == addr ||
-            r.toAddress.toLowerCase() == addr)
-        .take(5)
-        .toList(growable: false);
-    if (!mounted) return;
-    setState(() {
-      _recentRecords = filtered;
-    });
+    try {
+      final page = await _api.fetchWalletTransactions(
+        widget.wallet.address,
+        limit: 5,
+      );
+      if (!mounted) return;
+      setState(() {
+        _recentRecords = page.records;
+      });
+    } catch (_) {
+      // 加载失败静默忽略，钱包详情页仍可正常使用
+    }
   }
 
   Future<void> _onMenuAction(String action) async {
@@ -1100,15 +1100,13 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 final record = _recentRecords[index];
                 return Column(
                   children: [
-                    TxRecordTile(
+                    ServerTxRecordTile(
                       record: record,
-                      selfAddress: widget.wallet.address,
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => TxRecordDetailPage(
+                            builder: (_) => ServerTxRecordDetailPage(
                               record: record,
-                              selfAddress: widget.wallet.address,
                             ),
                           ),
                         );

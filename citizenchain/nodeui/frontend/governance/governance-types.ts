@@ -27,6 +27,17 @@ export type VoteSubmitResult = {
   txHash: string;
 };
 
+export type ProposeUpgradeRequestResult = {
+  requestJson: string;
+  requestId: string;
+  expectedPayloadHash: string;
+  signNonce: number;
+  signBlockNumber: number;
+  eligibleTotal: number;
+  snapshotNonce: string;
+  snapshotSignature: string;
+};
+
 // ── 投票状态 ──
 
 export type UserVoteStatus = {

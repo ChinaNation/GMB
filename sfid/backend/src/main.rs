@@ -25,6 +25,7 @@ use zeroize::Zeroizing;
 mod app_core;
 mod business;
 mod chain;
+mod indexer;
 #[path = "key-admins/mod.rs"]
 mod key_admins;
 mod login;
@@ -669,6 +670,7 @@ fn main() {
         .expect("build tokio runtime");
     runtime.block_on(async move {
         tokio::spawn(bind_callback_worker(state.clone()));
+        tokio::spawn(indexer::indexer_worker(state.store.backend.clone()));
 
         let auth_routes = Router::new()
             .route("/api/v1/admin/auth/check", get(login::admin_auth_check))
@@ -847,6 +849,10 @@ fn main() {
             .route(
                 "/api/v1/app/bind/request",
                 post(chain::app_api::app_bind_request),
+            )
+            .route(
+                "/api/v1/app/wallet/:address/transactions",
+                get(indexer::api::wallet_transactions),
             );
 
         let app_state = state.clone();

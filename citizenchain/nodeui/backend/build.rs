@@ -2,8 +2,11 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
-    // 始终尝试编译链节点（cargo 自身有增量编译缓存，未改动时秒级完成）
-    build_chain_node();
+    // CI 中先单独编译 node 并准备 sidecar，再用 SKIP_NODE_BUILD=1 cargo tauri build
+    // 避免 tauri build 过程中重复编译 node。
+    if std::env::var("SKIP_NODE_BUILD").is_err() {
+        build_chain_node();
+    }
     ensure_frontend_dist_dir();
     tauri_build::build();
 }

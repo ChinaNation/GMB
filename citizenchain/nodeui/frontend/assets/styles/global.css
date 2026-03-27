@@ -794,8 +794,8 @@ select option:checked {
 }
 
 .status-3 {
-  background: #fef3c7;
-  color: #92400e;
+  background: #d1fae5;
+  color: #065f46;
 }
 
 .proposal-card-tags {
@@ -1541,4 +1541,67 @@ select option:checked {
   word-break: break-all;
   background: transparent;
   padding: 0;
+}
+
+/* ── Runtime 升级提案页 ── */
+
+.upgrade-proposal-hint {
+  font-size: 13px;
+  color: #6b7280;
+  margin: -4px 0 12px;
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border-left: 3px solid var(--primary);
+  border-radius: 0 6px 6px 0;
+}
+
+.upgrade-file-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.upgrade-file-button {
+  padding: 7px 16px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  min-width: auto;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.upgrade-file-button:hover:not(:disabled) {
+  background: rgba(0, 140, 180, 0.08);
+}
+
+.upgrade-file-button:disabled {
+  border-color: #d1d5db;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.upgrade-file-name {
+  font-size: 13px;
+  color: #4b5563;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upgrade-no-wallet {
+  font-size: 13px;
+  color: #dc2626;
+  margin: 4px 0 0;
+}
+
+.upgrade-done-note {
+  font-size: 13px;
+  color: #6b7280;
+  text-align: center;
+  margin: 0 0 12px;
 }

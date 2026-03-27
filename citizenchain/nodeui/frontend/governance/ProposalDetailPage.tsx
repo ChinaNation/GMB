@@ -337,7 +337,7 @@ function stageLabel(stage: number): string {
   switch (stage) { case 0: return '内部阶段'; case 1: return '联合阶段'; case 2: return '公民阶段'; default: return '未知'; }
 }
 function statusLabel(status: number): string {
-  switch (status) { case 0: return '投票中'; case 1: return '已通过'; case 2: return '已否决'; case 3: return '执行失败'; default: return '未知'; }
+  switch (status) { case 0: return '投票中'; case 1: return '已通过'; case 2: return '已否决'; case 3: return '已执行'; default: return '未知'; }
 }
 function orgTypeLabel(orgType: number): string {
   switch (orgType) { case 0: return '国储会'; case 1: return '省储会'; case 2: return '省储行'; default: return '未知'; }

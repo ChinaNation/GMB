@@ -22,7 +22,7 @@ env:
 
 jobs:
   build-windows:
-    name: 编译 node + nodeui (Windows)
+    name: 打包 公民链.exe (Windows)
     runs-on: windows-latest
     steps:
       - name: 拉取代码
@@ -70,26 +70,48 @@ jobs:
         working-directory: citizenchain
         run: cargo build --release -p node
 
+      - name: 准备 sidecar
+        shell: pwsh
+        run: |
+          $backendDir = "citizenchain/nodeui/backend"
+          $binDir = "$backendDir/binaries"
+          $nodeBin = "citizenchain/target/release/node.exe"
+          $targetTriple = (rustc -vV | Select-String 'host:').ToString().Split(' ')[1]
+
+          New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+          Copy-Item $nodeBin "$binDir/citizenchain-node.exe"
+          Copy-Item $nodeBin "$binDir/citizenchain-node-${targetTriple}.exe"
+          $hash = (Get-FileHash "$binDir/citizenchain-node.exe" -Algorithm SHA256).Hash.ToLower()
+          Set-Content "$binDir/citizenchain-node.sha256" $hash
+
+          Write-Host "sidecar 已准备:"
+          Get-ChildItem $binDir
+
       - name: 安装前端依赖并构建
         run: |
           npm --prefix citizenchain/nodeui/frontend ci
           npm --prefix citizenchain/nodeui/frontend run build
 
-      - name: 编译 nodeui backend
-        run: cargo build --release --manifest-path citizenchain/nodeui/backend/Cargo.toml
+      - name: 安装 Tauri CLI
+        run: cargo install tauri-cli --locked
 
-      - name: 上传 node 二进制
+      - name: Tauri 打包
+        working-directory: citizenchain/nodeui/backend
+        env:
+          SKIP_NODE_BUILD: "1"
+        run: cargo tauri build --ci
+
+      - name: 重命名产物
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path "citizenchain/nodeui/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
+          Copy-Item $exe.FullName "公民链.exe"
+          Write-Host "产出: 公民链.exe ($([math]::Round($exe.Length / 1MB, 1)) MB)"
+
+      - name: 上传 公民链.exe
         uses: actions/upload-artifact@v4
         with:
-          name: citizenchain-node-windows
-          path: citizenchain/target/release/node.exe
-          retention-days: 30
-          overwrite: true
-
-      - name: 上传 nodeui 二进制
-        uses: actions/upload-artifact@v4
-        with:
-          name: citizenchain-nodeui-windows
-          path: citizenchain/nodeui/target/release/nodeui-desktop-shell.exe
+          name: 公民链-windows
+          path: 公民链.exe
           retention-days: 30
           overwrite: true

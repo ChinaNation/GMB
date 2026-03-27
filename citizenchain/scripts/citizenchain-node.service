@@ -9,7 +9,8 @@ ExecStart=/opt/citizenchain/node \
   --base-path /opt/citizenchain/data \
   --node-key-file /opt/citizenchain/data/node-key/secret_ed25519 \
   --rpc-port 9944 \
-  --rpc-methods Unsafe \
+  --rpc-external \
+  --rpc-methods Safe \
   --rpc-cors all \
   --no-prometheus \
   --state-pruning archive \

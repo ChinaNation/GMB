@@ -8,6 +8,7 @@ import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateProposalPage } from './CreateProposalPage';
 import { ColdWalletManager } from './ColdWalletManager';
 import { DeveloperUpgradePage } from './DeveloperUpgradePage';
+import { RuntimeUpgradeProposalPage } from './RuntimeUpgradeProposalPage';
 import type { AdminWalletMatch } from './governance-types';
 
 /// 国储会 shenfenId（只有 1 个，直接进详情）。
@@ -22,7 +23,8 @@ type GovernanceView =
   | { page: 'dev-upgrade' }
   | { page: 'institution-detail'; shenfenId: string; backTab: SubTab }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; shenfenId?: string; backTab: SubTab }
-  | { page: 'create-proposal'; shenfenId: string; orgType: number; institutionName: string; duoqianAddress: string; adminWallets: AdminWalletMatch[]; backTab: SubTab };
+  | { page: 'create-proposal'; shenfenId: string; orgType: number; institutionName: string; duoqianAddress: string; adminWallets: AdminWalletMatch[]; backTab: SubTab }
+  | { page: 'propose-upgrade'; adminWallets: AdminWalletMatch[]; backTab: SubTab };
 
 type SubTab = 'proposals' | 'nrc' | 'prc' | 'prb' | 'wallets' | 'dev-upgrade';
 
@@ -53,6 +55,17 @@ export function GovernanceSection() {
         orgType={view.orgType}
         institutionName={view.institutionName}
         duoqianAddress={view.duoqianAddress}
+        adminWallets={view.adminWallets}
+        onBack={() => setView({ page: view.backTab })}
+        onSuccess={() => setView({ page: view.backTab })}
+      />
+    );
+  }
+
+  // Runtime 升级提案页
+  if (view.page === 'propose-upgrade') {
+    return (
+      <RuntimeUpgradeProposalPage
         adminWallets={view.adminWallets}
         onBack={() => setView({ page: view.backTab })}
         onSuccess={() => setView({ page: view.backTab })}
@@ -117,6 +130,9 @@ export function GovernanceSection() {
           }
           onCreateProposal={(sid, orgType, name, duoqian, aw) =>
             handleCreateProposal(sid, orgType, name, duoqian, aw, 'nrc')
+          }
+          onCreateRuntimeUpgrade={(aw) =>
+            setView({ page: 'propose-upgrade', adminWallets: aw, backTab: 'nrc' })
           }
         />
       )}

@@ -9,6 +9,8 @@ import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_service.dart';
+import 'package:wuminapp_mobile/wallet/capabilities/api_client.dart';
+import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
@@ -41,6 +43,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   /// 来源：primitives::core_const::ACCOUNT_EXISTENTIAL_DEPOSIT = 111
   static const double _edYuan = 1.11;
   final OnchainTradeService _tradeService = OnchainTradeService();
+  final ApiClient _api = ApiClient();
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   static const List<String> _symbols = ['GMB'];
@@ -50,8 +53,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   bool _loadingWallet = true;
   bool _submitting = false;
   bool _syncing = false;
-  DateTime? _lastSyncedAt;
-  List<OnchainTxRecord> _records = <OnchainTxRecord>[];
+  /// 内存中的 pending 交易（刚提交，SFID 尚未索引到）。
+  final List<OnchainTxRecord> _pendingRecords = [];
   Timer? _syncTimer;
 
   @override
@@ -83,25 +86,27 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   Future<void> _reloadRecords({
     bool syncPending = false,
   }) async {
-    if (_syncing) {
-      return;
-    }
+    if (_syncing || _currentWallet == null || _pendingRecords.isEmpty) return;
     _syncing = true;
-    List<OnchainTxRecord> records = const <OnchainTxRecord>[];
     try {
-      records = syncPending
-          ? await _tradeService.refreshPendingRecords()
-          : await _tradeService.listRecentRecords();
+      final page = await _api.fetchWalletTransactions(
+        _currentWallet!.address,
+        limit: 10,
+      );
+      if (!mounted) return;
+      // 移除已被 SFID 索引到的 pending 记录
+      _pendingRecords.removeWhere((p) =>
+          page.records.any((s) =>
+              s.txType == 'transfer' &&
+              s.fromAddress == p.fromAddress &&
+              s.toAddress == p.toAddress &&
+              (s.amountYuan - p.amount).abs() < 0.001));
+      if (mounted) setState(() {});
+    } catch (_) {
+      // 加载失败静默忽略
     } finally {
       _syncing = false;
     }
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _records = records;
-      _lastSyncedAt = DateTime.now();
-    });
   }
 
   Future<void> _reloadWallet() async {
@@ -142,11 +147,11 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   }
 
   Future<void> _openTradeRecordsPage() async {
+    if (_currentWallet == null) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => TradeRecordsPage(
-          initialRecords: _records,
-          initialLastSyncedAt: _lastSyncedAt,
+        builder: (_) => TransactionHistoryPage(
+          walletAddress: _currentWallet!.address,
         ),
       ),
     );
@@ -340,12 +345,13 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       if (!mounted) {
         return;
       }
+      _pendingRecords.insert(0, record);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('签名成功，交易已发送，tx=${record.txHash}')));
       _toController.clear();
       _amountController.clear();
-      await _reloadRecords(syncPending: true);
+      await _reloadRecords();
     } on WalletAuthException catch (e) {
       if (!mounted) {
         return;
@@ -391,7 +397,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   }
 
   int _countByStatus(OnchainTxStatus status) {
-    return _records.where((it) => it.status == status).length;
+    return _pendingRecords.where((it) => it.status == status).length;
   }
 
   Widget _buildSubmitCard() {
@@ -689,392 +695,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   }
 }
 
-class TradeRecordsPage extends StatefulWidget {
-  const TradeRecordsPage({
-    super.key,
-    required this.initialRecords,
-    this.initialLastSyncedAt,
-  });
-
-  final List<OnchainTxRecord> initialRecords;
-  final DateTime? initialLastSyncedAt;
-
-  @override
-  State<TradeRecordsPage> createState() => _TradeRecordsPageState();
-}
-
-class _TradeRecordsPageState extends State<TradeRecordsPage> {
-  static const Color _brandPrimaryColor = Color(0xFF007A74);
-  static const Color _cardBgColor = Color(0xFFF5F5F5);
-  final OnchainTradeService _tradeService = OnchainTradeService();
-
-  bool _loading = true;
-  bool _syncing = false;
-  DateTime? _lastSyncedAt;
-  OnchainTxStatus? _statusFilter;
-  List<OnchainTxRecord> _records = <OnchainTxRecord>[];
-
-  @override
-  void initState() {
-    super.initState();
-    _records = widget.initialRecords;
-    _lastSyncedAt = widget.initialLastSyncedAt;
-    _loading = widget.initialRecords.isEmpty;
-    _reloadRecords(syncPending: true, silent: widget.initialRecords.isNotEmpty);
-  }
-
-  Future<void> _reloadRecords({
-    bool syncPending = false,
-    bool silent = false,
-  }) async {
-    if (_syncing) {
-      return;
-    }
-    if (!silent && mounted) {
-      setState(() {
-        _loading = true;
-      });
-    }
-    _syncing = true;
-    List<OnchainTxRecord> records = const <OnchainTxRecord>[];
-    try {
-      records = syncPending
-          ? await _tradeService.refreshPendingRecords()
-          : await _tradeService.listRecentRecords();
-    } finally {
-      _syncing = false;
-    }
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _records = records;
-      _lastSyncedAt = DateTime.now();
-      _loading = false;
-    });
-  }
-
-  List<OnchainTxRecord> _filteredRecords() {
-    if (_statusFilter == null) {
-      return _records;
-    }
-    return _records.where((it) => it.status == _statusFilter).toList();
-  }
-
-  String _statusLabel(OnchainTxStatus status) {
-    switch (status) {
-      case OnchainTxStatus.pending:
-        return '待确认';
-      case OnchainTxStatus.confirmed:
-        return '已确认';
-      case OnchainTxStatus.failed:
-        return '失败';
-    }
-  }
-
-  Color _statusColor(OnchainTxStatus status) {
-    switch (status) {
-      case OnchainTxStatus.pending:
-        return Colors.orange.shade700;
-      case OnchainTxStatus.confirmed:
-        return Colors.green.shade700;
-      case OnchainTxStatus.failed:
-        return Colors.red.shade700;
-    }
-  }
-
-  String _shortAddress(String address) {
-    if (address.length <= 14) {
-      return address;
-    }
-    return '${address.substring(0, 8)}...${address.substring(address.length - 6)}';
-  }
-
-  String _formatTime(DateTime dt) {
-    final y = dt.year.toString().padLeft(4, '0');
-    final m = dt.month.toString().padLeft(2, '0');
-    final d = dt.day.toString().padLeft(2, '0');
-    final h = dt.hour.toString().padLeft(2, '0');
-    final min = dt.minute.toString().padLeft(2, '0');
-    final s = dt.second.toString().padLeft(2, '0');
-    return '$y-$m-$d $h:$min:$s';
-  }
-
-  Widget _buildFilterRow() {
-    final options = <(String, OnchainTxStatus?)>[
-      ('全部', null),
-      ('待确认', OnchainTxStatus.pending),
-      ('已确认', OnchainTxStatus.confirmed),
-      ('失败', OnchainTxStatus.failed),
-    ];
-    return Wrap(
-      spacing: 8,
-      children: [
-        for (final (label, value) in options)
-          ChoiceChip(
-            selected: _statusFilter == value,
-            selectedColor: _brandPrimaryColor,
-            label: Text(
-              label,
-              style: TextStyle(
-                color: _statusFilter == value ? Colors.white : Colors.black87,
-                fontWeight:
-                    _statusFilter == value ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-            onSelected: (_) {
-              setState(() {
-                _statusFilter = value;
-              });
-            },
-          ),
-      ],
-    );
-  }
-
-  Widget _buildRecordsSection() {
-    if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    final records = _filteredRecords();
-    if (records.isEmpty) {
-      return const Card(
-        color: _cardBgColor,
-        child: Padding(
-          padding: EdgeInsets.all(12),
-          child: Text('暂无交易记录'),
-        ),
-      );
-    }
-
-    return Column(
-      children: [
-        for (final item in records)
-          Card(
-            color: _cardBgColor,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => TradeRecordDetailPage(record: item),
-                  ),
-                );
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${item.amount} ${item.symbol}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _statusColor(item.status)
-                                .withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            _statusLabel(item.status),
-                            style: TextStyle(
-                              color: _statusColor(item.status),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (item.estimatedFee != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          '手续费：${item.estimatedFee} ${item.symbol}',
-                          style: const TextStyle(
-                            color: Colors.black54,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                    Text('from: ${_shortAddress(item.fromAddress)}'),
-                    Text('to: ${_shortAddress(item.toAddress)}'),
-                    Text('tx: ${item.txHash}'),
-                    Text('time: ${_formatTime(item.createdAt)}'),
-                    if (item.failureReason != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'error: ${item.failureReason}',
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('交易记录'),
-        centerTitle: true,
-      ),
-      body: RefreshIndicator(
-        onRefresh: () => _reloadRecords(syncPending: true),
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          children: [
-            _buildFilterRow(),
-            if (_lastSyncedAt != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                '最近同步：${_formatTime(_lastSyncedAt!)}',
-                style: const TextStyle(color: Colors.black54, fontSize: 12),
-              ),
-            ],
-            const SizedBox(height: 8),
-            _buildRecordsSection(),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class TradeRecordDetailPage extends StatelessWidget {
-  const TradeRecordDetailPage({
-    super.key,
-    required this.record,
-  });
-
-  final OnchainTxRecord record;
-
-  String _statusLabel(OnchainTxStatus status) {
-    switch (status) {
-      case OnchainTxStatus.pending:
-        return '待确认';
-      case OnchainTxStatus.confirmed:
-        return '已确认';
-      case OnchainTxStatus.failed:
-        return '失败';
-    }
-  }
-
-  Color _statusColor(OnchainTxStatus status) {
-    switch (status) {
-      case OnchainTxStatus.pending:
-        return Colors.orange.shade700;
-      case OnchainTxStatus.confirmed:
-        return Colors.green.shade700;
-      case OnchainTxStatus.failed:
-        return Colors.red.shade700;
-    }
-  }
-
-  String _formatTime(DateTime dt) {
-    final y = dt.year.toString().padLeft(4, '0');
-    final m = dt.month.toString().padLeft(2, '0');
-    final d = dt.day.toString().padLeft(2, '0');
-    final h = dt.hour.toString().padLeft(2, '0');
-    final min = dt.minute.toString().padLeft(2, '0');
-    final s = dt.second.toString().padLeft(2, '0');
-    return '$y-$m-$d $h:$min:$s';
-  }
-
-  Widget _buildDetailRow(String label, String value, {Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.black54,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          SelectableText(
-            value,
-            style: TextStyle(
-              color: color ?? Colors.black87,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('交易记录详情'),
-        centerTitle: true,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildDetailRow('金额', '${record.amount} ${record.symbol}'),
-                  if (record.estimatedFee != null)
-                    _buildDetailRow(
-                      '手续费',
-                      '${record.estimatedFee} ${record.symbol}',
-                    ),
-                  _buildDetailRow(
-                    '状态',
-                    _statusLabel(record.status),
-                    color: _statusColor(record.status),
-                  ),
-                  _buildDetailRow('付款地址', record.fromAddress),
-                  _buildDetailRow('收款地址', record.toAddress),
-                  _buildDetailRow('交易哈希', record.txHash),
-                  _buildDetailRow('创建时间', _formatTime(record.createdAt)),
-                  if (record.failureReason != null)
-                    _buildDetailRow(
-                      '失败原因',
-                      record.failureReason!,
-                      color: Colors.red,
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 String _toHex(List<int> bytes) {
   const chars = '0123456789abcdef';

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:wuminapp_mobile/wallet/models/server_tx_record.dart';
 
 class HealthStatus {
   const HealthStatus({
@@ -314,6 +315,58 @@ class ApiClient {
       voteNonce: (data['vote_nonce']?.toString() ?? '').trim(),
       signature: (data['signature']?.toString() ?? '').trim(),
     );
+  }
+
+  /// 获取钱包交易记录（来自 SFID indexer）。
+  ///
+  /// 支持游标分页：传入 [beforeId] 获取更早的记录。
+  Future<ServerTxPage> fetchWalletTransactions(
+    String address, {
+    int limit = 20,
+    int? beforeId,
+    String? txType,
+  }) async {
+    final params = <String, String>{
+      'limit': limit.toString(),
+    };
+    if (beforeId != null) params['before_id'] = beforeId.toString();
+    if (txType != null && txType.isNotEmpty) params['tx_type'] = txType;
+
+    final uri = Uri.parse(
+      '$_baseUrl/api/v1/app/wallet/${Uri.encodeComponent(address)}/transactions',
+    ).replace(queryParameters: params);
+
+    http.Response response;
+    try {
+      response = await http.get(uri, headers: _headers());
+    } on SocketException catch (_) {
+      if ((Platform.isAndroid || Platform.isIOS) &&
+          _baseUrl.contains('127.0.0.1')) {
+        throw Exception(
+          '当前使用$_baseUrl，手机真机无法访问本机回环地址。请用 --dart-define=WUMINAPP_API_BASE_URL=http://<电脑局域网IP>:8787',
+        );
+      }
+      rethrow;
+    }
+    if (response.statusCode != 200) {
+      throw Exception('wallet transactions failed: ${response.statusCode}');
+    }
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final code = payload['code'] as int? ?? -1;
+    final message = payload['message']?.toString() ?? 'unknown';
+    if (code != 0) {
+      throw Exception(
+        'wallet transactions rejected: code=$code message=$message',
+      );
+    }
+
+    final data = payload['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('wallet transactions invalid response: missing data');
+    }
+
+    return ServerTxPage.fromJson(data);
   }
 }
 
