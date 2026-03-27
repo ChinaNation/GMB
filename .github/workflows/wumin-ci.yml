@@ -68,7 +68,7 @@ jobs:
           WUMIN_UPLOAD_KEYSTORE_BASE64: ${{ secrets.WUMIN_UPLOAD_KEYSTORE_BASE64 }}
         run: |
           test -n "$WUMIN_UPLOAD_KEYSTORE_BASE64"
-          printf '%s' "$WUMIN_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/wumin/android/wumin-release.jks"
+          printf '%s' "$WUMIN_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/wumin/android/wumin-ci.jks"
 
       - name: 生成 key.properties
         working-directory: wumin/android
@@ -84,7 +84,7 @@ jobs:
           storePassword=$WUMIN_KEYSTORE_PASSWORD
           keyPassword=$WUMIN_KEY_PASSWORD
           keyAlias=$WUMIN_KEY_ALIAS
-          storeFile=$GITHUB_WORKSPACE/wumin/android/wumin-release.jks
+          storeFile=$GITHUB_WORKSPACE/wumin/android/wumin-ci.jks
           EOF
 
       - name: 分析代码
