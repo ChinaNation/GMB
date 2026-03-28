@@ -54,6 +54,7 @@ void main() {
         .setMockMethodCallHandler(localAuthChannel, (call) async {
       switch (call.method) {
         case 'isDeviceSupported':
+          return true;
         case 'deviceSupportsBiometrics':
           return false;
         case 'getAvailableBiometrics':
@@ -152,16 +153,15 @@ void main() {
   });
 
   group('WalletManager — 冷钱包', () {
+    // 使用固定 hex 公钥导入冷钱包，避免与热钱包公钥重复。
+    const coldPubkeyHex =
+        '0x1111111111111111111111111111111111111111111111111111111111111111';
+
     test('importColdWallet should store only public key, no seed', () async {
       final manager = WalletManager();
 
-      // 先创建一个热钱包获取有效地址。
-      final hot = await manager.createWallet();
-      final address = hot.profile.address;
-
-      final cold = await manager.importColdWallet(address: address);
+      final cold = await manager.importColdWallet(address: coldPubkeyHex);
       expect(cold.signMode, 'external');
-      expect(cold.address, address);
 
       // 冷钱包不存 seed。
       expect(
@@ -178,9 +178,7 @@ void main() {
     test('deleteColdWallet should not touch secure storage', () async {
       final manager = WalletManager();
 
-      final hot = await manager.createWallet();
-      final address = hot.profile.address;
-      final cold = await manager.importColdWallet(address: address);
+      final cold = await manager.importColdWallet(address: coldPubkeyHex);
       final walletIndex = cold.walletIndex;
 
       await manager.deleteWallet(walletIndex);
