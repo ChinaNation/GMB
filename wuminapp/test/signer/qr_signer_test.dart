@@ -21,13 +21,18 @@ void main() {
 
     final signer = QrSigner();
 
+    // request_id 必须满足 16-128 字符，使用 generateRequestId 或足够长的固定 ID。
+    String longId(String prefix) =>
+        '$prefix-${List.filled(16, 'a').join()}';
+
     test('protocol should be V2', () {
       expect(QrSigner.protocol, 'WUMIN_SIGN_V1.0.0');
     });
 
     test('build + parse request should round-trip with display', () {
+      final requestId = longId('req-onchain');
       final request = signer.buildRequest(
-        requestId: 'req-onchain-1',
+        requestId: requestId,
         account: account,
         pubkey: pubkey,
         payloadHex: payload,
@@ -37,7 +42,7 @@ void main() {
       final parsed = signer.parseRequest(encoded);
 
       expect(parsed.proto, 'WUMIN_SIGN_V1.0.0');
-      expect(parsed.requestId, 'req-onchain-1');
+      expect(parsed.requestId, requestId);
       expect(parsed.account, account);
       expect(parsed.pubkey, pubkey);
       expect(parsed.payloadHex, payload);
@@ -46,10 +51,11 @@ void main() {
     });
 
     test('parseRequest should reject missing display', () {
+      final reqId = longId('req');
       // 手动构造缺少 display 的 JSON
       final json =
           '{"proto":"WUMIN_SIGN_V1.0.0","type":"sign_request",'
-          '"request_id":"req-1","account":"$account","pubkey":"$pubkey",'
+          '"request_id":"$reqId","account":"$account","pubkey":"$pubkey",'
           '"sig_alg":"sr25519","payload_hex":"$payload",'
           '"issued_at":${DateTime.now().millisecondsSinceEpoch ~/ 1000},'
           '"expires_at":${DateTime.now().millisecondsSinceEpoch ~/ 1000 + 90}}';
@@ -61,12 +67,13 @@ void main() {
     });
 
     test('parseRequest should reject display without action', () {
+      final requestId = longId('req-no-action');
       final request = signer.buildRequest(
-        requestId: 'req-no-action',
+        requestId: requestId,
         account: account,
         pubkey: pubkey,
         payloadHex: payload,
-        display: {'summary': '摘要', 'fields': {}},
+        display: {'summary': '摘要', 'fields': []},
       );
       // buildRequest 不校验 display，parseRequest 才校验
       final encoded = signer.encodeRequest(request);
@@ -84,8 +91,9 @@ void main() {
 
     test('parseRequest should reject expired request', () {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final requestId = longId('req-expired');
       final expired = signer.buildRequest(
-        requestId: 'req-expired',
+        requestId: requestId,
         account: account,
         pubkey: pubkey,
         payloadHex: payload,
@@ -108,10 +116,11 @@ void main() {
 
     test('parseResponse should round-trip with payloadHash', () {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final requestId = longId('req-match');
       final payloadHash = QrSigner.computePayloadHash(payload);
       final response = QrSignResponse(
         proto: QrSigner.protocol,
-        requestId: 'req-match',
+        requestId: requestId,
         pubkey: pubkey,
         sigAlg: 'sr25519',
         signature: signature,
@@ -122,19 +131,21 @@ void main() {
       final encoded = signer.encodeResponse(response);
       final parsed = signer.parseResponse(
         encoded,
-        expectedRequestId: 'req-match',
+        expectedRequestId: requestId,
         expectedPayloadHash: payloadHash,
       );
-      expect(parsed.requestId, 'req-match');
+      expect(parsed.requestId, requestId);
       expect(parsed.payloadHash, payloadHash);
     });
 
     test('parseResponse should reject mismatched request id', () {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final requestId = longId('req-other');
+      final expectedId = longId('req-expected');
       final payloadHash = QrSigner.computePayloadHash(payload);
       final response = QrSignResponse(
         proto: QrSigner.protocol,
-        requestId: 'req-other',
+        requestId: requestId,
         pubkey: pubkey,
         sigAlg: 'sr25519',
         signature: signature,
@@ -146,7 +157,7 @@ void main() {
       expect(
         () => signer.parseResponse(
           encoded,
-          expectedRequestId: 'req-expected',
+          expectedRequestId: expectedId,
         ),
         throwsA(
           isA<QrSignException>().having(
@@ -160,9 +171,10 @@ void main() {
 
     test('parseResponse should reject mismatched payloadHash', () {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final requestId = longId('req-hash');
       final response = QrSignResponse(
         proto: QrSigner.protocol,
-        requestId: 'req-hash',
+        requestId: requestId,
         pubkey: pubkey,
         sigAlg: 'sr25519',
         signature: signature,
@@ -174,7 +186,7 @@ void main() {
       expect(
         () => signer.parseResponse(
           encoded,
-          expectedRequestId: 'req-hash',
+          expectedRequestId: requestId,
           expectedPayloadHash: QrSigner.computePayloadHash('0xbeef'),
         ),
         throwsA(
