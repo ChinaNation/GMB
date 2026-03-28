@@ -335,16 +335,6 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     return value;
   }
 
-  /// 从 display.fields（List 格式）中按 key 查找 value。
-  static String? _findFieldValue(List<dynamic> fields, String key) {
-    for (final field in fields) {
-      if (field is Map && field['key']?.toString() == key) {
-        return field['value']?.toString();
-      }
-    }
-    return null;
-  }
-
   /// 从 display.fields（List 格式）中按 key 查找 label。
   static String? _findFieldLabel(List<dynamic> fields, String key) {
     for (final field in fields) {
