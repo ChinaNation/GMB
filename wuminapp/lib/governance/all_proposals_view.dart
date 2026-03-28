@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../util/amount_format.dart';
 import '../rpc/chain_event_subscription.dart';
 import '../wallet/core/wallet_manager.dart';
+import 'duoqian_manage_detail_page.dart';
+import 'duoqian_manage_models.dart';
 import 'institution_admin_service.dart';
 import 'institution_data.dart';
 import 'proposal_cache.dart';
@@ -348,6 +350,8 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     final statusLabel = _statusLabel(meta.status);
     final detail = item.proposal.transferDetail;
     final upgradeDetail = item.proposal.runtimeUpgradeDetail;
+    final createDqDetail = item.proposal.createDuoqianDetail;
+    final closeDqDetail = item.proposal.closeDuoqianDetail;
 
     return Card(
       elevation: 0,
@@ -371,7 +375,8 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                   color: statusColor.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(_proposalIcon(detail, upgradeDetail),
+                child: Icon(
+                    _proposalIcon(detail, upgradeDetail, createDqDetail, closeDqDetail),
                     size: 18, color: statusColor),
               ),
               const SizedBox(width: 12),
@@ -414,9 +419,13 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                           ? '转账 ${AmountFormat.format(detail.amountYuan, symbol: '')} 元'
                           : upgradeDetail != null
                               ? 'Runtime 升级'
-                              : meta.kind == 1
-                                  ? '联合投票提案'
-                                  : '提案 ${_kindLabel(meta.kind)}',
+                              : createDqDetail != null
+                                  ? '创建多签 · ${createDqDetail.adminCount} 管理员'
+                                  : closeDqDetail != null
+                                      ? '关闭多签'
+                                      : meta.kind == 1
+                                          ? '联合投票提案'
+                                          : '提案 ${_kindLabel(meta.kind)}',
                       style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ],
@@ -495,9 +504,15 @@ class _AllProposalsViewState extends State<AllProposalsView> {
 
   /// 根据提案类型返回图标。
   IconData _proposalIcon(
-      TransferProposalInfo? detail, RuntimeUpgradeProposalInfo? upgradeDetail) {
+    TransferProposalInfo? detail,
+    RuntimeUpgradeProposalInfo? upgradeDetail, [
+    CreateDuoqianProposalInfo? createDqDetail,
+    CloseDuoqianProposalInfo? closeDqDetail,
+  ]) {
     if (detail != null) return Icons.send_outlined; // 转账
     if (upgradeDetail != null) return Icons.arrow_upward; // Runtime 升级
+    if (createDqDetail != null) return Icons.group_add; // 创建多签
+    if (closeDqDetail != null) return Icons.group_remove; // 关闭多签
     return Icons.description_outlined; // 其他/未知
   }
 
@@ -531,6 +546,19 @@ class _AllProposalsViewState extends State<AllProposalsView> {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => TransferProposalDetailPage(
+            institution: inst,
+            proposalId: proposalId,
+            proposalContext: item.context,
+          ),
+        ),
+      );
+    } else if ((item.proposal.createDuoqianDetail != null ||
+            item.proposal.closeDuoqianDetail != null) &&
+        inst != null) {
+      // 多签管理提案
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => DuoqianManageDetailPage(
             institution: inst,
             proposalId: proposalId,
             proposalContext: item.context,

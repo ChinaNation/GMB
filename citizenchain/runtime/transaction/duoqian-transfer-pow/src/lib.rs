@@ -452,7 +452,7 @@ pub mod pallet {
                 ExistenceRequirement::KeepAlive,
             )
             .map_err(|_| Error::<T>::InsufficientBalance)?;
-            T::FeeRouter::on_unbalanced(fee_imbalance);
+            <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
             // ── 标记为已执行，防止双重执行 ──
             voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;

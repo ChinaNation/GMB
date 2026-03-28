@@ -16,6 +16,7 @@ import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/user/user.dart' show ContactBookPage;
 import 'package:wuminapp_mobile/user/user_service.dart' show UserContact;
+import 'package:wuminapp_mobile/trade/duoqian/duoqian_trade_page.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
 
@@ -637,8 +638,10 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                       color: _cardBgColor,
                       child: InkWell(
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('多签交易功能开发中')),
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const DuoqianTradePage(),
+                            ),
                           );
                         },
                         borderRadius: BorderRadius.circular(12),

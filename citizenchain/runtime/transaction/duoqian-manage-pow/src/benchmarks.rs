@@ -13,7 +13,7 @@ use voting_engine_system::InternalVoteEngine;
 use crate::{
     pallet::{
         AddressRegisteredSfid, DuoqianAccounts, DuoqianAdminsOf, RegisterNonceOf,
-        RegisterSignatureOf, SfidIdOf, SfidRegisteredAddress,
+        RegisterSignatureOf, SfidIdOf, SfidNameOf, SfidRegisteredAddress,
     },
     BalanceOf, Call, Config, DuoqianAddressValidator, DuoqianReservedAddressChecker, Pallet,
     ProtectedSourceChecker,
@@ -51,10 +51,18 @@ fn find_safe_sfid<T: Config>() -> Result<(SfidIdOf<T>, T::AccountId), BenchmarkE
     ))
 }
 
+fn bench_name<T: Config>() -> Result<SfidNameOf<T>, BenchmarkError> {
+    b"Benchmark Institution"
+        .to_vec()
+        .try_into()
+        .map_err(|_| BenchmarkError::Stop("benchmark name should fit"))
+}
+
 fn register_institution<T: Config>(
     relayer: &T::AccountId,
     sfid_id: &SfidIdOf<T>,
 ) -> Result<T::AccountId, BenchmarkError> {
+    let name = bench_name::<T>()?;
     let register_nonce: RegisterNonceOf<T> = b"bench-register-nonce"
         .to_vec()
         .try_into()
@@ -65,6 +73,7 @@ fn register_institution<T: Config>(
     Pallet::<T>::register_sfid_institution(
         RawOrigin::Signed(relayer.clone()).into(),
         sfid_id.clone(),
+        name,
         register_nonce,
         signature,
     )?;
@@ -110,6 +119,7 @@ mod benchmarks {
         let relayer: T::AccountId = frame_benchmarking::account("relayer", 0, 0);
 
         let (sfid_id, duoqian_address) = find_safe_sfid::<T>()?;
+        let name = bench_name::<T>()?;
         let register_nonce: RegisterNonceOf<T> = b"bench-register-nonce"
             .to_vec()
             .try_into()
@@ -122,6 +132,7 @@ mod benchmarks {
         register_sfid_institution(
             RawOrigin::Signed(relayer.clone()),
             sfid_id.clone(),
+            name,
             register_nonce,
             signature,
         );

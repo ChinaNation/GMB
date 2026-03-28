@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../util/amount_format.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'admin_list_page.dart';
+import 'duoqian_manage_detail_page.dart';
 import 'institution_admin_service.dart';
 import 'institution_data.dart';
 import 'proposal_cache.dart';
@@ -428,6 +429,12 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     if (proposal.transferDetail != null) {
       return '转账提案 $proposalId';
     }
+    if (proposal.createDuoqianDetail != null) {
+      return '创建多签 $proposalId';
+    }
+    if (proposal.closeDuoqianDetail != null) {
+      return '关闭多签 $proposalId';
+    }
     if (proposal.runtimeUpgradeDetail != null) {
       return 'Runtime 升级 $proposalId';
     }
@@ -443,6 +450,13 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     if (transferDetail != null) {
       return '${AmountFormat.format(transferDetail.amountYuan, symbol: '')} 元 · $status';
     }
+    final createDetail = proposal.createDuoqianDetail;
+    if (createDetail != null) {
+      return '${createDetail.adminCount} 管理员 · 阈值 ${createDetail.threshold} · $status';
+    }
+    if (proposal.closeDuoqianDetail != null) {
+      return '关闭多签账户 · $status';
+    }
     if (proposal.runtimeUpgradeDetail != null) {
       return 'Runtime 升级 · $status';
     }
@@ -455,6 +469,12 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   IconData _proposalIcon(ProposalWithDetail proposal) {
     if (proposal.transferDetail != null) {
       return Icons.send_outlined;
+    }
+    if (proposal.createDuoqianDetail != null) {
+      return Icons.group_add;
+    }
+    if (proposal.closeDuoqianDetail != null) {
+      return Icons.group_remove;
     }
     if (proposal.runtimeUpgradeDetail != null) {
       return Icons.arrow_upward;
@@ -577,6 +597,17 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => TransferProposalDetailPage(
+            institution: widget.institution,
+            proposalId: proposalId,
+            proposalContext: ctx,
+          ),
+        ),
+      );
+    } else if (proposal.createDuoqianDetail != null ||
+        proposal.closeDuoqianDetail != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => DuoqianManageDetailPage(
             institution: widget.institution,
             proposalId: proposalId,
             proposalContext: ctx,

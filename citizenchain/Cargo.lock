@@ -2697,6 +2697,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "institution-asset-guard",
+ "onchain-transaction-pow",
  "pallet-balances",
  "parity-scale-codec",
  "scale-info",

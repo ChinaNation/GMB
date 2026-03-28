@@ -8,6 +8,8 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../rpc/chain_rpc.dart';
 import '../rpc/nonce_manager.dart';
+import 'duoqian_manage_models.dart';
+import 'duoqian_manage_service.dart';
 import 'institution_data.dart';
 import 'proposal_cache.dart';
 import 'runtime_upgrade_service.dart';
@@ -218,10 +220,29 @@ class TransferProposalService {
       // 尝试获取业务详情（ProposalData）
       TransferProposalInfo? transferDetail;
       RuntimeUpgradeProposalInfo? runtimeUpgradeDetail;
+      CreateDuoqianProposalInfo? createDuoqianDetail;
+      CloseDuoqianProposalInfo? closeDuoqianDetail;
       if (meta.kind == 0) {
-        // 内部投票提案 → 尝试解码为转账提案
+        // 内部投票提案 → 先尝试管理提案，再尝试转账提案
         try {
-          transferDetail = await fetchProposalAction(meta.proposalId);
+          final manageService = DuoqianManageService(chainRpc: _rpc);
+          final key = _buildStorageKey(
+            'VotingEngineSystem',
+            'ProposalData',
+            _u64ToLeBytes(meta.proposalId),
+          );
+          final raw = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+          if (raw != null && raw.isNotEmpty) {
+            final manageDetail =
+                manageService.decodeManageProposalData(meta.proposalId, raw);
+            if (manageDetail is CreateDuoqianProposalInfo) {
+              createDuoqianDetail = manageDetail;
+            } else if (manageDetail is CloseDuoqianProposalInfo) {
+              closeDuoqianDetail = manageDetail;
+            } else {
+              transferDetail = await fetchProposalAction(meta.proposalId);
+            }
+          }
         } catch (_) {}
       } else if (meta.kind == 1) {
         // 联合投票提案 → 尝试解码为 runtime 升级提案
@@ -236,6 +257,8 @@ class TransferProposalService {
         meta: meta,
         transferDetail: transferDetail?.copyWithStatus(meta.status),
         runtimeUpgradeDetail: runtimeUpgradeDetail,
+        createDuoqianDetail: createDuoqianDetail?.copyWithStatus(meta.status),
+        closeDuoqianDetail: closeDuoqianDetail?.copyWithStatus(meta.status),
       ));
     }
 
@@ -293,6 +316,8 @@ class TransferProposalService {
     final uncachedDetailIds = <int>[];
     final cachedTransferDetails = <int, TransferProposalInfo>{};
     final cachedRuntimeUpgradeDetails = <int, RuntimeUpgradeProposalInfo>{};
+    final cachedCreateDuoqianDetails = <int, CreateDuoqianProposalInfo>{};
+    final cachedCloseDuoqianDetails = <int, CloseDuoqianProposalInfo>{};
 
     for (final entry in cachedMetas.entries) {
       final meta = entry.value;
@@ -303,9 +328,20 @@ class TransferProposalService {
           continue;
         }
       } else {
-        final cachedDetail = ProposalCache.getTransferDetail(entry.key);
-        if (cachedDetail != null) {
-          cachedTransferDetails[entry.key] = cachedDetail;
+        // 内部投票提案：先查转账缓存，再查管理缓存
+        final cachedTransfer = ProposalCache.getTransferDetail(entry.key);
+        if (cachedTransfer != null) {
+          cachedTransferDetails[entry.key] = cachedTransfer;
+          continue;
+        }
+        final cachedCreate = ProposalCache.getCreateDuoqianDetail(entry.key);
+        if (cachedCreate != null) {
+          cachedCreateDuoqianDetails[entry.key] = cachedCreate;
+          continue;
+        }
+        final cachedClose = ProposalCache.getCloseDuoqianDetail(entry.key);
+        if (cachedClose != null) {
+          cachedCloseDuoqianDetails[entry.key] = cachedClose;
           continue;
         }
       }
@@ -316,6 +352,7 @@ class TransferProposalService {
     }
 
     if (uncachedDetailKeys.isNotEmpty) {
+      final manageService = DuoqianManageService(chainRpc: _rpc);
       final batchResult = await _rpc.fetchStorageBatch(uncachedDetailKeys);
       for (var i = 0; i < uncachedDetailIds.length; i++) {
         final id = uncachedDetailIds[i];
@@ -333,6 +370,21 @@ class TransferProposalService {
           }
           continue;
         }
+
+        // 内部投票提案：先尝试解码为多签管理提案，失败再尝试转账提案。
+        // 管理提案的 ProposalData 首字节（BoundedVec 内容）为 ACTION_CREATE(1) 或 ACTION_CLOSE(2)。
+        final manageDetail = manageService.decodeManageProposalData(id, raw);
+        if (manageDetail is CreateDuoqianProposalInfo) {
+          cachedCreateDuoqianDetails[id] = manageDetail;
+          ProposalCache.putCreateDuoqianDetail(id, manageDetail);
+          continue;
+        }
+        if (manageDetail is CloseDuoqianProposalInfo) {
+          cachedCloseDuoqianDetails[id] = manageDetail;
+          ProposalCache.putCloseDuoqianDetail(id, manageDetail);
+          continue;
+        }
+
         final transferDetail = _decodeProposalData(id, raw);
         if (transferDetail != null) {
           cachedTransferDetails[id] = transferDetail;
@@ -347,10 +399,14 @@ class TransferProposalService {
       if (meta == null) continue;
       final transferDetail = cachedTransferDetails[id];
       final runtimeUpgradeDetail = cachedRuntimeUpgradeDetails[id];
+      final createDuoqianDetail = cachedCreateDuoqianDetails[id];
+      final closeDuoqianDetail = cachedCloseDuoqianDetails[id];
       results.add(ProposalWithDetail(
         meta: meta,
         transferDetail: transferDetail?.copyWithStatus(meta.status),
         runtimeUpgradeDetail: runtimeUpgradeDetail,
+        createDuoqianDetail: createDuoqianDetail?.copyWithStatus(meta.status),
+        closeDuoqianDetail: closeDuoqianDetail?.copyWithStatus(meta.status),
       ));
     }
 
@@ -381,6 +437,19 @@ class TransferProposalService {
         final transferDetail = proposal.transferDetail;
         if (transferDetail != null &&
             _bytesEqual(transferDetail.institutionBytes, institutionBytes)) {
+          visibleProposals.add(proposal);
+          continue;
+        }
+        // 多签管理提案：通过 duoqianAddress 匹配（institutionBytes 前 32 字节）
+        final createDetail = proposal.createDuoqianDetail;
+        if (createDetail != null &&
+            _bytesEqual(createDetail.institutionBytes, institutionBytes)) {
+          visibleProposals.add(proposal);
+          continue;
+        }
+        final closeDetail = proposal.closeDuoqianDetail;
+        if (closeDetail != null &&
+            _bytesEqual(closeDetail.institutionBytes, institutionBytes)) {
           visibleProposals.add(proposal);
           continue;
         }
@@ -904,6 +973,8 @@ class ProposalWithDetail {
     required this.meta,
     this.transferDetail,
     this.runtimeUpgradeDetail,
+    this.createDuoqianDetail,
+    this.closeDuoqianDetail,
   });
 
   final ProposalMeta meta;
@@ -913,4 +984,10 @@ class ProposalWithDetail {
 
   /// Runtime 升级提案详情（非升级提案为 null）。
   final RuntimeUpgradeProposalInfo? runtimeUpgradeDetail;
+
+  /// 创建多签账户提案详情。
+  final CreateDuoqianProposalInfo? createDuoqianDetail;
+
+  /// 关闭多签账户提案详情。
+  final CloseDuoqianProposalInfo? closeDuoqianDetail;
 }

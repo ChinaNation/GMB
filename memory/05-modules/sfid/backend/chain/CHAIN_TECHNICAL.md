@@ -20,9 +20,9 @@
    - SFID 实际提供：`GET /api/v1/chain/voters/count` 返回人口快照签名；核心签名 payload 与链上 verifier 一致。
    - 对齐结论：已对齐；对链接口现固定返回 `genesis_hash`、`who`、`eligible_total`、`snapshot_nonce`、`signature`。
 4. 功能 4：机构 `sfid_id` 登记
-   - 链上需要：proof 型字段包 `("GMB_SFID_INSTITUTION_V1", genesis_hash, sfid_id, register_nonce)`，以及 extrinsic `register_sfid_institution(sfid_id, register_nonce, signature)`。
-   - SFID 实际提供：`super-admins` 模块在机构扫码录入成功后，生成 `genesis_hash + sfid_id + register_nonce + signature`，并用这组字段调用链上登记入口，同时在响应中回写 proof 字段与 `tx_hash/block_number`。
-   - 对齐结论：已对齐；功能 4 已从旧交易型口径切换为 proof 型口径。
+   - 链上需要：proof 型字段包 `("GMB_SFID_INSTITUTION_V2", genesis_hash, sfid_id, name, register_nonce)`，以及 extrinsic `register_sfid_institution(sfid_id, name, register_nonce, signature)`。V2 新增 `name` 参数（机构名称，BoundedVec<u8, 128>），纳入签名载荷防篡改。创建/注销多签账户时按 0.1%（最低 10 分）收取手续费，走 FeeRouter 分账。
+   - SFID 实际提供：`super-admins` 模块在机构扫码录入成功后，生成 `genesis_hash + sfid_id + name + register_nonce + signature`，并用这组字段调用链上登记入口，同时在响应中回写 proof 字段与 `tx_hash/block_number`。
+   - 对齐结论：已对齐（V2 升级待下次 runtime 升级生效）。
 5. 功能 5：SFID 验签主备账户管理
    - 链上需要：创世三账户 `main + backup_1 + backup_2`，以及标准 extrinsic `rotate_sfid_keys(new_backup)`，要求由备用账户发起。
    - SFID 实际提供：`key-admins` 模块以链上三把公钥为唯一真相；`rotate/challenge` 与 `rotate/commit` 都强制发起者是 `backup_1/backup_2`，若服务端代提链上交易，则必须具备所选备用账户的 signer 能力。

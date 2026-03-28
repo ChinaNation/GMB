@@ -1,3 +1,4 @@
+import 'duoqian_manage_models.dart';
 import 'runtime_upgrade_service.dart';
 import 'transfer_proposal_service.dart';
 
@@ -12,6 +13,9 @@ class ProposalCache {
   static final Map<int, TransferProposalInfo> _transferDetailCache = {};
   static final Map<int, RuntimeUpgradeProposalInfo> _runtimeUpgradeDetailCache =
       {};
+  static final Map<int, CreateDuoqianProposalInfo>
+      _createDuoqianDetailCache = {};
+  static final Map<int, CloseDuoqianProposalInfo> _closeDuoqianDetailCache = {};
 
   // ──── 读取 ────
 
@@ -25,6 +29,14 @@ class ProposalCache {
   /// 获取 Runtime 升级提案详情，命中返回缓存，未命中返回 null。
   static RuntimeUpgradeProposalInfo? getRuntimeUpgradeDetail(int proposalId) =>
       _runtimeUpgradeDetailCache[proposalId];
+
+  /// 获取创建多签提案详情。
+  static CreateDuoqianProposalInfo? getCreateDuoqianDetail(int proposalId) =>
+      _createDuoqianDetailCache[proposalId];
+
+  /// 获取关闭多签提案详情。
+  static CloseDuoqianProposalInfo? getCloseDuoqianDetail(int proposalId) =>
+      _closeDuoqianDetailCache[proposalId];
 
   // ──── 写入 ────
 
@@ -41,6 +53,16 @@ class ProposalCache {
           int proposalId, RuntimeUpgradeProposalInfo detail) =>
       _runtimeUpgradeDetailCache[proposalId] = detail;
 
+  /// 存入创建多签提案详情。
+  static void putCreateDuoqianDetail(
+          int proposalId, CreateDuoqianProposalInfo detail) =>
+      _createDuoqianDetailCache[proposalId] = detail;
+
+  /// 存入关闭多签提案详情。
+  static void putCloseDuoqianDetail(
+          int proposalId, CloseDuoqianProposalInfo detail) =>
+      _closeDuoqianDetailCache[proposalId] = detail;
+
   // ──── 清除 ────
 
   /// 清空所有缓存（下拉刷新时调用）。
@@ -48,6 +70,8 @@ class ProposalCache {
     _metaCache.clear();
     _transferDetailCache.clear();
     _runtimeUpgradeDetailCache.clear();
+    _createDuoqianDetailCache.clear();
+    _closeDuoqianDetailCache.clear();
   }
 
   /// 使单个提案缓存失效（轻节点推送新区块时用）。
@@ -55,5 +79,7 @@ class ProposalCache {
     _metaCache.remove(proposalId);
     _transferDetailCache.remove(proposalId);
     _runtimeUpgradeDetailCache.remove(proposalId);
+    _createDuoqianDetailCache.remove(proposalId);
+    _closeDuoqianDetailCache.remove(proposalId);
   }
 }

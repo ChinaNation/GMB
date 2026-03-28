@@ -9,13 +9,13 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
     ensure,
     pallet_prelude::*,
-    traits::{Currency, ExistenceRequirement, ReservableCurrency},
+    traits::{Currency, ExistenceRequirement, OnUnbalanced, ReservableCurrency},
     BoundedVec,
 };
 use frame_system::pallet_prelude::*;
 use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
 use scale_info::TypeInfo;
-use sp_runtime::traits::{Hash, Zero};
+use sp_runtime::{traits::{Hash, Zero}, SaturatedConversion};
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 use voting_engine_system::{InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED};
 
@@ -55,18 +55,20 @@ impl<AccountId> ProtectedSourceChecker<AccountId> for () {
     }
 }
 
-/// SFID 机构登记验签抽象：链上只信任 SFID 对 `sfid_id + register_nonce` 的主公钥签名。
-pub trait SfidInstitutionVerifier<Nonce, Signature> {
+/// SFID 机构登记验签抽象：链上只信任 SFID 对 `sfid_id + name + register_nonce` 的主公钥签名。
+pub trait SfidInstitutionVerifier<Name, Nonce, Signature> {
     fn verify_institution_registration(
         sfid_id: &[u8],
+        name: &Name,
         nonce: &Nonce,
         signature: &Signature,
     ) -> bool;
 }
 
-impl<Nonce, Signature> SfidInstitutionVerifier<Nonce, Signature> for () {
+impl<Name, Nonce, Signature> SfidInstitutionVerifier<Name, Nonce, Signature> for () {
     fn verify_institution_registration(
         _sfid_id: &[u8],
+        _name: &Name,
         _nonce: &Nonce,
         _signature: &Signature,
     ) -> bool {
@@ -126,8 +128,9 @@ pub struct DuoqianAccount<AdminList, AccountId, BlockNumber> {
     PartialEq,
     Eq,
 )]
-pub struct RegisteredInstitution<SfidId> {
+pub struct RegisteredInstitution<SfidId, SfidName> {
     pub sfid_id: SfidId,
+    pub name: SfidName,
     pub nonce: u64,
 }
 
@@ -149,6 +152,16 @@ pub struct CloseDuoqianAction<AccountId> {
     pub proposer: AccountId,
 }
 
+/// 个人多签账户元数据（存储在 PersonalDuoqianInfo 中）
+#[derive(
+    Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen,
+    PartialEq, Eq,
+)]
+pub struct PersonalDuoqianMeta<AccountId, Name> {
+    pub creator: AccountId,
+    pub name: Name,
+}
+
 /// 将 AccountId（32 字节）转为 InstitutionPalletId（48 字节），右填充 16 个零。
 pub fn account_to_institution_id<AccountId: Encode>(account: &AccountId) -> InstitutionPalletId {
     let encoded = account.encode();
@@ -164,7 +177,7 @@ pub mod pallet {
     use crate::weights::WeightInfo;
     use voting_engine_system::InternalAdminProvider;
     use voting_engine_system::InternalVoteEngine;
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(5);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + voting_engine_system::Config {
@@ -181,8 +194,14 @@ pub mod pallet {
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
         type InstitutionAssetGuard: institution_asset_guard::InstitutionAssetGuard<Self::AccountId>;
         type SfidInstitutionVerifier: SfidInstitutionVerifier<
+            SfidNameOf<Self>,
             RegisterNonceOf<Self>,
             RegisterSignatureOf<Self>,
+        >;
+
+        /// 手续费分账路由（创建入金和注销转出的手续费）
+        type FeeRouter: frame_support::traits::OnUnbalanced<
+            <Self::Currency as Currency<Self::AccountId>>::NegativeImbalance,
         >;
 
         #[pallet::constant]
@@ -190,6 +209,10 @@ pub mod pallet {
 
         #[pallet::constant]
         type MaxSfidIdLength: Get<u32>;
+
+        /// 机构名称最大字节长度。
+        #[pallet::constant]
+        type MaxSfidNameLength: Get<u32>;
 
         #[pallet::constant]
         type MaxRegisterNonceLength: Get<u32>;
@@ -218,6 +241,7 @@ pub mod pallet {
     >;
 
     pub type SfidIdOf<T> = BoundedVec<u8, <T as Config>::MaxSfidIdLength>;
+    pub type SfidNameOf<T> = BoundedVec<u8, <T as Config>::MaxSfidNameLength>;
     pub type RegisterNonceOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterNonceLength>;
     pub type RegisterSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterSignatureLength>;
 
@@ -244,7 +268,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         T::AccountId,
-        RegisteredInstitution<SfidIdOf<T>>,
+        RegisteredInstitution<SfidIdOf<T>, SfidNameOf<T>>,
         OptionQuery,
     >;
 
@@ -253,6 +277,17 @@ pub mod pallet {
     #[pallet::getter(fn used_register_nonce)]
     pub type UsedRegisterNonce<T: Config> =
         StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
+
+    /// 个人多签反向索引：duoqian_address -> { creator, name }
+    #[pallet::storage]
+    #[pallet::getter(fn personal_duoqian_info)]
+    pub type PersonalDuoqianInfo<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        T::AccountId,
+        PersonalDuoqianMeta<T::AccountId, SfidNameOf<T>>,
+        OptionQuery,
+    >;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -311,6 +346,7 @@ pub mod pallet {
             admin_count: u32,
             threshold: u32,
             amount: BalanceOf<T>,
+            fee: BalanceOf<T>,
         },
         /// 创建提案投票通过但执行失败
         CreateExecutionFailed {
@@ -336,15 +372,27 @@ pub mod pallet {
             duoqian_address: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
+            fee: BalanceOf<T>,
         },
         /// 关闭提案投票通过但执行失败
         CloseExecutionFailed {
             proposal_id: u64,
             duoqian_address: T::AccountId,
         },
+        /// 个人多签账户创建提案已发起
+        PersonalDuoqianProposed {
+            proposal_id: u64,
+            duoqian_address: T::AccountId,
+            proposer: T::AccountId,
+            name: SfidNameOf<T>,
+            admin_count: u32,
+            threshold: u32,
+            amount: BalanceOf<T>,
+        },
         /// SFID 机构登记
         SfidInstitutionRegistered {
             sfid_id: SfidIdOf<T>,
+            name: SfidNameOf<T>,
             duoqian_address: T::AccountId,
             submitter: T::AccountId,
         },
@@ -410,6 +458,16 @@ pub mod pallet {
         TransferFailed,
         /// 管理员非本提案管理员
         UnauthorizedAdmin,
+        /// 机构名称为空
+        EmptySfidName,
+        /// 手续费扣取失败
+        FeeWithdrawFailed,
+        /// 注销后转账金额低于 ED
+        CloseTransferBelowED,
+        /// 个人多签名称为空
+        EmptyPersonalName,
+        /// 个人多签地址已存在（同一 creator + name）
+        PersonalDuoqianAlreadyExists,
     }
 
     /// 提案操作类型标记：存储在 ProposalData 的第一个字节
@@ -445,6 +503,21 @@ pub mod pallet {
                 amount >= T::MinCreateAmount::get(),
                 Error::<T>::CreateAmountBelowMinimum
             );
+            // 预检查：proposer 余额需覆盖入金 + 手续费 + ED（保留自身账户存活）
+            {
+                let amount_u128: u128 = amount.saturated_into();
+                let fee_u128 = onchain_transaction_pow::calculate_onchain_fee(amount_u128);
+                let fee: BalanceOf<T> = fee_u128.saturated_into();
+                let ed = T::Currency::minimum_balance();
+                let required = amount
+                    .checked_add(&fee)
+                    .and_then(|v| v.checked_add(&ed))
+                    .ok_or(Error::<T>::InsufficientAmount)?;
+                ensure!(
+                    T::Currency::free_balance(&who) >= required,
+                    Error::<T>::InsufficientAmount
+                );
+            }
             ensure!(admin_count >= 2, Error::<T>::InvalidAdminCount);
             ensure!(
                 duoqian_admins.len() as u32 == admin_count,
@@ -596,11 +669,13 @@ pub mod pallet {
         pub fn register_sfid_institution(
             origin: OriginFor<T>,
             sfid_id: SfidIdOf<T>,
+            name: SfidNameOf<T>,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
+            ensure!(!name.is_empty(), Error::<T>::EmptySfidName);
             let register_nonce_hash = T::Hashing::hash(register_nonce.as_slice());
             ensure!(
                 !UsedRegisterNonce::<T>::get(register_nonce_hash),
@@ -609,6 +684,7 @@ pub mod pallet {
             ensure!(
                 T::SfidInstitutionVerifier::verify_institution_registration(
                     sfid_id.as_slice(),
+                    &name,
                     &register_nonce,
                     &signature,
                 ),
@@ -643,11 +719,13 @@ pub mod pallet {
                 &duoqian_address,
                 RegisteredInstitution {
                     sfid_id: sfid_id.clone(),
+                    name: name.clone(),
                     nonce: 0,
                 },
             );
             Self::deposit_event(Event::<T>::SfidInstitutionRegistered {
                 sfid_id,
+                name,
                 duoqian_address,
                 submitter,
             });
@@ -710,6 +788,17 @@ pub mod pallet {
                 all_balance >= T::MinCloseBalance::get(),
                 Error::<T>::CloseBalanceBelowMinimum
             );
+            // 预检查：扣除手续费后转给 beneficiary 的金额需 >= ED
+            {
+                let balance_u128: u128 = all_balance.saturated_into();
+                let fee_u128 = onchain_transaction_pow::calculate_onchain_fee(balance_u128);
+                let fee: BalanceOf<T> = fee_u128.saturated_into();
+                let transfer_amount = all_balance
+                    .checked_sub(&fee)
+                    .ok_or(Error::<T>::FeeWithdrawFailed)?;
+                let ed = T::Currency::minimum_balance();
+                ensure!(transfer_amount >= ed, Error::<T>::CloseTransferBelowED);
+            }
             ensure!(
                 T::Currency::reserved_balance(&duoqian_address).is_zero(),
                 Error::<T>::ReservedBalanceRemaining
@@ -791,6 +880,145 @@ pub mod pallet {
 
             Ok(())
         }
+
+        /// 发起"创建个人多签账户"提案（无需 SFID 注册）。
+        ///
+        /// 地址由 `creator + name` 派生：
+        /// `Blake2b_256("DUOQIAN_PERSONAL_V1" || SS58_PREFIX_LE || creator.encode() || name_utf8)`
+        ///
+        /// 投票通过后由 vote_create 自动执行入金 + 激活（复用 execute_create）。
+        #[pallet::call_index(5)]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_create())]
+        pub fn propose_create_personal(
+            origin: OriginFor<T>,
+            name: SfidNameOf<T>,
+            admin_count: u32,
+            duoqian_admins: DuoqianAdminsOf<T>,
+            threshold: u32,
+            amount: BalanceOf<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            ensure!(
+                !T::ProtectedSourceChecker::is_protected(&who),
+                Error::<T>::ProtectedSource
+            );
+
+            ensure!(!name.is_empty(), Error::<T>::EmptyPersonalName);
+
+            ensure!(T::MaxAdmins::get() >= 2, Error::<T>::InvalidRuntimeConfig);
+            ensure!(
+                amount >= T::MinCreateAmount::get(),
+                Error::<T>::CreateAmountBelowMinimum
+            );
+            // 预检查余额
+            {
+                let amount_u128: u128 = amount.saturated_into();
+                let fee_u128 = onchain_transaction_pow::calculate_onchain_fee(amount_u128);
+                let fee: BalanceOf<T> = fee_u128.saturated_into();
+                let ed = T::Currency::minimum_balance();
+                let required = amount
+                    .checked_add(&fee)
+                    .and_then(|v| v.checked_add(&ed))
+                    .ok_or(Error::<T>::InsufficientAmount)?;
+                ensure!(
+                    T::Currency::free_balance(&who) >= required,
+                    Error::<T>::InsufficientAmount
+                );
+            }
+
+            ensure!(admin_count >= 2, Error::<T>::InvalidAdminCount);
+            ensure!(
+                duoqian_admins.len() as u32 == admin_count,
+                Error::<T>::AdminCountMismatch
+            );
+
+            let min_threshold = core::cmp::max(2, admin_count.saturating_add(1) / 2);
+            ensure!(
+                threshold >= min_threshold && threshold <= admin_count,
+                Error::<T>::InvalidThreshold
+            );
+
+            Self::ensure_unique_admins(&duoqian_admins)?;
+            ensure!(
+                duoqian_admins.iter().any(|a| a == &who),
+                Error::<T>::PermissionDenied
+            );
+
+            // 派生地址
+            let duoqian_address =
+                Self::derive_personal_duoqian_address(&who, name.as_slice())?;
+            ensure!(
+                !DuoqianAccounts::<T>::contains_key(&duoqian_address),
+                Error::<T>::PersonalDuoqianAlreadyExists
+            );
+            ensure!(
+                !T::ReservedAddressChecker::is_reserved(&duoqian_address),
+                Error::<T>::AddressReserved
+            );
+            ensure!(
+                T::AddressValidator::is_valid(&duoqian_address),
+                Error::<T>::InvalidAddress
+            );
+            ensure!(
+                !T::ProtectedSourceChecker::is_protected(&duoqian_address),
+                Error::<T>::ProtectedSource
+            );
+
+            // 预写入 DuoqianAccounts（pending 状态）
+            let now = frame_system::Pallet::<T>::block_number();
+            DuoqianAccounts::<T>::insert(
+                &duoqian_address,
+                DuoqianAccount {
+                    admin_count,
+                    threshold,
+                    duoqian_admins: duoqian_admins.clone(),
+                    creator: who.clone(),
+                    created_at: now,
+                    status: DuoqianStatus::Pending,
+                },
+            );
+
+            // 写入个人多签元数据
+            PersonalDuoqianInfo::<T>::insert(
+                &duoqian_address,
+                PersonalDuoqianMeta {
+                    creator: who.clone(),
+                    name: name.clone(),
+                },
+            );
+
+            // 创建投票引擎提案
+            let institution = account_to_institution_id(&duoqian_address);
+            let org = voting_engine_system::internal_vote::ORG_DUOQIAN;
+            let proposal_id =
+                T::InternalVoteEngine::create_internal_proposal(who.clone(), org, institution)?;
+
+            // 存储业务数据（复用 ACTION_CREATE + CreateDuoqianAction）
+            let action = CreateDuoqianAction {
+                duoqian_address: duoqian_address.clone(),
+                proposer: who.clone(),
+                admin_count,
+                threshold,
+                amount,
+            };
+            let mut data = sp_std::vec![ACTION_CREATE];
+            data.extend_from_slice(&action.encode());
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            voting_engine_system::Pallet::<T>::store_proposal_meta(proposal_id, now);
+
+            Self::deposit_event(Event::<T>::PersonalDuoqianProposed {
+                proposal_id,
+                duoqian_address,
+                proposer: who,
+                name,
+                admin_count,
+                threshold,
+                amount,
+            });
+
+            Ok(())
+        }
     }
 
     impl<T: Config> Pallet<T> {
@@ -806,6 +1034,20 @@ pub mod pallet {
             let mut input = b"DUOQIAN_SFID_V1".to_vec();
             input.extend_from_slice(&Self::chain_domain_prefix());
             input.extend_from_slice(sfid_id);
+            let digest = sp_runtime::traits::BlakeTwo256::hash(input.as_slice());
+            T::AccountId::decode(&mut digest.as_ref())
+                .map_err(|_| Error::<T>::DerivedAddressDecodeFailed.into())
+        }
+
+        /// 从 creator + name 派生个人多签地址。
+        pub fn derive_personal_duoqian_address(
+            creator: &T::AccountId,
+            name: &[u8],
+        ) -> Result<T::AccountId, DispatchError> {
+            let mut input = b"DUOQIAN_PERSONAL_V1".to_vec();
+            input.extend_from_slice(&Self::chain_domain_prefix());
+            input.extend_from_slice(&creator.encode());
+            input.extend_from_slice(name);
             let digest = sp_runtime::traits::BlakeTwo256::hash(input.as_slice());
             T::AccountId::decode(&mut digest.as_ref())
                 .map_err(|_| Error::<T>::DerivedAddressDecodeFailed.into())
@@ -833,6 +1075,11 @@ pub mod pallet {
             proposal_id: u64,
             action: &CreateDuoqianAction<T::AccountId, BalanceOf<T>>,
         ) -> DispatchResult {
+            // 计算手续费（复用 onchain-transaction-pow 公共费率）
+            let amount_u128: u128 = action.amount.saturated_into();
+            let fee_u128 = onchain_transaction_pow::calculate_onchain_fee(amount_u128);
+            let fee: BalanceOf<T> = fee_u128.saturated_into();
+
             // 入金：从提案发起人转入 duoqian_address
             T::Currency::transfer(
                 &action.proposer,
@@ -841,6 +1088,18 @@ pub mod pallet {
                 ExistenceRequirement::KeepAlive,
             )
             .map_err(|_| Error::<T>::TransferFailed)?;
+
+            // 手续费：从 proposer 额外扣取，通过 FeeRouter 分账
+            if !fee.is_zero() {
+                let fee_imbalance = T::Currency::withdraw(
+                    &action.proposer,
+                    fee,
+                    frame_support::traits::WithdrawReasons::FEE,
+                    ExistenceRequirement::KeepAlive,
+                )
+                .map_err(|_| Error::<T>::FeeWithdrawFailed)?;
+                T::FeeRouter::on_unbalanced(fee_imbalance);
+            }
 
             // 激活 DuoqianAccounts
             DuoqianAccounts::<T>::mutate(&action.duoqian_address, |maybe_account| {
@@ -863,6 +1122,7 @@ pub mod pallet {
                 admin_count: action.admin_count,
                 threshold: action.threshold,
                 amount: action.amount,
+                fee,
             });
 
             // 标记为已执行，防止双重执行
@@ -885,10 +1145,35 @@ pub mod pallet {
             );
             let all_balance = T::Currency::free_balance(&action.duoqian_address);
 
+            // 计算手续费
+            let balance_u128: u128 = all_balance.saturated_into();
+            let fee_u128 = onchain_transaction_pow::calculate_onchain_fee(balance_u128);
+            let fee: BalanceOf<T> = fee_u128.saturated_into();
+            let transfer_amount = all_balance
+                .checked_sub(&fee)
+                .ok_or(Error::<T>::FeeWithdrawFailed)?;
+
+            // 确保扣除手续费后转给 beneficiary 的金额 >= ED
+            let ed = T::Currency::minimum_balance();
+            ensure!(transfer_amount >= ed, Error::<T>::CloseTransferBelowED);
+
+            // 先扣手续费
+            if !fee.is_zero() {
+                let fee_imbalance = T::Currency::withdraw(
+                    &action.duoqian_address,
+                    fee,
+                    frame_support::traits::WithdrawReasons::FEE,
+                    ExistenceRequirement::AllowDeath,
+                )
+                .map_err(|_| Error::<T>::FeeWithdrawFailed)?;
+                T::FeeRouter::on_unbalanced(fee_imbalance);
+            }
+
+            // 转出剩余余额
             T::Currency::transfer(
                 &action.duoqian_address,
                 &action.beneficiary,
-                all_balance,
+                transfer_amount,
                 ExistenceRequirement::AllowDeath,
             )
             .map_err(|_| Error::<T>::TransferFailed)?;
@@ -906,7 +1191,8 @@ pub mod pallet {
                 proposal_id,
                 duoqian_address: action.duoqian_address.clone(),
                 beneficiary: action.beneficiary.clone(),
-                amount: all_balance,
+                amount: transfer_amount,
+                fee,
             });
 
             // 标记为已执行，防止双重执行
@@ -1002,11 +1288,12 @@ mod tests {
     }
 
     pub struct TestSfidInstitutionVerifier;
-    impl SfidInstitutionVerifier<RegisterNonceOf<Test>, RegisterSignatureOf<Test>>
+    impl SfidInstitutionVerifier<SfidNameOf<Test>, RegisterNonceOf<Test>, RegisterSignatureOf<Test>>
         for TestSfidInstitutionVerifier
     {
         fn verify_institution_registration(
             _sfid_id: &[u8],
+            _name: &SfidNameOf<Test>,
             nonce: &RegisterNonceOf<Test>,
             signature: &RegisterSignatureOf<Test>,
         ) -> bool {
@@ -1160,12 +1447,14 @@ mod tests {
         type ProtectedSourceChecker = TestProtectedSourceChecker;
         type InstitutionAssetGuard = TestInstitutionAssetGuard;
         type SfidInstitutionVerifier = TestSfidInstitutionVerifier;
+        type FeeRouter = ();
         type MaxAdmins = ConstU32<10>;
         type MaxSfidIdLength = ConstU32<96>;
+        type MaxSfidNameLength = ConstU32<128>;
         type MaxRegisterNonceLength = ConstU32<64>;
         type MaxRegisterSignatureLength = ConstU32<64>;
         type MinCreateAmount = ConstU128<111>;
-        type MinCloseBalance = ConstU128<111>;
+        type MinCloseBalance = ConstU128<121>;
         type WeightInfo = ();
     }
 
@@ -1183,6 +1472,11 @@ mod tests {
             .to_vec()
             .try_into()
             .expect("sfid id should fit");
+        let name: SfidNameOf<Test> = format!("Test Institution {}", tag)
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("name should fit");
         let register_nonce: RegisterNonceOf<Test> = b"register-nonce"
             .to_vec()
             .try_into()
@@ -1194,6 +1488,7 @@ mod tests {
         assert_ok!(Duoqian::register_sfid_institution(
             RuntimeOrigin::signed(relayer()),
             sfid.clone(),
+            name,
             register_nonce,
             signature,
         ));
@@ -1258,6 +1553,10 @@ mod tests {
                 .to_vec()
                 .try_into()
                 .expect("sfid id should fit");
+            let name: SfidNameOf<Test> = b"Bad Institution"
+                .to_vec()
+                .try_into()
+                .expect("name should fit");
             let register_nonce: RegisterNonceOf<Test> = b"bad-register-nonce"
                 .to_vec()
                 .try_into()
@@ -1270,6 +1569,7 @@ mod tests {
                 Duoqian::register_sfid_institution(
                     RuntimeOrigin::signed(admin(1)),
                     sfid,
+                    name,
                     register_nonce,
                     bad_signature,
                 ),
@@ -1378,9 +1678,10 @@ mod tests {
             // DuoqianAccounts 应该被删除
             assert!(DuoqianAccounts::<Test>::get(&duoqian_address).is_none());
 
-            // 受益人收到余额
-            // admin(4) 原有 100_000, 收到 1_000
-            assert_eq!(Balances::free_balance(&beneficiary), 101_000);
+            // 受益人收到余额（扣除 0.1% 手续费，最低 10 分）
+            // admin(4) 原有 100_000，多签余额 1_000，fee = max(1_000 * 0.1%, 10) = 10
+            // 实收 = 1_000 - 10 = 990
+            assert_eq!(Balances::free_balance(&beneficiary), 100_990);
         });
     }
 
