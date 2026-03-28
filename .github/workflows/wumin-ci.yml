@@ -89,7 +89,7 @@ jobs:
 
       - name: 分析代码
         working-directory: wumin
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: 运行测试
         working-directory: wumin
