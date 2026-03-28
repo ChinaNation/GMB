@@ -38,7 +38,6 @@ void main() {
       final response = await service.signParsedRequest(
         walletIndex: hotWallet.walletIndex,
         request: request,
-        acknowledgeDecodeFailed: true,
       );
 
       expect(response.requestId, request.requestId);
