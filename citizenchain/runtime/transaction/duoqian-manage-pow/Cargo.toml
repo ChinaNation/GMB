@@ -17,6 +17,7 @@ sp-std = { workspace = true }
 sfid-code-auth = { path = "../../otherpallet/sfid-code-auth", default-features = false }
 voting-engine-system = { path = "../../governance/voting-engine-system", default-features = false }
 institution-asset-guard = { path = "../institution-asset-guard", default-features = false }
+onchain-transaction-pow = { path = "../onchain-transaction-pow", default-features = false }
 
 [features]
 default = ["std"]
@@ -38,6 +39,7 @@ std = [
     "sfid-code-auth/std",
     "voting-engine-system/std",
     "institution-asset-guard/std",
+    "onchain-transaction-pow/std",
 ]
 
 [dev-dependencies]

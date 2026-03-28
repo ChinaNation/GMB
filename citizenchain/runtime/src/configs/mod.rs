@@ -546,18 +546,20 @@ impl duoqian_manage_pow::DuoqianReservedAddressChecker<AccountId>
 
 impl
     duoqian_manage_pow::SfidInstitutionVerifier<
+        duoqian_manage_pow::pallet::SfidNameOf<Runtime>,
         duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
         duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
     > for RuntimeSfidInstitutionVerifier
 {
     fn verify_institution_registration(
         sfid_id: &[u8],
+        name: &duoqian_manage_pow::pallet::SfidNameOf<Runtime>,
         nonce: &duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
         signature: &duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
-            return !sfid_id.is_empty() && !nonce.is_empty() && !signature.is_empty();
+            return !sfid_id.is_empty() && !name.is_empty() && !nonce.is_empty() && !signature.is_empty();
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
@@ -576,9 +578,10 @@ impl
             let signature = sr25519::Signature::from_raw(sig_raw);
 
             let payload = (
-                b"GMB_SFID_INSTITUTION_V1",
+                b"GMB_SFID_INSTITUTION_V2",
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 sfid_id,
+                name.as_slice(),
                 nonce.as_slice(),
             );
             let msg = blake2_256(&payload.encode());
@@ -597,12 +600,14 @@ impl duoqian_manage_pow::Config for Runtime {
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type InstitutionAssetGuard = RuntimeInstitutionAssetGuard;
     type SfidInstitutionVerifier = RuntimeSfidInstitutionVerifier;
+    type FeeRouter = TransferFeeRouter;
     type MaxAdmins = ConstU32<64>;
     type MaxSfidIdLength = ConstU32<96>;
+    type MaxSfidNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
     type MinCreateAmount = ConstU128<111>;
-    type MinCloseBalance = ConstU128<111>;
+    type MinCloseBalance = ConstU128<121>;
     type WeightInfo = duoqian_manage_pow::weights::SubstrateWeight<Runtime>;
 }
 

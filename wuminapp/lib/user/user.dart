@@ -12,6 +12,7 @@ import 'package:qr/qr.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wuminapp_mobile/governance/duoqian_institution_list_page.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
@@ -297,6 +298,25 @@ class _ProfilePageState extends State<ProfilePage> {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const MyWalletPage()),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _buildEntryCard(
+                leading: const Icon(
+                  Icons.groups_outlined,
+                  color: Color(0xFF1565C0),
+                  size: 22,
+                ),
+                title: '多签',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const DuoqianInstitutionListPage(
+                          mode: InstitutionListMode.manage),
+                    ),
                   );
                 },
               ),

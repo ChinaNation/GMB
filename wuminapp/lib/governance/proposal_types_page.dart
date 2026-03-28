@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'duoqian_close_proposal_page.dart';
+import 'duoqian_create_proposal_page.dart';
 import 'institution_data.dart';
 import 'runtime_upgrade_page.dart';
 import 'transfer_proposal_page.dart';
@@ -125,6 +127,40 @@ class ProposalTypesPage extends StatelessWidget {
             color: const Color(0xFFB71C1C),
             onTap: () => _checkAndOpenProposal(context, null, name: '决议销毁'),
           ),
+
+          // ──── 注册多签机构专属提案类型 ────
+          if (institution.orgType == OrgType.duoqian) ...[
+            const SizedBox(height: 20),
+            _buildSectionTitle('多签管理'),
+            const SizedBox(height: 8),
+            _ProposalTypeCard(
+              icon: Icons.group_add,
+              title: '创建多签',
+              subtitle: '发起创建多签账户提案',
+              color: const Color(0xFF1565C0),
+              onTap: () => _checkAndOpenProposal(
+                context,
+                () => DuoqianCreateProposalPage(
+                  institution: institution,
+                  adminWallets: adminWallets,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _ProposalTypeCard(
+              icon: Icons.group_remove,
+              title: '关闭多签',
+              subtitle: '发起关闭多签账户提案，资金转入指定受益人',
+              color: const Color(0xFFB71C1C),
+              onTap: () => _checkAndOpenProposal(
+                context,
+                () => DuoqianCloseProposalPage(
+                  institution: institution,
+                  adminWallets: adminWallets,
+                ),
+              ),
+            ),
+          ],
 
           // ──── 国储会专属提案类型 ────
           if (institution.orgType == OrgType.nrc) ...[
