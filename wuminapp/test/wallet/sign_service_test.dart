@@ -225,7 +225,7 @@ void main() {
     test('buildExternalSignRequest should build cold-wallet qr request',
         () async {
       final raw = _challengeJson(
-        challenge: 'req-cold-login',
+        challenge: 'req-cold-login-0001',
         expiresAt: _nowSec() + 90,
       );
       final challenge = service.parseChallenge(raw);
