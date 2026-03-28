@@ -95,6 +95,46 @@ class AppKvEntity {
   bool? boolValue;
 }
 
+/// 用户创建的个人多签账户（本地持久化）。
+@collection
+class PersonalDuoqianEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 多签地址公钥 hex（32 字节，不含 0x 前缀）。
+  @Index(unique: true, replace: true)
+  late String duoqianAddress;
+
+  /// 多签账户名称。
+  late String name;
+
+  /// 创建人 SS58 地址。
+  late String creatorAddress;
+
+  /// 添加时间戳（毫秒）。
+  @Index()
+  late int addedAtMillis;
+}
+
+/// 用户添加的多签机构（本地持久化）。
+@collection
+class DuoqianInstitutionEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 多签地址公钥 hex（32 字节，不含 0x 前缀），唯一标识。
+  @Index(unique: true, replace: true)
+  late String duoqianAddress;
+
+  /// SFID 标识（UTF-8 字符串）。
+  late String sfidId;
+
+  /// 机构名称（链上升级前暂用 sfidId 代替）。
+  late String name;
+
+  /// 添加时间戳（毫秒），用于排序。
+  @Index()
+  late int addedAtMillis;
+}
+
 class WalletIsar {
   WalletIsar._();
 
@@ -136,6 +176,8 @@ class WalletIsar {
       ObservedAccountEntitySchema,
       LoginReplayEntitySchema,
       AppKvEntitySchema,
+      DuoqianInstitutionEntitySchema,
+      PersonalDuoqianEntitySchema,
     ];
     final isar =
         await Isar.open(schemas, name: 'wuminapp_wallet', directory: dir);

@@ -6943,3 +6943,2344 @@ extension AppKvEntityQueryProperty
     });
   }
 }
+
+// coverage:ignore-file
+// ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
+
+extension GetPersonalDuoqianEntityCollection on Isar {
+  IsarCollection<PersonalDuoqianEntity> get personalDuoqianEntitys =>
+      this.collection();
+}
+
+const PersonalDuoqianEntitySchema = CollectionSchema(
+  name: r'PersonalDuoqianEntity',
+  id: -8490877180663063815,
+  properties: {
+    r'addedAtMillis': PropertySchema(
+      id: 0,
+      name: r'addedAtMillis',
+      type: IsarType.long,
+    ),
+    r'creatorAddress': PropertySchema(
+      id: 1,
+      name: r'creatorAddress',
+      type: IsarType.string,
+    ),
+    r'duoqianAddress': PropertySchema(
+      id: 2,
+      name: r'duoqianAddress',
+      type: IsarType.string,
+    ),
+    r'name': PropertySchema(
+      id: 3,
+      name: r'name',
+      type: IsarType.string,
+    )
+  },
+  estimateSize: _personalDuoqianEntityEstimateSize,
+  serialize: _personalDuoqianEntitySerialize,
+  deserialize: _personalDuoqianEntityDeserialize,
+  deserializeProp: _personalDuoqianEntityDeserializeProp,
+  idName: r'id',
+  indexes: {
+    r'duoqianAddress': IndexSchema(
+      id: 3822211026917775041,
+      name: r'duoqianAddress',
+      unique: true,
+      replace: true,
+      properties: [
+        IndexPropertySchema(
+          name: r'duoqianAddress',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
+    r'addedAtMillis': IndexSchema(
+      id: -1059979261930735929,
+      name: r'addedAtMillis',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'addedAtMillis',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
+    )
+  },
+  links: {},
+  embeddedSchemas: {},
+  getId: _personalDuoqianEntityGetId,
+  getLinks: _personalDuoqianEntityGetLinks,
+  attach: _personalDuoqianEntityAttach,
+  version: '3.1.0+1',
+);
+
+int _personalDuoqianEntityEstimateSize(
+  PersonalDuoqianEntity object,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  var bytesCount = offsets.last;
+  bytesCount += 3 + object.creatorAddress.length * 3;
+  bytesCount += 3 + object.duoqianAddress.length * 3;
+  bytesCount += 3 + object.name.length * 3;
+  return bytesCount;
+}
+
+void _personalDuoqianEntitySerialize(
+  PersonalDuoqianEntity object,
+  IsarWriter writer,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  writer.writeLong(offsets[0], object.addedAtMillis);
+  writer.writeString(offsets[1], object.creatorAddress);
+  writer.writeString(offsets[2], object.duoqianAddress);
+  writer.writeString(offsets[3], object.name);
+}
+
+PersonalDuoqianEntity _personalDuoqianEntityDeserialize(
+  Id id,
+  IsarReader reader,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  final object = PersonalDuoqianEntity();
+  object.addedAtMillis = reader.readLong(offsets[0]);
+  object.creatorAddress = reader.readString(offsets[1]);
+  object.duoqianAddress = reader.readString(offsets[2]);
+  object.id = id;
+  object.name = reader.readString(offsets[3]);
+  return object;
+}
+
+P _personalDuoqianEntityDeserializeProp<P>(
+  IsarReader reader,
+  int propertyId,
+  int offset,
+  Map<Type, List<int>> allOffsets,
+) {
+  switch (propertyId) {
+    case 0:
+      return (reader.readLong(offset)) as P;
+    case 1:
+      return (reader.readString(offset)) as P;
+    case 2:
+      return (reader.readString(offset)) as P;
+    case 3:
+      return (reader.readString(offset)) as P;
+    default:
+      throw IsarError('Unknown property with id $propertyId');
+  }
+}
+
+Id _personalDuoqianEntityGetId(PersonalDuoqianEntity object) {
+  return object.id;
+}
+
+List<IsarLinkBase<dynamic>> _personalDuoqianEntityGetLinks(
+    PersonalDuoqianEntity object) {
+  return [];
+}
+
+void _personalDuoqianEntityAttach(
+    IsarCollection<dynamic> col, Id id, PersonalDuoqianEntity object) {
+  object.id = id;
+}
+
+extension PersonalDuoqianEntityByIndex
+    on IsarCollection<PersonalDuoqianEntity> {
+  Future<PersonalDuoqianEntity?> getByDuoqianAddress(String duoqianAddress) {
+    return getByIndex(r'duoqianAddress', [duoqianAddress]);
+  }
+
+  PersonalDuoqianEntity? getByDuoqianAddressSync(String duoqianAddress) {
+    return getByIndexSync(r'duoqianAddress', [duoqianAddress]);
+  }
+
+  Future<bool> deleteByDuoqianAddress(String duoqianAddress) {
+    return deleteByIndex(r'duoqianAddress', [duoqianAddress]);
+  }
+
+  bool deleteByDuoqianAddressSync(String duoqianAddress) {
+    return deleteByIndexSync(r'duoqianAddress', [duoqianAddress]);
+  }
+
+  Future<List<PersonalDuoqianEntity?>> getAllByDuoqianAddress(
+      List<String> duoqianAddressValues) {
+    final values = duoqianAddressValues.map((e) => [e]).toList();
+    return getAllByIndex(r'duoqianAddress', values);
+  }
+
+  List<PersonalDuoqianEntity?> getAllByDuoqianAddressSync(
+      List<String> duoqianAddressValues) {
+    final values = duoqianAddressValues.map((e) => [e]).toList();
+    return getAllByIndexSync(r'duoqianAddress', values);
+  }
+
+  Future<int> deleteAllByDuoqianAddress(List<String> duoqianAddressValues) {
+    final values = duoqianAddressValues.map((e) => [e]).toList();
+    return deleteAllByIndex(r'duoqianAddress', values);
+  }
+
+  int deleteAllByDuoqianAddressSync(List<String> duoqianAddressValues) {
+    final values = duoqianAddressValues.map((e) => [e]).toList();
+    return deleteAllByIndexSync(r'duoqianAddress', values);
+  }
+
+  Future<Id> putByDuoqianAddress(PersonalDuoqianEntity object) {
+    return putByIndex(r'duoqianAddress', object);
+  }
+
+  Id putByDuoqianAddressSync(PersonalDuoqianEntity object,
+      {bool saveLinks = true}) {
+    return putByIndexSync(r'duoqianAddress', object, saveLinks: saveLinks);
+  }
+
+  Future<List<Id>> putAllByDuoqianAddress(List<PersonalDuoqianEntity> objects) {
+    return putAllByIndex(r'duoqianAddress', objects);
+  }
+
+  List<Id> putAllByDuoqianAddressSync(List<PersonalDuoqianEntity> objects,
+      {bool saveLinks = true}) {
+    return putAllByIndexSync(r'duoqianAddress', objects, saveLinks: saveLinks);
+  }
+}
+
+extension PersonalDuoqianEntityQueryWhereSort
+    on QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QWhere> {
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhere>
+      anyId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(const IdWhereClause.any());
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhere>
+      anyAddedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'addedAtMillis'),
+      );
+    });
+  }
+}
+
+extension PersonalDuoqianEntityQueryWhere on QueryBuilder<PersonalDuoqianEntity,
+    PersonalDuoqianEntity, QWhereClause> {
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      idEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: id,
+        upper: id,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      idNotEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            )
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            );
+      } else {
+        return query
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            )
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            );
+      }
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      idGreaterThan(Id id, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.greaterThan(lower: id, includeLower: include),
+      );
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      idLessThan(Id id, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.lessThan(upper: id, includeUpper: include),
+      );
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      idBetween(
+    Id lowerId,
+    Id upperId, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: lowerId,
+        includeLower: includeLower,
+        upper: upperId,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      duoqianAddressEqualTo(String duoqianAddress) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'duoqianAddress',
+        value: [duoqianAddress],
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      duoqianAddressNotEqualTo(String duoqianAddress) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'duoqianAddress',
+              lower: [],
+              upper: [duoqianAddress],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'duoqianAddress',
+              lower: [duoqianAddress],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'duoqianAddress',
+              lower: [duoqianAddress],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'duoqianAddress',
+              lower: [],
+              upper: [duoqianAddress],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      addedAtMillisEqualTo(int addedAtMillis) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'addedAtMillis',
+        value: [addedAtMillis],
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      addedAtMillisNotEqualTo(int addedAtMillis) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'addedAtMillis',
+              lower: [],
+              upper: [addedAtMillis],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'addedAtMillis',
+              lower: [addedAtMillis],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'addedAtMillis',
+              lower: [addedAtMillis],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'addedAtMillis',
+              lower: [],
+              upper: [addedAtMillis],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      addedAtMillisGreaterThan(
+    int addedAtMillis, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'addedAtMillis',
+        lower: [addedAtMillis],
+        includeLower: include,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      addedAtMillisLessThan(
+    int addedAtMillis, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'addedAtMillis',
+        lower: [],
+        upper: [addedAtMillis],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      addedAtMillisBetween(
+    int lowerAddedAtMillis,
+    int upperAddedAtMillis, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'addedAtMillis',
+        lower: [lowerAddedAtMillis],
+        includeLower: includeLower,
+        upper: [upperAddedAtMillis],
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+}
+
+extension PersonalDuoqianEntityQueryFilter on QueryBuilder<
+    PersonalDuoqianEntity, PersonalDuoqianEntity, QFilterCondition> {
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> addedAtMillisEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'addedAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> addedAtMillisGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'addedAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> addedAtMillisLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'addedAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> addedAtMillisBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'addedAtMillis',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> creatorAddressEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'creatorAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> creatorAddressGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'creatorAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> creatorAddressLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'creatorAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> creatorAddressBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'creatorAddress',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> creatorAddressStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'creatorAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> creatorAddressEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'creatorAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+          QAfterFilterCondition>
+      creatorAddressContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'creatorAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+          QAfterFilterCondition>
+      creatorAddressMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'creatorAddress',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> creatorAddressIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'creatorAddress',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> creatorAddressIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'creatorAddress',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> duoqianAddressEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'duoqianAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> duoqianAddressGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'duoqianAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> duoqianAddressLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'duoqianAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> duoqianAddressBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'duoqianAddress',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> duoqianAddressStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'duoqianAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> duoqianAddressEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'duoqianAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+          QAfterFilterCondition>
+      duoqianAddressContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'duoqianAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+          QAfterFilterCondition>
+      duoqianAddressMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'duoqianAddress',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> duoqianAddressIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'duoqianAddress',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> duoqianAddressIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'duoqianAddress',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> idEqualTo(Id value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> idGreaterThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> idLessThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> idBetween(
+    Id lower,
+    Id upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'id',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> nameEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> nameGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> nameLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> nameBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'name',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> nameStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> nameEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+          QAfterFilterCondition>
+      nameContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+          QAfterFilterCondition>
+      nameMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'name',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> nameIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'name',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> nameIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'name',
+        value: '',
+      ));
+    });
+  }
+}
+
+extension PersonalDuoqianEntityQueryObject on QueryBuilder<
+    PersonalDuoqianEntity, PersonalDuoqianEntity, QFilterCondition> {}
+
+extension PersonalDuoqianEntityQueryLinks on QueryBuilder<PersonalDuoqianEntity,
+    PersonalDuoqianEntity, QFilterCondition> {}
+
+extension PersonalDuoqianEntityQuerySortBy
+    on QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QSortBy> {
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      sortByAddedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addedAtMillis', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      sortByAddedAtMillisDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addedAtMillis', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      sortByCreatorAddress() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'creatorAddress', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      sortByCreatorAddressDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'creatorAddress', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      sortByDuoqianAddress() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'duoqianAddress', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      sortByDuoqianAddressDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'duoqianAddress', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      sortByName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      sortByNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.desc);
+    });
+  }
+}
+
+extension PersonalDuoqianEntityQuerySortThenBy
+    on QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QSortThenBy> {
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      thenByAddedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addedAtMillis', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      thenByAddedAtMillisDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addedAtMillis', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      thenByCreatorAddress() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'creatorAddress', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      thenByCreatorAddressDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'creatorAddress', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      thenByDuoqianAddress() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'duoqianAddress', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      thenByDuoqianAddressDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'duoqianAddress', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      thenById() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      thenByIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      thenByName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      thenByNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.desc);
+    });
+  }
+}
+
+extension PersonalDuoqianEntityQueryWhereDistinct
+    on QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QDistinct> {
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QDistinct>
+      distinctByAddedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'addedAtMillis');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QDistinct>
+      distinctByCreatorAddress({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'creatorAddress',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QDistinct>
+      distinctByDuoqianAddress({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'duoqianAddress',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QDistinct>
+      distinctByName({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'name', caseSensitive: caseSensitive);
+    });
+  }
+}
+
+extension PersonalDuoqianEntityQueryProperty on QueryBuilder<
+    PersonalDuoqianEntity, PersonalDuoqianEntity, QQueryProperty> {
+  QueryBuilder<PersonalDuoqianEntity, int, QQueryOperations> idProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, int, QQueryOperations>
+      addedAtMillisProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'addedAtMillis');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, String, QQueryOperations>
+      creatorAddressProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'creatorAddress');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, String, QQueryOperations>
+      duoqianAddressProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'duoqianAddress');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, String, QQueryOperations> nameProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'name');
+    });
+  }
+}
+
+// coverage:ignore-file
+// ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
+
+extension GetDuoqianInstitutionEntityCollection on Isar {
+  IsarCollection<DuoqianInstitutionEntity> get duoqianInstitutionEntitys =>
+      this.collection();
+}
+
+const DuoqianInstitutionEntitySchema = CollectionSchema(
+  name: r'DuoqianInstitutionEntity',
+  id: -2269869662941769306,
+  properties: {
+    r'addedAtMillis': PropertySchema(
+      id: 0,
+      name: r'addedAtMillis',
+      type: IsarType.long,
+    ),
+    r'duoqianAddress': PropertySchema(
+      id: 1,
+      name: r'duoqianAddress',
+      type: IsarType.string,
+    ),
+    r'name': PropertySchema(
+      id: 2,
+      name: r'name',
+      type: IsarType.string,
+    ),
+    r'sfidId': PropertySchema(
+      id: 3,
+      name: r'sfidId',
+      type: IsarType.string,
+    )
+  },
+  estimateSize: _duoqianInstitutionEntityEstimateSize,
+  serialize: _duoqianInstitutionEntitySerialize,
+  deserialize: _duoqianInstitutionEntityDeserialize,
+  deserializeProp: _duoqianInstitutionEntityDeserializeProp,
+  idName: r'id',
+  indexes: {
+    r'duoqianAddress': IndexSchema(
+      id: 3822211026917775041,
+      name: r'duoqianAddress',
+      unique: true,
+      replace: true,
+      properties: [
+        IndexPropertySchema(
+          name: r'duoqianAddress',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
+    r'addedAtMillis': IndexSchema(
+      id: -1059979261930735929,
+      name: r'addedAtMillis',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'addedAtMillis',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
+    )
+  },
+  links: {},
+  embeddedSchemas: {},
+  getId: _duoqianInstitutionEntityGetId,
+  getLinks: _duoqianInstitutionEntityGetLinks,
+  attach: _duoqianInstitutionEntityAttach,
+  version: '3.1.0+1',
+);
+
+int _duoqianInstitutionEntityEstimateSize(
+  DuoqianInstitutionEntity object,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  var bytesCount = offsets.last;
+  bytesCount += 3 + object.duoqianAddress.length * 3;
+  bytesCount += 3 + object.name.length * 3;
+  bytesCount += 3 + object.sfidId.length * 3;
+  return bytesCount;
+}
+
+void _duoqianInstitutionEntitySerialize(
+  DuoqianInstitutionEntity object,
+  IsarWriter writer,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  writer.writeLong(offsets[0], object.addedAtMillis);
+  writer.writeString(offsets[1], object.duoqianAddress);
+  writer.writeString(offsets[2], object.name);
+  writer.writeString(offsets[3], object.sfidId);
+}
+
+DuoqianInstitutionEntity _duoqianInstitutionEntityDeserialize(
+  Id id,
+  IsarReader reader,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  final object = DuoqianInstitutionEntity();
+  object.addedAtMillis = reader.readLong(offsets[0]);
+  object.duoqianAddress = reader.readString(offsets[1]);
+  object.id = id;
+  object.name = reader.readString(offsets[2]);
+  object.sfidId = reader.readString(offsets[3]);
+  return object;
+}
+
+P _duoqianInstitutionEntityDeserializeProp<P>(
+  IsarReader reader,
+  int propertyId,
+  int offset,
+  Map<Type, List<int>> allOffsets,
+) {
+  switch (propertyId) {
+    case 0:
+      return (reader.readLong(offset)) as P;
+    case 1:
+      return (reader.readString(offset)) as P;
+    case 2:
+      return (reader.readString(offset)) as P;
+    case 3:
+      return (reader.readString(offset)) as P;
+    default:
+      throw IsarError('Unknown property with id $propertyId');
+  }
+}
+
+Id _duoqianInstitutionEntityGetId(DuoqianInstitutionEntity object) {
+  return object.id;
+}
+
+List<IsarLinkBase<dynamic>> _duoqianInstitutionEntityGetLinks(
+    DuoqianInstitutionEntity object) {
+  return [];
+}
+
+void _duoqianInstitutionEntityAttach(
+    IsarCollection<dynamic> col, Id id, DuoqianInstitutionEntity object) {
+  object.id = id;
+}
+
+extension DuoqianInstitutionEntityByIndex
+    on IsarCollection<DuoqianInstitutionEntity> {
+  Future<DuoqianInstitutionEntity?> getByDuoqianAddress(String duoqianAddress) {
+    return getByIndex(r'duoqianAddress', [duoqianAddress]);
+  }
+
+  DuoqianInstitutionEntity? getByDuoqianAddressSync(String duoqianAddress) {
+    return getByIndexSync(r'duoqianAddress', [duoqianAddress]);
+  }
+
+  Future<bool> deleteByDuoqianAddress(String duoqianAddress) {
+    return deleteByIndex(r'duoqianAddress', [duoqianAddress]);
+  }
+
+  bool deleteByDuoqianAddressSync(String duoqianAddress) {
+    return deleteByIndexSync(r'duoqianAddress', [duoqianAddress]);
+  }
+
+  Future<List<DuoqianInstitutionEntity?>> getAllByDuoqianAddress(
+      List<String> duoqianAddressValues) {
+    final values = duoqianAddressValues.map((e) => [e]).toList();
+    return getAllByIndex(r'duoqianAddress', values);
+  }
+
+  List<DuoqianInstitutionEntity?> getAllByDuoqianAddressSync(
+      List<String> duoqianAddressValues) {
+    final values = duoqianAddressValues.map((e) => [e]).toList();
+    return getAllByIndexSync(r'duoqianAddress', values);
+  }
+
+  Future<int> deleteAllByDuoqianAddress(List<String> duoqianAddressValues) {
+    final values = duoqianAddressValues.map((e) => [e]).toList();
+    return deleteAllByIndex(r'duoqianAddress', values);
+  }
+
+  int deleteAllByDuoqianAddressSync(List<String> duoqianAddressValues) {
+    final values = duoqianAddressValues.map((e) => [e]).toList();
+    return deleteAllByIndexSync(r'duoqianAddress', values);
+  }
+
+  Future<Id> putByDuoqianAddress(DuoqianInstitutionEntity object) {
+    return putByIndex(r'duoqianAddress', object);
+  }
+
+  Id putByDuoqianAddressSync(DuoqianInstitutionEntity object,
+      {bool saveLinks = true}) {
+    return putByIndexSync(r'duoqianAddress', object, saveLinks: saveLinks);
+  }
+
+  Future<List<Id>> putAllByDuoqianAddress(
+      List<DuoqianInstitutionEntity> objects) {
+    return putAllByIndex(r'duoqianAddress', objects);
+  }
+
+  List<Id> putAllByDuoqianAddressSync(List<DuoqianInstitutionEntity> objects,
+      {bool saveLinks = true}) {
+    return putAllByIndexSync(r'duoqianAddress', objects, saveLinks: saveLinks);
+  }
+}
+
+extension DuoqianInstitutionEntityQueryWhereSort on QueryBuilder<
+    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QWhere> {
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterWhere>
+      anyId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(const IdWhereClause.any());
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterWhere>
+      anyAddedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'addedAtMillis'),
+      );
+    });
+  }
+}
+
+extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
+    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QWhereClause> {
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> idEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: id,
+        upper: id,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> idNotEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            )
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            );
+      } else {
+        return query
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            )
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            );
+      }
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> idGreaterThan(Id id, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.greaterThan(lower: id, includeLower: include),
+      );
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> idLessThan(Id id, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.lessThan(upper: id, includeUpper: include),
+      );
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> idBetween(
+    Id lowerId,
+    Id upperId, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: lowerId,
+        includeLower: includeLower,
+        upper: upperId,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> duoqianAddressEqualTo(String duoqianAddress) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'duoqianAddress',
+        value: [duoqianAddress],
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> duoqianAddressNotEqualTo(String duoqianAddress) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'duoqianAddress',
+              lower: [],
+              upper: [duoqianAddress],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'duoqianAddress',
+              lower: [duoqianAddress],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'duoqianAddress',
+              lower: [duoqianAddress],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'duoqianAddress',
+              lower: [],
+              upper: [duoqianAddress],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> addedAtMillisEqualTo(int addedAtMillis) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'addedAtMillis',
+        value: [addedAtMillis],
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> addedAtMillisNotEqualTo(int addedAtMillis) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'addedAtMillis',
+              lower: [],
+              upper: [addedAtMillis],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'addedAtMillis',
+              lower: [addedAtMillis],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'addedAtMillis',
+              lower: [addedAtMillis],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'addedAtMillis',
+              lower: [],
+              upper: [addedAtMillis],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> addedAtMillisGreaterThan(
+    int addedAtMillis, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'addedAtMillis',
+        lower: [addedAtMillis],
+        includeLower: include,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> addedAtMillisLessThan(
+    int addedAtMillis, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'addedAtMillis',
+        lower: [],
+        upper: [addedAtMillis],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> addedAtMillisBetween(
+    int lowerAddedAtMillis,
+    int upperAddedAtMillis, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'addedAtMillis',
+        lower: [lowerAddedAtMillis],
+        includeLower: includeLower,
+        upper: [upperAddedAtMillis],
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+}
+
+extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
+    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QFilterCondition> {
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> addedAtMillisEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'addedAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> addedAtMillisGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'addedAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> addedAtMillisLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'addedAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> addedAtMillisBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'addedAtMillis',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> duoqianAddressEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'duoqianAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> duoqianAddressGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'duoqianAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> duoqianAddressLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'duoqianAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> duoqianAddressBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'duoqianAddress',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> duoqianAddressStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'duoqianAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> duoqianAddressEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'duoqianAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+          QAfterFilterCondition>
+      duoqianAddressContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'duoqianAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+          QAfterFilterCondition>
+      duoqianAddressMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'duoqianAddress',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> duoqianAddressIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'duoqianAddress',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> duoqianAddressIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'duoqianAddress',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> idEqualTo(Id value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> idGreaterThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> idLessThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> idBetween(
+    Id lower,
+    Id upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'id',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> nameEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> nameGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> nameLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> nameBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'name',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> nameStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> nameEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+          QAfterFilterCondition>
+      nameContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+          QAfterFilterCondition>
+      nameMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'name',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> nameIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'name',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> nameIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'name',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> sfidIdEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sfidId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> sfidIdGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'sfidId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> sfidIdLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'sfidId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> sfidIdBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'sfidId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> sfidIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'sfidId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> sfidIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'sfidId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+          QAfterFilterCondition>
+      sfidIdContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'sfidId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+          QAfterFilterCondition>
+      sfidIdMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'sfidId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> sfidIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sfidId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> sfidIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'sfidId',
+        value: '',
+      ));
+    });
+  }
+}
+
+extension DuoqianInstitutionEntityQueryObject on QueryBuilder<
+    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QFilterCondition> {}
+
+extension DuoqianInstitutionEntityQueryLinks on QueryBuilder<
+    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QFilterCondition> {}
+
+extension DuoqianInstitutionEntityQuerySortBy on QueryBuilder<
+    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QSortBy> {
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      sortByAddedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addedAtMillis', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      sortByAddedAtMillisDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addedAtMillis', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      sortByDuoqianAddress() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'duoqianAddress', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      sortByDuoqianAddressDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'duoqianAddress', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      sortByName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      sortByNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      sortBySfidId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      sortBySfidIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidId', Sort.desc);
+    });
+  }
+}
+
+extension DuoqianInstitutionEntityQuerySortThenBy on QueryBuilder<
+    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QSortThenBy> {
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      thenByAddedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addedAtMillis', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      thenByAddedAtMillisDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addedAtMillis', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      thenByDuoqianAddress() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'duoqianAddress', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      thenByDuoqianAddressDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'duoqianAddress', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      thenById() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      thenByIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      thenByName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      thenByNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      thenBySfidId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      thenBySfidIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sfidId', Sort.desc);
+    });
+  }
+}
+
+extension DuoqianInstitutionEntityQueryWhereDistinct on QueryBuilder<
+    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct> {
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
+      distinctByAddedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'addedAtMillis');
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
+      distinctByDuoqianAddress({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'duoqianAddress',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
+      distinctByName({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'name', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
+      distinctBySfidId({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'sfidId', caseSensitive: caseSensitive);
+    });
+  }
+}
+
+extension DuoqianInstitutionEntityQueryProperty on QueryBuilder<
+    DuoqianInstitutionEntity, DuoqianInstitutionEntity, QQueryProperty> {
+  QueryBuilder<DuoqianInstitutionEntity, int, QQueryOperations> idProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, int, QQueryOperations>
+      addedAtMillisProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'addedAtMillis');
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, String, QQueryOperations>
+      duoqianAddressProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'duoqianAddress');
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, String, QQueryOperations>
+      nameProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'name');
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, String, QQueryOperations>
+      sfidIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'sfidId');
+    });
+  }
+}

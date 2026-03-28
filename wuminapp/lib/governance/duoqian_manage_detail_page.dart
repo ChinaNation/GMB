@@ -1,0 +1,916 @@
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:polkadart/polkadart.dart' show Hasher;
+import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+
+import '../util/amount_format.dart';
+import 'duoqian_manage_models.dart';
+import 'duoqian_manage_service.dart';
+import 'institution_data.dart';
+import 'institution_admin_service.dart';
+import 'pending_vote_store.dart';
+import 'proposal_context.dart';
+import 'transfer_proposal_service.dart';
+import '../qr/pages/qr_sign_session_page.dart';
+import '../rpc/chain_rpc.dart';
+import '../rpc/onchain.dart';
+import '../signer/qr_signer.dart';
+import '../wallet/core/wallet_manager.dart';
+
+/// 多签管理提案详情页：展示创建/关闭提案信息、投票进度及投票操作。
+class DuoqianManageDetailPage extends StatefulWidget {
+  const DuoqianManageDetailPage({
+    super.key,
+    required this.institution,
+    required this.proposalId,
+    required this.proposalContext,
+  });
+
+  final InstitutionInfo institution;
+  final int proposalId;
+  final ProposalContext proposalContext;
+
+  List<WalletProfile> get adminWallets => proposalContext.adminWallets;
+
+  @override
+  State<DuoqianManageDetailPage> createState() =>
+      _DuoqianManageDetailPageState();
+}
+
+class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
+  static const Color _inkGreen = Color(0xFF0B3D2E);
+
+  static const int _statusVoting = 0;
+  static const int _statusPassed = 1;
+  static const int _statusRejected = 2;
+  static const int _statusExecuted = 3;
+
+  final TransferProposalService _proposalService = TransferProposalService();
+  final DuoqianManageService _manageService = DuoqianManageService();
+  final InstitutionAdminService _adminService = InstitutionAdminService();
+  bool _loading = true;
+  String? _error;
+  bool _submitting = false;
+
+  int? _status;
+
+  // 提案详情（二选一）
+  CreateDuoqianProposalInfo? _createInfo;
+  CloseDuoqianProposalInfo? _closeInfo;
+
+  bool get _isCreateProposal => _createInfo != null;
+
+  // 投票计数
+  int _yesCount = 0;
+  int _noCount = 0;
+
+  // 管理员列表与投票记录
+  List<String> _admins = const [];
+  Map<String, bool?> _adminVotes = {};
+
+  List<WalletProfile> _votableWallets = const [];
+  WalletProfile? _selectedVoteWallet;
+  Set<String> _pendingPubkeys = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final rpc = ChainRpc();
+
+      // 并行加载管理员列表、提案状态、投票计数
+      final results = await Future.wait([
+        _adminService.fetchAdmins(widget.institution.shenfenId),
+        _proposalService.fetchProposalStatus(widget.proposalId),
+        _proposalService.fetchVoteTally(widget.proposalId),
+      ]);
+
+      final admins = results[0] as List<String>;
+      final status = results[1] as int?;
+      final tally = results[2] as ({int yes, int no});
+
+      // 加载提案业务数据（从 ProposalData 解码）
+      final key = _buildProposalDataStorageKey(widget.proposalId);
+      final raw = await rpc.fetchStorage('0x${_hexEncode(key)}');
+      CreateDuoqianProposalInfo? createInfo;
+      CloseDuoqianProposalInfo? closeInfo;
+      if (raw != null && raw.isNotEmpty) {
+        final detail =
+            _manageService.decodeManageProposalData(widget.proposalId, raw);
+        if (detail is CreateDuoqianProposalInfo) {
+          createInfo = detail;
+        } else if (detail is CloseDuoqianProposalInfo) {
+          closeInfo = detail;
+        }
+      }
+
+      // 逐个查询每位管理员的投票记录
+      final votes = <String, bool?>{};
+      final voteFutures = admins.map((pubkey) async {
+        final vote =
+            await _proposalService.fetchAdminVote(widget.proposalId, pubkey);
+        return MapEntry(pubkey, vote);
+      });
+      final voteResults = await Future.wait(voteFutures);
+      for (final entry in voteResults) {
+        votes[entry.key] = entry.value;
+      }
+
+      // 检查待确认投票
+      final pendingRecords = await PendingVoteStore.instance.confirmAll(
+        'duoqian_manage',
+        widget.proposalId,
+        OnchainRpc(),
+      );
+      final pendingPks = pendingRecords.map((r) => r.walletPubkey).toSet();
+
+      // 筛选可投票钱包
+      final votable = <WalletProfile>[];
+      for (final w in widget.adminWallets) {
+        var pk = w.pubkeyHex.toLowerCase();
+        if (pk.startsWith('0x')) pk = pk.substring(2);
+        if (admins.contains(pk) &&
+            votes[pk] == null &&
+            !pendingPks.contains(pk)) {
+          votable.add(w);
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _admins = admins;
+        _status = status;
+        _yesCount = tally.yes;
+        _noCount = tally.no;
+        _adminVotes = votes;
+        _pendingPubkeys = pendingPks;
+        _votableWallets = votable;
+        _selectedVoteWallet = votable.isNotEmpty ? votable.first : null;
+        _createInfo = createInfo;
+        _closeInfo = closeInfo;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  // ──── 工具方法 ────
+
+  Uint8List _buildProposalDataStorageKey(int proposalId) {
+    final palletHash = Hasher.twoxx128.hashString('VotingEngineSystem');
+    final storageHash = Hasher.twoxx128.hashString('ProposalData');
+    final idBytes = _u64ToLeBytes(proposalId);
+    final keyHash = _blake2128Concat(idBytes);
+    final result =
+        Uint8List(palletHash.length + storageHash.length + keyHash.length);
+    var offset = 0;
+    result.setAll(offset, palletHash);
+    offset += palletHash.length;
+    result.setAll(offset, storageHash);
+    offset += storageHash.length;
+    result.setAll(offset, keyHash);
+    return result;
+  }
+
+  String _pubkeyToSS58(String pubkeyHex) {
+    final hex =
+        pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex;
+    final bytes = _hexDecode(hex);
+    return Keyring().encodeAddress(bytes, 2027);
+  }
+
+  String _truncateAddress(String address) {
+    if (address.length <= 14) return address;
+    return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
+  }
+
+  String _statusLabel(int? status) {
+    switch (status) {
+      case _statusVoting:
+        return '投票中';
+      case _statusPassed:
+        return '已通过';
+      case _statusRejected:
+        return '已拒绝';
+      case _statusExecuted:
+        return '已执行';
+      default:
+        return '未知';
+    }
+  }
+
+  Color _statusColor(int? status) {
+    switch (status) {
+      case _statusVoting:
+        return Colors.blue;
+      case _statusPassed:
+      case _statusExecuted:
+        return Colors.green;
+      case _statusRejected:
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  // ──── 投票提交 ────
+
+  bool get _isCurrentUserAdmin => widget.proposalContext.isAdmin;
+
+  bool get _canVote {
+    if (_selectedVoteWallet == null) return false;
+    if (_status != _statusVoting) return false;
+    return _votableWallets.isNotEmpty;
+  }
+
+  Future<void> _submitVote(bool approve) async {
+    final wallet = _selectedVoteWallet;
+    if (wallet == null) return;
+
+    setState(() => _submitting = true);
+
+    try {
+      final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
+
+      Future<Uint8List> signCallback(Uint8List payload) async {
+        final qrSigner = QrSigner();
+        final voteText = approve ? '赞成' : '反对';
+        final rv = await ChainRpc().fetchRuntimeVersion();
+        final actionLabel = _isCreateProposal ? '创建多签投票' : '关闭多签投票';
+        final summaryType = _isCreateProposal ? '创建多签' : '关闭多签';
+        final request = qrSigner.buildRequest(
+          requestId: QrSigner.generateRequestId(prefix: 'vote-'),
+          account: wallet.address,
+          pubkey: '0x${wallet.pubkeyHex}',
+          payloadHex: '0x${_toHex(payload)}',
+          specVersion: rv.specVersion,
+          display: {
+            'action': _isCreateProposal ? 'vote_create' : 'vote_close',
+            'action_label': actionLabel,
+            'summary': '$summaryType提案 #${widget.proposalId} 投票：$voteText',
+            'fields': [
+              {
+                'key': 'proposal_id',
+                'label': '提案编号',
+                'value': widget.proposalId.toString(),
+              },
+              {'key': 'approve', 'label': '投票', 'value': approve.toString()},
+              if (_createInfo != null) ...[
+                {
+                  'key': 'amount_yuan',
+                  'label': '初始资金',
+                  'value': AmountFormat.format(_createInfo!.amountYuan,
+                      symbol: ''),
+                  'format': 'currency',
+                },
+                {
+                  'key': 'threshold',
+                  'label': '阈值',
+                  'value': '${_createInfo!.threshold}/${_createInfo!.adminCount}',
+                },
+              ],
+              if (_closeInfo != null)
+                {
+                  'key': 'beneficiary',
+                  'label': '受益人',
+                  'value': _closeInfo!.beneficiary,
+                },
+            ],
+          },
+        );
+        final requestJson = qrSigner.encodeRequest(request);
+        final response = await Navigator.push<QrSignResponse>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => QrSignSessionPage(
+                request: request,
+                requestJson: requestJson,
+                expectedPubkey: '0x${wallet.pubkeyHex}'),
+          ),
+        );
+        if (response == null) throw Exception('签名已取消');
+        return Uint8List.fromList(_hexDecode(response.signature));
+      }
+
+      final ({String txHash, int usedNonce}) result;
+      if (_isCreateProposal) {
+        result = await _manageService.submitVoteCreate(
+          proposalId: widget.proposalId,
+          approve: approve,
+          fromAddress: wallet.address,
+          signerPubkey: Uint8List.fromList(pubkeyBytes),
+          sign: signCallback,
+        );
+      } else {
+        result = await _manageService.submitVoteClose(
+          proposalId: widget.proposalId,
+          approve: approve,
+          fromAddress: wallet.address,
+          signerPubkey: Uint8List.fromList(pubkeyBytes),
+          sign: signCallback,
+        );
+      }
+
+      // 持久化待确认投票记录
+      var pubkey = wallet.pubkeyHex.toLowerCase();
+      if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
+      await PendingVoteStore.instance.save(PendingVoteRecord(
+        proposalType: 'duoqian_manage',
+        proposalId: widget.proposalId,
+        walletPubkey: pubkey,
+        approve: approve,
+        txHash: result.txHash,
+        usedNonce: result.usedNonce,
+        createdAt: DateTime.now(),
+      ));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('投票已提交：${_truncateAddress(result.txHash)}'),
+          backgroundColor: _inkGreen,
+        ),
+      );
+
+      _adminService.clearCache(widget.institution.shenfenId);
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('投票失败：$e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  void _confirmVote(bool approve) {
+    final label = approve ? '赞成' : '反对';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('确认$label'),
+        content: Text('确定要对此提案投"$label"票吗？投票后不可更改。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _submitVote(approve);
+            },
+            child: Text(label),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ──── 构建 UI ────
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text(
+          '提案详情',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        foregroundColor: _inkGreen,
+        elevation: 0,
+        scrolledUnderElevation: 0.5,
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? _buildError()
+              : _buildContent(),
+      bottomNavigationBar: (!_loading &&
+              _error == null &&
+              _status == _statusVoting &&
+              _isCurrentUserAdmin)
+          ? _buildVoteButtons()
+          : null,
+    );
+  }
+
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 12),
+            Text('加载失败',
+                style: TextStyle(fontSize: 16, color: Colors.grey[700])),
+            const SizedBox(height: 6),
+            Text(
+              _error!,
+              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(onPressed: _load, child: const Text('重试')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    return RefreshIndicator(
+      onRefresh: () async {
+        _adminService.clearCache(widget.institution.shenfenId);
+        await _load();
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          _buildStatusBadge(),
+          const SizedBox(height: 16),
+          _buildProposalInfoCard(),
+          const SizedBox(height: 16),
+          _buildVotingProgress(),
+          const SizedBox(height: 16),
+          _buildAdminVoteList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge() {
+    final color = _statusColor(_status);
+    final label = _statusLabel(_status);
+    final typeLabel = _isCreateProposal ? '创建多签' : '关闭多签';
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _status == _statusVoting
+                    ? Icons.how_to_vote
+                    : _status == _statusPassed || _status == _statusExecuted
+                        ? Icons.check_circle
+                        : _status == _statusRejected
+                            ? Icons.cancel
+                            : Icons.error,
+                size: 16,
+                color: color,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: _inkGreen.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            typeLabel,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _inkGreen,
+            ),
+          ),
+        ),
+        const Spacer(),
+        Text(
+          '提案 ${formatProposalId(widget.proposalId)}',
+          style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProposalInfoCard() {
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey[200]!),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _isCreateProposal ? '创建多签提案信息' : '关闭多签提案信息',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: _inkGreen,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (_createInfo != null) ..._buildCreateInfoRows(),
+            if (_closeInfo != null) ..._buildCloseInfoRows(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildCreateInfoRows() {
+    final info = _createInfo!;
+    final duoqianSs58 = Keyring()
+        .encodeAddress(_hexDecode(info.duoqianAddress), 2027);
+    return [
+      _buildInfoRow('多签地址', _truncateAddress(duoqianSs58), onCopy: () {
+        Clipboard.setData(ClipboardData(text: duoqianSs58));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('地址已复制'), duration: Duration(seconds: 1)),
+        );
+      }),
+      const Divider(height: 20),
+      _buildInfoRow('发起人', _truncateAddress(info.proposer)),
+      const Divider(height: 20),
+      _buildInfoRow('管理员数量', '${info.adminCount}'),
+      const Divider(height: 20),
+      _buildInfoRow('通过阈值', '${info.threshold} / ${info.adminCount}'),
+      const Divider(height: 20),
+      _buildInfoRow(
+        '初始资金',
+        '${AmountFormat.format(info.amountYuan, symbol: '')} 元',
+      ),
+    ];
+  }
+
+  List<Widget> _buildCloseInfoRows() {
+    final info = _closeInfo!;
+    final duoqianSs58 = Keyring()
+        .encodeAddress(_hexDecode(info.duoqianAddress), 2027);
+    return [
+      _buildInfoRow('多签地址', _truncateAddress(duoqianSs58), onCopy: () {
+        Clipboard.setData(ClipboardData(text: duoqianSs58));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('地址已复制'), duration: Duration(seconds: 1)),
+        );
+      }),
+      const Divider(height: 20),
+      _buildInfoRow('受益人', _truncateAddress(info.beneficiary), onCopy: () {
+        Clipboard.setData(ClipboardData(text: info.beneficiary));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('地址已复制'), duration: Duration(seconds: 1)),
+        );
+      }),
+      const Divider(height: 20),
+      _buildInfoRow('发起人', _truncateAddress(info.proposer)),
+    ];
+  }
+
+  Widget _buildInfoRow(String label, String value, {VoidCallback? onCopy}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 13, color: Color(0xFF333333)),
+          ),
+        ),
+        if (onCopy != null)
+          GestureDetector(
+            onTap: onCopy,
+            child: Icon(Icons.copy, size: 16, color: Colors.grey[400]),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildVotingProgress() {
+    final threshold = widget.institution.internalThreshold;
+    final progress =
+        threshold > 0 ? (_yesCount / threshold).clamp(0.0, 1.0) : 0.0;
+
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey[200]!),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '投票进度',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: _inkGreen,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 10,
+                backgroundColor: Colors.grey[200],
+                valueColor: const AlwaysStoppedAnimation<Color>(_inkGreen),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '赞成 $_yesCount / 阈值 $threshold',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: _inkGreen,
+                  ),
+                ),
+                Text(
+                  '反对 $_noCount',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.red[400],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdminVoteList() {
+    final proposer =
+        _createInfo?.proposer ?? _closeInfo?.proposer;
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey[200]!),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Text(
+                '管理员投票明细（共 ${_admins.length} 人）',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: _inkGreen,
+                ),
+              ),
+            ),
+            const Divider(),
+            ...List.generate(_admins.length, (index) {
+              final pubkey = _admins[index];
+              final vote = _adminVotes[pubkey];
+              final ss58 = _pubkeyToSS58(pubkey);
+              final isProposer = proposer == ss58;
+              final isPending = _pendingPubkeys.contains(pubkey);
+
+              return ListTile(
+                dense: true,
+                leading: CircleAvatar(
+                  radius: 16,
+                  backgroundColor: _inkGreen.withValues(alpha: 0.08),
+                  child: Text(
+                    '${index + 1}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _inkGreen,
+                    ),
+                  ),
+                ),
+                title: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _truncateAddress(ss58),
+                        style: const TextStyle(fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isProposer) ...[
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: _inkGreen.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          '发起人',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: _inkGreen,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                trailing: isPending
+                    ? Icon(Icons.schedule, size: 18, color: Colors.orange[400])
+                    : vote == null
+                        ? Icon(Icons.remove_circle_outline,
+                            size: 18, color: Colors.grey[300])
+                        : vote
+                            ? const Icon(Icons.check_circle,
+                                size: 18, color: Colors.green)
+                            : const Icon(Icons.cancel,
+                                size: 18, color: Colors.red),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVoteButtons() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 钱包选择器
+            if (_votableWallets.length > 1) ...[
+              Row(
+                children: [
+                  Text('投票钱包：',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: DropdownButton<WalletProfile>(
+                      isExpanded: true,
+                      isDense: true,
+                      value: _selectedVoteWallet,
+                      items: _votableWallets.map((w) {
+                        return DropdownMenuItem(
+                          value: w,
+                          child: Text(
+                            '${w.walletName} (${_truncateAddress(w.address)})',
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (w) =>
+                          setState(() => _selectedVoteWallet = w),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+            ],
+            // 投票按钮
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed:
+                        _canVote && !_submitting ? () => _confirmVote(false) : null,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: BorderSide(
+                          color: _canVote ? Colors.red : Colors.grey[300]!),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('反对', style: TextStyle(fontSize: 15)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed:
+                        _canVote && !_submitting ? () => _confirmVote(true) : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _inkGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: _submitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('赞成', style: TextStyle(fontSize: 15)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ──── 工具 ────
+
+  String _toHex(List<int> bytes) {
+    const chars = '0123456789abcdef';
+    final buf = StringBuffer();
+    for (final b in bytes) {
+      buf
+        ..write(chars[(b >> 4) & 0x0f])
+        ..write(chars[b & 0x0f]);
+    }
+    return buf.toString();
+  }
+
+  Uint8List _hexDecode(String hex) {
+    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
+    final result = Uint8List(h.length ~/ 2);
+    for (var i = 0; i < result.length; i++) {
+      result[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);
+    }
+    return result;
+  }
+
+  static String _hexEncode(Uint8List bytes) {
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  Uint8List _u64ToLeBytes(int value) {
+    final bytes = Uint8List(8);
+    final bd = ByteData.sublistView(bytes);
+    bd.setUint64(0, value, Endian.little);
+    return bytes;
+  }
+
+  Uint8List _blake2128Concat(Uint8List data) {
+    final hash = Hasher.blake2b128.hash(data);
+    final result = Uint8List(hash.length + data.length);
+    result.setAll(0, hash);
+    result.setAll(hash.length, data);
+    return result;
+  }
+}
