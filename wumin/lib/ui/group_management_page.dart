@@ -125,6 +125,7 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
     await _load();
   }
 
+  // ignore: unused_element
   Future<void> _deleteGroup(WalletGroupEntity group) async {
     if (group.isDefault) return;
 

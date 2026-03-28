@@ -3,7 +3,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:isar/isar.dart';
 
 import '../isar/wallet_isar.dart';
-import '../qr/offline_sign_page.dart';
 import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 import 'create_wallet_page.dart';
