@@ -24,16 +24,26 @@ void main() {
 
     test('signParsedRequest should sign matching request with hot wallet',
         () async {
+      // vote_transfer: pallet=0x13, call=0x01, proposal_id=1 (u64 LE), approve=true
+      const votePayloadHex = '0x13010100000000000000' '01';
+      final knownSpec = PalletRegistry.supportedSpecVersions.first;
       final request = QrSigner().buildRequest(
         requestId: 'offline-req-test-0001',
         account: hotWallet.address,
         pubkey: '0x${hotWallet.pubkeyHex}',
-        payloadHex: '0x01020304',
+        payloadHex: votePayloadHex,
+        specVersion: knownSpec,
         display: const <String, dynamic>{
-          'action': 'test',
-          'summary': 'test payload',
+          'action': 'vote_transfer',
+          'summary': '转账提案 #1 投票：赞成',
+          'fields': [
+            {'key': 'proposal_id', 'label': '提案', 'value': '1'},
+            {'key': 'approve', 'label': '投票', 'value': 'true'},
+          ],
         },
       );
+
+      final payloadBytes = _hexToBytes(votePayloadHex);
 
       final response = await service.signParsedRequest(
         walletIndex: hotWallet.walletIndex,
@@ -45,7 +55,7 @@ void main() {
       expect(
         _verifySr25519(
           pubkeyHex: response.pubkey,
-          message: Uint8List.fromList(<int>[1, 2, 3, 4]),
+          message: Uint8List.fromList(payloadBytes),
           signatureHex: response.signature,
         ),
         isTrue,
