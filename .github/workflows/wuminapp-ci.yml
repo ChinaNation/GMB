@@ -30,6 +30,21 @@ jobs:
         with:
           channel: stable
 
+      # 下载最新 chainspec.json（由 Linux CI 导出并上传）。
+      - name: 下载最新 chainspec.json
+        run: gh run download --name citizenchain-chainspec --dir chainspec-artifact -R ${{ github.repository }} || echo "未找到 chainspec artifact，使用仓库内现有版本"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: 替换 chainspec.json
+        run: |
+          if [ -f chainspec-artifact/chainspec.json ]; then
+            cp chainspec-artifact/chainspec.json wuminapp/assets/chainspec.json
+            echo "已更新为最新 chainspec.json"
+          else
+            echo "使用仓库内现有 chainspec.json"
+          fi
+
       - name: 安装依赖
         working-directory: wuminapp
         run: flutter pub get
