@@ -49,6 +49,9 @@
 - `memory/08-tasks/open/20260328-130310-全面仔细检查-duoqian-transfer-pow-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 - `memory/08-tasks/open/20260328-131513-全面仔细检查-genesis-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 - `memory/08-tasks/open/20260328-140327-全面仔细检查-node-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
+- `memory/08-tasks/open/20260328-164533-全面仔细检查-cpms-系统是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
+- `memory/08-tasks/open/20260329-100000-wumin-wuminapp-扫码登录-sfid-cpms.md`
+- `memory/08-tasks/open/20260329-124242-统一切换-libp2p-wss-30333-清理-litep2p-并修复全链节点连接问题.md`
 
 ## done
 
@@ -74,3 +77,6 @@
 - `memory/08-tasks/done/20260328-123709-审查-onchain-transaction-pow.md`
 - `memory/08-tasks/done/20260328-132030-审查-nodeui.md`
 - `memory/08-tasks/done/20260328-141519-全面仔细检查一遍-primitives-模块有没有安全漏洞-有没有需要改进的地方-功能需求是否严格实现-中文注释技术文档是否完整-有没有要清理的残留.md`
+- `memory/08-tasks/done/20260328-145337-审查-runtime-src.md`
+- `memory/08-tasks/done/20260328-164356-审查-sfid-系统.md`
+- `memory/08-tasks/done/20260329-150008-统一-sfid-城市代码从-001-起排并预留-000-为省级占位码-令-gmr-zrr-znr-生成-sfid-时默认使用-000-保持机构-site-sfid-与其他类型继续使用真实市码-并同步更新-sfid-前后端-cpms-编译期码表与文档.md`

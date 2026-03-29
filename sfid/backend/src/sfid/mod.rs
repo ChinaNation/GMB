@@ -8,6 +8,7 @@ use province::{city_code_by_name, province_code_by_name};
 type Blake2b256 = Blake2b<U32>;
 
 const ALPHABET: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const RESERVED_PROVINCE_CITY_CODE: &str = "000";
 
 pub struct GenerateSfidInput<'a> {
     pub account_pubkey: &'a str,
@@ -109,19 +110,69 @@ pub fn generate_sfid_code(input: GenerateSfidInput<'_>) -> Result<String, &'stat
     let province_code = province_code_by_name(input.province)
         .ok_or("province not found in code table")?
         .to_string();
-    let city_code = city_code_by_name(input.province, input.city)
-        .ok_or("city not found in province code table")?
-        .to_string();
+    // 中文注释：公民人/自然人/智能人的公开编码只精确到省，市级段统一固定为 000。
+    let city_code = if matches!(a3, "GMR" | "ZRR" | "ZNR") {
+        RESERVED_PROVINCE_CITY_CODE.to_string()
+    } else {
+        city_code_by_name(input.province, input.city)
+            .ok_or("city not found in province code table")?
+            .to_string()
+    };
+    let normalized_city_for_hash = if matches!(a3, "GMR" | "ZRR" | "ZNR") {
+        RESERVED_PROVINCE_CITY_CODE
+    } else {
+        input.city
+    };
     let r5 = format!("{province_code}{city_code}");
     let n9 = format!(
         "{:09}",
         (hash_text(&format!(
             "{}|{}|{}|{}|{}|{}",
-            input.account_pubkey, a3, input.province, input.city, input.institution, d
+            input.account_pubkey,
+            a3,
+            input.province,
+            normalized_city_for_hash,
+            input.institution,
+            d
         )) as usize)
             % 1_000_000_000
     );
     let payload = format!("{a3}{r5}{t2}{p1}{n9}{d}");
     let c1 = checksum(&payload);
     Ok(format!("{a3}-{r5}-{t2}{p1}{c1}-{n9}-{d}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{generate_sfid_code, GenerateSfidInput};
+
+    #[test]
+    fn gmr_uses_reserved_province_city_code() {
+        let code = generate_sfid_code(GenerateSfidInput {
+            account_pubkey: "0x1234",
+            a3: "GMR",
+            p1: "1",
+            province: "广东省",
+            city: "广州市",
+            institution: "ZG",
+        })
+        .expect("gmr sfid should generate");
+
+        assert_eq!(code.split('-').nth(1), Some("GD000"));
+    }
+
+    #[test]
+    fn gfr_keeps_real_city_code() {
+        let code = generate_sfid_code(GenerateSfidInput {
+            account_pubkey: "0x5678",
+            a3: "GFR",
+            p1: "0",
+            province: "广东省",
+            city: "广州市",
+            institution: "ZF",
+        })
+        .expect("gfr sfid should generate");
+
+        assert_eq!(code.split('-').nth(1), Some("GD001"));
+    }
 }

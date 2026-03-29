@@ -1,61 +1,65 @@
 use super::CityCode;
 
-pub const CITIES_LI: [CityCode; 102] = [
+pub const CITIES_LI: [CityCode; 103] = [
     CityCode {
-        name: "沈阳市",
+        name: "省辖市",
         code: "000",
     },
     CityCode {
-        name: "和平市",
+        name: "沈阳市",
         code: "001",
     },
     CityCode {
-        name: "沈河市",
+        name: "和平市",
         code: "002",
     },
     CityCode {
-        name: "大东市",
+        name: "沈河市",
         code: "003",
     },
     CityCode {
-        name: "皇姑市",
+        name: "大东市",
         code: "004",
     },
     CityCode {
-        name: "铁西市",
+        name: "皇姑市",
         code: "005",
     },
     CityCode {
-        name: "苏家屯市",
+        name: "铁西市",
         code: "006",
     },
     CityCode {
-        name: "浑南市",
+        name: "苏家屯市",
         code: "007",
     },
     CityCode {
-        name: "沈北新市",
+        name: "浑南市",
         code: "008",
     },
     CityCode {
-        name: "于洪市",
+        name: "沈北新市",
         code: "009",
     },
     CityCode {
-        name: "辽中市",
+        name: "于洪市",
         code: "010",
     },
     CityCode {
-        name: "康平市",
+        name: "辽中市",
         code: "011",
     },
     CityCode {
-        name: "法库市",
+        name: "康平市",
         code: "012",
     },
     CityCode {
-        name: "新民市",
+        name: "法库市",
         code: "013",
+    },
+    CityCode {
+        name: "新民市",
+        code: "014",
     },
     CityCode {
         name: "中山市",
@@ -235,178 +239,178 @@ pub const CITIES_LI: [CityCode; 102] = [
     },
     CityCode {
         name: "站前市",
-        code: "060",
+        code: "059",
     },
     CityCode {
         name: "西市市",
-        code: "061",
+        code: "060",
     },
     CityCode {
         name: "鲅鱼圈市",
-        code: "062",
+        code: "061",
     },
     CityCode {
         name: "老边市",
-        code: "063",
+        code: "062",
     },
     CityCode {
         name: "盖州市",
-        code: "064",
+        code: "063",
     },
     CityCode {
         name: "大石桥市",
-        code: "065",
+        code: "064",
     },
     CityCode {
         name: "海州市",
-        code: "066",
+        code: "065",
     },
     CityCode {
         name: "新邱市",
-        code: "067",
+        code: "066",
     },
     CityCode {
         name: "太平市",
-        code: "068",
+        code: "067",
     },
     CityCode {
         name: "清河门市",
-        code: "069",
+        code: "068",
     },
     CityCode {
         name: "细河市",
-        code: "070",
+        code: "069",
     },
     CityCode {
         name: "阜新市",
-        code: "071",
+        code: "070",
     },
     CityCode {
         name: "彰武市",
-        code: "072",
+        code: "071",
     },
     CityCode {
         name: "白塔市",
-        code: "073",
+        code: "072",
     },
     CityCode {
         name: "文圣市",
-        code: "074",
+        code: "073",
     },
     CityCode {
         name: "宏伟市",
-        code: "075",
+        code: "074",
     },
     CityCode {
         name: "弓长岭市",
-        code: "076",
+        code: "075",
     },
     CityCode {
         name: "太子河市",
-        code: "077",
+        code: "076",
     },
     CityCode {
         name: "辽阳市",
-        code: "078",
+        code: "077",
     },
     CityCode {
         name: "灯塔市",
-        code: "079",
+        code: "078",
     },
     CityCode {
         name: "双台子市",
-        code: "080",
+        code: "079",
     },
     CityCode {
         name: "兴隆台市",
-        code: "081",
+        code: "080",
     },
     CityCode {
         name: "大洼市",
-        code: "082",
+        code: "081",
     },
     CityCode {
         name: "盘山市",
-        code: "083",
+        code: "082",
     },
     CityCode {
         name: "银州市",
-        code: "084",
+        code: "083",
     },
     CityCode {
         name: "清河市",
-        code: "085",
+        code: "084",
     },
     CityCode {
         name: "铁岭市",
-        code: "086",
+        code: "085",
     },
     CityCode {
         name: "西丰市",
-        code: "087",
+        code: "086",
     },
     CityCode {
         name: "昌图市",
-        code: "088",
+        code: "087",
     },
     CityCode {
         name: "调兵山市",
-        code: "089",
+        code: "088",
     },
     CityCode {
         name: "开原市",
-        code: "090",
+        code: "089",
     },
     CityCode {
         name: "双塔市",
-        code: "091",
+        code: "090",
     },
     CityCode {
         name: "龙城市",
-        code: "092",
+        code: "091",
     },
     CityCode {
         name: "朝阳市",
-        code: "093",
+        code: "092",
     },
     CityCode {
         name: "建平市",
-        code: "094",
+        code: "093",
     },
     CityCode {
         name: "喀喇沁左翼市",
-        code: "095",
+        code: "094",
     },
     CityCode {
         name: "北票市",
-        code: "096",
+        code: "095",
     },
     CityCode {
         name: "凌源市",
-        code: "097",
+        code: "096",
     },
     CityCode {
         name: "连山市",
-        code: "098",
+        code: "097",
     },
     CityCode {
         name: "龙港市",
-        code: "099",
+        code: "098",
     },
     CityCode {
         name: "南票市",
-        code: "100",
+        code: "099",
     },
     CityCode {
         name: "绥中市",
-        code: "101",
+        code: "100",
     },
     CityCode {
         name: "建昌市",
-        code: "102",
+        code: "101",
     },
     CityCode {
         name: "兴城市",
-        code: "103",
+        code: "102",
     },
 ];
