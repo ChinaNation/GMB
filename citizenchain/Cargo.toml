@@ -149,3 +149,9 @@ substrate-frame-rpc-system = { git = "https://github.com/ChinaNation/polkadot-sd
 # Build 工具
 substrate-build-script-utils = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
 substrate-wasm-builder = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix" }
+
+# 本地 patch libp2p-websocket：公开 tls::Config 的 client 字段，
+# 支持在 transport.rs 中替换为自定义 TLS 客户端（跳过 CA 校验，
+# P2P 自签证书场景——身份认证由 Noise 协议通过 peer ID 保证）。
+[patch.crates-io]
+libp2p-websocket = { path = "node/libp2p-websocket-patch" }
