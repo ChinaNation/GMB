@@ -265,6 +265,38 @@ mod benchmarks {
     }
 
     #[benchmark]
+    fn propose_create_personal() -> Result<(), BenchmarkError> {
+        let admin1: T::AccountId = frame_benchmarking::account("admin", 40, 0);
+        let admin2: T::AccountId = frame_benchmarking::account("admin", 41, 0);
+
+        let admins: DuoqianAdminsOf<T> = vec![admin1.clone(), admin2.clone()]
+            .try_into()
+            .map_err(|_| BenchmarkError::Stop("benchmark admins should fit"))?;
+
+        let amount: BalanceOf<T> = 1_000u128.saturated_into();
+        let funding: BalanceOf<T> = 1_000_000u128.saturated_into();
+        let _ = T::Currency::deposit_creating(&admin1, funding);
+
+        let name: SfidNameOf<T> = b"Benchmark Personal"
+            .to_vec()
+            .try_into()
+            .map_err(|_| BenchmarkError::Stop("benchmark name should fit"))?;
+
+        #[extrinsic_call]
+        propose_create_personal(
+            RawOrigin::Signed(admin1.clone()),
+            name,
+            2,
+            admins,
+            2,
+            amount,
+        );
+
+        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(0).is_some());
+        Ok(())
+    }
+
+    #[benchmark]
     fn vote_close() -> Result<(), BenchmarkError> {
         let relayer: T::AccountId = frame_benchmarking::account("relayer", 4, 0);
 

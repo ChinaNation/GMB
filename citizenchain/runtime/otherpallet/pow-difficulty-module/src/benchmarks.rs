@@ -2,6 +2,7 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
+use codec::Encode;
 use frame_benchmarking::v2::*;
 use frame_support::traits::Hooks;
 use primitives::pow_const::{DIFFICULTY_ADJUSTMENT_INTERVAL, DIFFICULTY_TARGET_WINDOW_MS};
@@ -9,13 +10,19 @@ use sp_runtime::traits::SaturatedConversion;
 
 use crate::pallet::{Config, CurrentDifficulty, Pallet, WindowStartMs};
 
+/// 模拟区块含有 2 个 extrinsic（1 inherent + 1 用户交易），绕过空块拒绝断言。
+fn mock_extrinsic_count() {
+    let key = frame_support::storage::storage_prefix(b"System", b"ExtrinsicCount");
+    frame_support::storage::unhashed::put_raw(&key, &2u32.encode());
+}
+
 #[benchmarks]
 mod benchmarks {
     use super::*;
 
     #[benchmark]
     fn on_initialize_adjustment() {
-        // 中文注释：模拟真正的“结算块”路径，覆盖一次完整的难度计算和窗口推进。
+        // 中文注释：模拟真正的"结算块"路径，覆盖一次完整的难度计算和窗口推进。
         let n: frame_system::pallet_prelude::BlockNumberFor<T> =
             (DIFFICULTY_ADJUSTMENT_INTERVAL + 1).saturated_into();
         frame_system::Pallet::<T>::set_block_number(n);
@@ -24,6 +31,7 @@ mod benchmarks {
         pallet_timestamp::Pallet::<T>::set_timestamp(
             (1_000u64.saturating_add(DIFFICULTY_TARGET_WINDOW_MS)).saturated_into(),
         );
+        mock_extrinsic_count();
 
         #[block]
         {
@@ -44,6 +52,7 @@ mod benchmarks {
         frame_system::Pallet::<T>::set_block_number(n);
         WindowStartMs::<T>::kill();
         pallet_timestamp::Pallet::<T>::set_timestamp(6_000u64.saturated_into());
+        mock_extrinsic_count();
 
         #[block]
         {
@@ -61,6 +70,7 @@ mod benchmarks {
         frame_system::Pallet::<T>::set_block_number(n);
         WindowStartMs::<T>::put(1_000u64);
         pallet_timestamp::Pallet::<T>::set_timestamp(12_000u64.saturated_into());
+        mock_extrinsic_count();
 
         #[block]
         {
@@ -70,4 +80,6 @@ mod benchmarks {
 
         assert_eq!(WindowStartMs::<T>::get(), Some(1_000u64));
     }
+
+    impl_benchmark_test_suite!(Pallet, crate::tests::new_test_ext(), crate::tests::Test,);
 }

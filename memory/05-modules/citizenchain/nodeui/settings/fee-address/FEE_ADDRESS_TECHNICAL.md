@@ -72,6 +72,7 @@
 - 链上读取与交易提交使用 `shared/rpc.rs` 维护的共享 RPC 端口来源，默认 9944，但可随运行时配置/检测结果切换。
 - 若地址已保存但链上提交失败，命令返回错误，提示“本地已保存，但链上绑定失败”。
 - `home::process::start_node` 会调用本模块同步函数，节点启动后自动补齐链上绑定。
-- 节点数据目录通过 `shared/keystore::node_data_dir` 获取，避免重复定义路径逻辑。
+- 矿工身份（`powr` 公钥）仅从默认链（`citizenchain`）的 keystore 目录读取，不遍历其他链目录，避免旧链残留 keystore 导致矿工身份判定错位。
+- 节点数据目录通过 `shared/keystore::node_data_dir` 获取，默认链 keystore 路径通过 `shared/keystore::default_chain_keystore_dir` 获取。
 - 返回前端的错误消息使用 `security::sanitize_path` 脱敏，仅保留文件名。
 - SS58 地址校验和验证使用 blake2b-512（Substrate 标准），链上 storage key 派生使用 blake2b_128（与链上 Blake2_128Concat hasher 对齐）。

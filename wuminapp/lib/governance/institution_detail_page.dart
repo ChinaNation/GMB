@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ui/app_theme.dart';
 import '../util/amount_format.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'admin_list_page.dart';
@@ -31,8 +32,6 @@ class InstitutionDetailPage extends StatefulWidget {
 }
 
 class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
-
   final InstitutionAdminService _adminService = InstitutionAdminService();
   final WalletManager _walletManager = WalletManager();
   final TransferProposalService _transferService = TransferProposalService();
@@ -117,17 +116,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: Text(
           widget.institution.name,
           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
-        backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
-        elevation: 0,
-        scrolledUnderElevation: 0.5,
+        foregroundColor: AppTheme.textPrimary,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -144,14 +140,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
             const SizedBox(height: 12),
-            Text('加载失败',
-                style: TextStyle(fontSize: 16, color: Colors.grey[700])),
+            const Text('加载失败',
+                style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
             const SizedBox(height: 6),
             Text(
               _error!,
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               textAlign: TextAlign.center,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
@@ -242,14 +238,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     const SizedBox(height: 4),
                     Text(
                       '管理员 ${_admins.length} 人　通过阈值 ${inst.internalThreshold}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                     ),
                   ],
                 ),
               ),
               // 右侧箭头（仅管理员显示）
               if (_isCurrentUserAdmin)
-                Icon(Icons.chevron_right, size: 20, color: Colors.grey[400]),
+                Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),
@@ -262,21 +258,17 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   Widget _buildAdminBadge() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.green.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
-      ),
+      decoration: AppTheme.bannerDecoration(AppTheme.success),
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.verified_user, size: 14, color: Colors.green),
+          Icon(Icons.verified_user, size: 14, color: AppTheme.success),
           SizedBox(width: 4),
           Text(
             '你是本机构管理员，点击上方卡片可发起提案',
             style: TextStyle(
               fontSize: 12,
-              color: Colors.green,
+              color: AppTheme.success,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -293,7 +285,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: AppTheme.border),
       ),
       child: InkWell(
         onTap: _openAdminList,
@@ -306,11 +298,11 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: _inkGreen.withValues(alpha: 0.08),
+                  color: AppTheme.primaryDark.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.people_outline,
-                    size: 18, color: _inkGreen),
+                    size: 18, color: AppTheme.primaryDark),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -322,18 +314,18 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: _inkGreen,
+                        color: AppTheme.primaryDark,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '共 ${_admins.length} 位管理员',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, size: 20, color: Colors.grey[400]),
+              Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),
@@ -352,7 +344,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: _inkGreen,
+            color: AppTheme.primaryDark,
           ),
         ),
         const SizedBox(height: 12),
@@ -361,22 +353,22 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
             width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey[200]!),
+              color: AppTheme.surfaceMuted,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              border: Border.all(color: AppTheme.border),
             ),
             child: Column(
               children: [
-                Icon(Icons.ballot_outlined, size: 40, color: Colors.grey[400]),
+                const Icon(Icons.ballot_outlined, size: 40, color: AppTheme.textTertiary),
                 const SizedBox(height: 8),
-                Text(
+                const Text(
                   '暂无投票事件',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                  style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                const Text(
                   '本机构提案和全局联合投票事件将在此显示',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                  style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                 ),
               ],
             ),
@@ -409,20 +401,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     }
   }
 
-  Color _statusColor(int? status) {
-    switch (status) {
-      case 0:
-        return Colors.blue;
-      case 1:
-        return Colors.green;
-      case 2:
-        return Colors.red;
-      case 3:
-        return Colors.green;
-      default:
-        return Colors.grey;
-    }
-  }
+  Color _statusColor(int? status) => AppTheme.proposalStatusColor(status ?? -1);
 
   String _proposalTitle(ProposalWithDetail proposal) {
     final proposalId = formatProposalId(proposal.meta.proposalId);
@@ -521,13 +500,13 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: _inkGreen,
+                        color: AppTheme.primaryDark,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       _proposalSubtitle(proposal),
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                     ),
                   ],
                 ),
@@ -548,7 +527,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                 ),
               ),
               const SizedBox(width: 4),
-              Icon(Icons.chevron_right, size: 20, color: Colors.grey[400]),
+              Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),

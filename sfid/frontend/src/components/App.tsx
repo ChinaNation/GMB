@@ -49,6 +49,23 @@ import {
 const loginBg = '/assets/login-bg.png';
 
 const { Header, Content } = Layout;
+
+/** 业务卡片统一毛玻璃风格 */
+const glassCardStyle: React.CSSProperties = {
+  background: 'rgba(255,255,255,0.92)',
+  backdropFilter: 'blur(16px)',
+  borderRadius: 16,
+  boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+  border: '1px solid rgba(255,255,255,0.6)'
+};
+
+/** Card title 左侧 teal 竖条 + 加粗 */
+const glassCardHeadStyle: React.CSSProperties = {
+  borderBottom: '1px solid #e5e7eb',
+  borderLeft: '3px solid #0d9488',
+  paddingLeft: 20,
+  fontWeight: 600
+};
 const AUTH_STORAGE_KEY = 'sfid_admin_auth_v1';
 
 function readStoredAuth(): AdminAuth | null {
@@ -138,6 +155,7 @@ function parseSignedLoginPayload(raw: string, fallbackChallengeId: string): Sign
   const challenge_id =
     (typeof payload.request_id === 'string' && payload.request_id.trim()) ||
     (typeof payload.challenge_id === 'string' && payload.challenge_id.trim()) ||
+    (typeof payload.challenge === 'string' && payload.challenge.trim()) ||
     fallbackChallengeId;
   const admin_pubkey =
     (typeof payload.account === 'string' && payload.account.trim()) ||
@@ -691,7 +709,8 @@ export default function App() {
   const refreshList = async (currentAuth: AdminAuth, keyword?: string, silent?: boolean) => {
     setLoading(true);
     try {
-      const list = await listCitizens(currentAuth, keyword);
+      const raw = await listCitizens(currentAuth, keyword);
+      const list = Array.isArray(raw) ? raw : [];
       setRows(list);
       if (keyword && list.length === 0) {
         Modal.warning({
@@ -718,7 +737,7 @@ export default function App() {
     setOperatorsLoading(true);
     try {
       const rows = await listOperators(currentAuth);
-      setOperators(rows);
+      setOperators(Array.isArray(rows) ? rows : []);
     } catch (err) {
       const msg = err instanceof Error ? err.message : '加载操作管理员失败';
       message.error(msg);
@@ -731,7 +750,7 @@ export default function App() {
     setSuperAdminsLoading(true);
     try {
       const rows = await listSuperAdmins(currentAuth);
-      setSuperAdmins(rows);
+      setSuperAdmins(Array.isArray(rows) ? rows : []);
     } catch (err) {
       const msg = err instanceof Error ? err.message : '加载超级管理员失败';
       message.error(msg);
@@ -744,7 +763,7 @@ export default function App() {
     setCpmsSitesLoading(true);
     try {
       const rows = await listCpmsSites(currentAuth);
-      setCpmsSites(rows);
+      setCpmsSites(Array.isArray(rows) ? rows : []);
     } catch (err) {
       const msg = err instanceof Error ? err.message : '加载机构列表失败';
       message.error(msg);
@@ -1662,163 +1681,406 @@ export default function App() {
     <Layout
       style={{
         minHeight: '100vh',
-        backgroundImage: `url(${loginBg})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed'
+        background: 'linear-gradient(145deg, #0f172a 0%, #134e4a 40%, #0f766e 70%, #115e59 100%)',
+        backgroundAttachment: 'fixed',
+        position: 'relative'
       }}
     >
+      {/* 背景装饰层 */}
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          pointerEvents: 'none',
+          zIndex: 0,
+          overflow: 'hidden'
+        }}
+      >
+        {/* 右上光晕 */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '-20%',
+            right: '-10%',
+            width: '50vw',
+            height: '50vw',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(13,148,136,0.25) 0%, transparent 70%)',
+          }}
+        />
+        {/* 左下光晕 */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '-15%',
+            left: '-10%',
+            width: '45vw',
+            height: '45vw',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(20,184,166,0.15) 0%, transparent 70%)',
+          }}
+        />
+        {/* 网格纹理 */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage:
+              'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
+            backgroundSize: '60px 60px',
+          }}
+        />
+        {/* 对角线装饰 */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage:
+              'linear-gradient(135deg, transparent 48.5%, rgba(255,255,255,0.015) 48.5%, rgba(255,255,255,0.015) 51.5%, transparent 51.5%)',
+            backgroundSize: '120px 120px',
+          }}
+        />
+      </div>
       <Header
         style={{
-          background: 'transparent',
+          position: 'relative',
+          zIndex: 1,
+          background: 'linear-gradient(135deg, rgba(13,148,136,0.7) 0%, rgba(15,118,110,0.8) 100%)',
+          backdropFilter: 'blur(12px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          paddingInline: 24
+          paddingInline: 32,
+          height: 72,
+          borderBottom: '1px solid rgba(255,255,255,0.15)',
+          boxShadow: '0 2px 16px rgba(0,0,0,0.12)'
         }}
       >
-        <div style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.1 }}>
-          <Typography.Text
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div
             style={{
-              color: '#ffffff',
-              fontSize: 24,
-              fontWeight: 700,
-              textShadow: '0 2px 8px rgba(0,0,0,0.45)'
+              width: 44,
+              height: 44,
+              borderRadius: 10,
+              background: 'rgba(255,255,255,0.18)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 22,
+              border: '1px solid rgba(255,255,255,0.25)'
             }}
           >
-            中华民族联邦共和国
-          </Typography.Text>
-          <Typography.Title
-            level={4}
-            style={{
-              color: '#ffffff',
-              margin: '2px 0 0 144px',
-              fontSize: 20,
-              textShadow: '0 2px 8px rgba(0,0,0,0.45)'
-            }}
-          >
-            身份识别码系统
-          </Typography.Title>
+            <QrcodeOutlined style={{ color: '#fff' }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+            <Typography.Text
+              style={{
+                color: '#ffffff',
+                fontSize: 20,
+                fontWeight: 700,
+                letterSpacing: 2
+              }}
+            >
+              中华民族联邦共和国
+            </Typography.Text>
+            <Typography.Text
+              style={{
+                color: 'rgba(255,255,255,0.8)',
+                fontSize: 13,
+                fontWeight: 500,
+                letterSpacing: 4,
+                marginTop: 2
+              }}
+            >
+              身份识别码系统
+            </Typography.Text>
+          </div>
         </div>
         {auth && (
-          <Typography.Text
-            style={{
-              color: '#ffffff',
-              fontSize: 18,
-              fontWeight: 600,
-              textShadow: '0 2px 8px rgba(0,0,0,0.45)'
-            }}
-          >
-            {resolveHeaderAdminName(auth)}
-          </Typography.Text>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Typography.Text
+              style={{
+                color: '#ffffff',
+                fontSize: 14,
+                fontWeight: 500,
+                background: 'rgba(255,255,255,0.12)',
+                padding: '6px 16px',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.15)'
+              }}
+            >
+              {resolveHeaderAdminName(auth)}
+            </Typography.Text>
+            <Button
+              size="small"
+              danger
+              onClick={onLogout}
+              style={{
+                background: 'rgba(255,255,255,0.1)',
+                borderColor: 'rgba(255,255,255,0.25)',
+                color: '#fca5a5',
+                fontWeight: 500,
+                borderRadius: 8
+              }}
+            >
+              退出
+            </Button>
+          </div>
         )}
       </Header>
 
       {bootstrapping ? (
-        <Content style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Content style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <Card bordered={false} style={{ width: 520, maxWidth: '92vw' }} loading />
         </Content>
       ) : !auth ? (
         <Content
           style={{
+            position: 'relative',
+            zIndex: 1,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: 24
+            padding: 24,
+            minHeight: 'calc(100vh - 72px)'
           }}
         >
-          <Card
-            title={<span style={{ fontSize: 20, fontWeight: 600 }}>扫码登录</span>}
-            bordered={false}
-            headStyle={{ textAlign: 'center' }}
+          <div
             style={{
-              width: 720,
+              width: 780,
               maxWidth: '95vw',
-              background: 'rgba(255,255,255,0.88)',
-              backdropFilter: 'blur(4px)'
+              background: 'rgba(255,255,255,0.92)',
+              backdropFilter: 'blur(20px)',
+              borderRadius: 20,
+              boxShadow: '0 8px 40px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.06)',
+              border: '1px solid rgba(255,255,255,0.6)',
+              overflow: 'hidden'
             }}
           >
-            <Divider />
-            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <div style={{ flex: '1 1 320px', minWidth: 300 }}>
-                <div style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
-                  <div style={{ width: 220, height: 220, overflow: 'hidden' }}>
-                    <div
-                      style={{
-                        filter: pendingQrLogin ? 'none' : 'blur(2px)',
-                        transition: 'filter 0.25s ease'
-                      }}
-                    >
-                      <QRCode value={pendingQrLogin?.login_qr_payload || 'SFID_LOGIN_PENDING'} size={220} />
-                    </div>
-                  </div>
-                </div>
-                <Typography.Paragraph type="secondary" style={{ marginTop: 10, marginBottom: 8 }}>
-                  {pendingQrLogin
-                    ? `二维码有效期至：${new Date(pendingQrLogin.expire_at * 1000).toLocaleTimeString()}`
-                    : '二维码未生成'}
-                </Typography.Paragraph>
-                <Button type="primary" onClick={onCreateQrLogin} loading={challengeLoading}>
-                  {pendingQrLogin ? '重新生成二维码' : '生成二维码'}
-                </Button>
+            {/* 登录卡片顶部 */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #0d9488 0%, #0f766e 50%, #115e59 100%)',
+                padding: '28px 32px',
+                textAlign: 'center'
+              }}
+            >
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 52,
+                  height: 52,
+                  borderRadius: 14,
+                  background: 'rgba(255,255,255,0.18)',
+                  marginBottom: 12,
+                  border: '1px solid rgba(255,255,255,0.25)'
+                }}
+              >
+                <QrcodeOutlined style={{ fontSize: 26, color: '#fff' }} />
               </div>
-              <div style={{ flex: '1 1 320px', minWidth: 300 }}>
-                <Typography.Text strong>扫码窗口</Typography.Text>
+              <Typography.Title
+                level={4}
+                style={{ color: '#fff', margin: 0, fontWeight: 600, letterSpacing: 1 }}
+              >
+                管理员扫码登录
+              </Typography.Title>
+              <Typography.Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
+                使用 公民 移动端扫描二维码完成身份验证
+              </Typography.Text>
+            </div>
+
+            {/* 登录内容区域 */}
+            <div style={{ padding: '32px 36px 36px' }}>
+              <div style={{ display: 'flex', gap: 32, alignItems: 'stretch', flexWrap: 'wrap' }}>
+                {/* 左侧：QR 码生成 */}
                 <div
                   style={{
-                    marginTop: 8,
-                    width: '100%',
-                    aspectRatio: '1 / 1',
-                    background: '#111827',
-                    borderRadius: 8,
-                    overflow: 'hidden',
+                    flex: '1 1 300px',
+                    minWidth: 280,
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative'
+                    flexDirection: 'column',
+                    alignItems: 'center'
                   }}
                 >
-                  <video
-                    ref={videoRef}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    muted
-                    playsInline
-                  />
-                  {!scannerReady && (
-                    <Typography.Text style={{ color: '#fff', position: 'absolute' }}>
-                      {scannerActive ? '摄像头初始化中...' : '点击下方按钮开始扫码'}
+                  <Typography.Text
+                    strong
+                    style={{ fontSize: 14, marginBottom: 16, color: '#374151' }}
+                  >
+                    登录二维码
+                  </Typography.Text>
+                  <div
+                    style={{
+                      position: 'relative',
+                      padding: 16,
+                      background: '#f8fffe',
+                      borderRadius: 16,
+                      border: '2px solid #e6f7f5',
+                      display: 'inline-block'
+                    }}
+                  >
+                    {/* 扫码框四角装饰 */}
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: 20, height: 20, borderTop: '3px solid #0d9488', borderLeft: '3px solid #0d9488', borderTopLeftRadius: 8 }} />
+                    <div style={{ position: 'absolute', top: 0, right: 0, width: 20, height: 20, borderTop: '3px solid #0d9488', borderRight: '3px solid #0d9488', borderTopRightRadius: 8 }} />
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, width: 20, height: 20, borderBottom: '3px solid #0d9488', borderLeft: '3px solid #0d9488', borderBottomLeftRadius: 8 }} />
+                    <div style={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderBottom: '3px solid #0d9488', borderRight: '3px solid #0d9488', borderBottomRightRadius: 8 }} />
+                    <div
+                      style={{
+                        filter: pendingQrLogin ? 'none' : 'blur(3px) opacity(0.4)',
+                        transition: 'filter 0.3s ease'
+                      }}
+                    >
+                      <QRCode
+                        value={pendingQrLogin?.login_qr_payload || 'SFID_LOGIN_PENDING'}
+                        size={200}
+                        color="#134e4a"
+                      />
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 14, textAlign: 'center' }}>
+                    <Typography.Text
+                      type="secondary"
+                      style={{ fontSize: 12, display: 'block', marginBottom: 12 }}
+                    >
+                      {pendingQrLogin
+                        ? `有效期至 ${new Date(pendingQrLogin.expire_at * 1000).toLocaleTimeString()}`
+                        : '请点击按钮生成二维码'}
                     </Typography.Text>
-                  )}
+                    <Button
+                      type="primary"
+                      size="large"
+                      onClick={onCreateQrLogin}
+                      loading={challengeLoading}
+                      style={{
+                        borderRadius: 10,
+                        fontWeight: 500,
+                        boxShadow: '0 2px 8px rgba(13,148,136,0.3)'
+                      }}
+                    >
+                      {pendingQrLogin ? '重新生成' : '生成二维码'}
+                    </Button>
+                  </div>
                 </div>
-                <Space style={{ marginTop: 10 }}>
-                  <Button onClick={onToggleScanner} disabled={scanSubmitting}>
-                    {scannerActive ? '停止扫码' : '扫码签名二维码'}
-                  </Button>
-                </Space>
+
+                {/* 分割线 */}
+                <div
+                  style={{
+                    width: 1,
+                    background: 'linear-gradient(to bottom, transparent, #e5e7eb, transparent)',
+                    alignSelf: 'stretch',
+                    margin: '0 4px'
+                  }}
+                />
+
+                {/* 右侧：摄像头扫码 */}
+                <div
+                  style={{
+                    flex: '1 1 300px',
+                    minWidth: 280,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center'
+                  }}
+                >
+                  <Typography.Text
+                    strong
+                    style={{ fontSize: 14, marginBottom: 16, color: '#374151' }}
+                  >
+                    扫码窗口
+                  </Typography.Text>
+                  <div
+                    style={{
+                      width: '100%',
+                      maxWidth: 232,
+                      aspectRatio: '1 / 1',
+                      background: 'linear-gradient(145deg, #0f172a, #1e293b)',
+                      borderRadius: 16,
+                      overflow: 'hidden',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      position: 'relative',
+                      border: '2px solid #334155',
+                      boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)'
+                    }}
+                  >
+                    {/* 扫描框四角装饰 */}
+                    <div style={{ position: 'absolute', top: 8, left: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderTopLeftRadius: 4, zIndex: 2 }} />
+                    <div style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderTopRightRadius: 4, zIndex: 2 }} />
+                    <div style={{ position: 'absolute', bottom: 8, left: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderBottomLeftRadius: 4, zIndex: 2 }} />
+                    <div style={{ position: 'absolute', bottom: 8, right: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderBottomRightRadius: 4, zIndex: 2 }} />
+                    <video
+                      ref={videoRef}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      muted
+                      playsInline
+                    />
+                    {!scannerReady && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 8
+                        }}
+                      >
+                        <QrcodeOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.25)' }} />
+                        <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+                          {scannerActive ? '摄像头初始化中...' : '等待开启摄像头'}
+                        </Typography.Text>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginTop: 14, textAlign: 'center' }}>
+                    <Typography.Text
+                      type="secondary"
+                      style={{ fontSize: 12, display: 'block', marginBottom: 12 }}
+                    >
+                      开启摄像头扫描已签名的二维码
+                    </Typography.Text>
+                    <Button
+                      size="large"
+                      onClick={onToggleScanner}
+                      disabled={scanSubmitting}
+                      style={{
+                        borderRadius: 10,
+                        fontWeight: 500
+                      }}
+                    >
+                      {scannerActive ? '停止扫码' : '开启扫码'}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
-          </Card>
+          </div>
         </Content>
       ) : (
-        <Content style={{ padding: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-            <Button danger onClick={onLogout}>
-              退出登录
-            </Button>
-          </div>
+        <Content style={{ position: 'relative', zIndex: 1, padding: '16px 24px 24px' }}>
           {capabilities.canViewAdminNav && (
-            <Card bordered={false} style={{ marginBottom: 16 }}>
-              <Space>
-                <Button
-                  type={activeView === 'citizens' ? 'primary' : 'default'}
-                  onClick={() => setActiveView('citizens')}
-                >
-                  首页
-                </Button>
-                <Button
-                  type={activeView === 'operators' ? 'primary' : 'default'}
-                  onClick={async () => {
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                marginBottom: 20,
+                padding: '8px 12px',
+                background: 'rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(12px)',
+                borderRadius: 14,
+                border: '1px solid rgba(255,255,255,0.1)',
+                width: 'fit-content'
+              }}
+            >
+              {[
+                { key: 'citizens' as const, label: '首页', onClick: () => setActiveView('citizens') },
+                {
+                  key: 'operators' as const,
+                  label: '管理员',
+                  onClick: async () => {
                     setActiveView('operators');
                     setOperatorPage(1);
                     if (auth) {
@@ -1827,42 +2089,68 @@ export default function App() {
                         await refreshSuperAdmins(auth);
                       }
                     }
-                  }}
-                >
-                  管理员
-                </Button>
-                <Button
-                  type={activeView === 'institutions' ? 'primary' : 'default'}
-                  onClick={async () => {
+                  }
+                },
+                {
+                  key: 'institutions' as const,
+                  label: '机构管理',
+                  onClick: async () => {
                     setActiveView('institutions');
                     if (auth) {
                       await refreshCpmsSites(auth);
                     }
+                  }
+                },
+                ...(capabilities.canManageKeyring
+                  ? [
+                      {
+                        key: 'keyring' as const,
+                        label: '密钥管理',
+                        onClick: async () => {
+                          setActiveView('keyring');
+                          if (auth) {
+                            await refreshKeyringState(auth);
+                          }
+                        }
+                      }
+                    ]
+                  : [])
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={tab.onClick}
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: 10,
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    transition: 'all 0.2s ease',
+                    ...(activeView === tab.key
+                      ? {
+                          background: 'linear-gradient(135deg, #0d9488, #0f766e)',
+                          color: '#fff',
+                          boxShadow: '0 2px 8px rgba(13,148,136,0.35)'
+                        }
+                      : {
+                          background: 'transparent',
+                          color: 'rgba(255,255,255,0.7)'
+                        })
                   }}
                 >
-                  机构管理
-                </Button>
-                {capabilities.canManageKeyring && (
-                  <Button
-                    type={activeView === 'keyring' ? 'primary' : 'default'}
-                    onClick={async () => {
-                      setActiveView('keyring');
-                      if (auth) {
-                        await refreshKeyringState(auth);
-                      }
-                    }}
-                  >
-                    密钥管理
-                  </Button>
-                )}
-              </Space>
-            </Card>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           )}
           {activeView === 'operators' && capabilities.canManageOperators ? (
             <>
               <Card
                 title="管理员列表"
                 bordered={false}
+                style={glassCardStyle}
+                headStyle={glassCardHeadStyle}
                 extra={
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div
@@ -1982,7 +2270,8 @@ export default function App() {
                 <Card
                   title="省级超级管理员列表"
                   bordered={false}
-                  style={{ marginTop: 16 }}
+                  style={{ ...glassCardStyle, marginTop: 16 }}
+                  headStyle={glassCardHeadStyle}
                   extra={
                     <Form
                       form={replaceSuperForm}
@@ -2042,6 +2331,8 @@ export default function App() {
             <Card
               title="机构列表"
               bordered={false}
+              style={glassCardStyle}
+              headStyle={glassCardHeadStyle}
               extra={
                 capabilities.canRegisterInstitutions ? (
                   <Space>
@@ -2172,6 +2463,8 @@ export default function App() {
             <Card
               title="签名密钥管理（一主两备）"
               bordered={false}
+              style={glassCardStyle}
+              headStyle={glassCardHeadStyle}
               extra={
                 <Button
                   onClick={() => {
@@ -2220,21 +2513,28 @@ export default function App() {
                   </Typography.Paragraph>
                 </div>
                 <div style={{ flex: '1 1 320px', minWidth: 300 }}>
-                  <Typography.Text strong>扫码窗口</Typography.Text>
+                  <Typography.Text strong style={{ fontSize: 14, color: '#374151' }}>扫码窗口</Typography.Text>
                   <div
                     style={{
                       marginTop: 8,
                       width: '100%',
+                      maxWidth: 232,
                       aspectRatio: '1 / 1',
-                      background: '#111827',
-                      borderRadius: 8,
+                      background: 'linear-gradient(145deg, #0f172a, #1e293b)',
+                      borderRadius: 16,
                       overflow: 'hidden',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      position: 'relative'
+                      position: 'relative',
+                      border: '2px solid #334155',
+                      boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)'
                     }}
                   >
+                    <div style={{ position: 'absolute', top: 8, left: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderTopLeftRadius: 4, zIndex: 2 }} />
+                    <div style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderTopRightRadius: 4, zIndex: 2 }} />
+                    <div style={{ position: 'absolute', bottom: 8, left: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderBottomLeftRadius: 4, zIndex: 2 }} />
+                    <div style={{ position: 'absolute', bottom: 8, right: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderBottomRightRadius: 4, zIndex: 2 }} />
                     <video
                       ref={keyringVideoRef}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -2242,16 +2542,19 @@ export default function App() {
                       playsInline
                     />
                     {!keyringScannerReady && (
-                      <Typography.Text style={{ color: '#fff', position: 'absolute' }}>
-                        {keyringScannerActive ? '摄像头初始化中...' : '点击下方按钮开始扫码'}
-                      </Typography.Text>
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                        <QrcodeOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.25)' }} />
+                        <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+                          {keyringScannerActive ? '摄像头初始化中...' : '等待开启摄像头'}
+                        </Typography.Text>
+                      </div>
                     )}
                   </div>
-                  <Space style={{ marginTop: 10 }}>
-                    <Button onClick={onToggleKeyringScanner} disabled={keyringScanSubmitting}>
-                      {keyringScannerActive ? '停止扫码' : '扫码签名二维码'}
+                  <div style={{ marginTop: 12 }}>
+                    <Button onClick={onToggleKeyringScanner} disabled={keyringScanSubmitting} style={{ borderRadius: 10 }}>
+                      {keyringScannerActive ? '停止扫码' : '开启扫码'}
                     </Button>
-                  </Space>
+                  </div>
                 </div>
               </div>
 
@@ -2297,7 +2600,19 @@ export default function App() {
                 </Form>
               </Modal>
 
-              <Card size="small" loading={keyringLoading}>
+              <Card
+                size="small"
+                loading={keyringLoading}
+                style={{
+                  background: '#f0fdfa',
+                  borderRadius: 12,
+                  borderLeft: '3px solid #0d9488',
+                  border: '1px solid #ccfbf1'
+                }}
+              >
+                <Typography.Text strong style={{ fontSize: 13, color: '#134e4a', display: 'block', marginBottom: 10 }}>
+                  当前密钥状态
+                </Typography.Text>
                 <Typography.Paragraph style={{ marginBottom: 6 }}>
                   版本：{keyringState?.version ?? '-'}
                 </Typography.Paragraph>
@@ -2317,6 +2632,8 @@ export default function App() {
           <Card
             title={capabilities.isQueryOnly ? '身份信息（只读）' : '身份信息'}
             bordered={false}
+            style={glassCardStyle}
+            headStyle={glassCardHeadStyle}
             extra={
               <Form layout="inline" onFinish={onSearch}>
                 <Form.Item name="keyword" style={{ marginBottom: 0 }}>
@@ -2365,16 +2682,22 @@ export default function App() {
               width: '84%',
               maxWidth: 320,
               aspectRatio: '1 / 1',
-              background: '#111827',
-              borderRadius: 8,
+              background: 'linear-gradient(145deg, #0f172a, #1e293b)',
+              borderRadius: 16,
               overflow: 'hidden',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               position: 'relative',
-              margin: '14px auto 12px'
+              margin: '14px auto 12px',
+              border: '2px solid #334155',
+              boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)'
             }}
           >
+            <div style={{ position: 'absolute', top: 8, left: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderTopLeftRadius: 4, zIndex: 2 }} />
+            <div style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderTopRightRadius: 4, zIndex: 2 }} />
+            <div style={{ position: 'absolute', bottom: 8, left: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderBottomLeftRadius: 4, zIndex: 2 }} />
+            <div style={{ position: 'absolute', bottom: 8, right: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderBottomRightRadius: 4, zIndex: 2 }} />
             <video
               ref={bindVideoRef}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -2382,10 +2705,15 @@ export default function App() {
               playsInline
             />
             {!bindScannerReady && (
-              <Typography.Text
+              <div
                 style={{
-                  color: '#fff',
                   position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
                   cursor: bindScannerActive ? 'default' : 'pointer',
                   userSelect: 'none'
                 }}
@@ -2393,8 +2721,11 @@ export default function App() {
                   if (!bindScannerActive) onToggleBindScanner();
                 }}
               >
-                {bindScannerActive ? '摄像头初始化中...' : '点击扫描二维码'}
-              </Typography.Text>
+                <QrcodeOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.25)' }} />
+                <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+                  {bindScannerActive ? '摄像头初始化中...' : '点击扫描二维码'}
+                </Typography.Text>
+              </div>
             )}
           </div>
 
@@ -2438,18 +2769,27 @@ export default function App() {
           style={{
             width: '100%',
             aspectRatio: '1 / 1',
-            background: '#111827',
-            borderRadius: 8,
+            background: 'linear-gradient(145deg, #0f172a, #1e293b)',
+            borderRadius: 16,
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            position: 'relative'
+            position: 'relative',
+            border: '2px solid #334155',
+            boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)'
           }}
         >
+          <div style={{ position: 'absolute', top: 8, left: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderTopLeftRadius: 4, zIndex: 2 }} />
+          <div style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderTopRightRadius: 4, zIndex: 2 }} />
+          <div style={{ position: 'absolute', bottom: 8, left: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderBottomLeftRadius: 4, zIndex: 2 }} />
+          <div style={{ position: 'absolute', bottom: 8, right: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderBottomRightRadius: 4, zIndex: 2 }} />
           <video ref={opVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
           {!opScannerReady && (
-            <Typography.Text style={{ color: '#fff', position: 'absolute' }}>摄像头初始化中...</Typography.Text>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <QrcodeOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.25)' }} />
+              <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>摄像头初始化中...</Typography.Text>
+            </div>
           )}
         </div>
       </Modal>

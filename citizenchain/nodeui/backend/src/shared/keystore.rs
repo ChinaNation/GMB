@@ -126,6 +126,18 @@ pub(crate) fn remove_other_keys(
     Ok(())
 }
 
+/// 返回默认链（citizenchain）的 keystore 目录路径。
+/// 仅扫描默认链目录，避免旧链残留 keystore 干扰矿工身份判定。
+pub(crate) fn default_chain_keystore_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let ks = node_data_dir(app)?
+        .join("chains")
+        .join(DEFAULT_CHAIN_ID)
+        .join("keystore");
+    ensure_directory_secure(&ks)
+        .map_err(|e| format!("create default chain keystore dir failed ({}): {e}", ks.display()))?;
+    Ok(ks)
+}
+
 /// 检查指定公钥的 keystore 文件是否存在于任意 keystore 目录中。
 pub(crate) fn has_key_in_keystore(
     dirs: &[PathBuf],

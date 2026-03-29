@@ -5,6 +5,7 @@ import 'package:isar/isar.dart';
 import '../isar/wallet_isar.dart';
 import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
+import 'app_theme.dart';
 
 /// 钱包详情页：名称、地址、公钥、私钥（遮挡）、助记词（遮挡）。
 class WalletDetailPage extends StatefulWidget {
@@ -157,7 +158,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
             child: const Text('查看'),
           ),
         ],
@@ -168,7 +169,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   void _copyToClipboard(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label已复制'), duration: const Duration(seconds: 1)),
+      SnackBar(
+          content: Text('$label已复制'), duration: const Duration(seconds: 1)),
     );
   }
 
@@ -183,28 +185,101 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildInfoTile('名称', wallet.walletName, copyable: false),
-          const Divider(),
-          _buildGroupSelector(),
-          const Divider(),
-          _buildInfoTile('地址', wallet.address),
-          const Divider(),
-          _buildInfoTile('公钥', '0x${wallet.pubkeyHex}'),
-          const Divider(),
-          _buildSecretTile(
-            label: '私钥',
-            value: _seedHex != null ? '0x$_seedHex' : null,
-            visible: _seedVisible,
-            onReveal: _revealSeed,
-            onHide: () => setState(() => _seedVisible = false),
+          // 钱包头部卡片
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: AppTheme.primaryGradient,
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primary.withAlpha(40),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(30),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.account_balance_wallet_rounded,
+                      color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        wallet.walletName,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${wallet.address.substring(0, 8)}...${wallet.address.substring(wallet.address.length - 6)}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withAlpha(180),
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          const Divider(),
-          _buildSecretTile(
-            label: '助记词',
-            value: _mnemonic,
-            visible: _mnemonicVisible,
-            onReveal: _revealMnemonic,
-            onHide: () => setState(() => _mnemonicVisible = false),
+          const SizedBox(height: 20),
+          // 信息区
+          Container(
+            decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+            child: Column(
+              children: [
+                _buildInfoTile('地址', wallet.address),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                _buildInfoTile('公钥', '0x${wallet.pubkeyHex}'),
+                if (_groups
+                    .where((g) => g.name != '全部')
+                    .isNotEmpty) ...[
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  _buildGroupSelector(),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // 敏感信息区
+          Container(
+            decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+            child: Column(
+              children: [
+                _buildSecretTile(
+                  label: '私钥',
+                  value: _seedHex != null ? '0x$_seedHex' : null,
+                  visible: _seedVisible,
+                  onReveal: _revealSeed,
+                  onHide: () => setState(() => _seedVisible = false),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                _buildSecretTile(
+                  label: '助记词',
+                  value: _mnemonic,
+                  visible: _mnemonicVisible,
+                  onReveal: _revealMnemonic,
+                  onHide: () => setState(() => _mnemonicVisible = false),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -212,31 +287,27 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   }
 
   Widget _buildGroupSelector() {
-    if (_groups.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    // 排除"全部"，它是虚拟分组
     final selectableGroups = _groups.where((g) => g.name != '全部').toList();
-    if (selectableGroups.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    if (selectableGroups.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 「分组」+ 箭头，点击展开/收起
           GestureDetector(
             onTap: () => setState(() => _groupsExpanded = !_groupsExpanded),
             behavior: HitTestBehavior.opaque,
             child: Row(
               children: [
-                Text(
+                const Icon(Icons.folder_outlined,
+                    size: 16, color: AppTheme.textSecondary),
+                const SizedBox(width: 8),
+                const Text(
                   '分组',
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.grey.shade600,
+                    color: AppTheme.textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -246,17 +317,16 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                       ? Icons.keyboard_arrow_down
                       : Icons.keyboard_arrow_right,
                   size: 20,
-                  color: Colors.grey.shade500,
+                  color: AppTheme.textTertiary,
                 ),
               ],
             ),
           ),
-          // 展开后显示全部分组 chip
           if (_groupsExpanded) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             Wrap(
               spacing: 8,
-              runSpacing: 0,
+              runSpacing: 4,
               children: selectableGroups.map((g) {
                 final checked = _selectedGroups.contains(g.name);
                 return FilterChip(
@@ -272,38 +342,49 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     );
   }
 
-  Widget _buildInfoTile(String label, String value, {bool copyable = true}) {
+  Widget _buildInfoTile(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey.shade600,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppTheme.textSecondary,
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: SelectableText(
                   value,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontFamily: 'monospace',
+                    color: AppTheme.textPrimary,
+                    letterSpacing: 0.3,
                   ),
                 ),
               ),
-              if (copyable)
-                IconButton(
-                  icon: const Icon(Icons.copy, size: 18),
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceElevated,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.copy_rounded,
+                      size: 16, color: AppTheme.primaryLight),
                   onPressed: () => _copyToClipboard(value, label),
                   tooltip: '复制',
                 ),
+              ),
             ],
           ),
         ],
@@ -319,72 +400,96 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     required VoidCallback onHide,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey.shade600,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 6),
-          if (!visible)
-            InkWell(
-              onTap: onReveal,
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
+          Row(
+            children: [
+              Icon(
+                label == '私钥' ? Icons.vpn_key_rounded : Icons.key_rounded,
+                size: 16,
+                color: AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w500,
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.visibility_off, color: Colors.grey.shade500),
-                    const SizedBox(width: 8),
-                    Text(
-                      '点击查看$label',
-                      style: TextStyle(color: Colors.grey.shade600),
-                    ),
-                  ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (!visible)
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onReveal,
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceElevated,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.visibility_off_rounded,
+                          color: AppTheme.textTertiary, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        '点击查看$label',
+                        style: const TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             )
           else ...[
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.shade200),
+                color: AppTheme.danger.withAlpha(15),
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                border: Border.all(color: AppTheme.danger.withAlpha(40)),
               ),
               child: Text(
                 value ?? '无数据',
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   fontFamily: 'monospace',
+                  color: AppTheme.textPrimary,
+                  letterSpacing: 0.3,
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Row(
               children: [
                 const Expanded(
                   child: Text(
                     '请手抄备份，不支持复制',
-                    style: TextStyle(color: Colors.red, fontSize: 12),
+                    style: TextStyle(
+                        color: AppTheme.danger,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500),
                   ),
                 ),
                 TextButton.icon(
                   onPressed: onHide,
-                  icon: const Icon(Icons.visibility_off, size: 16),
+                  icon: const Icon(Icons.visibility_off_rounded, size: 16),
                   label: const Text('隐藏'),
                 ),
               ],

@@ -12,7 +12,8 @@ use crate::*;
 
 const BIND_DOMAIN: [u8; 16] = *b"GMB_SFID_BIND_V3";
 const VOTE_DOMAIN: [u8; 16] = *b"GMB_SFID_VOTE_V3";
-const INSTITUTION_DOMAIN: &[u8] = b"GMB_SFID_INSTITUTION_V1";
+const INSTITUTION_DOMAIN: &[u8] = b"GMB_SFID_INSTITUTION_V2";
+#[allow(dead_code)]
 pub(crate) const POPULATION_DOMAIN_STR: &str = "GMB_SFID_POPULATION_V3";
 const POPULATION_DOMAIN: [u8; 22] = *b"GMB_SFID_POPULATION_V3";
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
@@ -41,6 +42,7 @@ pub(crate) struct RuntimeSignatureMeta {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct RuntimeBindCredential {
     pub(crate) genesis_hash: String,
     pub(crate) who: String,
@@ -51,6 +53,7 @@ pub(crate) struct RuntimeBindCredential {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct RuntimeVoteCredential {
     pub(crate) genesis_hash: String,
     pub(crate) who: String,
@@ -62,6 +65,7 @@ pub(crate) struct RuntimeVoteCredential {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct RuntimePopulationSnapshotCredential {
     pub(crate) who: String,
     pub(crate) eligible_total: u64,
@@ -73,9 +77,11 @@ pub(crate) struct RuntimePopulationSnapshotCredential {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct RuntimeInstitutionCredential {
     pub(crate) genesis_hash: String,
     pub(crate) sfid_id: String,
+    pub(crate) name: String,
     pub(crate) register_nonce: String,
     pub(crate) signature: String,
     pub(crate) meta: RuntimeSignatureMeta,
@@ -186,19 +192,25 @@ pub(crate) fn build_population_snapshot_credential(
 pub(crate) fn build_institution_credential(
     state: &AppState,
     sfid_id: &str,
+    name: &str,
     register_nonce: String,
 ) -> Result<RuntimeInstitutionCredential, String> {
     if sfid_id.trim().is_empty() {
         return Err("sfid_id is required".to_string());
     }
+    if name.trim().is_empty() {
+        return Err("institution name is required".to_string());
+    }
     if register_nonce.trim().is_empty() {
         return Err("register_nonce is required".to_string());
     }
     let genesis_hash = resolve_chain_genesis_hash()?;
+    // 中文注释：V2 payload 包含 name 字段，与 citizenchain 链上 RuntimeSfidInstitutionVerifier 对齐。
     let payload = (
         INSTITUTION_DOMAIN,
         genesis_hash,
         sfid_id.as_bytes(),
+        name.as_bytes(),
         register_nonce.as_bytes(),
     );
     let payload_digest = blake2_256(&payload.encode());
@@ -206,6 +218,7 @@ pub(crate) fn build_institution_credential(
     Ok(RuntimeInstitutionCredential {
         genesis_hash: hex::encode(genesis_hash),
         sfid_id: sfid_id.to_string(),
+        name: name.to_string(),
         register_nonce,
         signature,
         meta: runtime_signature_meta(state),
@@ -351,7 +364,7 @@ async fn fetch_chain_genesis_hash_via_http(http_url: &str) -> Result<[u8; 32], S
 }
 
 async fn fetch_chain_genesis_hash_via_ws(ws_url: &str) -> Result<[u8; 32], String> {
-    let client = OnlineClient::<PolkadotConfig>::from_url(ws_url)
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url)
         .await
         .map_err(|e| format!("connect chain websocket for genesis hash failed: {e}"))?;
     Ok(client.genesis_hash().0)

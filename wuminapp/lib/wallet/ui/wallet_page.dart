@@ -14,8 +14,10 @@ import 'package:wuminapp_mobile/wallet/models/server_tx_record.dart';
 import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
 import 'package:wuminapp_mobile/user/user_service.dart' show UserProfileService;
 import 'package:wuminapp_mobile/ui/widgets/bip39_input.dart';
+import 'package:wuminapp_mobile/ui/widgets/shimmer_loading.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/util/screenshot_guard.dart';
+import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
 
@@ -279,9 +281,9 @@ class _MyWalletPageState extends State<MyWalletPage> {
 
   Widget _buildWalletCard(WalletProfile wallet, {required bool isLast}) {
     final cardColor = isLast
-        ? const Color(0xFFFFF4E3)
+        ? AppTheme.warning.withAlpha(15)
         : (_activeWalletIndex == wallet.walletIndex
-            ? const Color(0xFFE9F5EF)
+            ? AppTheme.primary.withAlpha(15)
             : null);
 
     // 根据金额长度自动选择字号
@@ -310,8 +312,8 @@ class _MyWalletPageState extends State<MyWalletPage> {
                     height: 20,
                     decoration: BoxDecoration(
                       color: wallet.isHotWallet
-                          ? const Color(0xFFFFE0B2)
-                          : const Color(0xFFB3E5FC),
+                          ? AppTheme.warning.withAlpha(30)
+                          : AppTheme.info.withAlpha(30),
                       borderRadius: BorderRadius.circular(5),
                     ),
                     child: Center(
@@ -321,8 +323,8 @@ class _MyWalletPageState extends State<MyWalletPage> {
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
                           color: wallet.isHotWallet
-                              ? const Color(0xFFE65100)
-                              : const Color(0xFF01579B),
+                              ? AppTheme.warning
+                              : AppTheme.info,
                         ),
                       ),
                     ),
@@ -351,7 +353,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
                       style: TextStyle(
                         fontSize: balanceFontSize,
                         fontWeight: FontWeight.w700,
-                        color: const Color(0xFF0B3D2E),
+                        color: AppTheme.primaryDark,
                       ),
                     ),
                   ),
@@ -367,7 +369,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: Colors.black38,
+                      color: AppTheme.textTertiary,
                     ),
                   ),
                 ],
@@ -416,7 +418,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
                   style: const TextStyle(
                     fontSize: 12,
                     height: 1.45,
-                    color: Colors.black87,
+                    color: AppTheme.textSecondary,
                   ),
                 ),
               ],
@@ -448,19 +450,19 @@ class _MyWalletPageState extends State<MyWalletPage> {
           childAspectRatio: 1.08,
           children: [
             _buildWalletEntryOption(
-              color: const Color(0xFFFFE4E1),
+              color: AppTheme.danger.withAlpha(15),
               title: '创建热钱包',
               description: '创建私钥存在本机的热钱包',
               onTap: _openCreatePage,
             ),
             _buildWalletEntryOption(
-              color: const Color(0xFFE0FFFF),
+              color: AppTheme.info.withAlpha(15),
               title: '导入热钱包',
               description: '导入钱包并将私钥存在本机',
               onTap: _openImportPage,
             ),
             _buildWalletEntryOption(
-              color: const Color(0xFFFFF8E1),
+              color: AppTheme.warning.withAlpha(15),
               title: '导入冷钱包',
               description: '仅导入公钥，签名在外部设备',
               onTap: _openImportColdWalletPage,
@@ -496,7 +498,10 @@ class _MyWalletPageState extends State<MyWalletPage> {
           future: _walletsFuture,
           builder: (context, walletsSnapshot) {
             if (walletsSnapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
+              return ListSkeleton(
+                itemCount: 3,
+                itemBuilder: (_, __) => const WalletCardSkeleton(),
+              );
             }
 
             final wallets = walletsSnapshot.data ?? const <WalletProfile>[];
@@ -535,8 +540,8 @@ class _MyWalletPageState extends State<MyWalletPage> {
                           alignment: Alignment.centerRight,
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           decoration: BoxDecoration(
-                            color: Colors.red.shade400,
-                            borderRadius: BorderRadius.circular(12),
+                            color: AppTheme.danger,
+                            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                           ),
                           child: const Icon(
                             Icons.delete_outline,
@@ -690,7 +695,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
             child: const Text('查看'),
           ),
         ],
@@ -715,11 +720,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
             children: [
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
+                decoration: AppTheme.bannerDecoration(AppTheme.danger),
                 child: Text(
                   value ?? '无数据',
                   style: const TextStyle(fontSize: 14, fontFamily: 'monospace'),
@@ -728,7 +729,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
               const SizedBox(height: 8),
               const Text(
                 '请手抄备份，不支持复制',
-                style: TextStyle(color: Colors.red, fontSize: 12),
+                style: TextStyle(color: AppTheme.danger, fontSize: 12),
               ),
             ],
           ),
@@ -863,8 +864,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
               decoration: BoxDecoration(
-                color: const Color(0xFFE9F5EF),
-                borderRadius: BorderRadius.circular(12),
+                color: AppTheme.primary.withAlpha(15),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -879,7 +880,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF0B3D2E),
+                              color: AppTheme.primaryDark,
                             ),
                             decoration: const InputDecoration(
                               border: UnderlineInputBorder(),
@@ -905,7 +906,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF0B3D2E),
+                              color: AppTheme.primaryDark,
                             ),
                           ),
                         ),
@@ -921,7 +922,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                           style: const TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF0B3D2E),
+                            color: AppTheme.primaryDark,
                           ),
                         ),
                         const Text(
@@ -929,7 +930,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF0B3D2E),
+                            color: AppTheme.primaryDark,
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -938,7 +939,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w500,
-                            color: Colors.black38,
+                            color: AppTheme.textTertiary,
                           ),
                         ),
                       ],
@@ -977,7 +978,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
-                        color: Colors.grey.shade300,
+                        color: AppTheme.border,
                         width: 1,
                       ),
                     ),
@@ -997,7 +998,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                               width: 18,
                               height: 18,
                               colorFilter: const ColorFilter.mode(
-                                Colors.black54,
+                                AppTheme.textSecondary,
                                 BlendMode.srcIn,
                               ),
                             ),
@@ -1025,7 +1026,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: Colors.black54,
+                      color: AppTheme.textTertiary,
                     ),
                   ),
                 ),
@@ -1077,8 +1078,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                       ),
                     ),
                     const Spacer(),
-                    Icon(Icons.chevron_right,
-                        size: 20, color: Colors.grey.shade400),
+                    const Icon(Icons.chevron_right,
+                        size: 20, color: AppTheme.textTertiary),
                   ],
                 ),
               ),
@@ -1091,7 +1092,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 child: Center(
                   child: Text(
                     '暂无交易记录',
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(color: AppTheme.textTertiary),
                   ),
                 ),
               )
@@ -1250,7 +1251,7 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
             const SizedBox(height: 8),
             Text(
               _wordCount == 24 ? '256 位熵，安全性更高' : '128 位熵，标准安全强度',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 16),
             FilledButton(
@@ -1323,7 +1324,7 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
           if (_error != null)
             Text(
               _error!,
-              style: const TextStyle(color: Colors.red),
+              style: const TextStyle(color: AppTheme.danger),
             ),
           FilledButton(
             onPressed: _isImporting ? null : _import,
@@ -1391,7 +1392,7 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
             const SizedBox(height: 8),
             const Text(
               '冷钱包仅保存公钥，私钥保留在 Wumin 签名设备上。\n管理员提案和投票将通过扫码签名完成。',
-              style: TextStyle(color: Colors.black54, fontSize: 13),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -1407,7 +1408,7 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
             if (_error != null)
               Text(
                 _error!,
-                style: const TextStyle(color: Colors.red),
+                style: const TextStyle(color: AppTheme.danger),
               ),
             FilledButton(
               onPressed: _isImporting ? null : _import,

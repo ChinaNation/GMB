@@ -15,6 +15,69 @@ use sqlx::Row;
 
 use crate::{err, ok, write_audit, ApiError, ApiResponse, AppState};
 
+// ── 密钥加密存储 ──────────────────────────────────────────────────────────
+// 中文注释：使用环境变量 CPMS_KEY_ENCRYPT_SECRET（32 字节 hex）作为主密钥，
+// 对 QR 签名私钥做 XOR 加密后存入 DB。环境变量不存在时回退到明文（日志警告）。
+
+fn master_encrypt_key() -> Option<[u8; 32]> {
+    let hex_str = env::var("CPMS_KEY_ENCRYPT_SECRET").ok()?;
+    let bytes = hex::decode(hex_str.trim()).ok()?;
+    if bytes.len() != 32 {
+        return None;
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&bytes);
+    Some(key)
+}
+
+/// 用主密钥 + key_id 派生的流密钥对 secret 做 XOR 加密/解密（对称操作）。
+fn xor_with_derived_key(master: &[u8; 32], key_id: &str, data: &[u8; 32]) -> [u8; 32] {
+    use blake2::digest::consts::U32;
+    use blake2::{Blake2b, Digest};
+    type Blake2b256 = Blake2b<U32>;
+    let mut hasher = Blake2b256::new();
+    hasher.update(master);
+    hasher.update(key_id.as_bytes());
+    let derived = hasher.finalize();
+    let mut out = [0u8; 32];
+    for i in 0..32 {
+        out[i] = data[i] ^ derived[i];
+    }
+    out
+}
+
+/// 加密 secret 后返回 hex 字符串（用于存入 DB）。
+fn encrypt_secret(key_id: &str, secret_bytes: &[u8; 32]) -> String {
+    match master_encrypt_key() {
+        Some(master) => {
+            let encrypted = xor_with_derived_key(&master, key_id, secret_bytes);
+            format!("enc:{}", hex::encode(encrypted))
+        }
+        None => {
+            eprintln!("WARNING: CPMS_KEY_ENCRYPT_SECRET not set, storing QR sign key in plaintext");
+            hex::encode(secret_bytes)
+        }
+    }
+}
+
+/// 从 DB 读取的 secret 字符串解密为 32 字节。
+fn decrypt_secret(key_id: &str, stored: &str) -> Option<Vec<u8>> {
+    if let Some(enc_hex) = stored.strip_prefix("enc:") {
+        let master = master_encrypt_key()?;
+        let encrypted = hex::decode(enc_hex).ok()?;
+        if encrypted.len() != 32 {
+            return None;
+        }
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&encrypted);
+        let decrypted = xor_with_derived_key(&master, key_id, &arr);
+        Some(decrypted.to_vec())
+    } else {
+        // 明文回退（兼容旧数据）
+        crate::decode_bytes(stored)
+    }
+}
+
 const FIXED_SUPER_ADMIN_COUNT: usize = 3;
 const FIXED_QR_SIGN_KEY_COUNT: usize = 3;
 
@@ -234,7 +297,8 @@ async fn initialize_install(
 
     let mut keys_runtime = Vec::with_capacity(FIXED_QR_SIGN_KEY_COUNT);
     for (key_id, purpose, status) in key_meta {
-        let (pubkey, secret) = generate_sr25519_keypair_hex();
+        let (pubkey, secret_raw) = generate_sr25519_keypair_raw();
+        let secret_stored = encrypt_secret(key_id, &secret_raw);
         sqlx::query(
             "INSERT INTO qr_sign_keys (key_id, purpose, status, pubkey, secret, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -243,20 +307,14 @@ async fn initialize_install(
         .bind(purpose)
         .bind(status)
         .bind(&pubkey)
-        .bind(&secret)
+        .bind(&secret_stored)
         .bind(now_ts)
         .bind(now_ts)
         .execute(tx.as_mut())
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "insert qr key failed"))?;
 
-        let secret_bytes = decode_bytes(&secret).ok_or_else(|| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "decode generated key failed",
-            )
-        })?;
+        let secret_bytes = secret_raw.to_vec();
         keys_runtime.push(QrSignKeyRuntime {
             key_id: key_id.to_string(),
             purpose: purpose.to_string(),
@@ -473,12 +531,13 @@ pub(crate) async fn load_qr_sign_keys(
 
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
-        let secret: String = row.get("secret");
-        let secret_bytes = decode_bytes(&secret).ok_or_else(|| {
+        let key_id: String = row.get("key_id");
+        let secret_stored: String = row.get("secret");
+        let secret_bytes = decrypt_secret(&key_id, &secret_stored).ok_or_else(|| {
             err(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 5003,
-                "invalid qr sign secret encoding",
+                "invalid qr sign secret encoding or decryption failed",
             )
         })?;
         if secret_bytes.len() != 32 {
@@ -650,11 +709,12 @@ fn verify_sr25519_signature(
         .map_err(|_| "sr25519 verify failed".to_string())
 }
 
-fn generate_sr25519_keypair_hex() -> (String, String) {
+/// 中文注释：生成 sr25519 密钥对，返回 (pubkey_hex, secret_raw_32bytes)。
+fn generate_sr25519_keypair_raw() -> (String, [u8; 32]) {
     let mini = MiniSecretKey::generate_with(OsRng);
     let secret = mini.to_bytes();
     let keypair = mini.expand_to_keypair(schnorrkel::ExpansionMode::Ed25519);
-    (hex::encode(keypair.public.to_bytes()), hex::encode(secret))
+    (hex::encode(keypair.public.to_bytes()), secret)
 }
 
 fn decode_bytes(input: &str) -> Option<Vec<u8>> {

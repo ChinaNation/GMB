@@ -1,0 +1,136 @@
+# 任务卡：全面仔细的检查一遍 runtime-root-upgrade 这个模块有没有安全漏洞、有没有需要改进的地方、功能需求是否严格实现、中文注释技术文档是否完整、有没有要清理的残留
+
+- 任务编号：20260328-120407
+- 状态：done
+- 所属模块：citizenchain/governance
+- 当前负责人：Codex
+- 创建时间：2026-03-28 12:04:07
+
+## 任务需求
+
+全面仔细的检查一遍 runtime-root-upgrade 这个模块有没有安全漏洞、有没有需要改进的地方、功能需求是否严格实现、中文注释技术文档是否完整、有没有要清理的残留
+
+## 必读上下文
+
+- memory/00-vision/project-goal.md
+- memory/00-vision/trust-boundary.md
+- memory/01-architecture/repo-map.md
+- memory/03-security/security-rules.md
+- memory/07-ai/agent-rules.md
+- memory/07-ai/context-loading-order.md
+- memory/01-architecture/citizenchain-target-structure.md
+- citizenchain/CITIZENCHAIN_TECHNICAL.md
+- citizenchain/runtime/README.md
+
+## 模块模板
+
+- 模板来源：memory/08-tasks/templates/citizenchain-runtime.md
+
+### 默认改动范围
+
+- `citizenchain/runtime`
+- `citizenchain/governance`
+- `citizenchain/issuance`
+- `citizenchain/otherpallet`
+- `citizenchain/transaction`
+- 必要时联动 `primitives`
+
+### 先沟通条件
+
+- 修改 runtime 存储结构
+- 修改资格模型
+- 修改提案、投票、治理核心规则
+
+## 模块执行清单
+
+- 清单来源：memory/07-ai/module-checklists/citizenchain.md
+
+# CitizenChain 模块执行清单
+
+- 开工前先确认任务属于 `runtime`、`node`、`nodeui` 或 `primitives`
+- 关键 Rust 或前端逻辑必须补中文注释
+- 改动链规则、存储或发布行为前必须先沟通
+- 如果改动 `runtime` 且会影响 `wuminapp` 在线端或 `wumin` 冷钱包二维码签名/验签兼容性，必须先暂停单边修改，转为跨模块任务
+- 触发项至少检查：`spec_version` / `transaction_version`、pallet index、call index、metadata 编码依赖、冷钱包 `pallet_registry` 与 `payload_decoder`
+- 未把 `wuminapp` 在线端和 `wumin` 冷钱包的对应更新纳入本次执行范围前，不允许继续 runtime 改动
+- 文档与残留必须一起收口
+
+## 模块级完成标准
+
+- 标准来源：memory/07-ai/module-definition-of-done/citizenchain.md
+
+# CitizenChain 完成标准
+
+- 改动范围和所属模块清晰
+- 关键逻辑已补中文注释
+- 文档已同步更新
+- 影响链规则、存储或发布行为的点都已先沟通
+- 残留已清理
+
+## 必须遵守
+
+- 不可突破模块边界
+- 不可绕过既有契约
+- 不可擅自修改安全红线
+- 不清楚逻辑时先沟通
+- 改代码后必须更新文档和清理残留
+
+## 输出物
+
+- 代码
+- 中文注释
+- 文档更新
+- 残留清理
+
+## 待确认问题
+
+- 暂无
+
+## 实施记录
+
+- 任务卡已创建
+- 已检查 `citizenchain/runtime/governance/runtime-root-upgrade/src/lib.rs`
+- 已检查 `citizenchain/runtime/src/configs/mod.rs`
+- 已检查 `citizenchain/runtime/governance/runtime-root-upgrade/src/weights.rs`
+- 已检查 `memory/05-modules/citizenchain/runtime/governance/runtime-root-upgrade/RUNTIMEROOT_TECHNICAL.md`
+- 已完成 `cargo test -p runtime-root-upgrade`
+- 已完成 `cargo check -p citizenchain`
+- 已完成 `cargo check -p citizenchain --features runtime-benchmarks`，确认失败原因是本地 wasm 依赖/目标环境问题，不是本模块业务逻辑错误
+
+## 审查结论
+
+1. 回调路由边界偏脆弱
+   - `runtime-root-upgrade` 没有像 `resolution-issuance-gov` 那样为 `ProposalData` 增加模块标签和 `owns_proposal()` 判定
+   - runtime 路由当前采用“先识别 `resolution-issuance-gov`，否则直接尝试 `runtime-root-upgrade` 回调”的方式
+   - 位置：
+     - `citizenchain/runtime/governance/runtime-root-upgrade/src/lib.rs:252`
+     - `citizenchain/runtime/src/configs/mod.rs:1009`
+     - `citizenchain/runtime/governance/resolution-issuance-gov/src/lib.rs:20`
+   - 结论：当前未确认形成直接可利用漏洞，但模块归属识别不够硬，属于需要收紧的安全边界
+
+2. 技术文档不完整
+   - 文档漏写了高权限快捷入口 `developer_direct_upgrade`
+   - 文档里的测试覆盖口径也已过期，当前实际测试数为 14，不是文档描述的旧数量
+   - 位置：
+     - `memory/05-modules/citizenchain/runtime/governance/runtime-root-upgrade/RUNTIMEROOT_TECHNICAL.md:96`
+     - `citizenchain/runtime/governance/runtime-root-upgrade/src/lib.rs:219`
+
+3. `weights.rs` 是旧残留
+   - 仍在引用 `NextProposalId`、`GovToJointVote`、`JointVoteToGov`、`Proposals`、`RetryCount` 等当前模块已不存在的旧存储
+   - 位置：
+     - `citizenchain/runtime/governance/runtime-root-upgrade/src/weights.rs:55`
+
+4. 有小型清理残留
+   - 测试代码里存在未使用的 doc comment，`cargo test` 会报 warning
+   - 位置：
+     - `citizenchain/runtime/governance/runtime-root-upgrade/src/lib.rs:470`
+
+## 验证记录
+
+- `cargo test -p runtime-root-upgrade`
+  - 结果：通过，14 个测试全部通过
+- `cargo check -p citizenchain`
+  - 结果：通过
+- `cargo check -p citizenchain --features runtime-benchmarks`
+  - 结果：失败
+  - 原因：`wasm32v1-none` 目标下依赖 `byte-slice-cast` / `serde_core` 触发 `can't find crate for std`，属于本地 wasm 构建环境/依赖兼容问题，不能据此判定 `runtime-root-upgrade` 模块逻辑有误

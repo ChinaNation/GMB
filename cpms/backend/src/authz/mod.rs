@@ -1,3 +1,7 @@
+//! # 鉴权模块 (authz)
+//!
+//! 提供 Bearer token 校验和角色检查。所有需要登录的 API 通过 `require_auth` 或 `require_role` 守卫。
+
 use axum::{
     http::{header, HeaderMap, StatusCode},
     Json,

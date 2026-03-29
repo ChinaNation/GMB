@@ -11,6 +11,14 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{authz, err, find_admin_by_pubkey, ok, write_audit, ApiError, ApiResponse, AppState};
+use rand::Rng;
+
+/// 中文注释：用 CSPRNG 生成 32 字节随机 token，比 UUID 更安全。
+fn generate_secure_token(prefix: &str) -> String {
+    let mut buf = [0u8; 32];
+    rand::thread_rng().fill(&mut buf);
+    format!("{}_{}", prefix, hex::encode(buf))
+}
 
 pub(crate) const TOKEN_EXPIRES_SECONDS: i64 = 30 * 60;
 const CHALLENGE_EXPIRES_SECONDS: i64 = 90;
@@ -293,7 +301,7 @@ async fn auth_verify(
         ));
     }
 
-    let access_token = format!("atk_{}", Uuid::new_v4().simple());
+    let access_token = generate_secure_token("atk");
     let expires_at = (Utc::now() + Duration::seconds(TOKEN_EXPIRES_SECONDS)).timestamp();
 
     sqlx::query(
@@ -512,7 +520,7 @@ async fn auth_qr_complete(
         ));
     }
 
-    let access_token = format!("atk_{}", Uuid::new_v4().simple());
+    let access_token = generate_secure_token("atk");
     let expires_at = (Utc::now() + Duration::seconds(TOKEN_EXPIRES_SECONDS)).timestamp();
 
     let mut tx2 = state

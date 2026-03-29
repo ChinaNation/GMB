@@ -46,3 +46,14 @@ pub enum VoteStage {
 /// 七、决议发行常量
 pub const RESOLUTION_ISSUANCE_MAX_REASON_LEN: u32 = 1024; // 决议发行理由最大长度
 pub const RESOLUTION_ISSUANCE_MAX_ALLOCATIONS: u32 = PRB_COUNT; // 决议发行单次最大分配条目数（与省储会数量一致）
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn joint_vote_total_matches_threshold() {
+        // 中文注释：联合投票总票数必须等于通过阈值（全票通过制）。
+        assert_eq!(JOINT_VOTE_TOTAL, JOINT_VOTE_PASS_THRESHOLD);
+    }
+}

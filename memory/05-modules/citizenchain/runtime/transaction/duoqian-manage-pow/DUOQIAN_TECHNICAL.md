@@ -17,7 +17,7 @@
 - 派生地址必须通过地址合法性校验，且不能落入制度保留地址或受保护地址集合。
 
 ### 0.3 SFID 登记需求
-- `register_sfid_institution` 必须只接受 `sfid_id + register_nonce + signature`。
+- `register_sfid_institution` 必须接受 `sfid_id + name + register_nonce + signature`。
 - `signature` 必须通过 `("GMB_SFID_INSTITUTION_V1", genesis_hash, sfid_id, register_nonce)` 验签。
 - 机构登记只认当前 SFID `MAIN` 公钥，不再信任交易发送者身份。
 - 登记成功后必须写入 `sfid_id <-> duoqian_address` 双向映射，并消费 `register_nonce`。
@@ -46,13 +46,14 @@
 
 ## 1. 当前实现结论
 
-当前代码实际提供 5 个公开入口：
+当前代码实际提供 6 个公开入口：
 
-1. `register_sfid_institution(sfid_id, register_nonce, signature)`
+1. `register_sfid_institution(sfid_id, name, register_nonce, signature)`
 2. `propose_create(sfid_id, admin_count, duoqian_admins, threshold, amount)`
 3. `vote_create(proposal_id, approve)`
 4. `propose_close(duoqian_address, beneficiary)`
 5. `vote_close(proposal_id, approve)`
+6. `propose_create_personal(name, admin_count, duoqian_admins, threshold, amount)`
 
 当前代码没有实现以下旧口径：
 
@@ -74,13 +75,14 @@
 
 1. `DuoqianAccounts<duoqian_address, DuoqianAccount>`
 2. `SfidRegisteredAddress<sfid_id, duoqian_address>`
-3. `AddressRegisteredSfid<duoqian_address, RegisteredInstitution { sfid_id, nonce }>`
-4. `UsedRegisterNonce<register_nonce, bool>`
+3. `AddressRegisteredSfid<duoqian_address, RegisteredInstitution { sfid_id, name }>`
+4. `UsedRegisterNonce<register_nonce_hash, bool>`
+5. `PersonalDuoqianInfo<duoqian_address, PersonalDuoqianMeta { creator, name }>`：个人多签反向索引
+6. `PendingCloseProposal<duoqian_address, proposal_id>`：每个多签账户当前进行中的关闭提案 ID，防止并发注销
 
 补充：
 1. `DuoqianAccount.status` 当前只有 `Pending / Active` 两种状态。
-2. `AddressRegisteredSfid.nonce` 当前跟随机构地址保存，用于机构生命周期变更计数。
-3. 当前制度下，关闭多签账户不会删除 `sfid_id <-> duoqian_address` 的登记映射。
+2. 当前制度下，关闭多签账户不会删除 `sfid_id <-> duoqian_address` 的登记映射。
 
 ## 4. Extrinsic 规则
 
@@ -155,25 +157,52 @@
 2. 若提案状态进入 `PASSED`，自动尝试执行 `execute_close`。
 3. 执行成功后把提案状态改成 `EXECUTED`。
 
+### 4.6 propose_create_personal(name, admin_count, duoqian_admins, threshold, amount)
+
+关键校验：
+1. 调用者 `who` 非受保护源。
+2. `name` 非空。
+3. `admin_count >= 2` 且 `duoqian_admins.len() == admin_count`。
+4. `threshold` 满足 `ceil(admin_count / 2) <= threshold <= admin_count`，且最小至少 2。
+5. `amount >= MinCreateAmount`，余额覆盖 `amount + fee + ED`。
+6. 所有管理员公钥必须唯一，`who` 必须在管理员列表中。
+7. 地址由 `Blake2b256("DUOQIAN_PERSONAL_V1" || ss58_prefix_le || creator.encode() || name_utf8)` 派生。
+8. 派生地址必须合法、非保留、非受保护，且当前不存在于 `DuoqianAccounts`。
+
+执行：
+1. 先写入 `DuoqianAccounts(status = Pending)` 和 `PersonalDuoqianInfo { creator, name }`。
+2. 以 `ORG_DUOQIAN` 创建内部投票提案。
+3. 把 `CreateDuoqianAction` 编码写入投票引擎的 `ProposalData`（复用 `ACTION_CREATE`）。
+4. 发出 `PersonalDuoqianProposed`。
+
+投票通过后由 `vote_create` 复用 `execute_create` 完成入金和激活。
+
 ## 5. 内部执行逻辑
 
 ### 5.1 execute_create
 
-执行内容：
-1. 从提案发起者向 `duoqian_address` 转入初始金额。
-2. 把 `DuoqianAccounts.status` 从 `Pending` 改成 `Active`。
-3. 把 `AddressRegisteredSfid.nonce += 1`。
-4. 发出 `DuoqianCreated`。
-5. 调用投票引擎把提案状态写成 `STATUS_EXECUTED`。
+执行内容（在 `with_transaction` 内原子执行）：
+1. 计算手续费（复用 `onchain-transaction-pow` 公共费率）。
+2. 从提案发起者向 `duoqian_address` 转入初始金额（`KeepAlive`）。
+3. 从提案发起者额外扣取手续费，通过 `FeeRouter` 分账。
+4. 把 `DuoqianAccounts.status` 从 `Pending` 改成 `Active`。
+5. 发出 `DuoqianCreated`（含 fee 字段）。
+6. 调用投票引擎把提案状态写成 `STATUS_EXECUTED`。
+
+失败处理：若执行失败，`with_transaction` 回滚资金操作，外层清理 Pending 条目和 PersonalDuoqianInfo，释放地址锁定。
 
 ### 5.2 execute_close
 
-执行内容：
-1. 把 `duoqian_address` 全额转给 `beneficiary`。
-2. 删除 `DuoqianAccounts`。
-3. 把 `AddressRegisteredSfid.nonce += 1`。
-4. 发出 `DuoqianClosed`。
-5. 调用投票引擎把提案状态写成 `STATUS_EXECUTED`。
+执行内容（在 `with_transaction` 内原子执行）：
+1. 校验 `InstitutionAssetGuard::can_spend`。
+2. 计算手续费，确保扣费后转给 beneficiary 的金额 >= ED。
+3. 从 `duoqian_address` 扣取手续费，通过 `FeeRouter` 分账。
+4. 将剩余余额转给 `beneficiary`（`AllowDeath`）。
+5. 删除 `DuoqianAccounts`、`PersonalDuoqianInfo`、`PendingCloseProposal`。
+6. 发出 `DuoqianClosed`（含 fee 字段）。
+7. 调用投票引擎把提案状态写成 `STATUS_EXECUTED`。
+
+失败处理：若执行失败，`with_transaction` 回滚资金操作，外层清理 `PendingCloseProposal`，允许重新发起关闭提案。
 
 ## 6. 与投票引擎的关系
 
@@ -193,22 +222,25 @@
 
 本模块当前不负责机构转账。
 
-## 8. 已知实现风险
+## 8. 已修复的历史风险
 
-### 8.1 Pending 残留风险
+### 8.1 创建状态机闭环（已修复）
 
-在 `propose_create` 中，模块会先把 `DuoqianAccounts` 写成 `Pending`，然后才创建内部投票提案。
+`propose_create` 会先把 `DuoqianAccounts` 写成 `Pending`，然后才创建内部投票提案。
 
-当前代码已确认：
-1. `execute_create` 只会把这条记录改成 `Active`。
-2. `execute_close` 只会在机构已 `Active` 且通过关闭提案后删除记录。
-3. 本模块中未看到“创建提案被拒绝 / 超时后，清理这条 Pending 记录”的路径。
+已修复：
+- `vote_create` 检测到 `STATUS_PASSED` 时执行入金激活；执行失败时清理 Pending 条目。
+- `vote_create` 检测到 `STATUS_REJECTED` 时清理 Pending 条目和 PersonalDuoqianInfo，释放地址锁定。
+- 投票引擎超时 reject（`on_initialize`）后无人再投票时，任意账户可调用 `cleanup_rejected_proposal` 清理。
 
-这意味着存在以下风险：
-- 创建提案未通过后，链上残留一条 `Pending` 机构记录。
-- 后续再次对同一 `sfid_id` / `duoqian_address` 发起创建时，可能命中 `AddressAlreadyExists`。
+### 8.2 关闭状态机闭环（已修复）
 
-这个问题需要单独修复，不能靠文档规避。
+`propose_close` 写入 `PendingCloseProposal` 防止并发注销。
+
+已修复：
+- `vote_close` 检测到 `STATUS_PASSED` 时执行关闭；执行失败时清理 PendingCloseProposal。
+- `vote_close` 检测到 `STATUS_REJECTED` 时清理 PendingCloseProposal。
+- 投票引擎超时 reject 后，任意账户可调用 `cleanup_rejected_proposal` 清理。
 
 ## 9. 前端 / 系统接入要求
 

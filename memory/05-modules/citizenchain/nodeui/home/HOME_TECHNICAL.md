@@ -35,11 +35,17 @@ home/
 ## process/mod.rs
 
 核心职责：
-- **进程启停**：`start_node` / `stop_node`，通过 `NODE_LIFECYCLE_LOCK` 串行化
+- **进程启停**：`start_node`（异步）/ `stop_node`，通过 `NODE_LIFECYCLE_LOCK` 互斥锁串行化，同一时刻只允许一个启停操作。`start_node` 返回后异步等待节点 RPC 就绪，然后触发 GRANDPA 校验和奖励钱包链上同步
 - **二进制校验**：SHA256 哈希验证 + 受信任目录校验（`is_trusted_node_process`）
 - **进程检测**：使用 `sysinfo` 库替代 `ps` 外部命令，Linux 优先走 `/proc` 监听端口探测，其他 Unix 再回退到 `lsof`
 - **运行时密钥**：启动时临时解密 node-key 注入，停止时清理
 - **RPC 端口共享**：节点启动参数、监听进程识别、HTTP/WS RPC 访问都复用同一份本地 RPC 端口来源
+
+RPC 暴露风险说明：
+- `spawn_node` 启动时使用 `--unsafe-rpc-external --rpc-methods Unsafe --rpc-cors all`，将高权限 RPC 绑定到 0.0.0.0
+- 这是因为 Tauri WebView 在某些操作系统环境下访问 localhost 有限制，需要通过外部网卡 IP 访问 RPC
+- **风险**：在公共网络上运行时，`Unsafe` RPC 方法（如 `author_submitExtrinsic`）会被外部访问
+- **当前定位**：单机家用场景，节点不对外暴露。如果后续部署到公网环境，需要改为 `--rpc-methods Safe` 并限制 CORS
 
 关键安全设计：
 1. 二进制先复制到运行时目录并在副本上再次验 hash（stage_verified_node_bin）

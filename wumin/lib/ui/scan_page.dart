@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import 'dart:convert';
+
 import '../qr/offline_sign_page.dart';
+import '../qr/qr_protocols.dart';
 import '../wallet/wallet_manager.dart';
+import 'app_theme.dart';
+import 'login_sign_page.dart';
 
 /// 扫码页面（对准框 + 相册 + 手电筒）。
 ///
@@ -72,12 +77,20 @@ class _ScanPageState extends State<ScanPage> {
     await _controller.stop();
 
     if (!mounted) return;
+
+    // 判断协议类型：登录 QR 走 LoginSignPage，其余走 OfflineSignPage。
+    final isLogin = _isLoginProtocol(raw);
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => OfflineSignPage(
-          wallet: widget.wallet,
-          initialCode: raw,
-        ),
+        builder: (_) => isLogin
+            ? LoginSignPage(
+                wallet: widget.wallet,
+                challengeRaw: raw,
+              )
+            : OfflineSignPage(
+                wallet: widget.wallet,
+                initialCode: raw,
+              ),
       ),
     );
 
@@ -86,10 +99,21 @@ class _ScanPageState extends State<ScanPage> {
     Navigator.of(context).pop();
   }
 
+  bool _isLoginProtocol(String raw) {
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      return data['proto'] == QrProtocols.login;
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
         title: const Text('扫码签名'),
         centerTitle: true,
       ),
@@ -132,10 +156,14 @@ class _ScanPageState extends State<ScanPage> {
           // 提示文字
           Center(
             child: Transform.translate(
-              offset: const Offset(0, scanBoxOffsetY + scanBoxSize / 2 + 24),
+              offset: const Offset(0, scanBoxOffsetY + scanBoxSize / 2 + 28),
               child: const Text(
                 '将二维码放入框内即可自动扫描',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
+                style: TextStyle(
+                  color: Colors.white60,
+                  fontSize: 14,
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
           ),
@@ -143,48 +171,67 @@ class _ScanPageState extends State<ScanPage> {
           // 底部工具栏：相册 + 手电筒
           Align(
             alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 60, left: 48, right: 48),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 48, left: 48, right: 48),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceCard.withAlpha(200),
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                border: Border.all(color: AppTheme.border.withAlpha(80)),
+              ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: _scanFromGallery,
-                        icon: const Icon(Icons.photo_library_outlined),
-                        iconSize: 32,
-                        color: Colors.white,
-                      ),
-                      const Text(
-                        '相册',
-                        style: TextStyle(color: Colors.white, fontSize: 12),
-                      ),
-                    ],
+                  _buildToolButton(
+                    icon: Icons.photo_library_outlined,
+                    label: '相册',
+                    onTap: _scanFromGallery,
+                    active: false,
                   ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: _toggleTorch,
-                        icon: Icon(
-                          _torchOn
-                              ? Icons.flashlight_on
-                              : Icons.flashlight_off_outlined,
-                        ),
-                        iconSize: 32,
-                        color: _torchOn ? Colors.amber : Colors.white,
-                      ),
-                      Text(
-                        _torchOn ? '关闭' : '手电筒',
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 12),
-                      ),
-                    ],
+                  Container(
+                    width: 1,
+                    height: 32,
+                    color: AppTheme.border,
+                  ),
+                  _buildToolButton(
+                    icon: _torchOn
+                        ? Icons.flashlight_on_rounded
+                        : Icons.flashlight_off_outlined,
+                    label: _torchOn ? '关闭' : '手电筒',
+                    onTap: _toggleTorch,
+                    active: _torchOn,
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    required bool active,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 26,
+            color: active ? AppTheme.gold : Colors.white,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: active ? AppTheme.gold : Colors.white70,
+              fontSize: 12,
             ),
           ),
         ],
@@ -217,7 +264,10 @@ class _ScanOverlayPainter extends CustomPainter {
 
     canvas.saveLayer(Offset.zero & size, Paint());
     canvas.drawRect(Offset.zero & size, bgPaint);
-    canvas.drawRect(rect, clearPaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(12)),
+      clearPaint,
+    );
     canvas.restore();
   }
 
@@ -233,11 +283,12 @@ class _ScanOverlayPainter extends CustomPainter {
 class _ScanCornerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    const cornerLen = 24.0;
-    const strokeWidth = 4.0;
+    const cornerLen = 28.0;
+    const strokeWidth = 3.5;
+    const cornerRadius = 12.0;
 
     final paint = Paint()
-      ..color = Colors.green
+      ..color = AppTheme.primaryLight
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -246,17 +297,36 @@ class _ScanCornerPainter extends CustomPainter {
     final h = size.height;
 
     // 左上
-    canvas.drawLine(const Offset(0, 0), const Offset(cornerLen, 0), paint);
-    canvas.drawLine(const Offset(0, 0), const Offset(0, cornerLen), paint);
+    final topLeftPath = Path()
+      ..moveTo(0, cornerLen)
+      ..lineTo(0, cornerRadius)
+      ..quadraticBezierTo(0, 0, cornerRadius, 0)
+      ..lineTo(cornerLen, 0);
+    canvas.drawPath(topLeftPath, paint);
+
     // 右上
-    canvas.drawLine(Offset(w, 0), Offset(w - cornerLen, 0), paint);
-    canvas.drawLine(Offset(w, 0), Offset(w, cornerLen), paint);
+    final topRightPath = Path()
+      ..moveTo(w - cornerLen, 0)
+      ..lineTo(w - cornerRadius, 0)
+      ..quadraticBezierTo(w, 0, w, cornerRadius)
+      ..lineTo(w, cornerLen);
+    canvas.drawPath(topRightPath, paint);
+
     // 左下
-    canvas.drawLine(Offset(0, h), Offset(cornerLen, h), paint);
-    canvas.drawLine(Offset(0, h), Offset(0, h - cornerLen), paint);
+    final bottomLeftPath = Path()
+      ..moveTo(0, h - cornerLen)
+      ..lineTo(0, h - cornerRadius)
+      ..quadraticBezierTo(0, h, cornerRadius, h)
+      ..lineTo(cornerLen, h);
+    canvas.drawPath(bottomLeftPath, paint);
+
     // 右下
-    canvas.drawLine(Offset(w, h), Offset(w - cornerLen, h), paint);
-    canvas.drawLine(Offset(w, h), Offset(w, h - cornerLen), paint);
+    final bottomRightPath = Path()
+      ..moveTo(w - cornerLen, h)
+      ..lineTo(w - cornerRadius, h)
+      ..quadraticBezierTo(w, h, w, h - cornerRadius)
+      ..lineTo(w, h - cornerLen);
+    canvas.drawPath(bottomRightPath, paint);
   }
 
   @override

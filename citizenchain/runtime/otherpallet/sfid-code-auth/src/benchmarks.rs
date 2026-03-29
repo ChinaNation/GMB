@@ -12,7 +12,7 @@ use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
 use sp_core::{crypto::KeyTypeId, sr25519};
 use sp_io::crypto::{sr25519_generate, sr25519_sign};
 use sp_runtime::{
-    traits::{BlakeTwo256, Hash, IdentifyAccount, Saturating, Zero},
+    traits::{BlakeTwo256, Hash, IdentifyAccount, Zero},
     MultiSigner,
 };
 

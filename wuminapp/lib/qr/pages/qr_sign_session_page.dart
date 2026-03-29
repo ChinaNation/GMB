@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 
 /// 冷钱包扫码签名会话页面。
@@ -110,17 +111,26 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
           // 倒计时状态栏
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: expired ? Colors.red.shade50 : Colors.green.shade50,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              expired ? '签名请求已过期，请返回重新提交' : '签名请求有效期剩余：${_remainingSeconds}s',
-              style: TextStyle(
-                color: expired ? Colors.red.shade700 : Colors.green.shade700,
-                fontWeight: FontWeight.w600,
-              ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: AppTheme.bannerDecoration(expired ? AppTheme.danger : AppTheme.success),
+            child: Row(
+              children: [
+                Icon(
+                  expired ? Icons.timer_off : Icons.timer_outlined,
+                  size: 18,
+                  color: expired ? AppTheme.danger : AppTheme.success,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    expired ? '签名请求已过期，请返回重新提交' : '签名请求有效期剩余：${_remainingSeconds}s',
+                    style: TextStyle(
+                      color: expired ? AppTheme.danger : AppTheme.success,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
@@ -136,14 +146,11 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
                   width: 240,
                   height: 240,
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Center(
+                  decoration: AppTheme.bannerDecoration(AppTheme.danger),
+                  child: const Center(
                     child: Text(
-                      '二维码渲染失败：$err',
-                      style: TextStyle(color: Colors.red.shade700),
+                      '二维码渲染失败',
+                      style: TextStyle(color: AppTheme.danger),
                     ),
                   ),
                 );
@@ -156,7 +163,7 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
           const Text(
             '请用离线设备扫描此二维码完成签名，\n然后点击下方按钮扫描回执二维码。',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.black54),
+            style: TextStyle(color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 24),
 
@@ -388,7 +395,7 @@ class _ScanCornerPainter extends CustomPainter {
     const strokeWidth = 4.0;
 
     final paint = Paint()
-      ..color = Colors.green
+      ..color = AppTheme.primary
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;

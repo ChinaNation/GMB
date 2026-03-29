@@ -74,7 +74,7 @@ pub(crate) async fn indexer_worker(backend: StoreBackend) {
 
 /// 主索引循环：连接链，追赶历史区块，然后订阅新区块。
 async fn run_indexer_loop(ws_url: &str, backend: &StoreBackend) -> Result<(), String> {
-    let rpc_client = RpcClient::from_url(ws_url)
+    let rpc_client = RpcClient::from_insecure_url(ws_url)
         .await
         .map_err(|e| format!("connect rpc: {e}"))?;
     let rpc = LegacyRpcMethods::<PolkadotConfig>::new(rpc_client.clone());

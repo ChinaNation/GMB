@@ -148,6 +148,7 @@ pub(crate) fn rpc_post(
 }
 
 /// 向指定 URL 发送 JSON-RPC 请求（用于远程 bootnode 查询）。
+/// 仅允许 http / https 协议，防止 SSRF。
 pub(crate) fn rpc_post_url(
     url: &str,
     method: &str,
@@ -155,6 +156,9 @@ pub(crate) fn rpc_post_url(
     request_timeout: Duration,
     max_response_bytes: u64,
 ) -> Result<Value, String> {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("仅允许 http/https 协议".to_string());
+    }
     let payload = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,

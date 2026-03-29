@@ -1,3 +1,7 @@
+//! # 档案管理模块 (dangan)
+//!
+//! 档案号生成（V3 格式）、QR 载荷构造与签名、公民状态校验、站点密钥注册载荷构造。
+
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},

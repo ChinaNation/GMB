@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../ui/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
@@ -40,7 +41,6 @@ class DuoqianManageDetailPage extends StatefulWidget {
 }
 
 class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
 
   static const int _statusVoting = 0;
   static const int _statusPassed = 1;
@@ -215,19 +215,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
     }
   }
 
-  Color _statusColor(int? status) {
-    switch (status) {
-      case _statusVoting:
-        return Colors.blue;
-      case _statusPassed:
-      case _statusExecuted:
-        return Colors.green;
-      case _statusRejected:
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
+  Color _statusColor(int? status) => AppTheme.proposalStatusColor(status ?? -1);
 
   // ──── 投票提交 ────
 
@@ -344,7 +332,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('投票已提交：${_truncateAddress(result.txHash)}'),
-          backgroundColor: _inkGreen,
+          backgroundColor: AppTheme.primaryDark,
         ),
       );
 
@@ -355,7 +343,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('投票失败：$e'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.danger,
         ),
       );
     } finally {
@@ -400,7 +388,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
+        foregroundColor: AppTheme.primaryDark,
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
@@ -425,14 +413,14 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
             const SizedBox(height: 12),
             Text('加载失败',
-                style: TextStyle(fontSize: 16, color: Colors.grey[700])),
+                style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
             const SizedBox(height: 6),
             Text(
               _error!,
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               textAlign: TextAlign.center,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
@@ -509,7 +497,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: _inkGreen.withValues(alpha: 0.08),
+            color: AppTheme.primaryDark.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
@@ -517,14 +505,14 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: _inkGreen,
+              color: AppTheme.primaryDark,
             ),
           ),
         ),
         const Spacer(),
         Text(
           '提案 ${formatProposalId(widget.proposalId)}',
-          style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+          style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
         ),
       ],
     );
@@ -536,7 +524,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -548,7 +536,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: _inkGreen,
+                color: AppTheme.primaryDark,
               ),
             ),
             const SizedBox(height: 12),
@@ -616,19 +604,19 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
           width: 80,
           child: Text(
             label,
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
           ),
         ),
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(fontSize: 13, color: Color(0xFF333333)),
+            style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
           ),
         ),
         if (onCopy != null)
           GestureDetector(
             onTap: onCopy,
-            child: Icon(Icons.copy, size: 16, color: Colors.grey[400]),
+            child: Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
           ),
       ],
     );
@@ -644,7 +632,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -656,7 +644,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: _inkGreen,
+                color: AppTheme.primaryDark,
               ),
             ),
             const SizedBox(height: 12),
@@ -665,8 +653,8 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 10,
-                backgroundColor: Colors.grey[200],
-                valueColor: const AlwaysStoppedAnimation<Color>(_inkGreen),
+                backgroundColor: AppTheme.border,
+                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryDark),
               ),
             ),
             const SizedBox(height: 8),
@@ -678,14 +666,14 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: _inkGreen,
+                    color: AppTheme.primaryDark,
                   ),
                 ),
                 Text(
                   '反对 $_noCount',
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.red[400],
+                    color: AppTheme.danger,
                   ),
                 ),
               ],
@@ -704,7 +692,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -718,7 +706,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: _inkGreen,
+                  color: AppTheme.primaryDark,
                 ),
               ),
             ),
@@ -734,13 +722,13 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
                 dense: true,
                 leading: CircleAvatar(
                   radius: 16,
-                  backgroundColor: _inkGreen.withValues(alpha: 0.08),
+                  backgroundColor: AppTheme.primaryDark.withValues(alpha: 0.08),
                   child: Text(
                     '${index + 1}',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: _inkGreen,
+                      color: AppTheme.primaryDark,
                     ),
                   ),
                 ),
@@ -759,14 +747,14 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 4, vertical: 1),
                         decoration: BoxDecoration(
-                          color: _inkGreen.withValues(alpha: 0.1),
+                          color: AppTheme.primaryDark.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(
                           '发起人',
                           style: TextStyle(
                             fontSize: 10,
-                            color: _inkGreen,
+                            color: AppTheme.primaryDark,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -775,15 +763,15 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
                   ],
                 ),
                 trailing: isPending
-                    ? Icon(Icons.schedule, size: 18, color: Colors.orange[400])
+                    ? Icon(Icons.schedule, size: 18, color: AppTheme.warning)
                     : vote == null
                         ? Icon(Icons.remove_circle_outline,
-                            size: 18, color: Colors.grey[300])
+                            size: 18, color: AppTheme.border)
                         : vote
                             ? const Icon(Icons.check_circle,
-                                size: 18, color: Colors.green)
+                                size: 18, color: AppTheme.success)
                             : const Icon(Icons.cancel,
-                                size: 18, color: Colors.red),
+                                size: 18, color: AppTheme.danger),
               );
             }),
           ],
@@ -804,7 +792,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
               Row(
                 children: [
                   Text('投票钱包：',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
                   const SizedBox(width: 4),
                   Expanded(
                     child: DropdownButton<WalletProfile>(
@@ -837,9 +825,9 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
                     onPressed:
                         _canVote && !_submitting ? () => _confirmVote(false) : null,
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
+                      foregroundColor: AppTheme.danger,
                       side: BorderSide(
-                          color: _canVote ? Colors.red : Colors.grey[300]!),
+                          color: _canVote ? AppTheme.danger : AppTheme.border),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: const Text('反对', style: TextStyle(fontSize: 15)),
@@ -851,7 +839,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
                     onPressed:
                         _canVote && !_submitting ? () => _confirmVote(true) : null,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _inkGreen,
+                      backgroundColor: AppTheme.primaryDark,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),

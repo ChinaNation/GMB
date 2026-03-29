@@ -85,8 +85,9 @@ fn insert_voting_proposal<T: Config>(proposal_id: u64) {
         has_code: true,
         status: ProposalStatus::Voting,
     };
-    let data = proposal.encode();
-    voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)
+    let mut encoded = sp_runtime::sp_std::vec::Vec::from(crate::MODULE_TAG);
+    encoded.extend_from_slice(&proposal.encode());
+    voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, encoded)
         .expect("benchmark store_proposal_data should succeed");
     voting_engine_system::Pallet::<T>::store_proposal_object(
         proposal_id,

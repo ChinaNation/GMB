@@ -63,7 +63,7 @@
 - `DIFFICULTY_TARGET_WINDOW_MS`：目标窗口时长（`interval * MILLISECS_PER_BLOCK`）。
 - `DIFFICULTY_MAX_ADJUST_FACTOR`：单次上调倍率上限（当前 4）。
 - `DIFFICULTY_MIN_ADJUST_FACTOR`：单次下调倍率下限（当前 4，对应最低为 `old/4`）。
-- `MILLISECS_PER_BLOCK`：目标出块时间（当前 6 分钟）。
+- `MILLISECS_PER_BLOCK`：编译期占位值（30 秒），仅用于 benchmark 和 test。运行期目标出块时间从 genesis-pallet 链上存储动态读取（创世期 30 秒 / 运行期 6 分钟）。
 
 ---
 
@@ -178,18 +178,32 @@ new_difficulty_raw = old_difficulty * target_window_ms / actual_window_ms
   - 调整块路径
   - 首次建立窗口路径
   - 普通空转路径
-- 当前 `weights.rs` 仍是保守手写值，后续可用 benchmark CLI 产物替换。
+- 当前 `weights.rs` 为 benchmark CLI 生成产物（2026-03-17），但生成时 benchmark 未设置 `ExtrinsicCount`（空块断言会 panic），因此 proof-size 注释缺少 `System::ExtrinsicCount` 和 `GenesisPallet::TargetBlockTimeMs` 两项读取。benchmark 修复后（已加 `mock_extrinsic_count`）需重跑 CLI 更新 `weights.rs`。
+- 每个 benchmark 均设置 `ExtrinsicCount = 2` 以绕过空块拒绝断言。
+- `impl_benchmark_test_suite!` 已配置，可通过 `cargo test --features runtime-benchmarks` 验证。
 
 ---
 
-## 9. 测试覆盖（当前）
-`cargo test -p pow-difficulty-module` 当前覆盖 8 项：
+## 9. try-runtime 支持
+Cargo.toml 已启用 `try-runtime` feature，依赖链：
+- `frame-support/try-runtime`
+- `frame-system/try-runtime`
+- `sp-runtime/try-runtime`
+
+Hooks 中实现了 `try_state` 钩子，校验：
+- `CurrentDifficulty > 0`（难度不得为零）
+
+---
+
+## 10. 测试覆盖（当前）
+`cargo test -p pow-difficulty-module` 当前覆盖 9 项：
 - `first_adjustment_happens_at_interval_plus_one_and_window_is_exact`
 - `raises_difficulty_when_blocks_are_too_fast`
 - `lowers_difficulty_when_blocks_are_too_slow`
 - `clamps_to_adjustment_bounds`
 - `saturating_cast_prevents_u128_to_u64_wraparound`
 - `zero_difficulty_storage_is_repaired_without_panic`
+- `rejects_empty_block` — 空块拒绝断言（`#[should_panic]`）
 - `test_genesis_config_builds`
 - `runtime_integrity_tests`
 
@@ -198,7 +212,7 @@ new_difficulty_raw = old_difficulty * target_window_ms / actual_window_ms
 
 ---
 
-## 10. 运维观察与审计建议
+## 11. 运维观察与审计建议
 - 监控 `DifficultyAdjusted` 事件，重点看：
   - `actual_window_ms / target_window_ms` 比值趋势
   - `new_difficulty` 连续窗口变化幅度

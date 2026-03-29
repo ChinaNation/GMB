@@ -11,14 +11,11 @@ codec = { workspace = true }
 scale-info = { workspace = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
-frame-benchmarking = { workspace = true, optional = true }
 sp-api = { workspace = true }
-sp-runtime = { workspace = true }
 
 [features]
 default = ["std"]
 runtime-benchmarks = [
-    "frame-benchmarking/runtime-benchmarks",
     "frame-support/runtime-benchmarks",
     "frame-system/runtime-benchmarks",
 ]
@@ -26,12 +23,11 @@ try-runtime = []
 std = [
     "codec/std",
     "scale-info/std",
-    "frame-benchmarking?/std",
     "frame-support/std",
     "frame-system/std",
     "sp-api/std",
-    "sp-runtime/std",
 ]
 
 [dev-dependencies]
 sp-io = { workspace = true }
+sp-runtime = { workspace = true }

@@ -331,7 +331,8 @@ where
     }
 
     // fee_blockFees(block_hash_hex: String) -> u128
-    // 读取指定区块的 System::Events，累加所有 FeePaid 事件的手续费。
+    // 读取指定区块的 System::Events，累加所有 FeePaid.fee（base_fee）
+    // 和 TransactionFeePaid.tip，返回真实总手续费。
     {
         let client = client.clone();
         module.register_method("fee_blockFees", move |params, _, _| {
@@ -366,11 +367,20 @@ where
 
             let mut total_fee: u128 = 0;
             for record in &events {
-                if let runtime::RuntimeEvent::OnchainTransactionPow(
-                    onchain_transaction_pow::pallet::Event::FeePaid { fee, .. },
-                ) = &record.event
-                {
-                    total_fee = total_fee.saturating_add(*fee);
+                match &record.event {
+                    // base_fee（不含 tip）
+                    runtime::RuntimeEvent::OnchainTransactionPow(
+                        onchain_transaction_pow::pallet::Event::FeePaid { fee, .. },
+                    ) => {
+                        total_fee = total_fee.saturating_add(*fee);
+                    }
+                    // tip 部分（由 pallet-transaction-payment 事件记录）
+                    runtime::RuntimeEvent::TransactionPayment(
+                        pallet_transaction_payment::Event::TransactionFeePaid { tip, .. },
+                    ) => {
+                        total_fee = total_fee.saturating_add(*tip);
+                    }
+                    _ => {}
                 }
             }
 

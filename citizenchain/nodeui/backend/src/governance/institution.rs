@@ -7,10 +7,10 @@ use std::time::Duration;
 use super::storage_keys;
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
-const MAX_RPC_RESPONSE_BYTES: u64 = 512 * 1024;
+use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
+    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, RPC_RESPONSE_LIMIT_SMALL)
 }
 
 /// 查询指定机构的管理员公钥列表。

@@ -78,3 +78,9 @@ pub trait InstitutionAssetGuard<AccountId> {
 - `ProtectedSourceChecker` 只能表达“完全禁止的源地址”，适合 `keyless_address`。
 - `duoqian_address` 不是完全禁止，而是“只有特定治理执行模块能动钱”。
 - 所以需要单独的资金动作白名单层，不能继续复用单一布尔语义的 `ProtectedSourceChecker`。
+
+## 6. 安全注意事项
+
+- 默认 `()` 实现为 **fail-open（全放行）**，仅适用于测试 mock。
+- 生产 runtime 必须配置为 `RuntimeInstitutionAssetGuard`，否则这一层资金白名单将完全失效。
+- 建议 runtime 层维护集成测试，锁定 keyless / 保留 duoqian / fee_account / 普通账户的允许矩阵，防止规则意外退化。

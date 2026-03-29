@@ -1,3 +1,12 @@
+//! # 决议发行治理模块 (resolution-issuance-gov)
+//!
+//! 本模块将"国储会决议发行"治理流程接入联合投票：
+//! - 仅国储会管理员可发起决议发行提案，分配明细必须与链上白名单精确匹配。
+//! - 借助 `voting-engine-system` 联合投票达成通过后，自动调用 `resolution-issuance-iss` 执行铸币。
+//! - 执行失败时提案状态覆盖为 `STATUS_EXECUTION_FAILED`，与通过明确区分。
+//! - 治理进行中禁止修改合法收款账户集合，避免口径漂移。
+//! - 提案创建、投票终结、发行执行和计数变更全部原子提交。
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::pallet_prelude::DispatchResult;
@@ -22,8 +31,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use primitives::china::china_cb::CHINA_CB;
     use resolution_issuance_iss::{
-        weights::WeightInfo as IssuanceWeightInfoT, ResolutionAllocationsOf,
-        ResolutionIssuanceExecutor, ResolutionReasonOf,
+        ResolutionAllocationsOf, ResolutionIssuanceExecutor, ResolutionReasonOf,
     };
     use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
     use voting_engine_system::JointVoteEngine;
@@ -49,6 +57,7 @@ pub mod pallet {
         PartialEq,
         Eq,
     )]
+    /// 中文注释：单条收款分配项，包含收款账户和分配金额。
     pub struct RecipientAmount<AccountId> {
         pub recipient: AccountId,
         pub amount: u128,
@@ -63,6 +72,7 @@ pub mod pallet {
         pub allocations: Vec<RecipientAmount<AccountId>>,
     }
 
+    /// 中文注释：联合投票终结后的执行结果，用于决定 post-dispatch 退费和状态覆盖。
     pub(crate) enum FinalizeOutcome {
         ApprovedExecutionSucceeded,
         ApprovedExecutionFailed,
@@ -88,8 +98,6 @@ pub mod pallet {
             Self::MaxReasonLen,
             Self::MaxAllocations,
         >;
-        /// 用于估算发行执行路径的 weight。
-        type IssuanceWeightInfo: IssuanceWeightInfoT;
         type JointVoteEngine: JointVoteEngine<Self::AccountId>;
 
         #[pallet::constant]
@@ -216,47 +224,64 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
+        /// 中文注释：决议发行提案已创建，联合投票已发起。
         ResolutionIssuanceProposed {
             proposal_id: u64,
             proposer: T::AccountId,
             total_amount: u128,
             allocation_count: u32,
         },
-        JointVoteFinalized {
-            proposal_id: u64,
-            approved: bool,
-        },
+        /// 中文注释：联合投票已终结，approved 表示是否通过。
+        JointVoteFinalized { proposal_id: u64, approved: bool },
+        /// 中文注释：投票通过且发行执行成功，铸币已落账。
         IssuanceExecutionTriggered {
             proposal_id: u64,
             total_amount: u128,
         },
-        IssuanceExecutionFailed {
-            proposal_id: u64,
-        },
-        AllowedRecipientsUpdated {
-            count: u32,
-        },
+        /// 中文注释：投票通过但发行执行失败，提案状态已覆盖为 STATUS_EXECUTION_FAILED。
+        IssuanceExecutionFailed { proposal_id: u64 },
+        /// 中文注释：合法收款账户集合已更新。
+        AllowedRecipientsUpdated { count: u32 },
     }
 
     #[pallet::error]
     pub enum Error<T> {
+        /// 中文注释：发行理由不能为空。
         EmptyReason,
+        /// 中文注释：分配明细不能为空。
         EmptyAllocations,
+        /// 中文注释：分配条目数与合法收款账户数不一致。
         InvalidAllocationCount,
+        /// 中文注释：分配明细中存在重复收款人。
         DuplicateRecipient,
+        /// 中文注释：分配明细中的收款人不在合法收款账户集合内。
         InvalidRecipientSet,
+        /// 中文注释：金额不能为零（total_amount 或单条 amount）。
         ZeroAmount,
+        /// 中文注释：分配金额求和溢出 u128。
         AllocationOverflow,
+        /// 中文注释：分配金额总和与 total_amount 不一致。
         TotalMismatch,
+        /// 中文注释：提案数据未找到或解码失败。
         ProposalNotFound,
-        ProposalNotVoting,
+        /// 中文注释：联合投票提案创建失败。
         JointVoteCreateFailed,
+        /// 中文注释：合法收款账户集合未配置（为空）。
         RecipientsNotConfigured,
+        /// 中文注释：合法收款账户集合中存在重复地址。
         DuplicateAllowedRecipient,
+        /// 中文注释：仍有 Voting 状态的提案，禁止修改收款账户集合。
         ActiveVotingProposalsExist,
+        /// 中文注释：VotingProposalCount 加一溢出。
         VotingProposalCountOverflow,
+        /// 中文注释：VotingProposalCount 减一下溢。
         VotingProposalCountUnderflow,
+        /// 中文注释：提案业务数据写入投票引擎失败。
         ProposalDataStoreFailed,
+        /// 中文注释：新名单移除了已有收款账户（只允许新增不允许删除）。
+        RecipientRemoved,
+        /// 中文注释：收款账户不是 CHINA_CB 省储会地址。
+        RecipientNotInChinaCb,
     }
 
     #[pallet::call]
@@ -353,7 +378,7 @@ pub mod pallet {
             Ok(actual.into())
         }
 
-        /// 更新链上合法收款账户集合。
+        /// 更新链上合法收款账户集合（只允许新增，不允许删除，且必须是 CHINA_CB 省储会地址）。
         #[pallet::call_index(2)]
         #[pallet::weight(<T as Config>::WeightInfo::set_allowed_recipients())]
         pub fn set_allowed_recipients(
@@ -369,6 +394,8 @@ pub mod pallet {
                 Error::<T>::ActiveVotingProposalsExist
             );
             Self::ensure_unique_recipients(recipients.as_slice())?;
+            Self::ensure_recipients_only_added(&recipients)?;
+            Self::ensure_recipients_in_china_cb(&recipients)?;
             AllowedRecipients::<T>::put(recipients.clone());
             Self::deposit_event(Event::<T>::AllowedRecipientsUpdated {
                 count: recipients.len() as u32,
@@ -566,6 +593,36 @@ pub mod pallet {
             Ok(())
         }
 
+        /// 中文注释：新名单必须是旧名单的超集（只允许新增不允许删除）。
+        fn ensure_recipients_only_added(
+            new_recipients: &BoundedVec<T::AccountId, T::MaxAllocations>,
+        ) -> DispatchResult {
+            let current = AllowedRecipients::<T>::get();
+            let new_set: BTreeSet<&T::AccountId> = new_recipients.iter().collect();
+            for existing in current.iter() {
+                ensure!(new_set.contains(existing), Error::<T>::RecipientRemoved);
+            }
+            Ok(())
+        }
+
+        /// 中文注释：所有收款账户必须是 CHINA_CB 省储会地址（跳过索引 0 的 NRC）。
+        fn ensure_recipients_in_china_cb(
+            recipients: &BoundedVec<T::AccountId, T::MaxAllocations>,
+        ) -> DispatchResult {
+            let valid_set: BTreeSet<T::AccountId> = CHINA_CB
+                .iter()
+                .skip(1)
+                .filter_map(|node| T::AccountId::decode(&mut &node.duoqian_address[..]).ok())
+                .collect();
+            for recipient in recipients.iter() {
+                ensure!(
+                    valid_set.contains(recipient),
+                    Error::<T>::RecipientNotInChinaCb
+                );
+            }
+            Ok(())
+        }
+
         fn decode_default_allowed_recipients() -> Option<BoundedVec<T::AccountId, T::MaxAllocations>>
         {
             let recipients: Vec<T::AccountId> = CHINA_CB
@@ -607,7 +664,16 @@ pub mod pallet {
 impl<T: pallet::Config> JointVoteResultCallback for pallet::Pallet<T> {
     fn on_joint_vote_finalized(vote_proposal_id: u64, approved: bool) -> DispatchResult {
         // 统一 ID：vote_proposal_id 就是唯一的提案 ID，无需转换。
-        pallet::Pallet::<T>::apply_joint_vote_result(vote_proposal_id, approved).map(|_| ())
+        let outcome = pallet::Pallet::<T>::apply_joint_vote_result(vote_proposal_id, approved)?;
+        if matches!(outcome, pallet::FinalizeOutcome::ApprovedExecutionFailed) {
+            // 投票通过但执行失败：覆盖 set_status_and_emit 刚写入的 STATUS_PASSED。
+            // 本回调运行在 set_status_and_emit 的 with_transaction 内，修改是原子的。
+            voting_engine_system::Pallet::<T>::override_proposal_status(
+                vote_proposal_id,
+                voting_engine_system::STATUS_EXECUTION_FAILED,
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -806,7 +872,6 @@ mod tests {
         type RecipientSetOrigin = frame_system::EnsureRoot<AccountId32>;
         type JointVoteFinalizeOrigin = frame_system::EnsureRoot<AccountId32>;
         type IssuanceExecutor = TestIssuanceExecutor;
-        type IssuanceWeightInfo = ();
         type WeightInfo = crate::weights::SubstrateWeight<Test>;
         type JointVoteEngine = TestJointVoteEngine;
         type MaxReasonLen = ConstU32<128>;
@@ -1096,8 +1161,25 @@ mod tests {
         });
     }
 
+    /// 在 voting engine 的 Proposals 中插入一个 mock 联合投票提案（status=PASSED）。
+    fn insert_mock_voting_engine_proposal(proposal_id: u64) {
+        voting_engine_system::pallet::Proposals::<Test>::insert(
+            proposal_id,
+            voting_engine_system::Proposal {
+                kind: voting_engine_system::PROPOSAL_KIND_JOINT,
+                stage: voting_engine_system::STAGE_JOINT,
+                status: voting_engine_system::STATUS_PASSED,
+                internal_org: None,
+                internal_institution: None,
+                start: 0u64,
+                end: 100u64,
+                citizen_eligible_total: 0,
+            },
+        );
+    }
+
     #[test]
-    fn approved_callback_execution_failure_emits_failure_event() {
+    fn approved_callback_execution_failure_overrides_status() {
         new_test_ext().execute_with(|| {
             assert_ok!(ResolutionIssuanceGov::propose_resolution_issuance(
                 RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
@@ -1108,6 +1190,7 @@ mod tests {
                 nonce_ok(),
                 sig_ok()
             ));
+            insert_mock_voting_engine_proposal(100);
 
             EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = true);
             assert_ok!(ResolutionIssuanceGov::on_joint_vote_finalized(100, true));
@@ -1116,6 +1199,12 @@ mod tests {
             assert_eq!(calls.len(), 0);
             // VotingProposalCount should be decremented even on execution failure
             assert_eq!(pallet::VotingProposalCount::<Test>::get(), 0);
+            // 提案状态必须是 EXECUTION_FAILED，不能是 PASSED
+            let proposal = voting_engine_system::pallet::Proposals::<Test>::get(100).unwrap();
+            assert_eq!(
+                proposal.status,
+                voting_engine_system::STATUS_EXECUTION_FAILED
+            );
         });
     }
 

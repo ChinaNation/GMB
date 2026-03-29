@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 
 import '../isar/wallet_isar.dart';
+import 'app_theme.dart';
 
 /// 分组管理页面。
 ///
@@ -14,7 +15,7 @@ class GroupManagementPage extends StatefulWidget {
 }
 
 class _GroupManagementPageState extends State<GroupManagementPage> {
-  // 总分组数上限，包含默认分组“全部 / 分组一 / 分组二”。
+  // 总分组数上限，包含默认分组"全部 / 分组一 / 分组二"。
   static const int maxGroups = 50;
 
   List<WalletGroupEntity> _groups = [];
@@ -211,88 +212,176 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
         actions: [
           IconButton(
             onPressed: _addGroup,
-            icon: const Icon(Icons.add),
+            icon: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withAlpha(25),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.add,
+                  size: 20, color: AppTheme.primaryLight),
+            ),
             tooltip: '新建分组',
           ),
         ],
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _groups.length,
-        itemBuilder: (context, index) {
-          final group = _groups[index];
-          return Dismissible(
-            key: ValueKey(group.id),
-            direction: group.isDefault
-                ? DismissDirection.none
-                : DismissDirection.endToStart,
-            background: Container(
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 20),
-              color: Colors.red,
-              child: const Icon(Icons.delete, color: Colors.white),
-            ),
-            confirmDismiss: (_) async {
-              if (group.isDefault) return false;
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('删除分组'),
-                  content: Text(
-                      '确定删除分组"${group.name}"？\n该分组下的钱包将移至"全部"。'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('取消'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('删除'),
-                    ),
-                  ],
-                ),
-              );
-              if (confirmed != true) return false;
-              final isar = await WalletIsar.instance.db();
-              await isar.writeTxn(() async {
-                // 从所有钱包的 groupNames 中移除该分组
-                final wallets = await isar.walletProfileEntitys
-                    .filter()
-                    .groupNamesContains(group.name)
-                    .findAll();
-                for (final w in wallets) {
-                  final names = w.groupNames
-                      .split(',')
-                      .where((n) => n != group.name)
-                      .join(',');
-                  w.groupNames = names;
-                  await isar.walletProfileEntitys.put(w);
-                }
-                await isar.walletGroupEntitys.delete(group.id);
-              });
-              await _load();
-              return false;
-            },
-            child: Card(
-              margin: const EdgeInsets.symmetric(vertical: 4),
-              child: ListTile(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                title: Text(
-                  group.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                trailing: group.name == '全部'
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.chevron_right),
-                        onPressed: () => _renameGroup(group),
-                      ),
+      body: _groups.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.folder_outlined,
+                      size: 48, color: AppTheme.textTertiary),
+                  const SizedBox(height: 12),
+                  const Text(
+                    '暂无分组',
+                    style: TextStyle(color: AppTheme.textTertiary),
+                  ),
+                ],
               ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _groups.length,
+              itemBuilder: (context, index) {
+                final group = _groups[index];
+                return Dismissible(
+                  key: ValueKey(group.id),
+                  direction: group.isDefault
+                      ? DismissDirection.none
+                      : DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.danger.withAlpha(30),
+                      borderRadius:
+                          BorderRadius.circular(AppTheme.radiusMd),
+                    ),
+                    child: const Icon(Icons.delete_outline,
+                        color: AppTheme.danger),
+                  ),
+                  confirmDismiss: (_) async {
+                    if (group.isDefault) return false;
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('删除分组'),
+                        content: Text(
+                            '确定删除分组"${group.name}"？\n该分组下的钱包将移至"全部"。'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('取消'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('删除'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed != true) return false;
+                    final isar = await WalletIsar.instance.db();
+                    await isar.writeTxn(() async {
+                      final wallets = await isar.walletProfileEntitys
+                          .filter()
+                          .groupNamesContains(group.name)
+                          .findAll();
+                      for (final w in wallets) {
+                        final names = w.groupNames
+                            .split(',')
+                            .where((n) => n != group.name)
+                            .join(',');
+                        w.groupNames = names;
+                        await isar.walletProfileEntitys.put(w);
+                      }
+                      await isar.walletGroupEntitys.delete(group.id);
+                    });
+                    await _load();
+                    return false;
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusMd),
+                        onTap: group.name == '全部'
+                            ? null
+                            : () => _renameGroup(group),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: AppTheme.cardDecoration(),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: group.name == '全部'
+                                      ? AppTheme.primary.withAlpha(20)
+                                      : AppTheme.surfaceElevated,
+                                  borderRadius:
+                                      BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  group.name == '全部'
+                                      ? Icons.folder_special_rounded
+                                      : Icons.folder_outlined,
+                                  size: 18,
+                                  color: group.name == '全部'
+                                      ? AppTheme.primaryLight
+                                      : AppTheme.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Text(
+                                group.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              if (group.name == '全部') ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        AppTheme.primary.withAlpha(20),
+                                    borderRadius:
+                                        BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    '默认',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: AppTheme.primaryLight,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              const Spacer(),
+                              if (group.name != '全部')
+                                const Icon(Icons.chevron_right,
+                                    size: 20,
+                                    color: AppTheme.textTertiary),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
-          );
-        },
-      ),
     );
   }
 }

@@ -102,6 +102,7 @@ impl ChainKeyringState {
         })
     }
 
+    #[allow(dead_code)]
     pub fn all_pubkeys(&self) -> [&str; 3] {
         [
             &self.main_pubkey,
@@ -111,6 +112,7 @@ impl ChainKeyringState {
     }
 }
 
+#[allow(dead_code)]
 pub fn load_signing_key() -> Sr25519Pair {
     let raw = std::env::var("SFID_SIGNING_SEED_HEX")
         .ok()
@@ -136,6 +138,7 @@ pub fn try_derive_pubkey_hex_from_seed(seed_text: &str) -> Result<String, String
     Ok(format!("0x{}", hex::encode(keypair.public().0)))
 }
 
+#[allow(dead_code)]
 pub fn derive_pubkey_hex_from_seed(seed_text: &str) -> String {
     try_derive_pubkey_hex_from_seed(seed_text)
         .unwrap_or_else(|err| panic!("invalid signing seed hex: {err}"))

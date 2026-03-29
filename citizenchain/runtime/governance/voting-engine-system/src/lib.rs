@@ -1,6 +1,19 @@
+//! # 投票引擎系统 (voting-engine-system)
+//!
+//! 治理投票基础设施模块，统一承载三类投票流程：
+//! - **内部投票**（INTERNAL）：机构内部管理员按阈值投票。
+//! - **联合机构投票**（JOINT）：国储会/省储会/省储行管理员按票权加权投票。
+//! - **公民投票**（CITIZEN）：SFID 持有者按 >50% 严格多数投票。
+//!
+//! 通过 trait 为上层治理模块提供标准化能力：
+//! - `InternalVoteEngine` / `JointVoteEngine`：提案创建和投票。
+//! - `JointVoteResultCallback`：联合提案终结后回调目标治理模块。
+//! - 自动超时结算、原子终结+回调一致性、90 天延迟分块清理。
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod active_proposal_limit;
+#[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
 pub mod citizen_vote;
 pub mod internal_vote;
@@ -42,6 +55,8 @@ pub const STATUS_PASSED: u8 = 1;
 pub const STATUS_REJECTED: u8 = 2;
 /// 提案已执行完成（终态）。消费模块在业务逻辑成功后调用 set_status_and_emit 设置。
 pub const STATUS_EXECUTED: u8 = 3;
+/// 投票通过但业务执行失败（终态）。由消费模块回调在 set_status_and_emit 事务内覆盖。
+pub const STATUS_EXECUTION_FAILED: u8 = 4;
 
 /// 中文注释：事项模块接入联合投票时，统一由投票引擎创建提案并写入人口快照。
 pub trait JointVoteEngine<AccountId> {
@@ -479,37 +494,44 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
+        /// 中文注释：提案已创建，记录类型、阶段和截止区块。
         ProposalCreated {
             proposal_id: u64,
             kind: u8,
             stage: u8,
             end: BlockNumberFor<T>,
         },
+        /// 中文注释：联合投票阶段非全票通过或超时，提案推进到公民投票阶段。
         ProposalAdvancedToCitizen {
             proposal_id: u64,
             citizen_end: BlockNumberFor<T>,
             eligible_total: u64,
         },
+        /// 中文注释：提案终结，status 为最终状态（PASSED/REJECTED/EXECUTED/EXECUTION_FAILED）。
         ProposalFinalized {
             proposal_id: u64,
             status: u8,
         },
+        /// 中文注释：内部投票已投出一票。
         InternalVoteCast {
             proposal_id: u64,
             who: T::AccountId,
             approve: bool,
         },
+        /// 中文注释：联合投票中某机构管理员已投出一票。
         JointAdminVoteCast {
             proposal_id: u64,
             institution: InstitutionPalletId,
             who: T::AccountId,
             approve: bool,
         },
+        /// 中文注释：联合投票中某机构已形成最终结果（赞成/反对）。
         JointInstitutionVoteFinalized {
             proposal_id: u64,
             institution: InstitutionPalletId,
             approved: bool,
         },
+        /// 中文注释：公民投票已投出一票（binding_id 为 SFID 哈希）。
         CitizenVoteCast {
             proposal_id: u64,
             who: T::AccountId,
@@ -520,24 +542,41 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
+        /// 中文注释：提案不存在或已被清理。
         ProposalNotFound,
+        /// 中文注释：提案类型与当前操作不匹配（内部/联合）。
         InvalidProposalKind,
+        /// 中文注释：提案所处阶段与当前操作不匹配（内部/联合/公民）。
         InvalidProposalStage,
+        /// 中文注释：提案状态不允许当前操作（例如已终结的提案不可投票）。
         InvalidProposalStatus,
+        /// 中文注释：内部投票的机构类型不合法。
         InvalidInternalOrg,
+        /// 中文注释：机构标识不属于任何已知类型（NRC/PRC/PRB/多签）。
         InvalidInstitution,
+        /// 中文注释：调用者无权执行此操作（非管理员或外部 extrinsic 直接调用）。
         NoPermission,
+        /// 中文注释：投票已截止（当前区块 > end）。
         VoteClosed,
+        /// 中文注释：提案尚未到期，不可手动触发超时结算。
         VoteNotExpired,
+        /// 中文注释：同一身份已对该提案投过票。
         AlreadyVoted,
+        /// 中文注释：SFID 资格校验未通过（binding_id 未绑定或不匹配）。
         SfidNotEligible,
+        /// 中文注释：SFID 投票凭证验签失败或已被消费。
         InvalidSfidVoteCredential,
+        /// 中文注释：公民投票总分母未设置（eligible_total == 0）。
         CitizenEligibleTotalNotSet,
+        /// 中文注释：人口快照参数无效（nonce 为空/已使用/签名验证失败）。
         InvalidPopulationSnapshot,
+        /// 中文注释：提案已终结，不可重复结算。
         ProposalAlreadyFinalized,
+        /// 中文注释：提案 ID 分配溢出（年内超过 999,999 或数学溢出）。
         ProposalIdOverflow,
+        /// 中文注释：单个到期区块的提案数超出上限。
         TooManyProposalsAtExpiry,
-        /// 该机构活跃提案数已达上限（10 个），需等待现有提案完成后再发起。
+        /// 中文注释：该机构活跃提案数已达上限（10 个），需等待现有提案完成后再发起。
         ActiveProposalLimitReached,
     }
 
@@ -866,6 +905,16 @@ pub mod pallet {
                 }
 
                 TransactionOutcome::Commit(Ok(()))
+            })
+        }
+
+        /// 低级状态覆盖：仅供 on_joint_vote_finalized 回调在同一事务内纠正状态。
+        /// 不发事件、不注册清理——这些由外层 set_status_and_emit 统一处理。
+        pub fn override_proposal_status(proposal_id: u64, new_status: u8) -> DispatchResult {
+            Proposals::<T>::try_mutate(proposal_id, |maybe| {
+                let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
+                proposal.status = new_status;
+                Ok(())
             })
         }
 
@@ -2062,7 +2111,7 @@ mod tests {
     }
 
     #[test]
-    fn citizen_timeout_cleanup_requires_explicit_joint_cleanup_request() {
+    fn citizen_timeout_auto_registers_cleanup_and_clears_vote_nonces() {
         new_test_ext().execute_with(|| {
             insert_citizen_proposal(0, 10, 5);
             assert_ok!(VotingEngineSystem::schedule_proposal_expiry(0, 5));

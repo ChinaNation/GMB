@@ -27,6 +27,9 @@ pub use pallet::*;
 mod benchmarks;
 pub mod weights;
 
+/// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
+pub const MODULE_TAG: &[u8] = b"adm-rep";
+
 #[derive(
     Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
 )]
@@ -37,8 +40,6 @@ pub struct AdminReplacementAction<AccountId> {
     pub old_admin: AccountId,
     /// 新管理员
     pub new_admin: AccountId,
-    /// 是否已经执行替换
-    pub executed: bool,
 }
 
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
@@ -241,8 +242,6 @@ pub mod pallet {
         ProposalActionNotFound,
         /// 投票尚未通过，不能执行替换
         ProposalNotPassed,
-        /// 该提案已执行过替换
-        ProposalAlreadyExecuted,
     }
 
     #[pallet::call]
@@ -279,10 +278,10 @@ pub mod pallet {
                 institution,
                 old_admin: old_admin.clone(),
                 new_admin: new_admin.clone(),
-                executed: false,
             };
-            let data = action.encode();
-            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            let mut encoded = Vec::from(crate::MODULE_TAG);
+            encoded.extend_from_slice(&action.encode());
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, encoded)?;
             voting_engine_system::Pallet::<T>::store_proposal_meta(
                 proposal_id,
                 frame_system::Pallet::<T>::block_number(),
@@ -308,11 +307,8 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+            let action = Self::load_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
-            let action = AdminReplacementAction::decode(&mut &data[..])
-                .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-            ensure!(!action.executed, Error::<T>::ProposalAlreadyExecuted);
 
             // 仅目标机构管理员可参与该提案投票
             let admins = Self::admins_for_institution(action.institution)?;
@@ -376,12 +372,22 @@ pub mod pallet {
             Ok(())
         }
 
+        /// 从投票引擎 ProposalData 中读取并解码本模块的业务数据。
+        /// 先校验 MODULE_TAG 前缀，防止跨模块误解码。
+        fn load_proposal_data(
+            proposal_id: u64,
+        ) -> Option<AdminReplacementAction<T::AccountId>> {
+            let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)?;
+            let tag = crate::MODULE_TAG;
+            if raw.len() < tag.len() || &raw[..tag.len()] != tag {
+                return None;
+            }
+            AdminReplacementAction::decode(&mut &raw[tag.len()..]).ok()
+        }
+
         fn try_execute_replacement(proposal_id: u64) -> DispatchResult {
-            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+            let action = Self::load_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
-            let action = AdminReplacementAction::decode(&mut &data[..])
-                .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-            ensure!(!action.executed, Error::<T>::ProposalAlreadyExecuted);
             Self::try_execute_replacement_from_action(proposal_id, action)
         }
 
@@ -917,9 +923,8 @@ mod tests {
             assert_eq!(proposal.status, STATUS_PASSED);
             let data = voting_engine_system::Pallet::<Test>::get_proposal_data(pid)
                 .expect("proposal data should exist");
-            let action = AdminReplacementAction::<AccountId32>::decode(&mut &data[..])
+            let _action = AdminReplacementAction::<AccountId32>::decode(&mut &data[..])
                 .expect("should decode");
-            assert!(!action.executed);
             assert_noop!(
                 AdminsOriginGov::execute_admin_replacement(
                     RuntimeOrigin::signed(nrc_admin(0)),
@@ -973,11 +978,10 @@ mod tests {
                 .into_inner();
             assert!(admins.iter().any(|a| a == &old_admin));
             assert!(!admins.iter().any(|a| a == &new_admin));
-            let data = voting_engine_system::Pallet::<Test>::get_proposal_data(pid)
-                .expect("proposal data should exist");
-            let action = AdminReplacementAction::<AccountId32>::decode(&mut &data[..])
-                .expect("should decode");
-            assert!(!action.executed);
+            assert!(
+                voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some(),
+                "proposal data should exist"
+            );
         });
     }
 
@@ -1173,11 +1177,10 @@ mod tests {
                 .into_inner();
             assert!(admins.iter().any(|a| a == &old_admin));
             assert!(!admins.iter().any(|a| a == &new_admin));
-            let data = voting_engine_system::Pallet::<Test>::get_proposal_data(pid)
-                .expect("proposal data should exist");
-            let action = AdminReplacementAction::<AccountId32>::decode(&mut &data[..])
-                .expect("should decode");
-            assert!(!action.executed);
+            assert!(
+                voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some(),
+                "proposal data should exist"
+            );
         });
     }
 

@@ -4,7 +4,7 @@
 
 use crate::{pallet, Call, Config, Pallet};
 use frame_benchmarking::v2::*;
-use frame_support::traits::Get;
+use frame_support::traits::{Get, Hooks};
 use frame_system::RawOrigin;
 
 #[benchmarks]
@@ -34,6 +34,42 @@ mod benchmarks {
         force_advance_year(RawOrigin::Root, 1u32);
 
         assert_eq!(pallet::LastSettledYear::<T>::get(), 1u32);
+    }
+
+    /// on_initialize 结算路径：年度边界块触发 1 个年度结算。
+    #[benchmark]
+    fn on_initialize_settlement() {
+        let blocks_per_year = T::BlocksPerYear::get();
+        // 设置到第 1 年边界块，确保触发结算
+        let n: frame_system::pallet_prelude::BlockNumberFor<T> =
+            u32::try_from(blocks_per_year.max(1)).unwrap_or(u32::MAX).into();
+        frame_system::Pallet::<T>::set_block_number(n);
+        pallet::LastSettledYear::<T>::put(0u32);
+
+        #[block]
+        {
+            let _ = Pallet::<T>::on_initialize(n);
+        }
+
+        assert_eq!(pallet::LastSettledYear::<T>::get(), 1u32);
+    }
+
+    /// on_initialize 空操作路径：非年度边界块快速跳过。
+    #[benchmark]
+    fn on_initialize_noop() {
+        let blocks_per_year = T::BlocksPerYear::get();
+        // 设置到非边界块（第 1 年边界 + 1）
+        let n: frame_system::pallet_prelude::BlockNumberFor<T> =
+            u32::try_from((blocks_per_year.max(1)) + 1).unwrap_or(u32::MAX).into();
+        frame_system::Pallet::<T>::set_block_number(n);
+
+        #[block]
+        {
+            let _ = Pallet::<T>::on_initialize(n);
+        }
+
+        // 非边界块不应触发结算
+        assert_eq!(pallet::LastSettledYear::<T>::get(), 0u32);
     }
 
     impl_benchmark_test_suite!(Pallet, crate::tests::new_test_ext(), crate::tests::Test,);

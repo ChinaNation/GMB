@@ -195,56 +195,40 @@ pub(crate) async fn get_bind_result(
         "chain bind result queried".to_string(),
     );
     record_chain_latency(&mut store, started_at);
-    let mut binding = store.bindings_by_pubkey.get(&query.account_pubkey).cloned();
-    drop(store);
-    if binding.is_none() {
-        return bind_result_not_bound(query.account_pubkey);
-    }
-
-    if !binding
-        .as_ref()
-        .map(|v| has_persisted_runtime_bind_credential(v, &state, active_signer_pubkey.as_str(), 0))
-        .unwrap_or(false)
-    {
-        let generated = match build_bind_credential(
-            &state,
-            query.account_pubkey.as_str(),
-            binding
-                .as_ref()
-                .map(|v| v.archive_index.as_str())
-                .unwrap_or_default(),
-            Uuid::new_v4().to_string(),
-        ) {
-            Ok(v) => v,
-            Err(message) => {
-                let detail = format!("bind credential sign failed: {message}");
-                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
-            }
-        };
-        let mut store = match store_write_or_500(&state) {
-            Ok(v) => v,
-            Err(resp) => return resp,
-        };
-        binding = if let Some(existing) = store.bindings_by_pubkey.get_mut(&query.account_pubkey) {
-            if !has_persisted_runtime_bind_credential(
-                existing,
-                &state,
-                active_signer_pubkey.as_str(),
-                0,
-            ) {
-                apply_runtime_bind_credential(existing, generated, active_signer_pubkey.as_str());
-            }
-            Some(existing.clone())
-        } else {
-            None
-        };
-        drop(store);
-        if binding.is_none() {
+    // 中文注释：在同一个写锁内完成绑定查找 + 凭证生成 + 状态更新，避免中途释放锁导致竞态。
+    let binding = {
+        let Some(existing) = store.bindings_by_pubkey.get(&query.account_pubkey) else {
+            drop(store);
             return bind_result_not_bound(query.account_pubkey);
-        }
-    }
+        };
 
-    let binding = binding.expect("checked is_some above");
+        if !has_persisted_runtime_bind_credential(existing, &state, active_signer_pubkey.as_str(), 0)
+        {
+            let generated = match build_bind_credential(
+                &state,
+                query.account_pubkey.as_str(),
+                existing.archive_index.as_str(),
+                Uuid::new_v4().to_string(),
+            ) {
+                Ok(v) => v,
+                Err(message) => {
+                    drop(store);
+                    let detail = format!("bind credential sign failed: {message}");
+                    return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
+                }
+            };
+            let existing = store
+                .bindings_by_pubkey
+                .get_mut(&query.account_pubkey)
+                .expect("binding checked above within same write guard");
+            apply_runtime_bind_credential(existing, generated, active_signer_pubkey.as_str());
+            existing.clone()
+        } else {
+            existing.clone()
+        }
+    };
+    drop(store);
+
     let Some(binding_id) = binding.runtime_bind_binding_id else {
         return api_error(
             StatusCode::INTERNAL_SERVER_ERROR,

@@ -68,6 +68,7 @@ class LoginSystemSignatureVerifier {
     }
   }
 
+  // 签名消息中的 sys_pubkey 必须与后端签名时的格式完全一致（含 0x 前缀）。
   String _buildChallengeMessage(LoginChallenge challenge) {
     return [
       challenge.proto,
@@ -75,7 +76,7 @@ class LoginSystemSignatureVerifier {
       challenge.challenge,
       challenge.issuedAt.toString(),
       challenge.expiresAt.toString(),
-      _normalizeHex(challenge.sysPubkey),
+      challenge.sysPubkey,
     ].join('|');
   }
 }

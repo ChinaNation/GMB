@@ -1,3 +1,13 @@
+//! # 公民轻节点认证奖励发行模块 (citizen-lightnode-issuance)
+//!
+//! 本模块在 SFID 绑定成功时，通过 `OnSfidBound` 回调自动发放一次性认证奖励。
+//!
+//! ## 核心规则
+//! - 双重防重：按 `binding_id` + 按账户，防止同一身份或同一账户重复领奖。
+//! - 阶梯奖励：前 `CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT` 人获高额奖励，之后降为常规奖励。
+//! - 总量硬顶：累计发放人数达到 `CITIZEN_LIGHTNODE_MAX_COUNT` 后停止发放。
+//! - 本模块不暴露任何 extrinsic，所有触发均来自上游回调。
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -59,6 +69,7 @@ pub mod pallet {
     pub type AccountRewarded<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, (), ValueQuery>;
 
+    /// 中文注释：描述奖励被跳过的具体原因，用于链上事件记录和前端展示。
     #[derive(
         Clone,
         Copy,
@@ -72,9 +83,13 @@ pub mod pallet {
         MaxEncodedLen,
     )]
     pub enum SkipReason {
+        /// 中文注释：同一 binding_id 已经领取过奖励。
         DuplicateBindingId,
+        /// 中文注释：全局累计发放人数已达上限。
         MaxCountReached,
+        /// 中文注释：该账户已通过其他 SFID 领取过奖励，换绑不可再领。
         AccountAlreadyRewarded,
+        /// 中文注释：奖励常量配置为零（不应出现，属防御性检查）。
         ZeroRewardConfigured,
     }
 
@@ -87,6 +102,7 @@ pub mod pallet {
             binding_id: T::Hash,
             reward: BalanceOf<T>,
         },
+        /// 中文注释：奖励因重复、超限等原因被跳过时触发，reason 字段说明具体原因。
         CertificationRewardSkipped {
             who: T::AccountId,
             binding_id: T::Hash,
@@ -94,9 +110,11 @@ pub mod pallet {
         },
     }
 
+    /// 中文注释：本模块不暴露 extrinsic，所有逻辑通过回调触发，因此无需定义错误类型。
     #[pallet::error]
     pub enum Error<T> {}
 
+    /// 中文注释：本模块不暴露 extrinsic，奖励发放由 OnSfidBound 回调驱动，无需用户直接调用。
     #[pallet::call]
     impl<T: Config> Pallet<T> {}
 
@@ -155,6 +173,7 @@ pub mod pallet {
         }
     }
 
+    /// 中文注释：实现 sfid-code-auth 的绑定回调，在 SFID 绑定成功后自动尝试发放认证奖励。
     impl<T: Config> OnSfidBound<T::AccountId, T::Hash> for Pallet<T> {
         fn on_sfid_bound(who: &T::AccountId, binding_id: T::Hash) {
             match Self::try_issue_certification_reward(who, binding_id) {
@@ -176,6 +195,7 @@ pub mod pallet {
         }
     }
 
+    /// 中文注释：向上游提供回调的 weight 预算，供 bind_sfid 在申报交易权重时叠加。
     impl<T: Config> OnSfidBoundWeight for Pallet<T> {
         fn on_sfid_bound_weight() -> Weight {
             Pallet::<T>::on_sfid_bound_weight()

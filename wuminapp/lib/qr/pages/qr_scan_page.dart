@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/qr/contact/contact_qr_models.dart';
+import 'package:wuminapp_mobile/qr/login/pages/login_scan_result_page.dart';
 import 'package:wuminapp_mobile/qr/qr_router.dart';
 import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
 import 'package:wuminapp_mobile/user/user_service.dart';
@@ -116,6 +118,13 @@ class _QrScanPageState extends State<QrScanPage> {
 
     try {
       final result = _router.route(raw);
+
+      // 登录 QR 在任何扫码模式下都优先处理（跳转登录流程）。
+      if (result.type == QrRouteType.login) {
+        await _handleLogin(raw);
+        return;
+      }
+
       switch (widget.mode) {
         case QrScanMode.transfer:
           // 扫码支付：仅处理收款码 / 裸地址
@@ -322,6 +331,16 @@ class _QrScanPageState extends State<QrScanPage> {
         QrScanMode.contact => '扫码添加好友',
       };
 
+  Future<void> _handleLogin(String raw) async {
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LoginScanResultPage(challengeRaw: raw),
+      ),
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
   Future<void> _showUnrecognized() async {
     if (!mounted) {
       return;
@@ -500,7 +519,7 @@ class _ScanCornerPainter extends CustomPainter {
     const strokeWidth = 4.0;
 
     final paint = Paint()
-      ..color = Colors.green
+      ..color = AppTheme.primary
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;

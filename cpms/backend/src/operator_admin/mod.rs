@@ -1,3 +1,7 @@
+//! # 操作员管理模块 (operator_admin)
+//!
+//! 档案创建/查询、QR 码生成/打印。仅 OPERATOR_ADMIN 角色可访问。
+
 use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},

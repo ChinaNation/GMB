@@ -47,7 +47,7 @@ pub fn get_other_tabs_content() -> Result<OtherTabsPayload, String> {
                 key: "party".to_string(),
                 title: "公民党".to_string(),
                 content: TabContent::Text {
-                    text: "公民党内容入口（待接入）。".to_string(),
+                    text: "更多功能开发中。".to_string(),
                 },
             },
         ],

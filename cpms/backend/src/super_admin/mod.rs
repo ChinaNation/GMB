@@ -1,3 +1,7 @@
+//! # 超级管理员模块 (super_admin)
+//!
+//! 操作员 CRUD、站点密钥注册 QR 生成、公民状态变更。仅 SUPER_ADMIN 角色可访问。
+
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},

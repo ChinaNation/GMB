@@ -32,28 +32,6 @@ pub fn blake2b_128(data: &[u8]) -> [u8; 16] {
     out
 }
 
-/// 解码 SS58 前缀（双字节格式），返回 (prefix, prefix_len)。
-pub fn decode_ss58_prefix_raw(data: &[u8]) -> Result<(u16, usize), String> {
-    if data.is_empty() {
-        return Err("SS58 地址为空".to_string());
-    }
-    let first = data[0];
-    match first {
-        0..=63 => Ok((first as u16, 1)),
-        64..=127 => {
-            if data.len() < 2 {
-                return Err("SS58 地址格式无效".to_string());
-            }
-            let second = data[1];
-            let prefix = (((first & 0x3f) as u16) << 2)
-                | ((second as u16) >> 6)
-                | (((second & 0x3f) as u16) << 8);
-            Ok((prefix, 2))
-        }
-        _ => Err("SS58 地址格式无效".to_string()),
-    }
-}
-
 /// 将 shenfen_id 字符串编码为固定 48 字节（UTF-8 右补零）。
 /// 与 Rust runtime primitives 的 `shenfen_id_to_fixed48` 一致。
 pub fn shenfen_id_to_fixed48(shenfen_id: &str) -> [u8; 48] {

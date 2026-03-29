@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ui/app_theme.dart';
 
 import 'duoqian_close_proposal_page.dart';
 import 'duoqian_create_proposal_page.dart';
@@ -29,7 +30,6 @@ class ProposalTypesPage extends StatelessWidget {
   /// 当前用户导入的、属于此机构的管理员钱包列表。
   final List<WalletProfile> adminWallets;
 
-  static const Color _inkGreen = Color(0xFF0B3D2E);
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +42,7 @@ class ProposalTypesPage extends StatelessWidget {
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
+        foregroundColor: AppTheme.primaryDark,
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
@@ -70,7 +70,7 @@ class ProposalTypesPage extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: _inkGreen,
+                      color: AppTheme.primaryDark,
                     ),
                   ),
                 ),
@@ -101,7 +101,7 @@ class ProposalTypesPage extends StatelessWidget {
             icon: Icons.send_outlined,
             title: '转账',
             subtitle: '从机构多签账户发起转账',
-            color: const Color(0xFF176650),
+            color: AppTheme.primary,
             onTap: () => _checkAndOpenProposal(
                 context,
                 () => TransferProposalPage(
@@ -116,7 +116,7 @@ class ProposalTypesPage extends StatelessWidget {
             icon: Icons.swap_horiz,
             title: '换管理员',
             subtitle: '提议更换本机构管理员',
-            color: const Color(0xFF2E7D5B),
+            color: AppTheme.accent,
             onTap: () => _checkAndOpenProposal(context, null, name: '换管理员'),
           ),
           const SizedBox(height: 8),
@@ -124,7 +124,7 @@ class ProposalTypesPage extends StatelessWidget {
             icon: Icons.delete_outline,
             title: '决议销毁',
             subtitle: '提议销毁机构持有的资产',
-            color: const Color(0xFFB71C1C),
+            color: AppTheme.danger,
             onTap: () => _checkAndOpenProposal(context, null, name: '决议销毁'),
           ),
 
@@ -137,7 +137,7 @@ class ProposalTypesPage extends StatelessWidget {
               icon: Icons.group_add,
               title: '创建多签',
               subtitle: '发起创建多签账户提案',
-              color: const Color(0xFF1565C0),
+              color: AppTheme.info,
               onTap: () => _checkAndOpenProposal(
                 context,
                 () => DuoqianCreateProposalPage(
@@ -151,7 +151,7 @@ class ProposalTypesPage extends StatelessWidget {
               icon: Icons.group_remove,
               title: '关闭多签',
               subtitle: '发起关闭多签账户提案，资金转入指定受益人',
-              color: const Color(0xFFB71C1C),
+              color: AppTheme.danger,
               onTap: () => _checkAndOpenProposal(
                 context,
                 () => DuoqianCloseProposalPage(
@@ -171,7 +171,7 @@ class ProposalTypesPage extends StatelessWidget {
               icon: Icons.account_balance,
               title: '决议发行',
               subtitle: '发起公民币发行决议，需联合投票+公民投票',
-              color: _inkGreen,
+              color: AppTheme.primaryDark,
               onTap: () => _checkAndOpenProposal(context, null, name: '决议发行'),
             ),
             const SizedBox(height: 8),
@@ -187,7 +187,7 @@ class ProposalTypesPage extends StatelessWidget {
               icon: Icons.arrow_upward,
               title: '状态升级',
               subtitle: 'Runtime 升级，需联合投票+公民投票',
-              color: const Color(0xFF1565C0),
+              color: AppTheme.info,
               onTap: () => _checkAndOpenProposal(
                 context,
                 () => RuntimeUpgradePage(adminWallets: adminWallets),
@@ -205,7 +205,7 @@ class ProposalTypesPage extends StatelessWidget {
       style: const TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w600,
-        color: Colors.grey,
+        color: AppTheme.textTertiary,
       ),
     );
   }
@@ -323,14 +323,14 @@ class _ProposalTypeCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, size: 20, color: Colors.grey[400]),
+              Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),

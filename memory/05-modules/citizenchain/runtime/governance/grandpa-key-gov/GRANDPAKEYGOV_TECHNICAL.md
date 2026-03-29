@@ -13,8 +13,8 @@
 - 发起人必须是该机构当前内部管理员。
 - `new_key` 不能为零值，必须是有效且非 weak/small-order 的 ed25519 公钥。
 - `new_key` 不能等于该机构当前 GRANDPA 公钥，也不能被其他机构当前占用。
-- 同一把 `new_key` 同一时间只能被一个活跃提案占用。
-- 同一机构同一时间只允许一个活跃提案。
+- 并发控制由 `voting-engine-system` 的 `ActiveProposalsByInstitution` 统一管控（每机构上限 10 个活跃提案），本模块不另设单机构单提案限制。
+- 同一把 `new_key` 若被多个活跃提案占用，第一个执行成功后后续执行会因 `NewKeyAlreadyUsed` 失败，可通过 `cancel_failed_replace_grandpa_key` 清理。
 
 ### 0.3 执行与失败恢复需求
 - 提案达到通过阈值后，应自动尝试执行 GRANDPA 密钥替换。
@@ -23,9 +23,9 @@
 - 若提案已通过但已确定不可执行，应允许机构管理员手动取消失败提案，解除机构阻塞。
 
 ### 0.4 生命周期与清理需求
-- 被拒绝、缺失或超过 stale 窗口的未通过提案，不应长期阻塞机构后续发起新提案。
-- `cancel_stale_replace_grandpa_key` 只能清理未通过的 stale 提案，不能取消已通过提案。
-- 下一次 `propose_replace_grandpa_key` 时，应能自动清理 rejected/stale 的旧提案索引与并发占用索引。
+- 被拒绝的提案由 `voting-engine-system` 的过期/清理机制处理。
+- 已通过但确定不可执行的提案，通过 `cancel_failed_replace_grandpa_key` 手动清理。
+- 注意：旧版的 `cancel_stale_replace_grandpa_key`（call_index=3）已移除，stale 清理由投票引擎统一承载。
 
 ## 1. 模块定位
 `grandpa-key-gov` 是“GRANDPA 密钥治理模块”，职责是：
@@ -43,30 +43,30 @@ Runtime 配置位置：
 关键接线：
 - `impl grandpa_key_gov::Config for Runtime`
   - `InternalVoteEngine = VotingEngineSystem`
-  - `StaleProposalLifetime = GrandpaKeyStaleProposalLifetime`
   - `GrandpaChangeDelay = GrandpaAuthoritySetChangeDelay`
 - `GrandpaAuthoritySetChangeDelay = 30`（预留运维注入新 gran 私钥窗口）
 - `MaxSetIdSessionEntries = 128`（为后续等值投票追溯能力预留）
+- 注意：旧版的 `StaleProposalLifetime` 配置项已移除。
 
 ## 3. 存储模型
-1. `ProposalActions: Map<u64, GrandpaKeyReplacementAction>`
-- 绑定提案与动作：`institution`, `old_key`, `new_key`
+本模块仅维护 2 个存储项，提案数据由 `voting-engine-system` 统一管理。
 
-2. `CurrentGrandpaKeys: Map<InstitutionPalletId, [u8; 32]>`
-- 机构当前 GRANDPA 公钥
+1. `CurrentGrandpaKeys: Map<InstitutionPalletId, [u8; 32]>`
+- 机构当前治理认可的 GRANDPA 公钥
 
-3. `GrandpaKeyOwnerByKey: Map<[u8; 32], InstitutionPalletId>`
-- 公钥反向索引，避免 O(n) 扫描
+2. `GrandpaKeyOwnerByKey: Map<[u8; 32], InstitutionPalletId>`
+- 公钥到机构的反向索引，O(1) 判断 new_key 是否已被占用
 
-4. `ProposalCreatedAt: Map<u64, BlockNumber>`
-- 提案创建高度（用于 stale 清理）
+提案数据存储在 `voting-engine-system` 中：
+- 提案动作（`GrandpaKeyReplacementAction`）通过 `store_proposal_data` 写入
+- 提案创建高度通过 `store_proposal_meta` 写入
+- 机构活跃提案列表由 `ActiveProposalsByInstitution`（上限 10 个）管控
 
-5. `ActiveProposalByInstitution: Map<InstitutionPalletId, u64>`
-- 单机构活跃提案索引（同机构同一时间只允许 1 个）
-
-6. `PendingProposalByNewKey: Map<[u8; 32], u64>`
-- `new_key -> proposal_id` 的并发占用索引
-- 防止两家机构同时把同一把新 key 放进不同活跃提案
+历史存储项（已移除）：
+- `ActiveProposalByInstitution`：已由投票引擎统一管控
+- `PendingProposalByNewKey`：已移除，冲突在执行时检测
+- `ProposalActions`：已迁移到投票引擎
+- `ProposalCreatedAt`：已迁移到投票引擎
 
 ## 4. 创世初始化
 `GenesisBuild` 会从 `CHINA_CB` 初始化：
@@ -80,11 +80,11 @@ Runtime 配置位置：
 约束：
 - 仅 `ORG_NRC | ORG_PRC`
 - 发起人必须是该机构内部管理员
-- `new_key` 必须是有效且非 weak/small-order 的 ed25519 公钥
+- `new_key` 不能为零值
+- `new_key` 必须是有效且非 weak/small-order 的 ed25519 公钥（`CompressedEdwardsY` + `is_small_order`）
 - `new_key != old_key`
-- `new_key` 不能被其他机构占用（反向索引 O(1)）
-- 同机构不能有活跃提案
-- 若旧提案已经 rejected、缺失或超过 stale 窗口，会在本次 propose 成功创建新提案后自动清理
+- `new_key` 不能被其他机构当前占用（反向索引 O(1)）
+- 机构活跃提案数由 `voting-engine-system` 的 `ActiveProposalsByInstitution`（上限 10 个）管控
 
 ### 5.2 `vote_replace_grandpa_key`（index = 1）
 约束：
@@ -98,13 +98,10 @@ Runtime 配置位置：
 - 仅该机构内部管理员可手动执行
 - 用于“已通过但自动执行失败”的重试
 
-### 5.4 `cancel_stale_replace_grandpa_key`（index = 3）
-约束：
-- 仅该机构内部管理员可清理
-- 仅可清理“超时且未通过”的提案
-- 不允许取消 `STATUS_PASSED` 提案
+### 5.4 `cancel_failed_replace_grandpa_key`（index = 4）
+注意：旧版 `cancel_stale_replace_grandpa_key`（index = 3）已移除，stale 清理由投票引擎统一承载。
 
-### 5.5 `cancel_failed_replace_grandpa_key`（index = 4）
+当前 `cancel_failed_replace_grandpa_key`（index = 4）：
 约束：
 - 仅该机构内部管理员可清理
 - 仅可清理“已通过但当前确定不可执行”的提案
@@ -135,7 +132,7 @@ Runtime 配置位置：
 - 立即切换风险：通过 `GrandpaAuthoritySetChangeDelay=30` 降低。
 - 长期卡死风险：通过 `cancel_failed_replace_grandpa_key` 消除。
 - 已修复风险：过去只校验 `new_key` “能解压为曲线点”，未拒绝 small-order 弱公钥；现在已显式拒绝 weak key。
-- 已修复风险：过去 rejected/stale 的旧提案可能继续占着机构活跃索引；现在会在下一次成功 `propose` 时自动清理。
+- 并发 new_key 冲突：当前设计不在提案创建时拦截（旧版 `PendingProposalByNewKey` 已移除），而是在执行时通过 `validate_action` 的 `BTreeSet` 唯一性检查拒绝。冲突的提案可通过 `cancel_failed_replace_grandpa_key` 清理。
 
 ## 9. 创世公钥严格校验（按“严格要求”）
 位置：
@@ -169,6 +166,20 @@ Runtime 配置位置：
 - 等值投票惩罚链路（offences/session historical）仍未启用；当前仅为后续接入保留历史 set 映射能力。
 
 ## 12. 测试覆盖
-- small-order 弱 ed25519 公钥会被拒绝。
-- rejected 的旧提案会在下一次 `propose` 时自动清理。
-- 超过 stale 窗口但未终结的旧提案会在下一次 `propose` 时自动清理。
+`cargo test -p grandpa-key-gov` 覆盖（15 个用例）：
+
+正向路径：
+- 投票通过后自动执行密钥替换并更新 authority set
+- 自动执行失败后手动重试成功
+- 已通过但不可执行的提案可被取消
+
+错误路径：
+- small-order 弱 ed25519 公钥拒绝
+- 零值 new_key 拒绝（`NewKeyIsZero`）
+- new_key == old_key 拒绝（`NewKeyUnchanged`）
+- new_key 被他机构占用拒绝（`NewKeyAlreadyUsed`）
+- 非管理员提案/投票拒绝（`UnauthorizedAdmin`）
+- 无效机构拒绝（`InvalidInstitution`）
+- 执行非通过提案拒绝（`ProposalNotPassed`）
+- 取消仍可执行提案拒绝（`ProposalStillExecutable`）
+- 取消暂时阻塞提案拒绝（`GrandpaChangePending`）

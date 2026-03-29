@@ -10,7 +10,7 @@ use postgres::config::Host;
 use redis::Client as RedisClient;
 use sp_core::Pair;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     net::SocketAddr,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -54,7 +54,7 @@ struct AppState {
     signing_seed_hex: Arc<RwLock<SensitiveSeed>>,
     known_key_seeds: Arc<RwLock<HashMap<String, SensitiveSeed>>>,
     rate_limit_redis: Arc<RedisClient>,
-    cpms_register_inflight: Arc<Mutex<HashSet<String>>>,
+    cpms_register_inflight: Arc<Mutex<HashMap<String, std::time::Instant>>>,
     key_id: String,
     key_version: String,
     key_alg: String,
@@ -68,6 +68,7 @@ struct StoreHandle {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 enum StoreBackend {
     Memory(Arc<RwLock<Store>>),
     Postgres {
@@ -476,6 +477,7 @@ impl StoreBackend {
 }
 
 impl StoreHandle {
+    #[allow(dead_code)]
     fn in_memory() -> Self {
         Self {
             backend: StoreBackend::Memory(Arc::new(RwLock::new(Store::default()))),
@@ -645,7 +647,7 @@ fn main() {
         signing_seed_hex: Arc::new(RwLock::new(main_seed)),
         known_key_seeds: Arc::new(RwLock::new(known_key_seeds)),
         rate_limit_redis: Arc::new(redis_client),
-        cpms_register_inflight: Arc::new(Mutex::new(HashSet::new())),
+        cpms_register_inflight: Arc::new(Mutex::new(HashMap::new())),
         key_id: required_env("SFID_KEY_ID"),
         key_version: "v1".to_string(),
         key_alg: "sr25519".to_string(),

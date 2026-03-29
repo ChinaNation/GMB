@@ -36,6 +36,7 @@ pub trait DeveloperUpgradeCheck {
 }
 
 #[frame_support::pallet]
+#[allow(dead_code)] // Events 预留给 on_runtime_upgrade 迁移使用，当前 deposit_event 暂未调用
 pub mod pallet {
     use alloc::vec::Vec;
     use frame_support::pallet_prelude::*;
@@ -162,6 +163,8 @@ pub mod pallet {
     }
 
     // ─── Events ────────────────────────────────────────────────────────────
+    // 中文注释：Events 预留给 on_runtime_upgrade 迁移代码使用（阶段切换时触发）。
+    // 当前迁移未实现，deposit_event 暂未被调用。
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]

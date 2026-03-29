@@ -94,6 +94,12 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
     }
     let city = input.city.trim().to_string();
     let institution = input.institution.trim().to_string();
+    if city.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "city is required");
+    }
+    if institution.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "institution is required");
+    }
     if city.chars().count() > MAX_CITY_CHARS {
         return api_error(StatusCode::BAD_REQUEST, 1001, "city too long");
     }
@@ -493,14 +499,18 @@ pub(crate) async fn register_cpms_keys_scan(
                 )
             }
         };
-        if inflight.contains(&replay_token) {
+        // 中文注释：清理超过 5 分钟的残留 in-flight token，防止请求取消后永久阻塞。
+        let stale_cutoff = std::time::Instant::now() - std::time::Duration::from_secs(300);
+        inflight.retain(|_, ts| *ts > stale_cutoff);
+        if inflight.contains_key(&replay_token) {
             return api_error(StatusCode::CONFLICT, 1005, "register qr is being processed");
         }
-        inflight.insert(replay_token.clone());
+        inflight.insert(replay_token.clone(), std::time::Instant::now());
     }
 
+    let institution_name = init_qr_payload.institution.trim().to_string();
     let chain_receipt =
-        match submit_register_sfid_institution_extrinsic(&state, site_sfid.as_str()).await {
+        match submit_register_sfid_institution_extrinsic(&state, site_sfid.as_str(), &institution_name).await {
             Ok(v) => v,
             Err(msg) => {
                 clear_cpms_register_inflight(&state, replay_token.as_str());
@@ -1074,15 +1084,17 @@ fn resolve_chain_signer_material(state: &AppState) -> Result<(String, SensitiveS
 async fn submit_register_sfid_institution_extrinsic(
     state: &AppState,
     site_sfid: &str,
+    institution_name: &str,
 ) -> Result<ChainInstitutionRegisterReceipt, String> {
     let sfid_id = validate_sfid_id_format(site_sfid)
         .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
     let register_nonce = Uuid::new_v4().to_string();
-    let credential = build_institution_credential(state, sfid_id.as_str(), register_nonce)
-        .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
+    let credential =
+        build_institution_credential(state, sfid_id.as_str(), institution_name, register_nonce)
+            .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
     let ws_url = resolve_chain_ws_url()
         .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
-    let client = OnlineClient::<PolkadotConfig>::from_url(ws_url)
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url)
         .await
         .map_err(|e| {
             format!("register_sfid_institution submit failed: chain websocket connect failed: {e}")
@@ -1099,6 +1111,7 @@ async fn submit_register_sfid_institution_extrinsic(
         "register_sfid_institution",
         vec![
             Value::from_bytes(sfid_id.as_bytes().to_vec()),
+            Value::from_bytes(credential.name.as_bytes().to_vec()),
             Value::from_bytes(credential.register_nonce.as_bytes().to_vec()),
             Value::from_bytes(hex::decode(credential.signature.as_str()).map_err(|e| {
                 format!("register_sfid_institution submit failed: signature hex decode failed: {e}")

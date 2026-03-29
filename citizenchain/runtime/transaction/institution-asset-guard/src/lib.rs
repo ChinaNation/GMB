@@ -1,3 +1,16 @@
+//! # 机构账户资金操作白名单公共模块 (institution-asset-guard)
+//!
+//! 本模块不是 pallet，不含 storage 或 extrinsic。
+//! 仅提供 `InstitutionAssetAction` 枚举和 `InstitutionAssetGuard` trait，
+//! 供 `duoqian-manage-pow`、`duoqian-transfer-pow`、`offchain-transaction-pos` 复用。
+//! 实际放行/拒绝规则由 runtime 的 `RuntimeInstitutionAssetGuard` 实现。
+//!
+//! # Safety
+//!
+//! 默认 `()` 实现为 **fail-open（全放行）**，仅适用于测试。
+//! 生产 runtime 必须配置为 `RuntimeInstitutionAssetGuard`，否则资金白名单层将完全失效。
+//! runtime 层应有集成测试锁定 keyless/duoqian/fee_account/普通账户 的允许矩阵。
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode, MaxEncodedLen};

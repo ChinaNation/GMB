@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
 import 'security/app_lock_service.dart';
 import 'security/pin_input_page.dart';
+import 'ui/app_theme.dart';
 import 'ui/home_page.dart';
 import 'wallet/mnemonic_cipher.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // 深色状态栏
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: AppTheme.scaffoldBg,
+    systemNavigationBarIconBrightness: Brightness.light,
+  ));
   runApp(const WuminApp());
 }
 
@@ -20,10 +29,7 @@ class WuminApp extends StatelessWidget {
     return MaterialApp(
       title: '公民钱包',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.darkTheme,
       home: const _AppLockGate(),
     );
   }
@@ -146,8 +152,36 @@ class _AppLockGateState extends State<_AppLockGate>
   @override
   Widget build(BuildContext context) {
     if (_checking) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  gradient: AppTheme.primaryGradient,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.shield_outlined,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: AppTheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -161,23 +195,52 @@ class _AppLockGateState extends State<_AppLockGate>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.lock_outline, size: 64,
-                  color: Theme.of(context).colorScheme.primary),
-              const SizedBox(height: 24),
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  gradient: AppTheme.primaryGradient,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primary.withAlpha(60),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.lock_outline,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 32),
               const Text(
                 '应用已锁定',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                  letterSpacing: 1,
+                ),
               ),
               const SizedBox(height: 8),
               const Text(
                 '请验证身份以继续',
-                style: TextStyle(fontSize: 14, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppTheme.textSecondary,
+                ),
               ),
-              const SizedBox(height: 32),
-              ElevatedButton.icon(
-                onPressed: _authenticateDevice,
-                icon: const Icon(Icons.fingerprint),
-                label: const Text('验证身份'),
+              const SizedBox(height: 40),
+              SizedBox(
+                width: 200,
+                child: FilledButton.icon(
+                  onPressed: _authenticateDevice,
+                  icon: const Icon(Icons.fingerprint, size: 22),
+                  label: const Text('验证身份'),
+                ),
               ),
             ],
           ),
@@ -185,8 +248,22 @@ class _AppLockGateState extends State<_AppLockGate>
       );
     }
 
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
+    return Scaffold(
+      body: Center(
+        child: Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            gradient: AppTheme.primaryGradient,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Icon(
+            Icons.shield_outlined,
+            color: Colors.white,
+            size: 32,
+          ),
+        ),
+      ),
     );
   }
 }

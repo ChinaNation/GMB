@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
@@ -14,8 +15,20 @@ import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
 import 'package:wuminapp_mobile/user/user.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
 
+import 'ui/app_theme.dart';
+import 'ui/page_transitions.dart';
+import 'ui/widgets/pressable_card.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 状态栏样式
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    systemNavigationBarColor: AppTheme.surfaceWhite,
+    systemNavigationBarIconBrightness: Brightness.dark,
+  ));
 
   // 先销毁可能残留的旧实例（hot restart 场景），再重新初始化。
   // 防止 Rust tokio 线程持有已删除的 Dart FFI 回调导致 SIGABRT。
@@ -37,10 +50,7 @@ class WuminApp extends StatelessWidget {
     return MaterialApp(
       title: '公民',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
       home: const _AppLockGate(),
     );
   }
@@ -165,7 +175,16 @@ class _AppLockGateState extends State<_AppLockGate>
   Widget build(BuildContext context) {
     if (_checking) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: AppTheme.primary,
+            ),
+          ),
+        ),
       );
     }
 
@@ -179,27 +198,51 @@ class _AppLockGateState extends State<_AppLockGate>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.lock_outline, size: 64, color: Color(0xFF007A74)),
-              const SizedBox(height: 24),
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  gradient: AppTheme.primaryGradient,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primary.withAlpha(50),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.lock_outline,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 32),
               const Text(
                 '应用已锁定',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                  letterSpacing: 1,
+                ),
               ),
               const SizedBox(height: 8),
               const Text(
                 '请验证身份以继续',
-                style: TextStyle(fontSize: 14, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppTheme.textSecondary,
+                ),
               ),
-              const SizedBox(height: 32),
-              ElevatedButton.icon(
-                onPressed: _authenticateDevice,
-                icon: const Icon(Icons.fingerprint),
-                label: const Text('验证身份'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF007A74),
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              const SizedBox(height: 40),
+              SizedBox(
+                width: 200,
+                child: FilledButton.icon(
+                  onPressed: _authenticateDevice,
+                  icon: const Icon(Icons.fingerprint, size: 22),
+                  label: const Text('验证身份'),
                 ),
               ),
             ],
@@ -209,8 +252,22 @@ class _AppLockGateState extends State<_AppLockGate>
     }
 
     // PIN 锁模式下，PinInputPage 已通过 Navigator 展示
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
+    return Scaffold(
+      body: Center(
+        child: Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            gradient: AppTheme.primaryGradient,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Icon(
+            Icons.how_to_vote_outlined,
+            color: Colors.white,
+            size: 30,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -223,8 +280,6 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  static const Color _navSelectedColor = Color(0xFF007A74);
-  static const Color _navUnselectedColor = Color(0xFF111111);
   int _currentIndex = 2;
   int _pendingVoteCount = 0;
   bool _isRooted = false;
@@ -260,18 +315,24 @@ class _AppShellState extends State<AppShell> {
           if (_isRooted)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              color: Colors.red.shade700,
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: AppTheme.bannerDecoration(AppTheme.danger),
               child: SafeArea(
                 bottom: false,
                 child: Row(
-                  children: const [
-                    Icon(Icons.warning, color: Colors.white, size: 18),
-                    SizedBox(width: 8),
-                    Expanded(
+                  children: [
+                    Icon(Icons.warning_rounded,
+                        color: AppTheme.danger, size: 18),
+                    const SizedBox(width: 8),
+                    const Expanded(
                       child: Text(
                         '检测到设备已 root/越狱，密钥安全无法保障',
-                        style: TextStyle(color: Colors.white, fontSize: 13),
+                        style: TextStyle(
+                          color: AppTheme.danger,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
@@ -281,28 +342,14 @@ class _AppShellState extends State<AppShell> {
           Expanded(child: _pages[_currentIndex]),
         ],
       ),
-      bottomNavigationBar: NavigationBarTheme(
-        data: NavigationBarThemeData(
-          indicatorColor: const Color(0xFFD7E9E1),
-          iconTheme: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return const IconThemeData(color: _navSelectedColor);
-            }
-            return const IconThemeData(color: _navUnselectedColor);
-          }),
-          labelTextStyle: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return const TextStyle(
-                color: _navSelectedColor,
-                fontWeight: FontWeight.w700,
-                height: 0.9,
-              );
-            }
-            return const TextStyle(color: _navUnselectedColor, height: 0.9);
-          }),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceWhite,
+          border: Border(
+            top: BorderSide(color: AppTheme.border, width: 0.5),
+          ),
         ),
         child: NavigationBar(
-          height: 68,
           selectedIndex: _currentIndex,
           onDestinationSelected: (index) {
             setState(() {
@@ -317,6 +364,12 @@ class _AppShellState extends State<AppShell> {
                       style: const TextStyle(fontSize: 10)),
                   child: const Icon(Icons.how_to_vote_outlined),
                 ),
+                selectedIcon: Badge(
+                  isLabelVisible: _pendingVoteCount > 0,
+                  label: Text('$_pendingVoteCount',
+                      style: const TextStyle(fontSize: 10)),
+                  child: const Icon(Icons.how_to_vote),
+                ),
                 label: '公民'),
             NavigationDestination(
               icon: SvgPicture.asset(
@@ -324,7 +377,7 @@ class _AppShellState extends State<AppShell> {
                 width: 22,
                 height: 22,
                 colorFilter: const ColorFilter.mode(
-                  _navUnselectedColor,
+                  AppTheme.textTertiary,
                   BlendMode.srcIn,
                 ),
               ),
@@ -333,7 +386,7 @@ class _AppShellState extends State<AppShell> {
                 width: 22,
                 height: 22,
                 colorFilter: const ColorFilter.mode(
-                  _navSelectedColor,
+                  AppTheme.primary,
                   BlendMode.srcIn,
                 ),
               ),
@@ -345,7 +398,7 @@ class _AppShellState extends State<AppShell> {
                 width: 22,
                 height: 22,
                 colorFilter: const ColorFilter.mode(
-                  _navUnselectedColor,
+                  AppTheme.textTertiary,
                   BlendMode.srcIn,
                 ),
               ),
@@ -354,14 +407,16 @@ class _AppShellState extends State<AppShell> {
                 width: 22,
                 height: 22,
                 colorFilter: const ColorFilter.mode(
-                  _navSelectedColor,
+                  AppTheme.primary,
                   BlendMode.srcIn,
                 ),
               ),
               label: '交易',
             ),
             const NavigationDestination(
-                icon: Icon(Icons.person_outline), label: '我的'),
+                icon: Icon(Icons.person_outline),
+                selectedIcon: Icon(Icons.person),
+                label: '我的'),
           ],
         ),
       ),
@@ -386,7 +441,7 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         children: [
           const SizedBox(height: 10),
-          _PipeTabs(
+          _StyledTabs(
             tabs: _tabs,
             selectedIndex: _selectedTab,
             onSelected: (index) {
@@ -395,7 +450,25 @@ class _HomePageState extends State<HomePage> {
               });
             },
           ),
-          const Expanded(child: Center(child: Text('广场页面（开发中）'))),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.explore_outlined,
+                      size: 48, color: AppTheme.textTertiary),
+                  const SizedBox(height: 12),
+                  Text(
+                    '广场页面（开发中）',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -421,7 +494,7 @@ class _VotingPageState extends State<VotingPage> {
       child: Column(
         children: [
           const SizedBox(height: 10),
-          _PipeTabs(
+          _StyledTabs(
             tabs: _tabs,
             selectedIndex: _selectedTab,
             onSelected: (index) {
@@ -442,10 +515,21 @@ class _VotingPageState extends State<VotingPage> {
 
     switch (_selectedTab) {
       case 0:
-        return const Center(
-          child: Text(
-            '正在开发中',
-            style: TextStyle(fontSize: 16, color: Colors.black54),
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.ballot_outlined,
+                  size: 48, color: AppTheme.textTertiary),
+              const SizedBox(height: 12),
+              Text(
+                '正在开发中',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
           ),
         );
       case 1:
@@ -515,14 +599,21 @@ class _MessagePageState extends State<MessagePage> {
                     'assets/icons/contact-round.svg',
                     width: 22,
                     height: 22,
+                    colorFilter: const ColorFilter.mode(
+                      AppTheme.textPrimary,
+                      BlendMode.srcIn,
+                    ),
                   ),
                 ),
                 const Expanded(
                   child: Center(
                     child: Text(
                       '消息',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
                     ),
                   ),
                 ),
@@ -531,24 +622,48 @@ class _MessagePageState extends State<MessagePage> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Container(
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: const Color(0xFFF4F4F4),
-                borderRadius: BorderRadius.circular(10),
+                color: AppTheme.surfaceMuted,
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                border: Border.all(color: AppTheme.border),
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.search, color: Colors.grey, size: 20),
-                  SizedBox(width: 8),
-                  Text('搜索', style: TextStyle(color: Colors.grey)),
+                  Icon(Icons.search_rounded,
+                      color: AppTheme.textTertiary, size: 20),
+                  SizedBox(width: 10),
+                  Text('搜索',
+                      style: TextStyle(
+                        color: AppTheme.textTertiary,
+                        fontSize: 15,
+                      )),
                 ],
               ),
             ),
           ),
-          const Expanded(child: Center(child: Text('消息页面（开发中）'))),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.chat_bubble_outline_rounded,
+                      size: 48, color: AppTheme.textTertiary),
+                  const SizedBox(height: 12),
+                  Text(
+                    '消息页面（开发中）',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -588,36 +703,43 @@ class _InstitutionCategoryViewState extends State<_InstitutionCategoryView> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       children: [
         const Text(
           '机构分类',
           style: TextStyle(
-            fontSize: 20,
+            fontSize: 22,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF0B3D2E),
+            color: AppTheme.textPrimary,
           ),
         ),
         const SizedBox(height: 4),
-        const SizedBox(height: 12),
+        const Text(
+          '查看各级机构信息与治理提案',
+          style: TextStyle(
+            fontSize: 13,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 20),
         _InstitutionSection(
           title: '国储会',
           icon: Icons.account_balance,
-          badgeColor: const Color(0xFF0B3D2E),
+          badgeColor: AppTheme.primaryDark,
           institutions: widget.nationalCouncil,
           onReturnFromDetail: () => setState(() {}),
         ),
         _InstitutionSection(
           title: '省储会',
           icon: Icons.groups_2_outlined,
-          badgeColor: const Color(0xFF0E5A44),
+          badgeColor: AppTheme.primary,
           institutions: _sorted(widget.provincialCouncils),
           onReturnFromDetail: () => setState(() {}),
         ),
         _InstitutionSection(
           title: '省储行',
           icon: Icons.account_balance_wallet_outlined,
-          badgeColor: const Color(0xFF176650),
+          badgeColor: AppTheme.accent,
           institutions: _sorted(widget.provincialBanks),
           onReturnFromDetail: () => setState(() {}),
         ),
@@ -648,15 +770,27 @@ class _InstitutionSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(icon, size: 18, color: badgeColor),
-            const SizedBox(width: 6),
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: badgeColor.withAlpha(20),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Icon(icon, size: 16, color: badgeColor),
+            ),
+            const SizedBox(width: 10),
             Text(
               '$title（${institutions.length}）',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         LayoutBuilder(
           builder: (context, constraints) {
             if (constraints.maxWidth <= 0) {
@@ -691,7 +825,7 @@ class _InstitutionSection extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
       ],
     );
   }
@@ -712,65 +846,62 @@ class _InstitutionCard extends StatelessWidget {
   final bool isAdmin;
   final VoidCallback? onReturnFromDetail;
 
-  static const Color _adminGreen = Color(0xFF2E7D32);
-
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = isAdmin ? _adminGreen : badgeColor;
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      color: isAdmin ? const Color(0xFFE8F5E9) : null,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isAdmin
-              ? _adminGreen.withValues(alpha: 0.4)
-              : badgeColor.withValues(alpha: 0.18),
-        ),
-      ),
-      child: InkWell(
-        onTap: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => InstitutionDetailPage(
-                institution: institution,
-                icon: icon,
-                badgeColor: effectiveColor,
+    final effectiveColor = isAdmin ? AppTheme.success : badgeColor;
+    return PressableCard(
+      child: Container(
+        decoration: AppTheme.cardDecoration(selected: isAdmin),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () async {
+              await Navigator.of(context).push(
+                FadeSlideRoute(
+                  page: InstitutionDetailPage(
+                    institution: institution,
+                    icon: icon,
+                    badgeColor: effectiveColor,
+                  ),
+                ),
+              );
+              onReturnFromDetail?.call();
+            },
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: effectiveColor.withAlpha(20),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Icon(icon, size: 14, color: effectiveColor),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      institution.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 16,
+                    color: AppTheme.textTertiary,
+                  ),
+                ],
               ),
             ),
-          );
-          onReturnFromDetail?.call();
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: effectiveColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Icon(icon, size: 14, color: effectiveColor),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  institution.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                size: 16,
-                color: Colors.grey[400],
-              ),
-            ],
           ),
         ),
       ),
@@ -778,8 +909,9 @@ class _InstitutionCard extends StatelessWidget {
   }
 }
 
-class _PipeTabs extends StatelessWidget {
-  const _PipeTabs({
+/// 精致的 tab 切换组件（替代原 _PipeTabs）。
+class _StyledTabs extends StatelessWidget {
+  const _StyledTabs({
     required this.tabs,
     required this.selectedIndex,
     required this.onSelected,
@@ -791,34 +923,57 @@ class _PipeTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        for (int i = 0; i < tabs.length; i++) ...[
-          GestureDetector(
-            onTap: () => onSelected(i),
-            child: Text(
-              tabs[i],
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight:
-                    i == selectedIndex ? FontWeight.w700 : FontWeight.w400,
-                color: i == selectedIndex
-                    ? const Color(0xFF0B3D2E)
-                    : Colors.black54,
-              ),
-            ),
-          ),
-          if (i != tabs.length - 1)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 10),
-              child: Text(
-                '|',
-                style: TextStyle(color: Colors.black45),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 48, vertical: 4),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Row(
+        children: [
+          for (int i = 0; i < tabs.length; i++)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onSelected(i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: i == selectedIndex
+                        ? AppTheme.surfaceWhite
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                    boxShadow: i == selectedIndex
+                        ? [
+                            BoxShadow(
+                              color: AppTheme.primary.withAlpha(15),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Text(
+                    tabs[i],
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: i == selectedIndex
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      color: i == selectedIndex
+                          ? AppTheme.primary
+                          : AppTheme.textSecondary,
+                    ),
+                  ),
+                ),
               ),
             ),
         ],
-      ],
+      ),
     );
   }
 }

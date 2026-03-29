@@ -381,15 +381,19 @@ pub(crate) async fn admin_auth_verify(
             return api_error(StatusCode::UNAUTHORIZED, 2004, "challenge context mismatch");
         }
 
-        if !verify_admin_signature(
-            &challenge.admin_pubkey,
-            &challenge.challenge_text,
-            input.signature.trim(),
-        ) {
+        // 中文注释：乐观消费——先标记 consumed 再验签，防止并发请求同时通过 consumed 检查。
+        // 验签失败时回退 consumed = false。
+        challenge.consumed = true;
+        let admin_pubkey = challenge.admin_pubkey.clone();
+        let challenge_text = challenge.challenge_text.clone();
+
+        if !verify_admin_signature(&admin_pubkey, &challenge_text, input.signature.trim()) {
+            if let Some(c) = store.login_challenges.get_mut(&input.challenge_id) {
+                c.consumed = false;
+            }
             return api_error(StatusCode::UNAUTHORIZED, 2004, "signature verify failed");
         }
-        challenge.consumed = true;
-        challenge.admin_pubkey.clone()
+        admin_pubkey
     };
 
     let admin = match store.admin_users_by_pubkey.get(&admin_pubkey) {

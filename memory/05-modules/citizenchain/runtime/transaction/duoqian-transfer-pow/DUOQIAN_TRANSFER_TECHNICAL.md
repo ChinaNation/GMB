@@ -357,31 +357,26 @@ App 可通过 `state_getStorage` 查询上述存储项，展示：
 
 ```rust
 #[pallet::config]
-pub trait Config: frame_system::Config + voting_engine_system::Config {
+pub trait Config:
+    frame_system::Config + voting_engine_system::Config + duoqian_manage_pow::Config
+{
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-
-    /// 货币类型，用于余额查询和转账执行
-    type Currency: Currency<Self::AccountId>;
 
     /// 备注最大长度
     #[pallet::constant]
     type MaxRemarkLen: Get<u32>;
 
-    /// 内部投票引擎
-    type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
-
-    /// 受保护地址检查器（复用 duoqian-manage-pow 的 trait）
-    type ProtectedSourceChecker: duoqian_manage_pow::ProtectedSourceChecker<Self::AccountId>;
-
     /// 手续费分账路由（复用 PowOnchainFeeRouter）
     type FeeRouter: frame_support::traits::OnUnbalanced<
-        <Self::Currency as Currency<Self::AccountId>>::NegativeImbalance,
+        <<Self as duoqian_manage_pow::Config>::Currency as Currency<Self::AccountId>>::NegativeImbalance,
     >;
 
     /// Weight 配置
     type WeightInfo: crate::weights::WeightInfo;
 }
 ```
+
+说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAssetGuard` 等类型由上游 `duoqian_manage_pow::Config` 和 `voting_engine_system::Config` 提供，本模块不再单独声明。
 
 ## 11. Weight 估算
 

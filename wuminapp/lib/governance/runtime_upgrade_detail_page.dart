@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ui/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
@@ -40,7 +41,6 @@ class RuntimeUpgradeDetailPage extends StatefulWidget {
 }
 
 class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
 
   final RuntimeUpgradeService _service = RuntimeUpgradeService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
@@ -357,7 +357,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('联合投票已提交：${_truncateAddress(result.txHash)}'),
-          backgroundColor: _inkGreen,
+          backgroundColor: AppTheme.primaryDark,
         ),
       );
 
@@ -366,12 +366,12 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     } on WalletAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        SnackBar(content: Text(e.message), backgroundColor: AppTheme.danger),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('投票失败：$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('投票失败：$e'), backgroundColor: AppTheme.danger),
       );
     } finally {
       if (mounted) {
@@ -424,20 +424,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   Color _statusColor(int? status) {
-    switch (status) {
-      case 0:
-        return Colors.blue;
-      case 1:
-        return Colors.green;
-      case 2:
-        return Colors.red;
-      case 3:
-        return Colors.green;
-      case 4:
-        return Colors.orange;
-      default:
-        return Colors.grey;
-    }
+    if (status == 4) return AppTheme.warning;
+    return AppTheme.proposalStatusColor(status ?? -1);
   }
 
   IconData _statusIcon(int? status) {
@@ -485,7 +473,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
+        foregroundColor: AppTheme.primaryDark,
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
@@ -505,14 +493,14 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
             const SizedBox(height: 12),
             Text('加载失败',
-                style: TextStyle(fontSize: 16, color: Colors.grey[700])),
+                style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
             const SizedBox(height: 6),
             Text(
               _error!,
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               textAlign: TextAlign.center,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
@@ -588,7 +576,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         const Spacer(),
         Text(
           '提案 ${formatProposalId(widget.proposalId)}',
-          style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+          style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
         ),
       ],
     );
@@ -603,7 +591,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -615,7 +603,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: _inkGreen,
+                color: AppTheme.primaryDark,
               ),
             ),
             const SizedBox(height: 12),
@@ -685,13 +673,13 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           width: 80,
           child: Text(
             label,
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
           ),
         ),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(fontSize: 13, color: Color(0xFF333333)),
+            style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
             maxLines: _reasonExpanded ? null : 1,
             overflow: _reasonExpanded ? null : TextOverflow.ellipsis,
           ),
@@ -704,7 +692,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                   ? Icons.keyboard_arrow_up
                   : Icons.keyboard_arrow_down,
               size: 20,
-              color: Colors.grey[400],
+              color: AppTheme.textTertiary,
             ),
           ),
       ],
@@ -719,19 +707,19 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           width: 80,
           child: Text(
             label,
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
           ),
         ),
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(fontSize: 13, color: Color(0xFF333333)),
+            style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
           ),
         ),
         if (onCopy != null)
           GestureDetector(
             onTap: onCopy,
-            child: Icon(Icons.copy, size: 16, color: Colors.grey[400]),
+            child: Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
           ),
       ],
     );
@@ -747,7 +735,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -759,7 +747,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: _inkGreen,
+                color: AppTheme.primaryDark,
               ),
             ),
             const SizedBox(height: 12),
@@ -768,8 +756,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 10,
-                backgroundColor: Colors.grey[200],
-                valueColor: const AlwaysStoppedAnimation<Color>(_inkGreen),
+                backgroundColor: AppTheme.border,
+                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryDark),
               ),
             ),
             const SizedBox(height: 8),
@@ -781,14 +769,14 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: _inkGreen,
+                    color: AppTheme.primaryDark,
                   ),
                 ),
                 Text(
                   '反对 ${_jointTally.no}',
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.red[400],
+                    color: AppTheme.danger,
                   ),
                 ),
               ],
@@ -796,7 +784,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             const SizedBox(height: 6),
             Text(
               '联合投票总权重 $jointVoteTotal，国储会权重 19，省储会/省储行各权重 1',
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
             ),
           ],
         ),
@@ -814,7 +802,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -826,7 +814,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: _inkGreen,
+                color: AppTheme.primaryDark,
               ),
             ),
             const SizedBox(height: 12),
@@ -839,7 +827,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: _inkGreen,
+                color: AppTheme.primaryDark,
               ),
             ),
             ClipRRect(
@@ -847,9 +835,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 8,
-                backgroundColor: Colors.grey[200],
+                backgroundColor: AppTheme.border,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                    _institutionVote == true ? _inkGreen : Colors.orange),
+                    _institutionVote == true ? AppTheme.primaryDark : AppTheme.warning),
               ),
             ),
             const SizedBox(height: 12),
@@ -858,11 +846,11 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               children: [
                 Text(
                   '管理员反对 ${_institutionAdminTally.no}',
-                  style: TextStyle(fontSize: 13, color: Colors.red[400]),
+                  style: TextStyle(fontSize: 13, color: AppTheme.danger),
                 ),
                 Text(
                   '链上当前管理员 ${_admins.length} 人',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                 ),
               ],
             ),
@@ -872,7 +860,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               const SizedBox(height: 8),
               Text(
                 '本机构管理员直接上链投票，赞成达到阈值会自动形成机构赞成结果；若剩余管理员已不足以达到阈值，链上会自动形成机构反对结果。',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               ),
             ],
           ],
@@ -887,12 +875,12 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         width: double.infinity,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.orange.withValues(alpha: 0.08),
+          color: AppTheme.warning.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(8),
         ),
         child: const Text(
           '当前未导入属于本机构的管理员钱包',
-          style: TextStyle(fontSize: 13, color: Colors.orange),
+          style: TextStyle(fontSize: 13, color: AppTheme.warning),
         ),
       );
     }
@@ -902,12 +890,12 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         width: double.infinity,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.grey[100],
+          color: AppTheme.surfaceMuted,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
           _allImportedAdminsVoted ? '已导入管理员钱包均已完成投票' : '当前没有可用的管理员钱包',
-          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+          style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
         ),
       );
     }
@@ -924,18 +912,18 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           _pubkeyToSs58(wallet.pubkeyHex),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          style: TextStyle(fontSize: 11, color: AppTheme.textTertiary),
         ),
-        trailing: const Icon(Icons.shield_outlined, size: 18, color: Colors.orange),
+        trailing: const Icon(Icons.shield_outlined, size: 18, color: AppTheme.warning),
       );
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.green.withValues(alpha: 0.05),
+        color: AppTheme.success.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+        border: Border.all(color: AppTheme.success.withValues(alpha: 0.2)),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<int>(
@@ -954,7 +942,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(Icons.shield_outlined, size: 18, color: Colors.orange),
+                  const Icon(Icons.shield_outlined, size: 18, color: AppTheme.warning),
                 ],
               ),
             );
@@ -978,7 +966,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -990,7 +978,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: _inkGreen,
+                color: AppTheme.primaryDark,
               ),
             ),
             const SizedBox(height: 12),
@@ -1002,14 +990,14 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: _inkGreen,
+                    color: AppTheme.primaryDark,
                   ),
                 ),
                 Text(
                   '反对 ${_citizenTally.no}',
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.red[400],
+                    color: AppTheme.danger,
                   ),
                 ),
               ],
@@ -1049,7 +1037,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: AppTheme.textPrimary.withValues(alpha: 0.06),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),
@@ -1062,7 +1050,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             padding: const EdgeInsets.only(bottom: 10),
             child: Text(
               '公民投票',
-              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
               textAlign: TextAlign.center,
             ),
           ),
@@ -1074,9 +1062,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                       ? null
                       : () => _confirmCitizenVote(false),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
+                    backgroundColor: AppTheme.danger,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.red.withValues(alpha: 0.25),
+                    disabledBackgroundColor: AppTheme.danger.withValues(alpha: 0.25),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -1101,10 +1089,10 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                       ? null
                       : () => _confirmCitizenVote(true),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: AppTheme.success,
                     foregroundColor: Colors.white,
                     disabledBackgroundColor:
-                        Colors.green.withValues(alpha: 0.25),
+                        AppTheme.success.withValues(alpha: 0.25),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -1162,7 +1150,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('公民投票功能开发中'),
-        backgroundColor: Colors.orange,
+        backgroundColor: AppTheme.warning,
       ),
     );
   }
@@ -1176,7 +1164,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: AppTheme.textPrimary.withValues(alpha: 0.06),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),
@@ -1190,7 +1178,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               padding: const EdgeInsets.only(bottom: 10),
               child: Text(
                 disabledReason,
-                style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -1200,9 +1188,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                 child: ElevatedButton(
                   onPressed: _canSubmitVote ? () => _confirmVote(false) : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
+                    backgroundColor: AppTheme.danger,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.red.withValues(alpha: 0.25),
+                    disabledBackgroundColor: AppTheme.danger.withValues(alpha: 0.25),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -1225,10 +1213,10 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                 child: ElevatedButton(
                   onPressed: _canSubmitVote ? () => _confirmVote(true) : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: AppTheme.success,
                     foregroundColor: Colors.white,
                     disabledBackgroundColor:
-                        Colors.green.withValues(alpha: 0.25),
+                        AppTheme.success.withValues(alpha: 0.25),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),

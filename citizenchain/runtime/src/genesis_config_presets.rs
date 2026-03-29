@@ -283,8 +283,12 @@ mod tests {
             .as_array()
             .expect("balances.balances should be an array");
 
-        // 中文注释：创世包含 1 个国储会地址 + 43 个省储行 keyless 质押地址。
-        assert_eq!(balances.len(), 1 + CHINA_CH.len());
+        // 中文注释：创世包含 1 个国储会多签地址 + 19 个 NRC 管理员 + 43 个省储行 keyless 质押地址。
+        let nrc_admin_count = CHINA_CB
+            .first()
+            .map(|n| n.duoqian_admins.len())
+            .unwrap_or(0);
+        assert_eq!(balances.len(), 1 + nrc_admin_count + CHINA_CH.len());
     }
 
     #[test]
@@ -313,8 +317,14 @@ mod tests {
             })
             .expect("NRC balance entry should exist");
 
-        // 中文注释：创世发行全额存入国储会。
-        assert_eq!(nrc_amount, GENESIS_ISSUANCE);
+        // 中文注释：创世发行分配到国储会多签地址 = 总发行量 - NRC 管理员预置总额。
+        let admin_each: u128 = 1_000_000_000;
+        let nrc_admin_count = CHINA_CB
+            .first()
+            .map(|n| n.duoqian_admins.len() as u128)
+            .unwrap_or(0);
+        let expected_nrc = GENESIS_ISSUANCE - admin_each * nrc_admin_count;
+        assert_eq!(nrc_amount, expected_nrc);
 
         let total_in_patch: u128 = balances
             .iter()

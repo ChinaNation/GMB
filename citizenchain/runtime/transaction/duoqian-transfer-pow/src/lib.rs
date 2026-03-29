@@ -1,3 +1,11 @@
+//! # 机构多签名地址转账模块 (duoqian-transfer-pow)
+//!
+//! 本模块为治理机构（NRC/PRC/PRB）和注册多签机构提供链上转账治理流程：
+//! - 管理员发起转账提案，经内部投票通过后自动执行转账并扣取手续费。
+//! - 自动执行失败时保留提案状态，可通过 `execute_transfer` 手动重试。
+//! - 余额在提案创建和执行两个时点双重检查，含手续费和 ED 保留。
+//! - 收款地址不能是机构自身，也不能是受保护地址（质押地址）。
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode, MaxEncodedLen};
@@ -40,6 +48,7 @@ pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
     pub proposer: AccountId,
 }
 
+/// 中文注释：判断机构属于 NRC/PRC/PRB（不含注册多签，注册多签由链上存储判断）。
 fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
     if CHINA_CB
         .first()
@@ -69,6 +78,7 @@ fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
     None
 }
 
+/// 中文注释：从 CHINA_CB/CHINA_CH 中查找机构的多签账户地址（duoqian_address）。
 fn institution_pallet_address(institution: InstitutionPalletId) -> Option<[u8; 32]> {
     if let Some(node) = CHINA_CB
         .iter()
@@ -83,6 +93,7 @@ fn institution_pallet_address(institution: InstitutionPalletId) -> Option<[u8; 3
         .map(|n| n.duoqian_address)
 }
 
+/// 中文注释：检查机构 ID 后 16 字节是否全零（注册多签机构的 ID 格式要求）。
 fn institution_id_has_zero_suffix(institution: InstitutionPalletId) -> bool {
     institution[32..].iter().all(|b| *b == 0)
 }
@@ -161,18 +172,31 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
+        /// 中文注释：机构不属于 NRC/PRC/PRB 且非注册多签机构。
         InvalidInstitution,
+        /// 中文注释：调用者声明的 org 类型与机构实际类型不一致。
         InstitutionOrgMismatch,
+        /// 中文注释：调用者不是该机构的管理员。
         UnauthorizedAdmin,
+        /// 中文注释：机构资产保护检查未通过（如冻结期间禁止支出）。
         InstitutionSpendNotAllowed,
+        /// 中文注释：转账金额不能为零。
         ZeroAmount,
+        /// 中文注释：转账金额低于 ED（存在性保证金），收款地址可能无法创建。
         AmountBelowExistentialDeposit,
+        /// 中文注释：不允许转账给机构自身。
         SelfTransferNotAllowed,
+        /// 中文注释：收款地址是受保护地址（如质押地址），不允许作为收款方。
         BeneficiaryIsProtectedAddress,
+        /// 中文注释：提案动作数据未找到或解码失败。
         ProposalActionNotFound,
+        /// 中文注释：机构账户地址解码失败。
         InstitutionAccountDecodeFailed,
+        /// 中文注释：机构余额不足（需 amount + fee + ED）。
         InsufficientBalance,
+        /// 中文注释：提案未达到通过状态，不可执行。
         ProposalNotPassed,
+        /// 中文注释：链上转账操作失败。
         TransferFailed,
     }
 
@@ -559,12 +583,14 @@ mod tests {
     pub struct TestSfidInstitutionVerifier;
     impl
         duoqian_manage_pow::SfidInstitutionVerifier<
+            duoqian_manage_pow::pallet::SfidNameOf<Test>,
             duoqian_manage_pow::pallet::RegisterNonceOf<Test>,
             duoqian_manage_pow::pallet::RegisterSignatureOf<Test>,
         > for TestSfidInstitutionVerifier
     {
         fn verify_institution_registration(
             _sfid_id: &[u8],
+            _name: &duoqian_manage_pow::pallet::SfidNameOf<Test>,
             nonce: &duoqian_manage_pow::pallet::RegisterNonceOf<Test>,
             signature: &duoqian_manage_pow::pallet::RegisterSignatureOf<Test>,
         ) -> bool {
@@ -746,8 +772,10 @@ mod tests {
         type ProtectedSourceChecker = TestProtectedSourceChecker;
         type InstitutionAssetGuard = TestInstitutionAssetGuard;
         type SfidInstitutionVerifier = TestSfidInstitutionVerifier;
+        type FeeRouter = ();
         type MaxAdmins = ConstU32<10>;
         type MaxSfidIdLength = ConstU32<96>;
+        type MaxSfidNameLength = ConstU32<128>;
         type MaxRegisterNonceLength = ConstU32<64>;
         type MaxRegisterSignatureLength = ConstU32<64>;
         type MinCreateAmount = ConstU128<111>;

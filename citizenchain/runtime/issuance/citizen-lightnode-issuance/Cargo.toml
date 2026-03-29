@@ -14,7 +14,6 @@ frame-system = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
 pallet-balances = { workspace = true }
 sp-runtime = { workspace = true }
-sp-std = { workspace = true }
 sfid-code-auth = { path = "../../otherpallet/sfid-code-auth", default-features = false }
 
 primitives = { path = "../../primitives", default-features = false }
@@ -25,6 +24,7 @@ runtime-benchmarks = [
     "frame-benchmarking/runtime-benchmarks",
     "frame-support/runtime-benchmarks",
     "frame-system/runtime-benchmarks",
+    "sfid-code-auth/runtime-benchmarks",
 ]
 try-runtime = []
 std = [
@@ -35,7 +35,6 @@ std = [
     "frame-system/std",
     "pallet-balances/std",
     "sp-runtime/std",
-    "sp-std/std",
     "sfid-code-auth/std",
     "primitives/std",
 ]

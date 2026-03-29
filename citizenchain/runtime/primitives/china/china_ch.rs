@@ -915,9 +915,19 @@ mod tests {
 
     #[test]
     fn stake_sum_matches_population_basis() {
-        // 中文注释：省储行创立发行按“每人 10_000 分”汇总。
+        // 中文注释：省储行创立发行按"每人 10_000 分"汇总。
         let citizens_sum: u128 = CHINA_CH.iter().map(|n| n.citizens_number as u128).sum();
         let stake_sum: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
         assert_eq!(stake_sum, citizens_sum * 10_000u128);
+    }
+
+    #[test]
+    fn all_china_ch_duoqian_addresses_are_unique() {
+        // 中文注释：43 个省储行的多签地址必须全部唯一，不允许两省共用同一地址。
+        let mut addrs: Vec<[u8; 32]> = CHINA_CH.iter().map(|n| n.duoqian_address).collect();
+        let total = addrs.len();
+        addrs.sort();
+        addrs.dedup();
+        assert_eq!(addrs.len(), total, "duoqian_address duplicate found");
     }
 }

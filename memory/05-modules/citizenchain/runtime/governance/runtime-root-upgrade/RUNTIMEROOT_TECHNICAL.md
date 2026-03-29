@@ -85,6 +85,9 @@ Runtime 配置位置：
 - `object_hash`：对象哈希
 - `object bytes`：原始 wasm 字节（对象层上限 10MB，业务自身继续限制 5MB）
 
+### 3.4 模块标识
+- `MODULE_TAG = b"rt-upg"`：存入 ProposalData 的前缀，用于区分不同业务模块，防止跨模块误解码。
+
 ## 4. 存储模型
 本模块无本地存储。所有提案数据、投票数据、元数据均存储在 `voting-engine-system`：
 - `ProposalData`：存放 `Proposal<T>` 摘要的 SCALE 编码
@@ -125,7 +128,22 @@ Runtime 配置位置：
    - 发出 `JointVoteFinalized` + 执行成功或失败事件
 5. wasm 对象不由本模块手工删除，统一交由投票引擎 90 天延迟清理。
 
-### 5.2.1 投票引擎 STATUS_EXECUTED 标记
+### 5.3 `developer_direct_upgrade`（call index = 2）
+说明：
+- 开发期快捷通道：NRC 管理员直接 `set_code`，不走联合投票。
+- 仅在 `genesis-pallet` 的 `DeveloperUpgradeEnabled` 为 `true` 时可用。
+- 链进入运行期后此调用永久失效，升级必须走 `propose_runtime_upgrade` 联合投票。
+
+流程：
+1. 校验 `NrcProposeOrigin`。
+2. 校验 `DeveloperUpgradeCheck::is_enabled()`，关闭则拒绝（`DeveloperUpgradeDisabled`）。
+3. 校验 `code` 非空。
+4. 计算 `code_hash`，调用 `RuntimeCodeExecutor::execute_runtime_code`。
+5. 发出 `DeveloperDirectUpgradeExecuted` 事件。
+
+权重：使用 `frame_system::set_code()` 的系统权重。
+
+### 5.4 投票引擎 STATUS_EXECUTED 标记
 
 无论执行成功、失败还是被拒绝，本模块都会将投票引擎侧 `Proposals` 的状态直接修改为 `STATUS_EXECUTED`。
 
@@ -191,14 +209,18 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - `on_joint_vote_finalized` 回调入口
 
 ## 9. 测试覆盖
-已覆盖（10 个测试）：
+已覆盖（14 个测试）：
 - 仅 NRC 管理员可发起提案
 - 提案摘要与对象数据正确分别存入 voting-engine-system
-- 联合投票拒绝进入 `Rejected`
+- 联合投票拒绝进入 `Rejected`（含 wasm 对象保留到统一清理）
 - 联合投票通过并成功执行进入 `Passed`
 - 联合投票通过但执行失败进入 `ExecutionFailed`
 - 已终结的提案不可重复终结（`ProposalNotVoting`）
 - 不存在的提案终结失败（`ProposalNotFound`）
+- 开发者直升：开关开启时成功执行
+- 开发者直升：开关关闭时拒绝（`DeveloperUpgradeDisabled`）
+- 开发者直升：非 NRC 管理员拒绝（`BadOrigin`）
+- 开发者直升：空 code 拒绝（`EmptyRuntimeCode`）
 - GenesisConfig 构建成功
 - Runtime 完整性检查
 

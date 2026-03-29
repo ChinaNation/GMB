@@ -85,7 +85,7 @@ Weight 集成：
 - `CertificationRewardSkipped { who, binding_id, reason }`
 
 `SkipReason`：
-- `DuplicateSfid`
+- `DuplicateBindingId`
 - `MaxCountReached`
 - `AccountAlreadyRewarded`
 - `ZeroRewardConfigured`
@@ -121,7 +121,7 @@ Weight 集成：
 - `WeightInfo::on_sfid_bound()`（由 runtime 注入）
 
 当前状态：
-- `WeightInfo::on_sfid_bound()` 已由 Substrate benchmark CLI 自动生成（见 `src/weights.rs` 文件头，日期 2026-03-12）。
+- `WeightInfo::on_sfid_bound()` 已由 Substrate benchmark CLI 自动生成（见 `src/weights.rs` 文件头，日期 2026-03-17）。
 
 说明：
 - 该值用于上游 `bind_sfid` 申报 weight 叠加。
@@ -152,6 +152,8 @@ Weight 集成：
 ---
 
 ## 10. 测试覆盖（当前）
+
+### 10.1 单元测试
 `cargo test -p citizen-lightnode-issuance` 覆盖：
 - 首次绑定发放高额奖励
 - 达到 `MAX_COUNT` 后停止发放
@@ -162,6 +164,14 @@ Weight 集成：
 - 跳过事件断言（重复 SFID / 达上限 / 账户已领奖）
 - 不同账户不同 SFID 独立发放
 - 同一账户不同 SFID 仅首笔发放
+
+### 10.2 集成测试
+`cargo test -p citizen-lightnode-issuance --test integration_bind_sfid` 覆盖：
+- `bind_sfid` extrinsic → `OnSfidBound` → 奖励发放完整链路
+- 同一账户换绑时奖励被跳过但绑定成功
+- 不同账户独立绑定独立领奖
+- 达到发放上限后绑定成功但奖励被跳过
+- `bind_sfid` weight 声明包含回调 weight（非零）
 
 ---
 

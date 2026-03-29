@@ -11,7 +11,7 @@ use tauri::AppHandle;
 
 use super::identity::current_status;
 
-const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
+use crate::shared::constants::RPC_RESPONSE_LIMIT_LARGE;
 const RPC_RETRY_COUNT: usize = 3;
 
 pub(super) fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
@@ -21,7 +21,7 @@ pub(super) fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
             method,
             params.clone(),
             rpc::RPC_REQUEST_TIMEOUT,
-            MAX_RPC_RESPONSE_BYTES,
+            RPC_RESPONSE_LIMIT_LARGE,
         ) {
             Ok(v) => return Ok(v),
             Err(err) => {

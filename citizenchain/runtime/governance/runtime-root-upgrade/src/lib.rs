@@ -1,11 +1,15 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
 pub mod weights;
 
 use frame_support::pallet_prelude::DispatchResult;
 pub use pallet::*;
 use voting_engine_system::JointVoteResultCallback;
+
+/// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
+pub const MODULE_TAG: &[u8] = b"rt-upg";
 
 pub trait RuntimeCodeExecutor {
     /// 中文注释：由 Runtime 注入真正的 set_code 执行器，pallet 本身只负责编排治理状态机。
@@ -185,8 +189,9 @@ pub mod pallet {
                 has_code: true,
                 status: ProposalStatus::Voting,
             };
-            let data = proposal.encode();
-            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            let mut encoded = sp_runtime::sp_std::vec::Vec::from(crate::MODULE_TAG);
+            encoded.extend_from_slice(&proposal.encode());
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, encoded)?;
             voting_engine_system::Pallet::<T>::store_proposal_object(
                 proposal_id,
                 PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
@@ -245,15 +250,23 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        /// 从投票引擎 ProposalData 中读取并解码本模块的提案摘要。
+        /// 先校验 MODULE_TAG 前缀，防止跨模块误解码。
         fn load_proposal(proposal_id: u64) -> Result<Proposal<T>, DispatchError> {
             let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalNotFound)?;
-            Proposal::<T>::decode(&mut &raw[..]).map_err(|_| Error::<T>::ProposalNotFound.into())
+            let tag = crate::MODULE_TAG;
+            if raw.len() < tag.len() || &raw[..tag.len()] != tag {
+                return Err(Error::<T>::ProposalNotFound.into());
+            }
+            Proposal::<T>::decode(&mut &raw[tag.len()..])
+                .map_err(|_| Error::<T>::ProposalNotFound.into())
         }
 
         fn save_proposal(proposal_id: u64, proposal: &Proposal<T>) -> DispatchResult {
-            let data = proposal.encode();
-            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)
+            let mut encoded = sp_runtime::sp_std::vec::Vec::from(crate::MODULE_TAG);
+            encoded.extend_from_slice(&proposal.encode());
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, encoded)
         }
 
         fn load_runtime_code(proposal_id: u64) -> Result<CodeOf<T>, DispatchError> {
@@ -463,7 +476,7 @@ mod tests {
         type WeightInfo = ();
     }
 
-    /// 测试用开发者直升开关：默认开启，可通过 thread_local 控制。
+    // 测试用开发者直升开关：默认开启，可通过 thread_local 控制。
     thread_local! {
         static DEV_UPGRADE_ENABLED: RefCell<bool> = const { RefCell::new(true) };
     }
@@ -544,6 +557,15 @@ mod tests {
             .expect("snapshot signature should fit")
     }
 
+    /// 从 ProposalData 读取并跳过 MODULE_TAG 后 decode 提案摘要。
+    fn decode_proposal(proposal_id: u64) -> pallet::Proposal<Test> {
+        let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(proposal_id)
+            .expect("proposal data should exist");
+        let tag = crate::MODULE_TAG;
+        assert!(raw.len() >= tag.len() && &raw[..tag.len()] == tag, "MODULE_TAG mismatch");
+        pallet::Proposal::<Test>::decode(&mut &raw[tag.len()..]).expect("should decode proposal")
+    }
+
     fn propose_ok() {
         assert_ok!(RuntimeRootUpgrade::propose_runtime_upgrade(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
@@ -586,13 +608,11 @@ mod tests {
         new_test_ext().execute_with(|| {
             propose_ok();
             // proposal_id comes from NEXT_JOINT_ID which starts at 100
-            let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100);
             assert!(
-                raw.is_some(),
+                voting_engine_system::Pallet::<Test>::get_proposal_data(100).is_some(),
                 "proposal data should be stored in voting engine"
             );
-            let proposal = pallet::Proposal::<Test>::decode(&mut &raw.unwrap()[..])
-                .expect("should decode proposal");
+            let proposal = decode_proposal(100);
             assert!(matches!(proposal.status, pallet::ProposalStatus::Voting));
             assert!(
                 proposal.has_code,
@@ -611,9 +631,7 @@ mod tests {
             propose_ok();
             // proposal_id == joint_vote_id == 100
             assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, false));
-            let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100)
-                .expect("proposal data should exist");
-            let p = pallet::Proposal::<Test>::decode(&mut &raw[..]).expect("should decode");
+            let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
             assert!(
                 p.has_code,
@@ -628,9 +646,7 @@ mod tests {
             propose_ok();
             assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, true));
 
-            let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100)
-                .expect("proposal data should exist");
-            let p = pallet::Proposal::<Test>::decode(&mut &raw[..]).expect("should decode");
+            let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::Passed));
             assert!(
                 p.has_code,
@@ -653,9 +669,7 @@ mod tests {
 
             assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, true));
 
-            let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100)
-                .expect("proposal data should exist");
-            let p = pallet::Proposal::<Test>::decode(&mut &raw[..]).expect("should decode");
+            let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::ExecutionFailed));
             assert!(
                 p.has_code,
@@ -675,9 +689,7 @@ mod tests {
             propose_ok();
             assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, false));
 
-            let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(100)
-                .expect("proposal data should exist");
-            let p = pallet::Proposal::<Test>::decode(&mut &raw[..]).expect("should decode");
+            let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
             assert!(
                 p.has_code,

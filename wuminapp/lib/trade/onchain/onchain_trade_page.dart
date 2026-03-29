@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
@@ -31,12 +32,6 @@ class OnchainTradePage extends StatefulWidget {
 }
 
 class _OnchainTradePageState extends State<OnchainTradePage> {
-  static const Color _brandPrimaryColor = Color(0xFF007A74);
-  static const Color _inputFieldColor = Color(0xFFF7F7F7);
-  static const Color _cardBgColor = Color(0xFFF5F5F5);
-  static const Color _inputTextColor = Colors.black87;
-  static const Color _inputBorderColor = Color(0xFFD0D0D0);
-
   /// 链的 SS58 地址前缀。
   static const int _ss58Prefix = 2027;
 
@@ -389,11 +384,11 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   Color _statusColor(OnchainTxStatus status) {
     switch (status) {
       case OnchainTxStatus.pending:
-        return Colors.orange.shade700;
+        return AppTheme.warning;
       case OnchainTxStatus.confirmed:
-        return Colors.green.shade700;
+        return AppTheme.success;
       case OnchainTxStatus.failed:
-        return Colors.red.shade700;
+        return AppTheme.danger;
     }
   }
 
@@ -402,8 +397,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   }
 
   Widget _buildSubmitCard() {
-    return Card(
-      color: _cardBgColor,
+    return Container(
+      decoration: AppTheme.cardDecoration(),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
         child: Column(
@@ -417,9 +412,9 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                   children: [
                     Text(
                       '可用余额：${AmountFormat.format(_currentWallet!.balance, symbol: '')} 元',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 13,
-                        color: Colors.grey.shade600,
+                        color: AppTheme.textSecondary,
                       ),
                     ),
                     const Spacer(),
@@ -427,7 +422,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                       width: 32,
                       height: 18,
                       decoration: BoxDecoration(
-                        color: _brandPrimaryColor,
+                        color: AppTheme.primary,
                         borderRadius: BorderRadius.circular(100),
                       ),
                       child: const Center(
@@ -435,7 +430,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                           '链上',
                           style: TextStyle(
                             fontSize: 8,
-                            color: Colors.white,
+                            color: AppTheme.textOnPrimary,
                             fontWeight: FontWeight.w600,
                             height: 1.0,
                           ),
@@ -448,15 +443,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             TextField(
               controller: _toController,
               decoration: InputDecoration(
-                enabledBorder: const OutlineInputBorder(
-                  borderSide: BorderSide(color: _inputBorderColor),
-                ),
-                focusedBorder: const OutlineInputBorder(
-                  borderSide: BorderSide(color: _brandPrimaryColor),
-                ),
                 labelText: '收款地址',
-                filled: true,
-                fillColor: _inputFieldColor,
                 suffixIcon: IconButton(
                   tooltip: '扫码填入收款地址',
                   onPressed: _scanToAddress,
@@ -475,17 +462,9 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                   child: TextField(
                     controller: _amountController,
                     keyboardType: TextInputType.number,
-                    style: const TextStyle(color: _inputTextColor),
+                    style: const TextStyle(color: AppTheme.textPrimary),
                     decoration: const InputDecoration(
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: _inputBorderColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: _brandPrimaryColor),
-                      ),
                       labelText: '金额',
-                      filled: true,
-                      fillColor: _inputFieldColor,
                     ),
                   ),
                 ),
@@ -494,19 +473,14 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                   width: 120,
                   child: InputDecorator(
                     decoration: const InputDecoration(
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: _inputBorderColor),
-                      ),
                       labelText: '币种',
-                      filled: true,
-                      fillColor: _inputFieldColor,
                       contentPadding: EdgeInsets.symmetric(vertical: 16),
                     ),
                     child: Text(
                       _selectedSymbol,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Colors.black45,
+                        color: AppTheme.textSecondary,
                         fontSize: 16,
                       ),
                     ),
@@ -518,9 +492,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: _brandPrimaryColor,
-                ),
                 onPressed:
                     (_submitting || _loadingWallet || _currentWallet == null)
                         ? null
@@ -634,31 +605,47 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                   padding: const EdgeInsets.all(16),
                   children: [
                     // 多签交易入口
-                    Card(
-                      color: _cardBgColor,
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const DuoqianTradePage(),
-                            ),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
-                          child: Row(
-                            children: [
-                              const Text(
-                                '多签交易',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                    Container(
+                      decoration: AppTheme.cardDecoration(),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const DuoqianTradePage(),
                               ),
-                              const Spacer(),
-                              const Icon(Icons.chevron_right, size: 22),
-                            ],
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primary.withAlpha(20),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(Icons.groups_outlined,
+                                      size: 18, color: AppTheme.primary),
+                                ),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  '多签交易',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                                const Spacer(),
+                                const Icon(Icons.chevron_right,
+                                    size: 20, color: AppTheme.textTertiary),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -667,8 +654,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                     if (_currentWallet == null && !_loadingWallet)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: Card(
-                          color: _cardBgColor,
+                        child: Container(
+                          decoration: AppTheme.cardDecoration(),
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                             child: Column(

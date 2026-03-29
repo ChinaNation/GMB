@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../ui/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -23,9 +24,6 @@ class RuntimeUpgradePage extends StatefulWidget {
 }
 
 class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
-  static const Color _inputFieldColor = Color(0xFFF7F7F7);
-  static const Color _inputBorderColor = Color(0xFFD0D0D0);
 
   final _reasonController = TextEditingController();
 
@@ -248,7 +246,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
+        foregroundColor: AppTheme.primaryDark,
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
@@ -273,24 +271,24 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
             maxLines: 5,
             decoration: InputDecoration(
               hintText: '输入升级理由（最多 341 个汉字）',
-              hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+              hintStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 14),
               filled: true,
-              fillColor: _inputFieldColor,
+              fillColor: AppTheme.surfaceMuted,
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: _inputBorderColor),
+                borderSide: const BorderSide(color: AppTheme.border),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: _inkGreen),
+                borderSide: const BorderSide(color: AppTheme.primaryDark),
               ),
               errorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.red),
+                borderSide: const BorderSide(color: AppTheme.danger),
               ),
               focusedErrorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.red),
+                borderSide: const BorderSide(color: AppTheme.danger),
               ),
               errorText: _reasonError,
             ),
@@ -310,7 +308,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
             height: 48,
             child: FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: _inkGreen,
+                backgroundColor: AppTheme.primaryDark,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -364,11 +362,11 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: const Color(0xFF1565C0).withValues(alpha: 0.12),
+            color: AppTheme.info.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
           ),
           child: const Icon(Icons.arrow_upward,
-              size: 18, color: Color(0xFF1565C0)),
+              size: 18, color: AppTheme.info),
         ),
         const SizedBox(width: 10),
         const Expanded(
@@ -377,7 +375,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: _inkGreen,
+              color: AppTheme.primaryDark,
             ),
           ),
         ),
@@ -398,13 +396,13 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.green.withValues(alpha: 0.06),
+          color: AppTheme.success.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+          border: Border.all(color: AppTheme.success.withValues(alpha: 0.2)),
         ),
         child: Row(
           children: [
-            const Icon(Icons.verified_user, size: 16, color: Colors.green),
+            const Icon(Icons.verified_user, size: 16, color: AppTheme.success),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -412,7 +410,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
                 style: const TextStyle(
                   fontSize: 13,
                   fontFamily: 'monospace',
-                  color: Colors.green,
+                  color: AppTheme.success,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -425,22 +423,22 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: _inputFieldColor,
+        color: AppTheme.surfaceMuted,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+        border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<int>(
           value: _selectedWallet.walletIndex,
           isExpanded: true,
-          icon: const Icon(Icons.arrow_drop_down, color: _inkGreen),
+          icon: const Icon(Icons.arrow_drop_down, color: AppTheme.primaryDark),
           items: wallets.map((w) {
             return DropdownMenuItem<int>(
               value: w.walletIndex,
               child: Row(
                 children: [
                   const Icon(Icons.verified_user,
-                      size: 14, color: Colors.green),
+                      size: 14, color: AppTheme.success),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -474,7 +472,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
       style: const TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
-        color: _inkGreen,
+        color: AppTheme.primaryDark,
       ),
     );
   }
@@ -490,8 +488,8 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
             icon: const Icon(Icons.upload_file, size: 18),
             label: const Text('选择 WASM 文件'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: _inkGreen,
-              side: const BorderSide(color: _inputBorderColor),
+              foregroundColor: AppTheme.primaryDark,
+              side: const BorderSide(color: AppTheme.border),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -505,20 +503,20 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.06),
+              color: AppTheme.success.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+              border: Border.all(color: AppTheme.success.withValues(alpha: 0.2)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.check_circle, size: 16, color: Colors.green),
+                const Icon(Icons.check_circle, size: 16, color: AppTheme.success),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '$_wasmFileName (${_formatFileSize(_wasmFileSize!)})',
                     style: const TextStyle(
                       fontSize: 13,
-                      color: Colors.green,
+                      color: AppTheme.success,
                       fontWeight: FontWeight.w500,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -532,7 +530,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
                       _wasmCode = null;
                     });
                   },
-                  child: Icon(Icons.close, size: 16, color: Colors.grey[400]),
+                  child: Icon(Icons.close, size: 16, color: AppTheme.textTertiary),
                 ),
               ],
             ),
@@ -540,7 +538,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
         else
           Text(
             '支持 .wasm 文件，最大 5MB',
-            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
           ),
       ],
     );

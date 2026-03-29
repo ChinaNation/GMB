@@ -1385,7 +1385,6 @@ dependencies = [
  "sfid-code-auth",
  "sp-io",
  "sp-runtime",
- "sp-std",
 ]
 
 [[package]]
@@ -2725,7 +2724,6 @@ dependencies = [
  "scale-info",
  "sp-io",
  "sp-runtime",
- "sp-std",
  "voting-engine-system",
 ]
 
@@ -3742,7 +3740,6 @@ dependencies = [
 name = "genesis-pallet"
 version = "1.0.0"
 dependencies = [
- "frame-benchmarking",
  "frame-support",
  "frame-system",
  "parity-scale-codec",
@@ -10345,7 +10342,6 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
- "sp-std",
 ]
 
 [[package]]

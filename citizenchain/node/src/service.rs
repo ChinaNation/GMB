@@ -1,4 +1,14 @@
-//! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
+//! # 节点服务层 (service)
+//!
+//! 实现 CitizenChain 全节点的双共识架构：
+//! - **PoW 共识**：SimplePow 算法，blake2_256(pre_hash ++ nonce)，难度从链上 Runtime API 读取。
+//! - **GRANDPA 最终性**：权威节点运行 voter，普通节点运行 observer。
+//!
+//! 挖矿特性：
+//! - CPU 多线程挖矿，各线程 nonce 不重叠（stride = 线程数）。
+//! - GPU 挖矿（可选 `gpu-mining` feature），使用 nonce 高半区（bit63=1）。
+//! - 空交易池时不挖矿（避免空块），离线或 major sync 时禁止出块（防分叉）。
+//! - 出块目标时间从 genesis-pallet 链上存储读取，启动时获取一次。
 
 use citizenchain::{self, apis::RuntimeApi, opaque::Block};
 use codec::{Decode, Encode};
@@ -13,9 +23,9 @@ use sc_telemetry::{Telemetry, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_api::ProvideRuntimeApi;
 use sp_consensus::{NoNetwork, SyncOracle};
-use sp_core::{crypto::KeyTypeId, hashing::blake2_256, U256};
+use sp_core::{crypto::KeyTypeId, hashing::blake2_256, sr25519, Pair as _, U256};
 use sp_keystore::Keystore;
-use sp_runtime::traits::{Block as BlockT, IdentifyAccount};
+use sp_runtime::traits::Block as BlockT;
 use std::{
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -102,18 +112,26 @@ impl PowAlgorithm<Block> for SimplePow {
         seal: &sp_consensus_pow::Seal,
         difficulty: Self::Difficulty,
     ) -> Result<bool, sc_consensus_pow::Error<Block>> {
-        // 中文注释：协议层仅要求 pre_digest 可解码为矿工账户；是否绑定钱包只影响奖励/手续费分配，不影响出块有效性。
+        // 中文注释：pre_digest 包含矿工 sr25519 公钥，seal 包含 (nonce, 签名)。
+        // 验证：1) PoW 难度满足  2) 签名证明矿工确实拥有该公钥的私钥。
         let Some(pre_digest) = pre_digest else {
             return Ok(false);
         };
-        match citizenchain::AccountId::decode(&mut &pre_digest[..]) {
-            Ok(_) => (),
+        let public = match sr25519::Public::decode(&mut &pre_digest[..]) {
+            Ok(p) => p,
             Err(_) => return Ok(false),
         };
 
-        let nonce = u64::decode(&mut &seal[..]).map_err(sc_consensus_pow::Error::<Block>::Codec)?;
+        let (nonce, signature): (u64, sr25519::Signature) =
+            Decode::decode(&mut &seal[..]).map_err(sc_consensus_pow::Error::<Block>::Codec)?;
+
         let hash = pow_hash(pre_hash.as_ref(), nonce);
-        Ok(hash_meets_difficulty(&hash, difficulty))
+        if !hash_meets_difficulty(&hash, difficulty) {
+            return Ok(false);
+        }
+
+        // 中文注释：验证矿工对 pre_hash 的 sr25519 签名，防止冒充他人公钥。
+        Ok(sr25519::Pair::verify(&signature, pre_hash.as_ref(), &public))
     }
 }
 
@@ -132,13 +150,14 @@ fn hash_meets_difficulty(hash: &[u8; 32], difficulty: U256) -> bool {
     U256::from_big_endian(hash) <= target
 }
 
-fn author_pre_digest(keystore: &sp_keystore::KeystorePtr) -> Option<Vec<u8>> {
-    // 中文注释：直接从 keystore 获取 powr 密钥，不再读取环境变量，避免明文密钥泄露。
+/// 中文注释：返回 (pre_digest 编码字节, 矿工公钥)。
+/// pre_digest 中存储的是 sr25519 公钥而非 AccountId，配合 seal 中的签名实现密码学绑定。
+fn author_pre_digest(
+    keystore: &sp_keystore::KeystorePtr,
+) -> Option<(Vec<u8>, sr25519::Public)> {
     let keys = keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE);
     let author_public = keys.into_iter().next()?;
-    let account: citizenchain::AccountId =
-        sp_runtime::MultiSigner::from(author_public).into_account();
-    Some(account.encode())
+    Some((author_public.encode(), author_public))
 }
 
 fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceError> {
@@ -161,6 +180,8 @@ fn start_cpu_miner<Proof: Send + 'static>(
     epoch: Instant,
     pool_ready: Arc<dyn Fn() -> usize + Send + Sync>,
     target_block_time_ms: u64,
+    keystore: sp_keystore::KeystorePtr,
+    author_public: sr25519::Public,
 ) {
     // 提交门控，防止"早产块"触发 timestamp inherent 的 future 校验失败。
     // 使用全局 AtomicU64 (LAST_SUBMIT_NS) 存储上次成功提交的时刻（自 epoch 的纳秒数），
@@ -173,6 +194,8 @@ fn start_cpu_miner<Proof: Send + 'static>(
         let worker = worker.clone();
         let epoch = epoch;
         let pool_ready = pool_ready.clone();
+        let keystore = keystore.clone();
+        let author_public = author_public;
         thread::spawn(move || {
             // 哈希率采样：仅 thread 0 每 SAMPLE_INTERVAL 次哈希统计一次，乘以线程数得到总哈希率。
             const SAMPLE_INTERVAL: u64 = 100_000;
@@ -244,7 +267,20 @@ fn start_cpu_miner<Proof: Send + 'static>(
                             break; // nonce 已过期，回外层重新获取 metadata
                         }
 
-                        let submitted = futures::executor::block_on(worker.submit(nonce.encode()));
+                        // 中文注释：签名 pre_hash 证明矿工身份，签名失败则丢弃该 nonce。
+                        let signature = match keystore.sr25519_sign(
+                            POW_AUTHOR_KEY_TYPE,
+                            &author_public,
+                            metadata.pre_hash.as_ref(),
+                        ) {
+                            Ok(Some(sig)) => sig,
+                            _ => {
+                                log::warn!("PoW: keystore 签名失败，丢弃 nonce");
+                                break;
+                            }
+                        };
+                        let seal = (nonce, sr25519::Signature::from(signature)).encode();
+                        let submitted = futures::executor::block_on(worker.submit(seal));
 
                         if submitted {
                             let submit_ns = epoch.elapsed().as_nanos() as u64;
@@ -518,7 +554,7 @@ pub fn new_full<
     );
 
     let algorithm = SimplePow::new(client.clone());
-    let pre_runtime = author_pre_digest(&keystore)
+    let (pre_runtime, author_public) = author_pre_digest(&keystore)
         .ok_or_else(|| ServiceError::Other("powr key missing after generation attempt".into()))?;
 
     let pow_block_import = PowBlockImport::new(
@@ -607,6 +643,8 @@ pub fn new_full<
             miner_epoch,
             pool_ready.clone(),
             target_block_time_ms,
+            keystore.clone(),
+            author_public,
         );
     }
 
@@ -619,6 +657,8 @@ pub fn new_full<
             miner_epoch,
             pool_ready.clone(),
             target_block_time_ms,
+            keystore.clone(),
+            author_public,
         ) {
             Ok(()) => log::info!("GPU miner started on device {}", device),
             Err(e) => log::warn!("GPU not available, CPU only: {}", e),
@@ -692,4 +732,71 @@ pub fn new_full<
     }
 
     Ok(task_manager)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pow_hash_deterministic() {
+        let pre_hash = [0u8; 32];
+        let h1 = pow_hash(&pre_hash, 42);
+        let h2 = pow_hash(&pre_hash, 42);
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn pow_hash_differs_with_different_nonce() {
+        let pre_hash = [1u8; 32];
+        assert_ne!(pow_hash(&pre_hash, 0), pow_hash(&pre_hash, 1));
+    }
+
+    #[test]
+    fn pow_hash_differs_with_different_pre_hash() {
+        assert_ne!(pow_hash(&[0u8; 32], 0), pow_hash(&[1u8; 32], 0));
+    }
+
+    #[test]
+    fn pow_hash_matches_manual_blake2() {
+        let pre_hash = [7u8; 32];
+        let nonce = 123u64;
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&pre_hash);
+        payload.extend_from_slice(&nonce.to_le_bytes());
+        assert_eq!(pow_hash(&pre_hash, nonce), blake2_256(&payload));
+    }
+
+    #[test]
+    fn hash_meets_difficulty_zero_always_false() {
+        assert!(!hash_meets_difficulty(&[0u8; 32], U256::zero()));
+    }
+
+    #[test]
+    fn hash_meets_difficulty_one_always_true() {
+        // difficulty=1 → target=U256::MAX, any hash passes
+        assert!(hash_meets_difficulty(&[0xFF; 32], U256::one()));
+    }
+
+    #[test]
+    fn hash_meets_difficulty_max_only_zero_hash() {
+        // difficulty=U256::MAX → target=1, only hash ≤ 1 passes
+        assert!(hash_meets_difficulty(&[0u8; 32], U256::MAX));
+        let mut h = [0u8; 32];
+        h[31] = 2;
+        assert!(!hash_meets_difficulty(&h, U256::MAX));
+    }
+
+    #[test]
+    fn hash_meets_difficulty_boundary() {
+        let difficulty = U256::from(2);
+        let target = U256::MAX / difficulty;
+        // At target: pass
+        let at_target: [u8; 32] = target.to_big_endian();
+        assert!(hash_meets_difficulty(&at_target, difficulty));
+        // Above target: fail
+        let above = target + U256::one();
+        let above_bytes: [u8; 32] = above.to_big_endian();
+        assert!(!hash_meets_difficulty(&above_bytes, difficulty));
+    }
 }

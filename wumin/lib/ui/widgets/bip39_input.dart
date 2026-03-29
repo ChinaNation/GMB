@@ -2,6 +2,8 @@
 import 'package:bip39/src/wordlists/english.dart' show WORDLIST;
 import 'package:flutter/material.dart';
 
+import '../app_theme.dart';
+
 /// BIP39 助记词输入组件，支持单词自动补全。
 ///
 /// 用户输入字母时，自动展示匹配的 BIP39 单词供选择。
@@ -97,10 +99,16 @@ class _Bip39InputFieldState extends State<Bip39InputField> {
         TextField(
           controller: widget.controller,
           maxLines: 4,
+          style: const TextStyle(
+            fontFamily: 'monospace',
+            color: AppTheme.textPrimary,
+            fontSize: 14,
+            letterSpacing: 0.5,
+          ),
           decoration: InputDecoration(
-            border: const OutlineInputBorder(),
             hintText: '输入助记词，选择匹配的单词',
-            counterText: '$_enteredWordCount / ${widget.wordCount > 0 ? widget.wordCount : "12 或 24"} 个单词',
+            counterText:
+                '$_enteredWordCount / ${widget.wordCount > 0 ? widget.wordCount : "12 或 24"} 个单词',
           ),
           textInputAction: TextInputAction.done,
           autocorrect: false,
@@ -108,14 +116,37 @@ class _Bip39InputFieldState extends State<Bip39InputField> {
           enableIMEPersonalizedLearning: false,
         ),
         if (_suggestions.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Wrap(
             spacing: 8,
-            runSpacing: 4,
+            runSpacing: 6,
             children: _suggestions.map((word) {
-              return ActionChip(
-                label: Text(word),
-                onPressed: () => _selectWord(word),
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  onTap: () => _selectWord(word),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withAlpha(20),
+                      borderRadius:
+                          BorderRadius.circular(AppTheme.radiusSm),
+                      border: Border.all(
+                          color: AppTheme.primary.withAlpha(40)),
+                    ),
+                    child: Text(
+                      word,
+                      style: const TextStyle(
+                        color: AppTheme.primaryLight,
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
               );
             }).toList(growable: false),
           ),
