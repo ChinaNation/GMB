@@ -216,26 +216,10 @@ pub fn run() -> sc_cli::Result<()> {
                 Some(cli.gpu_device.unwrap_or(0))
             };
             let runner = cli.create_runner(&cli.run)?;
+            // 固定使用 libp2p 后端（支持 WSS + DCUtR/Relay/AutoNAT），已清理 litep2p 代码路径。
             runner.run_node_until_exit(|config| async move {
-                match config.network.network_backend {
-                    sc_network::config::NetworkBackendType::Libp2p => {
-                        service::new_full::<
-                            sc_network::NetworkWorker<
-                                citizenchain::opaque::Block,
-                                <citizenchain::opaque::Block as sp_runtime::traits::Block>::Hash,
-                            >,
-                        >(config, mining_threads, gpu_device)
-                        .map_err(sc_cli::Error::Service)
-                    }
-                    sc_network::config::NetworkBackendType::Litep2p => {
-                        service::new_full::<sc_network::Litep2pNetworkBackend>(
-                            config,
-                            mining_threads,
-                            gpu_device,
-                        )
-                        .map_err(sc_cli::Error::Service)
-                    }
-                }
+                service::new_full(config, mining_threads, gpu_device)
+                    .map_err(sc_cli::Error::Service)
             })
         }
     }

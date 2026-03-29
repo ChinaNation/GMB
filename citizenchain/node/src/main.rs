@@ -9,6 +9,7 @@ mod command;
 mod gpu_miner;
 mod rpc;
 mod service;
+mod tls_cert;
 
 fn main() -> sc_cli::Result<()> {
     command::run()

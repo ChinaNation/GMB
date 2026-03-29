@@ -11,6 +11,7 @@
 //! - 出块目标时间从 genesis-pallet 链上存储读取，启动时获取一次。
 
 use citizenchain::{self, apis::RuntimeApi, opaque::Block};
+use sc_network::NetworkBackend as _;
 use codec::{Decode, Encode};
 use futures::FutureExt;
 use genesis_pallet::GenesisPalletApi;
@@ -389,14 +390,21 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
     })
 }
 
+/// 网络后端类型：固定使用 libp2p（支持 WSS + DCUtR/Relay/AutoNAT）。
+type NetworkBackend = sc_network::NetworkWorker<Block, <Block as sp_runtime::traits::Block>::Hash>;
+
 /// Builds a new service for a full client.
-pub fn new_full<
-    N: sc_network::NetworkBackend<Block, <Block as sp_runtime::traits::Block>::Hash>,
->(
-    config: Configuration,
+pub fn new_full(
+    mut config: Configuration,
     mining_threads: usize,
     gpu_device: Option<usize>,
 ) -> Result<TaskManager, ServiceError> {
+    // 生成或加载 TLS 自签证书，注入到网络配置中。
+    let tls_cert = crate::tls_cert::load_or_generate_tls_cert(config.base_path.path())
+        .map_err(|e| ServiceError::Other(e.into()))?;
+    config.network.tls_private_key_der = Some(tls_cert.private_key_der);
+    config.network.tls_certificate_chain_der = Some(tls_cert.certificate_chain_der);
+
     let sc_service::PartialComponents {
         client,
         backend,
@@ -424,9 +432,9 @@ pub fn new_full<
     let mut net_config = sc_network::config::FullNetworkConfiguration::<
         Block,
         <Block as sp_runtime::traits::Block>::Hash,
-        N,
+        NetworkBackend,
     >::new(&config.network, config.prometheus_registry().cloned());
-    let metrics = N::register_notification_metrics(config.prometheus_registry());
+    let metrics = NetworkBackend::register_notification_metrics(config.prometheus_registry());
     let peer_store_handle = net_config.peer_store_handle();
     let grandpa_protocol_name = sc_consensus_grandpa::protocol_standard_name(
         &client
@@ -439,7 +447,7 @@ pub fn new_full<
     // 中文注释：所有节点统一注册 GRANDPA 网络协议，保证协议栈一致，避免协议协商不对称导致连接断开。
     // 权威节点启动 grandpa-voter 消费 notification_service；普通节点启动 grandpa-observer 消费。
     let (grandpa_protocol_config, grandpa_notification_service) =
-        sc_consensus_grandpa::grandpa_peers_set_config::<_, N>(
+        sc_consensus_grandpa::grandpa_peers_set_config::<_, NetworkBackend>(
             grandpa_protocol_name.clone(),
             metrics.clone(),
             peer_store_handle,
