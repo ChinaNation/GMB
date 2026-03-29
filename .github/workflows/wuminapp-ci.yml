@@ -125,13 +125,16 @@ jobs:
         working-directory: wuminapp
         run: flutter build apk --release
 
+      - name: 重命名为公民.apk
+        run: cp wuminapp/build/app/outputs/flutter-apk/app-release.apk wuminapp/build/app/outputs/flutter-apk/公民.apk
+
       # 清理旧版 APK artifact 后上传新版
       - name: 清理旧版 APK artifact
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api repos/${{ github.repository }}/actions/artifacts \
-            --jq '.artifacts[] | select(.name == "公民-android") | .id' \
+            --jq '.artifacts[] | select(.name == "公民.apk") | .id' \
           | while read -r id; do
               echo "删除旧 artifact: $id"
               gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
@@ -140,6 +143,6 @@ jobs:
       - name: 上传公民.apk
         uses: actions/upload-artifact@v4
         with:
-          name: 公民-android
-          path: wuminapp/build/app/outputs/flutter-apk/app-release.apk
+          name: 公民.apk
+          path: wuminapp/build/app/outputs/flutter-apk/公民.apk
           retention-days: 30
