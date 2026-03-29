@@ -153,6 +153,12 @@ fn generate_module(
                 p.name, p.code
             )
         });
+        // 中文注释：000 为 SFID 省级占位码，不属于 CPMS 档案号可使用的真实市级编码。
+        let cities = cities
+            .iter()
+            .filter(|(_, city_code)| city_code != "000")
+            .cloned()
+            .collect::<Vec<_>>();
         out.push_str(&format!(
             "const CITIES_{}: [(&str, &str); {}] = [\n",
             p.code,
@@ -161,8 +167,8 @@ fn generate_module(
         for (city_name, city_code) in cities {
             out.push_str(&format!(
                 "    (\"{}\", \"{}\"),\n",
-                escape_rust_str(city_name),
-                escape_rust_str(city_code)
+                escape_rust_str(&city_name),
+                escape_rust_str(&city_code)
             ));
         }
         out.push_str("];\n\n");

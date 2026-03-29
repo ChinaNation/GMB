@@ -146,6 +146,7 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 - 格式：`省2 + 市3 + 校验1 + 随机9 + 日期8`
 - 总长度：23
 - 日期：`YYYYMMDD`
+- 市级真实代码统一从 `001` 起排；`000` 为 SFID 省级占位码，不用于 CPMS 档案号。
 
 ### 9.2 校验位算法
 - 输入串：`cpms-archive-v3|{province2}{city3}{random9}{created_date8}`

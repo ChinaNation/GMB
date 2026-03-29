@@ -1,113 +1,117 @@
 use super::CityCode;
 
-pub const CITIES_JS: [CityCode; 106] = [
+pub const CITIES_JS: [CityCode; 107] = [
     CityCode {
-        name: "金陵市",
+        name: "省辖市",
         code: "000",
     },
     CityCode {
-        name: "玄武市",
+        name: "金陵市",
         code: "001",
     },
     CityCode {
-        name: "秦淮市",
+        name: "玄武市",
         code: "002",
     },
     CityCode {
-        name: "建邺市",
+        name: "秦淮市",
         code: "003",
     },
     CityCode {
-        name: "鼓楼市",
+        name: "建邺市",
         code: "004",
     },
     CityCode {
-        name: "浦口市",
+        name: "鼓楼市",
         code: "005",
     },
     CityCode {
-        name: "栖霞市",
+        name: "浦口市",
         code: "006",
     },
     CityCode {
-        name: "雨花台市",
+        name: "栖霞市",
         code: "007",
     },
     CityCode {
-        name: "江宁市",
+        name: "雨花台市",
         code: "008",
     },
     CityCode {
-        name: "六合市",
+        name: "江宁市",
         code: "009",
     },
     CityCode {
-        name: "溧水市",
+        name: "六合市",
         code: "010",
     },
     CityCode {
-        name: "高淳市",
+        name: "溧水市",
         code: "011",
     },
     CityCode {
-        name: "锡山市",
+        name: "高淳市",
         code: "012",
     },
     CityCode {
-        name: "惠山市",
+        name: "锡山市",
         code: "013",
     },
     CityCode {
-        name: "滨湖市",
+        name: "惠山市",
         code: "014",
     },
     CityCode {
-        name: "梁溪市",
+        name: "滨湖市",
         code: "015",
     },
     CityCode {
-        name: "新吴市",
+        name: "梁溪市",
         code: "016",
     },
     CityCode {
-        name: "江阴市",
+        name: "新吴市",
         code: "017",
     },
     CityCode {
-        name: "宜兴市",
+        name: "江阴市",
         code: "018",
     },
     CityCode {
-        name: "鼓楼市",
+        name: "宜兴市",
         code: "019",
     },
     CityCode {
-        name: "云龙市",
+        name: "鼓楼市",
         code: "020",
     },
     CityCode {
-        name: "贾汪市",
+        name: "云龙市",
         code: "021",
     },
     CityCode {
-        name: "泉山市",
+        name: "贾汪市",
         code: "022",
     },
     CityCode {
-        name: "铜山市",
+        name: "泉山市",
         code: "023",
     },
     CityCode {
-        name: "丰市",
+        name: "铜山市",
         code: "024",
     },
     CityCode {
-        name: "沛市",
+        name: "丰市",
         code: "025",
     },
     CityCode {
-        name: "睢宁市",
+        name: "沛市",
         code: "026",
+    },
+    CityCode {
+        name: "睢宁市",
+        code: "027",
     },
     CityCode {
         name: "新沂市",
@@ -255,174 +259,174 @@ pub const CITIES_JS: [CityCode; 106] = [
     },
     CityCode {
         name: "淮安市",
-        code: "065",
+        code: "064",
     },
     CityCode {
         name: "淮阴市",
-        code: "066",
+        code: "065",
     },
     CityCode {
         name: "清江浦市",
-        code: "067",
+        code: "066",
     },
     CityCode {
         name: "洪泽市",
-        code: "068",
+        code: "067",
     },
     CityCode {
         name: "涟水市",
-        code: "069",
+        code: "068",
     },
     CityCode {
         name: "盱眙市",
-        code: "070",
+        code: "069",
     },
     CityCode {
         name: "金湖市",
+        code: "070",
+    },
+    CityCode {
+        name: "经济开发市",
         code: "071",
     },
     CityCode {
-        name: "经济开发市",
-        code: "073",
-    },
-    CityCode {
         name: "亭湖市",
-        code: "074",
+        code: "072",
     },
     CityCode {
         name: "盐都市",
-        code: "075",
+        code: "073",
     },
     CityCode {
         name: "大丰市",
-        code: "076",
+        code: "074",
     },
     CityCode {
         name: "响水市",
-        code: "077",
+        code: "075",
     },
     CityCode {
         name: "滨海市",
-        code: "078",
+        code: "076",
     },
     CityCode {
         name: "阜宁市",
-        code: "079",
+        code: "077",
     },
     CityCode {
         name: "射阳市",
-        code: "080",
+        code: "078",
     },
     CityCode {
         name: "建湖市",
-        code: "081",
+        code: "079",
     },
     CityCode {
         name: "东台市",
-        code: "083",
+        code: "080",
     },
     CityCode {
         name: "广陵市",
-        code: "084",
+        code: "081",
     },
     CityCode {
         name: "邗江市",
-        code: "085",
+        code: "082",
     },
     CityCode {
         name: "江都市",
-        code: "086",
+        code: "083",
     },
     CityCode {
         name: "宝应市",
-        code: "087",
+        code: "084",
     },
     CityCode {
         name: "仪征市",
-        code: "089",
+        code: "085",
     },
     CityCode {
         name: "高邮市",
-        code: "090",
+        code: "086",
     },
     CityCode {
         name: "经济开发市",
-        code: "091",
+        code: "087",
     },
     CityCode {
         name: "京口市",
-        code: "092",
+        code: "088",
     },
     CityCode {
         name: "润州市",
-        code: "093",
+        code: "089",
     },
     CityCode {
         name: "丹徒市",
-        code: "094",
+        code: "090",
     },
     CityCode {
         name: "镇江新市",
-        code: "095",
+        code: "091",
     },
     CityCode {
         name: "丹阳市",
-        code: "096",
+        code: "092",
     },
     CityCode {
         name: "扬中市",
-        code: "097",
+        code: "093",
     },
     CityCode {
         name: "句容市",
-        code: "098",
+        code: "094",
     },
     CityCode {
         name: "海陵市",
-        code: "099",
+        code: "095",
     },
     CityCode {
         name: "高港市",
-        code: "100",
+        code: "096",
     },
     CityCode {
         name: "姜堰市",
-        code: "101",
+        code: "097",
     },
     CityCode {
         name: "泰州医药高新技术产业开发市",
-        code: "102",
+        code: "098",
     },
     CityCode {
         name: "兴化市",
-        code: "103",
+        code: "099",
     },
     CityCode {
         name: "靖江市",
-        code: "104",
+        code: "100",
     },
     CityCode {
         name: "泰兴市",
-        code: "105",
+        code: "101",
     },
     CityCode {
         name: "宿城市",
-        code: "106",
+        code: "102",
     },
     CityCode {
         name: "宿豫市",
-        code: "107",
+        code: "103",
     },
     CityCode {
         name: "沭阳市",
-        code: "108",
+        code: "104",
     },
     CityCode {
         name: "泗阳市",
-        code: "109",
+        code: "105",
     },
     CityCode {
         name: "泗洪市",
-        code: "110",
+        code: "106",
     },
 ];

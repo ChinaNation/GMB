@@ -1,6 +1,10 @@
 use super::CityCode;
 
-pub const CITIES_CQ: [CityCode; 35] = [
+pub const CITIES_CQ: [CityCode; 36] = [
+    CityCode {
+        name: "省辖市",
+        code: "000",
+    },
     CityCode {
         name: "万州市",
         code: "001",
@@ -107,38 +111,38 @@ pub const CITIES_CQ: [CityCode; 35] = [
     },
     CityCode {
         name: "丰都市",
-        code: "028",
+        code: "027",
     },
     CityCode {
         name: "垫江市",
-        code: "029",
+        code: "028",
     },
     CityCode {
         name: "忠市",
-        code: "030",
+        code: "029",
     },
     CityCode {
         name: "云阳市",
-        code: "031",
+        code: "030",
     },
     CityCode {
         name: "奉节市",
-        code: "032",
+        code: "031",
     },
     CityCode {
         name: "石柱市",
-        code: "035",
+        code: "032",
     },
     CityCode {
         name: "秀山市",
-        code: "036",
+        code: "033",
     },
     CityCode {
         name: "酉阳市",
-        code: "037",
+        code: "034",
     },
     CityCode {
         name: "彭水市",
-        code: "038",
+        code: "035",
     },
 ];

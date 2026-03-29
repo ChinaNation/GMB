@@ -1,9 +1,13 @@
 use super::CityCode;
 
-pub const CITIES_TS: [CityCode; 25] = [
+pub const CITIES_TS: [CityCode; 26] = [
+    CityCode {
+        name: "省辖市",
+        code: "000",
+    },
     CityCode {
         name: "博乐市",
-        code: "000",
+        code: "001",
     },
     CityCode {
         name: "阿拉山口市",
