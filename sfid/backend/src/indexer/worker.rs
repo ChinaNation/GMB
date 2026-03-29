@@ -164,8 +164,7 @@ async fn run_indexer_loop(ws_url: &str, backend: &StoreBackend) -> Result<(), St
             .await
             .map_err(|e| format!("fetch events #{block_num}: {e}"))?;
         let block_ts = extract_block_timestamp_from_block(&block).await;
-        let records =
-            event_parser::parse_block_events(&events, block_num, block_ts);
+        let records = event_parser::parse_block_events(&events, block_num, block_ts);
         with_db(backend, |conn| {
             db::insert_block_records(conn, block_num, &records)
         })?;

@@ -318,6 +318,7 @@ export default function App() {
   const [keyringLoading, setKeyringLoading] = useState(false);
   const [keyringActionLoading, setKeyringActionLoading] = useState(false);
   const [keyringChallenge, setKeyringChallenge] = useState<KeyringRotateChallengeResult | null>(null);
+  const bindRequiresSfidMessage = '请先使用SFID码生成工具生成SFID码，再执行绑定';
   const [keyringSignedPayload, setKeyringSignedPayload] = useState<KeyringSignedPayload | null>(null);
   const [keyringScannerActive, setKeyringScannerActive] = useState(false);
   const [keyringScannerReady, setKeyringScannerReady] = useState(false);
@@ -1314,6 +1315,10 @@ export default function App() {
   };
 
   const openBindModal = (pubkey: string) => {
+    if (!rows.find((row) => row.account_pubkey === pubkey)?.sfid_code) {
+      message.error(bindRequiresSfidMessage);
+      return;
+    }
     setBindTargetPubkey(pubkey);
     setBindScanResult(null);
     setBindScannerActive(false);
@@ -1537,6 +1542,10 @@ export default function App() {
   const onConfirmBind = async () => {
     if (!auth) return;
     if (!bindTargetPubkey) return;
+    if (!rows.find((row) => row.account_pubkey === bindTargetPubkey)?.sfid_code) {
+      message.error(bindRequiresSfidMessage);
+      return;
+    }
     const archiveIndex = bindScanResult?.archive_no?.trim();
     const qrId = bindScanResult?.qr_id?.trim();
     if (!archiveIndex || !qrId) {
@@ -1556,7 +1565,9 @@ export default function App() {
       setBindScanResult(null);
       await refreshList(auth);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '绑定失败';
+      const rawMsg = err instanceof Error ? err.message : '绑定失败';
+      const msg =
+        rawMsg === 'sfid must be generated before binding' ? bindRequiresSfidMessage : rawMsg;
       message.error(msg);
     } finally {
       setBinding(false);

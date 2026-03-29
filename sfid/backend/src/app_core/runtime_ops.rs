@@ -9,15 +9,11 @@ use std::{
 };
 use tracing::warn;
 
-use blake2::digest::consts::U32;
-use blake2::{Blake2b, Digest};
-
 use crate::key_admins;
 use crate::key_admins::chain_proof::SignatureEnvelope;
 use crate::sfid::province::provinces;
+use crate::sfid::{generate_sfid_code, GenerateSfidInput};
 use crate::*;
-
-type Blake2b256 = Blake2b<U32>;
 
 /// 首次初始化：从 province.rs 硬编码数据创建 43 个内置机构管理员
 pub(crate) fn seed_super_admins(state: &AppState) {
@@ -519,12 +515,31 @@ pub(crate) fn seed_demo_record(state: &AppState) {
     let total = 50_u64;
     let bound_total = 30_u64;
     let now = Utc::now();
+    let demo_province = provinces()
+        .first()
+        .map(|item| item.name)
+        .unwrap_or("中原省");
+    let demo_city = "省辖市";
 
     for seq in 1..=total {
         let pubkey = format!("0xDEMO_PUBKEY_{seq:04}");
         if seq <= bound_total {
             let archive = format!("CIV-DEMO-{seq:04}");
-            let sfid = deterministic_sfid_code(state, &archive, &pubkey);
+            // 中文注释：演示数据也统一走正式 SFID 生成工具，避免启动时再产出旧格式 SFID 演示码。
+            let sfid = match generate_sfid_code(GenerateSfidInput {
+                account_pubkey: &pubkey,
+                a3: "GMR",
+                p1: "",
+                province: demo_province,
+                city: demo_city,
+                institution: "ZG",
+            }) {
+                Ok(v) => v,
+                Err(err) => {
+                    warn!(error = %err, "failed to generate demo sfid");
+                    return;
+                }
+            };
             let binding_payload = BindingPayload {
                 kind: "bind",
                 version: "v1",
@@ -579,33 +594,6 @@ pub(crate) fn seed_demo_record(state: &AppState) {
         }
     }
     store.next_seq = total;
-}
-
-pub(crate) fn deterministic_sfid_code(
-    state: &AppState,
-    archive_index: &str,
-    account_pubkey: &str,
-) -> String {
-    let public_key_hex = state
-        .public_key_hex
-        .read()
-        .map(|v| v.clone())
-        .unwrap_or_default();
-    let mut payload = Vec::new();
-    payload.extend_from_slice(b"sfid-code-v1|");
-    payload.extend_from_slice(public_key_hex.as_bytes());
-    payload.extend_from_slice(b"|");
-    payload.extend_from_slice(archive_index.as_bytes());
-    payload.extend_from_slice(b"|");
-    payload.extend_from_slice(account_pubkey.as_bytes());
-    let digest = Blake2b256::digest(&payload);
-    let digest_bytes = digest.as_slice();
-
-    let core = hex::encode_upper(&digest_bytes[..12]);
-    let checksum = digest_bytes
-        .iter()
-        .fold(0_u32, |acc, b| (acc + u32::from(*b)) % 10_u32);
-    format!("SFID-{core}{checksum}")
 }
 
 pub(crate) fn make_signature_envelope<T: Serialize>(
