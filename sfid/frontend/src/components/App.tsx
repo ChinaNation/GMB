@@ -212,6 +212,10 @@ function defaultInstitutionByA3(a3: string): string {
   return 'ZG';
 }
 
+function usesReservedProvinceCityByA3(a3: string): boolean {
+  return a3 === 'GMR' || a3 === 'ZRR' || a3 === 'ZNR';
+}
+
 function allowedInstitutionByA3(a3: string): string[] {
   if (a3 === 'GFR') return ['ZF', 'LF', 'SF', 'JC', 'JY', 'CB'];
   if (a3 === 'SFR') return ['ZG', 'CH', 'TG'];
@@ -229,6 +233,10 @@ function defaultP1ByA3(a3: string): string {
 
 function p1LockedByA3(a3: string): boolean {
   return a3 === 'GMR' || a3 === 'ZRR' || a3 === 'GFR';
+}
+
+function reservedProvinceCityName(cities: SfidCityItem[]): string {
+  return cities.find((city) => city.code === '000')?.name || '省辖市';
 }
 
 type RoleCapabilities = {
@@ -1178,15 +1186,17 @@ export default function App() {
   };
 
   const loadSfidCities = async (province: string) => {
-    if (!auth || !province.trim()) return;
+    if (!auth || !province.trim()) return [] as SfidCityItem[];
     setSfidCitiesLoading(true);
     try {
       const rows = await listSfidCities(auth, province);
       setSfidCities(rows);
+      return rows;
     } catch (err) {
       setSfidCities([]);
       const msg = err instanceof Error ? err.message : '加载城市列表失败';
       message.error(msg);
+      return [] as SfidCityItem[];
     } finally {
       setSfidCitiesLoading(false);
     }
@@ -1199,15 +1209,19 @@ export default function App() {
         const meta = await getSfidMeta(auth);
         setSfidMeta(meta);
         const provinceDefault = meta.scoped_province || meta.provinces[0]?.name || '';
+        const initialA3 = meta.a3_options[0]?.value || 'GFR';
         sfidToolForm.setFieldsValue({
-          a3: meta.a3_options[0]?.value || 'GFR',
-          p1: defaultP1ByA3(meta.a3_options[0]?.value || 'GFR'),
+          a3: initialA3,
+          p1: defaultP1ByA3(initialA3),
           province: provinceDefault,
           city: '',
-          institution: defaultInstitutionByA3(meta.a3_options[0]?.value || 'GFR')
+          institution: defaultInstitutionByA3(initialA3)
         });
         if (provinceDefault) {
-          await loadSfidCities(provinceDefault);
+          const rows = await loadSfidCities(provinceDefault);
+          if (usesReservedProvinceCityByA3(initialA3)) {
+            sfidToolForm.setFieldsValue({ city: reservedProvinceCityName(rows) });
+          }
         } else {
           setSfidCities([]);
         }
@@ -1257,6 +1271,7 @@ export default function App() {
       label: `${o.label} (${o.value})`
     }));
   const institutionLocked = sfidInstitutionOptions.length <= 1;
+  const cityLockedByA3 = usesReservedProvinceCityByA3(sfidToolA3 || '');
 
   const onDeleteOperator = (row: OperatorRow) => {
     if (!auth) return;
@@ -2942,9 +2957,12 @@ export default function App() {
               placeholder="请选择A3主体属性"
               onChange={(nextA3) => {
                 const nextDefault = defaultInstitutionByA3(nextA3);
+                const currentProvince = sfidToolForm.getFieldValue('province');
+                const nextCity = usesReservedProvinceCityByA3(nextA3) ? reservedProvinceCityName(sfidCities) : '';
                 sfidToolForm.setFieldsValue({
                   institution: nextDefault,
-                  p1: defaultP1ByA3(nextA3)
+                  p1: defaultP1ByA3(nextA3),
+                  city: currentProvince ? nextCity : ''
                 });
               }}
             />
@@ -2970,7 +2988,12 @@ export default function App() {
               disabled={Boolean(sfidMeta?.scoped_province)}
               onChange={(provinceName) => {
                 sfidToolForm.setFieldsValue({ city: '' });
-                void loadSfidCities(provinceName);
+                void (async () => {
+                  const rows = await loadSfidCities(provinceName);
+                  if (usesReservedProvinceCityByA3(sfidToolForm.getFieldValue('a3') || '')) {
+                    sfidToolForm.setFieldsValue({ city: reservedProvinceCityName(rows) });
+                  }
+                })();
               }}
             />
           </Form.Item>
@@ -2978,7 +3001,8 @@ export default function App() {
             <Select
               loading={sfidCitiesLoading}
               options={sfidCities.map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }))}
-              placeholder="请选择该省下的市"
+              placeholder={cityLockedByA3 ? '公民三类默认使用省级占位码 000' : '请选择该省下的市'}
+              disabled={cityLockedByA3}
             />
           </Form.Item>
           <Form.Item

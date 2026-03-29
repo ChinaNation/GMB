@@ -2,28 +2,28 @@ use super::CityCode;
 
 pub const CITIES_XK: [CityCode; 36] = [
     CityCode {
-        name: "香格里拉市",
+        name: "省辖市",
         code: "000",
     },
     CityCode {
-        name: "德钦市",
+        name: "香格里拉市",
         code: "001",
     },
     CityCode {
-        name: "维西市",
+        name: "德钦市",
         code: "002",
     },
     CityCode {
-        name: "泸水市",
+        name: "维西市",
         code: "003",
     },
     CityCode {
-        name: "福贡市",
+        name: "泸水市",
         code: "004",
     },
     CityCode {
-        name: "贡山市",
-        code: "05",
+        name: "福贡市",
+        code: "005",
     },
     CityCode {
         name: "兰坪市",

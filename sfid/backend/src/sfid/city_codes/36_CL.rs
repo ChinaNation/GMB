@@ -1,61 +1,65 @@
 use super::CityCode;
 
-pub const CITIES_CL: [CityCode; 25] = [
+pub const CITIES_CL: [CityCode; 26] = [
     CityCode {
-        name: "喀什市",
+        name: "省辖市",
         code: "000",
     },
     CityCode {
-        name: "阿克苏市",
+        name: "喀什市",
         code: "001",
     },
     CityCode {
-        name: "库车市",
+        name: "阿克苏市",
         code: "002",
     },
     CityCode {
-        name: "温宿市",
+        name: "库车市",
         code: "003",
     },
     CityCode {
-        name: "沙雅市",
+        name: "温宿市",
         code: "004",
     },
     CityCode {
-        name: "新和市",
+        name: "沙雅市",
         code: "005",
     },
     CityCode {
-        name: "拜城市",
+        name: "新和市",
         code: "006",
     },
     CityCode {
-        name: "乌什市",
+        name: "拜城市",
         code: "007",
     },
     CityCode {
-        name: "阿瓦提市",
+        name: "乌什市",
         code: "008",
     },
     CityCode {
-        name: "柯坪市",
+        name: "阿瓦提市",
         code: "009",
     },
     CityCode {
-        name: "阿图什市",
+        name: "柯坪市",
         code: "010",
     },
     CityCode {
-        name: "阿克陶市",
+        name: "阿图什市",
         code: "011",
     },
     CityCode {
-        name: "阿合奇市",
+        name: "阿克陶市",
         code: "012",
     },
     CityCode {
-        name: "乌恰市",
+        name: "阿合奇市",
         code: "013",
+    },
+    CityCode {
+        name: "乌恰市",
+        code: "014",
     },
     CityCode {
         name: "疏附市",

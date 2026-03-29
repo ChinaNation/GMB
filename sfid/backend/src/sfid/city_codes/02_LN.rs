@@ -1,6 +1,10 @@
 use super::CityCode;
 
-pub const CITIES_LN: [CityCode; 8] = [
+pub const CITIES_LN: [CityCode; 9] = [
+    CityCode {
+        name: "省辖市",
+        code: "000",
+    },
     CityCode {
         name: "香港市",
         code: "001",
