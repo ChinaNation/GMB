@@ -8,12 +8,12 @@ pub(crate) fn province_scope_for_role(
 ) -> Option<String> {
     match role {
         AdminRole::KeyAdmin => None,
-        AdminRole::SuperAdmin => store
+        AdminRole::InstitutionAdmin => store
             .super_admin_province_by_pubkey
             .get(admin_pubkey)
             .cloned()
             .or_else(|| super_admin_province(admin_pubkey).map(|v| v.to_string())),
-        AdminRole::OperatorAdmin => {
+        AdminRole::SystemAdmin => {
             let creator_pubkey = store
                 .admin_users_by_pubkey
                 .get(admin_pubkey)
@@ -24,7 +24,6 @@ pub(crate) fn province_scope_for_role(
                 .cloned()
                 .or_else(|| super_admin_province(&creator_pubkey).map(|v| v.to_string()))
         }
-        AdminRole::QueryOnly => None,
     }
 }
 

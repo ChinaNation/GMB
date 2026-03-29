@@ -13,7 +13,7 @@ pub(crate) async fn admin_cpms_status_scan(
     headers: HeaderMap,
     Json(input): Json<CpmsStatusScanInput>,
 ) -> impl IntoResponse {
-    let admin_ctx = match require_super_or_operator_or_key_admin(&state, &headers) {
+    let admin_ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };

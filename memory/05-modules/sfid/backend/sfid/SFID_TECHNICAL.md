@@ -39,7 +39,7 @@
 ## 4. 主要调用方
 
 - `main.rs` 路由将 `admin/sfid/*` 接口接入 `sfid::admin`。
-- `super-admins/institutions.rs`：超级管理员生成机构 `site_sfid`。
+- `super-admins/institutions.rs`：机构管理员生成机构 `site_sfid`。
 - `business/scope.rs` 与 `login/mod.rs`：使用省份公钥映射能力做角色展示和归属推断。
 
 ## 5. 命名与引用

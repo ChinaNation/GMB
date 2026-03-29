@@ -6,6 +6,7 @@ export const sfidTheme: ThemeConfig = {
     colorSuccess: '#15803d',
     colorWarning: '#d97706',
     colorError: '#dc2626',
+    controlHeight: 40,
     borderRadius: 10,
     fontSize: 14,
     colorBgContainer: '#ffffff',
@@ -14,7 +15,6 @@ export const sfidTheme: ThemeConfig = {
   },
   components: {
     Button: {
-      controlHeight: 40,
       paddingInline: 24,
       fontWeight: 500
     },

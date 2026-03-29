@@ -1,16 +1,17 @@
-# OPERATOR ADMINS 技术文档
+# SYSTEM ADMINS 技术文档（原 OPERATOR ADMINS）
 
 ## 1. 模块定位
 
 - 路径：`backend/src/operator-admins`
-- 职责：操作管理员（`OperatorAdmin`）角色入口模块。
-- 设计：本模块保持“轻路由适配”职责，核心业务实现下沉到业务模块，避免角色目录重复实现。
+- 职责：系统管理员（`SystemAdmin`，原 `OperatorAdmin`）角色入口模块。
+- 设计：本模块保持”轻路由适配”职责，核心业务实现下沉到业务模块，避免角色目录重复实现。
+- 角色变更说明：`OPERATOR_ADMIN`（操作管理员）已重命名为 `SYSTEM_ADMIN`（系统管理员），负责日常操作。
 
 ## 2. 当前接口职责
 
 - `admin_cpms_status_scan`
   - 对应路由：`POST /api/v1/admin/cpms-status/scan`
-  - 功能：操作管理员扫描并校验 CPMS 状态二维码。
+  - 功能：系统管理员扫描并校验 CPMS 状态二维码。
   - 实现方式：转调 `operate::status::admin_cpms_status_scan`，在操作业务模块中完成权限、验签、审计和响应组装。
 
 ## 3. 依赖关系
@@ -23,5 +24,5 @@
 
 ## 4. 边界说明
 
-- `operator-admins` 仅承接“操作管理员入口语义”，不直接维护底层存储和签名算法。
-- 若后续新增操作管理员接口，优先保持“入口薄层 + 业务下沉”模式。
+- `operator-admins` 仅承接”系统管理员入口语义”，不直接维护底层存储和签名算法。
+- 若后续新增系统管理员接口，优先保持”入口薄层 + 业务下沉”模式。
