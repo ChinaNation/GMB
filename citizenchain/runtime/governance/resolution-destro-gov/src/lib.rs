@@ -1,5 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
+use alloc::vec::Vec;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{ensure, pallet_prelude::*, traits::Currency};
 use frame_system::pallet_prelude::*;
@@ -19,6 +22,9 @@ pub use pallet::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
 pub mod weights;
+
+/// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
+pub const MODULE_TAG: &[u8] = b"res-dst";
 
 type BalanceOf<T> =
     <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -170,8 +176,9 @@ pub mod pallet {
                 institution,
                 amount,
             };
-            let data = action.encode();
-            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            let mut encoded = Vec::from(crate::MODULE_TAG);
+            encoded.extend_from_slice(&action.encode());
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, encoded)?;
             voting_engine_system::Pallet::<T>::store_proposal_meta(
                 proposal_id,
                 frame_system::Pallet::<T>::block_number(),
@@ -197,10 +204,8 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-            let action = DestroyAction::decode(&mut &data[..])
-                .map_err(|_| Error::<T>::ProposalActionNotFound)?;
+            let action =
+                Self::load_proposal_data(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
             let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 Self::is_internal_admin(org, action.institution, &who),
@@ -260,11 +265,20 @@ pub mod pallet {
             )
         }
 
+        /// 从投票引擎 ProposalData 中读取并解码本模块的业务数据。
+        /// 先校验 MODULE_TAG 前缀，防止跨模块误解码。
+        fn load_proposal_data(proposal_id: u64) -> Option<DestroyAction<BalanceOf<T>>> {
+            let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)?;
+            let tag = crate::MODULE_TAG;
+            if raw.len() < tag.len() || &raw[..tag.len()] != tag {
+                return None;
+            }
+            DestroyAction::decode(&mut &raw[tag.len()..]).ok()
+        }
+
         fn try_execute_destroy(proposal_id: u64) -> DispatchResult {
-            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-            let action = DestroyAction::decode(&mut &data[..])
-                .map_err(|_| Error::<T>::ProposalActionNotFound)?;
+            let action =
+                Self::load_proposal_data(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
             Self::try_execute_destroy_from_action(proposal_id, action)
         }
 

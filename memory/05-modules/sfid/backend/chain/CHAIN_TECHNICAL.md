@@ -88,6 +88,13 @@
 2. 签名密钥缓存中的 seed 必须使用可清零敏感类型存储（`SensitiveSeed`），禁止以普通 `String` 持有。
 3. `runtime_meta` 不再持久化或恢复活动主私钥 / 主公钥 / 已知 seed 映射，防止数据库旧状态覆盖部署环境。
 
+### 4.5 功能 4：机构登记签名（INSTITUTION_V2）
+1. 固定 payload：`("GMB_SFID_INSTITUTION_V2", genesis_hash, sfid_id, name, register_nonce)`。
+2. V2 相对 V1 新增 `name`（机构名称）字段，用于链上存储展示。
+3. SFID 对链输出字段：`genesis_hash`、`sfid_id`、`name`、`register_nonce`、`signature`。
+4. 链上交易参数：`register_sfid_institution(sfid_id, name, register_nonce, signature)`。
+5. `register_nonce` 每次新生成（UUID），链上按 `hash(register_nonce)` 去重。
+
 ## 5. 功能 4/5 模块边界（SFID 系统内）
 
 ### 5.1 功能 4：机构 `sfid_id` 登记

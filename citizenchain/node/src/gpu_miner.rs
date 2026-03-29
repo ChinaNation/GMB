@@ -141,7 +141,7 @@ impl GpuMiner {
 
         // Reset found flag to 0.
         self.buf_found
-            .write(&[0u32])
+            .write(&[0u32] as &[u32])
             .enq()
             .map_err(|e| format!("reset found: {e}"))?;
 
@@ -164,14 +164,14 @@ impl GpuMiner {
         // Read back results.
         let mut found = [0u32; 1];
         self.buf_found
-            .read(&mut found)
+            .read(&mut found as &mut [u32])
             .enq()
             .map_err(|e| format!("read found: {e}"))?;
 
         if found[0] != 0 {
             let mut result_nonce = [0u64; 1];
             self.buf_result_nonce
-                .read(&mut result_nonce)
+                .read(&mut result_nonce as &mut [u64])
                 .enq()
                 .map_err(|e| format!("read result_nonce: {e}"))?;
             Ok(Some(result_nonce[0]))
@@ -188,8 +188,7 @@ fn difficulty_to_target_be(difficulty: U256) -> [u64; 4] {
         return [0u64; 4];
     }
     let target = U256::MAX / difficulty;
-    let mut bytes = [0u8; 32];
-    target.to_big_endian(&mut bytes);
+    let bytes: [u8; 32] = target.to_big_endian();
     // Convert 32 big-endian bytes to 4 big-endian u64 words.
     let mut words = [0u64; 4];
     for i in 0..4 {
@@ -220,6 +219,8 @@ pub fn try_start<Proof: Send + 'static>(
     epoch: Instant,
     pool_ready: std::sync::Arc<dyn Fn() -> usize + Send + Sync>,
     target_block_time_ms: u64,
+    keystore: sp_keystore::KeystorePtr,
+    author_public: sp_core::sr25519::Public,
 ) -> Result<(), String> {
     let miner = GpuMiner::try_init(device_index)?;
 
@@ -283,7 +284,21 @@ pub fn try_start<Proof: Send + 'static>(
                             break;
                         }
 
-                        let submitted = futures::executor::block_on(worker.submit(nonce.encode()));
+                        // 中文注释：签名 pre_hash 证明矿工身份，签名失败则丢弃该 nonce。
+                        let signature = match keystore.sr25519_sign(
+                            sp_core::crypto::KeyTypeId(*b"powr"),
+                            &author_public,
+                            metadata.pre_hash.as_ref(),
+                        ) {
+                            Ok(Some(sig)) => sig,
+                            _ => {
+                                log::warn!("GPU PoW: keystore 签名失败，丢弃 nonce");
+                                break;
+                            }
+                        };
+                        let seal =
+                            (nonce, sp_core::sr25519::Signature::from(signature)).encode();
+                        let submitted = futures::executor::block_on(worker.submit(seal));
                         if submitted {
                             let submit_ns = epoch.elapsed().as_nanos() as u64;
                             if pool_ready() > 0 {
@@ -319,4 +334,54 @@ pub fn try_start<Proof: Send + 'static>(
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn difficulty_to_target_be_zero_returns_zeros() {
+        assert_eq!(difficulty_to_target_be(U256::zero()), [0u64; 4]);
+    }
+
+    #[test]
+    fn difficulty_to_target_be_one_returns_max() {
+        let result = difficulty_to_target_be(U256::one());
+        // U256::MAX / 1 = U256::MAX → 全 0xFF
+        assert_eq!(result, [u64::MAX; 4]);
+    }
+
+    #[test]
+    fn difficulty_to_target_be_two() {
+        let result = difficulty_to_target_be(U256::from(2));
+        let target = U256::MAX / U256::from(2);
+        let bytes: [u8; 32] = target.to_big_endian();
+        let expected = bytes_to_words(&bytes);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn difficulty_to_target_be_roundtrip() {
+        let difficulty = U256::from(1000);
+        let words = difficulty_to_target_be(difficulty);
+        let target = U256::MAX / difficulty;
+        let mut reconstructed = [0u8; 32];
+        for (i, word) in words.iter().enumerate() {
+            reconstructed[i * 8..(i + 1) * 8].copy_from_slice(&word.to_be_bytes());
+        }
+        assert_eq!(U256::from_big_endian(&reconstructed), target);
+    }
+
+    fn bytes_to_words(bytes: &[u8; 32]) -> [u64; 4] {
+        let mut words = [0u64; 4];
+        for i in 0..4 {
+            let o = i * 8;
+            words[i] = u64::from_be_bytes([
+                bytes[o], bytes[o+1], bytes[o+2], bytes[o+3],
+                bytes[o+4], bytes[o+5], bytes[o+6], bytes[o+7],
+            ]);
+        }
+        words
+    }
 }

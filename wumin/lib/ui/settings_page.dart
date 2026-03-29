@@ -4,6 +4,7 @@ import 'package:local_auth/local_auth.dart';
 
 import '../security/app_lock_service.dart';
 import '../security/pin_input_page.dart';
+import 'app_theme.dart';
 
 /// 冷钱包设置页。
 class SettingsPage extends StatefulWidget {
@@ -103,38 +104,188 @@ class _SettingsPageState extends State<SettingsPage> {
         centerTitle: true,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(
+                color: AppTheme.primary,
+                strokeWidth: 2.5,
+              ),
+            )
           : ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                SwitchListTile(
-                  title: const Text('设备锁'),
-                  subtitle: Text(
-                    _pinLockEnabled
-                        ? '请先关闭应用锁'
-                        : '启动应用时需要生物识别或设备密码',
+                // 安全区标题
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.security_rounded,
+                          size: 16, color: AppTheme.primaryLight),
+                      const SizedBox(width: 8),
+                      const Text(
+                        '安全',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryLight,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
                   ),
-                  value: _deviceLockEnabled,
-                  onChanged: _pinLockEnabled ? null : _toggleDeviceLock,
-                  activeThumbColor: Colors.white,
-                  activeTrackColor: Theme.of(context).colorScheme.primary,
-                  secondary: const Icon(Icons.fingerprint),
                 ),
-                const Divider(height: 1),
-                SwitchListTile(
-                  title: const Text('应用锁'),
-                  subtitle: Text(
-                    _deviceLockEnabled
-                        ? '请先关闭设备锁'
-                        : '启动应用时需要输入 6 位数字密码',
+                Container(
+                  decoration:
+                      AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+                  child: Column(
+                    children: [
+                      _buildSettingTile(
+                        icon: Icons.fingerprint_rounded,
+                        title: '设备锁',
+                        subtitle: _pinLockEnabled
+                            ? '请先关闭应用锁'
+                            : '启动应用时需要生物识别或设备密码',
+                        value: _deviceLockEnabled,
+                        onChanged:
+                            _pinLockEnabled ? null : _toggleDeviceLock,
+                      ),
+                      const Divider(
+                          height: 1, indent: 56, endIndent: 16),
+                      _buildSettingTile(
+                        icon: Icons.pin_outlined,
+                        title: '应用锁',
+                        subtitle: _deviceLockEnabled
+                            ? '请先关闭设备锁'
+                            : '启动应用时需要输入 6 位数字密码',
+                        value: _pinLockEnabled,
+                        onChanged:
+                            _deviceLockEnabled ? null : _togglePinLock,
+                      ),
+                    ],
                   ),
-                  value: _pinLockEnabled,
-                  onChanged: _deviceLockEnabled ? null : _togglePinLock,
-                  activeThumbColor: Colors.white,
-                  activeTrackColor: Theme.of(context).colorScheme.primary,
-                  secondary: const Icon(Icons.pin_outlined),
+                ),
+                const SizedBox(height: 32),
+                // 关于区
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded,
+                          size: 16, color: AppTheme.primaryLight),
+                      const SizedBox(width: 8),
+                      const Text(
+                        '关于',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryLight,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration:
+                      AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+                  child: const Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.shield_outlined,
+                              size: 18, color: AppTheme.textSecondary),
+                          SizedBox(width: 12),
+                          Text('公民冷钱包',
+                              style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w500)),
+                          Spacer(),
+                          Text('v1.0.0',
+                              style: TextStyle(
+                                  color: AppTheme.textTertiary,
+                                  fontSize: 13)),
+                        ],
+                      ),
+                      SizedBox(height: 8),
+                      Row(
+                        children: [
+                          SizedBox(width: 30),
+                          Text(
+                            '离线签名，安全可靠',
+                            style: TextStyle(
+                              color: AppTheme.textTertiary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildSettingTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool>? onChanged,
+  }) {
+    final disabled = onChanged == null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: disabled
+                  ? AppTheme.surfaceElevated
+                  : AppTheme.primary.withAlpha(20),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon,
+                size: 20,
+                color: disabled
+                    ? AppTheme.textTertiary
+                    : AppTheme.primaryLight),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: disabled
+                        ? AppTheme.textTertiary
+                        : AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
     );
   }
 }

@@ -20,6 +20,7 @@ import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
 import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
 import 'package:wuminapp_mobile/user/user_service.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
+import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
 
@@ -30,7 +31,7 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
-const Color _inkGreen = Color(0xFF0B3D2E);
+const Color _inkGreen = AppTheme.primaryDark;
 
 class _ProfilePageState extends State<ProfilePage> {
   final ImagePicker _imagePicker = ImagePicker();
@@ -178,15 +179,43 @@ class _ProfilePageState extends State<ProfilePage> {
     required String title,
     required VoidCallback onTap,
   }) {
-    return Card(
-      child: ListTile(
-        leading: leading,
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w700),
+    return Container(
+      decoration: AppTheme.cardDecoration(),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceMuted,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(child: leading),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.chevron_right,
+                    size: 20, color: AppTheme.textTertiary),
+              ],
+            ),
+          ),
         ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
       ),
     );
   }
@@ -269,7 +298,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _buildEntryCard(
@@ -278,12 +307,13 @@ class _ProfilePageState extends State<ProfilePage> {
                   width: 22,
                   height: 22,
                   colorFilter: const ColorFilter.mode(
-                      Color(0xFF008080), BlendMode.srcIn),
+                      AppTheme.primary, BlendMode.srcIn),
                 ),
                 title: '通讯录',
                 onTap: _openContacts,
               ),
             ),
+            const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _buildEntryCard(
@@ -292,7 +322,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   width: 22,
                   height: 22,
                   colorFilter: const ColorFilter.mode(
-                      Color(0xFFDE3163), BlendMode.srcIn),
+                      AppTheme.danger, BlendMode.srcIn),
                 ),
                 title: '钱包',
                 onTap: () {
@@ -302,12 +332,13 @@ class _ProfilePageState extends State<ProfilePage> {
                 },
               ),
             ),
+            const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _buildEntryCard(
                 leading: const Icon(
                   Icons.groups_outlined,
-                  color: Color(0xFF1565C0),
+                  color: AppTheme.info,
                   size: 22,
                 ),
                 title: '多签',
@@ -321,12 +352,13 @@ class _ProfilePageState extends State<ProfilePage> {
                 },
               ),
             ),
+            const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _buildEntryCard(
                 leading: const Icon(
                   Icons.settings_outlined,
-                  color: Color(0xFF2F4F4F),
+                  color: AppTheme.textSecondary,
                   size: 22,
                 ),
                 title: '设置',
@@ -337,7 +369,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 },
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
           ],
         ),
       ),
@@ -577,9 +609,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
 
   Color _voteStatusColor() {
     return switch (_voteBindState.status) {
-      SfidBindStatus.unbound => Colors.grey,
-      SfidBindStatus.pending => Colors.orange,
-      SfidBindStatus.bound => _inkGreen,
+      SfidBindStatus.unbound => AppTheme.textTertiary,
+      SfidBindStatus.pending => AppTheme.warning,
+      SfidBindStatus.bound => AppTheme.success,
     };
   }
 
@@ -608,9 +640,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                 textAlign: TextAlign.right,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 14,
-                  color: Colors.grey.shade600,
+                  color: AppTheme.textTertiary,
                 ),
               ),
             ),
@@ -619,7 +651,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
               trailing,
             ],
             const SizedBox(width: 4),
-            Icon(Icons.chevron_right, size: 20, color: Colors.grey.shade400),
+            const Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
           ],
         ),
       ),
@@ -664,7 +696,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                              color: Colors.grey.shade300,
+                              color: AppTheme.border,
                               width: 1,
                             ),
                           ),
@@ -680,9 +712,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2),
                                   )
-                                : Icon(Icons.download,
+                                : const Icon(Icons.download,
                                     size: 18,
-                                    color: Colors.grey.shade600),
+                                    color: AppTheme.textSecondary),
                           ),
                         ),
                       ],
@@ -691,14 +723,14 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                       width: 180,
                       height: 180,
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(12),
+                        color: AppTheme.surfaceElevated,
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                       ),
                       child: const Center(
                         child: Text(
                           '请设置通信账户后\n生成二维码',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey),
+                          style: TextStyle(color: AppTheme.textTertiary),
                         ),
                       ),
                     ),
@@ -715,8 +747,8 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                 children: [
                   _SquareAvatar(path: _profile.avatarPath, size: 44),
                   const Spacer(),
-                  Icon(Icons.chevron_right,
-                      size: 20, color: Colors.grey.shade400),
+                  const Icon(Icons.chevron_right,
+                      size: 20, color: AppTheme.textTertiary),
                 ],
               ),
             ),
@@ -886,10 +918,18 @@ class _ContactBookPageState extends State<ContactBookPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.perm_contact_calendar_outlined,
-              size: 72,
-              color: Colors.grey,
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.primary.withAlpha(15),
+              ),
+              child: const Icon(
+                Icons.perm_contact_calendar_outlined,
+                size: 44,
+                color: AppTheme.primary,
+              ),
             ),
             const SizedBox(height: 18),
             const Text(
@@ -900,7 +940,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
             Text(
               '扫描其他用户的二维码后，会把对方的昵称和公钥加入通讯录。',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade700, height: 1.5),
+              style: const TextStyle(color: AppTheme.textSecondary, height: 1.5),
             ),
           ],
         ),
@@ -950,11 +990,11 @@ class _ContactBookPageState extends State<ContactBookPage> {
               final contact = sorted[index];
               return ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: const Color(0xFFE3EFE8),
+                  backgroundColor: AppTheme.primary.withAlpha(20),
                   child: Text(
                     contact.displayNickname.characters.first,
                     style: const TextStyle(
-                      color: _inkGreen,
+                      color: AppTheme.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -967,9 +1007,9 @@ class _ContactBookPageState extends State<ContactBookPage> {
                   contact.accountPubkeyHex,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
-                    color: Colors.grey.shade600,
+                    color: AppTheme.textTertiary,
                   ),
                 ),
                 trailing: const Icon(Icons.chevron_right, size: 20),
@@ -1077,7 +1117,7 @@ class _MyQrCodePageState extends State<_MyQrCodePage> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(
-                    color: Colors.grey.shade300,
+                    color: AppTheme.border,
                     width: 1,
                   ),
                 ),
@@ -1092,8 +1132,8 @@ class _MyQrCodePageState extends State<_MyQrCodePage> {
                           child:
                               CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Icon(Icons.download,
-                          size: 20, color: Colors.grey.shade600),
+                      : const Icon(Icons.download,
+                          size: 20, color: AppTheme.textSecondary),
                 ),
               ),
             ],
@@ -1104,19 +1144,19 @@ class _MyQrCodePageState extends State<_MyQrCodePage> {
             child: Text(
               widget.address,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 13,
-                color: Colors.grey.shade600,
+                color: AppTheme.textTertiary,
                 height: 1.5,
               ),
             ),
           ),
           const Spacer(),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 32),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 32),
             child: Text(
               '其他用户扫描此二维码可添加通讯录',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
             ),
           ),
         ],
@@ -1151,12 +1191,12 @@ class _ContactDetailPage extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 36,
-                  backgroundColor: const Color(0xFFE3EFE8),
+                  backgroundColor: AppTheme.primary.withAlpha(20),
                   child: Text(
                     contact.displayNickname.characters.first,
                     style: const TextStyle(
                       fontSize: 28,
-                      color: _inkGreen,
+                      color: AppTheme.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1177,11 +1217,7 @@ class _ContactDetailPage extends StatelessWidget {
           Center(
             child: Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE5ECE8)),
-              ),
+              decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
               child: QrImageView(
                 data: qrData,
                 version: QrVersions.auto,
@@ -1201,9 +1237,9 @@ class _ContactDetailPage extends StatelessWidget {
                   child: Text(
                     contact.accountPubkeyHex,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 13,
-                      color: Colors.grey.shade600,
+                      color: AppTheme.textTertiary,
                       height: 1.5,
                     ),
                   ),
@@ -1248,7 +1284,7 @@ class _ContactDetailPage extends StatelessWidget {
               Expanded(
                 child: FilledButton.icon(
                   style: FilledButton.styleFrom(
-                    backgroundColor: _inkGreen,
+                    backgroundColor: AppTheme.primary,
                   ),
                   onPressed: () {
                     Navigator.of(context).push(
@@ -1294,9 +1330,9 @@ class _HeaderBackground extends StatelessWidget {
             ? null
             : const LinearGradient(
                 colors: [
-                  Color(0xFF0B3D2E),
-                  Color(0xFF1E7A65),
-                  Color(0xFFD8EFE6)
+                  AppTheme.primaryDark,
+                  AppTheme.primary,
+                  AppTheme.primaryLight,
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -1343,7 +1379,7 @@ class _SquareAvatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: const Color(0xFFE3EFE8),
+        color: AppTheme.primary.withAlpha(20),
         borderRadius: BorderRadius.circular(10),
       ),
       child: ClipRRect(
@@ -1462,38 +1498,192 @@ class _SettingsPageState extends State<_SettingsPage> {
         centerTitle: true,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AppTheme.primary))
           : ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                SwitchListTile(
-                  title: const Text('设备锁'),
-                  subtitle: Text(
-                    _pinLockEnabled
-                        ? '请先关闭应用锁'
-                        : '启动应用时需要生物识别或设备密码',
+                // 安全区标题
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 10),
+                  child: Row(
+                    children: [
+                      Icon(Icons.security_rounded,
+                          size: 16, color: AppTheme.primary),
+                      const SizedBox(width: 8),
+                      const Text(
+                        '安全',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primary,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
                   ),
-                  value: _deviceLockEnabled,
-                  onChanged: _pinLockEnabled ? null : _toggleDeviceLock,
-                  activeThumbColor: Colors.white,
-                  activeTrackColor: const Color(0xFF007A74),
-                  secondary: const Icon(Icons.fingerprint),
                 ),
-                const Divider(height: 1),
-                SwitchListTile(
-                  title: const Text('应用锁'),
-                  subtitle: Text(
-                    _deviceLockEnabled
-                        ? '请先关闭设备锁'
-                        : '启动应用时需要输入 6 位数字密码',
+                Container(
+                  decoration:
+                      AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+                  child: Column(
+                    children: [
+                      _buildSettingTile(
+                        icon: Icons.fingerprint_rounded,
+                        title: '设备锁',
+                        subtitle: _pinLockEnabled
+                            ? '请先关闭应用锁'
+                            : '启动应用时需要生物识别或设备密码',
+                        value: _deviceLockEnabled,
+                        onChanged:
+                            _pinLockEnabled ? null : _toggleDeviceLock,
+                      ),
+                      const Divider(height: 1, indent: 56, endIndent: 16),
+                      _buildSettingTile(
+                        icon: Icons.pin_outlined,
+                        title: '应用锁',
+                        subtitle: _deviceLockEnabled
+                            ? '请先关闭设备锁'
+                            : '启动应用时需要输入 6 位数字密码',
+                        value: _pinLockEnabled,
+                        onChanged:
+                            _deviceLockEnabled ? null : _togglePinLock,
+                      ),
+                    ],
                   ),
-                  value: _pinLockEnabled,
-                  onChanged: _deviceLockEnabled ? null : _togglePinLock,
-                  activeThumbColor: Colors.white,
-                  activeTrackColor: const Color(0xFF007A74),
-                  secondary: const Icon(Icons.pin_outlined),
+                ),
+                const SizedBox(height: 28),
+                // 关于区标题
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 10),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded,
+                          size: 16, color: AppTheme.primary),
+                      const SizedBox(width: 8),
+                      const Text(
+                        '关于',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primary,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration:
+                      AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              gradient: AppTheme.primaryGradient,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.how_to_vote_rounded,
+                                color: Colors.white, size: 18),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text('公民',
+                              style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16)),
+                          const Spacer(),
+                          const Text('v1.0.0',
+                              style: TextStyle(
+                                  color: AppTheme.textTertiary,
+                                  fontSize: 13)),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      const Row(
+                        children: [
+                          SizedBox(width: 48),
+                          Text(
+                            '公民治理，链上投票',
+                            style: TextStyle(
+                              color: AppTheme.textTertiary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildSettingTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool>? onChanged,
+  }) {
+    final disabled = onChanged == null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: disabled
+                  ? AppTheme.surfaceElevated
+                  : AppTheme.primary.withAlpha(20),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon,
+                size: 20,
+                color: disabled
+                    ? AppTheme.textTertiary
+                    : AppTheme.primary),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: disabled
+                        ? AppTheme.textTertiary
+                        : AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
     );
   }
 }

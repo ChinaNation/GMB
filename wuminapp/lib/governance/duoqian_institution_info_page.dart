@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../ui/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
@@ -36,7 +37,6 @@ class DuoqianInstitutionInfoPage extends StatefulWidget {
 
 class _DuoqianInstitutionInfoPageState
     extends State<DuoqianInstitutionInfoPage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
 
   final DuoqianManageService _manageService = DuoqianManageService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
@@ -103,7 +103,7 @@ class _DuoqianInstitutionInfoPageState
               Navigator.pop(ctx);
               _openClosePage();
             },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
             child: const Text('发起注销'),
           ),
         ],
@@ -172,7 +172,7 @@ class _DuoqianInstitutionInfoPageState
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
+        foregroundColor: AppTheme.primaryDark,
         elevation: 0,
         scrolledUnderElevation: 0.5,
         actions: [
@@ -186,9 +186,9 @@ class _DuoqianInstitutionInfoPageState
                 value: 'delete',
                 child: Row(
                   children: [
-                    Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                    Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),
                     SizedBox(width: 8),
-                    Text('注销机构', style: TextStyle(color: Colors.red)),
+                    Text('注销机构', style: TextStyle(color: AppTheme.danger)),
                   ],
                 ),
               ),
@@ -211,14 +211,14 @@ class _DuoqianInstitutionInfoPageState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
             const SizedBox(height: 12),
             Text('加载失败',
-                style: TextStyle(fontSize: 16, color: Colors.grey[700])),
+                style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
             const SizedBox(height: 6),
             Text(
               _error!,
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -238,8 +238,8 @@ class _DuoqianInstitutionInfoPageState
             ? '已激活'
             : '待激活';
     final statusColor = info?.status == DuoqianStatus.active
-        ? Colors.green
-        : Colors.orange;
+        ? AppTheme.success
+        : AppTheme.warning;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -255,7 +255,7 @@ class _DuoqianInstitutionInfoPageState
             margin: EdgeInsets.zero,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: Colors.grey[200]!),
+              side: BorderSide(color: AppTheme.border),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -267,7 +267,7 @@ class _DuoqianInstitutionInfoPageState
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: _inkGreen,
+                      color: AppTheme.primaryDark,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -314,7 +314,7 @@ class _DuoqianInstitutionInfoPageState
             margin: EdgeInsets.zero,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: Colors.grey[200]!),
+              side: BorderSide(color: AppTheme.border),
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -328,7 +328,7 @@ class _DuoqianInstitutionInfoPageState
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: _inkGreen,
+                        color: AppTheme.primaryDark,
                       ),
                     ),
                   ),
@@ -338,7 +338,7 @@ class _DuoqianInstitutionInfoPageState
                       padding: const EdgeInsets.all(16),
                       child: Text(
                         '暂无管理员信息',
-                        style: TextStyle(color: Colors.grey[500]),
+                        style: TextStyle(color: AppTheme.textTertiary),
                       ),
                     )
                   else
@@ -349,13 +349,13 @@ class _DuoqianInstitutionInfoPageState
                         dense: true,
                         leading: CircleAvatar(
                           radius: 16,
-                          backgroundColor: _inkGreen.withValues(alpha: 0.08),
+                          backgroundColor: AppTheme.primaryDark.withValues(alpha: 0.08),
                           child: Text(
                             '${index + 1}',
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: _inkGreen,
+                              color: AppTheme.primaryDark,
                             ),
                           ),
                         ),
@@ -365,7 +365,7 @@ class _DuoqianInstitutionInfoPageState
                         ),
                         trailing: IconButton(
                           icon: Icon(Icons.copy,
-                              size: 16, color: Colors.grey[400]),
+                              size: 16, color: AppTheme.textTertiary),
                           onPressed: () {
                             Clipboard.setData(ClipboardData(text: ss58));
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -396,7 +396,7 @@ class _DuoqianInstitutionInfoPageState
           width: 80,
           child: Text(
             label,
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
           ),
         ),
         Expanded(
@@ -404,7 +404,7 @@ class _DuoqianInstitutionInfoPageState
             value,
             style: TextStyle(
               fontSize: 13,
-              color: valueColor ?? const Color(0xFF333333),
+              color: valueColor ?? AppTheme.textPrimary,
               fontWeight: valueColor != null ? FontWeight.w600 : null,
             ),
           ),
@@ -412,7 +412,7 @@ class _DuoqianInstitutionInfoPageState
         if (onCopy != null)
           GestureDetector(
             onTap: onCopy,
-            child: Icon(Icons.copy, size: 16, color: Colors.grey[400]),
+            child: Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
           ),
       ],
     );

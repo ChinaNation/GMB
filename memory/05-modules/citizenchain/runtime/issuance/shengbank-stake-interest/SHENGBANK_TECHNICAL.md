@@ -39,11 +39,11 @@
 
 Runtime 注入：
 - `Config::Currency = Balances`
-- `Config::BlocksPerYear = ConstU64<{ primitives::pow_const::BLOCKS_PER_YEAR }>`
+- `Config::BlocksPerYear = ConstU64<{ primitives::pow_const::BLOCKS_PER_YEAR }>` — 白皮书定义 87,600 块/年，与出块时间无关（空块不允许上链，区块高度仅在有交易时推进）
 - `Config::WeightInfo = shengbank_stake_interest::weights::SubstrateWeight<Runtime>`
 
 Runtime 接线：
-- `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs:369`
+- `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs:404`
 
 ## 3. 存储结构
 - `LastSettledYear: u32`
@@ -60,6 +60,7 @@ Runtime 接线：
 - `ShengBankYearSettled { year }`
 - `ShengBankYearSettlementFailed { year, success_count, total_count }`
 - `ShengBankYearForceAdvanced { year }`
+- `ShengBankInterestBelowED { year, pallet_id, amount }` — 利息低于 Existential Deposit，跳过发币（链上可审计）
 
 主要错误：
 - `InvalidOperationCount`
@@ -125,14 +126,23 @@ Runtime 接线：
 
 补充说明：
 - `weights.rs` 当前为 `frame-benchmarking` 生成产物。
-- `benchmarks.rs` 覆盖两个 Root 调用，`force_settle_years` 的组件范围应与 `MAX_FORCE_SETTLE_YEARS` 保持一致。
+- `benchmarks.rs` 覆盖两个 Root 调用和两个 `on_initialize` 路径（结算路径 + 空操作路径），`force_settle_years` 的组件范围应与 `MAX_FORCE_SETTLE_YEARS` 保持一致。
 - 若 benchmark 组件范围、执行路径或常量边界发生变化，需要重新生成 `weights.rs`，不是历史上跑过一次就可以永久沿用。
 
-## 9. 测试覆盖
+## 9. try-runtime 支持
+Cargo.toml 已启用 `try-runtime` feature，依赖链：
+- `frame-support/try-runtime`
+- `frame-system/try-runtime`
+- `sp-runtime/try-runtime`
+
+Hooks 中实现了 `try_state` 钩子，校验：
+- `LastSettledYear <= SHENGBANK_INTEREST_DURATION_YEARS`
+
+## 10. 测试覆盖
 执行命令：
 - `cargo test -p shengbank-stake-interest`
 
-当前覆盖：
+当前覆盖（16 个业务测试）：
 - 第 1 / 2 年正常发放与利率递减。
 - 晚到边界时自动补结算。
 - 年限达到上限后停止继续发放。
@@ -143,11 +153,14 @@ Runtime 接线：
 - 自动补结算上限为 8 年。
 - `BlocksPerYear == 0` 时禁用自动结算。
 - 未来年度不能被 `force_advance_year` 提前跳过。
+- 故障恢复后自动结算恢复（`force_advance_then_settle_resumes`）。
+- `force_settle_years` 不超过当前年度（`force_settle_years_caps_at_current_year`）。
+- 第 100 年边界利率 1 BP 正确发放，第 101 年不再发放（`year_100_boundary_settles_with_minimum_rate`）。
 
-## 10. 审查结论与建议
+## 11. 审查结论与建议
 本轮没有发现新的高风险权限绕过或资金记账一致性漏洞。
 
 建议：
-1. 若调整 benchmark 组件范围、年度上限或结算路径，应同步重新跑 benchmark 并更新 `weights.rs`。  
-2. `force_advance_year` 属于恢复型 Root 接口，运维上应优先修复故障再跳过年度，只把它当成最后手段。  
-3. 若未来 `CHINA_CH` 的 `stake_amount` 或运行时 `Balance` 精度发生变化，建议补一条“利息乘法溢出”显式检测事件，避免继续依赖饱和算术。  
+1. 若调整 benchmark 组件范围、年度上限或结算路径，应同步重新跑 benchmark 并更新 `weights.rs`。
+2. `force_advance_year` 属于恢复型 Root 接口，运维上应优先修复故障再跳过年度，只把它当成最后手段。
+3. 若未来 `CHINA_CH` 的 `stake_amount` 或运行时 `Balance` 精度发生变化，建议补一条”利息乘法溢出”显式检测事件，避免继续依赖饱和算术。

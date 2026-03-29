@@ -5,6 +5,7 @@ import 'package:isar/isar.dart';
 import '../isar/wallet_isar.dart';
 import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
+import 'app_theme.dart';
 import 'create_wallet_page.dart';
 import 'group_management_page.dart';
 import 'import_wallet_page.dart';
@@ -97,26 +98,100 @@ class _HomePageState extends State<HomePage> {
     showModalBottomSheet(
       context: context,
       builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.add),
-              title: const Text('创建钱包'),
-              onTap: () {
-                Navigator.pop(context);
-                _openCreateWallet();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.download),
-              title: const Text('导入钱包'),
-              onTap: () {
-                Navigator.pop(context);
-                _openImportWallet();
-              },
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 拖拽指示条
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppTheme.textTertiary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              _buildBottomSheetItem(
+                icon: Icons.add_circle_outline,
+                label: '创建钱包',
+                subtitle: '生成新的助记词和密钥对',
+                onTap: () {
+                  Navigator.pop(context);
+                  _openCreateWallet();
+                },
+              ),
+              const SizedBox(height: 8),
+              _buildBottomSheetItem(
+                icon: Icons.download_rounded,
+                label: '导入钱包',
+                subtitle: '通过助记词恢复已有钱包',
+                onTap: () {
+                  Navigator.pop(context);
+                  _openImportWallet();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomSheetItem({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: AppTheme.cardDecoration(),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withAlpha(25),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                ),
+                child: Icon(icon, color: AppTheme.primaryLight, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right,
+                  color: AppTheme.textTertiary, size: 20),
+            ],
+          ),
         ),
       ),
     );
@@ -164,7 +239,7 @@ class _HomePageState extends State<HomePage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
             child: const Text('删除'),
           ),
         ],
@@ -228,42 +303,76 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.settings_outlined),
+          icon: const Icon(Icons.settings_outlined, size: 22),
           tooltip: '设置',
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const SettingsPage()),
           ),
         ),
-        title: const Text('公民钱包'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                gradient: AppTheme.primaryGradient,
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: const Icon(Icons.shield_outlined,
+                  color: Colors.white, size: 16),
+            ),
+            const SizedBox(width: 8),
+            const Text('公民钱包'),
+          ],
+        ),
         centerTitle: true,
         actions: [
           if (hasWallets)
             IconButton(
-              icon: const Icon(Icons.add),
+              icon: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withAlpha(25),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.add, size: 20, color: AppTheme.primaryLight),
+              ),
               tooltip: '添加钱包',
               onPressed: _showAddWalletMenu,
             ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(
+                color: AppTheme.primary,
+                strokeWidth: 2.5,
+              ),
+            )
           : Column(
               children: [
                 if (_isRooted)
                   Container(
                     width: double.infinity,
+                    margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    color: Colors.red.shade700,
-                    child: const Row(
+                        horizontal: 12, vertical: 10),
+                    decoration: AppTheme.bannerDecoration(AppTheme.danger),
+                    child: Row(
                       children: [
-                        Icon(Icons.warning, color: Colors.white, size: 18),
-                        SizedBox(width: 8),
-                        Expanded(
+                        Icon(Icons.warning_rounded,
+                            color: AppTheme.danger, size: 18),
+                        const SizedBox(width: 8),
+                        const Expanded(
                           child: Text(
                             '检测到设备已 root/越狱，密钥安全无法保障',
                             style: TextStyle(
-                                color: Colors.white, fontSize: 13),
+                              color: AppTheme.danger,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ],
@@ -286,32 +395,54 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.account_balance_wallet_outlined,
-              size: 64,
-              color: Colors.grey.shade400,
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceCard,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppTheme.border),
+              ),
+              child: const Icon(
+                Icons.account_balance_wallet_outlined,
+                size: 40,
+                color: AppTheme.textTertiary,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             const Text(
               '还没有钱包',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
             ),
             const SizedBox(height: 8),
             const Text(
               '创建或导入一个钱包来开始使用',
-              style: TextStyle(color: Colors.black54),
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 14,
+              ),
             ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: _openCreateWallet,
-              icon: const Icon(Icons.add),
-              label: const Text('创建钱包'),
+            const SizedBox(height: 36),
+            SizedBox(
+              width: 220,
+              child: FilledButton.icon(
+                onPressed: _openCreateWallet,
+                icon: const Icon(Icons.add, size: 20),
+                label: const Text('创建钱包'),
+              ),
             ),
             const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _openImportWallet,
-              icon: const Icon(Icons.download),
-              label: const Text('导入钱包'),
+            SizedBox(
+              width: 220,
+              child: OutlinedButton.icon(
+                onPressed: _openImportWallet,
+                icon: const Icon(Icons.download_rounded, size: 20),
+                label: const Text('导入钱包'),
+              ),
             ),
           ],
         ),
@@ -329,10 +460,9 @@ class _HomePageState extends State<HomePage> {
   Widget _buildGroupRow() {
     final otherGroups = _groups.where((g) => g.name != '全部').toList();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
       child: Row(
         children: [
-          // "全部"固定在左侧，不跟随滚动
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: ChoiceChip(
@@ -343,7 +473,6 @@ class _HomePageState extends State<HomePage> {
               },
             ),
           ),
-          // 其余分组可左右滑动
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -365,7 +494,8 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.chevron_right),
+            icon: const Icon(Icons.tune_rounded,
+                size: 20, color: AppTheme.textSecondary),
             tooltip: '分组管理',
             onPressed: _openGroupManagement,
           ),
@@ -384,7 +514,7 @@ class _HomePageState extends State<HomePage> {
               ? Center(
                   child: Text(
                     '该分组下没有钱包',
-                    style: TextStyle(color: Colors.grey.shade500),
+                    style: TextStyle(color: AppTheme.textTertiary),
                   ),
                 )
               : ReorderableListView.builder(
@@ -397,8 +527,9 @@ class _HomePageState extends State<HomePage> {
                     return AnimatedBuilder(
                       animation: animation,
                       builder: (context, child) => Material(
-                        elevation: 4,
-                        borderRadius: BorderRadius.circular(12),
+                        elevation: 0,
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                         child: child,
                       ),
                       child: child,
@@ -427,7 +558,6 @@ class _HomePageState extends State<HomePage> {
     if (newIndex > oldIndex) newIndex--;
     if (oldIndex == newIndex) return;
 
-    // 找到在全量列表中的真实索引
     final movedWalletIndex = displayedWallets[oldIndex].walletIndex;
     final targetWalletIndex = displayedWallets[newIndex].walletIndex;
 
@@ -439,111 +569,174 @@ class _HomePageState extends State<HomePage> {
     if (fromGlobal < 0 || toGlobal < 0) return;
 
     final item = _wallets.removeAt(fromGlobal);
-    // removeAt 后索引可能偏移
     if (fromGlobal < toGlobal) toGlobal--;
     _wallets.insert(toGlobal, item);
 
     setState(() {});
 
-    // 持久化新顺序
     final indexes = _wallets.map((w) => w.walletIndex).toList();
     await _walletManager.reorderWallets(indexes);
   }
 
   Widget _buildWalletCard(WalletProfile wallet, bool isActive, {Key? key}) {
-    return Card(
+    return Padding(
       key: key,
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isActive
-            ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 2)
-            : BorderSide.none,
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _setActive(wallet.walletIndex),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: isActive
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.grey.shade300,
-                child: Icon(
-                  Icons.account_balance_wallet,
-                  color: isActive ? Colors.white : Colors.grey.shade600,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          onTap: () => _setActive(wallet.walletIndex),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: AppTheme.cardDecoration(selected: isActive),
+            child: Row(
+              children: [
+                // 头像
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    gradient: isActive
+                        ? AppTheme.primaryGradient
+                        : null,
+                    color: isActive ? null : AppTheme.surfaceElevated,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  ),
+                  child: Icon(
+                    Icons.account_balance_wallet_rounded,
+                    color: isActive ? Colors.white : AppTheme.textTertiary,
+                    size: 22,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            wallet.walletName,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                const SizedBox(width: 14),
+                // 名称 + 地址
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              wallet.walletName,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
+                          if (isActive) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withAlpha(30),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                '当前',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: AppTheme.primaryLight,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _truncateAddress(wallet.address),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                          fontFamily: 'monospace',
+                          letterSpacing: 0.5,
                         ),
-                      ],
+                      ),
+                    ],
+                  ),
+                ),
+                // 扫码按钮
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceElevated,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  ),
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: SvgPicture.asset(
+                      'assets/icons/scan-line.svg',
+                      width: 20,
+                      height: 20,
+                      colorFilter: const ColorFilter.mode(
+                          AppTheme.primaryLight, BlendMode.srcIn),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _truncateAddress(wallet.address),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
-                        fontFamily: 'monospace',
+                    tooltip: '扫码签名',
+                    onPressed: () => _openScan(wallet),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // 更多菜单
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert,
+                      color: AppTheme.textTertiary, size: 20),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'detail':
+                        _openWalletDetail(wallet);
+                      case 'rename':
+                        _renameWallet(wallet);
+                      case 'delete':
+                        _confirmDelete(wallet);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'rename',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined,
+                              size: 18, color: AppTheme.textSecondary),
+                          SizedBox(width: 10),
+                          Text('重命名'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'detail',
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 18, color: AppTheme.textSecondary),
+                          SizedBox(width: 10),
+                          Text('钱包详情'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline,
+                              size: 18, color: AppTheme.danger),
+                          const SizedBox(width: 10),
+                          Text('删除钱包',
+                              style: TextStyle(color: AppTheme.danger)),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ),
-              IconButton(
-                icon: SvgPicture.asset(
-                  'assets/icons/scan-line.svg',
-                  width: 22,
-                  height: 22,
-                ),
-                tooltip: '扫码签名',
-                onPressed: () => _openScan(wallet),
-              ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  switch (value) {
-                    case 'detail':
-                      _openWalletDetail(wallet);
-                    case 'rename':
-                      _renameWallet(wallet);
-                    case 'delete':
-                      _confirmDelete(wallet);
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'rename',
-                    child: Text('重命名'),
-                  ),
-                  const PopupMenuItem(
-                    value: 'detail',
-                    child: Text('钱包详情'),
-                  ),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Text('删除钱包',
-                        style: TextStyle(color: Colors.red)),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

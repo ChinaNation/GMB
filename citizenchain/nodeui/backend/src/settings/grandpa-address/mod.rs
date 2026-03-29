@@ -20,7 +20,7 @@ use tauri::AppHandle;
 use zeroize::Zeroizing;
 const GRANDPA_KEY_TYPE_HEX_PREFIX: &str = "6772616e";
 const INSTITUTION_CATALOG_SRC: &str = include_str!("../institution-catalog.json");
-const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
+use crate::shared::constants::RPC_RESPONSE_LIMIT_LARGE;
 const AUTHORITY_ROLE_WAIT_TIMEOUT: Duration = Duration::from_secs(20);
 const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -294,7 +294,7 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
         method,
         params,
         rpc::RPC_REQUEST_TIMEOUT,
-        MAX_RPC_RESPONSE_BYTES,
+        RPC_RESPONSE_LIMIT_LARGE,
     )
 }
 
@@ -339,10 +339,7 @@ fn wait_for_authority_role() -> Result<(), String> {
     ))
 }
 
-pub(crate) fn prepare_grandpa_for_start(
-    app: &AppHandle,
-    _unlock_password: &str,
-) -> Result<bool, String> {
+pub(crate) fn prepare_grandpa_for_start(app: &AppHandle) -> Result<bool, String> {
     let Some(meta) = load_grandpa_meta(app)? else {
         return Ok(false);
     };
@@ -370,10 +367,7 @@ pub(crate) fn prepare_grandpa_for_start(
     Ok(true)
 }
 
-pub(crate) fn verify_grandpa_after_start(
-    app: &AppHandle,
-    _unlock_password: &str,
-) -> Result<(), String> {
+pub(crate) fn verify_grandpa_after_start(app: &AppHandle) -> Result<(), String> {
     let Some(meta) = load_grandpa_meta(app)? else {
         return Ok(());
     };
@@ -451,7 +445,7 @@ pub fn set_grandpa_key(
             let _ = home::start_node_blocking(app.clone(), unlock.to_string())?;
             new_node_started = true;
             node_stopped_for_restart = false;
-            verify_grandpa_after_start(&app, unlock)?;
+            verify_grandpa_after_start(&app)?;
         }
         Ok(())
     })();

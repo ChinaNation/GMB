@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../ui/app_theme.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../util/amount_format.dart';
@@ -33,7 +34,6 @@ class DuoqianCreateProposalPage extends StatefulWidget {
 
 class _DuoqianCreateProposalPageState
     extends State<DuoqianCreateProposalPage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
 
   final _sfidIdController = TextEditingController();
   final _amountController = TextEditingController();
@@ -261,14 +261,14 @@ class _DuoqianCreateProposalPageState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('提案已提交：${_truncateAddress(result.txHash)}'),
-          backgroundColor: _inkGreen,
+          backgroundColor: AppTheme.primaryDark,
         ),
       );
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('提交失败：$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('提交失败：$e'), backgroundColor: AppTheme.danger),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -288,7 +288,7 @@ class _DuoqianCreateProposalPageState
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
+        foregroundColor: AppTheme.primaryDark,
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
@@ -318,7 +318,7 @@ class _DuoqianCreateProposalPageState
               ElevatedButton(
                 onPressed: _checkingSfid ? null : _checkSfidRegistration,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _inkGreen,
+                  backgroundColor: AppTheme.primaryDark,
                   foregroundColor: Colors.white,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -339,16 +339,16 @@ class _DuoqianCreateProposalPageState
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.08),
+                color: AppTheme.success.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
                     '已注册，派生多签地址：',
-                    style: TextStyle(fontSize: 12, color: Colors.green),
+                    style: TextStyle(fontSize: 12, color: AppTheme.success),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -374,13 +374,13 @@ class _DuoqianCreateProposalPageState
               contentPadding: EdgeInsets.zero,
               leading: CircleAvatar(
                 radius: 14,
-                backgroundColor: _inkGreen.withValues(alpha: 0.08),
+                backgroundColor: AppTheme.primaryDark.withValues(alpha: 0.08),
                 child: Text(
                   '${index + 1}',
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: _inkGreen,
+                    color: AppTheme.primaryDark,
                   ),
                 ),
               ),
@@ -389,7 +389,7 @@ class _DuoqianCreateProposalPageState
                 style: const TextStyle(fontSize: 13),
               ),
               trailing: IconButton(
-                icon: Icon(Icons.close, size: 18, color: Colors.red[300]),
+                icon: Icon(Icons.close, size: 18, color: AppTheme.danger),
                 onPressed: () => _removeAdmin(index),
               ),
             );
@@ -399,8 +399,8 @@ class _DuoqianCreateProposalPageState
             icon: const Icon(Icons.qr_code_scanner, size: 18),
             label: const Text('扫码添加管理员'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: _inkGreen,
-              side: BorderSide(color: _inkGreen.withValues(alpha: 0.3)),
+              foregroundColor: AppTheme.primaryDark,
+              side: BorderSide(color: AppTheme.primaryDark.withValues(alpha: 0.3)),
             ),
           ),
 
@@ -475,7 +475,7 @@ class _DuoqianCreateProposalPageState
             child: ElevatedButton(
               onPressed: _submitting ? null : _submit,
               style: ElevatedButton.styleFrom(
-                backgroundColor: _inkGreen,
+                backgroundColor: AppTheme.primaryDark,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
@@ -504,7 +504,7 @@ class _DuoqianCreateProposalPageState
       style: const TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w600,
-        color: _inkGreen,
+        color: AppTheme.primaryDark,
       ),
     );
   }

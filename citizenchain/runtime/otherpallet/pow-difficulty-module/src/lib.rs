@@ -100,6 +100,14 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        /// try-runtime 状态校验：确保 CurrentDifficulty 始终为正数。
+        #[cfg(feature = "try-runtime")]
+        fn try_state(_n: BlockNumberFor<T>) -> Result<(), sp_runtime::TryRuntimeError> {
+            let diff = CurrentDifficulty::<T>::get();
+            frame_support::ensure!(diff > 0, "CurrentDifficulty 不得为 0");
+            Ok(())
+        }
+
         fn on_initialize(n: BlockNumberFor<T>) -> Weight {
             let block_num: u32 = n.saturated_into();
             if block_num == 0 {
@@ -270,7 +278,7 @@ mod tests {
         type WeightInfo = ();
     }
 
-    fn new_test_ext() -> sp_io::TestExternalities {
+    pub fn new_test_ext() -> sp_io::TestExternalities {
         let storage = frame_system::GenesisConfig::<Test>::default()
             .build_storage()
             .expect("frame system genesis storage should build");

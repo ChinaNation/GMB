@@ -1,3 +1,15 @@
+//! # SFID 绑定与资格校验模块 (sfid-code-auth)
+//!
+//! 本模块负责三件核心事：
+//! - SFID 与链上账户的一对一绑定 / 解绑。
+//! - 公民投票资格校验（基于 SFID 绑定关系 + SFID 系统签名凭证）。
+//! - 维护 SFID 验签主备账户（主账户验签、备用账户轮换）。
+//!
+//! 设计边界：
+//! - 不保存 SFID 明文，只保存 `binding_id`。
+//! - 绑定成功后的奖励发行通过 `OnSfidBound` 回调给上游模块处理。
+//! - 投票凭证校验返回 `bool`，不抛 dispatch 错误，不污染治理模块语义。
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
@@ -21,12 +33,14 @@ use sp_runtime::RuntimeDebug;
     TypeInfo,
     MaxEncodedLen,
 )]
+/// 中文注释：绑定凭证结构体，封装 binding_id、一次性 nonce 和 SFID 系统签名。
 pub struct BindCredential<Hash, Nonce, Signature> {
     pub binding_id: Hash,
     pub bind_nonce: Nonce,
     pub signature: Signature,
 }
 
+/// 中文注释：SFID 系统绑定验签接口，由 Runtime 注入具体实现（sr25519 验签桥接）。
 pub trait SfidVerifier<AccountId, Hash, Nonce, Signature> {
     fn verify(account: &AccountId, credential: &BindCredential<Hash, Nonce, Signature>) -> bool;
 }
@@ -67,6 +81,7 @@ pub trait OnSfidBound<AccountId, Hash> {
 
 impl<AccountId, Hash> OnSfidBound<AccountId, Hash> for () {}
 
+/// 中文注释：回调 weight 声明接口，供 bind_sfid 在申报 weight 时叠加回调预算。
 pub trait OnSfidBoundWeight {
     fn on_sfid_bound_weight() -> Weight {
         Weight::zero()
@@ -140,11 +155,13 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
+    /// 中文注释：binding_id 到账户的正向映射，保证同一 binding_id 只能绑定一个账户。
     #[pallet::storage]
     #[pallet::getter(fn binding_id_to_account)]
     pub type BindingIdToAccount<T: Config> =
         StorageMap<_, Blake2_128Concat, T::Hash, T::AccountId, OptionQuery>;
 
+    /// 中文注释：账户到 binding_id 的反向映射，用于快速查询账户当前绑定的身份标识。
     #[pallet::storage]
     #[pallet::getter(fn account_to_binding_id)]
     pub type AccountToBindingId<T: Config> =
@@ -242,15 +259,18 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
+        /// 中文注释：SFID 绑定成功，记录账户、binding_id 和 nonce 哈希。
         SfidBound {
             who: T::AccountId,
             binding_id: T::Hash,
             bind_nonce_hash: T::Hash,
         },
+        /// 中文注释：账户主动解绑 SFID。
         SfidUnbound {
             who: T::AccountId,
             binding_id: T::Hash,
         },
+        /// 中文注释：SFID 验签密钥轮换完成，记录操作者和新的三把账户。
         SfidKeysRotated {
             operator: T::AccountId,
             new_main: T::AccountId,
@@ -259,18 +279,27 @@ pub mod pallet {
         },
     }
 
+    /// 中文注释：本模块无需 on_initialize / on_finalize 钩子，所有逻辑由 extrinsic 或内部接口驱动。
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
     #[pallet::error]
     pub enum Error<T> {
+        /// 中文注释：绑定凭证中 bind_nonce 为空。
         EmptyBindNonce,
+        /// 中文注释：该 bind_nonce 已被使用（防重放）。
         BindNonceAlreadyUsed,
+        /// 中文注释：SFID 绑定签名验证失败。
         InvalidSfidBindingSignature,
+        /// 中文注释：该 binding_id 已被另一个账户绑定。
         BindingIdAlreadyBoundToAnotherAccount,
+        /// 中文注释：该账户已绑定到同一 binding_id，无需重复操作。
         SameBindingIdAlreadyBound,
+        /// 中文注释：账户当前未绑定 SFID，无法解绑。
         NotBound,
+        /// 中文注释：调用者不是 SFID 备用账户，无权发起轮换。
         UnauthorizedSfidOperator,
+        /// 中文注释：新备用账户与现有三把账户之一重复。
         DuplicateSfidKey,
     }
 
@@ -329,6 +358,7 @@ pub mod pallet {
             Ok(())
         }
 
+        /// 中文注释：主动解绑当前账户的 SFID 绑定关系，释放双向映射并减少计数。
         #[pallet::call_index(1)]
         #[pallet::weight(T::WeightInfo::unbind_sfid())]
         pub fn unbind_sfid(origin: OriginFor<T>) -> DispatchResult {
@@ -383,10 +413,12 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        /// 中文注释：查询账户是否已绑定 SFID。
         pub fn is_bound(who: &T::AccountId) -> bool {
             AccountToBindingId::<T>::contains_key(who)
         }
 
+        /// 中文注释：查询指定 binding_id 是否绑定到指定账户。
         pub fn is_binding_id_bound_to(binding_id: &T::Hash, who: &T::AccountId) -> bool {
             BindingIdToAccount::<T>::get(binding_id)
                 .map(|owner| owner == *who)
@@ -406,6 +438,7 @@ pub mod pallet {
         }
     }
 
+    /// 中文注释：实现投票资格接口，供治理模块统一判断公民身份和消费投票凭证。
     impl<T: Config> crate::SfidEligibilityProvider<T::AccountId, T::Hash> for Pallet<T> {
         fn is_eligible(binding_id: &T::Hash, who: &T::AccountId) -> bool {
             Self::is_binding_id_bound_to(binding_id, who)
@@ -705,6 +738,160 @@ mod tests {
     fn current_sfid_verify_pubkey_reads_main_account_encoding() {
         new_test_ext().execute_with(|| {
             assert!(SfidCodeAuth::current_sfid_verify_pubkey().is_none());
+        });
+    }
+
+    // ========================================================================
+    // 以下为补充的错误路径和边界测试
+    // ========================================================================
+
+    #[test]
+    fn bind_rejects_empty_nonce() {
+        new_test_ext().execute_with(|| {
+            let empty_credential = BindCredential {
+                binding_id: binding_id(b"id-empty"),
+                bind_nonce: Vec::<u8>::new().try_into().expect("empty vec fits"),
+                signature: signature("bind-ok"),
+            };
+            assert_noop!(
+                SfidCodeAuth::bind_sfid(RuntimeOrigin::signed(1), empty_credential),
+                Error::<Test>::EmptyBindNonce
+            );
+        });
+    }
+
+    #[test]
+    fn bind_rejects_invalid_signature() {
+        new_test_ext().execute_with(|| {
+            let credential = bind_credential(b"id-badsig", "nonce-badsig", "bad-sig");
+            assert_noop!(
+                SfidCodeAuth::bind_sfid(RuntimeOrigin::signed(1), credential),
+                Error::<Test>::InvalidSfidBindingSignature
+            );
+        });
+    }
+
+    #[test]
+    fn bind_rejects_binding_id_owned_by_another_account() {
+        new_test_ext().execute_with(|| {
+            let credential_1 = bind_credential(b"shared-id", "nonce-1", "bind-ok");
+            let credential_2 = bind_credential(b"shared-id", "nonce-2", "bind-ok");
+
+            assert_ok!(SfidCodeAuth::bind_sfid(
+                RuntimeOrigin::signed(1),
+                credential_1
+            ));
+            assert_noop!(
+                SfidCodeAuth::bind_sfid(RuntimeOrigin::signed(2), credential_2),
+                Error::<Test>::BindingIdAlreadyBoundToAnotherAccount
+            );
+        });
+    }
+
+    #[test]
+    fn bind_rejects_same_binding_id_already_bound() {
+        new_test_ext().execute_with(|| {
+            let credential_1 = bind_credential(b"dup-id", "nonce-dup-1", "bind-ok");
+            let credential_2 = bind_credential(b"dup-id", "nonce-dup-2", "bind-ok");
+
+            assert_ok!(SfidCodeAuth::bind_sfid(
+                RuntimeOrigin::signed(1),
+                credential_1
+            ));
+            assert_noop!(
+                SfidCodeAuth::bind_sfid(RuntimeOrigin::signed(1), credential_2),
+                Error::<Test>::SameBindingIdAlreadyBound
+            );
+        });
+    }
+
+    #[test]
+    fn unbind_rejects_unbound_account() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                SfidCodeAuth::unbind_sfid(RuntimeOrigin::signed(99)),
+                Error::<Test>::NotBound
+            );
+        });
+    }
+
+    #[test]
+    fn rotate_rejects_main_account_as_operator() {
+        new_test_ext().execute_with(|| {
+            // main = 10, 主账户不能直接发起轮换
+            assert_noop!(
+                SfidCodeAuth::rotate_sfid_keys(RuntimeOrigin::signed(10), 20),
+                Error::<Test>::UnauthorizedSfidOperator
+            );
+        });
+    }
+
+    #[test]
+    fn rotate_from_backup_2_succeeds() {
+        new_test_ext().execute_with(|| {
+            // backup_2 = 12 发起轮换
+            assert_ok!(SfidCodeAuth::rotate_sfid_keys(
+                RuntimeOrigin::signed(12),
+                20
+            ));
+            assert_eq!(SfidMainAccount::<Test>::get(), Some(12));
+            assert_eq!(SfidBackupAccount1::<Test>::get(), Some(11));
+            assert_eq!(SfidBackupAccount2::<Test>::get(), Some(20));
+        });
+    }
+
+    #[test]
+    fn rotate_rejects_duplicate_new_backup() {
+        new_test_ext().execute_with(|| {
+            // new_backup == main (10)
+            assert_noop!(
+                SfidCodeAuth::rotate_sfid_keys(RuntimeOrigin::signed(11), 10),
+                Error::<Test>::DuplicateSfidKey
+            );
+            // new_backup == caller (11)
+            assert_noop!(
+                SfidCodeAuth::rotate_sfid_keys(RuntimeOrigin::signed(11), 11),
+                Error::<Test>::DuplicateSfidKey
+            );
+            // new_backup == survivor (12)
+            assert_noop!(
+                SfidCodeAuth::rotate_sfid_keys(RuntimeOrigin::signed(11), 12),
+                Error::<Test>::DuplicateSfidKey
+            );
+        });
+    }
+
+    #[test]
+    fn cleanup_vote_credentials_removes_nonces() {
+        new_test_ext().execute_with(|| {
+            let credential = bind_credential(b"binding-cleanup", "nonce-cleanup", "bind-ok");
+            let bid = credential.binding_id;
+            assert_ok!(SfidCodeAuth::bind_sfid(
+                RuntimeOrigin::signed(1),
+                credential
+            ));
+
+            // 消费一个投票 nonce
+            assert!(<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &bid, &1, 42, b"vote-nonce-c", b"vote-ok"
+            ));
+
+            // 清理提案 42 的 nonce
+            <Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::cleanup_vote_credentials(42);
+
+            // 同一 nonce 应该可以再次使用（已被清理）
+            assert!(<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &bid, &1, 42, b"vote-nonce-c", b"vote-ok"
+            ));
         });
     }
 }

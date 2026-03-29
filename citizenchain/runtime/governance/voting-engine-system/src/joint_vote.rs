@@ -186,12 +186,16 @@ impl<T: Config> Pallet<T> {
         // 中文注释：联合提案创建时就锁定公民投票分母与人口快照，后续阶段切换不再改写。
         let end = now.saturating_add(Self::joint_stage_duration());
 
+        // 中文注释：联合提案由 NRC 发起，活跃提案名额计入 NRC 机构。
+        let nrc_institution =
+            nrc_pallet_id_bytes().ok_or(Error::<T>::InvalidInstitution)?;
+
         let proposal = Proposal {
             kind: PROPOSAL_KIND_JOINT,
             stage: STAGE_JOINT,
             status: crate::STATUS_VOTING,
             internal_org: None,
-            internal_institution: None,
+            internal_institution: Some(nrc_institution),
             start: now,
             end,
             citizen_eligible_total: eligible_total,
@@ -202,6 +206,13 @@ impl<T: Config> Pallet<T> {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
+
+            // 中文注释：联合提案与内部提案共享每机构活跃提案上限，统一管控。
+            if let Err(err) =
+                crate::active_proposal_limit::try_add_active_proposal::<T>(nrc_institution, id)
+            {
+                return TransactionOutcome::Rollback(Err(err));
+            }
 
             UsedPopulationSnapshotNonce::<T>::insert(snapshot_nonce_hash, true);
             Proposals::<T>::insert(id, proposal);
@@ -382,8 +393,9 @@ impl<T: Config> Pallet<T> {
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
 
-            // 移除旧的联合投票阶段 expiry 条目，避免 on_initialize 无效查询
-            ProposalsByExpiry::<T>::mutate(old_end, |ids| {
+            // 中文注释：schedule_proposal_expiry 存储在 end + 1，移除旧条目也必须用 old_end + 1。
+            let old_expiry = old_end.saturating_add(sp_runtime::traits::One::one());
+            ProposalsByExpiry::<T>::mutate(old_expiry, |ids| {
                 ids.retain(|&id| id != proposal_id);
             });
 

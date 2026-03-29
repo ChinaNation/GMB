@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../ui/app_theme.dart';
 import 'package:isar/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
@@ -40,8 +41,7 @@ class DuoqianInstitutionListPage extends StatefulWidget {
 
 class _DuoqianInstitutionListPageState
     extends State<DuoqianInstitutionListPage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
-  static const Color _institutionColor = Color(0xFF1565C0);
+  static const Color _institutionColor = AppTheme.info;
   static const Color _personalColor = Color(0xFF6A1B9A);
 
   List<_DuoqianListItem> _items = [];
@@ -223,7 +223,7 @@ class _DuoqianInstitutionListPageState
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
+        foregroundColor: AppTheme.primaryDark,
         elevation: 0,
         scrolledUnderElevation: 0.5,
         actions: isSelect
@@ -248,17 +248,17 @@ class _DuoqianInstitutionListPageState
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.groups_outlined, size: 64, color: Colors.grey[300]),
+          Icon(Icons.groups_outlined, size: 64, color: AppTheme.border),
           const SizedBox(height: 12),
           Text(
             '暂无多签账户',
-            style: TextStyle(fontSize: 16, color: Colors.grey[500]),
+            style: TextStyle(fontSize: 16, color: AppTheme.textTertiary),
           ),
           if (widget.mode == InstitutionListMode.manage) ...[
             const SizedBox(height: 6),
             Text(
               '点击右上角 + 创建',
-              style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+              style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
             ),
           ],
         ],
@@ -321,7 +321,7 @@ class _DuoqianInstitutionListPageState
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: _inkGreen,
+                              color: AppTheme.primaryDark,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -348,12 +348,12 @@ class _DuoqianInstitutionListPageState
                     const SizedBox(height: 2),
                     Text(
                       _truncateAddress(ss58),
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, size: 20, color: Colors.grey[400]),
+              Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),

@@ -10,7 +10,11 @@ use uuid::Uuid;
 use crate::chain::runtime_align::{build_vote_credential, RuntimeVoteCredential};
 use crate::*;
 
-const MAX_VOTE_REVALIDATION_ATTEMPTS: usize = 3;
+/// 投票资格二次校验最大重试次数。
+/// 凭证签名在写锁外生成（不需要 store），签名后重新获取写锁做二次校验。
+/// 如果二次校验发现状态已变（极低概率竞态），丢弃凭证重试。
+/// 5 次足以覆盖高并发下的瞬时状态抖动。
+const MAX_VOTE_REVALIDATION_ATTEMPTS: usize = 5;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum VoteDecisionSource {

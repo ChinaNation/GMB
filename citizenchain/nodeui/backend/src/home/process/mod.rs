@@ -842,12 +842,12 @@ fn verify_start_unlock_password(app: &AppHandle, unlock_password: &str) -> Resul
 fn spawn_node(
     app: &AppHandle,
     node_bin: &Path,
-    unlock_password: &str,
+    _unlock_password: &str,
 ) -> Result<(Child, Option<PathBuf>), String> {
     let rpc_port = rpc::current_rpc_port();
     let base_path = node_data_dir(app)?;
     let enable_grandpa_validator =
-        grandpa_address::prepare_grandpa_for_start(app, unlock_password)?;
+        grandpa_address::prepare_grandpa_for_start(app)?;
     let node_name = load_node_name(app)?;
 
     let mut cmd = Command::new(node_bin);
@@ -864,9 +864,9 @@ fn spawn_node(
     // 始终使用编译进二进制的内置 chain_config()，不依赖外部 chainspec.json。
     cmd.arg("--chain").arg("citizenchain");
 
+    // 中文注释：不传 --unsafe-rpc-external，RPC 默认绑定 127.0.0.1，仅本机可访问。
     cmd.arg("--rpc-port")
         .arg(rpc_port.to_string())
-        .arg("--unsafe-rpc-external")
         .arg("--rpc-methods")
         .arg("Unsafe")
         .arg("--rpc-cors")
@@ -1064,7 +1064,7 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
             }
         }
 
-        if let Err(err) = grandpa_address::verify_grandpa_after_start(&app, &unlock_password) {
+        if let Err(err) = grandpa_address::verify_grandpa_after_start(&app) {
             rollback_started_node(&app);
             let _ = cleanup_stale_staged_node_bins(&app, None);
             let _ = cleanup_stale_node_key_temp_files(&app);

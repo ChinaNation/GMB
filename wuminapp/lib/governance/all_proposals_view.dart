@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../ui/app_theme.dart';
+import '../ui/widgets/pressable_card.dart';
+import '../ui/widgets/shimmer_loading.dart';
 import '../util/amount_format.dart';
 import '../rpc/chain_event_subscription.dart';
 import '../wallet/core/wallet_manager.dart';
@@ -37,7 +40,6 @@ class AllProposalsView extends StatefulWidget {
 }
 
 class _AllProposalsViewState extends State<AllProposalsView> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
   static const int _pageSize = 10;
 
   final TransferProposalService _proposalService = TransferProposalService();
@@ -267,7 +269,10 @@ class _AllProposalsViewState extends State<AllProposalsView> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return ListSkeleton(
+        itemCount: 5,
+        itemBuilder: (_, __) => const ProposalCardSkeleton(),
+      );
     }
     if (_error != null) {
       return Center(
@@ -276,13 +281,13 @@ class _AllProposalsViewState extends State<AllProposalsView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
               const SizedBox(height: 12),
-              Text('加载失败',
-                  style: TextStyle(fontSize: 16, color: Colors.grey[700])),
+              const Text('加载失败',
+                  style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
               const SizedBox(height: 6),
               Text(_error!,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                   textAlign: TextAlign.center,
                   maxLines: 4,
                   overflow: TextOverflow.ellipsis),
@@ -299,13 +304,13 @@ class _AllProposalsViewState extends State<AllProposalsView> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.ballot_outlined, size: 48, color: Colors.grey[400]),
+            const Icon(Icons.ballot_outlined, size: 48, color: AppTheme.textTertiary),
             const SizedBox(height: 12),
-            Text('暂无提案',
-                style: TextStyle(fontSize: 16, color: Colors.grey[500])),
+            const Text('暂无提案',
+                style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
             const SizedBox(height: 4),
-            Text('全链提案将在此显示',
-                style: TextStyle(fontSize: 13, color: Colors.grey[400])),
+            const Text('全链提案将在此显示',
+                style: TextStyle(fontSize: 13, color: AppTheme.textTertiary)),
           ],
         ),
       );
@@ -353,17 +358,18 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     final createDqDetail = item.proposal.createDuoqianDetail;
     final closeDqDetail = item.proposal.closeDuoqianDetail;
 
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: statusColor.withValues(alpha: 0.2)),
-      ),
-      child: InkWell(
-        onTap: () => _openProposalDetail(item),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
+    return PressableCard(
+      child: Card(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: statusColor.withValues(alpha: 0.2)),
+        ),
+        child: InkWell(
+          onTap: () => _openProposalDetail(item),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
             children: [
@@ -392,7 +398,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
-                            color: _inkGreen,
+                            color: AppTheme.primaryDark,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -401,13 +407,13 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 1),
                             decoration: BoxDecoration(
-                              color: _inkGreen.withValues(alpha: 0.08),
+                              color: AppTheme.primaryDark.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               inst.name,
                               style: const TextStyle(
-                                  fontSize: 10, color: _inkGreen),
+                                  fontSize: 10, color: AppTheme.primaryDark),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -426,7 +432,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                                       : meta.kind == 1
                                           ? '联合投票提案'
                                           : '提案 ${_kindLabel(meta.kind)}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                     ),
                   ],
                 ),
@@ -456,7 +462,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                       width: 8,
                       height: 8,
                       decoration: const BoxDecoration(
-                        color: Colors.red,
+                        color: AppTheme.danger,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -464,10 +470,11 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                 ],
               ),
               const SizedBox(width: 4),
-              Icon(Icons.chevron_right, size: 20, color: Colors.grey[400]),
+              const Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -487,20 +494,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     }
   }
 
-  Color _statusColor(int status) {
-    switch (status) {
-      case 0:
-        return Colors.blue;
-      case 1:
-        return Colors.green;
-      case 2:
-        return Colors.red;
-      case 3:
-        return Colors.green;
-      default:
-        return Colors.grey;
-    }
-  }
+  Color _statusColor(int status) => AppTheme.proposalStatusColor(status);
 
   /// 根据提案类型返回图标。
   IconData _proposalIcon(

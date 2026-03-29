@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/api_client.dart';
 import 'package:wuminapp_mobile/wallet/models/server_tx_record.dart';
@@ -113,7 +114,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('加载失败', style: TextStyle(color: Colors.grey.shade600)),
+            const Text('加载失败', style: TextStyle(color: AppTheme.textSecondary)),
             const SizedBox(height: 8),
             TextButton(onPressed: _loadFirstPage, child: const Text('重试')),
           ],
@@ -122,7 +123,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
     }
     if (_records.isEmpty) {
       return const Center(
-        child: Text('暂无交易记录', style: TextStyle(color: Colors.grey)),
+        child: Text('暂无交易记录', style: TextStyle(color: AppTheme.textTertiary)),
       );
     }
     return RefreshIndicator(
@@ -181,15 +182,15 @@ class ServerTxRecordTile extends StatelessWidget {
   String _pad(int n) => n.toString().padLeft(2, '0');
 
   Color get _iconColor {
-    if (record.isExpense) return Colors.red;
-    if (record.isIncome) return const Color(0xFF0B3D2E);
-    return Colors.grey;
+    if (record.isExpense) return AppTheme.danger;
+    if (record.isIncome) return AppTheme.primaryDark;
+    return AppTheme.textTertiary;
   }
 
   Color get _iconBgColor {
-    if (record.isExpense) return Colors.red.shade50;
-    if (record.isIncome) return Colors.green.shade50;
-    return Colors.grey.shade100;
+    if (record.isExpense) return AppTheme.danger.withAlpha(20);
+    if (record.isIncome) return AppTheme.success.withAlpha(20);
+    return AppTheme.surfaceElevated;
   }
 
   IconData get _icon {
@@ -289,7 +290,7 @@ class ServerTxRecordDetailPage extends StatelessWidget {
             width: 72,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 14, color: Colors.black54),
+              style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
           ),
           Expanded(
@@ -300,7 +301,7 @@ class ServerTxRecordDetailPage extends StatelessWidget {
               onTap: () => _copy(context, value),
               child: const Padding(
                 padding: EdgeInsets.only(left: 8),
-                child: Icon(Icons.copy, size: 16, color: Colors.black38),
+                child: Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
               ),
             ),
         ],
@@ -311,10 +312,10 @@ class ServerTxRecordDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final amountColor = record.isExpense
-        ? Colors.red
+        ? AppTheme.danger
         : record.isIncome
-            ? const Color(0xFF0B3D2E)
-            : Colors.grey.shade700;
+            ? AppTheme.primaryDark
+            : AppTheme.textSecondary;
 
     return Scaffold(
       appBar: AppBar(

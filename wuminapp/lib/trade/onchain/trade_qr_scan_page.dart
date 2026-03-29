@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:wuminapp_mobile/ui/app_theme.dart';
 
 class TradeQrScanPage extends StatefulWidget {
   const TradeQrScanPage({super.key});
@@ -256,7 +257,7 @@ class _ScanCornerPainter extends CustomPainter {
     const strokeWidth = 4.0;
 
     final paint = Paint()
-      ..color = Colors.green
+      ..color = AppTheme.primary
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../ui/app_theme.dart';
 import 'app_lock_service.dart';
 
 /// PIN 输入模式。
@@ -270,17 +271,29 @@ class _PinInputPageState extends State<PinInputPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.lock_clock, size: 64, color: Colors.red),
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.danger.withAlpha(20),
+              ),
+              child: const Icon(Icons.lock_clock, size: 44, color: AppTheme.danger),
+            ),
             const SizedBox(height: 24),
             const Text(
               '应用已锁定',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
               '连续验证错误次数过多\n请在 ${_formatDuration(_remainingSeconds)} 后重试',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
+              style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -293,29 +306,33 @@ class _PinInputPageState extends State<PinInputPage> {
       children: [
         const Spacer(flex: 2),
         if (widget.mode == PinInputMode.verify) ...[
-          const Icon(Icons.lock_outline, size: 48, color: Color(0xFF007A74)),
+          Container(
+            width: 72,
+            height: 72,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: AppTheme.primaryGradient,
+            ),
+            child: const Icon(Icons.lock_outline, size: 36, color: AppTheme.textOnPrimary),
+          ),
           const SizedBox(height: 16),
         ],
         Text(
           widget.mode == PinInputMode.verify ? _title : _subtitle,
-          style: const TextStyle(fontSize: 16, color: Colors.black54),
+          style: const TextStyle(fontSize: 16, color: AppTheme.textSecondary),
         ),
         if (widget.mode == PinInputMode.setup && _firstPin == null) ...[
           const SizedBox(height: 8),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 48),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.shade200),
-            ),
-            child: Text(
+            decoration: AppTheme.bannerDecoration(AppTheme.warning),
+            child: const Text(
               '请牢记密码。忘记密码将清空所有数据。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.orange.shade800,
+                color: AppTheme.warning,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -327,17 +344,21 @@ class _PinInputPageState extends State<PinInputPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(pinLength, (i) {
             final filled = i < _pin.length;
-            return Container(
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
               margin: const EdgeInsets.symmetric(horizontal: 8),
-              width: 16,
-              height: 16,
+              width: filled ? 18 : 16,
+              height: filled ? 18 : 16,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: filled ? const Color(0xFF007A74) : Colors.transparent,
+                color: filled ? AppTheme.primary : Colors.transparent,
                 border: Border.all(
-                  color: const Color(0xFF007A74),
+                  color: filled ? AppTheme.primary : AppTheme.border,
                   width: 2,
                 ),
+                boxShadow: filled
+                    ? [BoxShadow(color: AppTheme.primary.withAlpha(40), blurRadius: 8)]
+                    : null,
               ),
             );
           }),
@@ -346,7 +367,7 @@ class _PinInputPageState extends State<PinInputPage> {
           const SizedBox(height: 12),
           Text(
             _error!,
-            style: const TextStyle(color: Colors.red, fontSize: 13),
+            style: const TextStyle(color: AppTheme.danger, fontSize: 13),
           ),
         ],
         const Spacer(flex: 1),
@@ -405,17 +426,19 @@ class _PinInputPageState extends State<PinInputPage> {
       height: 72,
       child: Material(
         color: Colors.transparent,
-        shape: const CircleBorder(),
+        shape: const CircleBorder(side: BorderSide(color: AppTheme.borderLight, width: 1)),
         clipBehavior: Clip.hardEdge,
         child: InkWell(
           onTap: () => _onDigit(digit),
           customBorder: const CircleBorder(),
+          splashColor: AppTheme.primary.withAlpha(30),
           child: Center(
             child: Text(
               '$digit',
               style: const TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w500,
+                color: AppTheme.textPrimary,
               ),
             ),
           ),

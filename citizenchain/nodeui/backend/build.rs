@@ -26,7 +26,7 @@ fn build_chain_node() {
     let sidecar = binaries_dir.join("citizenchain-node");
 
     // 构建参数
-    let mut args = vec![
+    let args = vec![
         "build",
         "--release",
         "--manifest-path",

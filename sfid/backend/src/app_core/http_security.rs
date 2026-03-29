@@ -292,6 +292,7 @@ pub(crate) fn constant_time_eq(left: &str, right: &str) -> bool {
     diff == 0
 }
 
+#[allow(dead_code)]
 pub(crate) fn require_public_search_auth(
     headers: &HeaderMap,
 ) -> Result<(), axum::response::Response> {

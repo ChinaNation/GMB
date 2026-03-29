@@ -38,6 +38,17 @@
 - `memory/08-tasks/open/20260326-104800-删除前10块自动引导出块逻辑-普通节点只允许同步现网后出块.md`
 - `memory/08-tasks/open/20260326-112500-修复普通节点关闭-grandpa-voter-后网络连接被-grandpa-协议空接收端打断.md`
 - `memory/08-tasks/open/20260327-083033-全面检查-grandpa-为什么不工作-不验证区块-基于代码-配置-日志和运行行为定位根因.md`
+- `memory/08-tasks/open/20260327-fix-smoldot-submit-and-vote-display.md`
+- `memory/08-tasks/open/20260327-fix-try-execute-transfer-atomicity.md`
+- `memory/08-tasks/open/20260328-095223-全面仔细检查-citizen-lightnode-issuance-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
+- `memory/08-tasks/open/20260328-101548-全面仔细检查-sfid-code-auth-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
+- `memory/08-tasks/open/20260328-112224-全面仔细检查-grandpa-key-gov-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
+- `memory/08-tasks/open/20260328-122100-全面仔细检查-resolution-issuance-gov-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
+- `memory/08-tasks/open/20260328-123104-全面仔细检查-institution-asset-guard-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
+- `memory/08-tasks/open/20260328-124050-全面仔细检查-voting-engine-system-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
+- `memory/08-tasks/open/20260328-130310-全面仔细检查-duoqian-transfer-pow-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
+- `memory/08-tasks/open/20260328-131513-全面仔细检查-genesis-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
+- `memory/08-tasks/open/20260328-140327-全面仔细检查-node-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 
 ## done
 
@@ -52,3 +63,14 @@
 - `memory/08-tasks/done/20260321-074809-生成-sfid-env-dev-local-本地开发环境文件-并确保与当前启动脚本和后端必需环境变量一致.md`
 - `memory/08-tasks/done/20260321-082100-将-wuminapp-手机启动脚本补充-wuminapp-api-base-url-并指向云服务器-147-224-14.md`
 - `memory/08-tasks/done/20260323-173653-将-tools-zhujichi-py-从输出-json-改为输出-txt-并验证生成结果.md`
+- `memory/08-tasks/done/20260328-073618-全面仔细检查一遍-shengbank-stake-interest-模块有没有安全漏洞-有没有需要改进的地方-功能需求是否严格实现-中文注释技术文档是否完整-有没有要清理的残留.md`
+- `memory/08-tasks/done/20260328-075127-全面仔细的检查一遍-fullnode-pow-reward-模块有没有安全漏洞-有没有需要改进的地方-功能需求是否严格实现-中文注释技术文档是否完整-有没有要清理的残留.md`
+- `memory/08-tasks/done/20260328-100300-全面仔细检查一遍-pow-difficulty-module-模块有没有安全漏洞-有没有需要改进的地方-功能需求是否严格实现-中文注释技术文档是否完整-有没有要清理的残留.md`
+- `memory/08-tasks/done/20260328-100500-全面仔细的检查一遍-resolution-issuance-iss-模块有没有安全漏洞-有没有需要改进的地方-功能需求是否严格实现-中文注释技术文档是否完整-有没有要清理的残留.md`
+- `memory/08-tasks/done/20260328-112311-全面仔细的检查一遍-admins-origin-gov-模块有没有安全漏洞-有没有需要改进的地方-功能需求是否严格实现-中文注释技术文档是否完整-有没有要清理的残留.md`
+- `memory/08-tasks/done/20260328-113654-审查-resolution-destro-gov.md`
+- `memory/08-tasks/done/20260328-120407-审查-runtime-root-upgrade.md`
+- `memory/08-tasks/done/20260328-121809-审查-duoqian-manage-pow.md`
+- `memory/08-tasks/done/20260328-123709-审查-onchain-transaction-pow.md`
+- `memory/08-tasks/done/20260328-132030-审查-nodeui.md`
+- `memory/08-tasks/done/20260328-141519-全面仔细检查一遍-primitives-模块有没有安全漏洞-有没有需要改进的地方-功能需求是否严格实现-中文注释技术文档是否完整-有没有要清理的残留.md`

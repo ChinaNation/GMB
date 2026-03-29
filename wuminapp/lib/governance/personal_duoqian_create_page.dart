@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../ui/app_theme.dart';
 import 'package:isar/isar.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
@@ -26,7 +27,6 @@ class PersonalDuoqianCreatePage extends StatefulWidget {
 
 class _PersonalDuoqianCreatePageState
     extends State<PersonalDuoqianCreatePage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
   static const int _ss58Prefix = 2027;
 
   final _nameController = TextEditingController();
@@ -252,14 +252,14 @@ class _PersonalDuoqianCreatePageState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('提案已提交：${_truncateAddress(result.txHash)}'),
-          backgroundColor: _inkGreen,
+          backgroundColor: AppTheme.primaryDark,
         ),
       );
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('提交失败：$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('提交失败：$e'), backgroundColor: AppTheme.danger),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -277,7 +277,7 @@ class _PersonalDuoqianCreatePageState
         title: const Text('创建个人多签', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
+        foregroundColor: AppTheme.primaryDark,
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
@@ -300,13 +300,13 @@ class _PersonalDuoqianCreatePageState
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: _inkGreen.withValues(alpha: 0.06),
+                color: AppTheme.primaryDark.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('派生多签地址：', style: TextStyle(fontSize: 12, color: _inkGreen)),
+                  const Text('派生多签地址：', style: TextStyle(fontSize: 12, color: AppTheme.primaryDark)),
                   const SizedBox(height: 4),
                   Text(preview, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
                 ],
@@ -324,12 +324,12 @@ class _PersonalDuoqianCreatePageState
               contentPadding: EdgeInsets.zero,
               leading: CircleAvatar(
                 radius: 14,
-                backgroundColor: _inkGreen.withValues(alpha: 0.08),
-                child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _inkGreen)),
+                backgroundColor: AppTheme.primaryDark.withValues(alpha: 0.08),
+                child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryDark)),
               ),
               title: Text(_truncateAddress(ss58), style: const TextStyle(fontSize: 13)),
               trailing: IconButton(
-                icon: Icon(Icons.close, size: 18, color: Colors.red[300]),
+                icon: Icon(Icons.close, size: 18, color: AppTheme.danger),
                 onPressed: () => _removeAdmin(entry.key),
               ),
             );
@@ -338,7 +338,7 @@ class _PersonalDuoqianCreatePageState
             onPressed: _addAdminByQr,
             icon: const Icon(Icons.qr_code_scanner, size: 18),
             label: const Text('扫码添加管理员'),
-            style: OutlinedButton.styleFrom(foregroundColor: _inkGreen, side: BorderSide(color: _inkGreen.withValues(alpha: 0.3))),
+            style: OutlinedButton.styleFrom(foregroundColor: AppTheme.primaryDark, side: BorderSide(color: AppTheme.primaryDark.withValues(alpha: 0.3))),
           ),
 
           const SizedBox(height: 20),
@@ -384,7 +384,7 @@ class _PersonalDuoqianCreatePageState
             width: double.infinity,
             child: ElevatedButton(
               onPressed: _submitting ? null : _submit,
-              style: ElevatedButton.styleFrom(backgroundColor: _inkGreen, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryDark, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
               child: _submitting
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Text('发起创建提案', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
@@ -395,7 +395,7 @@ class _PersonalDuoqianCreatePageState
     );
   }
 
-  Widget _buildSectionTitle(String title) => Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _inkGreen));
+  Widget _buildSectionTitle(String title) => Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primaryDark));
 
   String _truncateAddress(String a) => a.length <= 14 ? a : '${a.substring(0, 6)}...${a.substring(a.length - 6)}';
   String _hexToSs58(String hex) => Keyring().encodeAddress(Uint8List.fromList(_hexDecode(hex)), _ss58Prefix);

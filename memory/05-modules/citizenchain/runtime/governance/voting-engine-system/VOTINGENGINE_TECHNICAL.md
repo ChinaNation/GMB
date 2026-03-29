@@ -56,10 +56,12 @@
   - `STATUS_PASSED = 1`：投票已通过
   - `STATUS_REJECTED = 2`：投票被否决
   - `STATUS_EXECUTED = 3`：提案已执行完成（终态）。消费模块在业务逻辑成功后调用 `set_status_and_emit(STATUS_EXECUTED)` 设置。
+  - `STATUS_EXECUTION_FAILED = 4`：投票通过但业务执行失败（终态）。由消费模块回调在 `set_status_and_emit` 事务内覆盖。
 
 状态流转：
 ```
 VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
+         → PASSED(1) → EXECUTION_FAILED(4)（投票通过但执行失败）
          → REJECTED(2)（投票超时/否决）
 ```
 - `internal_org`、`internal_institution`：内部提案专用字段
@@ -67,7 +69,9 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 - `citizen_eligible_total`：公民投票总分母
 
 ### 2.2 关键存储
-- `NextProposalId`：全局提案 ID 自增计数器（`u64`）
+- `CurrentProposalYear`：当前提案年份（`u16`），用于年度计数器重置
+- `YearProposalCounter`：当前年份内的提案计数器（`u32`），每年从 0 开始
+- `NextProposalId`：兼容别名（`u64`），值为 `年份 × 1,000,000 + 计数器 + 1`，仅供外部查询
 - `Proposals`：提案主表
 - `ProposalsByExpiry`：按阶段截止区块索引提案（用于自动超时结算）
 - `PendingExpiryBucket`：自动结算游标（上块未处理完的过期桶）
@@ -219,5 +223,7 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 - 内部投票：`src/internal_vote.rs`
 - 联合投票：`src/joint_vote.rs`
 - 公民投票：`src/citizen_vote.rs`
+- 提案清理调度：`src/proposal_cleanup.rs`
+- 活跃提案限额：`src/active_proposal_limit.rs`
 - Benchmark：`src/benchmarks.rs`
 - Weight：`src/weights.rs`
