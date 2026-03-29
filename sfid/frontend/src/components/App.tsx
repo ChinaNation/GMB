@@ -108,18 +108,18 @@ function resolveAdminName(auth: AdminAuth | null): string {
     return auth.admin_name.trim();
   }
   if (auth.role === 'KEY_ADMIN') return '密钥管理员';
-  if (auth.role === 'SUPER_ADMIN') return '超级管理员';
-  if (auth.role === 'OPERATOR_ADMIN') return '操作管理员';
-  return '查询管理员';
+  if (auth.role === 'INSTITUTION_ADMIN') return '机构管理员';
+  if (auth.role === 'SYSTEM_ADMIN') return '系统管理员';
+  return '';
 }
 
 function resolveHeaderAdminName(auth: AdminAuth | null): string {
   if (!auth) return '';
-  if (auth.role === 'OPERATOR_ADMIN') {
+  if (auth.role === 'SYSTEM_ADMIN') {
     if (typeof auth.admin_name === 'string' && auth.admin_name.trim()) {
-      return `操作管理员：${auth.admin_name.trim()}`;
+      return `系统管理员：${auth.admin_name.trim()}`;
     }
-    return '操作管理员';
+    return '系统管理员';
   }
   return resolveAdminName(auth);
 }
@@ -232,33 +232,36 @@ function p1LockedByA3(a3: string): boolean {
 }
 
 type RoleCapabilities = {
-  canViewAdminNav: boolean;
-  canManageOperators: boolean;
+  canViewInstitutions: boolean;
+  canViewKeyring: boolean;
+  canViewInstitutionAdmins: boolean;
+  canViewSystemAdmins: boolean;
+  canCrudSystemAdmins: boolean;
   canManageInstitutions: boolean;
   canRegisterInstitutions: boolean;
-  canManageKeyring: boolean;
   canReplaceSuperAdmins: boolean;
+  canManageKeyring: boolean;
   canStatusScan: boolean;
   canBusinessWrite: boolean;
-  isQueryOnly: boolean;
 };
 
 function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilities {
   const role = auth?.role;
   const isKeyAdmin = role === 'KEY_ADMIN';
-  const isSuperAdmin = role === 'SUPER_ADMIN';
-  const isOperatorAdmin = role === 'OPERATOR_ADMIN';
-  const isQueryOnly = role === 'QUERY_ONLY';
+  const isInstitutionAdmin = role === 'INSTITUTION_ADMIN';
+  const isSystemAdmin = role === 'SYSTEM_ADMIN';
   return {
-    canViewAdminNav: isKeyAdmin || isSuperAdmin,
-    canManageOperators: isKeyAdmin || isSuperAdmin,
-    canManageInstitutions: isSuperAdmin,
-    canRegisterInstitutions: isSuperAdmin,
-    canManageKeyring: isKeyAdmin,
+    canViewInstitutions: isKeyAdmin || isInstitutionAdmin,
+    canViewKeyring: isKeyAdmin,
+    canViewInstitutionAdmins: isKeyAdmin || isInstitutionAdmin,
+    canViewSystemAdmins: isKeyAdmin || isInstitutionAdmin || isSystemAdmin,
+    canCrudSystemAdmins: isKeyAdmin || isInstitutionAdmin,
+    canManageInstitutions: isKeyAdmin || isInstitutionAdmin,
+    canRegisterInstitutions: isKeyAdmin || isInstitutionAdmin,
     canReplaceSuperAdmins: isKeyAdmin,
-    canStatusScan: isKeyAdmin || isSuperAdmin || isOperatorAdmin,
-    canBusinessWrite: Boolean(role) && !isQueryOnly,
-    isQueryOnly
+    canManageKeyring: isKeyAdmin,
+    canStatusScan: isKeyAdmin || isInstitutionAdmin || isSystemAdmin,
+    canBusinessWrite: true,
   };
 }
 
@@ -283,7 +286,7 @@ export default function App() {
   const [scannerActive, setScannerActive] = useState(false);
   const [scanSubmitting, setScanSubmitting] = useState(false);
   const [scannerReady, setScannerReady] = useState(false);
-  const [activeView, setActiveView] = useState<'citizens' | 'operators' | 'institutions' | 'keyring'>('citizens');
+  const [activeView, setActiveView] = useState<'citizens' | 'institutions' | 'keyring' | 'super-admins' | 'operators'>('citizens');
   const [operators, setOperators] = useState<OperatorRow[]>([]);
   const [operatorsLoading, setOperatorsLoading] = useState(false);
   const [operatorPage, setOperatorPage] = useState(1);
@@ -739,7 +742,7 @@ export default function App() {
       const rows = await listOperators(currentAuth);
       setOperators(Array.isArray(rows) ? rows : []);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '加载操作管理员失败';
+      const msg = err instanceof Error ? err.message : '加载系统管理员失败';
       message.error(msg);
     } finally {
       setOperatorsLoading(false);
@@ -752,7 +755,7 @@ export default function App() {
       const rows = await listSuperAdmins(currentAuth);
       setSuperAdmins(Array.isArray(rows) ? rows : []);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '加载超级管理员失败';
+      const msg = err instanceof Error ? err.message : '加载机构管理员失败';
       message.error(msg);
     } finally {
       setSuperAdminsLoading(false);
@@ -1111,10 +1114,10 @@ export default function App() {
     setOperatorsLoading(true);
     try {
       await updateOperatorStatus(auth, row.id, target);
-      message.success(target === 'ACTIVE' ? '已启用操作管理员' : '已停用操作管理员');
+      message.success(target === 'ACTIVE' ? '已启用系统管理员' : '已停用系统管理员');
       await refreshOperators(auth);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '更新操作管理员状态失败';
+      const msg = err instanceof Error ? err.message : '更新系统管理员状态失败';
       message.error(msg);
     } finally {
       setOperatorsLoading(false);
@@ -1126,7 +1129,7 @@ export default function App() {
     let nextName = row.admin_name;
     let nextPubkey = row.admin_pubkey;
     Modal.confirm({
-      title: '修改操作管理员',
+      title: '修改系统管理员',
       content: (
         <Space direction="vertical" style={{ width: '100%' }}>
           <Input
@@ -1161,10 +1164,10 @@ export default function App() {
         setOperatorsLoading(true);
         try {
           await updateOperator(auth, row.id, { admin_name, admin_pubkey });
-          message.success('操作管理员信息已更新');
+          message.success('系统管理员信息已更新');
           await refreshOperators(auth);
         } catch (err) {
-          const msg = err instanceof Error ? err.message : '更新操作管理员信息失败';
+          const msg = err instanceof Error ? err.message : '更新系统管理员信息失败';
           message.error(msg);
           throw err;
         } finally {
@@ -1258,8 +1261,8 @@ export default function App() {
   const onDeleteOperator = (row: OperatorRow) => {
     if (!auth) return;
     Modal.confirm({
-      title: '删除操作管理员',
-      content: `确认删除该操作管理员？\n${row.admin_pubkey}`,
+      title: '删除系统管理员',
+      content: `确认删除该系统管理员？\n${row.admin_pubkey}`,
       okText: '确认删除',
       okButtonProps: { danger: true },
       cancelText: '取消',
@@ -1267,10 +1270,10 @@ export default function App() {
         setOperatorsLoading(true);
         try {
           await deleteOperator(auth, row.id);
-          message.success('操作管理员已删除');
+          message.success('系统管理员已删除');
           await refreshOperators(auth);
         } catch (err) {
-          const msg = err instanceof Error ? err.message : '删除操作管理员失败';
+          const msg = err instanceof Error ? err.message : '删除系统管理员失败';
           message.error(msg);
         } finally {
           setOperatorsLoading(false);
@@ -1284,11 +1287,11 @@ export default function App() {
     setReplaceSuperLoading(true);
     try {
       await replaceSuperAdmin(auth, values.province.trim(), values.admin_pubkey.trim());
-      message.success(`已更新 ${values.province} 超级管理员`);
+      message.success(`已更新 ${values.province} 机构管理员`);
       replaceSuperForm.resetFields();
       await refreshSuperAdmins(auth);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '更换超级管理员失败';
+      const msg = err instanceof Error ? err.message : '更换机构管理员失败';
       message.error(msg);
     } finally {
       setReplaceSuperLoading(false);
@@ -1305,7 +1308,7 @@ export default function App() {
 
   const openRegisterScanner = () => {
     if (!capabilities.canRegisterInstitutions) {
-      message.error('仅超级管理员可录入机构');
+      message.error('仅机构管理员可录入机构');
       return;
     }
     setOpScanType('register');
@@ -1314,7 +1317,7 @@ export default function App() {
 
   const openInstitutionSfidModal = async () => {
     if (!capabilities.canRegisterInstitutions) {
-      message.error('仅超级管理员可生成身份识别码');
+      message.error('仅机构管理员可生成身份识别码');
       return;
     }
     if (!auth) return;
@@ -2061,8 +2064,7 @@ export default function App() {
         </Content>
       ) : (
         <Content style={{ position: 'relative', zIndex: 1, padding: '16px 24px 24px' }}>
-          {capabilities.canViewAdminNav && (
-            <div
+          <div
               style={{
                 display: 'flex',
                 gap: 6,
@@ -2075,25 +2077,12 @@ export default function App() {
                 width: 'fit-content'
               }}
             >
-              {[
-                { key: 'citizens' as const, label: '首页', onClick: () => setActiveView('citizens') },
-                {
-                  key: 'operators' as const,
-                  label: '管理员',
-                  onClick: async () => {
-                    setActiveView('operators');
-                    setOperatorPage(1);
-                    if (auth) {
-                      await refreshOperators(auth);
-                      if (capabilities.canReplaceSuperAdmins) {
-                        await refreshSuperAdmins(auth);
-                      }
-                    }
-                  }
-                },
+              {([
+                { key: 'citizens' as const, label: '首页', visible: true, onClick: () => setActiveView('citizens') },
                 {
                   key: 'institutions' as const,
                   label: '机构管理',
+                  visible: capabilities.canViewInstitutions,
                   onClick: async () => {
                     setActiveView('institutions');
                     if (auth) {
@@ -2101,21 +2090,41 @@ export default function App() {
                     }
                   }
                 },
-                ...(capabilities.canManageKeyring
-                  ? [
-                      {
-                        key: 'keyring' as const,
-                        label: '密钥管理',
-                        onClick: async () => {
-                          setActiveView('keyring');
-                          if (auth) {
-                            await refreshKeyringState(auth);
-                          }
-                        }
-                      }
-                    ]
-                  : [])
-              ].map((tab) => (
+                {
+                  key: 'keyring' as const,
+                  label: '密钥管理员',
+                  visible: capabilities.canViewKeyring,
+                  onClick: async () => {
+                    setActiveView('keyring');
+                    if (auth) {
+                      await refreshKeyringState(auth);
+                    }
+                  }
+                },
+                {
+                  key: 'super-admins' as const,
+                  label: '机构管理员',
+                  visible: capabilities.canViewInstitutionAdmins,
+                  onClick: async () => {
+                    setActiveView('super-admins');
+                    if (auth) {
+                      await refreshSuperAdmins(auth);
+                    }
+                  }
+                },
+                {
+                  key: 'operators' as const,
+                  label: '系统管理员',
+                  visible: capabilities.canViewSystemAdmins,
+                  onClick: async () => {
+                    setActiveView('operators');
+                    setOperatorPage(1);
+                    if (auth) {
+                      await refreshOperators(auth);
+                    }
+                  }
+                },
+              ] as const).filter((tab) => tab.visible).map((tab) => (
                 <button
                   key={tab.key}
                   onClick={tab.onClick}
@@ -2143,15 +2152,14 @@ export default function App() {
                 </button>
               ))}
             </div>
-          )}
-          {activeView === 'operators' && capabilities.canManageOperators ? (
-            <>
-              <Card
-                title="管理员列表"
-                bordered={false}
-                style={glassCardStyle}
-                headStyle={glassCardHeadStyle}
-                extra={
+          {activeView === 'operators' && capabilities.canViewSystemAdmins ? (
+            <Card
+              title="系统管理员列表"
+              bordered={false}
+              style={glassCardStyle}
+              headStyle={glassCardHeadStyle}
+              extra={
+                capabilities.canCrudSystemAdmins ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div
                       style={{
@@ -2183,15 +2191,15 @@ export default function App() {
                       >
                         <Form.Item
                           name="operator_name"
-                          rules={[{ required: true, message: '请输入管理员姓名' }]}
+                          rules={[{ required: true, message: '请输入系统管理员姓名' }]}
                           style={{ marginBottom: 0 }}
                         >
-                          <Input style={{ width: 180 }} placeholder="请输入管理员姓名" />
+                          <Input style={{ width: 180 }} placeholder="请输入系统管理员姓名" />
                         </Form.Item>
                         <Form.Item
                           name="operator_pubkey"
                           rules={[
-                            { required: true, message: '请输入管理员公钥' },
+                            { required: true, message: '请输入系统管理员公钥' },
                             {
                               validator: async (_rule, value) => {
                                 if (!value || isSr25519HexPubkey(String(value))) return;
@@ -2201,7 +2209,7 @@ export default function App() {
                           ]}
                           style={{ marginBottom: 0 }}
                         >
-                          <Input style={{ width: 520 }} placeholder="请输入管理员公钥" />
+                          <Input style={{ width: 520 }} placeholder="请输入系统管理员公钥" />
                         </Form.Item>
                       </Form>
                     </div>
@@ -2216,117 +2224,135 @@ export default function App() {
                         addOperatorForm.submit();
                       }}
                     >
-                      {addOperatorOpen ? '确认新增' : '新增管理员'}
+                      {addOperatorOpen ? '确认新增' : '新增系统管理员'}
                     </Button>
                   </div>
-                }
-              >
-                <Table<OperatorRow>
-                  rowKey={(r) => `${r.id}-${r.admin_pubkey}`}
-                  loading={operatorsLoading}
-                  dataSource={operators}
-                  pagination={{
-                    pageSize: 10,
-                    current: operatorPage,
-                    onChange: (page) => setOperatorPage(page)
-                  }}
-                  columns={[
-                    {
-                      title: '序号',
-                      width: 80,
-                      align: 'center',
-                      render: (_v, _row, index) => (operatorPage - 1) * 10 + index + 1
-                    },
-                    { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 160 },
-                    { title: '公钥', dataIndex: 'admin_pubkey', align: 'center' },
-                    { title: '状态', dataIndex: 'status', width: 120, align: 'center' },
-                    {
-                      title: '创建者',
-                      align: 'center',
-                      render: (_v, row) => row.created_by_name || row.created_by || '-'
-                    },
-                    {
-                      title: '操作',
-                      width: 220,
-                      align: 'center',
-                      render: (_v, row) => (
-                        <Space>
-                          <Button size="small" onClick={() => onUpdateOperator(row)}>
-                            修改
-                          </Button>
-                          <Button size="small" onClick={() => onToggleOperatorStatus(row)}>
-                            {row.status === 'ACTIVE' ? '停用' : '启用'}
-                          </Button>
-                          <Button size="small" danger onClick={() => onDeleteOperator(row)}>
-                            删除
-                          </Button>
-                        </Space>
-                      )
-                    }
-                  ]}
-                />
-              </Card>
-              {capabilities.canReplaceSuperAdmins && (
-                <Card
-                  title="省级超级管理员列表"
-                  bordered={false}
-                  style={{ ...glassCardStyle, marginTop: 16 }}
-                  headStyle={glassCardHeadStyle}
-                  extra={
-                    <Form
-                      form={replaceSuperForm}
-                      layout="inline"
-                      onFinish={onReplaceSuperAdmin}
-                      style={{ rowGap: 8 }}
+                ) : null
+              }
+            >
+              <Table<OperatorRow>
+                rowKey={(r) => `${r.id}-${r.admin_pubkey}`}
+                loading={operatorsLoading}
+                dataSource={operators}
+                pagination={{
+                  pageSize: 10,
+                  current: operatorPage,
+                  onChange: (page) => setOperatorPage(page)
+                }}
+                columns={[
+                  {
+                    title: '序号',
+                    width: 80,
+                    align: 'center',
+                    render: (_v, _row, index) => (operatorPage - 1) * 10 + index + 1
+                  },
+                  { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 160 },
+                  { title: '公钥', dataIndex: 'admin_pubkey', align: 'center' },
+                  { title: '状态', dataIndex: 'status', width: 120, align: 'center' },
+                  {
+                    title: '创建者',
+                    align: 'center',
+                    render: (_v, row) => row.created_by_name || row.created_by || '-'
+                  },
+                  ...(capabilities.canCrudSystemAdmins
+                    ? [
+                        {
+                          title: '操作',
+                          width: 220,
+                          align: 'center' as const,
+                          render: (_v: unknown, row: OperatorRow) => (
+                            <Space>
+                              <Button size="small" onClick={() => onUpdateOperator(row)}>
+                                修改
+                              </Button>
+                              <Button size="small" onClick={() => onToggleOperatorStatus(row)}>
+                                {row.status === 'ACTIVE' ? '停用' : '启用'}
+                              </Button>
+                              <Button size="small" danger onClick={() => onDeleteOperator(row)}>
+                                删除
+                              </Button>
+                            </Space>
+                          )
+                        }
+                      ]
+                    : [])
+                ]}
+              />
+            </Card>
+          ) : activeView === 'super-admins' && capabilities.canViewInstitutionAdmins ? (
+            <Card
+              title="机构管理员列表"
+              bordered={false}
+              style={glassCardStyle}
+              headStyle={glassCardHeadStyle}
+              extra={
+                capabilities.canReplaceSuperAdmins ? (
+                  <Form
+                    form={replaceSuperForm}
+                    layout="inline"
+                    onFinish={onReplaceSuperAdmin}
+                    style={{ rowGap: 8 }}
+                  >
+                    <Form.Item
+                      name="province"
+                      rules={[{ required: true, message: '请选择省份' }]}
+                      style={{ marginBottom: 0 }}
                     >
-                      <Form.Item
-                        name="province"
-                        rules={[{ required: true, message: '请选择省份' }]}
-                        style={{ marginBottom: 0 }}
-                      >
-                        <Select
-                          style={{ width: 160 }}
-                          placeholder="选择省份"
-                          options={superAdmins.map((item) => ({ value: item.province, label: item.province }))}
-                        />
-                      </Form.Item>
-                      <Form.Item
-                        name="admin_pubkey"
-                        rules={[
-                          { required: true, message: '请输入新超级管理员公钥' },
-                          {
-                            validator: async (_rule, value) => {
-                              if (!value || isSr25519HexPubkey(String(value))) return;
-                              throw new Error('公钥格式必须为 32 字节十六进制');
-                            }
+                      <Select
+                        style={{ width: 160 }}
+                        placeholder="选择省份"
+                        options={superAdmins.map((item) => ({ value: item.province, label: item.province }))}
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      name="admin_pubkey"
+                      rules={[
+                        { required: true, message: '请输入新机构管理员公钥' },
+                        {
+                          validator: async (_rule, value) => {
+                            if (!value || isSr25519HexPubkey(String(value))) return;
+                            throw new Error('公钥格式必须为 32 字节十六进制');
                           }
-                        ]}
-                        style={{ marginBottom: 0 }}
-                      >
-                        <Input style={{ width: 420, maxWidth: '60vw' }} placeholder="新超级管理员公钥" />
-                      </Form.Item>
-                      <Form.Item style={{ marginBottom: 0 }}>
-                        <Button type="primary" htmlType="submit" loading={replaceSuperLoading}>
-                          更换超级管理员
-                        </Button>
-                      </Form.Item>
-                    </Form>
+                        }
+                      ]}
+                      style={{ marginBottom: 0 }}
+                    >
+                      <Input style={{ width: 420, maxWidth: '60vw' }} placeholder="新机构管理员公钥" />
+                    </Form.Item>
+                    <Form.Item style={{ marginBottom: 0 }}>
+                      <Button type="primary" htmlType="submit" loading={replaceSuperLoading}>
+                        更换机构管理员
+                      </Button>
+                    </Form.Item>
+                  </Form>
+                ) : null
+              }
+            >
+              <Table<SuperAdminRow>
+                rowKey={(r) => `${r.province}-${r.admin_pubkey}`}
+                loading={superAdminsLoading}
+                dataSource={superAdmins}
+                pagination={{ pageSize: 10 }}
+                columns={[
+                  {
+                    title: '序号',
+                    width: 80,
+                    align: 'center',
+                    render: (_v: unknown, _row: SuperAdminRow, index: number) => index + 1
+                  },
+                  { title: '省份', dataIndex: 'province', align: 'center', width: 140 },
+                  { title: '名称', dataIndex: 'admin_name', align: 'center', width: 180 },
+                  { title: '公钥', dataIndex: 'admin_pubkey', align: 'center' },
+                  { title: '状态', dataIndex: 'status', align: 'center', width: 100 },
+                  {
+                    title: '类型',
+                    width: 100,
+                    align: 'center',
+                    render: (_v: unknown, row: SuperAdminRow) => row.built_in ? '内置' : '自定义'
                   }
-                >
-                  <Table<SuperAdminRow>
-                    rowKey={(r) => `${r.province}-${r.admin_pubkey}`}
-                    loading={superAdminsLoading}
-                    dataSource={superAdmins}
-                    pagination={{ pageSize: 10 }}
-                    columns={[
-                      { title: '省份', dataIndex: 'province', align: 'center', width: 160 },
-                      { title: '公钥', dataIndex: 'admin_pubkey', align: 'center' },
-                      { title: '状态', dataIndex: 'status', align: 'center', width: 120 }
-                    ]}
-                  />
-                </Card>
-              )}
-            </>
+                ]}
+              />
+            </Card>
           ) : activeView === 'institutions' && capabilities.canManageInstitutions ? (
             <Card
               title="机构列表"
@@ -2431,7 +2457,7 @@ export default function App() {
                   {
                     title: '登记人',
                     align: 'center',
-                    render: (_v, row) => `${row.admin_province || ''}超级管理员`
+                    render: (_v, row) => `${row.admin_province || ''}机构管理员`
                   },
                   {
                     title: '操作',
@@ -2630,7 +2656,7 @@ export default function App() {
           ) : (
             <>
           <Card
-            title={capabilities.isQueryOnly ? '身份信息（只读）' : '身份信息'}
+            title={'身份信息'}
             bordered={false}
             style={glassCardStyle}
             headStyle={glassCardHeadStyle}
@@ -2647,11 +2673,6 @@ export default function App() {
               </Form>
             }
           >
-            {capabilities.isQueryOnly && (
-              <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-                当前为非管理员登录，仅可按档案号、SFID号、公钥查询绑定信息。
-              </Typography.Paragraph>
-            )}
             <Table<CitizenRow>
               rowKey={(r) => `${r.seq}-${r.account_pubkey}`}
               dataSource={rows}

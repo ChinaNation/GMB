@@ -19,6 +19,7 @@ use crate::*;
 
 type Blake2b256 = Blake2b<U32>;
 
+/// 首次初始化：从 province.rs 硬编码数据创建 43 个内置机构管理员
 pub(crate) fn seed_super_admins(state: &AppState) {
     let mut store = match state.store.write() {
         Ok(v) => v,
@@ -36,7 +37,7 @@ pub(crate) fn seed_super_admins(state: &AppState) {
                 id: (idx as u64) + 1,
                 admin_pubkey: pubkey,
                 admin_name: String::new(),
-                role: AdminRole::SuperAdmin,
+                role: AdminRole::InstitutionAdmin,
                 status: AdminStatus::Active,
                 built_in: true,
                 created_by: "SYSTEM".to_string(),
@@ -47,6 +48,71 @@ pub(crate) fn seed_super_admins(state: &AppState) {
         store
             .super_admin_province_by_pubkey
             .insert(item.pubkey.to_string(), item.name.to_string());
+    }
+}
+
+/// 从 DB 加载后，补充 province.rs 中新增的省份（DB 中缺失的）
+/// - DB 是唯一真实数据源，已有省份的公钥不会被覆盖
+/// - 只补缺：province.rs 中有但 DB 中没有的省份，用默认公钥创建
+/// - 同时修正 role 字段（旧 DB 可能存的是 SuperAdmin）
+pub(crate) fn sync_builtin_institution_admins(state: &AppState) {
+    let mut store = match state.store.write() {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    let now = Utc::now();
+
+    // 修正已有机构管理员的 role（从旧 DB 加载可能是错误的 role）
+    let institution_pubkeys: Vec<String> = store
+        .super_admin_province_by_pubkey
+        .keys()
+        .cloned()
+        .collect();
+    for pubkey in &institution_pubkeys {
+        if let Some(user) = store.admin_users_by_pubkey.get_mut(pubkey) {
+            if user.role != AdminRole::InstitutionAdmin {
+                user.role = AdminRole::InstitutionAdmin;
+            }
+        }
+    }
+
+    // 补充 DB 中缺失的省份（province.rs 有但 DB 没有的）
+    let existing_provinces: std::collections::HashSet<String> = store
+        .super_admin_province_by_pubkey
+        .values()
+        .cloned()
+        .collect();
+
+    for item in provinces().iter() {
+        let province = item.name.to_string();
+        if existing_provinces.contains(&province) {
+            continue; // DB 已有该省份，不覆盖
+        }
+        // DB 中缺失该省份，用 province.rs 的默认公钥创建
+        let pubkey = item.pubkey.to_string();
+        let max_id = store
+            .admin_users_by_pubkey
+            .values()
+            .map(|u| u.id)
+            .max()
+            .unwrap_or(0);
+        store.admin_users_by_pubkey.insert(
+            pubkey.clone(),
+            AdminUser {
+                id: max_id + 1,
+                admin_pubkey: pubkey.clone(),
+                admin_name: String::new(),
+                role: AdminRole::InstitutionAdmin,
+                status: AdminStatus::Active,
+                built_in: true,
+                created_by: "SYSTEM".to_string(),
+                created_at: now,
+                updated_at: Some(now),
+            },
+        );
+        store
+            .super_admin_province_by_pubkey
+            .insert(pubkey, province);
     }
 }
 

@@ -16,7 +16,7 @@ pub(crate) async fn list_operators(
     headers: HeaderMap,
     Query(query): Query<ListQuery>,
 ) -> impl IntoResponse {
-    let ctx = match require_super_or_key_admin(&state, &headers) {
+    let ctx = match require_institution_or_key_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -27,7 +27,7 @@ pub(crate) async fn list_operators(
     let mut rows: Vec<OperatorRow> = store
         .admin_users_by_pubkey
         .values()
-        .filter(|u| u.role == AdminRole::OperatorAdmin)
+        .filter(|u| u.role == AdminRole::SystemAdmin)
         .filter(|u| {
             can_manage_operator(
                 &store,
@@ -76,7 +76,7 @@ pub(crate) async fn create_operator(
     headers: HeaderMap,
     Json(input): Json<CreateOperatorInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_super_or_key_admin(&state, &headers) {
+    let ctx = match require_institution_or_key_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -111,7 +111,7 @@ pub(crate) async fn create_operator(
         id: next_id,
         admin_pubkey: admin_pubkey.clone(),
         admin_name: admin_name.clone(),
-        role: AdminRole::OperatorAdmin,
+        role: AdminRole::SystemAdmin,
         status: AdminStatus::Active,
         built_in: false,
         created_by: ctx.admin_pubkey.clone(),
@@ -156,7 +156,7 @@ pub(crate) async fn update_operator(
     Path(id): Path<u64>,
     Json(input): Json<UpdateOperatorInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_super_or_key_admin(&state, &headers) {
+    let ctx = match require_institution_or_key_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -168,7 +168,7 @@ pub(crate) async fn update_operator(
         let current_pubkey = store
             .admin_users_by_pubkey
             .values()
-            .find(|u| u.id == id && u.role == AdminRole::OperatorAdmin)
+            .find(|u| u.id == id && u.role == AdminRole::SystemAdmin)
             .map(|u| u.admin_pubkey.clone());
         let Some(current_pubkey) = current_pubkey else {
             return api_error(StatusCode::NOT_FOUND, 1004, "operator not found");
@@ -223,7 +223,7 @@ pub(crate) async fn update_operator(
     let current_pubkey = store
         .admin_users_by_pubkey
         .values()
-        .find(|u| u.id == id && u.role == AdminRole::OperatorAdmin)
+        .find(|u| u.id == id && u.role == AdminRole::SystemAdmin)
         .map(|u| u.admin_pubkey.clone());
     let Some(current_pubkey) = current_pubkey else {
         return api_error(StatusCode::NOT_FOUND, 1004, "operator not found");
@@ -324,7 +324,7 @@ pub(crate) async fn delete_operator(
     headers: HeaderMap,
     Path(id): Path<u64>,
 ) -> impl IntoResponse {
-    let ctx = match require_super_or_key_admin(&state, &headers) {
+    let ctx = match require_institution_or_key_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -336,7 +336,7 @@ pub(crate) async fn delete_operator(
         let operator = store
             .admin_users_by_pubkey
             .values()
-            .find(|u| u.id == id && u.role == AdminRole::OperatorAdmin)
+            .find(|u| u.id == id && u.role == AdminRole::SystemAdmin)
             .cloned();
         let Some(operator) = operator else {
             return api_error(StatusCode::NOT_FOUND, 1004, "operator not found");
@@ -362,7 +362,7 @@ pub(crate) async fn delete_operator(
     let operator = store
         .admin_users_by_pubkey
         .values()
-        .find(|u| u.id == id && u.role == AdminRole::OperatorAdmin)
+        .find(|u| u.id == id && u.role == AdminRole::SystemAdmin)
         .cloned();
     let Some(operator) = operator else {
         return api_error(StatusCode::NOT_FOUND, 1004, "operator not found");
@@ -413,7 +413,7 @@ pub(crate) async fn update_operator_status(
     Path(id): Path<u64>,
     Json(input): Json<UpdateOperatorStatusInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_super_or_key_admin(&state, &headers) {
+    let ctx = match require_institution_or_key_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -424,7 +424,7 @@ pub(crate) async fn update_operator_status(
     let pubkey = store
         .admin_users_by_pubkey
         .values()
-        .find(|u| u.id == id && u.role == AdminRole::OperatorAdmin)
+        .find(|u| u.id == id && u.role == AdminRole::SystemAdmin)
         .map(|u| u.admin_pubkey.clone());
     let Some(pubkey) = pubkey else {
         return api_error(StatusCode::NOT_FOUND, 1004, "operator not found");
@@ -542,7 +542,7 @@ fn creator_display_name(store: &Store, creator_pubkey: &str) -> String {
     let Some(creator) = store.admin_users_by_pubkey.get(creator_pubkey) else {
         return creator_pubkey.to_string();
     };
-    let province = if creator.role == AdminRole::SuperAdmin {
+    let province = if creator.role == AdminRole::InstitutionAdmin {
         store
             .super_admin_province_by_pubkey
             .get(creator_pubkey)

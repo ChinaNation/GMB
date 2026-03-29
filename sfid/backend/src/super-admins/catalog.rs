@@ -25,13 +25,18 @@ pub(crate) async fn list_super_admins(
         .iter()
         .filter_map(|(pubkey, province)| {
             let user = store.admin_users_by_pubkey.get(pubkey)?;
-            if user.role != AdminRole::SuperAdmin {
+            if user.role != AdminRole::InstitutionAdmin {
                 return None;
             }
             Some(SuperAdminRow {
                 id: user.id,
                 province: province.clone(),
                 admin_pubkey: user.admin_pubkey.clone(),
+                admin_name: if user.admin_name.is_empty() {
+                    format!("{province}机构管理员")
+                } else {
+                    user.admin_name.clone()
+                },
                 status: user.status.clone(),
                 built_in: user.built_in,
                 created_at: user.created_at,
@@ -90,7 +95,7 @@ pub(crate) async fn replace_super_admin(
                 && store
                     .admin_users_by_pubkey
                     .get(pubkey.as_str())
-                    .map(|user| user.role == AdminRole::SuperAdmin)
+                    .map(|user| user.role == AdminRole::InstitutionAdmin)
                     .unwrap_or(false)
         })
         .map(|(k, _)| k.clone());
@@ -110,8 +115,9 @@ pub(crate) async fn replace_super_admin(
             message: "ok".to_string(),
             data: SuperAdminRow {
                 id: existing.id,
-                province: province_name,
+                province: province_name.clone(),
                 admin_pubkey: existing.admin_pubkey.clone(),
+                admin_name: format!("{province_name}机构管理员"),
                 status: existing.status.clone(),
                 built_in: existing.built_in,
                 created_at: existing.created_at,
@@ -135,7 +141,7 @@ pub(crate) async fn replace_super_admin(
     let Some(old_user) = store.admin_users_by_pubkey.get(&old_pubkey).cloned() else {
         return api_error(StatusCode::NOT_FOUND, 1004, "super admin not found");
     };
-    if old_user.role != AdminRole::SuperAdmin {
+    if old_user.role != AdminRole::InstitutionAdmin {
         return api_error(
             StatusCode::CONFLICT,
             1005,
@@ -152,7 +158,7 @@ pub(crate) async fn replace_super_admin(
             id: old_user.id,
             admin_pubkey: new_pubkey.clone(),
             admin_name: old_user.admin_name,
-            role: AdminRole::SuperAdmin,
+            role: AdminRole::InstitutionAdmin,
             status: preserved_status.clone(),
             built_in: old_user.built_in,
             created_by: old_user.created_by,
@@ -169,7 +175,7 @@ pub(crate) async fn replace_super_admin(
     });
 
     for operator in store.admin_users_by_pubkey.values_mut() {
-        if operator.role == AdminRole::OperatorAdmin
+        if operator.role == AdminRole::SystemAdmin
             && same_admin_pubkey(operator.created_by.as_str(), old_pubkey.as_str())
         {
             operator.created_by = new_pubkey.clone();
@@ -196,8 +202,9 @@ pub(crate) async fn replace_super_admin(
         message: "ok".to_string(),
         data: SuperAdminRow {
             id: old_user.id,
-            province: province_name,
+            province: province_name.clone(),
             admin_pubkey: new_pubkey,
+            admin_name: format!("{province_name}机构管理员"),
             status: preserved_status,
             built_in: old_user.built_in,
             created_at: old_user.created_at,
