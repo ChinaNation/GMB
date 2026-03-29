@@ -864,6 +864,12 @@ fn spawn_node(
     // 始终使用编译进二进制的内置 chain_config()，不依赖外部 chainspec.json。
     cmd.arg("--chain").arg("citizenchain");
 
+    // P2P 监听地址：统一使用 WSS（WebSocket Secure）30333 端口。
+    cmd.arg("--listen-addr")
+        .arg("/ip4/0.0.0.0/tcp/30333/wss")
+        .arg("--listen-addr")
+        .arg("/ip6/::/tcp/30333/wss");
+
     // 中文注释：不传 --unsafe-rpc-external，RPC 默认绑定 127.0.0.1，仅本机可访问。
     cmd.arg("--rpc-port")
         .arg(rpc_port.to_string())
@@ -872,9 +878,19 @@ fn spawn_node(
         .arg("--rpc-cors")
         .arg("all")
         .arg("--no-prometheus")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stdin(Stdio::null());
+
+    // 节点日志写入文件（便于排查问题），而非丢弃。
+    let log_dir = base_path.join("logs");
+    std::fs::create_dir_all(&log_dir)
+        .map_err(|e| format!("创建日志目录失败: {e}"))?;
+    let log_file = std::fs::File::create(log_dir.join("node.log"))
+        .map_err(|e| format!("创建日志文件失败: {e}"))?;
+    let stderr_file = log_file
+        .try_clone()
+        .map_err(|e| format!("复制日志文件句柄失败: {e}"))?;
+    cmd.stdout(std::process::Stdio::from(log_file))
+        .stderr(std::process::Stdio::from(stderr_file));
 
     if let Some(name) = node_name {
         cmd.arg("--name").arg(name);
