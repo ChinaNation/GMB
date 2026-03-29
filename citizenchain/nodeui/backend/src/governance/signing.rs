@@ -16,7 +16,7 @@ const PROTOCOL_VERSION: &str = "WUMIN_SIGN_V1.0.0";
 const DEFAULT_TTL_SECS: u64 = 90;
 const MORTAL_ERA_PERIOD: u64 = 64;
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
-const MAX_RPC_RESPONSE_BYTES: u64 = 512 * 1024;
+use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 /// SS58 前缀 2027。
 const SS58_PREFIX: u16 = 2027;
 
@@ -43,7 +43,9 @@ pub struct QrSignRequest {
 
 /// 签名响应（离线设备 → nodeui）。
 /// 字段名使用 snake_case，与 WUMIN_SIGN_V1.0.0 协议一致。
+/// 保留全部协议字段以保持反序列化兼容性。
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct QrSignResponse {
     pub proto: String,
     #[serde(rename = "type")]
@@ -683,7 +685,7 @@ pub fn decode_ss58_to_pubkey(address: &str) -> Result<[u8; 32], String> {
     let data = bs58::decode(address)
         .into_vec()
         .map_err(|_| "SS58 地址解码失败".to_string())?;
-    let (prefix, prefix_len) = super::storage_keys::decode_ss58_prefix_raw(&data)?;
+    let (prefix, prefix_len) = crate::settings::address_utils::decode_ss58_prefix(&data)?;
     if prefix != SS58_PREFIX {
         return Err(format!("SS58 地址前缀无效，期望 2027，实际 {prefix}"));
     }
@@ -890,7 +892,7 @@ pub fn verify_and_submit(
 // ──── RPC 查询 ────
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
+    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, RPC_RESPONSE_LIMIT_SMALL)
 }
 
 fn fetch_runtime_version() -> Result<(u32, u32), String> {
@@ -1101,12 +1103,6 @@ fn now_secs() -> u64 {
 fn generate_request_id(prefix: &str) -> String {
     let random_bytes: [u8; 16] = rand::random();
     format!("{}-{}", prefix, hex::encode(random_bytes))
-}
-
-fn format_proposal_id(id: u64) -> String {
-    let year = id / 1_000_000;
-    let counter = id % 1_000_000;
-    format!("{year}#{counter}")
 }
 
 #[cfg(test)]

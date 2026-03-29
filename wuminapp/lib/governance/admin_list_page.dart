@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../ui/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 
@@ -22,7 +23,6 @@ class AdminListPage extends StatelessWidget {
   final Set<String> adminPubkeys;
   final Color badgeColor;
 
-  static const Color _inkGreen = Color(0xFF0B3D2E);
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +35,7 @@ class AdminListPage extends StatelessWidget {
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
+        foregroundColor: AppTheme.primaryDark,
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
@@ -48,7 +48,7 @@ class AdminListPage extends StatelessWidget {
           // 管理员总数
           Text(
             '共 ${admins.length} 位管理员　通过阈值 ${institution.internalThreshold}',
-            style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+            style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
           ),
           const SizedBox(height: 12),
           // 管理员列表
@@ -58,7 +58,7 @@ class AdminListPage extends StatelessWidget {
               child: Center(
                 child: Text(
                   '暂无管理员信息',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                  style: TextStyle(fontSize: 14, color: AppTheme.textTertiary),
                 ),
               ),
             )
@@ -96,7 +96,7 @@ class AdminListPage extends StatelessWidget {
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: _inkGreen,
+              color: AppTheme.primaryDark,
             ),
           ),
         ),
@@ -158,13 +158,13 @@ class _AdminTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: isSelf
-            ? Colors.green.withValues(alpha: 0.06)
-            : Colors.grey[50],
+            ? AppTheme.success.withValues(alpha: 0.06)
+            : AppTheme.surfaceMuted,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isSelf
-              ? Colors.green.withValues(alpha: 0.3)
-              : Colors.grey[200]!,
+              ? AppTheme.success.withValues(alpha: 0.3)
+              : AppTheme.border,
         ),
       ),
       child: Row(
@@ -179,7 +179,7 @@ class _AdminTile extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: Colors.grey[500],
+                  color: AppTheme.textTertiary,
                 ),
               ),
             ),
@@ -190,7 +190,7 @@ class _AdminTile extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontFamily: 'monospace',
-                color: isSelf ? Colors.green[800] : Colors.grey[700],
+                color: isSelf ? AppTheme.primaryDark : AppTheme.textSecondary,
                 height: 1.4,
               ),
             ),
@@ -204,14 +204,14 @@ class _AdminTile extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.1),
+                    color: AppTheme.success.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
                     '我',
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.green,
+                      color: AppTheme.success,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -226,7 +226,7 @@ class _AdminTile extends StatelessWidget {
                     ),
                   );
                 },
-                child: Icon(Icons.copy, size: 16, color: Colors.grey[400]),
+                child: Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
               ),
             ],
           ),

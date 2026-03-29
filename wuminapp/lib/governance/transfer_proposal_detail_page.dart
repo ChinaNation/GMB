@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
+import '../ui/app_theme.dart';
 import '../util/amount_format.dart';
 import 'institution_data.dart';
 import 'institution_admin_service.dart';
@@ -39,8 +40,6 @@ class TransferProposalDetailPage extends StatefulWidget {
 
 class _TransferProposalDetailPageState
     extends State<TransferProposalDetailPage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
-
   static const int _statusVoting = 0;
   static const int _statusPassed = 1;
   static const int _statusRejected = 2;
@@ -203,20 +202,7 @@ class _TransferProposalDetailPageState
     }
   }
 
-  Color _statusColor(int? status) {
-    switch (status) {
-      case _statusVoting:
-        return Colors.blue;
-      case _statusPassed:
-        return Colors.green;
-      case _statusRejected:
-        return Colors.red;
-      case _statusExecuted:
-        return Colors.green;
-      default:
-        return Colors.grey;
-    }
-  }
+  Color _statusColor(int? status) => AppTheme.proposalStatusColor(status ?? -1);
 
   // ──── 投票提交 ────
 
@@ -318,7 +304,7 @@ class _TransferProposalDetailPageState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('投票已提交：${_truncateAddress(result.txHash)}'),
-          backgroundColor: _inkGreen,
+          backgroundColor: AppTheme.primaryDark,
         ),
       );
 
@@ -330,7 +316,7 @@ class _TransferProposalDetailPageState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('投票失败：$e'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.danger,
         ),
       );
     } finally {
@@ -367,17 +353,14 @@ class _TransferProposalDetailPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: const Text(
           '提案详情',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
-        backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
-        elevation: 0,
-        scrolledUnderElevation: 0.5,
+        foregroundColor: AppTheme.textPrimary,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -400,14 +383,14 @@ class _TransferProposalDetailPageState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
             const SizedBox(height: 12),
-            Text('加载失败',
-                style: TextStyle(fontSize: 16, color: Colors.grey[700])),
+            const Text('加载失败',
+                style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
             const SizedBox(height: 6),
             Text(
               _error!,
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               textAlign: TextAlign.center,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
@@ -484,7 +467,7 @@ class _TransferProposalDetailPageState
         const Spacer(),
         Text(
           '提案 ${formatProposalId(widget.proposalId)}',
-          style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+          style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
         ),
       ],
     );
@@ -501,7 +484,7 @@ class _TransferProposalDetailPageState
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -513,7 +496,7 @@ class _TransferProposalDetailPageState
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: _inkGreen,
+                color: AppTheme.primaryDark,
               ),
             ),
             const SizedBox(height: 12),
@@ -566,13 +549,13 @@ class _TransferProposalDetailPageState
               width: 80,
               child: Text(
                 '备注',
-                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
               ),
             ),
             Expanded(
               child: Text(
                 remark,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF333333)),
+                style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
                 maxLines: _remarkExpanded ? null : 1,
                 overflow: _remarkExpanded ? null : TextOverflow.ellipsis,
               ),
@@ -585,7 +568,7 @@ class _TransferProposalDetailPageState
                       ? Icons.keyboard_arrow_up
                       : Icons.keyboard_arrow_down,
                   size: 20,
-                  color: Colors.grey[400],
+                  color: AppTheme.textTertiary,
                 ),
               ),
           ],
@@ -602,19 +585,19 @@ class _TransferProposalDetailPageState
           width: 80,
           child: Text(
             label,
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
           ),
         ),
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(fontSize: 13, color: Color(0xFF333333)),
+            style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
           ),
         ),
         if (onCopy != null)
           GestureDetector(
             onTap: onCopy,
-            child: Icon(Icons.copy, size: 16, color: Colors.grey[400]),
+            child: Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
           ),
       ],
     );
@@ -632,7 +615,7 @@ class _TransferProposalDetailPageState
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -644,7 +627,7 @@ class _TransferProposalDetailPageState
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: _inkGreen,
+                color: AppTheme.primaryDark,
               ),
             ),
             const SizedBox(height: 12),
@@ -653,8 +636,8 @@ class _TransferProposalDetailPageState
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 10,
-                backgroundColor: Colors.grey[200],
-                valueColor: const AlwaysStoppedAnimation<Color>(_inkGreen),
+                backgroundColor: AppTheme.border,
+                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryDark),
               ),
             ),
             const SizedBox(height: 8),
@@ -666,14 +649,14 @@ class _TransferProposalDetailPageState
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: _inkGreen,
+                    color: AppTheme.primaryDark,
                   ),
                 ),
                 Text(
                   '反对 $_noCount',
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.red[400],
+                    color: AppTheme.danger,
                   ),
                 ),
               ],
@@ -692,7 +675,7 @@ class _TransferProposalDetailPageState
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -706,7 +689,7 @@ class _TransferProposalDetailPageState
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: _inkGreen,
+                  color: AppTheme.primaryDark,
                 ),
               ),
             ),
@@ -721,13 +704,13 @@ class _TransferProposalDetailPageState
                 dense: true,
                 leading: CircleAvatar(
                   radius: 16,
-                  backgroundColor: _inkGreen.withValues(alpha: 0.08),
+                  backgroundColor: AppTheme.primaryDark.withValues(alpha: 0.08),
                   child: Text(
                     '${index + 1}',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: _inkGreen,
+                      color: AppTheme.primaryDark,
                     ),
                   ),
                 ),
@@ -746,7 +729,7 @@ class _TransferProposalDetailPageState
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
-                          color: Colors.orange.withValues(alpha: 0.1),
+                          color: AppTheme.warning.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(
@@ -754,7 +737,7 @@ class _TransferProposalDetailPageState
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
-                            color: Colors.orange,
+                            color: AppTheme.warning,
                           ),
                         ),
                       ),
@@ -776,7 +759,7 @@ class _TransferProposalDetailPageState
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
-          color: Colors.green.withValues(alpha: 0.1),
+          color: AppTheme.success.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
         child: const Text(
@@ -784,7 +767,7 @@ class _TransferProposalDetailPageState
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: Colors.green,
+            color: AppTheme.success,
           ),
         ),
       );
@@ -792,7 +775,7 @@ class _TransferProposalDetailPageState
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
-          color: Colors.red.withValues(alpha: 0.1),
+          color: AppTheme.danger.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
         child: const Text(
@@ -800,7 +783,7 @@ class _TransferProposalDetailPageState
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: Colors.red,
+            color: AppTheme.danger,
           ),
         ),
       );
@@ -809,7 +792,7 @@ class _TransferProposalDetailPageState
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
-          color: Colors.orange.withValues(alpha: 0.1),
+          color: AppTheme.warning.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -820,7 +803,7 @@ class _TransferProposalDetailPageState
               height: 10,
               child: CircularProgressIndicator(
                 strokeWidth: 1.5,
-                color: Colors.orange[700],
+                color: AppTheme.warning,
               ),
             ),
             const SizedBox(width: 4),
@@ -829,7 +812,7 @@ class _TransferProposalDetailPageState
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Colors.orange[700],
+                color: AppTheme.warning,
               ),
             ),
           ],
@@ -839,7 +822,7 @@ class _TransferProposalDetailPageState
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
-          color: Colors.grey.withValues(alpha: 0.1),
+          color: AppTheme.textTertiary.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
@@ -847,7 +830,7 @@ class _TransferProposalDetailPageState
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: Colors.grey[500],
+            color: AppTheme.textTertiary,
           ),
         ),
       );
@@ -869,7 +852,7 @@ class _TransferProposalDetailPageState
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: AppTheme.textPrimary.withValues(alpha: 0.06),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),
@@ -885,23 +868,23 @@ class _TransferProposalDetailPageState
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.05),
+                  color: AppTheme.success.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(8),
                   border:
-                      Border.all(color: Colors.green.withValues(alpha: 0.2)),
+                      Border.all(color: AppTheme.success.withValues(alpha: 0.2)),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
                     value: _selectedVoteWallet?.walletIndex,
                     isExpanded: true,
-                    icon: const Icon(Icons.arrow_drop_down, color: _inkGreen),
+                    icon: const Icon(Icons.arrow_drop_down, color: AppTheme.primaryDark),
                     items: _votableWallets.map((w) {
                       return DropdownMenuItem<int>(
                         value: w.walletIndex,
                         child: Row(
                           children: [
                             const Icon(Icons.verified_user,
-                                size: 14, color: Colors.green),
+                                size: 14, color: AppTheme.success),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
@@ -933,7 +916,7 @@ class _TransferProposalDetailPageState
               padding: const EdgeInsets.only(bottom: 10),
               child: Text(
                 '你的管理员钱包均已投票',
-                style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -945,7 +928,7 @@ class _TransferProposalDetailPageState
                       ? null
                       : () => _confirmVote(false),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _canVote ? Colors.red : Colors.grey[300],
+                    backgroundColor: _canVote ? AppTheme.danger : AppTheme.border,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -976,10 +959,10 @@ class _TransferProposalDetailPageState
                       ? null
                       : () => _confirmVote(true),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: AppTheme.success,
                     foregroundColor: Colors.white,
                     disabledBackgroundColor:
-                        Colors.green.withValues(alpha: 0.25),
+                        AppTheme.success.withValues(alpha: 0.25),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),

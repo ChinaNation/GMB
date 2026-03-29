@@ -15,9 +15,10 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
 use scale_info::TypeInfo;
-use sp_runtime::{traits::{Hash, Zero}, SaturatedConversion};
+use sp_runtime::{traits::{Hash, Zero}, SaturatedConversion, TransactionOutcome};
+use frame_support::storage::with_transaction;
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
-use voting_engine_system::{InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED};
+use voting_engine_system::{InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED, STATUS_REJECTED};
 
 type BalanceOf<T> =
     <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -131,7 +132,6 @@ pub struct DuoqianAccount<AdminList, AccountId, BlockNumber> {
 pub struct RegisteredInstitution<SfidId, SfidName> {
     pub sfid_id: SfidId,
     pub name: SfidName,
-    pub nonce: u64,
 }
 
 /// 创建多签账户提案的业务数据（存入投票引擎 ProposalData）
@@ -177,7 +177,7 @@ pub mod pallet {
     use crate::weights::WeightInfo;
     use voting_engine_system::InternalAdminProvider;
     use voting_engine_system::InternalVoteEngine;
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(5);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(6);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + voting_engine_system::Config {
@@ -288,6 +288,13 @@ pub mod pallet {
         PersonalDuoqianMeta<T::AccountId, SfidNameOf<T>>,
         OptionQuery,
     >;
+
+    /// 每个多签账户当前进行中的关闭提案 ID（防止并发注销提案）。
+    /// 发起 propose_close 时写入，execute_close 成功或执行失败后清除。
+    #[pallet::storage]
+    #[pallet::getter(fn pending_close_proposal)]
+    pub type PendingCloseProposal<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, u64, OptionQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -468,6 +475,10 @@ pub mod pallet {
         EmptyPersonalName,
         /// 个人多签地址已存在（同一 creator + name）
         PersonalDuoqianAlreadyExists,
+        /// 该多签账户已有进行中的关闭提案，不允许重复发起
+        CloseAlreadyPending,
+        /// 提案未被拒绝，不可清理
+        ProposalNotRejected,
     }
 
     /// 提案操作类型标记：存储在 ProposalData 的第一个字节
@@ -648,15 +659,31 @@ pub mod pallet {
                 approve,
             });
 
-            // 检查是否投票通过
+            // 检查投票结果并执行或清理
             if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
                 if proposal.status == STATUS_PASSED {
-                    if Self::execute_create(proposal_id, &action).is_err() {
+                    // 使用 with_transaction 保证 execute_create 内部的资金操作和状态变更原子性：
+                    // 若 execute_create 中途失败（如余额不足），已执行的转账会随事务回滚。
+                    let exec_result = with_transaction(|| {
+                        match Self::execute_create(proposal_id, &action) {
+                            Ok(()) => TransactionOutcome::Commit(Ok(())),
+                            Err(e) => TransactionOutcome::Rollback(Err(e)),
+                        }
+                    });
+                    if exec_result.is_err() {
+                        // 执行失败后清理 propose_create/propose_create_personal 写入的 pending 记录，
+                        // 释放地址锁定，防止地址被永久占用。
+                        DuoqianAccounts::<T>::remove(&action.duoqian_address);
+                        PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
                         Self::deposit_event(Event::<T>::CreateExecutionFailed {
                             proposal_id,
                             duoqian_address: action.duoqian_address,
                         });
                     }
+                } else if proposal.status == STATUS_REJECTED {
+                    // 提案被拒绝：清理 Pending 条目，释放地址锁定。
+                    DuoqianAccounts::<T>::remove(&action.duoqian_address);
+                    PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
                 }
             }
 
@@ -720,7 +747,6 @@ pub mod pallet {
                 RegisteredInstitution {
                     sfid_id: sfid_id.clone(),
                     name: name.clone(),
-                    nonce: 0,
                 },
             );
             Self::deposit_event(Event::<T>::SfidInstitutionRegistered {
@@ -783,6 +809,12 @@ pub mod pallet {
                 Error::<T>::PermissionDenied
             );
 
+            // 拒绝对同一多签账户发起并发注销提案
+            ensure!(
+                !PendingCloseProposal::<T>::contains_key(&duoqian_address),
+                Error::<T>::CloseAlreadyPending
+            );
+
             let all_balance = T::Currency::free_balance(&duoqian_address);
             ensure!(
                 all_balance >= T::MinCloseBalance::get(),
@@ -823,6 +855,7 @@ pub mod pallet {
                 proposal_id,
                 frame_system::Pallet::<T>::block_number(),
             );
+            PendingCloseProposal::<T>::insert(&duoqian_address, proposal_id);
 
             Self::deposit_event(Event::<T>::CloseDuoqianProposed {
                 proposal_id,
@@ -866,15 +899,28 @@ pub mod pallet {
                 approve,
             });
 
-            // 检查是否投票通过
+            // 检查投票结果并执行或清理
             if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
                 if proposal.status == STATUS_PASSED {
-                    if Self::execute_close(proposal_id, &action).is_err() {
+                    // 使用 with_transaction 保证 execute_close 内部的资金操作原子性：
+                    // 若扣费或转出中途失败，已执行的操作会随事务回滚。
+                    let exec_result = with_transaction(|| {
+                        match Self::execute_close(proposal_id, &action) {
+                            Ok(()) => TransactionOutcome::Commit(Ok(())),
+                            Err(e) => TransactionOutcome::Rollback(Err(e)),
+                        }
+                    });
+                    if exec_result.is_err() {
+                        // 执行失败后清除活跃关闭提案记录，允许重新发起关闭提案（账户仍为 Active）。
+                        PendingCloseProposal::<T>::remove(&action.duoqian_address);
                         Self::deposit_event(Event::<T>::CloseExecutionFailed {
                             proposal_id,
                             duoqian_address: action.duoqian_address,
                         });
                     }
+                } else if proposal.status == STATUS_REJECTED {
+                    // 提案被拒绝：清理 PendingCloseProposal，允许重新发起关闭。
+                    PendingCloseProposal::<T>::remove(&action.duoqian_address);
                 }
             }
 
@@ -888,7 +934,7 @@ pub mod pallet {
         ///
         /// 投票通过后由 vote_create 自动执行入金 + 激活（复用 execute_create）。
         #[pallet::call_index(5)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_create())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_create_personal())]
         pub fn propose_create_personal(
             origin: OriginFor<T>,
             name: SfidNameOf<T>,
@@ -1019,6 +1065,49 @@ pub mod pallet {
 
             Ok(())
         }
+
+        /// 清理已被拒绝或超时的创建/关闭提案残留状态。
+        /// 任意签名账户可调用。用于解决投票引擎 on_initialize 超时 reject 后
+        /// 本模块无法自动收到通知导致的 Pending / PendingCloseProposal 残留。
+        #[pallet::call_index(6)]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::cleanup_rejected_proposal())]
+        pub fn cleanup_rejected_proposal(
+            origin: OriginFor<T>,
+            proposal_id: u64,
+        ) -> DispatchResult {
+            let _ = ensure_signed(origin)?;
+
+            // 读取提案数据，判断操作类型
+            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            let action_tag = *data.first().ok_or(Error::<T>::ProposalActionNotFound)?;
+
+            // 校验投票引擎状态必须为 REJECTED
+            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            ensure!(
+                proposal.status == STATUS_REJECTED,
+                Error::<T>::ProposalNotRejected
+            );
+
+            match action_tag {
+                ACTION_CREATE => {
+                    let action =
+                        CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(&mut &data[1..])
+                            .map_err(|_| Error::<T>::ProposalActionNotFound)?;
+                    DuoqianAccounts::<T>::remove(&action.duoqian_address);
+                    PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
+                }
+                ACTION_CLOSE => {
+                    let action = CloseDuoqianAction::<T::AccountId>::decode(&mut &data[1..])
+                        .map_err(|_| Error::<T>::ProposalActionNotFound)?;
+                    PendingCloseProposal::<T>::remove(&action.duoqian_address);
+                }
+                _ => return Err(Error::<T>::ProposalActionNotFound.into()),
+            }
+
+            Ok(())
+        }
     }
 
     impl<T: Config> Pallet<T> {
@@ -1108,12 +1197,6 @@ pub mod pallet {
                 }
             });
 
-            // 更新 nonce
-            AddressRegisteredSfid::<T>::mutate(&action.duoqian_address, |maybe_registered| {
-                if let Some(registered) = maybe_registered {
-                    registered.nonce = registered.nonce.saturating_add(1);
-                }
-            });
 
             Self::deposit_event(Event::<T>::DuoqianCreated {
                 proposal_id,
@@ -1179,13 +1262,10 @@ pub mod pallet {
             .map_err(|_| Error::<T>::TransferFailed)?;
 
             DuoqianAccounts::<T>::remove(&action.duoqian_address);
-
-            // 更新 nonce
-            AddressRegisteredSfid::<T>::mutate(&action.duoqian_address, |maybe_registered| {
-                if let Some(registered) = maybe_registered {
-                    registered.nonce = registered.nonce.saturating_add(1);
-                }
-            });
+            // 清理个人多签元数据（机构多签无此条目，remove 为 no-op）。
+            PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
+            // 清除活跃关闭提案记录。
+            PendingCloseProposal::<T>::remove(&action.duoqian_address);
 
             Self::deposit_event(Event::<T>::DuoqianClosed {
                 proposal_id,
@@ -1831,6 +1911,134 @@ mod tests {
                 ),
                 Error::<Test>::CreateAmountBelowMinimum
             );
+        });
+    }
+
+    // ──── 新增：针对审查修复的专项测试 ────
+
+    /// 修复验证：同一多签账户不能并发发起两个关闭提案。
+    #[test]
+    fn duplicate_close_proposal_is_rejected() {
+        new_test_ext().execute_with(|| {
+            let (sfid, duoqian_address) = register_sfid_and_get_address("I001");
+            let admins = make_admins(&[1, 2]);
+
+            // 创建并激活
+            assert_ok!(Duoqian::propose_create(
+                RuntimeOrigin::signed(admin(1)),
+                sfid,
+                2,
+                admins,
+                2,
+                1_000,
+            ));
+            let create_pid = last_proposal_id();
+            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(1)), create_pid, true));
+            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(2)), create_pid, true));
+
+            let beneficiary = admin(3);
+
+            // 第一个关闭提案 — 应该成功
+            assert_ok!(Duoqian::propose_close(
+                RuntimeOrigin::signed(admin(1)),
+                duoqian_address.clone(),
+                beneficiary.clone(),
+            ));
+
+            // 第二个关闭提案 — 应该被 CloseAlreadyPending 拒绝
+            assert_noop!(
+                Duoqian::propose_close(
+                    RuntimeOrigin::signed(admin(2)),
+                    duoqian_address.clone(),
+                    beneficiary.clone(),
+                ),
+                Error::<Test>::CloseAlreadyPending
+            );
+        });
+    }
+
+    /// 修复验证：execute_create 失败后地址应被释放（Pending 条目清理）。
+    #[test]
+    fn execute_create_failure_releases_address() {
+        new_test_ext().execute_with(|| {
+            let (sfid, duoqian_address) = register_sfid_and_get_address("J001");
+            let admins = make_admins(&[1, 2]);
+
+            assert_ok!(Duoqian::propose_create(
+                RuntimeOrigin::signed(admin(1)),
+                sfid.clone(),
+                2,
+                admins.clone(),
+                2,
+                1_000,
+            ));
+            let pid = last_proposal_id();
+
+            // 排干 admin(1) 的余额，使 execute_create 在 transfer 时失败
+            let _ = Balances::slash(&admin(1), 99_900);
+            assert!(Balances::free_balance(&admin(1)) < 1_010);
+
+            // 最后一票触发 execute_create，因余额不足应失败
+            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(1)), pid, true));
+            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(2)), pid, true));
+
+            // execute_create 失败后 DuoqianAccounts 中的 Pending 条目应被清除
+            assert!(
+                DuoqianAccounts::<Test>::get(&duoqian_address).is_none(),
+                "pending entry must be cleaned up after execute_create failure"
+            );
+
+            // PersonalDuoqianInfo 也不应残留（机构多签无条目，remove 为 no-op）
+            assert!(PersonalDuoqianInfo::<Test>::get(&duoqian_address).is_none());
+        });
+    }
+
+    /// 修复验证：个人多签创建流程正常。
+    #[test]
+    fn personal_duoqian_create_works() {
+        new_test_ext().execute_with(|| {
+            let name: SfidNameOf<Test> = b"Family Fund"
+                .to_vec()
+                .try_into()
+                .expect("name should fit");
+            let admins = make_admins(&[1, 2]);
+
+            assert_ok!(Duoqian::propose_create_personal(
+                RuntimeOrigin::signed(admin(1)),
+                name.clone(),
+                2,
+                admins,
+                2,
+                1_000,
+            ));
+            let pid = last_proposal_id();
+
+            // 派生地址
+            let duoqian_address =
+                Pallet::<Test>::derive_personal_duoqian_address(&admin(1), name.as_slice())
+                    .expect("derive should succeed");
+
+            // 投票通过前处于 Pending
+            assert_eq!(
+                DuoqianAccounts::<Test>::get(&duoqian_address)
+                    .map(|a| a.status),
+                Some(DuoqianStatus::Pending)
+            );
+
+            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(1)), pid, true));
+            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(2)), pid, true));
+
+            // 投票通过后变为 Active，资金已转入
+            let account =
+                DuoqianAccounts::<Test>::get(&duoqian_address).expect("should exist");
+            assert_eq!(account.status, DuoqianStatus::Active);
+            assert_eq!(Balances::free_balance(&duoqian_address), 1_000);
+
+            // PersonalDuoqianInfo 已写入
+            let meta = PersonalDuoqianInfo::<Test>::get(&duoqian_address)
+                .expect("personal info should exist");
+            assert_eq!(meta.creator, admin(1));
+            assert_eq!(meta.name, name);
         });
     }
 }

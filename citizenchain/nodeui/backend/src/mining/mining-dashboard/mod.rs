@@ -26,7 +26,7 @@ const INCOME_DAY_KEEP: u64 = 400;
 const MINING_CACHE_VERSION: u32 = 2;
 const MINING_CACHE_FILENAME: &str = "mining-dashboard-cache.json";
 const CACHE_PERSIST_MIN_INTERVAL_MS: u64 = 60_000;
-const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
+use crate::shared::constants::RPC_RESPONSE_LIMIT_LARGE;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -318,7 +318,7 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
         method,
         params,
         rpc::RPC_REQUEST_TIMEOUT,
-        MAX_RPC_RESPONSE_BYTES,
+        RPC_RESPONSE_LIMIT_LARGE,
     )
 }
 

@@ -8,10 +8,10 @@ use std::time::Duration;
 use super::storage_keys;
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
-const MAX_RPC_RESPONSE_BYTES: u64 = 1024 * 1024;
+use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
+    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, RPC_RESPONSE_LIMIT_SMALL)
 }
 
 /// 提案元数据（从 VotingEngineSystem::Proposals 解码）。
@@ -140,7 +140,7 @@ pub fn fetch_next_proposal_id() -> Result<u64, String> {
             if data.len() < 8 {
                 return Ok(0);
             }
-            Ok(u64::from_le_bytes(data[..8].try_into().unwrap()))
+            Ok(u64::from_le_bytes(data[..8].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?))
         }
         _ => Ok(0),
     }
@@ -354,8 +354,8 @@ fn fetch_internal_tally(proposal_id: u64) -> Result<VoteTally, String> {
             if data.len() < 8 {
                 return Ok(VoteTally { yes: 0, no: 0 });
             }
-            let yes = u32::from_le_bytes(data[0..4].try_into().unwrap());
-            let no = u32::from_le_bytes(data[4..8].try_into().unwrap());
+            let yes = u32::from_le_bytes(data[0..4].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
+            let no = u32::from_le_bytes(data[4..8].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
             Ok(VoteTally { yes, no })
         }
         _ => Ok(VoteTally { yes: 0, no: 0 }),
@@ -379,8 +379,8 @@ fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
             if data.len() < 8 {
                 return Ok(JointVoteTally { yes: 0, no: 0 });
             }
-            let yes = u32::from_le_bytes(data[0..4].try_into().unwrap());
-            let no = u32::from_le_bytes(data[4..8].try_into().unwrap());
+            let yes = u32::from_le_bytes(data[0..4].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
+            let no = u32::from_le_bytes(data[4..8].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
             Ok(JointVoteTally { yes, no })
         }
         _ => Ok(JointVoteTally { yes: 0, no: 0 }),
@@ -404,8 +404,8 @@ fn fetch_citizen_tally(proposal_id: u64) -> Result<CitizenVoteTally, String> {
             if data.len() < 16 {
                 return Ok(CitizenVoteTally { yes: 0, no: 0 });
             }
-            let yes = u64::from_le_bytes(data[0..8].try_into().unwrap());
-            let no = u64::from_le_bytes(data[8..16].try_into().unwrap());
+            let yes = u64::from_le_bytes(data[0..8].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
+            let no = u64::from_le_bytes(data[8..16].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
             Ok(CitizenVoteTally { yes, no })
         }
         _ => Ok(CitizenVoteTally { yes: 0, no: 0 }),
@@ -572,7 +572,7 @@ fn decode_u64_vec(data: &[u8]) -> Result<Vec<u64>, String> {
         if offset + 8 > data.len() {
             break;
         }
-        let val = u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
+        let val = u64::from_le_bytes(data[offset..offset + 8].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
         ids.push(val);
         offset += 8;
     }
@@ -745,7 +745,9 @@ pub fn fetch_user_vote_status(
 
     // 查询联合投票状态（JointVotesByAdmin: DoubleMap<u64, (InstitutionId48 ++ AccountId32)> → bool）
     let joint_vote = if meta.kind == 1 && shenfen_id.is_some() {
-        let institution_id = storage_keys::shenfen_id_to_fixed48(shenfen_id.unwrap());
+        // shenfen_id.is_some() 已在上方 if 条件中守卫，此处 expect 不会 panic。
+        let institution_id =
+            storage_keys::shenfen_id_to_fixed48(shenfen_id.expect("guarded by is_some()"));
         let mut composite_key = Vec::with_capacity(48 + 32);
         composite_key.extend_from_slice(&institution_id);
         composite_key.extend_from_slice(&pubkey_bytes);

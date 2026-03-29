@@ -1,0 +1,91 @@
+// CPMS 共享类型定义
+
+export interface ApiResponse<T> {
+  code: number;
+  message: string;
+  data: T | null;
+}
+
+export interface ApiError {
+  code: number;
+  message: string;
+  trace_id: string;
+}
+
+export interface SessionUser {
+  user_id: string;
+  role: string;
+}
+
+export interface AdminUser {
+  user_id: string;
+  admin_pubkey: string;
+  role: string;
+  status: string;
+}
+
+export interface Archive {
+  archive_id: string;
+  archive_no: string;
+  province_code: string;
+  city_code: string;
+  full_name: string;
+  birth_date: string;
+  gender_code: string;
+  height_cm: number | null;
+  passport_no: string;
+  status: string;
+  citizen_status: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface QrPayload {
+  ver: string;
+  issuer_id: string;
+  site_sfid: string;
+  sign_key_id: string;
+  archive_no: string;
+  citizen_status: string;
+  voting_eligible: boolean;
+  issued_at: number;
+  expire_at: number;
+  qr_id: string;
+  sig_alg: string;
+  signature: string;
+}
+
+export interface QrPrintRecord {
+  print_id: string;
+  archive_id: string;
+  archive_no: string;
+  citizen_status: string;
+  voting_eligible: boolean;
+  printed_at: number;
+}
+
+export interface InstallStatus {
+  initialized: boolean;
+  site_sfid: string | null;
+  super_admin_bound_count: number;
+  super_admin_bind_qrs: SuperAdminBindQr[];
+}
+
+export interface SuperAdminBindQr {
+  key_id: string;
+  bound: boolean;
+  qr_content: string;
+}
+
+export interface ChallengeData {
+  challenge_id: string;
+  challenge_payload: string;
+  nonce: string;
+  expire_at: number;
+}
+
+export interface VerifyData {
+  access_token: string;
+  expires_in: number;
+  user: SessionUser;
+}

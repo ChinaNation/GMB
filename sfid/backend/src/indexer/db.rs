@@ -141,6 +141,7 @@ pub(crate) fn query_tx_records(
         .collect())
 }
 
+#[allow(dead_code)]
 pub(crate) struct TxRecordRow {
     pub id: i64,
     pub block_number: i64,

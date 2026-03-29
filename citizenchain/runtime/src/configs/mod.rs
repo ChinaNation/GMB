@@ -408,7 +408,8 @@ impl shengbank_stake_interest::Config for Runtime {
 }
 
 /// PoW 作者解析器：
-/// 从区块 pre-runtime digest 中读取 POW_ENGINE_ID 的负载，并解码为 AccountId。
+/// 从区块 pre-runtime digest 中读取 POW_ENGINE_ID 的负载（sr25519 公钥），
+/// 派生为 AccountId。配合 seal 中的签名实现矿工身份密码学绑定。
 pub struct PowDigestAuthor;
 
 impl FindAuthor<AccountId> for PowDigestAuthor {
@@ -418,7 +419,12 @@ impl FindAuthor<AccountId> for PowDigestAuthor {
     {
         digests.into_iter().find_map(|(engine_id, data)| {
             if engine_id == sp_consensus_pow::POW_ENGINE_ID {
-                AccountId::decode(&mut &data[..]).ok()
+                sp_core::sr25519::Public::decode(&mut &data[..])
+                    .ok()
+                    .map(|public| {
+                        use sp_runtime::traits::IdentifyAccount;
+                        sp_runtime::MultiSigner::from(public).into_account()
+                    })
             } else {
                 None
             }
@@ -945,7 +951,6 @@ impl resolution_issuance_gov::Config for Runtime {
     // 中文注释：禁用外部 finalize 入口，只允许投票引擎回调路径落地结果。
     type JointVoteFinalizeOrigin = EnsureJointVoteFinalizeOrigin;
     type IssuanceExecutor = ResolutionIssuanceIss;
-    type IssuanceWeightInfo = ();
     type WeightInfo = resolution_issuance_gov::weights::SubstrateWeight<Runtime>;
     type JointVoteEngine = VotingEngineSystem;
     type MaxReasonLen = ResolutionIssuanceMaxReasonLen;
@@ -1363,14 +1368,17 @@ mod tests {
 
     #[test]
     fn pow_digest_author_finds_pow_engine_author() {
-        let author = AccountId::new([21u8; 32]);
-        let encoded = author.encode();
+        // 中文注释：pre_digest 现在存储 sr25519 公钥，PowDigestAuthor 解码后派生 AccountId。
+        let public = sp_core::sr25519::Public::from_raw([21u8; 32]);
+        let expected_account: AccountId =
+            sp_runtime::MultiSigner::from(public).into_account();
+        let encoded = public.encode();
         let digests: Vec<(sp_runtime::ConsensusEngineId, &[u8])> = vec![
             (*b"TEST", b"ignored".as_ref()),
             (sp_consensus_pow::POW_ENGINE_ID, encoded.as_slice()),
         ];
         let found = PowDigestAuthor::find_author(digests);
-        assert_eq!(found, Some(author));
+        assert_eq!(found, Some(expected_account));
     }
 
     #[test]
@@ -1397,9 +1405,10 @@ mod tests {
                 has_code: true,
                 status: runtime_root_upgrade::pallet::ProposalStatus::Voting,
             };
-            let data = codec::Encode::encode(&proposal);
+            let mut encoded = Vec::from(runtime_root_upgrade::MODULE_TAG);
+            encoded.extend_from_slice(&codec::Encode::encode(&proposal));
             assert_ok!(
-                voting_engine_system::Pallet::<Runtime>::store_proposal_data(proposal_id, data)
+                voting_engine_system::Pallet::<Runtime>::store_proposal_data(proposal_id, encoded)
             );
             assert_ok!(
                 voting_engine_system::Pallet::<Runtime>::store_proposal_object(
@@ -1416,7 +1425,9 @@ mod tests {
             ));
             let raw = voting_engine_system::Pallet::<Runtime>::get_proposal_data(proposal_id)
                 .expect("proposal data should exist");
-            let updated = runtime_root_upgrade::pallet::Proposal::<Runtime>::decode(&mut &raw[..])
+            let tag = runtime_root_upgrade::MODULE_TAG;
+            assert!(raw.len() >= tag.len() && &raw[..tag.len()] == tag, "MODULE_TAG mismatch");
+            let updated = runtime_root_upgrade::pallet::Proposal::<Runtime>::decode(&mut &raw[tag.len()..])
                 .expect("should decode");
             assert!(matches!(
                 updated.status,
@@ -1625,12 +1636,18 @@ mod tests {
                     .to_vec()
                     .try_into()
                     .expect("nonce should fit");
+            let register_name: duoqian_manage_pow::pallet::SfidNameOf<Runtime> =
+                b"test-name"
+                    .to_vec()
+                    .try_into()
+                    .expect("name should fit");
             let register_signature: duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime> = pair
                 .sign(&blake2_256(
                     &(
-                        b"GMB_SFID_INSTITUTION_V1",
+                        b"GMB_SFID_INSTITUTION_V2",
                         frame_system::Pallet::<Runtime>::block_hash(0),
                         sfid_id.as_slice(),
+                        register_name.as_slice(),
                         register_nonce.as_slice(),
                     )
                         .encode(),
@@ -1641,10 +1658,12 @@ mod tests {
                 .expect("signature should fit");
             assert!(
                 <RuntimeSfidInstitutionVerifier as duoqian_manage_pow::SfidInstitutionVerifier<
+                    duoqian_manage_pow::pallet::SfidNameOf<Runtime>,
                     duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
                     duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id.as_slice(),
+                    &register_name,
                     &register_nonce,
                     &register_signature,
                 )
@@ -1654,10 +1673,12 @@ mod tests {
                 vec![9u8; 63].try_into().expect("signature should fit");
             assert!(
                 !<RuntimeSfidInstitutionVerifier as duoqian_manage_pow::SfidInstitutionVerifier<
+                    duoqian_manage_pow::pallet::SfidNameOf<Runtime>,
                     duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
                     duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id.as_slice(),
+                    &register_name,
                     &register_nonce,
                     &bad_signature,
                 )
@@ -1829,5 +1850,120 @@ impl voting_engine_system::SfidEligibility<AccountId, Hash> for RuntimeSfidEligi
             loops: result.loops,
             has_remaining: result.maybe_cursor.is_some(),
         }
+    }
+}
+
+// ============================================================================
+// 机构资金白名单允许矩阵测试
+// ============================================================================
+
+#[cfg(test)]
+mod asset_guard_tests {
+    use super::*;
+    use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
+
+    fn keyless_account() -> AccountId {
+        AccountId::new(primitives::china::china_ch::CHINA_CH[0].keyless_address)
+    }
+
+    fn reserved_duoqian_account() -> AccountId {
+        AccountId::new(primitives::china::china_cb::CHINA_CB[1].duoqian_address)
+    }
+
+    fn reserved_fee_account() -> AccountId {
+        use frame_support::PalletId;
+        use sp_runtime::traits::AccountIdConversion;
+        let node = &primitives::china::china_ch::CHINA_CH[0];
+        let pid = primitives::china::china_ch::shenfen_fee_id_to_bytes(node.shenfen_fee_id)
+            .expect("fee id should be valid");
+        PalletId(pid).into_account_truncating()
+    }
+
+    fn ordinary_account() -> AccountId {
+        AccountId::new([99u8; 32])
+    }
+
+    #[test]
+    fn keyless_account_is_completely_blocked() {
+        let account = keyless_account();
+        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::DuoqianTransferExecute
+        ));
+        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::DuoqianCloseExecute
+        ));
+        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::OffchainBatchDebit
+        ));
+        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::OffchainFeeSweepExecute
+        ));
+    }
+
+    #[test]
+    fn reserved_duoqian_only_allows_transfer_and_close() {
+        let account = reserved_duoqian_account();
+        assert!(RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::DuoqianTransferExecute
+        ));
+        assert!(RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::DuoqianCloseExecute
+        ));
+        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::OffchainBatchDebit
+        ));
+        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::OffchainFeeSweepExecute
+        ));
+    }
+
+    #[test]
+    fn reserved_fee_account_only_allows_fee_sweep() {
+        let account = reserved_fee_account();
+        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::DuoqianTransferExecute
+        ));
+        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::DuoqianCloseExecute
+        ));
+        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::OffchainBatchDebit
+        ));
+        assert!(RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::OffchainFeeSweepExecute
+        ));
+    }
+
+    #[test]
+    fn ordinary_account_allows_all_actions() {
+        let account = ordinary_account();
+        assert!(RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::DuoqianTransferExecute
+        ));
+        assert!(RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::DuoqianCloseExecute
+        ));
+        assert!(RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::OffchainBatchDebit
+        ));
+        assert!(RuntimeInstitutionAssetGuard::can_spend(
+            &account,
+            InstitutionAssetAction::OffchainFeeSweepExecute
+        ));
     }
 }

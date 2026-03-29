@@ -89,6 +89,13 @@ pub mod pallet {
 
         /// 由 Root 强制推进年度（跳过故障年度）。
         ShengBankYearForceAdvanced { year: u32 },
+
+        /// 省储行利息低于 Existential Deposit，跳过发币以防 dust 账户（链上可审计）。
+        ShengBankInterestBelowED {
+            year: u32,
+            pallet_id: [u8; 48],
+            amount: BalanceOf<T>,
+        },
     }
 
     #[pallet::error]
@@ -101,7 +108,7 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-            // 按区块高度结算：每满一个年度区块数才触发一次（87_600块/年）
+            // 按区块高度结算：每满 BLOCKS_PER_YEAR（白皮书定义 87,600）个区块触发一次年度结算
             let block = n.saturated_into::<u64>();
             let per_year = T::BlocksPerYear::get();
 
@@ -130,6 +137,17 @@ pub mod pallet {
 
             // 默认只读一次 LastSettledYear
             T::DbWeight::get().reads(1)
+        }
+
+        /// try-runtime 状态校验：确保 LastSettledYear 不超过制度年限上限。
+        #[cfg(feature = "try-runtime")]
+        fn try_state(_n: BlockNumberFor<T>) -> Result<(), sp_runtime::TryRuntimeError> {
+            let last = LastSettledYear::<T>::get();
+            frame_support::ensure!(
+                last <= SHENGBANK_INTEREST_DURATION_YEARS,
+                "LastSettledYear 超过制度年限上限"
+            );
+            Ok(())
         }
     }
 
@@ -347,11 +365,17 @@ pub mod pallet {
                 if interest < T::Currency::minimum_balance() {
                     // 中文注释：当前省储行固定 stake_amount 下不会命中这个分支；
                     // 这里保留为防御性兜底，避免未来参数变化时创建 dust 账户。
+                    Self::deposit_event(Event::<T>::ShengBankInterestBelowED {
+                        year,
+                        pallet_id,
+                        amount: interest,
+                    });
                     log::warn!(
                         target: "runtime::shengbank",
                         "省储行利息低于 ED，跳过: {}",
                         bank.shenfen_id
                     );
+                    writes = writes.saturating_add(1); // event write
                     success_count = success_count.saturating_add(1);
                     continue;
                 }
@@ -463,7 +487,7 @@ mod tests {
         BLOCKS_PER_YEAR_FOR_TEST.with(|p| *p.borrow_mut() = v);
     }
 
-    fn new_test_ext() -> sp_io::TestExternalities {
+    pub fn new_test_ext() -> sp_io::TestExternalities {
         set_blocks_per_year(10);
         let storage = frame_system::GenesisConfig::<Test>::default()
             .build_storage()
@@ -669,6 +693,67 @@ mod tests {
             run_to_block(50);
             assert_eq!(LastSettledYear::<Test>::get(), 0);
             assert_eq!(Balances::free_balance(shengbank_account(0)), 0);
+        });
+    }
+
+    #[test]
+    fn force_advance_then_settle_resumes() {
+        // 模拟故障恢复场景：前两年因故障被 force_advance 跳过，
+        // 验证自动结算从第 3 年正常恢复。
+        new_test_ext().execute_with(|| {
+            System::set_block_number(50); // current_year = 5
+            // 模拟 Root 已跳过前两年故障
+            LastSettledYear::<Test>::put(2);
+            // 自动结算应从第 3 年开始恢复
+            ShengBankStakeInterest::on_initialize(50);
+            // 应结算到第 5 年（current_year）
+            assert_eq!(LastSettledYear::<Test>::get(), 5);
+            let first_bank = &primitives::china::china_ch::CHINA_CH[0];
+            let account = shengbank_account(0);
+            // 第 3/4/5 年的利率分别是 98/97/96 BP
+            let year3 = first_bank.stake_amount * 98u128 / 10_000u128;
+            let year4 = first_bank.stake_amount * 97u128 / 10_000u128;
+            let year5 = first_bank.stake_amount * 96u128 / 10_000u128;
+            assert_eq!(Balances::free_balance(account), year3 + year4 + year5);
+        });
+    }
+
+    #[test]
+    fn force_settle_years_caps_at_current_year() {
+        // 在 current_year=3 时请求补结算 10 年，验证只结算 3 年。
+        new_test_ext().execute_with(|| {
+            System::set_block_number(30); // current_year = 3
+            assert_ok!(ShengBankStakeInterest::force_settle_years(
+                RuntimeOrigin::root(),
+                10
+            ));
+            assert_eq!(LastSettledYear::<Test>::get(), 3);
+        });
+    }
+
+    #[test]
+    fn year_100_boundary_settles_with_minimum_rate() {
+        // 验证第 100 年（最后一年）的利率为 1 BP (0.01%)，且发放正确。
+        new_test_ext().execute_with(|| {
+            LastSettledYear::<Test>::put(99);
+            System::set_block_number(1000); // current_year = 100
+            ShengBankStakeInterest::on_initialize(1000);
+            assert_eq!(LastSettledYear::<Test>::get(), 100);
+
+            let first_bank = &primitives::china::china_ch::CHINA_CH[0];
+            let account = shengbank_account(0);
+            // 第 100 年利率 = 100 - (100-1)*1 = 1 BP
+            let expected = first_bank.stake_amount * 1u128 / 10_000u128;
+            assert_eq!(Balances::free_balance(account), expected);
+            assert!(expected > 0, "最后一年利息不应为零");
+
+            // 推进到第 101 年边界，验证不再发放
+            let balance_after_100 = Balances::free_balance(shengbank_account(0));
+            System::set_block_number(1010); // current_year = 101
+            ShengBankStakeInterest::on_initialize(1010);
+            // LastSettledYear 不应前进，余额不应变化
+            assert_eq!(LastSettledYear::<Test>::get(), 100);
+            assert_eq!(Balances::free_balance(shengbank_account(0)), balance_after_100);
         });
     }
 }

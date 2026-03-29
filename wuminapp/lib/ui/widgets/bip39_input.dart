@@ -1,6 +1,7 @@
 // ignore: implementation_imports
 import 'package:bip39/src/wordlists/english.dart' show WORDLIST;
 import 'package:flutter/material.dart';
+import '../app_theme.dart';
 
 /// BIP39 助记词输入组件，支持单词自动补全。
 ///
@@ -98,7 +99,6 @@ class _Bip39InputFieldState extends State<Bip39InputField> {
           controller: widget.controller,
           maxLines: 4,
           decoration: InputDecoration(
-            border: const OutlineInputBorder(),
             hintText: '输入助记词，选择匹配的单词',
             counterText: '$_enteredWordCount / ${widget.wordCount > 0 ? widget.wordCount : "12 或 24"} 个单词',
           ),
@@ -114,7 +114,9 @@ class _Bip39InputFieldState extends State<Bip39InputField> {
             runSpacing: 4,
             children: _suggestions.map((word) {
               return ActionChip(
-                label: Text(word),
+                label: Text(word, style: const TextStyle(color: AppTheme.primary)),
+                backgroundColor: AppTheme.primary.withAlpha(15),
+                side: BorderSide(color: AppTheme.primary.withAlpha(40)),
                 onPressed: () => _selectWord(word),
               );
             }).toList(growable: false),

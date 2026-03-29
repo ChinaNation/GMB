@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../ui/app_theme.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../util/amount_format.dart';
@@ -31,7 +32,6 @@ class DuoqianCloseProposalPage extends StatefulWidget {
 }
 
 class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
 
   final _beneficiaryController = TextEditingController();
   final _manageService = DuoqianManageService();
@@ -167,14 +167,14 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('提案已提交：${_truncateAddress(result.txHash)}'),
-          backgroundColor: _inkGreen,
+          backgroundColor: AppTheme.primaryDark,
         ),
       );
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('提交失败：$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('提交失败：$e'), backgroundColor: AppTheme.danger),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -194,7 +194,7 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
+        foregroundColor: AppTheme.primaryDark,
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
@@ -207,7 +207,7 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: AppTheme.surfaceMuted,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -215,7 +215,7 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
               style: TextStyle(
                 fontSize: 13,
                 fontFamily: 'monospace',
-                color: Colors.grey[700],
+                color: AppTheme.textSecondary,
               ),
             ),
           ),
@@ -228,7 +228,7 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: AppTheme.surfaceMuted,
               borderRadius: BorderRadius.circular(10),
             ),
             child: _loadingBalance
@@ -245,8 +245,8 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: _availableBalance != null
-                          ? _inkGreen
-                          : Colors.red,
+                          ? AppTheme.primaryDark
+                          : AppTheme.danger,
                     ),
                   ),
           ),
@@ -274,7 +274,7 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                icon: const Icon(Icons.qr_code_scanner, color: _inkGreen),
+                icon: const Icon(Icons.qr_code_scanner, color: AppTheme.primaryDark),
                 onPressed: () async {
                   final result = await Navigator.push<String>(
                     context,
@@ -323,7 +323,7 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
             child: ElevatedButton(
               onPressed: _submitting ? null : _submit,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFB71C1C),
+                backgroundColor: AppTheme.danger,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
@@ -352,7 +352,7 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
       style: const TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w600,
-        color: _inkGreen,
+        color: AppTheme.primaryDark,
       ),
     );
   }

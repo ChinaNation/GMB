@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../ui/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
@@ -37,9 +38,6 @@ class TransferProposalPage extends StatefulWidget {
 }
 
 class _TransferProposalPageState extends State<TransferProposalPage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
-  static const Color _inputFieldColor = Color(0xFFF7F7F7);
-  static const Color _inputBorderColor = Color(0xFFD0D0D0);
 
   final _beneficiaryController = TextEditingController();
   final _amountController = TextEditingController();
@@ -273,7 +271,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
+        foregroundColor: AppTheme.primaryDark,
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
@@ -303,24 +301,24 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
             controller: _beneficiaryController,
             decoration: InputDecoration(
               hintText: '输入 SS58 格式地址',
-              hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+              hintStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 14),
               filled: true,
-              fillColor: _inputFieldColor,
+              fillColor: AppTheme.surfaceMuted,
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: _inputBorderColor),
+                borderSide: const BorderSide(color: AppTheme.border),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: _inkGreen),
+                borderSide: const BorderSide(color: AppTheme.primaryDark),
               ),
               errorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.red),
+                borderSide: const BorderSide(color: AppTheme.danger),
               ),
               focusedErrorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.red),
+                borderSide: const BorderSide(color: AppTheme.danger),
               ),
               errorText: _addressError,
               suffixIcon: IconButton(
@@ -348,24 +346,24 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
             ],
             decoration: InputDecoration(
               hintText: '最低 1.11 元',
-              hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+              hintStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 14),
               filled: true,
-              fillColor: _inputFieldColor,
+              fillColor: AppTheme.surfaceMuted,
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: _inputBorderColor),
+                borderSide: const BorderSide(color: AppTheme.border),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: _inkGreen),
+                borderSide: const BorderSide(color: AppTheme.primaryDark),
               ),
               errorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.red),
+                borderSide: const BorderSide(color: AppTheme.danger),
               ),
               focusedErrorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.red),
+                borderSide: const BorderSide(color: AppTheme.danger),
               ),
               errorText: _amountError,
               suffixText: '元',
@@ -400,16 +398,16 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
             maxLines: 3,
             decoration: InputDecoration(
               hintText: '最多 256 字节',
-              hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+              hintStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 14),
               filled: true,
-              fillColor: _inputFieldColor,
+              fillColor: AppTheme.surfaceMuted,
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: _inputBorderColor),
+                borderSide: const BorderSide(color: AppTheme.border),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: _inkGreen),
+                borderSide: const BorderSide(color: AppTheme.primaryDark),
               ),
             ),
             style: const TextStyle(fontSize: 14),
@@ -422,7 +420,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
             height: 48,
             child: FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: _inkGreen,
+                backgroundColor: AppTheme.primaryDark,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -467,13 +465,13 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.green.withValues(alpha: 0.06),
+          color: AppTheme.success.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+          border: Border.all(color: AppTheme.success.withValues(alpha: 0.2)),
         ),
         child: Row(
           children: [
-            const Icon(Icons.verified_user, size: 16, color: Colors.green),
+            const Icon(Icons.verified_user, size: 16, color: AppTheme.success),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -481,7 +479,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
                 style: const TextStyle(
                   fontSize: 13,
                   fontFamily: 'monospace',
-                  color: Colors.green,
+                  color: AppTheme.success,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -494,22 +492,22 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: _inputFieldColor,
+        color: AppTheme.surfaceMuted,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+        border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<int>(
           value: _selectedWallet.walletIndex,
           isExpanded: true,
-          icon: const Icon(Icons.arrow_drop_down, color: _inkGreen),
+          icon: const Icon(Icons.arrow_drop_down, color: AppTheme.primaryDark),
           items: wallets.map((w) {
             return DropdownMenuItem<int>(
               value: w.walletIndex,
               child: Row(
                 children: [
                   const Icon(Icons.verified_user,
-                      size: 14, color: Colors.green),
+                      size: 14, color: AppTheme.success),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -556,7 +554,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: _inkGreen,
+              color: AppTheme.primaryDark,
             ),
           ),
         ),
@@ -585,7 +583,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       style: const TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
-        color: _inkGreen,
+        color: AppTheme.primaryDark,
       ),
     );
   }
@@ -595,15 +593,15 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       decoration: BoxDecoration(
-        color: _inputFieldColor,
+        color: AppTheme.surfaceMuted,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _inputBorderColor),
+        border: Border.all(color: AppTheme.border),
       ),
       child: SelectableText(
         value,
         style: TextStyle(
           fontSize: 13,
-          color: Colors.grey[600],
+          color: AppTheme.textSecondary,
           fontFamily: 'monospace',
         ),
       ),
@@ -616,14 +614,14 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       children: [
         Text(
           label,
-          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+          style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
         ),
         Text(
           value,
           style: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: _inkGreen,
+            color: AppTheme.primaryDark,
           ),
         ),
       ],

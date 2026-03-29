@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../util/sensitive_page_mixin.dart';
 import '../wallet/wallet_manager.dart';
+import 'app_theme.dart';
 import 'widgets/bip39_input.dart';
 
 /// 导入钱包页面（通过助记词）。
@@ -63,26 +64,58 @@ class _ImportWalletPageState extends State<ImportWalletPage>
         centerTitle: true,
       ),
       body: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(20),
         children: [
+          // 图标
+          Center(
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withAlpha(25),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.download_rounded,
+                size: 30,
+                color: AppTheme.primaryLight,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
           const Text(
             '输入助记词',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textPrimary,
+            ),
           ),
           const SizedBox(height: 8),
           const Text(
             '逐个输入单词，从候选列表中选择匹配项',
-            style: TextStyle(color: Colors.black54),
-          ),
-          const SizedBox(height: 16),
-          Bip39InputField(controller: _mnemonicController, wordCount: 0),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _importing ? null : _import,
-              child: Text(_importing ? '导入中...' : '导入钱包'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 14,
             ),
+          ),
+          const SizedBox(height: 24),
+          Bip39InputField(controller: _mnemonicController, wordCount: 0),
+          const SizedBox(height: 28),
+          FilledButton(
+            onPressed: _importing ? null : _import,
+            child: _importing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('导入钱包'),
           ),
         ],
       ),

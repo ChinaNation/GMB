@@ -9,3 +9,14 @@ pub const GENESIS_CITIZEN_MAX: u64 = 1_443_497_378; // 中共国第7次人口普
 
 /// 三、创世发行（单位：分）：144,349,737,800.00 元 = 14_434_973_780_000 分
 pub const GENESIS_ISSUANCE: u128 = 14_434_973_780_000; // 每人100元的创世发行总量，单位为分
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn genesis_issuance_matches_population() {
+        // 中文注释：创世发行 = 创世人口 × 每人 100 元 × 100 分/元 = 人口 × 10_000。
+        assert_eq!(GENESIS_ISSUANCE, GENESIS_CITIZEN_MAX as u128 * 10_000u128);
+    }
+}

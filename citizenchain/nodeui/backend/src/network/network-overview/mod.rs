@@ -17,7 +17,7 @@ use tauri::AppHandle;
 const KNOWN_PEERS_MAX: usize = 5000;
 // 网络统计需要查询较多 peer 信息，给予额外 1 秒余量。
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(4);
-const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
+use crate::shared::constants::RPC_RESPONSE_LIMIT_LARGE;
 
 struct CachedKnownPeers {
     peers: Vec<String>,
@@ -223,7 +223,7 @@ fn merge_known_peers(app: &AppHandle, observed_peer_ids: &[String]) -> KnownPeer
 }
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, MAX_RPC_RESPONSE_BYTES)
+    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, RPC_RESPONSE_LIMIT_LARGE)
 }
 
 // 网络统计必须建立在"当前 RPC 确认属于目标链"的前提上，
@@ -273,6 +273,8 @@ fn extract_light_role(roles_value: &Value) -> bool {
     false
 }
 
+/// 获取网络总览数据（连接节点数、引导节点状态、已知 peer 列表）。
+/// 前端定期轮询此命令；内部通过 spawn_blocking 避免阻塞 Tauri 主线程。
 #[tauri::command]
 pub async fn get_network_overview(app: AppHandle) -> Result<NetworkOverview, String> {
     tauri::async_runtime::spawn_blocking(move || get_network_overview_blocking(app))
@@ -386,7 +388,7 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
                     "system_peers",
                     Value::Array(vec![]),
                     REMOTE_RPC_TIMEOUT,
-                    MAX_RPC_RESPONSE_BYTES,
+                    RPC_RESPONSE_LIMIT_LARGE,
                 ) {
                     if let Some(arr) = peers.as_array() {
                         for p in arr {
@@ -542,19 +544,23 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
 mod tests {
     use super::*;
 
+    // 合法 PeerId 示例：以 "12D3KooW" 开头 + 至少 46 字符 + 纯 ASCII 字母数字
+    const VALID_PEER_ID: &str = "12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN";
+
     #[test]
     fn normalize_peer_id_valid() {
         assert_eq!(
-            normalize_peer_id("12D3KooWTest"),
-            Some("12D3KooWTest".to_string())
+            normalize_peer_id(VALID_PEER_ID),
+            Some(VALID_PEER_ID.to_string())
         );
     }
 
     #[test]
     fn normalize_peer_id_trims_whitespace() {
+        let padded = format!("  {VALID_PEER_ID}  ");
         assert_eq!(
-            normalize_peer_id("  12D3KooWTest  "),
-            Some("12D3KooWTest".to_string())
+            normalize_peer_id(&padded),
+            Some(VALID_PEER_ID.to_string())
         );
     }
 
@@ -566,14 +572,20 @@ mod tests {
 
     #[test]
     fn normalize_peer_id_too_long_rejected() {
-        let long = "a".repeat(129);
+        let long = format!("12D3KooW{}", "a".repeat(121)); // 8 + 121 = 129 > 128
         assert_eq!(normalize_peer_id(&long), None);
     }
 
     #[test]
     fn normalize_peer_id_max_length_ok() {
-        let max = "a".repeat(128);
+        let max = format!("12D3KooW{}", "a".repeat(120)); // 8 + 120 = 128
         assert!(normalize_peer_id(&max).is_some());
+    }
+
+    #[test]
+    fn normalize_peer_id_too_short_rejected() {
+        // 以 12D3KooW 开头但不足 46 字符
+        assert_eq!(normalize_peer_id("12D3KooWShort"), None);
     }
 
     #[test]

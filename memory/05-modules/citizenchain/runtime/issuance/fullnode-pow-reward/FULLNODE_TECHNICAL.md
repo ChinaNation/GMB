@@ -187,7 +187,8 @@ Substrate 框架的 `sr25519_generate_new(key_type, None)` 行为：
 nodeui **不读取私钥、不签名**，仅传入收款钱包的 SS58 地址。签名使用与出块相同的 `sp_core` 密钥推导路径，确保签名身份与出块作者身份一致。
 
 ### 10.4 nodeui 的角色
-- 只读取 keystore 文件名中的公钥（`local_powr_miner_account_hex`），用于前端展示矿工身份
+- 只读取默认链（`citizenchain`）keystore 文件名中的公钥（`local_powr_miner_account_hex`），用于前端展示矿工身份；不遍历其他链目录，避免旧链残留 keystore 导致身份错位
+- 设置奖励钱包时在同步路径提前校验 wallet != miner，避免先存后验
 - 通过 `state_getStorage` 查询链上 `RewardWalletByMiner` 状态，判断是否需要 bind 或 rebind
 - 所有签名和交易提交委托给 node 端 RPC
 

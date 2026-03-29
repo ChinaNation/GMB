@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
+import 'package:wuminapp_mobile/ui/app_theme.dart';
 
 import '../../Isar/wallet_isar.dart';
 import '../../governance/duoqian_institution_list_page.dart';
@@ -24,8 +25,6 @@ class DuoqianTradePage extends StatefulWidget {
 }
 
 class _DuoqianTradePageState extends State<DuoqianTradePage> {
-  static const Color _inkGreen = Color(0xFF0B3D2E);
-
   final TransferProposalService _proposalService = TransferProposalService();
 
   bool _loading = true;
@@ -154,7 +153,7 @@ class _DuoqianTradePageState extends State<DuoqianTradePage> {
         builder: (_) => TransferProposalPage(
           institution: selected,
           icon: Icons.groups,
-          badgeColor: _inkGreen,
+          badgeColor: AppTheme.primaryDark,
           adminWallets: wallets,
         ),
       ),
@@ -231,17 +230,11 @@ class _DuoqianTradePageState extends State<DuoqianTradePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
           '多签交易',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        foregroundColor: _inkGreen,
-        elevation: 0,
-        scrolledUnderElevation: 0.5,
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
@@ -266,10 +259,10 @@ class _DuoqianTradePageState extends State<DuoqianTradePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
             const SizedBox(height: 12),
             Text(_error!,
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                 textAlign: TextAlign.center),
             const SizedBox(height: 16),
             OutlinedButton(onPressed: _load, child: const Text('重试')),
@@ -284,16 +277,16 @@ class _DuoqianTradePageState extends State<DuoqianTradePage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.receipt_long, size: 64, color: Colors.grey[300]),
+          const Icon(Icons.receipt_long, size: 64, color: AppTheme.border),
           const SizedBox(height: 12),
-          Text(
+          const Text(
             '暂无多签交易记录',
-            style: TextStyle(fontSize: 16, color: Colors.grey[500]),
+            style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 6),
-          Text(
+          const Text(
             '点击右上角 + 发起多签转账',
-            style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+            style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
           ),
         ],
       ),
@@ -353,7 +346,7 @@ class _DuoqianTradePageState extends State<DuoqianTradePage> {
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
-                            color: _inkGreen,
+                            color: AppTheme.textPrimary,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -361,13 +354,13 @@ class _DuoqianTradePageState extends State<DuoqianTradePage> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 1),
                           decoration: BoxDecoration(
-                            color: _inkGreen.withValues(alpha: 0.08),
+                            color: AppTheme.primaryDark.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             item.institution.name,
                             style: const TextStyle(
-                                fontSize: 10, color: _inkGreen),
+                                fontSize: 10, color: AppTheme.primaryDark),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -376,7 +369,7 @@ class _DuoqianTradePageState extends State<DuoqianTradePage> {
                     const SizedBox(height: 2),
                     Text(
                       _proposalSubtitle(item.proposal),
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                     ),
                   ],
                 ),
@@ -397,7 +390,7 @@ class _DuoqianTradePageState extends State<DuoqianTradePage> {
                 ),
               ),
               const SizedBox(width: 4),
-              Icon(Icons.chevron_right, size: 20, color: Colors.grey[400]),
+              const Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),
@@ -443,16 +436,7 @@ class _DuoqianTradePageState extends State<DuoqianTradePage> {
   }
 
   Color _statusColor(int status) {
-    switch (status) {
-      case 0:
-        return Colors.blue;
-      case 1:
-        return Colors.green;
-      case 2:
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
+    return AppTheme.proposalStatusColor(status);
   }
 }
 

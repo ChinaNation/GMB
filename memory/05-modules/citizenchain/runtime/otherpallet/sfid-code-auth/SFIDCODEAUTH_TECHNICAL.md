@@ -13,7 +13,7 @@
 - 绑定时不得保存 SFID 明文，只保存 `binding_id`。
 - 同一 SFID 同一时刻只能绑定到一个账户。
 - 同一账户允许换绑，但旧映射必须原子释放。
-- 绑定凭证 nonce 必须防重放，并按过期块高回收。
+- 绑定凭证 nonce 必须防重放（按 `hash(bind_nonce)` 永久记账，无过期回收）。
 - 绑定成功后，模块必须能够向上游模块发出“已绑定”回调，但回调模块不得破坏本模块的一对一绑定不变量。
 - 用户主动解绑时，只影响“当前绑定关系”，不应隐式清理历史领奖、历史投票或外部业务审计记录。
 
@@ -29,8 +29,8 @@
 - 模块不得依赖链下“在线状态”或链下缓存来判断公民资格，资格判断必须完全可由链上状态重建。
 - SFID 验签主备账户轮换必须保证三把账户两两不同，避免主备塌缩成同一把密钥。
 - 绑定凭证与投票凭证必须带链域隔离信息（`genesis_hash`），防止跨链重放。
-- 绑定 nonce 的链上清理必须受每块预算限制，避免一次性清理过多状态导致出块抖动。
-- 投票 nonce 当前没有按块自动回收机制，运维流程必须在提案结束时触发清理，否则会产生长期状态膨胀。
+- 绑定 nonce（`UsedBindNonce`）当前为永久存储，无回收机制。以 `CITIZEN_LIGHTNODE_MAX_COUNT` 为上界，存储增长有限。
+- 投票 nonce 当前没有按块自动回收机制，运维流程必须在提案结束时通过 `cleanup_vote_credentials` 触发清理，否则会产生长期状态膨胀。当前清理实现使用 `clear_prefix(u32::MAX)` 一次性清除，如果单提案投票量极大，需考���分批清理。
 
 ### 0.5 Runtime 对齐基线（冻结）
 1. 以链上 Runtime 为唯一验签真值。
@@ -116,37 +116,34 @@ Runtime 配置与验签桥接：
 
 ## 5. Extrinsic 规则
 
-### 5.1 `bind_sfid(origin, sfid_code, credential)`（call index = 0）
+### 5.1 `bind_sfid(origin, credential)`（call index = 0）
 校验顺序：
 1. `origin` 必须是签名账户。
-2. `sfid_code` 非空。
-3. `credential.nonce` 非空。
-4. `hash(sfid_code)` 必须等于 `credential.binding_id`。
-5. `UsedCredentialNonce[hash(nonce)]` 不得已使用。
-6. `credential.expires_at >= now`，且不得超过 `MaxBindCredentialLifetimeBlocks`。
-7. `T::SfidVerifier::verify(&who, &credential)` 必须通过。
-8. 若 `binding_id` 已绑定他人，拒绝。
-9. 若 `binding_id` 已绑定当前账户，拒绝（`SameSfidAlreadyBound`）。
+2. `credential.bind_nonce` 非空（`EmptyBindNonce`）。
+3. `UsedBindNonce[hash(bind_nonce)]` 不得已使用（`BindNonceAlreadyUsed`）。
+4. `T::SfidVerifier::verify(&who, &credential)` 必须通过（`InvalidSfidBindingSignature`）。
+5. 若 `binding_id` 已绑定他人，拒绝（`BindingIdAlreadyBoundToAnotherAccount`）。
+6. 若 `binding_id` 已绑定当前账户，拒绝（`SameBindingIdAlreadyBound`）。
 
 状态变更：
-1. 若账户之前已绑旧 SFID：移除旧正向映射（允许换绑）。
+1. 若账户之前已绑旧 binding_id：移除旧正向映射（允许换绑），不减少 `BoundCount`。
 2. 若账户此前未绑定：`BoundCount += 1`。
-3. 写入新双向映射。
-4. 标记 `UsedCredentialNonce` 已使用并记录 `expires_at`。
-5. 写入 `CredentialNoncesByExpiry[expires_at]`。
-6. 触发 `OnSfidBound` 回调。
-7. 发事件 `SfidBound { who, binding_id, credential_nonce_hash }`。
+3. 写入新双向映射（`BindingIdToAccount` + `AccountToBindingId`）。
+4. 标记 `UsedBindNonce[hash(bind_nonce)] = true`（永久存储，无过期）。
+5. 触发 `T::OnSfidBound::on_sfid_bound(&who, binding_id)` 回调。
+6. 发事件 `SfidBound { who, binding_id, bind_nonce_hash }`。
 
 weight：
-- `DbWeight.reads_writes(7, 7) + OnSfidBound::on_sfid_bound_weight()`
+- `T::WeightInfo::bind_sfid().saturating_add(T::OnSfidBound::on_sfid_bound_weight())`
+- 由 Substrate benchmark CLI 自动生成（见 `src/weights.rs`）。
 
 ### 5.2 `unbind_sfid(origin)`（call index = 1）
 校验：
 1. `origin` 必须是签名账户。
-2. 账户必须当前已绑定 SFID。
+2. 账户必须当前已绑定（`NotBound`）。
 
 状态变更：
-1. 删除 `AccountToSfid` 与 `SfidToAccount`。
+1. 删除 `AccountToBindingId` 与 `BindingIdToAccount`。
 2. `BoundCount -= 1`（`saturating_sub`）。
 3. 发事件 `SfidUnbound`。
 
@@ -223,7 +220,7 @@ weight：
 2. 链上消费字段：`binding_id`、`bind_nonce`、`signature`。
 3. `bind_nonce` 一次性；链上按 `hash(bind_nonce)` 去重。
 4. SFID 可保留扩展运维字段（如 `key_id`、`key_version`、`alg`），但不改变链上验签字段。
-5. 链上交易更新为 `bind_sfid(origin, credential)`，不再消费 `sfid_code`。
+5. 链上交易签名为 `bind_sfid(origin, credential)`，credential 封装 `binding_id` + `bind_nonce` + `signature`。
 
 ### 功能 2：公民投票凭证校验
 需要提供：
@@ -270,52 +267,63 @@ weight：
 ---
 
 ## 10. 安全属性与注意事项
-- 一对一绑定：`SfidToAccount` + `AccountToSfid` 双向约束。
+- 一对一绑定：`BindingIdToAccount` + `AccountToBindingId` 双向约束。
 - 防重放：
-  - 绑定：`UsedCredentialNonce(hash(nonce))`
-  - 投票：`UsedVoteNonce(proposal_id, binding_id, hash(nonce))`
+  - 绑定：`UsedBindNonce(hash(bind_nonce))`（永久存储）
+  - 投票：`UsedVoteNonce(proposal_id, (binding_id, hash(vote_nonce)))`（提案结束后可清理）
 - 链域隔离：payload 包含 `block_hash(0)`。
 - 域隔离：绑定/投票/快照使用不同 domain 常量。
 - 可轮换验签根：主备账户机制降低单点密钥风险。
 
 注意：
 - `current_sfid_verify_pubkey()` 要求 `AccountId` 编码长度恰好 32 字节，否则验签会失败。
+- `cleanup_vote_credentials` 当前使用 `clear_prefix(u32::MAX)` 一次性清除，如果单提案投票量极大，可能影响出块稳定性。
 
 ---
 
 ## 11. 事件与错误码
 事件：
-- `SfidBound`
-- `SfidUnbound`
-- `SfidKeysRotated`
+- `SfidBound { who, binding_id, bind_nonce_hash }`
+- `SfidUnbound { who, binding_id }`
+- `SfidKeysRotated { operator, new_main, backup_1, backup_2 }`
 
 错误码：
-- `EmptySfid`
-- `EmptyCredentialNonce`
-- `InvalidCredentialSfidCodeHash`
-- `CredentialAlreadyUsed`
-- `InvalidSfidCredentialSignature`
-- `SfidAlreadyBoundToAnotherAccount`
-- `SameSfidAlreadyBound`
-- `NotBound`
-- `UnauthorizedSfidOperator`
-- `DuplicateSfidKey`
+- `EmptyBindNonce`：绑定凭证中 bind_nonce 为空。
+- `BindNonceAlreadyUsed`：该 bind_nonce 已被使用（防重放）。
+- `InvalidSfidBindingSignature`：SFID 绑定签名验证失败。
+- `BindingIdAlreadyBoundToAnotherAccount`：该 binding_id 已被另一个账户绑定。
+- `SameBindingIdAlreadyBound`：该账户已绑定到同一 binding_id。
+- `NotBound`：账户当前未绑定 SFID。
+- `UnauthorizedSfidOperator`：调��者不是备用账户，无权轮换。
+- `DuplicateSfidKey`：新备用账户与现有账户重复。
 
 ---
 
 ## 12. 测试覆盖（当前）
-`sfid-code-auth` 模块单测已覆盖：
+
+### 12.1 单元测试
+`cargo test -p sfid-code-auth` 覆盖（17 个用例）：
 - 绑定成功与 `BoundCount` 计数
 - 绑定 nonce 防重放
-- 同 SFID 不能绑定给不同账户
-- 同账户换绑 SFID 不增加 `BoundCount`
-- 同账户重复绑定同 SFID 拒绝
-- 解绑前置条件与计数回退
-- 备用账户轮换成功路径
-- 轮换权限与重复 key 拒绝路径
+- 同账户换绑不增加 `BoundCount`
 - 投票资格判断与 vote nonce 防重放
-- 绑定参数与签名错误路径
 - `current_sfid_verify_pubkey` 编码长度边界
+- 备用账户轮换成功路径（backup_1 和 backup_2 各一条）
+- 空 bind_nonce 拒绝（`EmptyBindNonce`）
+- 签名验证失败拒绝（`InvalidSfidBindingSignature`）
+- binding_id 已绑他人拒绝（`BindingIdAlreadyBoundToAnotherAccount`）
+- 同 binding_id 重复绑定拒绝（`SameBindingIdAlreadyBound`）
+- 未绑定账户解绑拒绝（`NotBound`）
+- 主账户无权轮换拒绝（`UnauthorizedSfidOperator`）
+- 新备用账户重复拒绝（`DuplicateSfidKey`，三条路径）
+- `cleanup_vote_credentials` 清理后 nonce 可复用
+
+### 12.2 跨模块集成测试
+`cargo test -p citizen-lightnode-issuance --test integration_bind_sfid` 覆盖：
+- `bind_sfid` → `OnSfidBound` → 奖励发放完整链路
+- 换绑时奖励跳过但绑定成功
+- 不同账户独立领奖
+- 达到上限后绑定成功但奖励跳过
 
 ---
 

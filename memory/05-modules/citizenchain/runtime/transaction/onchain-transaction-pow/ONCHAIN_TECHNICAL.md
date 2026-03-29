@@ -84,6 +84,9 @@
 3. 应用最低费：`max(by_rate, ONCHAIN_MIN_FEE)`。
 4. 最终费用：`base_fee + tip`。
 
+`transfer_all` 特殊说明：
+`PowTxAmountExtractor` 对 `transfer_all` 按扣费前的 `reducible_balance` 提取金额。这是有意设计——按用户"转出全部"的意图金额收费，实际转出额 = 可用余额 - 手续费。如果改为按扣费后金额收费会产生循环依赖（手续费取决于转出额，转出额取决于手续费）。
+
 ---
 
 ## 4. 扣费流程（OnChargeTransaction）
@@ -94,6 +97,7 @@
   - 先计算 `fee_with_tip`
   - 可选通过 `CallFeePayer` 指定代付账户
   - 余额扣除后把 credit 拆为 `(inclusion_fee, tip_credit)`
+  - 发出 `FeePaid { who, fee }` 事件，其中 `fee` 只包含基础手续费（不含 tip）
 - `correct_and_deposit_fee`：
   - 设计上不做执行后退款（`_corrected_fee_with_tip` 被有意忽略）
   - 将 `fee_credit` 与 `tip_credit` 一并交给 Router，由 `on_unbalanceds` 合并后按同一口径统一分账
@@ -191,4 +195,20 @@
 出现上述告警时，优先检查：
 1. 出块作者识别链路（digest / `FindAuthor`）
 2. `RewardWalletByMiner` 映射是否完整
+3. NRC 账户配置是否正确
+
+---
+
+## 11. FeePaid 事件与外部依赖
+
+### 事件语义
+`FeePaid { who, fee }` 中的 `fee` 只记录基础手续费（`base_fee = fee_with_tip - tip`），不包含 tip。当前 PoW 链无 tip UI 入口，tip 实际值始终为 0，因此 `fee` 等同于真实手续费。若未来引入 tip 机制，需同步更新下游消费方。
+
+### 外部依赖方
+- **node RPC `fee_blockFees`**（`node/src/rpc.rs`）：累加指定区块内所有 `FeePaid.fee`，返回该区块的手续费总额。
+- **nodeui mining-dashboard**（`nodeui/backend/src/mining/mining-dashboard/mod.rs`）：读取 `fee_blockFees` 统计矿工收益。
+- **runtime 注册**（`runtime/src/lib.rs` pallet_index 4）：`OnchainTransactionPow` 发出事件。
+
+### 注意
+上述依赖方均假定 `FeePaid.fee` 等于实际扣费总额。当 tip > 0 时该假设不成立，统计会少算 tip 部分。
 3. NRC 账户配置是否正确

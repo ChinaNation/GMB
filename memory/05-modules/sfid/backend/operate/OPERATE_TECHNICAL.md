@@ -47,3 +47,13 @@
   - 先调用 `persist_reward_state_db(..., None)` 持久化；
   - DB 成功后才写入 `store.reward_state_by_pubkey`。
 - 若奖励状态持久化失败（含未生效），接口返回 `1502 reward state persistence failed`，不保留仅内存成功的中间状态。
+
+## 6. 审计事件
+
+| 事件 | 触发场景 | 关键字段 |
+|------|---------|---------|
+| `BIND_SCAN` | 管理员扫描公民 QR 码 | account_pubkey, archive_no, site_sfid |
+| `BIND_CONFIRM` | 管理员确认绑定 | account_pubkey, archive_index |
+| `BIND_CONFIRM_META` | 绑定确认元数据 | request_id, actor_ip |
+| `BIND_UNBIND` | 管理员解绑 | account_pubkey, archive_index |
+| `BIND_UNBIND_META` | 解绑元数据 | request_id, actor_ip, reason |

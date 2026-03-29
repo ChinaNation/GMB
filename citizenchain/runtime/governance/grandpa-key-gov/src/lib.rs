@@ -1,3 +1,13 @@
+//! # GRANDPA 密钥治理模块 (grandpa-key-gov)
+//!
+//! 本模块将"机构 GRANDPA 公钥替换"包装成受治理约束的链上流程：
+//! - 仅国储会（NRC）与省储会（PRC）可发起密钥替换提案。
+//! - 仅目标机构内部管理员可参与提案/投票/执行/清理。
+//! - 借助 `voting-engine-system` 内部投票达成通过后，调用 `pallet-grandpa::schedule_change` 变更 authority set。
+//! - 新公钥必须通过 ed25519 有效性校验和 small-order 弱公钥拒绝。
+//!
+//! 投票通过后自动尝试执行；若因 GRANDPA pending change 暂时失败，可手动重试或取消。
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
@@ -29,18 +39,21 @@ const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 #[derive(
     Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
 )]
+/// 中文注释：密钥替换提案动作，封装机构、旧公钥和新公钥。
 pub struct GrandpaKeyReplacementAction {
     pub institution: InstitutionPalletId,
     pub old_key: [u8; 32],
     pub new_key: [u8; 32],
 }
 
+/// 中文注释：获取国储会（NRC）的机构 pallet ID。
 fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
     CHINA_CB
         .first()
         .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
 }
 
+/// 中文注释：判断机构属于 NRC 还是 PRC，不属于任何一类则返回 None。
 fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
     if Some(institution) == nrc_pallet_id_bytes() {
         return Some(ORG_NRC);
@@ -86,11 +99,13 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
+    /// 中文注释：机构当前 GRANDPA 公钥，治理认可的目标 key（真正生效由 pallet-grandpa delay 控制）。
     #[pallet::storage]
     #[pallet::getter(fn current_grandpa_key)]
     pub type CurrentGrandpaKeys<T: Config> =
         StorageMap<_, Blake2_128Concat, InstitutionPalletId, [u8; 32], OptionQuery>;
 
+    /// 中文注释：公钥到机构的反向索引，O(1) 判断 new_key 是否已被其他机构占用。
     #[pallet::storage]
     #[pallet::getter(fn key_owner)]
     pub type GrandpaKeyOwnerByKey<T: Config> =
@@ -182,20 +197,35 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
+        /// 中文注释：机构不属于 NRC 或 PRC。
         InvalidInstitution,
+        /// 中文注释：机构与提案所属组织不匹配。
         InstitutionOrgMismatch,
+        /// 中文注释：不支持的组织类型。
         UnsupportedOrg,
+        /// 中文注释：调用者不是该机构的内部管理员。
         UnauthorizedAdmin,
+        /// 中文注释：提案动作数据未找到或解码失败。
         ProposalActionNotFound,
+        /// 中文注释：提案未达到通过状态，不可执行。
         ProposalNotPassed,
+        /// 中文注释：已通过的提案不能直接取消。
         PassedProposalCannotBeCancelled,
+        /// 中文注释：机构当前 GRANDPA 公钥未找到（创世未初始化）。
         CurrentGrandpaKeyNotFound,
+        /// 中文注释：新公钥不能为全零值。
         NewKeyIsZero,
+        /// 中文注释：新公钥不是有效的 ed25519 曲线点，或为 small-order 弱公钥。
         InvalidEd25519Key,
+        /// 中文注释：新公钥与当前公钥相同，无需替换。
         NewKeyUnchanged,
+        /// 中文注释：新公钥已被其他机构占用或替换后 authority set 中出现重复。
         NewKeyAlreadyUsed,
+        /// 中文注释：提案绑定的旧公钥已不在当前 GRANDPA authority set 中。
         OldAuthorityNotFound,
+        /// 中文注释：当前已有待生效的 GRANDPA authority set 变更，需等待其完成。
         GrandpaChangePending,
+        /// 中文注释：提案仍可执行，不允许误取消。
         ProposalStillExecutable,
     }
 
@@ -361,6 +391,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        /// 中文注释：检查调用者是否为指定机构的内部管理员。
         fn is_internal_admin(
             org: u8,
             institution: InstitutionPalletId,
@@ -373,6 +404,7 @@ pub mod pallet {
             )
         }
 
+        /// 中文注释：检查 new_key 是否已被其他机构占用（通过反向索引 O(1) 判断）。
         fn is_key_used_by_other_institution(
             institution: InstitutionPalletId,
             key: &[u8; 32],
@@ -382,6 +414,7 @@ pub mod pallet {
                 .unwrap_or(false)
         }
 
+        /// 中文注释：从投票引擎读取并解码提案动作数据。
         fn decode_action(proposal_id: u64) -> Result<GrandpaKeyReplacementAction, DispatchError> {
             let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
@@ -389,6 +422,7 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::ProposalActionNotFound.into())
         }
 
+        /// 中文注释：尝试执行已通过的密钥替换提案，成功后调度 GRANDPA authority set 变更。
         fn try_execute_from_action(
             proposal_id: u64,
             action: GrandpaKeyReplacementAction,
@@ -425,6 +459,7 @@ pub mod pallet {
             Ok(())
         }
 
+        /// 中文注释：校验提案可执行性——无 pending change、旧 key 存在、替换后无重复。
         fn validate_action(
             action: &GrandpaKeyReplacementAction,
         ) -> Result<Vec<(GrandpaAuthorityId, u64)>, Error<T>> {
@@ -929,6 +964,175 @@ mod tests {
                     .expect("passed proposal should remain active")
                     .status,
                 STATUS_PASSED
+            );
+        });
+    }
+
+    // ========================================================================
+    // 补充的错误路径和边界测试
+    // ========================================================================
+
+    #[test]
+    fn propose_rejects_zero_key() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                GrandpaKeyGov::propose_replace_grandpa_key(
+                    RuntimeOrigin::signed(prc_admin(0)),
+                    prc_pallet_id(),
+                    [0u8; 32],
+                ),
+                Error::<Test>::NewKeyIsZero
+            );
+        });
+    }
+
+    #[test]
+    fn propose_rejects_unchanged_key() {
+        new_test_ext().execute_with(|| {
+            let institution = prc_pallet_id();
+            let current_key = CurrentGrandpaKeys::<Test>::get(institution)
+                .expect("institution should have key");
+            assert_noop!(
+                GrandpaKeyGov::propose_replace_grandpa_key(
+                    RuntimeOrigin::signed(prc_admin(0)),
+                    institution,
+                    current_key,
+                ),
+                Error::<Test>::NewKeyUnchanged
+            );
+        });
+    }
+
+    #[test]
+    fn propose_rejects_key_owned_by_other_institution() {
+        new_test_ext().execute_with(|| {
+            // CHINA_CB[0] 是国储会的 key，用它作为省储会的 new_key 应失败
+            let nrc_key = CHINA_CB[0].grandpa_key;
+            assert_noop!(
+                GrandpaKeyGov::propose_replace_grandpa_key(
+                    RuntimeOrigin::signed(prc_admin(0)),
+                    prc_pallet_id(),
+                    nrc_key,
+                ),
+                Error::<Test>::NewKeyAlreadyUsed
+            );
+        });
+    }
+
+    #[test]
+    fn propose_rejects_unauthorized_admin() {
+        new_test_ext().execute_with(|| {
+            // 使用一个不在 duoqian_admins 中的随机账户
+            let outsider = AccountId32::new([99u8; 32]);
+            assert_noop!(
+                GrandpaKeyGov::propose_replace_grandpa_key(
+                    RuntimeOrigin::signed(outsider),
+                    prc_pallet_id(),
+                    valid_public_key(80),
+                ),
+                Error::<Test>::UnauthorizedAdmin
+            );
+        });
+    }
+
+    #[test]
+    fn propose_rejects_invalid_institution() {
+        new_test_ext().execute_with(|| {
+            let fake_institution: InstitutionPalletId = [99u8; 48];
+            assert_noop!(
+                GrandpaKeyGov::propose_replace_grandpa_key(
+                    RuntimeOrigin::signed(prc_admin(0)),
+                    fake_institution,
+                    valid_public_key(81),
+                ),
+                Error::<Test>::InvalidInstitution
+            );
+        });
+    }
+
+    #[test]
+    fn execute_rejects_non_passed_proposal() {
+        new_test_ext().execute_with(|| {
+            let institution = prc_pallet_id();
+            let new_key = valid_public_key(82);
+            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
+                RuntimeOrigin::signed(prc_admin(0)),
+                institution,
+                new_key,
+            ));
+            let pid = last_proposal_id();
+            // 不投票，直接尝试执行
+            assert_noop!(
+                GrandpaKeyGov::execute_replace_grandpa_key(
+                    RuntimeOrigin::signed(prc_admin(0)),
+                    pid,
+                ),
+                Error::<Test>::ProposalNotPassed
+            );
+        });
+    }
+
+    #[test]
+    fn cancel_rejects_still_executable_proposal() {
+        new_test_ext().execute_with(|| {
+            let institution = prc_pallet_id();
+            let new_key = valid_public_key(83);
+
+            // 先制造 pending change 阻塞
+            assert_ok!(Grandpa::schedule_change(
+                grandpa_authorities(),
+                GrandpaChangeDelay::get(),
+                None,
+            ));
+
+            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
+                RuntimeOrigin::signed(prc_admin(0)),
+                institution,
+                new_key,
+            ));
+            let pid = last_proposal_id();
+
+            // 投票通过，自动执行因 pending change 失败
+            pass_prc_proposal(1, pid);
+            assert!(System::events().iter().any(|r| matches!(
+                &r.event,
+                RuntimeEvent::GrandpaKeyGov(Event::<Test>::GrandpaKeyExecutionFailed { .. })
+            )));
+
+            // 清除 pending change
+            finalize_grandpa_at(1 + GrandpaChangeDelay::get());
+            assert!(Grandpa::pending_change().is_none());
+
+            // 提案仍可执行，不允许取消
+            assert_noop!(
+                GrandpaKeyGov::cancel_failed_replace_grandpa_key(
+                    RuntimeOrigin::signed(prc_admin(0)),
+                    pid,
+                ),
+                Error::<Test>::ProposalStillExecutable
+            );
+        });
+    }
+
+    #[test]
+    fn vote_rejects_unauthorized_admin() {
+        new_test_ext().execute_with(|| {
+            let institution = prc_pallet_id();
+            let new_key = valid_public_key(85);
+            assert_ok!(GrandpaKeyGov::propose_replace_grandpa_key(
+                RuntimeOrigin::signed(prc_admin(0)),
+                institution,
+                new_key,
+            ));
+            let pid = last_proposal_id();
+            let outsider = AccountId32::new([98u8; 32]);
+            assert_noop!(
+                GrandpaKeyGov::vote_replace_grandpa_key(
+                    RuntimeOrigin::signed(outsider),
+                    pid,
+                    true,
+                ),
+                Error::<Test>::UnauthorizedAdmin
             );
         });
     }

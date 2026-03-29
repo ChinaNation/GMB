@@ -12,76 +12,14 @@ export function isTokenAuth(auth: AdminAuth): auth is TokenAdminAuth {
   return 'access_token' in auth;
 }
 
-function normalizeBaseUrl(raw?: string): string {
-  const value = (raw ?? '').trim();
-  const allowInsecureHttp =
-    String(import.meta.env.VITE_SFID_ALLOW_INSECURE_HTTP || '').toLowerCase() === 'true';
-  const isDev = Boolean(import.meta.env.DEV);
-  if (!value) {
-    if (isDev) {
-      return '';
-    }
-    const isHttpsPage = typeof window !== 'undefined' && window.location.protocol === 'https:';
-    if (isHttpsPage) {
-      return `https://${window.location.hostname}:8899`;
-    }
-    if (!allowInsecureHttp && !isDev) {
-      throw new Error('VITE_SFID_API_BASE_URL is required unless VITE_SFID_ALLOW_INSECURE_HTTP=true');
-    }
-    return 'http://127.0.0.1:8899';
-  }
-  if (value.startsWith('/')) {
-    return value.replace(/\/+$/, '');
-  }
-  if (value.startsWith('http://') || value.startsWith('https://')) {
-    if (value.startsWith('http://') && !allowInsecureHttp) {
-      throw new Error('Insecure http API URL is blocked. Use https or set VITE_SFID_ALLOW_INSECURE_HTTP=true for local dev.');
-    }
-    return value.replace(/\/+$/, '');
-  }
-  const inferred = `https://${value.replace(/\/+$/, '')}`;
-  return inferred;
-}
-
-const BASE_URL = normalizeBaseUrl(import.meta.env.VITE_SFID_API_BASE_URL);
-
-function fallbackBaseUrl(baseUrl: string): string | null {
-  if (baseUrl.includes('127.0.0.1')) {
-    return baseUrl.replace('127.0.0.1', 'localhost');
-  }
-  if (baseUrl.includes('localhost')) {
-    return baseUrl.replace('localhost', '127.0.0.1');
-  }
-  return null;
-}
-
+/** 所有 API 请求使用相对路径，由 Vite(开发) / Nginx(生产) 统一代理到后端 */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const targetBase = BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
-  const buildUrl = (base: string, reqPath: string): string => {
-    if (!base) {
-      return reqPath;
-    }
-    if (base === '/api' && reqPath.startsWith('/api/')) {
-      return reqPath;
-    }
-    return `${base}${reqPath}`;
-  };
   let resp: Response;
   try {
-    resp = await fetch(buildUrl(targetBase, path), init);
+    resp = await fetch(path, init);
   } catch (error) {
-    const fallbackBase = fallbackBaseUrl(targetBase);
-    if (fallbackBase != null) {
-      try {
-        resp = await fetch(buildUrl(fallbackBase, path), init);
-      } catch (fallbackError) {
-        const msg = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-        throw new Error(`无法连接服务器(${targetBase})：${msg}`);
-      }
-    } else {
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(`无法连接服务器(${targetBase})：${msg}`);
-    }
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`无法连接服务器：${msg}`);
   }
 
   const text = await resp.text();

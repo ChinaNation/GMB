@@ -201,7 +201,18 @@
 9. `CPMS_KEYS_STATUS_UPDATE`
 10. `CPMS_KEYS_DELETE`
 
-## 11. 路由挂载与文件索引
+## 11. 输入校验规则
+
+| 字段 | 最小 | 最大 | 说明 |
+|------|------|------|------|
+| province | 1 字符 | MAX_PROVINCE_CHARS | trim 后非空 |
+| city | 1 字符 | MAX_CITY_CHARS | trim 后非空 |
+| institution | 1 字符 | MAX_INSTITUTION_CHARS | trim 后非空 |
+| admin_pubkey | 64 hex | 64 hex | 合法 sr25519 公钥 |
+| admin_name | 1 字符 | 256 字符 | trim 后非空 |
+| sfid_id | 符合 SFID 格式 | SFID_ID_MAX_BYTES | 5 段式格式校验 |
+
+## 12. 路由挂载与文件索引
 1. 路由定义：`backend/src/main.rs`（`/api/v1/admin/*`）。
 2. 模块导出：`backend/src/super-admins/mod.rs`。
 3. 业务实现：

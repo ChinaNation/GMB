@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../ui/app_theme.dart';
 import '../util/amount_format.dart';
 import '../signer/offline_sign_service.dart';
 import '../signer/qr_signer.dart';
@@ -159,8 +160,6 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       _remainingSeconds = 0;
       _signing = false;
     });
-    // 等 MobileScanner widget 重新挂载后再启动 controller，
-    // 否则 camera preview 和 widget 绑定不上会白屏。
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
         await _controller.start();
@@ -224,7 +223,6 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     );
   }
 
-
   String _truncate(String text, {int head = 12, int tail = 8}) {
     if (text.length <= head + tail + 3) return text;
     return '${text.substring(0, head)}...${text.substring(text.length - tail)}';
@@ -269,63 +267,79 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         // 提示文字
         Center(
           child: Transform.translate(
-            offset: const Offset(0, scanBoxOffsetY + scanBoxSize / 2 + 24),
+            offset: const Offset(0, scanBoxOffsetY + scanBoxSize / 2 + 28),
             child: Text(
               '扫描签名请求二维码\n当前钱包：${widget.wallet.walletName}',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              style: const TextStyle(
+                color: Colors.white60,
+                fontSize: 14,
+                letterSpacing: 0.3,
+              ),
             ),
           ),
         ),
 
-        // 底部工具栏：相册 + 手电筒
+        // 底部工具栏
         Align(
           alignment: Alignment.bottomCenter,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 60, left: 48, right: 48),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 48, left: 48, right: 48),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceCard.withAlpha(200),
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              border: Border.all(color: AppTheme.border.withAlpha(80)),
+            ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      onPressed: _scanFromGallery,
-                      icon: const Icon(Icons.photo_library_outlined),
-                      iconSize: 32,
-                      color: Colors.white,
-                    ),
-                    const Text(
-                      '相册',
-                      style: TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ],
+                _buildToolButton(
+                  icon: Icons.photo_library_outlined,
+                  label: '相册',
+                  onTap: _scanFromGallery,
+                  active: false,
                 ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      onPressed: _toggleTorch,
-                      icon: Icon(
-                        _torchOn
-                            ? Icons.flashlight_on
-                            : Icons.flashlight_off_outlined,
-                      ),
-                      iconSize: 32,
-                      color: _torchOn ? Colors.amber : Colors.white,
-                    ),
-                    Text(
-                      _torchOn ? '关闭' : '手电筒',
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ],
+                Container(width: 1, height: 32, color: AppTheme.border),
+                _buildToolButton(
+                  icon: _torchOn
+                      ? Icons.flashlight_on_rounded
+                      : Icons.flashlight_off_outlined,
+                  label: _torchOn ? '关闭' : '手电筒',
+                  onTap: _toggleTorch,
+                  active: _torchOn,
                 ),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildToolButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    required bool active,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 26, color: active ? AppTheme.gold : Colors.white),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: active ? AppTheme.gold : Colors.white70,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -354,17 +368,20 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     switch (match) {
       case DisplayMatchStatus.matched:
         statusBanner = _buildBanner(
-          color: Colors.green,
+          color: AppTheme.success,
+          icon: Icons.verified_rounded,
           text: '交易内容已独立验证，与摘要一致',
         );
       case DisplayMatchStatus.mismatched:
         statusBanner = _buildBanner(
-          color: Colors.red,
+          color: AppTheme.danger,
+          icon: Icons.dangerous_rounded,
           text: '警告：交易内容与摘要不符，禁止签名',
         );
       case DisplayMatchStatus.decodeFailed:
         statusBanner = _buildBanner(
-          color: Colors.orange,
+          color: AppTheme.warning,
+          icon: Icons.warning_amber_rounded,
           text: '无法独立验证交易内容，以下信息来自请求方',
         );
     }
@@ -376,7 +393,6 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
 
     final List<Widget> detailRows;
     if (decoded != null) {
-      // 解码成功：使用解码结果展示，label 从 display.fields 中获取
       final displayFields = display['fields'];
       detailRows = [
         _detailRow('交易类型', actionLabel),
@@ -388,7 +404,6 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         }),
       ];
     } else {
-      // 解码失败：直接使用 display.fields 渲染
       detailRows = [
         _detailRow('交易类型', actionLabel),
       ];
@@ -403,7 +418,9 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
             final displayValue = _fieldValue(key, value);
             return _detailRow(
               label,
-              format == 'currency' ? AmountFormat.formatString(displayValue) : displayValue,
+              format == 'currency'
+                  ? AmountFormat.formatString(displayValue)
+                  : displayValue,
             );
           }),
         );
@@ -415,45 +432,37 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       children: [
         statusBanner,
         const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: detailRows,
-            ),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: AppTheme.cardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: detailRows,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildBanner({required MaterialColor color, required String text}) {
+  Widget _buildBanner({
+    required Color color,
+    required IconData icon,
+    required String text,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.shade200),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: AppTheme.bannerDecoration(color),
       child: Row(
         children: [
-          Icon(
-            color == Colors.green
-                ? Icons.verified
-                : color == Colors.red
-                    ? Icons.dangerous
-                    : Icons.warning_amber,
-            color: color.shade700,
-            size: 20,
-          ),
-          const SizedBox(width: 8),
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               text,
               style: TextStyle(
-                color: color.shade700,
+                color: color,
                 fontWeight: FontWeight.w600,
+                fontSize: 13,
               ),
             ),
           ),
@@ -464,22 +473,30 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
 
   Widget _detailRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '$label  ',
-            style: const TextStyle(
-              color: Colors.black54,
-              fontWeight: FontWeight.w500,
-              fontSize: 13,
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+              ),
             ),
           ),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+                fontSize: 14,
+              ),
             ),
           ),
         ],
@@ -498,31 +515,43 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // 有效期横幅
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: expired ? Colors.red.shade50 : Colors.green.shade50,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            expired ? '签名请求已过期，请重新扫描' : '签名请求有效期剩余：${_remainingSeconds}s',
-            style: TextStyle(
-              color: expired ? Colors.red.shade700 : Colors.green.shade700,
-              fontWeight: FontWeight.w600,
-            ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: AppTheme.bannerDecoration(
+              expired ? AppTheme.danger : AppTheme.success),
+          child: Row(
+            children: [
+              Icon(
+                expired ? Icons.timer_off_rounded : Icons.timer_rounded,
+                color: expired ? AppTheme.danger : AppTheme.success,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                expired
+                    ? '签名请求已过期，请重新扫描'
+                    : '签名请求有效期剩余：${_remainingSeconds}s',
+                style: TextStyle(
+                  color: expired ? AppTheme.danger : AppTheme.success,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _detailRow('请求 ID', request.requestId),
-                _detailRow('签名账户', request.account),
-              ],
-            ),
+        // 请求基本信息
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: AppTheme.cardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _detailRow('请求 ID', request.requestId),
+              _detailRow('签名账户', request.account),
+            ],
           ),
         ),
         const SizedBox(height: 12),
@@ -532,17 +561,14 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         if (isDecodeFailed) ...[
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.red.shade200),
-            ),
+            padding: const EdgeInsets.all(14),
+            decoration: AppTheme.bannerDecoration(AppTheme.danger),
             child: Text(
               '无法独立验证交易内容，禁止签名。请升级冷钱包后重试。',
               style: TextStyle(
-                color: Colors.red.shade700,
+                color: AppTheme.danger,
                 fontWeight: FontWeight.w600,
+                fontSize: 13,
               ),
             ),
           ),
@@ -559,10 +585,20 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton(
-                onPressed: (_signing || expired || isMismatched || isDecodeFailed)
-                    ? null
-                    : _signRequest,
-                child: Text(_signing ? '签名中...' : '确认签名'),
+                onPressed:
+                    (_signing || expired || isMismatched || isDecodeFailed)
+                        ? null
+                        : _signRequest,
+                child: _signing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('确认签名'),
               ),
             ),
           ],
@@ -576,46 +612,59 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.green.shade50,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            '签名已完成，请用在线手机扫描下方回执二维码',
-            style: TextStyle(
-              color: Colors.green.shade700,
-              fontWeight: FontWeight.w600,
+        // 成功横幅
+        _buildBanner(
+          color: AppTheme.success,
+          icon: Icons.check_circle_rounded,
+          text: '签名已完成，请用在线手机扫描下方回执二维码',
+        ),
+        const SizedBox(height: 24),
+        // QR 码容器
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primary.withAlpha(20),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: QrImageView(
+              data: responseJson,
+              version: QrVersions.auto,
+              size: 220,
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: AppTheme.primaryDark,
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: AppTheme.primaryDark,
+              ),
             ),
           ),
         ),
         const SizedBox(height: 20),
-        Center(
-          child: QrImageView(
-            data: responseJson,
-            version: QrVersions.auto,
-            size: 240,
+        // 信息
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: AppTheme.cardDecoration(),
+          child: Column(
+            children: [
+              _detailRow('请求 ID', response.requestId),
+              _detailRow('签名公钥', _truncate(response.pubkey)),
+            ],
           ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          '请求 ID：${response.requestId}',
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '签名公钥：${_truncate(response.pubkey)}',
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.black54),
         ),
         const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('完成'),
-          ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('完成'),
         ),
       ],
     );
@@ -626,13 +675,18 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     final request = _request;
     final response = _response;
     return Scaffold(
+      backgroundColor:
+          (response != null || request != null) ? null : Colors.black,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
         title: const Text('扫码签名'),
         centerTitle: true,
       ),
       body: response != null
           ? _buildResponseView(response)
-          : (request != null ? _buildRequestSummary(request) : _buildScanner()),
+          : (request != null
+              ? _buildRequestSummary(request)
+              : _buildScanner()),
     );
   }
 }
@@ -657,7 +711,10 @@ class _ScanOverlayPainter extends CustomPainter {
 
     canvas.saveLayer(Offset.zero & size, Paint());
     canvas.drawRect(Offset.zero & size, bgPaint);
-    canvas.drawRect(rect, clearPaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(12)),
+      clearPaint,
+    );
     canvas.restore();
   }
 
@@ -669,11 +726,12 @@ class _ScanOverlayPainter extends CustomPainter {
 class _ScanCornerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    const cornerLen = 24.0;
-    const strokeWidth = 4.0;
+    const cornerLen = 28.0;
+    const strokeWidth = 3.5;
+    const cornerRadius = 12.0;
 
     final paint = Paint()
-      ..color = Colors.green
+      ..color = AppTheme.primaryLight
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -681,14 +739,37 @@ class _ScanCornerPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    canvas.drawLine(const Offset(0, 0), const Offset(cornerLen, 0), paint);
-    canvas.drawLine(const Offset(0, 0), const Offset(0, cornerLen), paint);
-    canvas.drawLine(Offset(w, 0), Offset(w - cornerLen, 0), paint);
-    canvas.drawLine(Offset(w, 0), Offset(w, cornerLen), paint);
-    canvas.drawLine(Offset(0, h), Offset(cornerLen, h), paint);
-    canvas.drawLine(Offset(0, h), Offset(0, h - cornerLen), paint);
-    canvas.drawLine(Offset(w, h), Offset(w - cornerLen, h), paint);
-    canvas.drawLine(Offset(w, h), Offset(w, h - cornerLen), paint);
+    // 左上
+    final topLeftPath = Path()
+      ..moveTo(0, cornerLen)
+      ..lineTo(0, cornerRadius)
+      ..quadraticBezierTo(0, 0, cornerRadius, 0)
+      ..lineTo(cornerLen, 0);
+    canvas.drawPath(topLeftPath, paint);
+
+    // 右上
+    final topRightPath = Path()
+      ..moveTo(w - cornerLen, 0)
+      ..lineTo(w - cornerRadius, 0)
+      ..quadraticBezierTo(w, 0, w, cornerRadius)
+      ..lineTo(w, cornerLen);
+    canvas.drawPath(topRightPath, paint);
+
+    // 左下
+    final bottomLeftPath = Path()
+      ..moveTo(0, h - cornerLen)
+      ..lineTo(0, h - cornerRadius)
+      ..quadraticBezierTo(0, h, cornerRadius, h)
+      ..lineTo(cornerLen, h);
+    canvas.drawPath(bottomLeftPath, paint);
+
+    // 右下
+    final bottomRightPath = Path()
+      ..moveTo(w - cornerLen, h)
+      ..lineTo(w - cornerRadius, h)
+      ..quadraticBezierTo(w, h, w, h - cornerRadius)
+      ..lineTo(w, h - cornerLen);
+    canvas.drawPath(bottomRightPath, paint);
   }
 
   @override

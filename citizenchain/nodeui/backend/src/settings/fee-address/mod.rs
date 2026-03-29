@@ -16,7 +16,7 @@ use twox_hash::XxHash64;
 
 const POWR_KEY_TYPE_HEX_PREFIX: &str = "706f7772";
 const REWARD_BIND_TIMEOUT_SECS: u64 = 45;
-const MAX_RPC_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
+use crate::shared::constants::RPC_RESPONSE_LIMIT_LARGE;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,10 +28,6 @@ pub struct RewardWallet {
 #[derive(Debug, Serialize, Deserialize)]
 struct StoredWallet {
     address: String,
-}
-
-fn node_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    keystore::node_data_dir(app)
 }
 
 fn reward_wallet_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -63,56 +59,38 @@ fn save_reward_wallet(app: &AppHandle, address: &str) -> Result<(), String> {
         .map_err(|e| format!("write reward wallet failed: {e}"))
 }
 
+/// 仅扫描默认链（citizenchain）的 keystore 目录中的 powr 文件。
+/// 不遍历其他链目录，避免旧链残留 keystore 导致矿工身份错位。
 fn collect_powr_keystore_files(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
-    let chains_root = node_data_dir(app)?.join("chains");
-    if !chains_root.exists() {
+    let keystore_dir = keystore::default_chain_keystore_dir(app)?;
+    if !keystore_dir.is_dir() {
         return Ok(Vec::new());
     }
 
     let mut files = Vec::new();
-    let chain_dirs =
-        fs::read_dir(chains_root).map_err(|e| format!("read chains dir failed: {e}"))?;
-    for chain_dir in chain_dirs {
-        let chain_dir = chain_dir.map_err(|e| format!("read chain dir entry failed: {e}"))?;
-        let file_type = chain_dir
+    let entries = fs::read_dir(&keystore_dir).map_err(|e| {
+        format!(
+            "read keystore dir failed ({}): {e}",
+            security::sanitize_path(&keystore_dir)
+        )
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("read keystore file entry failed: {e}"))?;
+        let file_type = entry
             .file_type()
-            .map_err(|e| format!("read chain dir file type failed: {e}"))?;
-        if file_type.is_symlink() || !file_type.is_dir() {
+            .map_err(|e| format!("read keystore file type failed: {e}"))?;
+        if file_type.is_symlink() {
             continue;
         }
-        let keystore_dir = chain_dir.path().join("keystore");
-        if let Ok(meta) = fs::symlink_metadata(&keystore_dir) {
-            if meta.file_type().is_symlink() {
-                continue;
-            }
-        }
-        if !keystore_dir.is_dir() {
+        let path = entry.path();
+        if !path.is_file() {
             continue;
         }
-        let entries = fs::read_dir(&keystore_dir).map_err(|e| {
-            format!(
-                "read keystore dir failed ({}): {e}",
-                security::sanitize_path(&keystore_dir)
-            )
-        })?;
-        for entry in entries {
-            let entry = entry.map_err(|e| format!("read keystore file entry failed: {e}"))?;
-            let file_type = entry
-                .file_type()
-                .map_err(|e| format!("read keystore file type failed: {e}"))?;
-            if file_type.is_symlink() {
-                continue;
-            }
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
-                continue;
-            };
-            if name.starts_with(POWR_KEY_TYPE_HEX_PREFIX) {
-                files.push(path);
-            }
+        let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
+            continue;
+        };
+        if name.starts_with(POWR_KEY_TYPE_HEX_PREFIX) {
+            files.push(path);
         }
     }
     files.sort();
@@ -202,7 +180,7 @@ fn ensure_expected_reward_wallet_rpc_node() -> Result<(), String> {
         "system_properties",
         serde_json::Value::Array(vec![]),
         rpc::RPC_REQUEST_TIMEOUT,
-        MAX_RPC_RESPONSE_BYTES,
+        RPC_RESPONSE_LIMIT_LARGE,
     )?;
     let ss58 = properties
         .get("ss58Format")
@@ -222,7 +200,7 @@ fn ensure_expected_reward_wallet_rpc_node() -> Result<(), String> {
         "system_name",
         serde_json::Value::Array(vec![]),
         rpc::RPC_REQUEST_TIMEOUT,
-        MAX_RPC_RESPONSE_BYTES,
+        RPC_RESPONSE_LIMIT_LARGE,
     )?
     .as_str()
     .map(str::trim)
@@ -285,7 +263,7 @@ pub(crate) async fn sync_saved_reward_wallet_inner(app: &AppHandle) -> Result<()
             "state_getStorage",
             serde_json::json!([hex_key]),
             rpc::RPC_REQUEST_TIMEOUT,
-            MAX_RPC_RESPONSE_BYTES,
+            RPC_RESPONSE_LIMIT_LARGE,
         )?;
         let current_wallet = if let Some(hex_val) = raw.as_str() {
             let hex_val = hex_val.trim_start_matches("0x");
@@ -316,7 +294,7 @@ pub(crate) async fn sync_saved_reward_wallet_inner(app: &AppHandle) -> Result<()
             rpc_method,
             serde_json::json!([normalized]),
             bind_timeout,
-            MAX_RPC_RESPONSE_BYTES,
+            RPC_RESPONSE_LIMIT_LARGE,
         )?;
 
         Ok(Some(()))
@@ -349,7 +327,16 @@ pub async fn set_reward_wallet(
     let normalized = normalize_wallet_address(&address)?;
 
     // 地址格式校验
-    let _ = account_id_from_address(&normalized)?;
+    let target_wallet = account_id_from_address(&normalized)?;
+
+    // 同步路径提前拒绝：奖励钱包不能与矿工账户相同。
+    // 避免先存后验导致本地保存了一个链上必然被拒绝的无效地址。
+    if let Some(miner_hex) = local_powr_miner_account_hex(&app)? {
+        let miner_bytes = decode_hex_32_with_optional_0x(&miner_hex)?;
+        if target_wallet == miner_bytes {
+            return Err("奖励钱包不能与矿工账户相同，请使用独立收款钱包".to_string());
+        }
+    }
 
     save_reward_wallet(&app, &normalized)?;
 
