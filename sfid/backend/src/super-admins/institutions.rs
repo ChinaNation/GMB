@@ -514,27 +514,32 @@ pub(crate) async fn register_cpms_keys_scan(
     }
 
     let institution_name = init_qr_payload.institution.trim().to_string();
-    let chain_receipt =
-        match submit_register_sfid_institution_extrinsic(&state, site_sfid.as_str(), &institution_name).await {
-            Ok(v) => v,
-            Err(msg) => {
-                clear_cpms_register_inflight(&state, replay_token.as_str());
-                if let Ok(mut store) = store_write_or_500(&state) {
-                    append_audit_log(
-                        &mut store,
-                        "CPMS_KEYS_REGISTER_SCAN",
-                        &ctx.admin_pubkey,
-                        Some(site_sfid.clone()),
-                        None,
-                        "CHAIN_SUBMIT_FAILED",
-                        format!("site_sfid={} error={}", site_sfid, msg),
-                    );
-                    drop(store);
-                    persist_runtime_state(&state);
-                }
-                return api_error(StatusCode::BAD_GATEWAY, 1004, msg.as_str());
+    let chain_receipt = match submit_register_sfid_institution_extrinsic(
+        &state,
+        site_sfid.as_str(),
+        &institution_name,
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(msg) => {
+            clear_cpms_register_inflight(&state, replay_token.as_str());
+            if let Ok(mut store) = store_write_or_500(&state) {
+                append_audit_log(
+                    &mut store,
+                    "CPMS_KEYS_REGISTER_SCAN",
+                    &ctx.admin_pubkey,
+                    Some(site_sfid.clone()),
+                    None,
+                    "CHAIN_SUBMIT_FAILED",
+                    format!("site_sfid={} error={}", site_sfid, msg),
+                );
+                drop(store);
+                persist_runtime_state(&state);
             }
-        };
+            return api_error(StatusCode::BAD_GATEWAY, 1004, msg.as_str());
+        }
+    };
 
     let commit_at = Utc::now();
     let mut store = match store_write_or_500(&state) {

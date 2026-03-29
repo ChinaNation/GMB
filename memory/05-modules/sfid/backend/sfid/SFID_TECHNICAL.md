@@ -37,10 +37,12 @@
 - 不同 `A3` 对 `T2/P1` 有严格组合约束，生成前强校验。
 - `GMR / ZRR / ZNR` 当前固定使用省级占位市码 `000`；真实市码从 `001` 起排。
 - `GFR / SFR / FFR` 与机构 `site_sfid` 继续使用真实市码。
+- 管理端生成后的 `sfid_code` 先进入 `generated_sfid_by_pubkey` 暂存，绑定确认阶段只能消费这份结果，不再允许绑定时兜底生成第二套口径。
 
 ## 4. 主要调用方
 
 - `main.rs` 路由将 `admin/sfid/*` 接口接入 `sfid::admin`。
+- `app_core/runtime_ops.rs` 的 `seed_demo_record` 也复用同一套生成工具，不再生成旧格式演示 `sfid`。
 - `super-admins/institutions.rs`：机构管理员生成机构 `site_sfid`。
 - `business/scope.rs` 与 `login/mod.rs`：使用省份公钥映射能力做角色展示和归属推断。
 
