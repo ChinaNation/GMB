@@ -46,6 +46,18 @@ jobs:
         working-directory: citizenchain
         run: cargo build --release -p citizenchain
 
+      # 删除所有旧版 WASM artifact，确保仓库中只保留最新一份。
+      - name: 清理旧版 WASM artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/${{ github.repository }}/actions/artifacts \
+            --jq '.artifacts[] | select(.name == "citizenchain-wasm") | .id' \
+          | while read -r id; do
+              echo "删除旧 artifact: $id"
+              gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
+            done
+
       - name: 上传正式 WASM
         uses: actions/upload-artifact@v4
         with:
@@ -55,7 +67,6 @@ jobs:
             citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.wasm
             citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
           retention-days: 30
-          overwrite: true
 
       # ── 第 2 步：编译带 benchmarks feature 的 node binary ──
       # 用正式 WASM 跳过 WASM 重编译（serde_core 在 wasm32v1-none 上不兼容）
