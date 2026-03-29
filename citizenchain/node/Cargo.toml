@@ -28,6 +28,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, default-features = true }
 primitives = { path = "../runtime/primitives" }
 ocl = { version = "0.19", optional = true }
+rcgen = { version = "0.13", default-features = false, features = ["ring"] }
 
 # substrate client
 sc-basic-authorship = { workspace = true, default-features = true }
