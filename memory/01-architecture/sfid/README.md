@@ -21,12 +21,12 @@ SFID 是在线身份绑定系统，用于接收线下二维码并服务区块链
 
 ## 管理员体系
 - 密钥管理员（`KEY_ADMIN`）：固定 3 个（一主两备槽位映射）。
-- 超级管理员（`SUPER_ADMIN`）：固定 43 个（每省 1 个）。
-- 操作管理员（`OPERATOR_ADMIN`）：数量不限，由超级管理员增删改查。
+- 机构管理员（`INSTITUTION_ADMIN`）：固定 43 个（每省 1 个）。
+- 系统管理员（`SYSTEM_ADMIN`）：数量不限，由机构管理员增删改查。
 - 权限边界：
-1. 密钥管理员：密钥轮换管理、超级管理员替换、全局管理能力。
-2. 超级管理员：可管理操作管理员，且可执行绑定/解绑/查询。
-3. 操作管理员：仅可执行绑定/解绑/查询，不可管理管理员账号。
+1. 密钥管理员：密钥轮换管理、机构管理员替换、全局管理能力。
+2. 机构管理员：可管理系统管理员，且可执行绑定/解绑/查询。
+3. 系统管理员：仅可执行绑定/解绑/查询，不可管理管理员账号。
 4. 三类管理员使用同一套前端页面与登录流程；菜单按角色显示，权限以后端 RBAC 为准。
 5. 非管理员扫码登录会被拒绝，只有 SFID 管理员可登录。
 
@@ -54,30 +54,32 @@ SFID 是在线身份绑定系统，用于接收线下二维码并服务区块链
 ```bash
 docker run -d --name sfid-pg \
   -e POSTGRES_USER=sfid \
-  -e POSTGRES_PASSWORD=sfid_dev_pwd \
-  -e POSTGRES_DB=sfid_dev \
+  -e POSTGRES_PASSWORD=sfid_pwd \
+  -e POSTGRES_DB=sfid \
   -p 5432:5432 \
   postgres:16
 ```
 
 ### 1) 执行数据库迁移
 ```bash
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/001_init_sfid.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/002_runtime_store.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/003_admin_role_partition.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/004_finalize_no_runtime_store.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/005_drop_sfid_prefix.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/006_super_admin_catalog.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/007_refresh_admin_views.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/008_chain_idempotency_reward_state.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/009_runtime_cache_and_pii_encryption.sql
-docker exec -i sfid-pg psql -U sfid -d sfid_dev < backend/db/migrations/010_drop_plaintext_pii_columns.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/001_init_sfid.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/002_runtime_store.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/003_admin_role_partition.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/004_finalize_no_runtime_store.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/005_drop_sfid_prefix.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/006_super_admin_catalog.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/007_refresh_admin_views.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/008_chain_idempotency_reward_state.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/009_runtime_cache_and_pii_encryption.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/010_drop_plaintext_pii_columns.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/011_tx_indexer.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/012_rename_roles.sql
 ```
 
 ### 2) 启动后端
 ```bash
 cd backend
-export DATABASE_URL='postgres://sfid:sfid_dev_pwd@127.0.0.1:5432/sfid_dev'
+export DATABASE_URL='postgres://sfid:sfid_pwd@127.0.0.1:5432/sfid'
 export SFID_SIGNING_SEED_HEX='<required>'
 export SFID_KEY_ID='sfid-master-v1'
 export SFID_CHAIN_TOKEN='<required>'
@@ -91,7 +93,7 @@ cargo run
 
 ### 2.1) 一键启动前后端（开发）
 ```bash
-./start-dev.sh
+./sfid-run.sh
 ```
 说明：脚本会加载 `.env.dev.local`，并同时启动后端与前端开发服务。
 
@@ -161,22 +163,22 @@ curl http://127.0.0.1:8899/api/v1/health
 - 校验位算法与 SFID `sfid_code` 一致：`BLAKE2b` 摘要字节和 `mod 10`。
 - `issuer_id` 固定为 `cpms`。
 - 签名算法固定 `sr25519`。
-- 机构初始化必须先由 SFID 超级管理员在机构页生成机构身份识别码（`site_sfid`）及 SFID 签名初始化二维码。
+- 机构初始化必须先由 SFID 机构管理员在机构页生成机构身份识别码（`site_sfid`）及 SFID 签名初始化二维码。
 - CPMS 使用该初始化二维码完成首次安装初始化，再生成机构公钥登记二维码（含 `site_sfid + 3把公钥 + init_qr_payload + checksum_or_signature`）。
-- SFID 超级管理员扫码录入公钥登记二维码后，该机构公钥才生效（会校验是否由 SFID 签发二维码初始化得到）。
+- SFID 机构管理员扫码录入公钥登记二维码后，该机构公钥才生效（会校验是否由 SFID 签发二维码初始化得到）。
 - 可信闭环成立条件：`SFID 初始化二维码签发 -> CPMS 初始化 -> SFID 录入机构公钥成功(ACTIVE)`；闭环完成后，该机构后续出具的公民档案二维码与状态二维码才被 SFID 接受。
 - 拒绝语义：若验签失败、机构未登记、机构非 `ACTIVE`、或 `init_qr_payload` 链路不一致，SFID 必须拒绝对应 CPMS 二维码。
 - 公民档案二维码包含 `sign_key_id + signature`，由该机构 `sign_key_id` 对应私钥生成。
 - CPMS 不保存 SFID 公钥（当前版本）。
 - 用户投票资格状态由 CPMS 二维码提供：`NORMAL` 可投票，`ABNORMAL` 不可投票。
-- 机构管理权限仅超级管理员开放，密钥管理员与操作管理员不可使用机构管理功能。
+- 机构管理权限仅机构管理员开放，密钥管理员与系统管理员不可使用机构管理功能。
 
 ## CPMS 联调脚本（开发）
 - 生成公民绑定二维码（含初始状态）：
 ```bash
 ./backend/scripts/gen_cpms_qr_dev.py citizen --site-sfid SITE001 --archive-no ARCHIVE001 --sign-pubkey DEMO_PUBKEY_A --status NORMAL
 ```
-- 生成状态变更二维码（供操作管理员扫码）：
+- 生成状态变更二维码（供系统管理员扫码）：
 ```bash
 ./backend/scripts/gen_cpms_qr_dev.py status --site-sfid SITE001 --archive-no ARCHIVE001 --status ABNORMAL --sign-pubkey DEMO_PUBKEY_A
 ```

@@ -26,29 +26,27 @@ pub(crate) async fn admin_list_citizens(
     };
     let mut rows: Vec<CitizenRow> = Vec::new();
 
-    if auth_ctx.role != AdminRole::QueryOnly {
-        for pending in store.pending_by_pubkey.values() {
-            if store
-                .bindings_by_pubkey
-                .contains_key(&pending.account_pubkey)
-            {
-                continue;
-            }
-            if !in_scope_pending(pending, auth_ctx.admin_province.as_deref()) {
-                continue;
-            }
-            rows.push(CitizenRow {
-                seq: pending.seq,
-                account_pubkey: pending.account_pubkey.clone(),
-                archive_index: None,
-                sfid_code: store
-                    .generated_sfid_by_pubkey
-                    .get(&pending.account_pubkey)
-                    .cloned(),
-                citizen_status: None,
-                is_bound: false,
-            });
+    for pending in store.pending_by_pubkey.values() {
+        if store
+            .bindings_by_pubkey
+            .contains_key(&pending.account_pubkey)
+        {
+            continue;
         }
+        if !in_scope_pending(pending, auth_ctx.admin_province.as_deref()) {
+            continue;
+        }
+        rows.push(CitizenRow {
+            seq: pending.seq,
+            account_pubkey: pending.account_pubkey.clone(),
+            archive_index: None,
+            sfid_code: store
+                .generated_sfid_by_pubkey
+                .get(&pending.account_pubkey)
+                .cloned(),
+            citizen_status: None,
+            is_bound: false,
+        });
     }
 
     for b in store.bindings_by_pubkey.values() {
@@ -66,10 +64,6 @@ pub(crate) async fn admin_list_citizens(
     }
 
     rows.sort_by_key(|r| r.seq);
-
-    if auth_ctx.role == AdminRole::QueryOnly && keyword.is_empty() {
-        rows.clear();
-    }
 
     if !keyword.is_empty() {
         rows.retain(|r| {

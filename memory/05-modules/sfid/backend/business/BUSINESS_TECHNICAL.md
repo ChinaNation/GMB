@@ -25,6 +25,8 @@
   - `in_scope_pending`
   - `in_scope_cpms_site`
   - 用途：角色作用域与省域隔离判定
+  - 角色口径：`INSTITUTION_ADMIN`（原 `SUPER_ADMIN`）受省域隔离；`KEY_ADMIN` 不受省域限制；`SYSTEM_ADMIN`（原 `OPERATOR_ADMIN`）按所属省域限定
+  - 权限函数：`require_institution_or_key_admin`（原 `require_super_or_key_admin`）、`require_admin_any`（原 `require_super_or_operator_or_key_admin`）
 - `pubkey.rs`
   - `normalize_admin_pubkey`
   - `normalize_cpms_pubkey`

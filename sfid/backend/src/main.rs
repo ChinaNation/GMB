@@ -43,8 +43,8 @@ pub(crate) use app_core::http_security::*;
 pub(crate) use app_core::runtime_ops::*;
 pub(crate) use login::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
-    require_admin_write, require_key_admin, require_super_admin, require_super_or_key_admin,
-    require_super_or_operator_or_key_admin, verify_admin_signature,
+    require_admin_write, require_institution_or_key_admin,
+    require_key_admin, verify_admin_signature,
 };
 pub(crate) use models::*;
 
@@ -148,10 +148,9 @@ impl StoreBackend {
     fn parse_admin_role(role: &str) -> AdminRole {
         match role {
             "KEY_ADMIN" => AdminRole::KeyAdmin,
-            "SUPER_ADMIN" => AdminRole::SuperAdmin,
-            "OPERATOR_ADMIN" => AdminRole::OperatorAdmin,
-            "QUERY_ONLY" => AdminRole::QueryOnly,
-            _ => AdminRole::OperatorAdmin,
+            "INSTITUTION_ADMIN" | "SUPER_ADMIN" => AdminRole::InstitutionAdmin,
+            "SYSTEM_ADMIN" | "OPERATOR_ADMIN" => AdminRole::SystemAdmin,
+            _ => AdminRole::SystemAdmin,
         }
     }
 
@@ -165,9 +164,8 @@ impl StoreBackend {
     fn admin_role_text(role: &AdminRole) -> &'static str {
         match role {
             AdminRole::KeyAdmin => "KEY_ADMIN",
-            AdminRole::SuperAdmin => "SUPER_ADMIN",
-            AdminRole::OperatorAdmin => "OPERATOR_ADMIN",
-            AdminRole::QueryOnly => "QUERY_ONLY",
+            AdminRole::InstitutionAdmin => "INSTITUTION_ADMIN",
+            AdminRole::SystemAdmin => "SYSTEM_ADMIN",
         }
     }
 
@@ -390,7 +388,7 @@ impl StoreBackend {
         }
 
         for admin in store.admin_users_by_pubkey.values() {
-            if admin.role != AdminRole::OperatorAdmin {
+            if admin.role != AdminRole::SystemAdmin {
                 continue;
             }
             let Some(admin_id) = admin_id_by_pubkey.get(&admin.admin_pubkey) else {
@@ -654,6 +652,7 @@ fn main() {
         public_key_hex: Arc::new(RwLock::new(public_key_hex)),
     };
     if load_runtime_state(&state) {
+        sync_builtin_institution_admins(&state);
         key_admins::seed_key_admins(&state);
         persist_runtime_state(&state);
         info!("loaded persisted runtime state from database");

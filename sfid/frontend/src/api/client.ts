@@ -1,7 +1,7 @@
 export type TokenAdminAuth = {
   access_token: string;
   admin_pubkey: string;
-  role: 'KEY_ADMIN' | 'SUPER_ADMIN' | 'OPERATOR_ADMIN' | 'QUERY_ONLY';
+  role: 'KEY_ADMIN' | 'INSTITUTION_ADMIN' | 'SYSTEM_ADMIN';
   admin_name?: string;
   admin_province?: string | null;
 };
@@ -48,14 +48,14 @@ function adminHeaders(auth: AdminAuth): HeadersInit {
 export type AdminAuthCheck = {
   ok: boolean;
   admin_pubkey: string;
-  role: 'KEY_ADMIN' | 'SUPER_ADMIN' | 'OPERATOR_ADMIN' | 'QUERY_ONLY';
+  role: 'KEY_ADMIN' | 'INSTITUTION_ADMIN' | 'SYSTEM_ADMIN';
   admin_name: string;
   admin_province?: string | null;
 };
 
 export type AdminIdentifyResult = {
   admin_pubkey: string;
-  role: 'KEY_ADMIN' | 'SUPER_ADMIN' | 'OPERATOR_ADMIN' | 'QUERY_ONLY';
+  role: 'KEY_ADMIN' | 'INSTITUTION_ADMIN' | 'SYSTEM_ADMIN';
   status: 'ACTIVE' | 'DISABLED';
   admin_name: string;
   admin_province?: string | null;
@@ -241,7 +241,7 @@ export type OperatorRow = {
   id: number;
   admin_pubkey: string;
   admin_name: string;
-  role: 'OPERATOR_ADMIN';
+  role: 'SYSTEM_ADMIN';
   status: 'ACTIVE' | 'DISABLED';
   built_in: boolean;
   created_by: string;
@@ -253,6 +253,7 @@ export type SuperAdminRow = {
   id: number;
   province: string;
   admin_pubkey: string;
+  admin_name: string;
   status: 'ACTIVE' | 'DISABLED';
   built_in: boolean;
   created_at: string;

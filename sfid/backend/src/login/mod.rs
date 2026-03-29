@@ -775,7 +775,7 @@ fn admin_auth(
             .filter(|v| *v > 0)
             .unwrap_or(10);
         cleanup_admin_sessions(&mut store, now, idle_timeout_minutes);
-        let (session_pubkey, session_role) = {
+        let (session_pubkey, _session_role) = {
             let Some(session) = store.admin_sessions.get_mut(&token) else {
                 return Err(api_error(
                     StatusCode::UNAUTHORIZED,
@@ -796,14 +796,6 @@ fn admin_auth(
             session.last_active_at = now;
             (session.admin_pubkey.clone(), session.role.clone())
         };
-        if session_role == AdminRole::QueryOnly {
-            return Ok(AdminAuthContext {
-                admin_pubkey: session_pubkey.clone(),
-                role: session_role.clone(),
-                admin_name: build_admin_display_name(&session_pubkey, &session_role, None),
-                admin_province: None,
-            });
-        }
         let Some(admin_user) = store.admin_users_by_pubkey.get(&session_pubkey) else {
             return Err(api_error(StatusCode::FORBIDDEN, 2002, "admin not found"));
         };
@@ -838,52 +830,22 @@ pub(crate) fn require_admin_write(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<AdminAuthContext, axum::response::Response> {
-    let ctx = admin_auth(state, headers)?;
-    if ctx.role == AdminRole::QueryOnly {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "admin role required",
-        ));
-    }
-    Ok(ctx)
+    admin_auth(state, headers)
 }
 
-pub(crate) fn require_super_admin(
+pub(crate) fn require_institution_or_key_admin(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<AdminAuthContext, axum::response::Response> {
     let ctx = admin_auth(state, headers)?;
-    if ctx.role != AdminRole::SuperAdmin {
+    if !matches!(ctx.role, AdminRole::InstitutionAdmin | AdminRole::KeyAdmin) {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "super admin required",
+            "institution admin or key admin required",
         ));
     }
-    if ctx.admin_province.is_none() {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "admin province scope missing",
-        ));
-    }
-    Ok(ctx)
-}
-
-pub(crate) fn require_super_or_key_admin(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<AdminAuthContext, axum::response::Response> {
-    let ctx = admin_auth(state, headers)?;
-    if !matches!(ctx.role, AdminRole::SuperAdmin | AdminRole::KeyAdmin) {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "super admin or key admin required",
-        ));
-    }
-    if ctx.role == AdminRole::SuperAdmin && ctx.admin_province.is_none() {
+    if ctx.role == AdminRole::InstitutionAdmin && ctx.admin_province.is_none() {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
@@ -900,24 +862,6 @@ pub(crate) fn require_key_admin(
     let ctx = admin_auth(state, headers)?;
     if ctx.role != AdminRole::KeyAdmin {
         return Err(api_error(StatusCode::FORBIDDEN, 1003, "key admin required"));
-    }
-    Ok(ctx)
-}
-
-pub(crate) fn require_super_or_operator_or_key_admin(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<AdminAuthContext, axum::response::Response> {
-    let ctx = admin_auth(state, headers)?;
-    if !matches!(
-        ctx.role,
-        AdminRole::SuperAdmin | AdminRole::OperatorAdmin | AdminRole::KeyAdmin
-    ) {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "super admin or operator admin or key admin required",
-        ));
     }
     Ok(ctx)
 }
@@ -1103,9 +1047,9 @@ pub(crate) fn build_admin_display_name(
     role: &AdminRole,
     admin_province: Option<&str>,
 ) -> String {
-    if *role == AdminRole::SuperAdmin {
+    if *role == AdminRole::InstitutionAdmin {
         if let Some(province) = admin_province {
-            return format!("{province}超级管理员");
+            return format!("{province}机构管理员");
         }
     }
     if let Some(name) = super_admin_display_name(admin_pubkey) {
@@ -1113,9 +1057,8 @@ pub(crate) fn build_admin_display_name(
     }
     match role {
         AdminRole::KeyAdmin => "密钥管理员".to_string(),
-        AdminRole::OperatorAdmin => "操作管理员".to_string(),
-        AdminRole::QueryOnly => "查询管理员".to_string(),
-        AdminRole::SuperAdmin => "超级管理员".to_string(),
+        AdminRole::SystemAdmin => "系统管理员".to_string(),
+        AdminRole::InstitutionAdmin => "机构管理员".to_string(),
     }
 }
 
@@ -1123,7 +1066,7 @@ pub(crate) fn build_admin_display_name_from_user(
     admin: &AdminUser,
     admin_province: Option<&str>,
 ) -> String {
-    if admin.role == AdminRole::OperatorAdmin {
+    if admin.role == AdminRole::SystemAdmin {
         let name = admin.admin_name.trim();
         if !name.is_empty() {
             return name.to_string();

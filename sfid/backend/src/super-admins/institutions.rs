@@ -63,7 +63,7 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
     headers: HeaderMap,
     Json(input): Json<GenerateCpmsInstitutionSfidInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_super_admin(&state, &headers) {
+    let ctx = match require_institution_or_key_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -87,7 +87,13 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
             }
             scope.to_string()
         }
-        None => return api_error(StatusCode::FORBIDDEN, 1003, "admin province scope missing"),
+        None => {
+            // KeyAdmin 无省份限制，从请求参数取省份
+            match input.province.as_deref() {
+                Some(raw) if !raw.trim().is_empty() => raw.trim().to_string(),
+                _ => return api_error(StatusCode::BAD_REQUEST, 1001, "province is required"),
+            }
+        }
     };
     if province.chars().count() > MAX_PROVINCE_CHARS {
         return api_error(StatusCode::BAD_REQUEST, 1001, "province too long");
@@ -274,7 +280,7 @@ pub(crate) async fn register_cpms_keys_scan(
     headers: HeaderMap,
     Json(input): Json<CpmsRegisterScanInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_super_admin(&state, &headers) {
+    let ctx = match require_institution_or_key_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -454,9 +460,8 @@ pub(crate) async fn register_cpms_keys_scan(
                 "cannot register other province institutions",
             );
         }
-    } else {
-        return api_error(StatusCode::FORBIDDEN, 1003, "admin province scope missing");
     }
+    // KeyAdmin 无省份限制，跳过省份校验
 
     let replay_token = compute_cpms_register_replay_token(input.qr_payload.trim());
     {
@@ -624,7 +629,7 @@ pub(crate) async fn update_cpms_keys(
     Path(site_sfid): Path<String>,
     Json(input): Json<UpdateCpmsKeysInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_super_admin(&state, &headers) {
+    let ctx = match require_institution_or_key_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -769,7 +774,7 @@ pub(crate) async fn delete_cpms_keys(
     headers: HeaderMap,
     Path(site_sfid): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_super_admin(&state, &headers) {
+    let ctx = match require_institution_or_key_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -829,7 +834,7 @@ pub(crate) async fn list_cpms_keys(
     headers: HeaderMap,
     Query(query): Query<ListQuery>,
 ) -> impl IntoResponse {
-    let ctx = match require_super_admin(&state, &headers) {
+    let ctx = match require_institution_or_key_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -872,7 +877,7 @@ async fn update_cpms_site_status(
     target_status: CpmsSiteStatus,
     reason: Option<String>,
 ) -> axum::response::Response {
-    let ctx = match require_super_admin(&state, &headers) {
+    let ctx = match require_institution_or_key_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };

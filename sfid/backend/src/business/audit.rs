@@ -12,7 +12,7 @@ pub(crate) async fn admin_list_audit_logs(
     headers: HeaderMap,
     Query(query): Query<AuditLogsQuery>,
 ) -> impl IntoResponse {
-    if let Err(resp) = require_super_or_key_admin(&state, &headers) {
+    if let Err(resp) = require_institution_or_key_admin(&state, &headers) {
         return resp;
     }
 

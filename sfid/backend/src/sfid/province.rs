@@ -169,5 +169,5 @@ pub fn super_admin_province(pubkey: &str) -> Option<&'static str> {
 
 pub fn super_admin_display_name(pubkey: &str) -> Option<String> {
     let province_name = super_admin_province(pubkey)?;
-    Some(format!("{province_name}超级管理员"))
+    Some(format!("{province_name}机构管理员"))
 }

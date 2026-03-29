@@ -49,7 +49,7 @@ fn build_test_state() -> AppState {
         rate_limit_redis: Arc::new(
             redis::Client::open("redis://127.0.0.1/").expect("test redis url should be valid"),
         ),
-        cpms_register_inflight: Arc::new(Mutex::new(HashSet::new())),
+        cpms_register_inflight: Arc::new(Mutex::new(HashMap::new())),
         key_id: "sfid-master-v1".to_string(),
         key_version: "v1".to_string(),
         key_alg: "sr25519".to_string(),
@@ -519,7 +519,7 @@ async fn qr_login_super_admin_keeps_write_permission() {
                 id: 999,
                 admin_pubkey: admin_pubkey.clone(),
                 admin_name: String::new(),
-                role: AdminRole::SuperAdmin,
+                role: AdminRole::InstitutionAdmin,
                 status: AdminStatus::Active,
                 built_in: false,
                 created_by: "TEST".to_string(),
@@ -558,7 +558,7 @@ async fn qr_login_super_admin_keeps_write_permission() {
         .expect("access token");
     assert_eq!(
         result_json["data"]["admin"]["role"].as_str(),
-        Some("SUPER_ADMIN")
+        Some("INSTITUTION_ADMIN")
     );
 
     let mut headers = HeaderMap::new();
@@ -608,7 +608,7 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 id: 2001,
                 admin_pubkey: login_pubkey.clone(),
                 admin_name: String::new(),
-                role: AdminRole::SuperAdmin,
+                role: AdminRole::InstitutionAdmin,
                 status: AdminStatus::Active,
                 built_in: false,
                 created_by: "TEST".to_string(),
@@ -622,7 +622,7 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 id: 2002,
                 admin_pubkey: signer_pubkey.clone(),
                 admin_name: String::new(),
-                role: AdminRole::OperatorAdmin,
+                role: AdminRole::SystemAdmin,
                 status: AdminStatus::Active,
                 built_in: false,
                 created_by: "TEST".to_string(),
@@ -653,57 +653,57 @@ async fn qr_login_rejects_signer_admin_mismatch() {
 }
 
 #[test]
-fn require_super_or_operator_or_key_admin_should_allow_expected_roles() {
+fn require_admin_any_should_allow_all_three_roles() {
     let state = build_test_state();
-    let (super_pubkey, key_pubkey) = {
+    let (institution_pubkey, key_pubkey) = {
         let store = state.store.read().expect("store read lock poisoned");
-        let super_pubkey = store
+        let institution_pubkey = store
             .admin_users_by_pubkey
             .values()
-            .find(|u| u.role == AdminRole::SuperAdmin)
+            .find(|u| u.role == AdminRole::InstitutionAdmin)
             .map(|u| u.admin_pubkey.clone())
-            .expect("super admin exists");
+            .expect("institution admin exists");
         let key_pubkey = store
             .admin_users_by_pubkey
             .values()
             .find(|u| u.role == AdminRole::KeyAdmin)
             .map(|u| u.admin_pubkey.clone())
             .expect("key admin exists");
-        (super_pubkey, key_pubkey)
+        (institution_pubkey, key_pubkey)
     };
-    let operator_pubkey = "0xTEST_OPERATOR_ADMIN".to_string();
+    let system_pubkey = "0xTEST_SYSTEM_ADMIN".to_string();
     {
         let mut store = state.store.write().expect("store write lock poisoned");
         store.admin_users_by_pubkey.insert(
-            operator_pubkey.clone(),
+            system_pubkey.clone(),
             AdminUser {
                 id: 9_999,
-                admin_pubkey: operator_pubkey.clone(),
-                admin_name: "测试操作员".to_string(),
-                role: AdminRole::OperatorAdmin,
+                admin_pubkey: system_pubkey.clone(),
+                admin_name: "测试系统管理员".to_string(),
+                role: AdminRole::SystemAdmin,
                 status: AdminStatus::Active,
                 built_in: false,
-                created_by: super_pubkey.clone(),
+                created_by: institution_pubkey.clone(),
                 created_at: Utc::now(),
                 updated_at: None,
             },
         );
         store.admin_sessions.insert(
-            "tok-super".to_string(),
+            "tok-institution".to_string(),
             AdminSession {
-                token: "tok-super".to_string(),
-                admin_pubkey: super_pubkey.clone(),
-                role: AdminRole::SuperAdmin,
+                token: "tok-institution".to_string(),
+                admin_pubkey: institution_pubkey.clone(),
+                role: AdminRole::InstitutionAdmin,
                 expire_at: Utc::now() + Duration::hours(1),
                 last_active_at: Utc::now(),
             },
         );
         store.admin_sessions.insert(
-            "tok-operator".to_string(),
+            "tok-system".to_string(),
             AdminSession {
-                token: "tok-operator".to_string(),
-                admin_pubkey: operator_pubkey.clone(),
-                role: AdminRole::OperatorAdmin,
+                token: "tok-system".to_string(),
+                admin_pubkey: system_pubkey.clone(),
+                role: AdminRole::SystemAdmin,
                 expire_at: Utc::now() + Duration::hours(1),
                 last_active_at: Utc::now(),
             },
@@ -718,33 +718,16 @@ fn require_super_or_operator_or_key_admin_should_allow_expected_roles() {
                 last_active_at: Utc::now(),
             },
         );
-        store.admin_sessions.insert(
-            "tok-query".to_string(),
-            AdminSession {
-                token: "tok-query".to_string(),
-                admin_pubkey: "query-only".to_string(),
-                role: AdminRole::QueryOnly,
-                expire_at: Utc::now() + Duration::hours(1),
-                last_active_at: Utc::now(),
-            },
-        );
     }
 
-    for token in ["tok-super", "tok-operator", "tok-key"] {
+    for token in ["tok-institution", "tok-system", "tok-key"] {
         let mut headers = HeaderMap::new();
         headers.insert(
             "authorization",
             HeaderValue::from_str(&format!("Bearer {token}")).expect("header value"),
         );
-        assert!(require_super_or_operator_or_key_admin(&state, &headers).is_ok());
+        assert!(require_admin_any(&state, &headers).is_ok());
     }
-
-    let mut query_headers = HeaderMap::new();
-    query_headers.insert(
-        "authorization",
-        HeaderValue::from_str("Bearer tok-query").expect("header value"),
-    );
-    assert!(require_super_or_operator_or_key_admin(&state, &query_headers).is_err());
 }
 
 #[test]

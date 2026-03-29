@@ -8,85 +8,58 @@
 5. 若本文件其余章节与本节冲突，以本节为准。
 
 ## 1. 模块目标
-- 本模块负责后台治理能力，覆盖三类资源：
-1. 省级超级管理员目录（查询/更换）。
-2. 操作管理员（列表/新增/修改/删除/启停）。
-3. 机构管理（身份识别码生成、扫码录入公钥、查询、更新、禁用、撤销、删除）。
+- 本模块负责后台治理能力，覆盖两类资源：
+1. 机构管理员目录（查询/更换）。
+2. 机构管理（身份识别码生成、扫码录入公钥、查询、更新、禁用、撤销、删除）。
 
 - 架构口径（冻结）：
 1. 管理员功能与机构管理功能继续保持在 `super-admins` 模块内迭代。
-2. 不新增独立“管理员模块”或“机构模块”。
+2. 不新增独立”管理员模块”或”机构模块”。
 
 - 代码归档：
-1. `backend/src/super-admins/catalog.rs`：省级超级管理员目录治理。
-2. `backend/src/super-admins/operators.rs`：操作管理员治理。
-3. `backend/src/super-admins/institutions.rs`：机构身份识别码与机构公钥治理。
+1. `backend/src/super-admins/catalog.rs`：省级机构管理员目录治理。
+2. `backend/src/super-admins/institutions.rs`：机构身份识别码与机构公钥治理。
 
 ## 2. 权限口径（当前冻结）
-1. `SUPER_ADMIN`：
-   - 可管理操作管理员（按省域隔离）。
+1. `INSTITUTION_ADMIN`（机构管理员，原 `SUPER_ADMIN`）：
    - 可管理机构（生成机构身份识别码、扫码录入机构公钥、更新/禁用/撤销/删除、查询）。
    - 必须具备省域作用域（`admin_province` 不能为空）。
-2. `KEY_ADMIN`：
-   - 可管理操作管理员。
-   - 可查询并更换 43 省超级管理员。
-   - 不具备机构管理权限。
-3. `OPERATOR_ADMIN`：
-   - 不属于本模块治理角色；仅可执行绑定/解绑/状态扫码等业务接口。
+2. `KEY_ADMIN`（密钥管理员）：
+   - 拥有全部权限，包括机构管理。
+   - 可查询并更换 43 省机构管理员。
+   - 可管理系统管理员。
+3. `SYSTEM_ADMIN`（系统管理员，原 `OPERATOR_ADMIN`）：
+   - 不属于本模块治理角色；仅可执行绑定/解绑/状态扫码等日常操作业务接口。
 
 ## 3. 省域隔离口径
-1. `SUPER_ADMIN` 受 `admin_province` 约束，不能管理外省机构/外省业务数据。
-2. `KEY_ADMIN` 不受省域隔离，但不开放机构管理接口。
-3. 操作管理员列表与治理：`SUPER_ADMIN` 仅能查看/操作本省操作管理员；`KEY_ADMIN` 可跨省治理。
+1. `INSTITUTION_ADMIN` 受 `admin_province` 约束，不能管理外省机构/外省业务数据。
+2. `KEY_ADMIN` 不受省域隔离，拥有全部权限包括机构管理。
+3. 系统管理员列表与治理：`INSTITUTION_ADMIN` 仅能查看/操作本省系统管理员；`KEY_ADMIN` 可跨省治理。
 
 ## 4. API 矩阵（已实现）
 
-### 4.1 省级超级管理员目录（catalog）
+### 4.1 省级机构管理员目录（catalog）
 1. `GET /api/v1/admin/super-admins`
    - 权限：`KEY_ADMIN`
-   - 功能：查询省级超级管理员列表。
+   - 功能：查询省级机构管理员列表。
 2. `PUT /api/v1/admin/super-admins/:province`
    - 权限：`KEY_ADMIN`
-   - 功能：按省更换超级管理员公钥；迁移相关操作管理员 `created_by`；清理旧管理员会话；写审计 `SUPER_ADMIN_REPLACE`。
+   - 功能：按省更换机构管理员公钥；迁移相关系统管理员 `created_by`；清理旧管理员会话；写审计 `SUPER_ADMIN_REPLACE`。
    - 输入校验：`province` 必须在 43 省编码表内；`admin_pubkey` 必须通过 `sr25519` 公钥格式校验。
-   - 数据保持：保留原超级管理员 `status` 与 `created_at`，并刷新 `updated_at`。
+   - 数据保持：保留原机构管理员 `status` 与 `created_at`，并刷新 `updated_at`。
 
-### 4.2 操作管理员（operators）
-1. `GET /api/v1/admin/operators`
-   - 权限：`SUPER_ADMIN | KEY_ADMIN`
-   - 范围：`SUPER_ADMIN` 仅看本省；`KEY_ADMIN` 看全局。
-   - 返回：分页对象（`total/limit/offset/rows`），`rows` 包含 `admin_name` 与 `created_by_name`。
-2. `POST /api/v1/admin/operators`
-   - 权限：`SUPER_ADMIN | KEY_ADMIN`
-   - 功能：新增操作管理员（默认 `ACTIVE`）；写审计 `OPERATOR_CREATE`。
-   - 必填字段：`admin_name` + `admin_pubkey`。
-   - 输入校验：`admin_pubkey` 必须是有效 `sr25519` 公钥（hex/0x hex 或可解析 SS58）。
-3. `PUT /api/v1/admin/operators/:id`
-   - 权限：`SUPER_ADMIN | KEY_ADMIN`
-   - 功能：修改操作管理员信息（姓名与公钥）；写审计 `OPERATOR_UPDATE`。
-   - 输入校验：若提交新公钥，必须通过 `sr25519` 公钥格式校验；若提交姓名，不能为空字符串。
-   - 会话处理：若公钥变更，清理旧公钥对应会话。
-4. `DELETE /api/v1/admin/operators/:id`
-   - 权限：`SUPER_ADMIN | KEY_ADMIN`
-   - 功能：删除操作管理员；写审计 `OPERATOR_DELETE`。
-   - 会话处理：删除后清理该管理员会话。
-5. `PUT /api/v1/admin/operators/:id/status`
-   - 权限：`SUPER_ADMIN | KEY_ADMIN`
-   - 功能：启用/停用；写审计 `OPERATOR_STATUS_UPDATE`。
-   - 会话处理：状态改为 `DISABLED` 时清理该管理员会话。
-
-### 4.3 机构管理（institutions）
+### 4.2 机构管理（institutions）
 1. `GET /api/v1/admin/cpms-keys`
-   - 权限：`SUPER_ADMIN`
-   - 范围：仅本省机构。
+   - 权限：`INSTITUTION_ADMIN | KEY_ADMIN`
+   - 范围：`INSTITUTION_ADMIN` 仅本省机构；`KEY_ADMIN` 全局。
    - 返回：分页对象（`total/limit/offset/rows`），列表行不包含 `init_qr_payload`。
 2. `POST /api/v1/admin/cpms-keys/sfid/generate`
-   - 权限：`SUPER_ADMIN`
+   - 权限：`INSTITUTION_ADMIN | KEY_ADMIN`
    - 功能：调用 `sfid` 生成机构身份识别码（`A3=GFR`,`P1=0`），并生成 SFID 签名初始化二维码。
    - 链侧字段对齐：机构识别码对链口径统一为 `sfid_id`，对应本系统内部字段 `site_sfid`。
    - `sfid_id` 规范：长度、字符集、大小写规则由 SFID 与链侧双端校验（同一规则集）。
 3. `POST /api/v1/admin/cpms-keys/register-scan`
-   - 权限：`SUPER_ADMIN`
+   - 权限：`INSTITUTION_ADMIN | KEY_ADMIN`
    - 功能：扫码录入 CPMS 初始化后产生的机构公钥二维码，生成 proof 字段 `genesis_hash + sfid_id + register_nonce + signature`，并调用链上 `DuoqianManagePow.register_sfid_institution(sfid_id, register_nonce, signature)`，成功后写审计 `CPMS_KEYS_REGISTER_SCAN`。
    - 主公钥约束：初始化二维码验签与功能 4 proof 签名统一只认当前 SFID `MAIN`；备用公钥不能代替功能 4 出具 proof。
    - 并发控制：同一登记二维码 `replay_token` 在链上提交阶段采用进程内 in-flight 占位，重复并发请求直接拒绝（`register qr is being processed`），避免双重链上提交。
@@ -94,21 +67,21 @@
    - 失败处理：链上提交失败写审计（`CPMS_KEYS_REGISTER_SCAN` + `CHAIN_SUBMIT_FAILED`）并立即持久化，再返回网关错误。
    - 返回：必须包含 proof 字段 `genesis_hash | sfid_id | register_nonce | signature`，以及链上回执字段 `chain_register_tx_hash`、`chain_register_block_number`。
 4. `PUT /api/v1/admin/cpms-keys/:site_sfid`
-   - 权限：`SUPER_ADMIN`
+   - 权限：`INSTITUTION_ADMIN | KEY_ADMIN`
    - 功能：仅允许 `ACTIVE` 机构更新三把公钥；写审计 `CPMS_KEYS_UPDATE`。
    - 输入校验：三把公钥必须通过 `sr25519` 格式校验，且三把公钥必须互不相同。
    - 审计详情：记录更新前后三把公钥（old/new）。
 5. `PUT /api/v1/admin/cpms-keys/:site_sfid/disable`
-   - 权限：`SUPER_ADMIN`
+   - 权限：`INSTITUTION_ADMIN | KEY_ADMIN`
    - 功能：机构状态置为 `DISABLED`；写审计 `CPMS_KEYS_STATUS_UPDATE`。
 6. `PUT /api/v1/admin/cpms-keys/:site_sfid/enable`
-   - 权限：`SUPER_ADMIN`
+   - 权限：`INSTITUTION_ADMIN | KEY_ADMIN`
    - 功能：仅允许 `DISABLED -> ACTIVE`；写审计 `CPMS_KEYS_STATUS_UPDATE`。
 7. `PUT /api/v1/admin/cpms-keys/:site_sfid/revoke`
-   - 权限：`SUPER_ADMIN`
+   - 权限：`INSTITUTION_ADMIN | KEY_ADMIN`
    - 功能：机构状态置为 `REVOKED`；写审计 `CPMS_KEYS_STATUS_UPDATE`。
 8. `DELETE /api/v1/admin/cpms-keys/:site_sfid`
-   - 权限：`SUPER_ADMIN`
+   - 权限：`INSTITUTION_ADMIN | KEY_ADMIN`
    - 功能：仅允许删除 `PENDING` 机构记录；写审计 `CPMS_KEYS_DELETE`。
 
 ## 5. 机构数据模型
@@ -127,7 +100,7 @@
 ## 6. 关键流程（机构）
 
 ### 6.1 生成机构身份识别码
-1. `SUPER_ADMIN` 在机构管理页发起“生成身份识别码”。
+1. `INSTITUTION_ADMIN` 或 `KEY_ADMIN` 在机构管理页发起”生成身份识别码”。
 2. 后端调用 `sfid` 生成 `site_sfid`：
    - 不输入机构公钥。
    - `A3` 固定 `GFR`，`P1` 固定 `0`。
@@ -137,13 +110,13 @@
 ### 6.2 CPMS 初始化与扫码录入机构
 1. 用户携带 SFID 系统生成的机构二维码去 CPMS 做初始化。
 2. CPMS 用该二维码完成初始化并生成自身机构公钥登记二维码（含 3 把公钥 + `init_qr_payload` 绑定信息）。
-3. `SUPER_ADMIN` 在 SFID 机构页扫码录入。
+3. `INSTITUTION_ADMIN` 或 `KEY_ADMIN` 在 SFID 机构页扫码录入。
 4. SFID 校验点：
    - `register` 二维码结构与时间窗口。
    - `checksum` 必须绑定 `init_qr_payload` 哈希，且必须是 `64` 位十六进制字符串。
    - 三把机构公钥必须通过 `sr25519` 格式校验，且三把公钥互不相同。
    - `init_qr_payload` 必须是 SFID 可信签名公钥签发且验签通过。
-   - `SUPER_ADMIN` 必须具备省域作用域，且作用域必须等于 `init_qr_payload.province`。
+   - `INSTITUTION_ADMIN` 必须具备省域作用域，且作用域必须等于 `init_qr_payload.province`（`KEY_ADMIN` 不受省域限制）。
    - `site_sfid` 必须已存在且当前为 `PENDING`。
    - 录入时提交的 `init_qr_payload` 必须与该 `site_sfid` 生成阶段保存值一致。
 5. 通过首轮校验后，写入 in-flight 占位（按 `replay_token`）再提交链上机构登记交易（`register_sfid_institution`）；提交 signer 必须与链上当前 `MAIN` 完全一致。
@@ -165,20 +138,16 @@
 4. 行操作保留“禁用、删除、扫码”；去掉“撤销”按钮。
    - 约束：删除操作仅对 `PENDING` 行可用。
 5. 每个公钥列单独提供“更新”按钮。
-6. “登记人”显示为“`{省名}超级管理员`”。
+6. “登记人”显示为”`{省名}机构管理员`”。
 7. 不展示“版本”列。
 
-## 8. 前端对接口径（管理员页）
-1. 管理员列表“创建者”显示创建者名称（优先 `created_by_name`），不再展示纯公钥。
-2. 管理员列表“序号”显示为分页连续序号（1,2,3...），不直接使用数据库 `id`。
-3. 管理员列表新增“姓名”列，展示 `admin_name`。
-4. 新增管理员弹窗为同一行双输入框：姓名在前、公钥在后；点击确认后提交 `admin_name + admin_pubkey`。
-5. “修改”按钮弹窗支持同时修改姓名与公钥。
-6. 新增/修改管理员时后端会对 `admin_pubkey` 做强校验；非法公钥返回参数错误。
+## 8. 前端导航标签页
+- 导航标签顺序为：首页 | 机构管理 | 密钥管理员 | 机构管理员 | 系统管理员
+- 注：此处”机构管理员”标签页对应 `INSTITUTION_ADMIN`（机构管理员）的管理界面。
 
 ## 9. 安全与一致性
-1. 机构接口统一使用 `require_super_admin`。
-2. `require_super_admin` 与 `require_super_or_key_admin` 均对 `SUPER_ADMIN` 执行 `admin_province` 非空防御校验。
+1. 机构接口统一使用 `require_institution_or_key_admin`（原 `require_super_or_key_admin`）。
+2. `require_institution_or_key_admin` 对 `INSTITUTION_ADMIN` 执行 `admin_province` 非空防御校验。
 3. 省域隔离由 `in_scope_cpms_site` 强校验。
 4. 机构登记二维码有防重放 token（24 小时窗口）。
 5. 只有 `ACTIVE` 机构可用于后续 CPMS 业务二维码验签。
@@ -189,11 +158,11 @@
 10. 链上签名 seed 在提交链上交易时以 `SensitiveSeed` 形态传递，不转为普通 `String` 暴露。
 
 ## 10. 审计事件
-1. `SUPER_ADMIN_REPLACE`
-2. `OPERATOR_CREATE`
-3. `OPERATOR_UPDATE`
-4. `OPERATOR_DELETE`
-5. `OPERATOR_STATUS_UPDATE`
+1. `SUPER_ADMIN_REPLACE`（更换机构管理员）
+2. `OPERATOR_CREATE`（创建系统管理员）
+3. `OPERATOR_UPDATE`（更新系统管理员）
+4. `OPERATOR_DELETE`（删除系统管理员）
+5. `OPERATOR_STATUS_UPDATE`（系统管理员状态变更）
 6. `CPMS_SFID_GENERATE`
 7. `CPMS_KEYS_REGISTER_SCAN`
    - 结果可为 `SUCCESS` 或 `CHAIN_SUBMIT_FAILED`（同 action，通过 result 区分）。
@@ -216,8 +185,7 @@
 1. 路由定义：`backend/src/main.rs`（`/api/v1/admin/*`）。
 2. 模块导出：`backend/src/super-admins/mod.rs`。
 3. 业务实现：
-   - `backend/src/super-admins/catalog.rs`
-   - `backend/src/super-admins/operators.rs`
-   - `backend/src/super-admins/institutions.rs`
+   - `backend/src/super-admins/catalog.rs`（机构管理员目录）
+   - `backend/src/super-admins/institutions.rs`（机构管理）
 4. 省域判定：`backend/src/business/scope.rs`
 5. CPMS 状态扫码联动：`backend/src/operate/status.rs`

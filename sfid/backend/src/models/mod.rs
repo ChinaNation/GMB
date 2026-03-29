@@ -99,9 +99,8 @@ impl fmt::Debug for PersistedRuntimeMeta {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum AdminRole {
     KeyAdmin,
-    SuperAdmin,
-    OperatorAdmin,
-    QueryOnly,
+    InstitutionAdmin,
+    SystemAdmin,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -522,6 +521,7 @@ pub(crate) struct SuperAdminRow {
     pub(crate) id: u64,
     pub(crate) province: String,
     pub(crate) admin_pubkey: String,
+    pub(crate) admin_name: String,
     pub(crate) status: AdminStatus,
     pub(crate) built_in: bool,
     pub(crate) created_at: DateTime<Utc>,

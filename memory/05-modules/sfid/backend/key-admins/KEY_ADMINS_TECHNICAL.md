@@ -23,14 +23,11 @@
 4. 主备轮换时链上参数 `new_backup` 对应本模块接口字段 `new_backup_pubkey`。
 
 ## 3. 权限定义（最终口径）
-- 三个密钥管理员共同拥有系统最高业务权限：
-1. 更换超级管理员（43 省）。
-2. 全局管理操作管理员（跨省查看、增删改查、启停用）。
+- 三个密钥管理员共同拥有系统全部权限：
+1. 更换机构管理员（43 省）。
+2. 全局管理系统管理员（跨省查看、增删改查、启停用）。
 3. 全局业务操作与查询（不受省隔离限制，按接口细分）。
-4. 机构列表查询（`/api/v1/admin/cpms-keys`）。
-
-- 明确不属于 `KEY_ADMIN` 的能力：
-1. 机构新增扫码登记（`/api/v1/admin/cpms-keys/register-scan`）仅 `SUPER_ADMIN` 可用。
+4. 机构管理（生成、扫码登记、更新、禁用、撤销、删除、查询）。
 
 - 差异化权限：
 1. `MAIN` 才能执行链证明签名（投票状态、绑定证明、公民数证明）。
@@ -151,10 +148,10 @@
 - `rotate_sfid_keys included failed`
 
 ## 10. 当前已实现功能清单（2026-03，含 Runtime 对齐改造项）
-1. 超级管理员治理：
-   - 查询省级超级管理员：`GET /api/v1/admin/super-admins`
-   - 更换省级超级管理员：`PUT /api/v1/admin/super-admins/:province`
-2. 操作管理员治理（全局）：
+1. 机构管理员治理：
+   - 查询省级机构管理员：`GET /api/v1/admin/super-admins`
+   - 更换省级机构管理员：`PUT /api/v1/admin/super-admins/:province`
+2. 系统管理员治理（全局）：
    - 列表/新增/删除/启停：`/api/v1/admin/operators*`
 3. 密钥管理（一主两备）：
    - 查询 keyring：`GET /api/v1/admin/attestor/keyring`
@@ -166,7 +163,7 @@
    - 绑定扫码/确认/解绑：`POST /api/v1/admin/bind/scan|confirm|unbind`
    - SFID 元数据/城市/生成：`GET /api/v1/admin/sfid/meta|cities`、`POST /api/v1/admin/sfid/generate`
    - CPMS 状态变更扫码：`POST /api/v1/admin/cpms-status/scan`
-   - 机构列表查询：`GET /api/v1/admin/cpms-keys`
+   - 机构管理（全部操作）：`/api/v1/admin/cpms-keys*`
 5. 链证明相关：
    - 公钥输出：`GET /api/v1/attestor/public-key`
    - 绑定证明、投票资格证明、公民计数证明签名由当前主签名密钥执行。

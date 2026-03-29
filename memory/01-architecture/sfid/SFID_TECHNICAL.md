@@ -25,8 +25,8 @@
 
 ## 3. 参与方与职责
 - 办证工作人员：在线下 CPMS 建档，生成二维码。
-- SFID 超级管理员：具备除“密钥管理”外的全部业务与管理能力。
-- SFID 操作管理员：执行绑定、解绑、查询用户信息等业务操作。
+- SFID 机构管理员：具备除”密钥管理”外的全部业务与管理能力。
+- SFID 系统管理员：执行绑定、解绑、查询用户信息等业务操作。
 - 区块链端：调用 SFID 自动接口获取可投票人数、绑定有效性等结果。
 - 普通用户：不登录管理员后台，但可使用公开查询页查询档案号、身份识别码、公钥地址。
 
@@ -42,23 +42,23 @@
 - 密钥管理员（`KEY_ADMIN`）：
 1. 数量固定 3 个（主密钥管理员 1 + 备用密钥管理员 2）。
 2. 来源为当前一主两备公钥状态，随密钥轮换自动同步。
-3. 权限：密钥管理最高权限（查看密钥状态、发起/提交主密钥轮换）、全局管理权限（可跨省管理操作管理员、可更换省级超级管理员、可执行业务接口查询与状态操作）。
+3. 权限：密钥管理最高权限（查看密钥状态、发起/提交主密钥轮换）、全局管理权限（可跨省管理系统管理员、可更换省级机构管理员、可执行业务接口查询与状态操作）。
 4. 不具备机构管理权限（不能访问机构管理页、不能生成机构身份识别码、不能扫码录入机构）。
-- 超级管理员（`SUPER_ADMIN`）：
+- 机构管理员（`INSTITUTION_ADMIN`）：
 1. 数量固定 43 个（每省 1 个）。
 2. 初始公钥清单在代码中固化（编译期常量）并在安装时入库；运行中可由密钥管理员按省替换。
-3. 权限：除密钥管理外全权限（操作管理员管理、机构管理、绑定/解绑/查询、状态变更扫码等）。
-4. 超级管理员角色不可降级；公钥替换仅允许密钥管理员执行。
-5. 权限范围：01-43 号超级管理员仅可查看/启用/停用/删除自己创建的操作管理员。
-- 操作管理员（`OPERATOR_ADMIN`）：
+3. 权限：除密钥管理外全权限（系统管理员管理、机构管理、绑定/解绑/查询、状态变更扫码等）。
+4. 机构管理员角色不可降级；公钥替换仅允许密钥管理员执行。
+5. 权限范围：01-43 号机构管理员仅可查看/启用/停用/删除自己创建的系统管理员。
+- 系统管理员（`SYSTEM_ADMIN`）：
 1. 数量不设上限。
-2. 仅能由超级管理员创建、修改、停用、删除。
+2. 仅能由机构管理员创建、修改、停用、删除。
 3. 权限：登录后执行绑定、解绑、查询用户信息，不可管理管理员账号。
 
 ### 4.4 前端统一形态
-- 密钥管理员、超级管理员与操作管理员使用同一套管理员网站前端与同一登录流程。
-- 三类管理员共享基础业务页面（绑定、解绑、查询、状态变更扫码）；超级管理员额外拥有“管理员/机构管理”，密钥管理员额外拥有“密钥管理/省级超级管理员更换”。
-- 密钥管理员登录后额外显示“密钥管理”菜单；超级管理员登录后额外显示“管理员”“机构管理”菜单。
+- 密钥管理员、机构管理员与系统管理员使用同一套管理员网站前端与同一登录流程。
+- 三类管理员共享基础业务页面（绑定、解绑、查询、状态变更扫码）；机构管理员额外拥有”管理员/机构管理”，密钥管理员额外拥有”密钥管理/省级机构管理员更换”。
+- 密钥管理员登录后额外显示”密钥管理”菜单；机构管理员登录后额外显示”管理员””机构管理”菜单。
 - 菜单显示仅做体验控制，最终权限以后端 RBAC 为准。
 
 ### 4.2 账户模型
@@ -107,28 +107,28 @@
 ## 6. 功能清单
 ### 6.1 管理员人工功能
 - 扫码并解析 CPMS 二维码。
-- 超级管理员、操作管理员扫码“CPMS 状态变更二维码”更新用户状态（密钥管理员同样可执行）。
+- 机构管理员、系统管理员扫码”CPMS 状态变更二维码”更新用户状态（密钥管理员同样可执行）。
 - 绑定确认（档案号、公钥唯一性校验）。
 - 解绑处理（线下受理、线上执行）。
 - 绑定查询与审计查询。
-- 超级管理员与密钥管理员维护操作管理员账号（新增、启停用、删除；超级管理员按创建者隔离）。
-- 操作管理员数据模型新增姓名字段 `admin_name`；新增管理员必须提交姓名与公钥。
-- 管理员新增/修改操作管理员时，`admin_pubkey` 必须通过 `sr25519` 公钥格式校验（非法输入拒绝）。
-- 管理员“修改”弹窗支持同时修改姓名和公钥。
+- 机构管理员与密钥管理员维护系统管理员账号（新增、启停用、删除；机构管理员按创建者隔离）。
+- 系统管理员数据模型新增姓名字段 `admin_name`；新增管理员必须提交姓名与公钥。
+- 管理员新增/修改系统管理员时，`admin_pubkey` 必须通过 `sr25519` 公钥格式校验（非法输入拒绝）。
+- 管理员”修改”弹窗支持同时修改姓名和公钥。
 - 身份信息页“操作”列内按钮文案固定为“绑定”“变更”（列名仍为“操作”）。
-- 超级管理员维护机构管理：
+- 机构管理员维护机构管理：
 1. 先在机构页生成机构身份识别码（调用 `sfid`，`A3=GFR`,`P1=0`，不输入公钥）。
 2. 持 SFID 二维码去 CPMS 初始化系统，CPMS 初始化后生成机构公钥登记二维码。
 3. 回到 SFID 机构页扫码录入机构，完成 3 把机构公钥入库并激活。
 
 ### 6.3 权限控制实现要求
-- 绑定/解绑/扫码状态变更等写接口允许：`KEY_ADMIN`、`SUPER_ADMIN`、`OPERATOR_ADMIN`（按具体接口约束）。
-- 机构管理接口（机构身份识别码生成、机构扫码录入、机构更新/禁用/撤销/删除/查询）仅允许：`SUPER_ADMIN`。
-- 绑定信息查询接口允许：`KEY_ADMIN`、`SUPER_ADMIN`、`OPERATOR_ADMIN`。
-- 管理操作管理员接口允许：`KEY_ADMIN`、`SUPER_ADMIN`（`KEY_ADMIN` 可跨创建者全局管理）。
+- 绑定/解绑/扫码状态变更等写接口允许：`KEY_ADMIN`、`INSTITUTION_ADMIN`、`SYSTEM_ADMIN`（按具体接口约束）。
+- 机构管理接口（机构身份识别码生成、机构扫码录入、机构更新/禁用/撤销/删除/查询）仅允许：`INSTITUTION_ADMIN`。
+- 绑定信息查询接口允许：`KEY_ADMIN`、`INSTITUTION_ADMIN`、`SYSTEM_ADMIN`。
+- 管理系统管理员接口允许：`KEY_ADMIN`、`INSTITUTION_ADMIN`（`KEY_ADMIN` 可跨创建者全局管理）。
 - 密钥管理接口（`attestor/keyring`、`rotate/challenge`、`rotate/commit`）仅允许：`KEY_ADMIN`。
-- 操作管理员管理接口的对象权限：按 `created_by` 隔离，仅可管理自己创建的操作管理员。
-- 省级数据强隔离：每省 1 个超级管理员；超级管理员与其创建的操作管理员仅可查看和操作本省数据。
+- 系统管理员管理接口的对象权限：按 `created_by` 隔离，仅可管理自己创建的系统管理员。
+- 省级数据强隔离：每省 1 个机构管理员；机构管理员与其创建的系统管理员仅可查看和操作本省数据。
 - 隔离范围：机构（CPMS 机构登记）、公民绑定信息、SFID 生成与状态变更。
 - `cpms_site_keys` 必须记录 `admin_province`，并在机构查询、扫码验签、状态变更时做后端强校验。
 - 待绑定公民在首次生成 SFID 后锁定所属省，后续仅该省管理员可见、可操作。
@@ -167,9 +167,9 @@
 4. `operator_admin_scope`
 5. `key_admin_keyring`
 - 角色逻辑分层目录（已落地）：
-1. `backend/src/key-admins/`：密钥管理员逻辑（密钥轮换、超级管理员替换、链证明签名/公钥输出）。
-2. `backend/src/super-admins/`：超级管理员逻辑（已拆分为 `operators.rs` 管理员管理、`institutions.rs` 机构管理）。
-3. `backend/src/operator-admins/`：操作管理员入口逻辑（角色入口与路由适配）。
+1. `backend/src/key-admins/`：密钥管理员逻辑（密钥轮换、机构管理员替换、链证明签名/公钥输出）。
+2. `backend/src/super-admins/`：机构管理员逻辑（已拆分为 `operators.rs` 管理员管理、`institutions.rs` 机构管理）。
+3. `backend/src/operator-admins/`：系统管理员入口逻辑（角色入口与路由适配）。
 4. `backend/src/business/`：共用后台查询与审计能力（查询、审计、省域隔离）。
 5. `backend/src/operate/`：操作业务逻辑（管理员绑定流程、状态扫码、CPMS 二维码验签）。
 6. `backend/src/chain/`：区块链业务接口逻辑（公钥绑定、公民数获取、投票验证、链侧校验/回执）。
@@ -228,10 +228,10 @@
 1. `runtime_cache_entries`：运行态分片缓存（JSONB，按 `entry_key` 存储）。
 2. `runtime_misc`：运行态兼容快照。
 3. `runtime_meta`：运行态元数据（签名种子/公钥，含加密载荷）。
-4. `admins`：管理员主表（`KEY_ADMIN|SUPER_ADMIN|OPERATOR_ADMIN|QUERY_ONLY`）。
+4. `admins`：管理员主表（`KEY_ADMIN|INSTITUTION_ADMIN|SYSTEM_ADMIN`）。
 5. `provinces`：省份维度表。
-6. `super_admin_scope`：超级管理员省域归属（含 `scope_no`）。
-7. `operator_admin_scope`：操作管理员归属超级管理员关系。
+6. `super_admin_scope`：机构管理员省域归属（含 `scope_no`）。
+7. `operator_admin_scope`：系统管理员归属机构管理员关系。
 8. `key_admin_keyring`：密钥管理员一主两备槽位映射。
 9. `chain_idempotency_requests`：链路幂等与防重放记录。
 10. `binding_unique_locks`：绑定唯一性锁（公钥/档案号双向唯一）。
@@ -249,7 +249,7 @@
 
 ### 8.2 关键约束
 - `admins.admin_pubkey` 全局唯一。
-- `super_admin_scope.province_name` 唯一（每省仅 1 名超级管理员）。
+- `super_admin_scope.province_name` 唯一（每省仅 1 名机构管理员）。
 - `super_admin_scope.scope_no` 唯一（1..43 编号）。
 - `key_admin_keyring.slot` 固定且唯一：`MAIN|BACKUP_A|BACKUP_B`。
 - `chain_idempotency_requests` 双唯一：`(route_key, request_id)` 与 `(route_key, nonce)`。
@@ -258,8 +258,8 @@
 
 ### 8.3 状态机
 - `audit_logs.result`：`SUCCESS | FAILED`
-- `admins.role`：`KEY_ADMIN | SUPER_ADMIN | OPERATOR_ADMIN | QUERY_ONLY`
-- 会话角色：`KEY_ADMIN | SUPER_ADMIN | OPERATOR_ADMIN`
+- `admins.role`：`KEY_ADMIN | INSTITUTION_ADMIN | SYSTEM_ADMIN`
+- 会话角色：`KEY_ADMIN | INSTITUTION_ADMIN | SYSTEM_ADMIN`
 - `admins.status`：`ACTIVE | DISABLED`
 - 登录挑战：运行态 `login_challenges`（一次性消费 + TTL）。
 - 奖励状态：`PENDING | RETRY_WAITING | FAILED | REWARDED`。
@@ -276,18 +276,18 @@
 - `POST /api/v1/admin/auth/qr/challenge`：生成网页登录二维码 challenge。
 - `POST /api/v1/admin/auth/qr/complete`：提交签名结果（`challenge_id/request_id + admin_pubkey + signature`，`session_id` 可选）。
 - `GET /api/v1/admin/auth/qr/result`：网页登录页轮询二维码登录结果。
-- `GET /api/v1/admin/operators`：查询操作管理员列表（`SUPER_ADMIN | KEY_ADMIN`）。
-- `POST /api/v1/admin/operators`：新增操作管理员（`SUPER_ADMIN | KEY_ADMIN`）。
-- `PUT /api/v1/admin/operators/{id}`：修改操作管理员（`SUPER_ADMIN | KEY_ADMIN`）。
-- `DELETE /api/v1/admin/operators/{id}`：删除操作管理员（`SUPER_ADMIN | KEY_ADMIN`）。
-- `PUT /api/v1/admin/operators/{id}/status`：启用/停用操作管理员（`SUPER_ADMIN | KEY_ADMIN`）。
-- 操作管理员接口口径补充：列表返回 `admin_name` 与 `created_by_name`（创建者显示名）；新增接口提交 `admin_name + admin_pubkey`；修改接口支持同时更新姓名与公钥，且后端校验 `admin_pubkey` 格式。
+- `GET /api/v1/admin/operators`：查询系统管理员列表（`INSTITUTION_ADMIN | KEY_ADMIN`）。
+- `POST /api/v1/admin/operators`：新增系统管理员（`INSTITUTION_ADMIN | KEY_ADMIN`）。
+- `PUT /api/v1/admin/operators/{id}`：修改系统管理员（`INSTITUTION_ADMIN | KEY_ADMIN`）。
+- `DELETE /api/v1/admin/operators/{id}`：删除系统管理员（`INSTITUTION_ADMIN | KEY_ADMIN`）。
+- `PUT /api/v1/admin/operators/{id}/status`：启用/停用系统管理员（`INSTITUTION_ADMIN | KEY_ADMIN`）。
+- 系统管理员接口口径补充：列表返回 `admin_name` 与 `created_by_name`（创建者显示名）；新增接口提交 `admin_name + admin_pubkey`；修改接口支持同时更新姓名与公钥，且后端校验 `admin_pubkey` 格式。
 
-### 9.6 超级管理员基线与变更策略（当前）
-1. 超级管理员基线采用 `scope_no(1..43) + province_name + admin_pubkey` 固化清单初始化（迁移脚本维护）。
-2. 运行中允许由密钥管理员通过接口按省替换超级管理员公钥：`PUT /api/v1/admin/super-admins/:province`。
+### 9.6 机构管理员基线与变更策略（当前）
+1. 机构管理员基线采用 `scope_no(1..43) + province_name + admin_pubkey` 固化清单初始化（迁移脚本维护）。
+2. 运行中允许由密钥管理员通过接口按省替换机构管理员公钥：`PUT /api/v1/admin/super-admins/:province`。
 3. 替换后必须同步写入审计日志，并保持 `super_admin_scope` 的省份唯一与编号唯一约束。
-4. 非密钥管理员不得替换超级管理员公钥。
+4. 非密钥管理员不得替换机构管理员公钥。
 
 ### 9.3 管理员业务接口（人工）
 - `POST /api/v1/admin/bind/scan`：上传二维码内容并验签解析（仅允许扫描本省已登记机构的二维码）。
@@ -302,13 +302,13 @@
 - `POST /api/v1/admin/attestor/rotate/verify`：校验 challenge 签名是否来自发起备用公钥。
 - `POST /api/v1/admin/attestor/rotate/commit`：提交 `challenge_id + signature + new_backup_pubkey` 执行轮换。
 - 密钥管理员可在前端“密钥管理”页面完成可视化操作（二维码生成 + 扫码签名 + 验签 + 输入新备用公钥提交）。
-- `GET /api/v1/admin/super-admins`：查询 43 省超级管理员列表（仅密钥管理员）。
-- `PUT /api/v1/admin/super-admins/:province`：按省替换超级管理员公钥（仅密钥管理员）。
-- `POST /api/v1/admin/cpms-keys/sfid/generate`：生成机构身份识别码与 SFID 签名初始化二维码（仅超级管理员）。
-- `POST /api/v1/admin/cpms-keys/register-scan`：扫描并录入 CPMS 公钥登记二维码（仅超级管理员，且必须绑定对应 `init_qr_payload`）。
-- `POST /api/v1/admin/cpms-status/scan`：超级管理员/操作管理员扫描 CPMS 状态变更二维码并更新用户状态（密钥管理员同样可执行；省级角色仅可操作本省机构与本省公民）。
-- `GET /api/v1/admin/audit-logs`：查询审计日志（密钥管理员/超级管理员，可按 action/actor/keyword 过滤）。
-- `GET /api/v1/admin/cpms-keys`：查询机构列表（仅超级管理员，返回本省机构）。
+- `GET /api/v1/admin/super-admins`：查询 43 省机构管理员列表（仅密钥管理员）。
+- `PUT /api/v1/admin/super-admins/:province`：按省替换机构管理员公钥（仅密钥管理员）。
+- `POST /api/v1/admin/cpms-keys/sfid/generate`：生成机构身份识别码与 SFID 签名初始化二维码（仅机构管理员）。
+- `POST /api/v1/admin/cpms-keys/register-scan`：扫描并录入 CPMS 公钥登记二维码（仅机构管理员，且必须绑定对应 `init_qr_payload`）。
+- `POST /api/v1/admin/cpms-status/scan`：机构管理员/系统管理员扫描 CPMS 状态变更二维码并更新用户状态（密钥管理员同样可执行；省级角色仅可操作本省机构与本省公民）。
+- `GET /api/v1/admin/audit-logs`：查询审计日志（密钥管理员/机构管理员，可按 action/actor/keyword 过滤）。
+- `GET /api/v1/admin/cpms-keys`：查询机构列表（仅机构管理员，返回本省机构）。
 
 ### 9.4 区块链接口（自动）
 - `GET /api/v1/chain/voters/count?account_pubkey=<who>`：返回 `genesis_hash`、`who`、`eligible_total`、`snapshot_nonce`、`signature`；签名 payload 必须包含 `who(account)`。
@@ -368,8 +368,8 @@
 - App Token 与 Chain Token（`SFID_CHAIN_TOKEN`）为独立凭据，安全级别不同，不可混用。
 
 ### 9.8 CPMS 状态变更扫码接口（人工）
-- `POST /api/v1/admin/cpms-status/scan`：超级管理员/操作管理员扫描 CPMS 状态变更二维码并更新用户状态。
-- 鉴权要求：`SUPER_ADMIN`、`OPERATOR_ADMIN`、`KEY_ADMIN` 可调用（省级角色仍受省域隔离）。
+- `POST /api/v1/admin/cpms-status/scan`：机构管理员/系统管理员扫描 CPMS 状态变更二维码并更新用户状态。
+- 鉴权要求：`INSTITUTION_ADMIN`、`SYSTEM_ADMIN`、`KEY_ADMIN` 可调用（省级角色仍受省域隔离）。
 
 ### 9.5 公开查询接口（Token 鉴权）
 - `GET /api/v1/public/identity/search?archive_no=...`
@@ -502,9 +502,9 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - SFID 初始化二维码字段（由 SFID 生成）：`ver`, `issuer_id=sfid`, `purpose=cpms_init`, `site_sfid`, `a3=GFR`, `p1=0`, `province`, `city`, `institution`, `issued_at`, `expire_at=0`, `qr_id`, `sig_alg=sr25519`, `key_id`, `key_version`, `public_key`, `signature`。
 - CPMS 公钥登记二维码字段（由 CPMS 生成）：`site_sfid`, `pubkey_1`, `pubkey_2`, `pubkey_3`, `issued_at`, `init_qr_payload`, `checksum_or_signature`。
 - 流程：
-1. SFID 超级管理员先在机构管理页生成机构身份识别码（`site_sfid`）和 SFID 签名初始化二维码，机构记录状态为 `PENDING`。
+1. SFID 机构管理员先在机构管理页生成机构身份识别码（`site_sfid`）和 SFID 签名初始化二维码，机构记录状态为 `PENDING`。
 2. CPMS 使用该初始化二维码完成安装初始化并生成 3 把机构公钥登记二维码。
-3. SFID 超级管理员扫码录入 CPMS 公钥登记二维码。
+3. SFID 机构管理员扫码录入 CPMS 公钥登记二维码。
 4. SFID 校验该登记二维码是否绑定了 SFID 侧签发的 `init_qr_payload`，并校验 `init_qr_payload` 签名可信。
 5. 校验通过后机构状态由 `PENDING` 变为 `ACTIVE`，3 把公钥生效。
 6. 录入完成前，SFID 不认可该机构出具的公民档案二维码与状态变更二维码。
@@ -527,12 +527,12 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 ### 11.6 机构管理页面冻结口径（2026-03）
 - 机构列表中“机构号”统一为“身份识别码”，展示 `site_sfid`。
 - 生成身份识别码弹窗不输入公钥；弹窗内 `A3` 固定公法人（`GFR`）、`P1` 固定非盈利（`0`）。
-- 超级管理员账号有省份约束时，省份默认并锁定；可选市与机构类型（机构类型受 `GFR` 约束）。
+- 机构管理员账号有省份约束时，省份默认并锁定；可选市与机构类型（机构类型受 `GFR` 约束）。
 - 生成后主按钮显示“完成”，点击返回列表并展示该 `site_sfid`；次按钮为“下载”二维码，不显示 JSON 文本框。
 - 列表每条身份识别码后显示小二维码按钮；点击弹出该 `site_sfid` 对应二维码并支持再次下载。
 - 身份识别码二维码长期有效，不展示“有效期至”文案。
 - 机构页操作按钮为“禁用、删除、扫码”；不显示“撤销”按钮与“扫码录入机构”顶栏按钮。
-- 每个机构公钥列分别展示“更新”按钮；“登记人”列显示“`{省名}超级管理员`”。
+- 每个机构公钥列分别展示”更新”按钮；”登记人”列显示”`{省名}机构管理员`”。
 
 ## 12. 部署与运维
 - SFID 为在线部署系统，管理员通过浏览器访问前端网站。
@@ -569,9 +569,9 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 可完成线下受理解绑 -> 管理员执行解绑 -> 区块链收到解绑结果闭环。
 - 可投票人数统计接口可稳定返回。
 - 绑定有效性校验接口返回准确。
-- 超级管理员可完成操作管理员增删改查；操作管理员无该权限。
+- 机构管理员可完成系统管理员增删改查；系统管理员无该权限。
 - 非管理员公钥扫码登录必须被拒绝（返回 403）。
-- 超级管理员与操作管理员使用同一前端页面；超级管理员仅多一个“操作管理员管理”功能域。
+- 机构管理员与系统管理员使用同一前端页面；机构管理员仅多一个”系统管理员管理”功能域。
 - 公开查询需携带查询 Token，可查询档案号、身份识别码、公钥地址三项信息。
 - 状态为 `ABNORMAL` 的用户在绑定有效时仍不可计入可投票人数，且资格校验返回不可投票。
 
@@ -580,7 +580,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 越权解绑、伪造二维码、重放请求应被拦截。
 - 登录 challenge 重放必须被拦截。
 - 关键动作具备完整审计记录。
-- 操作管理员访问管理员管理接口必须返回权限拒绝。
+- 系统管理员访问管理员管理接口必须返回权限拒绝。
 
 ### 13.3 自动化回归（已落地）
 - `backend/scripts/smoke.sh` 覆盖主流程 + 异常流：
@@ -626,7 +626,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 登录 challenge 可绑定 `domain/session_id/nonce/expires_at` 作为网页侧上下文；`aud` 不再属于扫码协议字段。
 - 冻结二维码签名原文规范（字段顺序、编码、时间格式），避免 CPMS/SFID 联调歧义。
 - 重放防护双层化：`qr_id` 一次性消费 + `login_challenges` 一次性消费与 TTL。
-- 超级管理员保护：除“不可删改角色”外，增加最小可用数量保护（避免误操作锁死）。
+- 机构管理员保护：除”不可删改角色”外，增加最小可用数量保护（避免误操作锁死）。
 
 ### 15.2 P1（首版稳定后建议）
 - 从“固定 3 把公钥任意验签”升级为 `key_id` 精确验签 + 公钥状态管理（`ACTIVE/REVOKED`）。
@@ -642,7 +642,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 ### 16.1 里程碑 0：规格冻结（0.5 天）
 - 冻结 `archive_no` 解析规则：字段位置、日期格式、异常处理策略。
 - 冻结 API 字段、错误码、通用返回结构（`code/message/data|trace_id`）。
-- 冻结权限矩阵：`SUPER_ADMIN` 与 `OPERATOR_ADMIN` 的接口边界。
+- 冻结权限矩阵：`INSTITUTION_ADMIN` 与 `SYSTEM_ADMIN` 的接口边界。
 - 交付物：全部冻结规格统一写入本技术文档（不再拆分独立规格文档）。
 - 验收标准：前后端、测试、区块链对接口与字段无歧义。
 
@@ -670,9 +670,9 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 实现认证链路：`identify -> challenge -> verify`。
 - challenge 绑定 `domain/session_id/nonce/expires_at`，一次性消费与 TTL 过期清理。
 - 落地后端 RBAC 中间件，对每个管理接口进行角色强校验。
-- 实现操作管理员管理接口（仅超级管理员可访问）。
+- 实现系统管理员管理接口（仅机构管理员可访问）。
 - 交付物：认证 API、会话/JWT、权限中间件、管理员管理 API。
-- 验收标准：非管理员公钥拒绝登录；操作管理员访问管理员管理接口返回 403。
+- 验收标准：非管理员公钥拒绝登录；系统管理员访问管理员管理接口返回 403。
 
 ### 16.4 里程碑 3：绑定/解绑主流程（3 天）
 - 完成 CPMS 机构公钥登记流程：扫码录入 `site_sfid + keys[key_id,pubkey]`。
@@ -698,7 +698,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 
 ### 16.7 里程碑 6：前端收口（3-4 天）
 - 管理端统一页面：登录、绑定、解绑、查询、管理员管理。
-- 同一套前端支持两类管理员；超级管理员额外显示管理员管理模块。
+- 同一套前端支持两类管理员；机构管理员额外显示管理员管理模块。
 - 完善错误态、空态、加载态与操作反馈。
 - 交付物：`frontend` 联调版本、接口错误映射与提示规范。
 - 验收标准：核心流程均可前端闭环完成，无阻断级 UI 缺陷。
