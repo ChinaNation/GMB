@@ -57,18 +57,13 @@ jobs:
           retention-days: 30
           overwrite: true
 
-      # ── 第 2 步：编译 benchmark WASM + node binary ──
-      - name: 编译 benchmark WASM + node
+      # ── 第 2 步：编译带 benchmarks feature 的 node binary ──
+      # 用正式 WASM 跳过 WASM 重编译（serde_core 在 wasm32v1-none 上不兼容）
+      - name: 编译 benchmark node binary
         working-directory: citizenchain
+        env:
+          WASM_FILE: ${{ github.workspace }}/citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
         run: cargo build --release --features runtime-benchmarks
-
-      - name: 上传 benchmark WASM
-        uses: actions/upload-artifact@v4
-        with:
-          name: citizenchain-wasm-benchmarks
-          path: citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
-          retention-days: 30
-          overwrite: true
 
       # ── 第 3 步：跑所有 pallet 的 benchmark，生成 weights.rs ──
       - name: 跑 benchmarks 生成 weights
