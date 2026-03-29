@@ -1,10 +1,7 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
+import '../login_models.dart';
 import '../login_service.dart';
-import '../../qr_protocols.dart';
 import '../../../wallet/core/wallet_manager.dart';
 import '../../../ui/app_theme.dart';
 
@@ -54,15 +51,15 @@ class _LoginScanResultPageState extends State<LoginScanResultPage> {
     setState(() => _signing = true);
 
     try {
-      final walletManager = WalletManager.instance;
-      final activeIndex = walletManager.activeWalletIndex;
-      if (activeIndex == null) {
-        throw const LoginException(LoginErrorCode.walletUnavailable, '请先选择钱包');
+      final walletManager = WalletManager();
+      final activeWallet = await walletManager.getWallet();
+      if (activeWallet == null) {
+        throw const LoginException(LoginErrorCode.walletMissing, '请先选择钱包');
       }
 
       final receipt = await _loginService.buildReceiptPayload(
-        challenge: challenge,
-        walletIndex: activeIndex,
+        challenge,
+        walletIndex: activeWallet.walletIndex,
       );
 
       // 提交 receipt 到后端
@@ -92,21 +89,9 @@ class _LoginScanResultPageState extends State<LoginScanResultPage> {
     LoginChallenge challenge,
     Map<String, dynamic> receipt,
   ) async {
-    // 从 QR 中解析后端地址不可行（QR 不含后端 URL）。
-    // wuminapp 作为热钱包可以联网，直接向 SFID/CPMS 后端提交。
-    // 但后端 URL 需要从某处获取——当前使用 receipt 自行构建，
-    // 由 SFID/CPMS 前端轮询 challenge 状态来获取登录结果。
-    //
-    // 实际链路：wuminapp 签名后不直接提交，而是通过前端 polling 机制。
+    // wuminapp 签名后不直接提交，而是通过前端 polling 机制。
     // SFID/CPMS 前端在生成 QR 后会持续 poll /api/v1/admin/auth/qr/result。
-    // 因此 wuminapp 需要把 receipt 提交到后端的 /api/v1/admin/auth/qr/complete。
-    //
-    // 但 wuminapp 不知道后端 URL。解决方案：
-    // receipt 包含 challenge_id，SFID/CPMS 前端也知道这个 ID，
-    // 前端可以扫描 wuminapp 显示的 receipt QR 来完成提交。
-    // 这和冷钱包流程一致——wuminapp 也显示 receipt QR。
-    //
-    // 暂时显示 receipt QR 供前端扫描，与冷钱包流程统一。
+    // 暂时显示成功提示，与冷钱包流程统一。
   }
 
   @override
@@ -114,11 +99,7 @@ class _LoginScanResultPageState extends State<LoginScanResultPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('扫码登录'),
-        backgroundColor: AppTheme.background,
-        foregroundColor: AppTheme.textPrimary,
-        elevation: 0,
       ),
-      backgroundColor: AppTheme.background,
       body: SafeArea(
         child: _error != null
             ? _buildError()
@@ -126,7 +107,9 @@ class _LoginScanResultPageState extends State<LoginScanResultPage> {
                 ? _buildReceiptQr()
                 : _challenge != null
                     ? _buildConfirm()
-                    : const Center(child: CircularProgressIndicator()),
+                    : const Center(
+                        child: CircularProgressIndicator(
+                            color: AppTheme.primary)),
       ),
     );
   }
@@ -138,15 +121,15 @@ class _LoginScanResultPageState extends State<LoginScanResultPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.redAccent),
+            const Icon(Icons.error_outline, size: 64, color: AppTheme.danger),
             const SizedBox(height: 16),
             Text(
               _error!,
-              style: const TextStyle(color: Colors.redAccent, fontSize: 16),
+              style: const TextStyle(color: AppTheme.danger, fontSize: 16),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
+            OutlinedButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('返回'),
             ),
@@ -163,51 +146,46 @@ class _LoginScanResultPageState extends State<LoginScanResultPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Card(
-            color: AppTheme.surface,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '扫码登录',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textPrimary,
-                    ),
+          Container(
+            decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '扫码登录',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
                   ),
-                  const SizedBox(height: 16),
-                  _infoRow('系统', c.systemDisplayName),
-                  if (c.isExpired)
-                    _infoRow('状态', '已过期')
-                  else
-                    _infoRow('有效期', '${c.expiresAt - (DateTime.now().millisecondsSinceEpoch ~/ 1000)}秒'),
-                ],
-              ),
+                ),
+                const SizedBox(height: 16),
+                _infoRow('系统', c.system.toUpperCase()),
+                if (c.isExpired)
+                  _infoRow('状态', '已过期')
+                else
+                  _infoRow('有效期', '${c.ttlSeconds}秒'),
+              ],
             ),
           ),
           const SizedBox(height: 12),
-          Text(
+          const Text(
             '确认后将使用当前钱包签名登录',
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             textAlign: TextAlign.center,
           ),
           const Spacer(),
-          ElevatedButton(
+          FilledButton(
             onPressed: _signing || c.isExpired ? null : _confirmAndSign,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: AppTheme.primary,
-            ),
             child: _signing
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('确认登录', style: TextStyle(fontSize: 16)),
+                : const Text('确认登录'),
           ),
           const SizedBox(height: 16),
         ],
@@ -216,26 +194,29 @@ class _LoginScanResultPageState extends State<LoginScanResultPage> {
   }
 
   Widget _buildReceiptQr() {
-    // 签名完成后显示成功提示（热钱包登录后 SFID 前端通过 polling 检测到状态变化）
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.check_circle, size: 64, color: Colors.green),
+            const Icon(Icons.check_circle, size: 64, color: AppTheme.success),
             const SizedBox(height: 16),
             const Text(
               '签名已完成',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
             ),
             const SizedBox(height: 8),
-            Text(
+            const Text(
               '请在登录页面确认登录结果',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
+            OutlinedButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('完成'),
             ),
@@ -252,10 +233,14 @@ class _LoginScanResultPageState extends State<LoginScanResultPage> {
         children: [
           SizedBox(
             width: 80,
-            child: Text(label, style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+            child: Text(label,
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 14)),
           ),
           Expanded(
-            child: Text(value, style: TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
+            child: Text(value,
+                style: const TextStyle(
+                    color: AppTheme.textPrimary, fontSize: 14)),
           ),
         ],
       ),
