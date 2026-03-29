@@ -5,8 +5,8 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use sp_core::crypto::Ss58Codec;
-use subxt::ext::scale_value::{At, Composite, Value};
 use subxt::events::{EventDetails, Phase};
+use subxt::ext::scale_value::{At, Composite, Value};
 use subxt::PolkadotConfig;
 use tracing::warn;
 
@@ -63,8 +63,7 @@ pub(crate) fn parse_block_events(
     block_number: i64,
     block_timestamp_ms: Option<u64>,
 ) -> Vec<TxRecordInsert> {
-    let block_ts = block_timestamp_ms
-        .and_then(|ms| Utc.timestamp_millis_opt(ms as i64).single());
+    let block_ts = block_timestamp_ms.and_then(|ms| Utc.timestamp_millis_opt(ms as i64).single());
 
     let mut records = Vec::new();
 

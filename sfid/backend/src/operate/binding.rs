@@ -253,12 +253,18 @@ pub(crate) async fn admin_bind_confirm(
         return resp;
     }
 
-    let sfid_code = store
+    // 中文注释：绑定阶段只允许消费管理员预先生成的 SFID，禁止再走绑定时兜底生成的旧口径。
+    let Some(sfid_code) = store
         .generated_sfid_by_pubkey
-        .remove(&input.account_pubkey)
-        .unwrap_or_else(|| {
-            deterministic_sfid_code(&state, &input.archive_index, &input.account_pubkey)
-        });
+        .get(&input.account_pubkey)
+        .cloned()
+    else {
+        return api_error(
+            StatusCode::CONFLICT,
+            3011,
+            "sfid must be generated before binding",
+        );
+    };
     let birth_date = parse_birth_date_from_archive_no(&input.archive_index);
     let citizen_status = pending_scan.status.clone();
     store.pending_bind_scan_by_qr_id.remove(&input.qr_id);
@@ -431,6 +437,7 @@ pub(crate) async fn admin_bind_confirm(
     }
     invalidate_vote_cache_for_pubkey(&mut store, &input.account_pubkey);
     enqueue_bind_callback_job(&mut store, callback_url, callback_payload);
+    store.generated_sfid_by_pubkey.remove(&input.account_pubkey);
     append_audit_log(
         &mut store,
         "BIND_CONFIRM",

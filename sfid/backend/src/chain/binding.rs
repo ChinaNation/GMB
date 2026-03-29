@@ -202,8 +202,12 @@ pub(crate) async fn get_bind_result(
             return bind_result_not_bound(query.account_pubkey);
         };
 
-        if !has_persisted_runtime_bind_credential(existing, &state, active_signer_pubkey.as_str(), 0)
-        {
+        if !has_persisted_runtime_bind_credential(
+            existing,
+            &state,
+            active_signer_pubkey.as_str(),
+            0,
+        ) {
             let generated = match build_bind_credential(
                 &state,
                 query.account_pubkey.as_str(),

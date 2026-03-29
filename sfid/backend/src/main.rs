@@ -43,8 +43,8 @@ pub(crate) use app_core::http_security::*;
 pub(crate) use app_core::runtime_ops::*;
 pub(crate) use login::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
-    require_admin_write, require_institution_or_key_admin,
-    require_key_admin, verify_admin_signature,
+    require_admin_write, require_institution_or_key_admin, require_key_admin,
+    verify_admin_signature,
 };
 pub(crate) use models::*;
 

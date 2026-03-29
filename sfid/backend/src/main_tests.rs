@@ -8,7 +8,6 @@ use axum::{
 };
 use chrono::Duration;
 use sp_core::Pair;
-use std::collections::HashSet;
 
 fn hex_seed(byte: u8) -> String {
     format!("{byte:02x}").repeat(32)
@@ -158,6 +157,102 @@ fn setup_rotation_test_state() -> (AppState, HeaderMap, String, String) {
     (state, headers, backup_a_seed, new_backup_seed)
 }
 
+fn setup_bind_confirm_test_state(
+    generated_sfid: Option<&str>,
+) -> (AppState, HeaderMap, String, String, String, String) {
+    let state = build_test_state();
+    let account_pubkey = format!("0x{}", "44".repeat(32));
+    let archive_index = "CIV-BIND-9001-19900101".to_string();
+    let qr_id = "qr-bind-test-001".to_string();
+    let site_sfid = "GFR-11001-ZF0X-123456789-20260329".to_string();
+    let key_pubkey = {
+        let store = state.store.read().expect("store read lock poisoned");
+        store
+            .admin_users_by_pubkey
+            .values()
+            .find(|user| user.role == AdminRole::KeyAdmin)
+            .map(|user| user.admin_pubkey.clone())
+            .expect("key admin exists")
+    };
+    {
+        let mut store = state.store.write().expect("store write lock poisoned");
+        store.next_seq += 1;
+        let seq = store.next_seq;
+        store.pending_by_pubkey.insert(
+            account_pubkey.clone(),
+            PendingRequest {
+                seq,
+                account_pubkey: account_pubkey.clone(),
+                admin_province: None,
+                requested_at: Utc::now(),
+                callback_url: None,
+                client_request_id: None,
+            },
+        );
+        store.admin_sessions.insert(
+            "tok-bind".to_string(),
+            AdminSession {
+                token: "tok-bind".to_string(),
+                admin_pubkey: key_pubkey.clone(),
+                role: AdminRole::KeyAdmin,
+                expire_at: Utc::now() + Duration::hours(1),
+                last_active_at: Utc::now(),
+            },
+        );
+        store.cpms_site_keys.insert(
+            site_sfid.clone(),
+            CpmsSiteKeys {
+                site_sfid: site_sfid.clone(),
+                pubkey_1: "0x11".repeat(32),
+                pubkey_2: "0x22".repeat(32),
+                pubkey_3: "0x33".repeat(32),
+                status: CpmsSiteStatus::Active,
+                version: 1,
+                last_register_issued_at: Utc::now().timestamp(),
+                init_qr_payload: None,
+                admin_province: "中原省".to_string(),
+                created_by: key_pubkey,
+                created_at: Utc::now(),
+                updated_by: None,
+                updated_at: None,
+                chain_register_tx_hash: None,
+                chain_register_block_number: None,
+                chain_register_at: None,
+            },
+        );
+        store.pending_bind_scan_by_qr_id.insert(
+            qr_id.clone(),
+            PendingBindScan {
+                qr_id: qr_id.clone(),
+                archive_no: archive_index.clone(),
+                site_sfid: site_sfid.clone(),
+                status: CitizenStatus::Normal,
+                expire_at: (Utc::now() + Duration::minutes(5)).timestamp(),
+                scanned_at: Utc::now(),
+            },
+        );
+        store
+            .pending_status_by_archive_no
+            .insert(archive_index.clone(), CitizenStatus::Normal);
+        if let Some(sfid_code) = generated_sfid {
+            store
+                .generated_sfid_by_pubkey
+                .insert(account_pubkey.clone(), sfid_code.to_string());
+        }
+    }
+
+    let mut headers = HeaderMap::new();
+    headers.insert("authorization", HeaderValue::from_static("Bearer tok-bind"));
+    (
+        state,
+        headers,
+        account_pubkey,
+        archive_index,
+        qr_id,
+        site_sfid,
+    )
+}
+
 #[tokio::test]
 async fn keyring_rotate_challenge_rejects_main_initiator() {
     let (state, headers, _, _) = setup_rotation_test_state();
@@ -190,6 +285,72 @@ async fn keyring_rotate_challenge_rejects_main_initiator() {
         body["message"].as_str(),
         Some("rotation initiator must be backup key")
     );
+}
+
+#[tokio::test]
+async fn bind_confirm_requires_pre_generated_sfid() {
+    let (state, headers, account_pubkey, archive_index, qr_id, _) =
+        setup_bind_confirm_test_state(None);
+
+    let resp = operate::binding::admin_bind_confirm(
+        State(state.clone()),
+        headers,
+        Json(AdminBindInput {
+            account_pubkey: account_pubkey.clone(),
+            archive_index: archive_index.clone(),
+            qr_id,
+        }),
+    )
+    .await
+    .into_response();
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
+    let body = parse_json(resp).await;
+    assert_eq!(
+        body["message"].as_str(),
+        Some("sfid must be generated before binding")
+    );
+
+    let store = state.store.read().expect("store read lock poisoned");
+    assert!(store.pending_by_pubkey.contains_key(&account_pubkey));
+    assert!(!store.bindings_by_pubkey.contains_key(&account_pubkey));
+    assert!(!store.pubkey_by_archive_index.contains_key(&archive_index));
+}
+
+#[tokio::test]
+async fn bind_confirm_consumes_pre_generated_sfid_without_fallback() {
+    let expected_sfid = "GMR-11000-ZG1X-123456789-20260329";
+    let (state, headers, account_pubkey, archive_index, qr_id, _) =
+        setup_bind_confirm_test_state(Some(expected_sfid));
+
+    let resp = operate::binding::admin_bind_confirm(
+        State(state.clone()),
+        headers,
+        Json(AdminBindInput {
+            account_pubkey: account_pubkey.clone(),
+            archive_index: archive_index.clone(),
+            qr_id,
+        }),
+    )
+    .await
+    .into_response();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = parse_json(resp).await;
+    assert_eq!(body["data"]["sfid_code"].as_str(), Some(expected_sfid));
+
+    let store = state.store.read().expect("store read lock poisoned");
+    assert!(!store.pending_by_pubkey.contains_key(&account_pubkey));
+    assert_eq!(
+        store
+            .bindings_by_pubkey
+            .get(&account_pubkey)
+            .map(|binding| binding.sfid_code.as_str()),
+        Some(expected_sfid)
+    );
+    assert_eq!(
+        store.pubkey_by_archive_index.get(&archive_index),
+        Some(&account_pubkey)
+    );
+    assert!(!store.generated_sfid_by_pubkey.contains_key(&account_pubkey));
 }
 
 #[tokio::test]

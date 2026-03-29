@@ -93,7 +93,8 @@ pub(crate) async fn wallet_transactions(
     let records: Vec<TxRecordOutput> = rows_to_return
         .iter()
         .map(|r| {
-            let direction = determine_direction(&address, r.from_address.as_deref(), r.to_address.as_deref());
+            let direction =
+                determine_direction(&address, r.from_address.as_deref(), r.to_address.as_deref());
             TxRecordOutput {
                 id: r.id,
                 block_number: r.block_number,

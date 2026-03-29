@@ -27,7 +27,7 @@ NODE_KEY=""
 GRANDPA_KEY=""
 
 # 矿工收款地址（SS58 格式，挖矿奖励发到此地址）
-MINER_REWARD_ADDRESS=""
+MINER_REWARD_ADDRESS="w5FFpe2pXieqMSoYHvRvXCRgh8ywSpuUjf8dYXkDSFkyTvQX1"
 
 # ══════════════════════════════════════════════════════════════
 
