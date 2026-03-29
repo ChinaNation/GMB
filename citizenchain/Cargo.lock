@@ -5522,8 +5522,6 @@ dependencies = [
 [[package]]
 name = "libp2p-websocket"
 version = "0.44.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "888b2ff2e5d8dcef97283daab35ad1043d18952b65e05279eecbe02af4c6e347"
 dependencies = [
  "either",
  "futures 0.3.32",
@@ -9410,6 +9408,7 @@ dependencies = [
  "either",
  "fnv",
  "futures 0.3.32",
+ "futures-rustls",
  "futures-timer",
  "ip_network",
  "libp2p",
