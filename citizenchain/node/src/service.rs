@@ -39,6 +39,8 @@ use std::{
 /// CPU 全线程合计哈希率（hashes/sec），以 f64 bits 存入 AtomicU64。
 static CPU_HASHRATE: AtomicU64 = AtomicU64::new(0);
 
+// 空块 propose 防护在 start_mining_worker_no_empty 中实现。
+
 /// 上次成功提交区块的时刻（自 epoch 起的纳秒数）。
 /// CPU 和 GPU 矿工共享此门控，防止出块频率超过 MILLISECS_PER_BLOCK。
 /// 初始值 u64::MAX 表示"从未提交过"，首次提交直接放行。
@@ -577,32 +579,6 @@ pub fn new_full(
         },
     );
 
-    let (worker, worker_task) = sc_consensus_pow::start_mining_worker(
-        Box::new(pow_block_import),
-        client.clone(),
-        select_chain,
-        algorithm,
-        proposer_factory,
-        NoNetwork,
-        (),
-        Some(pre_runtime),
-        |_, ()| async {
-            let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-            Ok((timestamp,))
-        },
-        Duration::from_secs(POW_MINING_TIMEOUT_SECS),
-        Duration::from_secs(POW_PROPOSAL_BUILD_SECS),
-    );
-
-    task_manager.spawn_essential_handle().spawn(
-        "pow-worker",
-        Some("block-authoring"),
-        worker_task.boxed(),
-    );
-
-    // 所有矿工线程共享的时间基准，用于无锁提交门控。
-    let miner_epoch = Instant::now();
-
     // 空块不提交：构造一个闭包，返回交易池中待打包的交易数。
     // CPU 和 GPU 矿工在交易池为空时跳过挖矿，避免产生空块。
     // 额外门控：节点必须先接入网络并完成主要同步，才允许恢复正常出块，
@@ -632,6 +608,39 @@ pub fn new_full(
             pool.status().ready
         })
     };
+
+    // PoW mining worker：在 propose 前检查 pool_ready，交易池为空时跳过 propose，
+    // 避免触发 runtime 的空块 assert panic。
+    let should_propose = {
+        let pr = pool_ready.clone();
+        move || pr() > 0
+    };
+    let (worker, worker_task) = sc_consensus_pow::start_mining_worker(
+        Box::new(pow_block_import),
+        client.clone(),
+        select_chain,
+        algorithm,
+        proposer_factory,
+        NoNetwork,
+        (),
+        Some(pre_runtime),
+        |_, ()| async {
+            let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+            Ok((timestamp,))
+        },
+        Duration::from_secs(POW_MINING_TIMEOUT_SECS),
+        Duration::from_secs(POW_PROPOSAL_BUILD_SECS),
+        should_propose,
+    );
+
+    task_manager.spawn_essential_handle().spawn(
+        "pow-worker",
+        Some("block-authoring"),
+        worker_task.boxed(),
+    );
+
+    // 所有矿工线程共享的时间基准，用于无锁提交门控。
+    let miner_epoch = Instant::now();
 
     // 中文注释：从 genesis-pallet 链上存储读取动态出块目标时间，
     // 替代编译期常量 MILLISECS_PER_BLOCK。若 API 调用失败，回退到常量默认值。
