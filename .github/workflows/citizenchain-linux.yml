@@ -112,8 +112,8 @@ jobs:
 
       - name: 导出 chainspec.json
         run: |
-          chmod +x citizenchain/target/release/node
-          citizenchain/target/release/node build-spec --chain citizenchain --raw 2>/dev/null > chainspec.json
+          chmod +x citizenchain/target/release/citizenchain
+          citizenchain/target/release/citizenchain build-spec --chain citizenchain --raw 2>/dev/null > chainspec.json
           echo "chainspec.json 已导出 ($(wc -c < chainspec.json) bytes)"
 
       - name: 上传 chainspec.json
