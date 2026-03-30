@@ -5,8 +5,7 @@ set -euo pipefail
 cleanup() {
     echo ""
     echo "==> 正在关闭节点进程..."
-    pkill -f "citizenchain-node" 2>/dev/null || true
-    pkill -f "node-bin-" 2>/dev/null || true
+    pkill -f "citizenchain" 2>/dev/null || true
     sleep 1
     echo "    节点已关闭"
 }
@@ -28,7 +27,7 @@ export WASM_FILE="$WASM_DIR/citizenchain.compact.compressed.wasm"
 [ -f "$WASM_FILE" ] || { echo "错误：WASM 文件不存在"; exit 1; }
 echo "    WASM: $WASM_FILE"
 
-# ── 2. 彻底清除 runtime 所有编译缓存（用 find，不用 glob）──
+# ── 2. 彻底清除 runtime 编译缓存 ──
 echo "==> 清除 runtime 缓存..."
 find "$REPO_ROOT/target" -maxdepth 3 -type d -name "citizenchain-*" -path "*/build/*" -exec rm -rf {} + 2>/dev/null || true
 find "$REPO_ROOT/target" -maxdepth 2 -type d -name "citizenchain" -path "*/wbuild/*" -exec rm -rf {} + 2>/dev/null || true
