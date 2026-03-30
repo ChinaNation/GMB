@@ -19,19 +19,13 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// Force compileSdk = 36 for all subprojects and patch isar_flutter_libs namespace.
-// isar_flutter_libs ships with a low compileSdk causing android:attr/lStar not found.
+// Force compileSdk = 36 for all library subprojects and patch isar_flutter_libs namespace.
 subprojects {
-    afterEvaluate {
-        if (extensions.findByName("android") != null) {
-            val android = extensions.getByName("android") as com.android.build.gradle.BaseExtension
-            if (android.compileSdkVersion == null || android.compileSdkVersion!!.substringAfter("-").toIntOrNull()?.let { it < 36 } == true) {
-                android.compileSdkVersion(36)
-            }
-            // AGP 8+ requires namespace for every Android module.
-            if (name == "isar_flutter_libs" && android.namespace.isNullOrEmpty()) {
-                android.namespace = "dev.isar.isar_flutter_libs"
-            }
+    plugins.withId("com.android.library") {
+        val android = extensions.getByName("android") as com.android.build.gradle.LibraryExtension
+        android.compileSdk = 36
+        if (name == "isar_flutter_libs" && android.namespace.isNullOrEmpty()) {
+            android.namespace = "dev.isar.isar_flutter_libs"
         }
     }
 }
