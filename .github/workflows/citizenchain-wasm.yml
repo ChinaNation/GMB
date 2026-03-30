@@ -42,6 +42,8 @@ jobs:
       # ── 第 1 步：编译正式 WASM（部署用）──
       - name: 编译正式 WASM
         working-directory: citizenchain
+        env:
+          WASM_BUILD_FROM_SOURCE: "1"
         run: cargo build --release -p citizenchain
 
       # 删除所有旧版 WASM artifact，确保仓库中只保留最新一份。
