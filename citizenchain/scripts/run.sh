@@ -42,6 +42,6 @@ if [ ! -f "$WASM_FILE" ]; then
 fi
 echo "    使用 CI WASM: $WASM_FILE"
 
-cd "$REPO_ROOT/nodeui"
-echo "==> 启动 nodeui（保留现有链数据，不清库）..."
+cd "$REPO_ROOT/node"
+echo "==> 启动公民链（保留现有链数据，不清库）..."
 cargo tauri dev

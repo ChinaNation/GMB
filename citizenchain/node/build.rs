@@ -2,6 +2,8 @@ use substrate_build_script_utils::{generate_cargo_keys, rerun_if_git_head_change
 
 fn main() {
     generate_cargo_keys();
-
     rerun_if_git_head_changed();
+
+    // Tauri 桌面应用构建。
+    tauri_build::build();
 }
