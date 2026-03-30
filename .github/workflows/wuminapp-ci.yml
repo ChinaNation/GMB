@@ -126,6 +126,14 @@ jobs:
         working-directory: wuminapp
         run: flutter pub get
 
+      - name: 修复 isar_flutter_libs compileSdk
+        run: |
+          ISAR_GRADLE=$(find "$HOME/.pub-cache" -path "*/isar_flutter_libs*/android/build.gradle" | head -1)
+          if [ -n "$ISAR_GRADLE" ]; then
+            sed -i 's/compileSdkVersion 30/compileSdkVersion 36/' "$ISAR_GRADLE"
+            echo "已将 isar_flutter_libs compileSdkVersion 30 → 36"
+          fi
+
       - name: 打包 APK
         working-directory: wuminapp
         run: flutter build apk --release
