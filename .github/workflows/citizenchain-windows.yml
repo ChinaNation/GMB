@@ -6,7 +6,6 @@ on:
     paths:
       - ".github/workflows/citizenchain-windows.yml"
       - "citizenchain/node/**"
-      - "citizenchain/nodeui/**"
       - "citizenchain/runtime/**"
       - "citizenchain/Cargo.toml"
       - "citizenchain/Cargo.lock"
@@ -22,7 +21,7 @@ env:
 
 jobs:
   build-windows:
-    name: 打包 公民链.exe (Windows)
+    name: 打包公民链.exe (Windows)
     runs-on: windows-latest
     steps:
       - name: 拉取代码
@@ -36,7 +35,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: citizenchain/nodeui/frontend/package-lock.json
+          cache-dependency-path: citizenchain/node/frontend/package-lock.json
 
       - name: 安装 protobuf
         run: choco install protoc -y
@@ -50,9 +49,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "citizenchain-windows"
-          workspaces: |
-            citizenchain -> target
-            citizenchain/nodeui -> target
+          workspaces: citizenchain -> target
 
       - name: 下载最新 WASM 产物
         run: gh run download --name citizenchain-wasm --dir wasm-artifact -R ${{ env.GITHUB_REPOSITORY }}
@@ -60,55 +57,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
 
-      - name: 确认 WASM 文件位置
-        run: dir wasm-artifact\
-
       - name: 设置 WASM_FILE
         run: echo "WASM_FILE=${{ github.workspace }}/wasm-artifact/citizenchain.compact.compressed.wasm" >> $env:GITHUB_ENV
 
-      - name: 编译 node
-        working-directory: citizenchain
-        run: cargo build --release -p node
-
-      - name: 准备 sidecar
-        shell: pwsh
-        run: |
-          $backendDir = "citizenchain/nodeui/backend"
-          $binDir = "$backendDir/binaries"
-          $nodeBin = "citizenchain/target/release/node.exe"
-          $targetTriple = (rustc -vV | Select-String 'host:').ToString().Split(' ')[1]
-
-          New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-          Copy-Item $nodeBin "$binDir/citizenchain-node.exe"
-          Copy-Item $nodeBin "$binDir/citizenchain-node-${targetTriple}.exe"
-          $hash = (Get-FileHash "$binDir/citizenchain-node.exe" -Algorithm SHA256).Hash.ToLower()
-          Set-Content "$binDir/citizenchain-node.sha256" $hash
-
-          Write-Host "sidecar 已准备:"
-          Get-ChildItem $binDir
-
       - name: 安装前端依赖并构建
         run: |
-          npm --prefix citizenchain/nodeui/frontend ci
-          npm --prefix citizenchain/nodeui/frontend run build
+          npm --prefix citizenchain/node/frontend ci
+          npm --prefix citizenchain/node/frontend run build
 
       - name: 安装 Tauri CLI
         run: cargo install tauri-cli --locked
 
       - name: Tauri 打包
-        working-directory: citizenchain/nodeui/backend
-        env:
-          SKIP_NODE_BUILD: "1"
+        working-directory: citizenchain/node
         run: cargo tauri build --ci
 
       - name: 重命名产物
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path "citizenchain/nodeui/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
+          $exe = Get-ChildItem -Path "citizenchain/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
           Copy-Item $exe.FullName "公民链.exe"
           Write-Host "产出: 公民链.exe ($([math]::Round($exe.Length / 1MB, 1)) MB)"
 
-      - name: 上传 公民链.exe
+      - name: 上传公民链.exe
         uses: actions/upload-artifact@v4
         with:
           name: 公民链-windows
