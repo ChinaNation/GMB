@@ -42,6 +42,9 @@ if [ ! -f "$WASM_FILE" ]; then
 fi
 echo "    使用 CI WASM: $WASM_FILE"
 
+# 清除 runtime 编译缓存，强制用 WASM_FILE 重新编译（避免用到旧的本地 WASM 缓存）。
+cargo clean --manifest-path "$REPO_ROOT/Cargo.toml" -p citizenchain 2>/dev/null || true
+
 cd "$REPO_ROOT/node"
 echo "==> 启动公民链（保留现有链数据，不清库）..."
 cargo tauri dev
