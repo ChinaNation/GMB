@@ -42,7 +42,10 @@ if [ ! -f "$WASM_FILE" ]; then
 fi
 echo "    使用 CI WASM: $WASM_FILE"
 
-# 清除 runtime 编译缓存，强制用 WASM_FILE 重新编译（避免用到旧的本地 WASM 缓存）。
+# 清除 runtime 编译缓存，强制用 WASM_FILE 重新编译。
+# cargo clean 不清 build script 产物，必须手动删。
+rm -rf "$REPO_ROOT/target/debug/build/citizenchain-"* 2>/dev/null
+rm -rf "$REPO_ROOT/target/debug/wbuild/citizenchain" 2>/dev/null
 cargo clean --manifest-path "$REPO_ROOT/Cargo.toml" -p citizenchain 2>/dev/null || true
 
 cd "$REPO_ROOT/node"

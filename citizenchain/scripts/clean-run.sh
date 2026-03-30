@@ -39,9 +39,14 @@ echo "==> 清除节点数据：$APP_DATA_DIR"
 rm -rf "$APP_DATA_DIR"
 echo "    已清除"
 
-# ── 3. 清除编译缓存，强制全量重编译（清 debug 和 release）──
+# ── 3. 清除编译缓存，强制全量重编译 ──
 CHAIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 echo "==> 清除节点编译缓存..."
+# cargo clean 不清 build script 产物和 wbuild，必须手动删。
+rm -rf "$CHAIN_ROOT/target/debug/build/citizenchain-"* 2>/dev/null
+rm -rf "$CHAIN_ROOT/target/release/build/citizenchain-"* 2>/dev/null
+rm -rf "$CHAIN_ROOT/target/debug/wbuild/citizenchain" 2>/dev/null
+rm -rf "$CHAIN_ROOT/target/release/wbuild/citizenchain" 2>/dev/null
 cargo clean --manifest-path "$CHAIN_ROOT/Cargo.toml" -p citizenchain -p node 2>/dev/null || true
 cargo clean --release --manifest-path "$CHAIN_ROOT/Cargo.toml" -p citizenchain -p node 2>/dev/null || true
 echo "    编译缓存已清除"
