@@ -47,7 +47,7 @@ LoginChallenge _buildSfidChallenge(_KeyFixture signer) {
   final expiresAt = now + 90;
   const challengeToken = 'challenge-token';
   final message = utf8.encode(
-    'WUMIN_LOGIN_V1.0.0|sfid|$challengeToken|$now|$expiresAt|${signer.pubkeyHex}',
+    'WUMIN_LOGIN_V1.0.0|sfid|$challengeToken|$now|$expiresAt|0x${signer.pubkeyHex}',
   );
   final signature = signer.pair.sign(Uint8List.fromList(message));
 
