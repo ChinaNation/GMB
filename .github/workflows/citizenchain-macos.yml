@@ -6,7 +6,6 @@ on:
     paths:
       - ".github/workflows/citizenchain-macos.yml"
       - "citizenchain/node/**"
-      - "citizenchain/nodeui/**"
       - "citizenchain/runtime/**"
       - "citizenchain/Cargo.toml"
       - "citizenchain/Cargo.lock"
@@ -22,7 +21,7 @@ env:
 
 jobs:
   build-macos:
-    name: 打包 公民链.dmg (macOS)
+    name: 打包公民链.dmg (macOS)
     runs-on: macos-latest
     steps:
       - name: 拉取代码
@@ -36,7 +35,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: citizenchain/nodeui/frontend/package-lock.json
+          cache-dependency-path: citizenchain/node/frontend/package-lock.json
 
       - name: 安装构建依赖
         run: brew install protobuf llvm
@@ -50,60 +49,35 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "citizenchain-macos"
-          workspaces: |
-            citizenchain -> target
-            citizenchain/nodeui -> target
+          workspaces: citizenchain -> target
 
       - name: 下载最新 WASM 产物
         run: gh run download --name citizenchain-wasm --dir wasm-artifact -R ${{ github.repository }}
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: 确认 WASM 文件位置
-        run: ls -la wasm-artifact/
-
       - name: 设置 WASM_FILE
         run: echo "WASM_FILE=${{ github.workspace }}/wasm-artifact/citizenchain.compact.compressed.wasm" >> "$GITHUB_ENV"
 
-      - name: 编译 node
-        working-directory: citizenchain
-        run: cargo build --release -p node
-
-      - name: 准备 sidecar
-        run: |
-          BACKEND_DIR=citizenchain/nodeui/backend
-          BINARIES_DIR=$BACKEND_DIR/binaries
-          NODE_BIN=citizenchain/target/release/node
-          TARGET_TRIPLE=$(rustc -vV | sed -n 's/host: //p')
-
-          mkdir -p "$BINARIES_DIR"
-          cp "$NODE_BIN" "$BINARIES_DIR/citizenchain-node"
-          cp "$NODE_BIN" "$BINARIES_DIR/citizenchain-node-${TARGET_TRIPLE}"
-          shasum -a 256 "$BINARIES_DIR/citizenchain-node" | awk '{print $1}' > "$BINARIES_DIR/citizenchain-node.sha256"
-
-          echo "sidecar 已准备: $(ls -lh $BINARIES_DIR/)"
-
       - name: 安装前端依赖并构建
         run: |
-          npm --prefix citizenchain/nodeui/frontend ci
-          npm --prefix citizenchain/nodeui/frontend run build
+          npm --prefix citizenchain/node/frontend ci
+          npm --prefix citizenchain/node/frontend run build
 
       - name: 安装 Tauri CLI
         run: cargo install tauri-cli --locked
 
       - name: Tauri 打包
-        working-directory: citizenchain/nodeui/backend
-        env:
-          SKIP_NODE_BUILD: "1"
+        working-directory: citizenchain/node
         run: cargo tauri build --ci
 
       - name: 重命名产物
         run: |
-          DMG=$(find citizenchain/nodeui/target/release/bundle/dmg -name '*.dmg' | head -1)
+          DMG=$(find citizenchain/target/release/bundle/dmg -name '*.dmg' | head -1)
           cp "$DMG" "公民链.dmg"
           echo "产出: 公民链.dmg ($(du -h 公民链.dmg | cut -f1))"
 
-      - name: 上传 公民链.dmg
+      - name: 上传公民链.dmg
         uses: actions/upload-artifact@v4
         with:
           name: 公民链-macos

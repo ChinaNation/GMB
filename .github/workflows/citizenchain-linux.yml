@@ -21,7 +21,7 @@ env:
 
 jobs:
   build-linux:
-    name: 编译 node (Linux)
+    name: 打包公民链.deb (Linux)
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
@@ -29,6 +29,13 @@ jobs:
 
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@1.94.0
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: citizenchain/node/frontend/package-lock.json
 
       - name: 安装 Linux 构建依赖
         run: |
@@ -39,7 +46,11 @@ jobs:
             llvm-dev \
             libclang-dev \
             protobuf-compiler \
-            libpam0g-dev
+            libpam0g-dev \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
 
       - name: 配置 libclang 环境变量
         run: |
@@ -58,29 +69,36 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: 确认 WASM 文件位置
-        run: ls -la wasm-artifact/
-
       - name: 设置 WASM_FILE
         run: echo "WASM_FILE=${{ github.workspace }}/wasm-artifact/citizenchain.compact.compressed.wasm" >> "$GITHUB_ENV"
 
-      - name: 编译 node
-        working-directory: citizenchain
-        run: cargo build --release -p node
+      - name: 安装前端依赖并构建
+        run: |
+          npm --prefix citizenchain/node/frontend ci
+          npm --prefix citizenchain/node/frontend run build
 
-      - name: 运行 node 测试
-        working-directory: citizenchain
-        run: cargo test --release -p node
+      - name: 安装 Tauri CLI
+        run: cargo install tauri-cli --locked
 
-      - name: 上传 node 二进制
+      - name: Tauri 打包
+        working-directory: citizenchain/node
+        run: cargo tauri build --ci
+
+      - name: 重命名产物
+        run: |
+          DEB=$(find citizenchain/target/release/bundle/deb -name '*.deb' | head -1)
+          cp "$DEB" "公民链.deb"
+          echo "产出: 公民链.deb ($(du -h 公民链.deb | cut -f1))"
+
+      - name: 上传公民链.deb
         uses: actions/upload-artifact@v4
         with:
-          name: citizenchain-node-linux-amd64
-          path: citizenchain/target/release/node
+          name: 公民链-linux
+          path: 公民链.deb
           retention-days: 30
           overwrite: true
 
-      # 导出 chainspec.json 并上传为 artifact，供 wuminapp CI 下载使用。
+      # 导出 chainspec.json 供 wuminapp CI 使用
       - name: 清理旧版 chainspec artifact
         env:
           GH_TOKEN: ${{ github.token }}
