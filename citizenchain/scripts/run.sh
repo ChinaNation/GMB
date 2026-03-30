@@ -21,7 +21,7 @@ trap cleanup EXIT INT TERM HUP
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-WASM_DIR="$REPO_ROOT/target/wasm-artifact"
+WASM_DIR="$REPO_ROOT/target/ci-wasm"
 
 # ── 下载最新 CI 编译的 WASM，确保本地用的和链上一致 ──
 echo "==> 下载最新 WASM..."
