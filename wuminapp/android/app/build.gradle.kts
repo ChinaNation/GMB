@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "org.chinanation.citizen"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
