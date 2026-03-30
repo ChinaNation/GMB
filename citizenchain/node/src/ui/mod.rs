@@ -66,7 +66,7 @@ pub fn run_desktop() {
             cleanup_on_startup(app.handle());
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(tauri::generate_context!("tauri.conf.json"))
         .expect("启动公民链失败")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
