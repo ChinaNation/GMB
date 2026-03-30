@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "公民链",
+  "productName": "citizenchain",
   "version": "1.0.0",
   "identifier": "org.chinanation.citizenchain.desktop",
   "build": {
