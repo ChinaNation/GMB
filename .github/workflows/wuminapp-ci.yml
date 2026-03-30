@@ -55,6 +55,8 @@ jobs:
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@1.94.0
