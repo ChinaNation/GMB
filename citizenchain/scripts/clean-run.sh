@@ -67,6 +67,6 @@ fi
 echo "    WASM_FILE=$WASM_FILE"
 
 # ── 5. 重新编译并启动 ──
-cd "$CHAIN_ROOT/nodeui"
-echo "==> 强制重新编译并启动 nodeui（全新创世）..."
+cd "$CHAIN_ROOT/node"
+echo "==> 强制重新编译并启动公民链（全新创世）..."
 cargo tauri dev
