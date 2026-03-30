@@ -7,8 +7,7 @@ APP_DATA_DIR="$HOME/Library/Application Support/org.chinanation.citizenchain.des
 cleanup() {
     echo ""
     echo "==> 正在关闭节点进程..."
-    pkill -f "citizenchain-node" 2>/dev/null || true
-    pkill -f "node-bin-" 2>/dev/null || true
+    pkill -f "citizenchain" 2>/dev/null || true
     sleep 1
     echo "    节点已关闭"
 }
@@ -16,8 +15,7 @@ trap cleanup EXIT INT TERM HUP
 
 # ── 1. 杀进程 ──
 echo "==> 杀掉所有节点进程..."
-pkill -9 -f "citizenchain-node" 2>/dev/null || true
-pkill -9 -f "node-bin-" 2>/dev/null || true
+pkill -9 -f "citizenchain" 2>/dev/null || true
 sleep 1
 echo "    已清理"
 
@@ -40,7 +38,7 @@ export WASM_FILE="$WASM_DIR/citizenchain.compact.compressed.wasm"
 [ -f "$WASM_FILE" ] || { echo "错误：WASM 文件不存在"; exit 1; }
 echo "    WASM: $WASM_FILE"
 
-# ── 4. 彻底清除所有编译缓存（用 find，不用 glob）──
+# ── 4. 彻底清除所有编译缓存 ──
 echo "==> 清除编译缓存..."
 find "$CHAIN_ROOT/target" -maxdepth 3 -type d -name "citizenchain-*" -path "*/build/*" -exec rm -rf {} + 2>/dev/null || true
 find "$CHAIN_ROOT/target" -maxdepth 2 -type d -name "citizenchain" -path "*/wbuild/*" -exec rm -rf {} + 2>/dev/null || true
