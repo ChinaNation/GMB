@@ -25,6 +25,7 @@ WASM_DIR="$REPO_ROOT/target/ci-wasm"
 
 # ── 下载最新 CI 编译的 WASM，确保本地用的和链上一致 ──
 echo "==> 下载最新 WASM..."
+rm -rf "$WASM_DIR"
 mkdir -p "$WASM_DIR"
 if gh run download --name citizenchain-wasm --dir "$WASM_DIR" -R ChinaNation/GMB 2>/dev/null; then
     export WASM_FILE="$WASM_DIR/citizenchain.compact.compressed.wasm"
