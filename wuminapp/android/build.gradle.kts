@@ -21,15 +21,22 @@ subprojects {
 
 // AGP 8+ requires namespace for every Android module.
 // Some transitive plugins still omit it, so patch them here until upstream catches up.
+// Also force compileSdk to 36 for all subprojects (isar_flutter_libs etc.).
 subprojects {
-    if (name == "isar_flutter_libs") {
-        plugins.withId("com.android.library") {
-            val androidExt = extensions.findByName("android")
-            val setNamespace = androidExt
-                ?.javaClass
-                ?.methods
-                ?.firstOrNull { it.name == "setNamespace" && it.parameterCount == 1 }
-            setNamespace?.invoke(androidExt, "dev.isar.isar_flutter_libs")
+    plugins.withId("com.android.library") {
+        val androidExt = extensions.findByName("android")
+        if (androidExt != null) {
+            // Force compileSdk = 36 for all library modules
+            androidExt.javaClass.methods
+                .firstOrNull { it.name == "setCompileSdk" && it.parameterCount == 1 && it.parameterTypes[0] == Int::class.java }
+                ?.invoke(androidExt, 36)
+
+            // Patch namespace for isar_flutter_libs
+            if (name == "isar_flutter_libs") {
+                androidExt.javaClass.methods
+                    .firstOrNull { it.name == "setNamespace" && it.parameterCount == 1 }
+                    ?.invoke(androidExt, "dev.isar.isar_flutter_libs")
+            }
         }
     }
 }
