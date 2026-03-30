@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=citizenchain
-ExecStart=/opt/citizenchain/node \
+ExecStart=/usr/bin/citizenchain \
   --base-path /opt/citizenchain/data \
   --node-key-file /opt/citizenchain/data/node-key/secret_ed25519 \
   --rpc-port 9944 \
