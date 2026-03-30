@@ -18,7 +18,7 @@ env:
 
 jobs:
   build-wasm:
-    name: 编译 WASM + 跑 Benchmarks
+    name: 编译 WASM
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
@@ -39,14 +39,12 @@ jobs:
           shared-key: "citizenchain-wasm"
           workspaces: citizenchain -> target
 
-      # ── 第 1 步：编译正式 WASM（部署用）──
-      - name: 编译正式 WASM
+      - name: 编译 WASM
         working-directory: citizenchain
         env:
           WASM_BUILD_FROM_SOURCE: "1"
         run: cargo build --release -p citizenchain
 
-      # 删除所有旧版 WASM artifact，确保仓库中只保留最新一份。
       - name: 清理旧版 WASM artifact
         env:
           GH_TOKEN: ${{ github.token }}
@@ -58,7 +56,7 @@ jobs:
               gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
             done
 
-      - name: 上传正式 WASM
+      - name: 上传 WASM
         uses: actions/upload-artifact@v4
         with:
           name: citizenchain-wasm
@@ -67,60 +65,3 @@ jobs:
             citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.wasm
             citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
           retention-days: 30
-
-      # ── 第 2 步：编译带 benchmarks feature 的 node binary ──
-      # 用正式 WASM 跳过 WASM 重编译（serde_core 在 wasm32v1-none 上不兼容）
-      - name: 编译 benchmark node binary
-        working-directory: citizenchain
-        env:
-          WASM_FILE: ${{ github.workspace }}/citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
-        run: cargo build --release --features runtime-benchmarks
-
-      # ── 第 3 步：跑所有 pallet 的 benchmark，生成 weights.rs ──
-      - name: 跑 benchmarks 生成 weights
-        working-directory: citizenchain
-        run: |
-          PALLETS=(
-            "shengbank_stake_interest:runtime/issuance/shengbank-stake-interest/src/weights.rs"
-            "fullnode_pow_reward:runtime/issuance/fullnode-pow-reward/src/weights.rs"
-            "citizen_lightnode_issuance:runtime/issuance/citizen-lightnode-issuance/src/weights.rs"
-            "resolution_issuance_iss:runtime/issuance/resolution-issuance-iss/src/weights.rs"
-            "resolution_issuance_gov:runtime/governance/resolution-issuance-gov/src/weights.rs"
-            "sfid_code_auth:runtime/otherpallet/sfid-code-auth/src/weights.rs"
-            "pow_difficulty_module:runtime/otherpallet/pow-difficulty-module/src/weights.rs"
-            "admins_origin_gov:runtime/governance/admins-origin-gov/src/weights.rs"
-            "resolution_destro_gov:runtime/governance/resolution-destro-gov/src/weights.rs"
-            "grandpa_key_gov:runtime/governance/grandpa-key-gov/src/weights.rs"
-            "duoqian_manage_pow:runtime/transaction/duoqian-manage-pow/src/weights.rs"
-            "duoqian_transfer_pow:runtime/transaction/duoqian-transfer-pow/src/weights.rs"
-            "voting_engine_system:runtime/governance/voting-engine-system/src/weights.rs"
-            "runtime_root_upgrade:runtime/governance/runtime-root-upgrade/src/weights.rs"
-          )
-
-          for entry in "${PALLETS[@]}"; do
-            PALLET="${entry%%:*}"
-            OUTPUT="${entry##*:}"
-            echo "══════════════════════════════════════"
-            echo "▶ 跑 benchmark: ${PALLET}"
-            echo "══════════════════════════════════════"
-            ./target/release/node benchmark pallet \
-              --chain=citizenchain \
-              --pallet="${PALLET}" \
-              --extrinsic='*' \
-              --steps=50 \
-              --repeat=20 \
-              --output="${OUTPUT}" \
-            || echo "⚠ ${PALLET} benchmark 失败，继续下一个"
-          done
-
-      - name: 上传 weights 文件
-        uses: actions/upload-artifact@v4
-        with:
-          name: citizenchain-weights
-          path: |
-            citizenchain/runtime/issuance/*/src/weights.rs
-            citizenchain/runtime/governance/*/src/weights.rs
-            citizenchain/runtime/otherpallet/*/src/weights.rs
-            citizenchain/runtime/transaction/*/src/weights.rs
-          retention-days: 30
-          overwrite: true
