@@ -88,8 +88,8 @@ pub fn chain_config() -> Result<ChainSpec, String> {
         .with_id(CHAIN_ID)
         .with_chain_type(ChainType::Live)
         .with_boot_nodes(boot_nodes)
-        // 自定义 Protocol ID，避免与其他 Substrate 链的默认 "sup" 混淆。
-        .with_protocol_id("citizenchain")
+        // TODO: 自定义 Protocol ID 需要在所有节点清库后统一切换，暂用默认 "sup"。
+        // .with_protocol_id("citizenchain")
         // 中文注释：唯一创世来源（主网）。
         .with_genesis_config_patch(genesis_config_presets::genesis_config())
         .with_properties(chain_properties())
