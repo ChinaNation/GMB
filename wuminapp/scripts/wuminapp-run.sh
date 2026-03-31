@@ -29,6 +29,28 @@ fi
 DART_DEFINES=(--dart-define=WUMINAPP_API_BASE_URL="$WUMINAPP_API_BASE_URL")
 echo "[启动模式] smoldot 轻节点"
 
+# ── 强制更新 chainspec ──
+# 每次运行都从 Linux CI artifact 下载最新 chainspec，删除旧的，用新的覆盖。
+CHAINSPEC_PATH="assets/chainspec.json"
+echo "==> 下载最新 chainspec.json ..."
+rm -f "$CHAINSPEC_PATH"
+DOWNLOAD_DIR=$(mktemp -d)
+if gh run download --name citizenchain-chainspec --dir "$DOWNLOAD_DIR" -R ChinaNation/GMB 2>/dev/null; then
+  if [[ -f "$DOWNLOAD_DIR/chainspec.json" ]]; then
+    cp "$DOWNLOAD_DIR/chainspec.json" "$CHAINSPEC_PATH"
+    echo "    已更新 chainspec.json ($(wc -c < "$CHAINSPEC_PATH" | tr -d ' ') bytes)"
+  else
+    echo "ERROR: artifact 下载成功但未找到 chainspec.json" >&2
+    rm -rf "$DOWNLOAD_DIR"
+    exit 1
+  fi
+else
+  echo "ERROR: 无法从 CI 下载 chainspec artifact，请确认 gh 已登录且 citizenchain Linux CI 至少成功运行过一次" >&2
+  rm -rf "$DOWNLOAD_DIR"
+  exit 1
+fi
+rm -rf "$DOWNLOAD_DIR"
+
 echo "==> 编译 Rust 原生库..."
 # 检测目标平台：通过 flutter devices 判断
 DEVICE_LINE=$(flutter devices --machine 2>/dev/null | python3 -c "

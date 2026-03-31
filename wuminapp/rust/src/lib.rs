@@ -86,7 +86,7 @@ pub unsafe extern "C" fn smoldot_client_init(
     {
         let _ = android_logger::init_once(
             android_logger::Config::default()
-                .with_max_level(log::LevelFilter::Debug)
+                .with_max_level(log::LevelFilter::Trace)
                 .with_tag("smoldot"),
         );
     }
