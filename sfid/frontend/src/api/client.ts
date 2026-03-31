@@ -515,10 +515,11 @@ export async function reissueInstallToken(
 }
 
 export async function listCpmsSites(auth: AdminAuth): Promise<CpmsSiteRow[]> {
-  return request<CpmsSiteRow[]>('/api/v1/admin/cpms-keys', {
+  const result = await request<{ total: number; limit: number; offset: number; rows: CpmsSiteRow[] }>('/api/v1/admin/cpms-keys', {
     method: 'GET',
     headers: adminHeaders(auth)
   });
+  return result.rows ?? [];
 }
 
 export async function disableCpmsKeys(
