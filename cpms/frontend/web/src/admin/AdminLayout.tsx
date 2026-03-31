@@ -6,6 +6,7 @@ const NAV = [
   { label: '操作员管理', to: '/admin' },
   { label: '站点密钥', to: '/admin/site-keys' },
   { label: '公民状态', to: '/admin/citizen-status' },
+  { label: '匿名证书', to: '/admin/anon-cert' },
 ];
 
 export default function AdminLayout() {
