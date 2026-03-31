@@ -7,11 +7,11 @@ enum QrRouteType {
   /// 登录挑战码（`WUMIN_LOGIN_V1.0.0`）。
   login,
 
-  /// 收款码（`WUMINAPP_TRANSFER_V1`）。
-  transfer,
-
-  /// 用户码（`WUMINAPP_CONTACT_V1` 或旧版 `WUMINAPP_USER_CARD_V1`）。
+  /// 用户码 - 联系人（`WUMIN_USER_V1.0.0`，purpose=contact）。
   contact,
+
+  /// 用户码 - 收款码（`WUMIN_USER_V1.0.0`，purpose=transfer）。
+  transfer,
 
   /// 交易签名请求（`WUMIN_SIGN_V1.0.0`）。
   sign,
@@ -64,16 +64,13 @@ class QrRouter {
             raw: raw,
             jsonData: jsonData,
           );
-        case QrProtocols.transfer:
+        case QrProtocols.user:
+          // 根据 purpose 字段区分联系人/收款
+          final purpose = (jsonData['purpose'] ?? 'contact').toString();
           return QrRouteResult(
-            type: QrRouteType.transfer,
-            raw: raw,
-            jsonData: jsonData,
-          );
-        case QrProtocols.contact:
-        case QrProtocols.legacyUserCard:
-          return QrRouteResult(
-            type: QrRouteType.contact,
+            type: purpose == 'transfer'
+                ? QrRouteType.transfer
+                : QrRouteType.contact,
             raw: raw,
             jsonData: jsonData,
           );

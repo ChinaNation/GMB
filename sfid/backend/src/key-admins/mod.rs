@@ -1,5 +1,6 @@
 pub(crate) mod chain_keyring;
 pub(crate) mod chain_proof;
+pub(crate) mod rsa_blind;
 
 use self::chain_keyring::{
     try_derive_pubkey_hex_from_seed, try_load_signing_key_from_seed, verify_rotation_signature,

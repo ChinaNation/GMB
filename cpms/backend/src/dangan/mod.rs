@@ -9,6 +9,7 @@ use std::{
 
 use axum::{http::StatusCode, Json};
 use chrono::Utc;
+use rand::rngs::OsRng;
 use schnorrkel::{signing_context, MiniSecretKey};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -128,6 +129,143 @@ fn generate_random9(terminal_id: &str, admin_pubkey: &str, nonce: u32) -> String
     source.hash(&mut hasher);
     let n = hasher.finish() % 1_000_000_000;
     format!("{:09}", n)
+}
+
+// ── SFID-CPMS QR v1: AR4 不透明档案号 ─────────────────────────────────
+
+const AR4_RANDOM_LEN: usize = 26;
+const AR4_CHECK_LEN: usize = 2;
+const AR4_MAX_RETRY: u32 = 20;
+/// Base32 字母表（RFC 4648 无 padding）
+const BASE32_ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+/// 生成 AR4 格式不透明档案号：`AR4-<26位Base32随机>-<2位校验>`
+///
+/// 随机体用安全随机数，不编码省、市、站点、日期。
+pub(crate) async fn generate_ar4_archive_no(
+    state: &AppState,
+) -> Result<String, (StatusCode, Json<ApiError>)> {
+    use rand::RngCore;
+
+    for _ in 0..AR4_MAX_RETRY {
+        // 生成 26 位 Base32 随机体
+        let mut random_bytes = [0u8; 26];
+        OsRng.fill_bytes(&mut random_bytes);
+        let random_body: String = random_bytes
+            .iter()
+            .map(|b| BASE32_ALPHABET[(*b as usize) % BASE32_ALPHABET.len()] as char)
+            .collect();
+
+        // 计算 2 位校验
+        let check = ar4_checksum(&random_body);
+        let archive_no = format!("AR4-{}-{}", random_body, check);
+
+        // 碰撞检测
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM archives WHERE archive_no = $1)")
+                .bind(&archive_no)
+                .fetch_one(&state.db)
+                .await
+                .map_err(|_| {
+                    err(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        5001,
+                        "archive lookup failed",
+                    )
+                })?;
+
+        if !exists {
+            return Ok(archive_no);
+        }
+    }
+
+    Err(err(
+        StatusCode::CONFLICT,
+        3005,
+        "ar4 archive_no conflict, retry exhausted",
+    ))
+}
+
+/// AR4 档案号 2 位校验码。
+fn ar4_checksum(random_body: &str) -> String {
+    use blake2::digest::consts::U32;
+    use blake2::{Blake2b, Digest};
+    type Blake2b256 = Blake2b<U32>;
+    let payload = format!("cpms-ar4-checksum-v1|{}", random_body);
+    let digest = Blake2b256::digest(payload.as_bytes());
+    // 取前两字节映射到 Base32
+    let c1 = BASE32_ALPHABET[(digest[0] as usize) % BASE32_ALPHABET.len()] as char;
+    let c2 = BASE32_ALPHABET[(digest[1] as usize) % BASE32_ALPHABET.len()] as char;
+    format!("{}{}", c1, c2)
+}
+
+// ── SFID-CPMS QR v1: QR4 档案业务二维码构造 ──────────────────────────
+
+/// QR4 档案业务二维码载荷。
+#[derive(Serialize)]
+pub(crate) struct ArchiveQr4Payload {
+    pub(crate) ver: u32,
+    pub(crate) qr_type: String,
+    pub(crate) province_code: String,
+    pub(crate) archive_no: String,
+    pub(crate) citizen_status: String,
+    pub(crate) voting_eligible: bool,
+    pub(crate) anon_cert: serde_json::Value,
+    pub(crate) archive_sig: String,
+}
+
+/// 构造 QR4 载荷（SFID-CPMS QR v1 协议）。
+///
+/// 使用本机匿名私钥签名，嵌入匿名证书。
+pub(crate) async fn build_qr4_payload(
+    state: &AppState,
+    archive: &crate::Archive,
+) -> Result<ArchiveQr4Payload, (StatusCode, Json<ApiError>)> {
+    // 读取匿名证书和匿名私钥
+    let row = sqlx::query("SELECT anon_cert, anon_key_encrypted, anon_pubkey FROM system_install WHERE id = 1")
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query anon_cert failed"))?
+        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "cpms not initialized"))?;
+
+    let anon_cert_json: Option<String> = row.get("anon_cert");
+    let anon_cert_json = anon_cert_json
+        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "anon_cert not found, complete QR3 first"))?;
+    let anon_cert: serde_json::Value = serde_json::from_str(&anon_cert_json)
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "parse anon_cert failed"))?;
+
+    let province_code = anon_cert
+        .get("province_code")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "anon_cert missing province_code"))?
+        .to_string();
+
+    // 解密匿名私钥
+    let anon_secret_stored: Option<String> = row.get("anon_key_encrypted");
+    let anon_secret_stored = anon_secret_stored
+        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "anon_key not found"))?;
+    let anon_secret_bytes = crate::initialize::decrypt_secret_public("ANON", &anon_secret_stored)
+        .ok_or_else(|| err(StatusCode::INTERNAL_SERVER_ERROR, 5003, "decrypt anon key failed"))?;
+
+    let voting_eligible = archive.citizen_status == "NORMAL";
+
+    // 签名原文：cpms-archive-qr-v1|{province_code}|{archive_no}|{citizen_status}|{voting_eligible}
+    let sign_source = format!(
+        "cpms-archive-qr-v1|{}|{}|{}|{}",
+        province_code, archive.archive_no, archive.citizen_status, voting_eligible
+    );
+    let archive_sig = sign_qr_payload_with_secret(&anon_secret_bytes, &sign_source)?;
+
+    Ok(ArchiveQr4Payload {
+        ver: 1,
+        qr_type: "CPMS_ARCHIVE_QR".to_string(),
+        province_code,
+        archive_no: archive.archive_no.clone(),
+        citizen_status: archive.citizen_status.clone(),
+        voting_eligible,
+        anon_cert,
+        archive_sig,
+    })
 }
 
 pub(crate) fn archive_checksum_digit(

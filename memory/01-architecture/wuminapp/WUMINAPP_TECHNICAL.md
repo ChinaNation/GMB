@@ -107,8 +107,8 @@ wuminapp/
 关键口径：
 
 - 登录协议：`WUMIN_LOGIN_V1.0.0`
-- 收款协议：`WUMINAPP_TRANSFER_V1`
-- 用户协议：`WUMINAPP_CONTACT_V1`
+- 签名协议：`WUMIN_SIGN_V1.0.0`
+- 用户协议：`WUMIN_USER_V1.0.0`（联系人 purpose=contact / 收款 purpose=transfer）
 - 登录协议与链上转账/投票签名协议完全分离；前者只用于 `sfid/cpms` 扫码登录，后者只用于链上交易 `payload` 签名
 - 系统身份：通过 `sys_pubkey`/`sys_sig` 密码学验证二维码确由系统私钥签发（不再使用 `aud` 白名单）
 - 登录签名串：

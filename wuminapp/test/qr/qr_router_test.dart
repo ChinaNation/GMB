@@ -26,35 +26,36 @@ void main() {
       expect(result.jsonData, isNotNull);
     });
 
-    test('should route transfer QR', () {
+    test('should route user QR with purpose=transfer', () {
       final raw = jsonEncode({
-        'proto': 'WUMINAPP_TRANSFER_V1',
-        'to': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+        'proto': 'WUMIN_USER_V1.0.0',
+        'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+        'name': '张三',
+        'purpose': 'transfer',
         'amount': '100.50',
         'symbol': 'GMB',
         'memo': '房租',
-        'bank': '',
       });
       final result = router.route(raw);
       expect(result.type, QrRouteType.transfer);
     });
 
-    test('should route contact QR (new protocol)', () {
+    test('should route user QR with purpose=contact', () {
       final raw = jsonEncode({
-        'proto': 'WUMINAPP_CONTACT_V1',
+        'proto': 'WUMIN_USER_V1.0.0',
         'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
         'name': '张三',
+        'purpose': 'contact',
       });
       final result = router.route(raw);
       expect(result.type, QrRouteType.contact);
     });
 
-    test('should route legacy user card QR', () {
+    test('should route user QR without purpose as contact', () {
       final raw = jsonEncode({
-        'type': 'WUMINAPP_USER_CARD_V1',
-        'nickname': '张三',
-        'account_pubkey':
-            '0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d',
+        'proto': 'WUMIN_USER_V1.0.0',
+        'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+        'name': '张三',
       });
       final result = router.route(raw);
       expect(result.type, QrRouteType.contact);

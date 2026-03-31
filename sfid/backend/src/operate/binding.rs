@@ -11,531 +11,413 @@ use uuid::Uuid;
 use crate::chain::runtime_align::build_bind_credential;
 use crate::*;
 
-pub(crate) async fn admin_bind_scan(
+// ── 公民身份绑定新接口 ────────────────────────────────────────────────
+
+const BIND_CHALLENGE_TTL_SECONDS: i64 = 300; // 5 分钟
+
+/// 生成绑定/解绑 challenge。
+///
+/// 返回 challenge_text 和 WUMIN_SIGN_V1.0.0 格式的签名请求 JSON，
+/// 前端直接将 sign_request 展示为二维码供用户扫码签名。
+pub(crate) async fn citizen_bind_challenge(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(input): Json<BindScanInput>,
 ) -> impl IntoResponse {
-    let actor_ip = actor_ip_from_headers(&headers);
-    let request_id = request_id_from_headers(&headers);
-    let admin_ctx = match require_admin_write(&state, &headers) {
+    let _ctx = match require_admin_write(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    if input.qr_payload.trim().is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "qr_payload is required");
-    }
-    let payload: CitizenQrPayload = match serde_json::from_str(input.qr_payload.trim()) {
-        Ok(v) => v,
-        Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid citizen qr_payload"),
-    };
-    if payload.ver != "1" || payload.issuer_id != "cpms" || payload.sig_alg != "sr25519" {
-        return api_error(StatusCode::UNAUTHORIZED, 1006, "qr header invalid");
-    }
-    if payload.archive_no.trim().is_empty()
-        || payload.qr_id.trim().is_empty()
-        || payload.site_sfid.trim().is_empty()
-    {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "qr required fields missing");
-    }
-
-    let now = Utc::now().timestamp();
-    if payload.expire_at < now {
-        return api_error(StatusCode::UNAUTHORIZED, 1006, "qr expired");
-    }
-
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    cleanup_consumed_qr_ids(&mut store, Utc::now());
-    cleanup_pending_bind_scans(&mut store, Utc::now());
-    if store.consumed_qr_ids.contains_key(&payload.qr_id) {
-        return api_error(StatusCode::CONFLICT, 1005, "qr_id already consumed");
-    }
-    let Some(site_keys) = store.cpms_site_keys.get(&payload.site_sfid).cloned() else {
-        return api_error(StatusCode::FORBIDDEN, 1004, "site_sfid keys not registered");
-    };
-    if !in_scope_cpms_site(&site_keys, admin_ctx.admin_province.as_deref()) {
-        return api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "cannot use other province institutions",
-        );
-    }
-
-    let status_text = match payload.status {
-        CitizenStatus::Normal => "NORMAL",
-        CitizenStatus::Abnormal => "ABNORMAL",
-    };
-    let canonical = crate::operate::cpms_qr::canonical_citizen_qr_text(
-        &payload.ver,
-        &payload.issuer_id,
-        &payload.site_sfid,
-        &payload.archive_no,
-        payload.issued_at,
-        payload.expire_at,
-        &payload.qr_id,
-        &payload.sig_alg,
-        status_text,
+    let challenge_id = Uuid::new_v4().to_string();
+    let now = Utc::now();
+    let challenge_text = format!(
+        "sfid-citizen-bind-v1|{}|{}",
+        challenge_id,
+        now.timestamp()
     );
-    let verified = crate::operate::cpms_qr::verify_cpms_qr_signature(
-        &[
-            &site_keys.pubkey_1,
-            &site_keys.pubkey_2,
-            &site_keys.pubkey_3,
-        ],
-        &canonical,
-        &payload.signature,
-    );
-    if !verified {
-        return api_error(StatusCode::UNAUTHORIZED, 1006, "qr signature verify failed");
-    }
-    insert_bounded_map(
-        &mut store.consumed_qr_ids,
-        payload.qr_id.clone(),
-        Utc::now(),
-        bounded_cache_limit("SFID_CONSUMED_QR_CACHE_MAX", 50_000),
-    );
-    let pending = PendingBindScan {
-        qr_id: payload.qr_id.clone(),
-        archive_no: payload.archive_no.clone(),
-        site_sfid: payload.site_sfid.clone(),
-        status: payload.status.clone(),
-        expire_at: payload.expire_at,
-        scanned_at: Utc::now(),
-    };
-    insert_bounded_map(
-        &mut store.pending_bind_scan_by_qr_id,
-        payload.qr_id.clone(),
-        pending,
-        bounded_cache_limit("SFID_PENDING_SCAN_CACHE_MAX", 50_000),
-    );
-    insert_bounded_map(
-        &mut store.pending_status_by_archive_no,
-        payload.archive_no.clone(),
-        payload.status.clone(),
-        bounded_cache_limit("SFID_PENDING_STATUS_CACHE_MAX", 50_000),
-    );
-    append_audit_log_with_meta(
-        &mut store,
-        "BIND_SCAN",
-        &admin_ctx.admin_pubkey,
-        None,
-        Some(payload.archive_no.clone()),
-        request_id,
-        actor_ip,
-        "SUCCESS",
-        format!("qr_id={} site_sfid={}", payload.qr_id, payload.site_sfid),
-    );
+    let expire_at = now + chrono::Duration::seconds(BIND_CHALLENGE_TTL_SECONDS);
 
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data: BindScanOutput {
-            site_sfid: payload.site_sfid,
-            archive_no: payload.archive_no,
-            qr_id: payload.qr_id,
-            status: payload.status,
-            issued_at: payload.issued_at,
-            expire_at: payload.expire_at,
-        },
-    })
-    .into_response()
-}
-
-pub(crate) async fn admin_bind_confirm(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(input): Json<AdminBindInput>,
-) -> impl IntoResponse {
-    let admin_ctx = match require_admin_write(&state, &headers) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    let actor_ip = actor_ip_from_headers(&headers);
-    let req_id = request_id_from_headers(&headers);
-
-    if input.account_pubkey.trim().is_empty()
-        || input.archive_index.trim().is_empty()
-        || input.qr_id.trim().is_empty()
-    {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "invalid request params");
-    }
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    cleanup_pending_bind_scans(&mut store, Utc::now());
-    let Some(pending_scan) = store.pending_bind_scan_by_qr_id.get(&input.qr_id).cloned() else {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "bind qr_id not scanned or expired",
-        );
-    };
-    if pending_scan.archive_no != input.archive_index {
-        return api_error(StatusCode::CONFLICT, 3001, "archive_index mismatch with qr");
-    }
-    let Some(site_keys) = store.cpms_site_keys.get(&pending_scan.site_sfid).cloned() else {
-        return api_error(StatusCode::FORBIDDEN, 1004, "site_sfid keys not registered");
-    };
-    if !in_scope_cpms_site(&site_keys, admin_ctx.admin_province.as_deref()) {
-        return api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "cannot manage other province institutions",
-        );
-    }
-    if let Some(pending_request) = store.pending_by_pubkey.get(&input.account_pubkey) {
-        if !in_scope_pending(pending_request, admin_ctx.admin_province.as_deref()) {
-            return api_error(
-                StatusCode::FORBIDDEN,
-                1003,
-                "cannot manage other province citizens",
-            );
+    // 构造 WUMIN_SIGN_V1.0.0 签名请求
+    let sign_request = serde_json::json!({
+        "proto": "WUMIN_SIGN_V1.0.0",
+        "type": "sign_request",
+        "request_id": format!("bind-{}", challenge_id),
+        "account": "",
+        "pubkey": "",
+        "sig_alg": "sr25519",
+        "payload_hex": format!("0x{}", hex::encode(challenge_text.as_bytes())),
+        "issued_at": now.timestamp(),
+        "expires_at": expire_at.timestamp(),
+        "display": {
+            "action": "citizen_bind",
+            "action_label": "公民身份绑定",
+            "summary": "确认将您的公钥绑定到公民身份记录",
+            "fields": []
         }
-    }
-
-    if let Some(bound_pubkey) = store.pubkey_by_archive_index.get(&input.archive_index) {
-        if bound_pubkey != &input.account_pubkey {
-            return api_error(StatusCode::CONFLICT, 3001, "archive_index already bound");
-        }
-    }
-    if let Some(existing) = store.bindings_by_pubkey.get(&input.account_pubkey) {
-        if !in_scope(existing, admin_ctx.admin_province.as_deref()) {
-            return api_error(
-                StatusCode::FORBIDDEN,
-                1003,
-                "cannot manage other province citizens",
-            );
-        }
-        if existing.archive_index != input.archive_index {
-            return api_error(
-                StatusCode::CONFLICT,
-                3002,
-                "pubkey already bound to another archive_index",
-            );
-        }
-        let payload = BindingPayload {
-            kind: "bind",
-            version: "v1",
-            account_pubkey: existing.account_pubkey.clone(),
-            archive_index: existing.archive_index.clone(),
-            sfid_code: existing.sfid_code.clone(),
-            issued_at: existing.bound_at.timestamp(),
-        };
-        let proof = match make_signature_envelope(&state, &payload) {
-            Ok(v) => v,
-            Err(_) => {
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    "failed to sign binding proof",
-                )
-            }
-        };
-        return Json(ApiResponse {
-            code: 0,
-            message: "ok".to_string(),
-            data: AdminBindOutput {
-                account_pubkey: existing.account_pubkey.clone(),
-                archive_index: existing.archive_index.clone(),
-                sfid_code: existing.sfid_code.clone(),
-                proof,
-                status: "BOUND",
-                message: "already bound",
-            },
-        })
-        .into_response();
-    }
-    if let Err(resp) = ensure_binding_lock_db(&state, &input.account_pubkey, &input.archive_index) {
-        return resp;
-    }
-
-    // 中文注释：绑定阶段只允许消费管理员预先生成的 SFID，禁止再走绑定时兜底生成的旧口径。
-    let Some(sfid_code) = store
-        .generated_sfid_by_pubkey
-        .get(&input.account_pubkey)
-        .cloned()
-    else {
-        return api_error(
-            StatusCode::CONFLICT,
-            3011,
-            "sfid must be generated before binding",
-        );
-    };
-    let birth_date = parse_birth_date_from_archive_no(&input.archive_index);
-    let citizen_status = pending_scan.status.clone();
-    store.pending_bind_scan_by_qr_id.remove(&input.qr_id);
-    store
-        .pending_status_by_archive_no
-        .remove(&input.archive_index);
-    let pending_request = store.pending_by_pubkey.get(&input.account_pubkey).cloned();
-    let seq = pending_request.as_ref().map(|p| p.seq).unwrap_or_else(|| {
-        store.next_seq += 1;
-        store.next_seq
     });
-    let bound_at = Utc::now();
-    let binding_payload = BindingPayload {
-        kind: "bind",
-        version: "v1",
-        account_pubkey: input.account_pubkey.clone(),
-        archive_index: input.archive_index.clone(),
-        sfid_code: sfid_code.clone(),
-        issued_at: bound_at.timestamp(),
-    };
-    let proof = match make_signature_envelope(&state, &binding_payload) {
-        Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "failed to sign binding proof",
-            )
-        }
-    };
-    let runtime_bind_credential = match build_bind_credential(
-        &state,
-        input.account_pubkey.as_str(),
-        input.archive_index.as_str(),
-        Uuid::new_v4().to_string(),
-    ) {
-        Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "failed to sign runtime bind credential",
-            )
-        }
-    };
-    let runtime_bind_signer_pubkey = match state.public_key_hex.read() {
-        Ok(v) => v.clone(),
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "active signer read lock poisoned",
-            )
-        }
-    };
-    let bound_by = admin_ctx.admin_pubkey.clone();
-    let client_request_id = pending_request
-        .as_ref()
-        .and_then(|p| p.client_request_id.clone());
-    let callback_url = pending_request
-        .as_ref()
-        .and_then(|p| p.callback_url.clone())
-        .or_else(default_bind_callback_url);
-    let binding = BindingRecord {
-        seq,
-        account_pubkey: input.account_pubkey.clone(),
-        archive_index: input.archive_index.clone(),
-        birth_date,
-        citizen_status,
-        sfid_code: sfid_code.clone(),
-        sfid_signature: proof.signature_hex.clone(),
-        runtime_bind_binding_id: Some(runtime_bind_credential.binding_id),
-        runtime_bind_bind_nonce: Some(runtime_bind_credential.bind_nonce),
-        runtime_bind_signature: Some(runtime_bind_credential.signature),
-        runtime_bind_key_id: Some(runtime_bind_credential.meta.key_id),
-        runtime_bind_key_version: Some(runtime_bind_credential.meta.key_version),
-        runtime_bind_alg: Some(runtime_bind_credential.meta.alg),
-        runtime_bind_signer_pubkey: Some(runtime_bind_signer_pubkey),
-        bound_at,
-        bound_by,
-        admin_province: admin_ctx.admin_province.clone(),
-        client_request_id: client_request_id.clone(),
-    };
+    let sign_request_str = serde_json::to_string(&sign_request).unwrap_or_default();
 
-    store
-        .pubkey_by_archive_index
-        .insert(input.archive_index.clone(), input.account_pubkey.clone());
-    store
-        .bindings_by_pubkey
-        .insert(input.account_pubkey.clone(), binding);
-    store.pending_by_pubkey.remove(&input.account_pubkey);
-    store.metrics.bind_confirms_total += 1;
-    let callback_id = Uuid::new_v4().to_string();
-    let callback_signable = BindCallbackSignablePayload {
-        callback_id: callback_id.clone(),
-        event: "BIND_CONFIRMED".to_string(),
-        account_pubkey: input.account_pubkey.clone(),
-        archive_index: input.archive_index.clone(),
-        sfid_code: sfid_code.clone(),
-        status: "BOUND".to_string(),
-        bound_at: bound_at.timestamp(),
-        proof: proof.clone(),
-        client_request_id: client_request_id.clone(),
+    let mut store = match store_write_or_500(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
     };
-    let callback_payload = BindCallbackPayload {
-        callback_id: callback_id.clone(),
-        event: "BIND_CONFIRMED".to_string(),
-        account_pubkey: input.account_pubkey.clone(),
-        archive_index: input.archive_index.clone(),
-        sfid_code: sfid_code.clone(),
-        status: "BOUND".to_string(),
-        bound_at: bound_at.timestamp(),
-        proof: proof.clone(),
-        client_request_id: client_request_id.clone(),
-        callback_attestation: match make_signature_envelope(&state, &callback_signable) {
-            Ok(v) => v,
-            Err(_) => {
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    "failed to sign callback attestation",
-                )
-            }
+    store.citizen_bind_challenges.retain(|_, c| c.expire_at > Utc::now());
+    store.citizen_bind_challenges.insert(
+        challenge_id.clone(),
+        CitizenBindChallenge {
+            challenge_id: challenge_id.clone(),
+            challenge_text: challenge_text.clone(),
+            account_pubkey: String::new(), // 签名时才确定
+            expire_at,
+            created_at: now,
         },
-    };
-    let reward = RewardStateRecord {
-        account_pubkey: input.account_pubkey.clone(),
-        archive_index: input.archive_index.clone(),
-        callback_id: callback_payload.callback_id.clone(),
-        reward_status: RewardStatus::Pending,
-        retry_count: 0,
-        max_retries: 5,
-        reward_tx_hash: None,
-        last_error: None,
-        next_retry_at: None,
-        updated_at: Utc::now(),
-        created_at: Utc::now(),
-    };
-    match persist_reward_state_db(&state, &reward, None) {
-        Ok(true) => {
-            store
-                .reward_state_by_pubkey
-                .insert(input.account_pubkey.clone(), reward.clone());
-        }
-        Ok(false) => {
-            warn!(
-                account_pubkey = input.account_pubkey,
-                callback_id = reward.callback_id,
-                "pending reward state persistence was not applied"
-            );
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1502,
-                "reward state persistence failed",
-            );
-        }
-        Err(err) => {
-            warn!(
-                error = %err,
-                account_pubkey = input.account_pubkey,
-                callback_id = reward.callback_id,
-                "failed to persist pending reward state after bind confirm"
-            );
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1502,
-                "reward state persistence failed",
-            );
-        }
-    }
-    invalidate_vote_cache_for_pubkey(&mut store, &input.account_pubkey);
-    enqueue_bind_callback_job(&mut store, callback_url, callback_payload);
-    store.generated_sfid_by_pubkey.remove(&input.account_pubkey);
-    append_audit_log(
-        &mut store,
-        "BIND_CONFIRM",
-        &admin_ctx.admin_pubkey,
-        Some(input.account_pubkey.clone()),
-        Some(input.archive_index.clone()),
-        "SUCCESS",
-        format!(
-            "binding activated (qr_id={}, site_sfid={})",
-            pending_scan.qr_id, pending_scan.site_sfid
-        ),
-    );
-    append_audit_log_with_meta(
-        &mut store,
-        "BIND_CONFIRM_META",
-        &admin_ctx.admin_pubkey,
-        Some(input.account_pubkey.clone()),
-        Some(input.archive_index.clone()),
-        req_id,
-        actor_ip,
-        "SUCCESS",
-        "bind confirm metadata".to_string(),
     );
 
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: AdminBindOutput {
-            account_pubkey: input.account_pubkey,
-            archive_index: input.archive_index,
-            sfid_code,
-            proof,
-            status: "BOUND",
-            message: "bind success",
+        data: CitizenBindChallengeOutput {
+            challenge_id,
+            challenge_text,
+            sign_request: sign_request_str,
+            expire_at: expire_at.timestamp(),
         },
     })
     .into_response()
 }
 
-pub(crate) async fn admin_unbind(
+/// 绑定公民身份。
+///
+/// 两种模式：
+/// - `bind_archive`：有公钥的记录，扫 QR4 获取档案号，生成 SFID 码
+/// - `bind_pubkey`：有档案号的记录（解绑后），绑定新公钥
+pub(crate) async fn citizen_bind(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(input): Json<AdminUnbindInput>,
+    Json(input): Json<CitizenBindInput>,
 ) -> impl IntoResponse {
-    let actor_ip = actor_ip_from_headers(&headers);
-    let request_id = request_id_from_headers(&headers);
-    let admin_ctx = match require_admin_write(&state, &headers) {
+    let ctx = match require_admin_write(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    if input.account_pubkey.trim().is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "account_pubkey is required");
+    if input.user_address.trim().is_empty()
+        || input.challenge_id.trim().is_empty()
+        || input.signature.trim().is_empty()
+    {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "user_address, challenge_id, signature are required");
     }
+
+    // 从 SS58 地址解出公钥
+    let account_pubkey_hex = match ss58_to_pubkey_hex(input.user_address.trim()) {
+        Some(v) => v,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid SS58 user_address"),
+    };
+
+    // 验证 challenge
+    let challenge = {
+        let mut store = match store_write_or_500(&state) {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
+        let Some(challenge) = store.citizen_bind_challenges.remove(input.challenge_id.trim()) else {
+            return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found or expired");
+        };
+        if Utc::now() > challenge.expire_at {
+            return api_error(StatusCode::UNAUTHORIZED, 1007, "challenge expired");
+        }
+        challenge
+    };
+
+    // 验证公钥签名（WUMIN_SIGN_V1.0.0 签名结果）
+    let pubkey_bytes = match crate::login::parse_sr25519_pubkey_bytes(&account_pubkey_hex) {
+        Some(v) => v,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid account_pubkey derived from address"),
+    };
+    let sig_bytes = match hex::decode(input.signature.trim().trim_start_matches("0x")) {
+        Ok(v) => v,
+        Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid signature hex"),
+    };
+    if !verify_citizen_bind_signature(&pubkey_bytes, &challenge.challenge_text, &sig_bytes) {
+        return api_error(StatusCode::UNAUTHORIZED, 2004, "signature verify failed");
+    }
+
+    match input.mode.as_str() {
+        "bind_archive" => {
+            // 有公钥，绑定档案号 + 生成 SFID 码
+            let qr4_str = match input.qr4_payload.as_deref() {
+                Some(v) if !v.trim().is_empty() => v.trim(),
+                _ => return api_error(StatusCode::BAD_REQUEST, 1001, "qr4_payload is required for bind_archive"),
+            };
+
+            // 解析 QR4
+            let qr4: CpmsArchiveQrPayload = match serde_json::from_str(qr4_str) {
+                Ok(v) => v,
+                Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid QR4 payload"),
+            };
+            if qr4.qr_type != "CPMS_ARCHIVE_QR" {
+                return api_error(StatusCode::BAD_REQUEST, 1001, "qr_type must be CPMS_ARCHIVE_QR");
+            }
+
+            // 验证 anon_cert + archive_sig（复用 archive_import 的逻辑）
+            let sfid_sig_bytes = match hex::decode(qr4.anon_cert.sfid_sig.trim().trim_start_matches("0x")) {
+                Ok(v) => v,
+                Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "anon_cert.sfid_sig hex decode failed"),
+            };
+            let msg_randomizer = qr4.anon_cert.msg_randomizer.as_deref().and_then(|r| {
+                hex::decode(r.trim().trim_start_matches("0x")).ok()
+            });
+            let cert_valid = match key_admins::rsa_blind::verify_anon_cert(
+                &qr4.anon_cert.province_code,
+                &qr4.anon_cert.anon_pubkey,
+                &sfid_sig_bytes,
+                msg_randomizer.as_deref(),
+            ) {
+                Ok(v) => v,
+                Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &format!("verify error: {e}")),
+            };
+            if !cert_valid {
+                return api_error(StatusCode::UNAUTHORIZED, 2004, "anon_cert.sfid_sig invalid");
+            }
+            if qr4.anon_cert.province_code != qr4.province_code {
+                return api_error(StatusCode::BAD_REQUEST, 1001, "province_code mismatch");
+            }
+            // 验 archive_sig
+            let archive_sign_source = format!(
+                "cpms-archive-qr-v1|{}|{}|{}|{}",
+                qr4.province_code, qr4.archive_no, qr4.citizen_status, qr4.voting_eligible
+            );
+            let anon_pk = match crate::login::parse_sr25519_pubkey_bytes(&qr4.anon_cert.anon_pubkey) {
+                Some(v) => v,
+                None => return api_error(StatusCode::BAD_REQUEST, 1001, "anon_pubkey format invalid"),
+            };
+            let archive_sig = match hex::decode(qr4.archive_sig.trim().trim_start_matches("0x")) {
+                Ok(v) => v,
+                Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "archive_sig hex decode failed"),
+            };
+            if !crate::super_admins::institutions::verify_sr25519_signature(&anon_pk, &archive_sign_source, &archive_sig) {
+                return api_error(StatusCode::UNAUTHORIZED, 2004, "archive_sig invalid");
+            }
+
+            let province_code = qr4.anon_cert.province_code.clone();
+            let archive_no = qr4.archive_no.clone();
+
+            // 生成 SFID 码
+            let sfid_result = match crate::sfid::generate_sfid_code(crate::sfid::GenerateSfidInput {
+                account_pubkey: account_pubkey_hex.as_str(),
+                a3: "GMR",
+                p1: "1",
+                province: &crate::sfid::province::province_name_by_code(&province_code).unwrap_or(""),
+                city: "省辖市",
+                institution: "ZG",
+            }) {
+                Ok(v) => v,
+                Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
+            };
+
+            // 写入
+            let mut store = match store_write_or_500(&state) {
+                Ok(v) => v,
+                Err(resp) => return resp,
+            };
+            // 检查唯一性
+            let existing_cid = store.citizen_id_by_pubkey.get(account_pubkey_hex.as_str()).copied();
+            if let Some(cid) = existing_cid {
+                // 已有记录，检查是否已绑定档案
+                let already_bound = store.citizen_records.get(&cid).and_then(|r| r.archive_no.as_ref()).is_some();
+                if already_bound {
+                    return api_error(StatusCode::CONFLICT, 1005, "pubkey already bound to archive");
+                }
+                // 更新记录
+                if let Some(record) = store.citizen_records.get_mut(&cid) {
+                    record.archive_no = Some(archive_no.clone());
+                    record.sfid_code = Some(sfid_result.clone());
+                    record.province_code = Some(province_code.clone());
+                    record.bound_at = Some(Utc::now());
+                    record.bound_by = Some(ctx.admin_pubkey.clone());
+                }
+                store.citizen_id_by_archive_no.insert(archive_no, cid);
+                let record = &store.citizen_records[&cid];
+                let output = CitizenBindOutput {
+                    id: cid,
+                    account_pubkey: record.account_pubkey.clone(),
+                    archive_no: record.archive_no.clone(),
+                    sfid_code: record.sfid_code.clone(),
+                    province_code: record.province_code.clone(),
+                    status: record.status(),
+                };
+                drop(store);
+                persist_runtime_state(&state);
+                return Json(ApiResponse { code: 0, message: "ok".to_string(), data: output }).into_response();
+            }
+            if store.citizen_id_by_archive_no.contains_key(&archive_no) {
+                return api_error(StatusCode::CONFLICT, 1005, "archive_no already bound");
+            }
+            let cid = store.next_citizen_id;
+            store.next_citizen_id += 1;
+            let record = CitizenRecord {
+                id: cid,
+                account_pubkey: Some(account_pubkey_hex.as_str().to_string()),
+                archive_no: Some(archive_no.clone()),
+                sfid_code: Some(sfid_result.clone()),
+                sfid_signature: None,
+                province_code: Some(province_code.clone()),
+                bound_at: Some(Utc::now()),
+                bound_by: Some(ctx.admin_pubkey.clone()),
+                created_at: Utc::now(),
+            };
+            let output = CitizenBindOutput {
+                id: cid,
+                account_pubkey: record.account_pubkey.clone(),
+                archive_no: record.archive_no.clone(),
+                sfid_code: record.sfid_code.clone(),
+                province_code: record.province_code.clone(),
+                status: record.status(),
+            };
+            store.citizen_records.insert(cid, record);
+            store.citizen_id_by_pubkey.insert(account_pubkey_hex.as_str().to_string(), cid);
+            store.citizen_id_by_archive_no.insert(archive_no, cid);
+            drop(store);
+            persist_runtime_state(&state);
+            Json(ApiResponse { code: 0, message: "ok".to_string(), data: output }).into_response()
+        }
+        "bind_pubkey" => {
+            // 有档案号的记录，绑定新公钥
+            let citizen_id = match input.citizen_id {
+                Some(v) => v,
+                None => return api_error(StatusCode::BAD_REQUEST, 1001, "citizen_id is required for bind_pubkey"),
+            };
+            let mut store = match store_write_or_500(&state) {
+                Ok(v) => v,
+                Err(resp) => return resp,
+            };
+            // 检查公钥是否已被占用
+            if store.citizen_id_by_pubkey.contains_key(account_pubkey_hex.as_str()) {
+                return api_error(StatusCode::CONFLICT, 1005, "pubkey already bound to another record");
+            }
+            let record = match store.citizen_records.get_mut(&citizen_id) {
+                Some(v) => v,
+                None => return api_error(StatusCode::NOT_FOUND, 1004, "citizen record not found"),
+            };
+            if record.account_pubkey.is_some() {
+                return api_error(StatusCode::CONFLICT, 1005, "record already has a pubkey, unbind first");
+            }
+            record.account_pubkey = Some(account_pubkey_hex.as_str().to_string());
+            record.bound_at = Some(Utc::now());
+            record.bound_by = Some(ctx.admin_pubkey.clone());
+            let output = CitizenBindOutput {
+                id: citizen_id,
+                account_pubkey: record.account_pubkey.clone(),
+                archive_no: record.archive_no.clone(),
+                sfid_code: record.sfid_code.clone(),
+                province_code: record.province_code.clone(),
+                status: record.status(),
+            };
+            store.citizen_id_by_pubkey.insert(account_pubkey_hex.as_str().to_string(), citizen_id);
+            drop(store);
+            persist_runtime_state(&state);
+            Json(ApiResponse { code: 0, message: "ok".to_string(), data: output }).into_response()
+        }
+        _ => api_error(StatusCode::BAD_REQUEST, 1001, "mode must be bind_archive or bind_pubkey"),
+    }
+}
+
+/// 解绑：清除公钥，保留档案号+SFID码。需要公钥持有者签名确认。
+pub(crate) async fn citizen_unbind(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<CitizenUnbindInput>,
+) -> impl IntoResponse {
+    let _ctx = match require_admin_write(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    if input.challenge_id.trim().is_empty() || input.signature.trim().is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "challenge_id and signature are required");
+    }
+
+    // 验证 challenge
+    let challenge = {
+        let mut store = match store_write_or_500(&state) {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
+        let Some(challenge) = store.citizen_bind_challenges.remove(input.challenge_id.trim()) else {
+            return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found or expired");
+        };
+        if Utc::now() > challenge.expire_at {
+            return api_error(StatusCode::UNAUTHORIZED, 1007, "challenge expired");
+        }
+        challenge
+    };
+
+    // 获取已绑定的公钥并验签
     let mut store = match store_write_or_500(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let Some(binding) = store.bindings_by_pubkey.get(&input.account_pubkey).cloned() else {
-        return api_error(StatusCode::NOT_FOUND, 3005, "binding not found");
-    };
-    if !in_scope(&binding, admin_ctx.admin_province.as_deref()) {
-        return api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "cannot manage other province citizens",
-        );
+    if !store.citizen_records.contains_key(&input.citizen_id) {
+        return api_error(StatusCode::NOT_FOUND, 1004, "citizen record not found");
     }
-    store.bindings_by_pubkey.remove(&input.account_pubkey);
-    store.pubkey_by_archive_index.remove(&binding.archive_index);
-    store.pending_by_pubkey.remove(&input.account_pubkey);
-    store.reward_state_by_pubkey.remove(&input.account_pubkey);
-    invalidate_vote_cache_for_pubkey(&mut store, &input.account_pubkey);
-    release_binding_lock_db(&state, &input.account_pubkey);
-    remove_reward_state_db(&state, &input.account_pubkey);
-    append_audit_log(
-        &mut store,
-        "BIND_UNBIND",
-        &admin_ctx.admin_pubkey,
-        Some(input.account_pubkey.clone()),
-        Some(binding.archive_index),
-        "SUCCESS",
-        "binding removed".to_string(),
-    );
-    append_audit_log_with_meta(
-        &mut store,
-        "BIND_UNBIND_META",
-        &admin_ctx.admin_pubkey,
-        Some(input.account_pubkey),
-        None,
-        request_id,
-        actor_ip,
-        "SUCCESS",
-        "unbind metadata".to_string(),
-    );
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data: "unbind success and citizen removed",
-    })
-    .into_response()
+    let old_pubkey = store.citizen_records.get(&input.citizen_id)
+        .and_then(|r| r.account_pubkey.clone());
+    let old_pubkey = match old_pubkey {
+        Some(pk) if !pk.is_empty() => pk,
+        _ => return api_error(StatusCode::CONFLICT, 1005, "record has no pubkey to unbind"),
+    };
+
+    // 验证公钥签名
+    let pubkey_bytes = match crate::login::parse_sr25519_pubkey_bytes(&old_pubkey) {
+        Some(v) => v,
+        None => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "stored pubkey format invalid"),
+    };
+    let sig_bytes = match hex::decode(input.signature.trim().trim_start_matches("0x")) {
+        Ok(v) => v,
+        Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid signature hex"),
+    };
+    if !verify_citizen_bind_signature(&pubkey_bytes, &challenge.challenge_text, &sig_bytes) {
+        return api_error(StatusCode::UNAUTHORIZED, 2004, "unbind signature verify failed");
+    }
+
+    // 清除公钥
+    store.citizen_id_by_pubkey.remove(&old_pubkey);
+    if let Some(record) = store.citizen_records.get_mut(&input.citizen_id) {
+        record.account_pubkey = None;
+    }
+    let record = &store.citizen_records[&input.citizen_id];
+    let output = CitizenBindOutput {
+        id: input.citizen_id,
+        account_pubkey: record.account_pubkey.clone(),
+        archive_no: record.archive_no.clone(),
+        sfid_code: record.sfid_code.clone(),
+        province_code: record.province_code.clone(),
+        status: record.status(),
+    };
+    drop(store);
+    persist_runtime_state(&state);
+    Json(ApiResponse { code: 0, message: "ok".to_string(), data: output }).into_response()
+}
+
+/// 验证公民绑定签名（sr25519，substrate context）。
+fn verify_citizen_bind_signature(pubkey_bytes: &[u8; 32], message: &str, signature: &[u8]) -> bool {
+    use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
+    let pk = match Sr25519PublicKey::from_bytes(pubkey_bytes) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let sig = match Sr25519Signature::from_bytes(signature) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let ctx = signing_context(b"substrate");
+    pk.verify(ctx.bytes(message.as_bytes()), &sig).is_ok()
+}
+
+/// 从 SS58 地址解出 hex 格式公钥。
+fn ss58_to_pubkey_hex(address: &str) -> Option<String> {
+    let decoded = bs58::decode(address.trim()).into_vec().ok()?;
+    // SS58 格式：1 byte prefix + 32 bytes pubkey + 2 bytes checksum (最少 35 字节)
+    if decoded.len() < 35 {
+        return None;
+    }
+    let pubkey = &decoded[1..33];
+    Some(format!("0x{}", hex::encode(pubkey)))
 }
