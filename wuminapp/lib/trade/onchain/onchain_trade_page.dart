@@ -18,6 +18,7 @@ import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/user/user.dart' show ContactBookPage;
 import 'package:wuminapp_mobile/user/user_service.dart' show UserContact;
 import 'package:wuminapp_mobile/trade/duoqian/duoqian_trade_page.dart';
+import 'package:wuminapp_mobile/trade/offchain/offchain_pay_page.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
 
@@ -151,6 +152,40 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         ),
       ),
     );
+  }
+
+  /// 扫码支付：扫商户收款码，根据 bank 字段分流。
+  Future<void> _openOffchainPay() async {
+    final result = await Navigator.of(context).push<QrScanTransferResult>(
+      MaterialPageRoute(
+          builder: (_) => const QrScanPage(mode: QrScanMode.transfer)),
+    );
+    if (result == null || !mounted) return;
+
+    if (result.bank != null && result.bank!.isNotEmpty) {
+      // 有 bank 字段 → 走链下快捷支付
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => OffchainPayPage(
+            toAddress: result.toAddress,
+            amount: result.amount,
+            bank: result.bank!,
+            memo: result.memo,
+          ),
+        ),
+      );
+    } else {
+      // 无 bank 字段 → 填入链上转账表单
+      setState(() {
+        _toController.text = result.toAddress;
+        if (result.amount != null && result.amount!.isNotEmpty) {
+          _amountController.text = result.amount!;
+        }
+        if (result.symbol != null && result.symbol!.isNotEmpty) {
+          _selectedSymbol = result.symbol!;
+        }
+      });
+    }
   }
 
   Future<void> _scanToAddress() async {
@@ -635,6 +670,56 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                                 const SizedBox(width: 12),
                                 const Text(
                                   '多签交易',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                                const Spacer(),
+                                const Icon(Icons.chevron_right,
+                                    size: 20, color: AppTheme.textTertiary),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // 扫码支付入口（链下快捷支付）
+                    Container(
+                      decoration: AppTheme.cardDecoration(),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _openOffchainPay,
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primary.withAlpha(20),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Center(
+                                    child: SvgPicture.asset(
+                                      'assets/icons/scan-line.svg',
+                                      width: 18,
+                                      height: 18,
+                                      colorFilter: const ColorFilter.mode(
+                                        AppTheme.primary,
+                                        BlendMode.srcIn,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  '扫码支付',
                                   style: TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w600,

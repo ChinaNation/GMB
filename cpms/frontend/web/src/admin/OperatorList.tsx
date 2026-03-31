@@ -57,7 +57,7 @@ export default function OperatorList() {
       </div>
 
       {showAdd && (
-        <div style={{ background: '#F7FAFC', padding: 16, borderRadius: 'var(--radius)', marginBottom: 16 }}>
+        <div style={{ background: '#f0fdfa', padding: 16, borderRadius: 'var(--radius)', marginBottom: 16 }}>
           {error && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
           <div style={{ display: 'flex', gap: 8 }}>
             <input className="form-input" placeholder="操作员 Sr25519 公钥" value={newPubkey} onChange={e => setNewPubkey(e.target.value)} />

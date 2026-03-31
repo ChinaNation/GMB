@@ -5,6 +5,7 @@ import type { ColumnsType } from 'antd/es/table';
 import type {
   AdminAuth,
   AdminQrChallengeResult,
+  CitizenBindChallengeResult,
   CitizenRow,
   CpmsSiteRow,
   GenerateCpmsInstitutionSfidResult,
@@ -17,8 +18,10 @@ import type {
 } from '../api/client';
 import {
   checkAdminAuth,
+  citizenBind,
+  citizenBindChallenge,
+  citizenUnbind,
   completeAdminQrLogin,
-  confirmBind,
   createKeyringRotateChallenge,
   createOperator,
   createAdminQrChallenge,
@@ -26,7 +29,6 @@ import {
   deleteOperator,
   disableCpmsKeys,
   generateCpmsInstitutionSfid,
-  generateSfid,
   getAttestorKeyring,
   getSfidMeta,
   listCitizens,
@@ -38,11 +40,8 @@ import {
   verifyKeyringRotateSignature,
   queryAdminQrLoginResult,
   replaceSuperAdmin,
-  registerCpmsKeysScan,
-  scanBindQr,
+  registerCpms,
   scanCpmsStatusQr,
-  unbind,
-  updateCpmsKeys,
   updateOperator,
   updateOperatorStatus
 } from '../api/client';
@@ -283,12 +282,25 @@ export default function App() {
   const [bootstrapping, setBootstrapping] = useState(true);
   const [pendingQrLogin, setPendingQrLogin] = useState<AdminQrChallengeResult | null>(null);
   const [challengeLoading, setChallengeLoading] = useState(false);
-  const [bindScanLoading, setBindScanLoading] = useState(false);
-  const [bindScanResult, setBindScanResult] = useState<{
-    archive_no: string;
-    site_sfid: string;
-    qr_id: string;
-  } | null>(null);
+  const [bindMode, setBindMode] = useState<'bind_archive' | 'bind_pubkey'>('bind_archive');
+  const [bindTargetRecord, setBindTargetRecord] = useState<CitizenRow | null>(null);
+  const [bindChallenge, setBindChallenge] = useState<CitizenBindChallengeResult | null>(null);
+  const [bindChallengeLoading, setBindChallengeLoading] = useState(false);
+  const [bindQr4Payload, setBindQr4Payload] = useState<string | null>(null);
+  const [bindQr4ScanLoading, setBindQr4ScanLoading] = useState(false);
+  const [bindSignature, setBindSignature] = useState<string | null>(null);
+  const [bindStep, setBindStep] = useState<'scan_qr4' | 'sign_challenge' | 'scan_signature' | 'input_pubkey' | 'done'>('scan_qr4');
+  const [bindNewPubkey, setBindNewPubkey] = useState('');
+  const [unbindModalOpen, setUnbindModalOpen] = useState(false);
+  const [unbindTarget, setUnbindTarget] = useState<CitizenRow | null>(null);
+  const [unbindChallenge, setUnbindChallenge] = useState<CitizenBindChallengeResult | null>(null);
+  const [unbindChallengeLoading, setUnbindChallengeLoading] = useState(false);
+  const [unbindScannerActive, setUnbindScannerActive] = useState(false);
+  const [unbindScannerReady, setUnbindScannerReady] = useState(false);
+  const [unbindSubmitting, setUnbindSubmitting] = useState(false);
+  const [unbindStep, setUnbindStep] = useState<'confirm' | 'sign_challenge' | 'scan_signature'>('confirm');
+  const unbindVideoRef = useRef<HTMLVideoElement | null>(null);
+  const unbindScanStreamRef = useRef<MediaStream | null>(null);
   const [bindScannerActive, setBindScannerActive] = useState(false);
   const [bindScannerReady, setBindScannerReady] = useState(false);
   const [scannerActive, setScannerActive] = useState(false);
@@ -318,15 +330,11 @@ export default function App() {
   const [keyringLoading, setKeyringLoading] = useState(false);
   const [keyringActionLoading, setKeyringActionLoading] = useState(false);
   const [keyringChallenge, setKeyringChallenge] = useState<KeyringRotateChallengeResult | null>(null);
-  const bindRequiresSfidMessage = '请先使用SFID码生成工具生成SFID码，再执行绑定';
   const [keyringSignedPayload, setKeyringSignedPayload] = useState<KeyringSignedPayload | null>(null);
   const [keyringScannerActive, setKeyringScannerActive] = useState(false);
   const [keyringScannerReady, setKeyringScannerReady] = useState(false);
   const [keyringScanSubmitting, setKeyringScanSubmitting] = useState(false);
   const [keyringCommitLoading, setKeyringCommitLoading] = useState(false);
-  const [sfidToolOpen, setSfidToolOpen] = useState(false);
-  const [sfidToolTargetPubkey, setSfidToolTargetPubkey] = useState('');
-  const [sfidToolLoading, setSfidToolLoading] = useState(false);
   const [sfidMeta, setSfidMeta] = useState<SfidMetaResult | null>(null);
   const [sfidCities, setSfidCities] = useState<SfidCityItem[]>([]);
   const [sfidCitiesLoading, setSfidCitiesLoading] = useState(false);
@@ -338,14 +346,6 @@ export default function App() {
   }>();
   const [replaceSuperForm] = Form.useForm<{ province: string; admin_pubkey: string }>();
   const [keyringForm] = Form.useForm<{ new_backup_pubkey: string }>();
-  const [sfidToolForm] = Form.useForm<{
-    a3: string;
-    p1: string;
-    province: string;
-    city: string;
-    institution: string;
-  }>();
-  const sfidToolA3 = Form.useWatch('a3', sfidToolForm);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scanStreamRef = useRef<MediaStream | null>(null);
   const bindVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -707,6 +707,10 @@ export default function App() {
     setCpmsSites([]);
     setOpScanOpen(false);
     stopOpScanner();
+    setUnbindModalOpen(false);
+    setUnbindTarget(null);
+    setUnbindChallenge(null);
+    stopUnbindScanner();
     setKeyringState(null);
     setKeyringChallenge(null);
     setKeyringSignedPayload(null);
@@ -937,8 +941,8 @@ export default function App() {
     setOpScanSubmitting(true);
     try {
       if (opScanType === 'register') {
-        const result = await registerCpmsKeysScan(auth, { qr_payload: raw });
-        message.success(`机构 ${result.site_sfid} 公钥登记成功`);
+        const result = await registerCpms(auth, { qr_payload: raw });
+        message.success('机构公钥登记成功');
         await refreshCpmsSites(auth);
       } else {
         const result = await scanCpmsStatusQr(auth, { qr_payload: raw });
@@ -955,109 +959,6 @@ export default function App() {
     }
   };
 
-  const onUpdateCpmsSiteKeys = (row: CpmsSiteRow) => {
-    if (!auth) return;
-    let pubkey1 = row.pubkey_1;
-    let pubkey2 = row.pubkey_2;
-    let pubkey3 = row.pubkey_3;
-    Modal.confirm({
-      title: `更新机构公钥 (${row.site_sfid})`,
-      width: 720,
-      content: (
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Input
-            defaultValue={row.pubkey_1}
-            placeholder="公钥1"
-            onChange={(event) => {
-              pubkey1 = event.target.value;
-            }}
-          />
-          <Input
-            defaultValue={row.pubkey_2}
-            placeholder="公钥2"
-            onChange={(event) => {
-              pubkey2 = event.target.value;
-            }}
-          />
-          <Input
-            defaultValue={row.pubkey_3}
-            placeholder="公钥3"
-            onChange={(event) => {
-              pubkey3 = event.target.value;
-            }}
-          />
-        </Space>
-      ),
-      okText: '确认更新',
-      cancelText: '取消',
-      onOk: async () => {
-        const payload = {
-          pubkey_1: pubkey1.trim(),
-          pubkey_2: pubkey2.trim(),
-          pubkey_3: pubkey3.trim()
-        };
-        if (!payload.pubkey_1 || !payload.pubkey_2 || !payload.pubkey_3) {
-          message.error('三个公钥都必须填写');
-          throw new Error('cpms pubkeys required');
-        }
-        setCpmsSitesLoading(true);
-        try {
-          await updateCpmsKeys(auth, row.site_sfid, payload);
-          message.success(`机构 ${row.site_sfid} 公钥已更新`);
-          await refreshCpmsSites(auth);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : '更新机构公钥失败';
-          message.error(msg);
-          throw err;
-        } finally {
-          setCpmsSitesLoading(false);
-        }
-      }
-    });
-  };
-
-  const onUpdateCpmsSiteKey = (row: CpmsSiteRow, keySlot: 1 | 2 | 3) => {
-    if (!auth) return;
-    let nextValue =
-      keySlot === 1 ? row.pubkey_1 : keySlot === 2 ? row.pubkey_2 : row.pubkey_3;
-    Modal.confirm({
-      title: `更新公钥${keySlot} (${row.site_sfid})`,
-      content: (
-        <Input
-          defaultValue={nextValue}
-          placeholder={`请输入新的公钥${keySlot}`}
-          onChange={(event) => {
-            nextValue = event.target.value;
-          }}
-        />
-      ),
-      okText: '确认更新',
-      cancelText: '取消',
-      onOk: async () => {
-        const value = nextValue.trim();
-        if (!value) {
-          message.error(`公钥${keySlot}不能为空`);
-          throw new Error('cpms pubkey required');
-        }
-        setCpmsSitesLoading(true);
-        try {
-          await updateCpmsKeys(auth, row.site_sfid, {
-            pubkey_1: keySlot === 1 ? value : row.pubkey_1,
-            pubkey_2: keySlot === 2 ? value : row.pubkey_2,
-            pubkey_3: keySlot === 3 ? value : row.pubkey_3
-          });
-          message.success(`机构 ${row.site_sfid} 公钥${keySlot}已更新`);
-          await refreshCpmsSites(auth);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : '更新机构公钥失败';
-          message.error(msg);
-          throw err;
-        } finally {
-          setCpmsSitesLoading(false);
-        }
-      }
-    });
-  };
 
   const onDisableCpmsSite = (row: CpmsSiteRow) => {
     if (!auth) return;
@@ -1202,76 +1103,6 @@ export default function App() {
     }
   };
 
-  const openSfidTool = async (accountPubkey: string) => {
-    setSfidToolTargetPubkey(accountPubkey);
-    if (auth) {
-      try {
-        const meta = await getSfidMeta(auth);
-        setSfidMeta(meta);
-        const provinceDefault = meta.scoped_province || meta.provinces[0]?.name || '';
-        const initialA3 = meta.a3_options[0]?.value || 'GFR';
-        sfidToolForm.setFieldsValue({
-          a3: initialA3,
-          p1: defaultP1ByA3(initialA3),
-          province: provinceDefault,
-          city: '',
-          institution: defaultInstitutionByA3(initialA3)
-        });
-        if (provinceDefault) {
-          const rows = await loadSfidCities(provinceDefault);
-          if (usesReservedProvinceCityByA3(initialA3)) {
-            sfidToolForm.setFieldsValue({ city: reservedProvinceCityName(rows) });
-          }
-        } else {
-          setSfidCities([]);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : '加载SFID工具配置失败';
-        message.error(msg);
-        return;
-      }
-    }
-    setSfidToolOpen(true);
-  };
-
-  const onGenerateSfidCode = (values: {
-    a3: string;
-    p1: string;
-    province: string;
-    city: string;
-    institution: string;
-  }) => {
-    if (!sfidToolTargetPubkey) return;
-    if (!auth) return;
-    setSfidToolLoading(true);
-    generateSfid(auth, {
-      account_pubkey: sfidToolTargetPubkey,
-      a3: values.a3,
-      p1: values.p1,
-      province: values.province,
-      city: values.city,
-      institution: values.institution
-    })
-      .then(async (res) => {
-        message.success(`SFID码已生成：${res.sfid_code}`);
-        setSfidToolOpen(false);
-        await refreshList(auth, undefined, true);
-      })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : 'SFID码生成失败';
-        message.error(msg);
-      })
-      .finally(() => setSfidToolLoading(false));
-  };
-
-  const sfidInstitutionOptions = (sfidMeta?.institution_options || [])
-    .filter((o) => allowedInstitutionByA3(sfidToolA3 || '').includes(o.value))
-    .map((o) => ({
-      value: o.value,
-      label: `${o.label} (${o.value})`
-    }));
-  const institutionLocked = sfidInstitutionOptions.length <= 1;
-  const cityLockedByA3 = usesReservedProvinceCityByA3(sfidToolA3 || '');
 
   const onDeleteOperator = (row: OperatorRow) => {
     if (!auth) return;
@@ -1313,13 +1144,16 @@ export default function App() {
     }
   };
 
-  const openBindModal = (pubkey: string) => {
-    if (!rows.find((row) => row.account_pubkey === pubkey)?.sfid_code) {
-      message.error(bindRequiresSfidMessage);
-      return;
-    }
-    setBindTargetPubkey(pubkey);
-    setBindScanResult(null);
+  const openBindModal = (record: CitizenRow) => {
+    const mode = record.status === 'UNLINKED' ? 'bind_pubkey' : 'bind_archive';
+    setBindTargetPubkey(record.account_pubkey || '');
+    setBindTargetRecord(record);
+    setBindMode(mode);
+    setBindChallenge(null);
+    setBindQr4Payload(null);
+    setBindSignature(null);
+    setBindNewPubkey('');
+    setBindStep(mode === 'bind_archive' ? 'scan_qr4' : 'input_pubkey');
     setBindScannerActive(false);
     stopBindScanner();
     setBindModalOpen(true);
@@ -1440,28 +1274,80 @@ export default function App() {
     setOpScanOpen(true);
   };
 
-  const onScanBindQrRaw = async (qrPayload: string) => {
+  const onScanBindQr4 = async (qrPayload: string) => {
     if (!auth) return;
     if (!qrPayload.trim()) {
       message.error('二维码识别失败');
       return;
     }
-    setBindScanLoading(true);
+    setBindQr4ScanLoading(true);
     try {
-      const result = await scanBindQr(auth, { qr_payload: qrPayload });
-      setBindScanResult({
-        archive_no: result.archive_no,
-        site_sfid: result.site_sfid,
-        qr_id: result.qr_id
-      });
-      message.success(`验签通过，档案号：${result.archive_no}，状态：${result.status}`);
+      setBindQr4Payload(qrPayload);
+      message.success('QR4 扫码成功，正在生成签名挑战...');
       setBindScannerActive(false);
       stopBindScanner();
+      // 自动获取 challenge
+      const challenge = await citizenBindChallenge(auth);
+      setBindChallenge(challenge);
+      setBindStep('sign_challenge');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '二维码验签失败';
+      const msg = err instanceof Error ? err.message : 'QR4 扫码处理失败';
       message.error(msg);
     } finally {
-      setBindScanLoading(false);
+      setBindQr4ScanLoading(false);
+    }
+  };
+
+  const onBindPubkeyNext = async () => {
+    if (!auth) return;
+    if (!bindNewPubkey.trim()) {
+      message.error('请输入新公钥');
+      return;
+    }
+    setBindChallengeLoading(true);
+    try {
+      const challenge = await citizenBindChallenge(auth);
+      setBindChallenge(challenge);
+      setBindStep('sign_challenge');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '生成签名挑战失败';
+      message.error(msg);
+    } finally {
+      setBindChallengeLoading(false);
+    }
+  };
+
+  const onScanBindSignature = async (raw: string) => {
+    if (!auth || !bindChallenge) return;
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      message.error('签名二维码识别失败');
+      return;
+    }
+    setBindQr4ScanLoading(true);
+    try {
+      const payload = parseKeyringSignedPayload(trimmed, bindChallenge.challenge_id);
+      setBindSignature(payload.signature);
+      setBindScannerActive(false);
+      stopBindScanner();
+      // 自动提交绑定
+      const userAddress = bindMode === 'bind_pubkey' ? bindNewPubkey.trim() : (bindTargetPubkey || '');
+      const result = await citizenBind(auth, {
+        mode: bindMode,
+        user_address: userAddress,
+        qr4_payload: bindQr4Payload || undefined,
+        citizen_id: bindTargetRecord?.id,
+        challenge_id: payload.challenge_id,
+        signature: payload.signature
+      });
+      message.success(`绑定成功${result.sfid_code ? `，SFID码：${result.sfid_code}` : ''}`);
+      setBindModalOpen(false);
+      await refreshList(auth, undefined, true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '绑定失败';
+      message.error(msg);
+    } finally {
+      setBindQr4ScanLoading(false);
     }
   };
 
@@ -1513,13 +1399,17 @@ export default function App() {
           setBindScannerReady(true);
         }
         const timer = window.setInterval(async () => {
-          if (!bindVideoRef.current || bindScanLoading) return;
+          if (!bindVideoRef.current || bindQr4ScanLoading) return;
           try {
             const barcodes = await detector.detect(bindVideoRef.current);
             const raw = barcodes.find((item) => item.rawValue)?.rawValue?.trim();
             if (!raw) return;
             window.clearInterval(timer);
-            await onScanBindQrRaw(raw);
+            if (bindStep === 'scan_qr4') {
+              await onScanBindQr4(raw);
+            } else if (bindStep === 'scan_signature') {
+              await onScanBindSignature(raw);
+            }
           } catch {
             // ignore frame errors
           }
@@ -1536,84 +1426,121 @@ export default function App() {
       cancelled = true;
       stopBindScanner();
     };
-  }, [bindModalOpen, bindScannerActive, bindScanLoading]);
+  }, [bindModalOpen, bindScannerActive, bindQr4ScanLoading, bindStep]);
 
-  const onConfirmBind = async () => {
+  const openUnbindModal = (record: CitizenRow) => {
+    setUnbindTarget(record);
+    setUnbindChallenge(null);
+    setUnbindStep('confirm');
+    setUnbindScannerActive(false);
+    stopUnbindScanner();
+    setUnbindModalOpen(true);
+  };
+
+  const stopUnbindScanner = () => {
+    if (unbindScanStreamRef.current) {
+      unbindScanStreamRef.current.getTracks().forEach((t) => t.stop());
+      unbindScanStreamRef.current = null;
+    }
+    setUnbindScannerReady(false);
+  };
+
+  const onUnbindGenerateChallenge = async () => {
     if (!auth) return;
-    if (!bindTargetPubkey) return;
-    if (!rows.find((row) => row.account_pubkey === bindTargetPubkey)?.sfid_code) {
-      message.error(bindRequiresSfidMessage);
-      return;
-    }
-    const archiveIndex = bindScanResult?.archive_no?.trim();
-    const qrId = bindScanResult?.qr_id?.trim();
-    if (!archiveIndex || !qrId) {
-      message.error('请先扫码验签后再确认绑定');
-      return;
-    }
-    setBinding(true);
+    setUnbindChallengeLoading(true);
     try {
-      const res = await confirmBind(auth, {
-        account_pubkey: bindTargetPubkey,
-        archive_index: archiveIndex,
-        qr_id: qrId
-      });
-      message.success(`绑定成功，SFID码：${res.sfid_code}`);
-      setBindModalOpen(false);
-      setBindTargetPubkey('');
-      setBindScanResult(null);
-      await refreshList(auth);
+      const challenge = await citizenBindChallenge(auth);
+      setUnbindChallenge(challenge);
+      setUnbindStep('sign_challenge');
     } catch (err) {
-      const rawMsg = err instanceof Error ? err.message : '绑定失败';
-      const msg =
-        rawMsg === 'sfid must be generated before binding' ? bindRequiresSfidMessage : rawMsg;
+      const msg = err instanceof Error ? err.message : '生成解绑签名挑战失败';
       message.error(msg);
     } finally {
-      setBinding(false);
+      setUnbindChallengeLoading(false);
     }
   };
 
-  const onUnbind = async (pubkey: string) => {
-    if (!auth) return;
-    Modal.confirm({
-      centered: true,
-      icon: null,
-      title: null,
-      content: (
-        <div style={{ textAlign: 'center', paddingTop: 8 }}>
-          <ExclamationCircleFilled style={{ color: '#faad14', fontSize: 28, marginBottom: 8 }} />
-          <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>确认解绑</div>
-          <div style={{ color: '#4b5563', lineHeight: 1.6 }}>
-            确定要解绑并删除该公民信息吗？
-            <br />
-            公钥：{pubkey}
-          </div>
-        </div>
-      ),
-      okText: '确认解绑',
-      okButtonProps: { danger: true },
-      cancelText: '取 消',
-      footer: (_, { OkBtn, CancelBtn }) => (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
-          <CancelBtn />
-          <OkBtn />
-        </div>
-      ),
-      onOk: async () => {
-        setLoading(true);
-        try {
-          await unbind(auth, pubkey);
-          message.success('解绑成功');
-          await refreshList(auth);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : '解绑失败';
-          message.error(msg);
-        } finally {
-          setLoading(false);
-        }
-      }
-    });
+  const onScanUnbindSignature = async (raw: string) => {
+    if (!auth || !unbindChallenge || !unbindTarget) return;
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      message.error('签名二维码识别失败');
+      return;
+    }
+    setUnbindSubmitting(true);
+    try {
+      const payload = parseKeyringSignedPayload(trimmed, unbindChallenge.challenge_id);
+      setUnbindScannerActive(false);
+      stopUnbindScanner();
+      await citizenUnbind(auth, {
+        citizen_id: unbindTarget.id,
+        challenge_id: payload.challenge_id,
+        signature: payload.signature
+      });
+      message.success('解绑成功');
+      setUnbindModalOpen(false);
+      await refreshList(auth, undefined, true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '解绑失败';
+      message.error(msg);
+    } finally {
+      setUnbindSubmitting(false);
+    }
   };
+
+  useEffect(() => {
+    if (!unbindModalOpen || !unbindScannerActive) {
+      stopUnbindScanner();
+      return;
+    }
+    let cancelled = false;
+    const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
+    if (!win.BarcodeDetector) {
+      message.warning('当前浏览器不支持摄像头扫码');
+      setUnbindScannerActive(false);
+      return;
+    }
+    const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
+    const start = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        unbindScanStreamRef.current = stream;
+        if (unbindVideoRef.current) {
+          unbindVideoRef.current.srcObject = stream;
+          await unbindVideoRef.current.play();
+          setUnbindScannerReady(true);
+        }
+        const timer = window.setInterval(async () => {
+          if (!unbindVideoRef.current || unbindSubmitting) return;
+          try {
+            const barcodes = await detector.detect(unbindVideoRef.current);
+            const raw = barcodes.find((item) => item.rawValue)?.rawValue?.trim();
+            if (!raw) return;
+            window.clearInterval(timer);
+            await onScanUnbindSignature(raw);
+          } catch {
+            // ignore frame errors
+          }
+        }, 300);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '无法打开摄像头';
+        message.error(msg);
+        setUnbindScannerActive(false);
+      }
+    };
+    start();
+    return () => {
+      cancelled = true;
+      stopUnbindScanner();
+    };
+  }, [unbindModalOpen, unbindScannerActive, unbindSubmitting]);
 
   const citizenColumns: ColumnsType<CitizenRow> = [
     {
@@ -1625,11 +1552,12 @@ export default function App() {
     {
       title: '公钥',
       dataIndex: 'account_pubkey',
-      align: 'center'
+      align: 'center',
+      render: (v: string | undefined) => v ?? '-'
     },
     {
       title: '档案号',
-      dataIndex: 'archive_index',
+      dataIndex: 'archive_no',
       align: 'center',
       render: (v: string | undefined) => v ?? '-'
     },
@@ -1637,42 +1565,36 @@ export default function App() {
       title: 'SFID码',
       dataIndex: 'sfid_code',
       align: 'center',
-      render: (v: string | undefined, row: CitizenRow) => {
-        if (v) return v;
-        if (capabilities.canBusinessWrite && !row.is_bound) {
-          return (
-            <Button size="small" type="primary" onClick={() => openSfidTool(row.account_pubkey)}>
-              生成
-            </Button>
-          );
-        }
-        return '-';
+      render: (v: string | undefined) => v ?? '-'
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      width: 100,
+      align: 'center',
+      render: (v: string) => {
+        if (v === 'BOUND') return '已绑定';
+        if (v === 'UNLINKED') return '已解绑';
+        return '未绑定';
       }
     }
   ];
   if (capabilities.canBusinessWrite) {
     citizenColumns.push({
       title: '操作',
-      width: 240,
+      width: 200,
       align: 'center',
       render: (_v: unknown, row: CitizenRow) => (
         <Space size={8}>
-          {row.is_bound ? (
-            <Button danger onClick={() => onUnbind(row.account_pubkey)}>
-              绑定
+          {row.status === 'BOUND' ? (
+            <Button danger onClick={() => openUnbindModal(row)}>
+              解绑
             </Button>
           ) : (
-            <Button
-              type="primary"
-              disabled={!row.sfid_code}
-              onClick={() => openBindModal(row.account_pubkey)}
-            >
+            <Button type="primary" onClick={() => openBindModal(row)}>
               绑定
             </Button>
           )}
-          <Button onClick={openStatusScanner} disabled={!row.is_bound}>
-            变更
-          </Button>
         </Space>
       )
     });
@@ -1682,12 +1604,10 @@ export default function App() {
     .filter((item) => !cpmsSites.some((row) => row.site_sfid === item.site_sfid))
     .map((item) => ({
       site_sfid: item.site_sfid,
-      pubkey_1: '-',
-      pubkey_2: '-',
-      pubkey_3: '-',
-      status: undefined,
+      install_token_status: 'PENDING' as const,
+      status: 'PENDING' as const,
       created_by: auth?.admin_pubkey || '-',
-      created_at: new Date(item.issued_at * 1000).toISOString(),
+      created_at: new Date().toISOString(),
       updated_by: null,
       updated_at: null
     }));
@@ -1695,14 +1615,7 @@ export default function App() {
   const previewForSite = (siteSfid: string): GenerateCpmsInstitutionSfidResult | null => {
     const draft = institutionSfidDrafts.find((item) => item.site_sfid === siteSfid);
     if (draft) return draft;
-    const fromRow = cpmsSites.find((row) => row.site_sfid === siteSfid)?.init_qr_payload?.trim();
-    if (!fromRow) return null;
-    return {
-      site_sfid: siteSfid,
-      issued_at: 0,
-      expire_at: 0,
-      qr_payload: fromRow
-    };
+    return null;
   };
 
   return (
@@ -2423,61 +2336,29 @@ export default function App() {
                     }
                   },
                   {
+                    title: '安装令牌',
+                    dataIndex: 'install_token_status',
+                    width: 110,
+                    align: 'center',
+                    render: (v: string) => {
+                      if (v === 'PENDING') return '待使用';
+                      if (v === 'USED') return '已使用';
+                      if (v === 'REVOKED') return '已撤销';
+                      return v || '-';
+                    }
+                  },
+                  {
                     title: '状态',
                     width: 110,
                     align: 'center',
-                    render: (_v, row) => (row.status === 'PENDING' || !row.status ? '待录入' : row.status)
-                  },
-                  {
-                    title: '公钥1',
-                    dataIndex: 'pubkey_1',
-                    align: 'center',
-                    render: (v: string, row) => (
-                      <Space size={6}>
-                        <span>{v || '-'}</span>
-                        <Button
-                          size="small"
-                          onClick={() => onUpdateCpmsSiteKey(row, 1)}
-                          disabled={!row.status || row.status === 'PENDING'}
-                        >
-                          更新
-                        </Button>
-                      </Space>
-                    )
-                  },
-                  {
-                    title: '公钥2',
-                    dataIndex: 'pubkey_2',
-                    align: 'center',
-                    render: (v: string, row) => (
-                      <Space size={6}>
-                        <span>{v || '-'}</span>
-                        <Button
-                          size="small"
-                          onClick={() => onUpdateCpmsSiteKey(row, 2)}
-                          disabled={!row.status || row.status === 'PENDING'}
-                        >
-                          更新
-                        </Button>
-                      </Space>
-                    )
-                  },
-                  {
-                    title: '公钥3',
-                    dataIndex: 'pubkey_3',
-                    align: 'center',
-                    render: (v: string, row) => (
-                      <Space size={6}>
-                        <span>{v || '-'}</span>
-                        <Button
-                          size="small"
-                          onClick={() => onUpdateCpmsSiteKey(row, 3)}
-                          disabled={!row.status || row.status === 'PENDING'}
-                        >
-                          更新
-                        </Button>
-                      </Space>
-                    )
+                    render: (_v, row) => {
+                      const s = row.status || 'PENDING';
+                      if (s === 'PENDING') return '待录入';
+                      if (s === 'ACTIVE') return '正常';
+                      if (s === 'DISABLED') return '已禁用';
+                      if (s === 'REVOKED') return '已撤销';
+                      return s;
+                    }
                   },
                   {
                     title: '登记人',
@@ -2685,7 +2566,7 @@ export default function App() {
             }
           >
             <Table<CitizenRow>
-              rowKey={(r) => `${r.seq}-${r.account_pubkey}`}
+              rowKey={(r) => `${r.id}`}
               dataSource={rows}
               loading={loading}
               pagination={{ pageSize: 10 }}
@@ -2708,81 +2589,286 @@ export default function App() {
             stopBindScanner();
           }}
           destroyOnClose
+          width={520}
         >
-          <div
-            style={{
-              width: '84%',
-              maxWidth: 320,
-              aspectRatio: '1 / 1',
-              background: 'linear-gradient(145deg, #0f172a, #1e293b)',
-              borderRadius: 16,
-              overflow: 'hidden',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              position: 'relative',
-              margin: '14px auto 12px',
-              border: '2px solid #334155',
-              boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)'
-            }}
-          >
-            <div style={{ position: 'absolute', top: 8, left: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderTopLeftRadius: 4, zIndex: 2 }} />
-            <div style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderTopRightRadius: 4, zIndex: 2 }} />
-            <div style={{ position: 'absolute', bottom: 8, left: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderBottomLeftRadius: 4, zIndex: 2 }} />
-            <div style={{ position: 'absolute', bottom: 8, right: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderBottomRightRadius: 4, zIndex: 2 }} />
-            <video
-              ref={bindVideoRef}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              muted
-              playsInline
-            />
-            {!bindScannerReady && (
+          {/* 步骤指示 */}
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+            {bindMode === 'bind_archive'
+              ? '模式：有公钥绑档案（扫描 CPMS 档案二维码 → 签名验证 → 完成绑定）'
+              : '模式：有档案绑公钥（输入新公钥 → 签名验证 → 完成绑定）'}
+          </Typography.Paragraph>
+
+          {/* 模式1：有公钥绑档案 - 第一步扫 QR4 */}
+          {bindMode === 'bind_archive' && bindStep === 'scan_qr4' && (
+            <>
+              <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+                第一步：扫描 CPMS 档案二维码（QR4）
+              </Typography.Text>
               <div
                 style={{
-                  position: 'absolute',
-                  inset: 0,
+                  width: '84%',
+                  maxWidth: 320,
+                  aspectRatio: '1 / 1',
+                  background: 'linear-gradient(145deg, #0f172a, #1e293b)',
+                  borderRadius: 16,
+                  overflow: 'hidden',
                   display: 'flex',
-                  flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 8,
-                  cursor: bindScannerActive ? 'default' : 'pointer',
-                  userSelect: 'none'
-                }}
-                onClick={() => {
-                  if (!bindScannerActive) onToggleBindScanner();
+                  position: 'relative',
+                  margin: '14px auto 12px',
+                  border: '2px solid #334155',
+                  boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)'
                 }}
               >
-                <QrcodeOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.25)' }} />
-                <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
-                  {bindScannerActive ? '摄像头初始化中...' : '点击扫描二维码'}
-                </Typography.Text>
+                <div style={{ position: 'absolute', top: 8, left: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderTopLeftRadius: 4, zIndex: 2 }} />
+                <div style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderTopRightRadius: 4, zIndex: 2 }} />
+                <div style={{ position: 'absolute', bottom: 8, left: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderBottomLeftRadius: 4, zIndex: 2 }} />
+                <div style={{ position: 'absolute', bottom: 8, right: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderBottomRightRadius: 4, zIndex: 2 }} />
+                <video ref={bindVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                {!bindScannerReady && (
+                  <div
+                    style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: bindScannerActive ? 'default' : 'pointer', userSelect: 'none' }}
+                    onClick={() => { if (!bindScannerActive) onToggleBindScanner(); }}
+                  >
+                    <QrcodeOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.25)' }} />
+                    <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+                      {bindScannerActive ? '摄像头初始化中...' : '点击扫描档案二维码'}
+                    </Typography.Text>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-
-          {bindScanResult && (
-            <Typography.Paragraph type="secondary">
-              已验签通过：site={bindScanResult.site_sfid}，qr_id={bindScanResult.qr_id}
-            </Typography.Paragraph>
+              <div style={{ textAlign: 'center' }}>
+                <Button onClick={onToggleBindScanner} loading={bindQr4ScanLoading}>
+                  {bindScannerActive ? '停止扫码' : '开启扫码'}
+                </Button>
+              </div>
+            </>
           )}
 
-          <Form layout="vertical" onFinish={onConfirmBind}>
-            <Form.Item label="公钥">
-              <Input value={bindTargetPubkey} disabled />
-            </Form.Item>
-            <Form.Item label="档案号">
-              <Input value={bindScanResult?.archive_no ?? ''} disabled />
-            </Form.Item>
-            <Space>
-              <Button onClick={() => setBindModalOpen(false)}>取消</Button>
-              <Button htmlType="submit" type="primary" loading={binding} disabled={!bindScanResult}>
-                确认绑定
-              </Button>
-            </Space>
-          </Form>
+          {/* 模式2：有档案绑公钥 - 第一步输入公钥 */}
+          {bindMode === 'bind_pubkey' && bindStep === 'input_pubkey' && (
+            <>
+              <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+                第一步：输入新公钥
+              </Typography.Text>
+              <Form layout="vertical">
+                <Form.Item label="记录ID">
+                  <Input value={bindTargetRecord?.id ?? ''} disabled />
+                </Form.Item>
+                <Form.Item label="档案号">
+                  <Input value={bindTargetRecord?.archive_no ?? ''} disabled />
+                </Form.Item>
+                <Form.Item label="SFID码">
+                  <Input value={bindTargetRecord?.sfid_code ?? ''} disabled />
+                </Form.Item>
+                <Form.Item label="新公钥" required>
+                  <Input
+                    value={bindNewPubkey}
+                    onChange={(e) => setBindNewPubkey(e.target.value)}
+                    placeholder="请输入新公钥（0x 开头 32 字节十六进制）"
+                  />
+                </Form.Item>
+                <Button type="primary" onClick={onBindPubkeyNext} loading={bindChallengeLoading}>
+                  下一步：生成签名挑战
+                </Button>
+              </Form>
+            </>
+          )}
+
+          {/* 第二步：展示签名挑战二维码 */}
+          {bindStep === 'sign_challenge' && bindChallenge && (
+            <>
+              <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+                第二步：用 公民 钱包扫码签名
+              </Typography.Text>
+              <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+                <QRCode value={bindChallenge.sign_request} size={220} color="#134e4a" />
+              </div>
+              <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
+                有效期至：{new Date(bindChallenge.expire_at * 1000).toLocaleTimeString()}
+              </Typography.Paragraph>
+              <div style={{ textAlign: 'center' }}>
+                <Button
+                  type="primary"
+                  onClick={() => {
+                    setBindStep('scan_signature');
+                    setBindScannerActive(true);
+                  }}
+                >
+                  下一步：扫描签名结果
+                </Button>
+              </div>
+            </>
+          )}
+
+          {/* 第三步：扫描签名结果 */}
+          {bindStep === 'scan_signature' && (
+            <>
+              <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+                第三步：扫描签名结果二维码
+              </Typography.Text>
+              <div
+                style={{
+                  width: '84%',
+                  maxWidth: 320,
+                  aspectRatio: '1 / 1',
+                  background: 'linear-gradient(145deg, #0f172a, #1e293b)',
+                  borderRadius: 16,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  margin: '14px auto 12px',
+                  border: '2px solid #334155',
+                  boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)'
+                }}
+              >
+                <div style={{ position: 'absolute', top: 8, left: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderTopLeftRadius: 4, zIndex: 2 }} />
+                <div style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderTopRightRadius: 4, zIndex: 2 }} />
+                <div style={{ position: 'absolute', bottom: 8, left: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderBottomLeftRadius: 4, zIndex: 2 }} />
+                <div style={{ position: 'absolute', bottom: 8, right: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderBottomRightRadius: 4, zIndex: 2 }} />
+                <video ref={bindVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                {!bindScannerReady && (
+                  <div
+                    style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: bindScannerActive ? 'default' : 'pointer', userSelect: 'none' }}
+                    onClick={() => { if (!bindScannerActive) onToggleBindScanner(); }}
+                  >
+                    <QrcodeOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.25)' }} />
+                    <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+                      {bindScannerActive ? '摄像头初始化中...' : '点击扫描签名二维码'}
+                    </Typography.Text>
+                  </div>
+                )}
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <Button onClick={onToggleBindScanner} loading={bindQr4ScanLoading}>
+                  {bindScannerActive ? '停止扫码' : '开启扫码'}
+                </Button>
+              </div>
+            </>
+          )}
         </Modal>
       )}
+
+      {/* 解绑弹窗 */}
+      <Modal
+        title={<span style={{ fontSize: 20, fontWeight: 600 }}>解绑身份</span>}
+        open={unbindModalOpen}
+        footer={null}
+        onCancel={() => {
+          setUnbindModalOpen(false);
+          setUnbindScannerActive(false);
+          stopUnbindScanner();
+        }}
+        destroyOnClose
+        width={520}
+      >
+        {unbindTarget && (
+          <>
+            <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fff7ed', borderRadius: 8, border: '1px solid #fed7aa' }}>
+              <div style={{ color: '#9a3412', fontWeight: 500, marginBottom: 4 }}>
+                解绑后公钥将被清除，档案号和SFID码保留。
+              </div>
+              <div style={{ color: '#78716c', fontSize: 13 }}>
+                公钥：{unbindTarget.account_pubkey || '-'}
+              </div>
+            </div>
+
+            {/* 第一步：确认并生成 challenge */}
+            {unbindStep === 'confirm' && (
+              <div style={{ textAlign: 'center' }}>
+                <Button
+                  type="primary"
+                  danger
+                  onClick={onUnbindGenerateChallenge}
+                  loading={unbindChallengeLoading}
+                >
+                  确认解绑 — 生成签名挑战
+                </Button>
+              </div>
+            )}
+
+            {/* 第二步：展示签名二维码 */}
+            {unbindStep === 'sign_challenge' && unbindChallenge && (
+              <>
+                <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+                  请用该公钥的 公民 钱包扫码签名
+                </Typography.Text>
+                <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+                  <QRCode value={unbindChallenge.sign_request} size={220} color="#134e4a" />
+                </div>
+                <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
+                  有效期至：{new Date(unbindChallenge.expire_at * 1000).toLocaleTimeString()}
+                </Typography.Paragraph>
+                <div style={{ textAlign: 'center' }}>
+                  <Button
+                    type="primary"
+                    onClick={() => {
+                      setUnbindStep('scan_signature');
+                      setUnbindScannerActive(true);
+                    }}
+                  >
+                    下一步：扫描签名结果
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* 第三步：扫描签名结果 */}
+            {unbindStep === 'scan_signature' && (
+              <>
+                <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+                  扫描签名结果二维码
+                </Typography.Text>
+                <div
+                  style={{
+                    width: '84%',
+                    maxWidth: 320,
+                    aspectRatio: '1 / 1',
+                    background: 'linear-gradient(145deg, #0f172a, #1e293b)',
+                    borderRadius: 16,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    position: 'relative',
+                    margin: '14px auto 12px',
+                    border: '2px solid #334155',
+                    boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)'
+                  }}
+                >
+                  <div style={{ position: 'absolute', top: 8, left: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderTopLeftRadius: 4, zIndex: 2 }} />
+                  <div style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderTopRightRadius: 4, zIndex: 2 }} />
+                  <div style={{ position: 'absolute', bottom: 8, left: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderBottomLeftRadius: 4, zIndex: 2 }} />
+                  <div style={{ position: 'absolute', bottom: 8, right: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderBottomRightRadius: 4, zIndex: 2 }} />
+                  <video ref={unbindVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                  {!unbindScannerReady && (
+                    <div
+                      style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: unbindScannerActive ? 'default' : 'pointer', userSelect: 'none' }}
+                      onClick={() => { if (!unbindScannerActive) setUnbindScannerActive(true); }}
+                    >
+                      <QrcodeOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.25)' }} />
+                      <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+                        {unbindScannerActive ? '摄像头初始化中...' : '点击扫描签名二维码'}
+                      </Typography.Text>
+                    </div>
+                  )}
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <Button
+                    onClick={() => setUnbindScannerActive((v) => !v)}
+                    loading={unbindSubmitting}
+                  >
+                    {unbindScannerActive ? '停止扫码' : '开启扫码'}
+                  </Button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </Modal>
 
       <Modal
         title={opScanType === 'register' ? '新增机构（扫码）' : '状态变更扫码'}
@@ -2894,7 +2980,7 @@ export default function App() {
           <Space direction="vertical" size={8} style={{ width: '100%' }}>
             <Typography.Text strong>身份识别码：{institutionSfidResult.site_sfid}</Typography.Text>
             <div ref={institutionQrRef} style={{ display: 'flex', justifyContent: 'center' }}>
-              <QRCode value={institutionSfidResult.qr_payload} size={220} />
+              <QRCode value={institutionSfidResult.qr1_payload} size={220} />
             </div>
           </Space>
         )}
@@ -2918,102 +3004,12 @@ export default function App() {
           <Space direction="vertical" size={8} style={{ width: '100%' }}>
             <Typography.Text strong>身份识别码：{institutionQrPreview.site_sfid}</Typography.Text>
             <div ref={institutionQrPreviewRef} style={{ display: 'flex', justifyContent: 'center' }}>
-              <QRCode value={institutionQrPreview.qr_payload} size={220} />
+              <QRCode value={institutionQrPreview.qr1_payload} size={220} />
             </div>
           </Space>
         )}
       </Modal>
 
-      <Modal
-        title="SFID码生成工具"
-        open={sfidToolOpen}
-        onCancel={() => setSfidToolOpen(false)}
-        onOk={() => sfidToolForm.submit()}
-        confirmLoading={sfidToolLoading}
-        okText="生成并应用"
-        cancelText="取消"
-        destroyOnClose
-      >
-        <Form form={sfidToolForm} layout="vertical" onFinish={onGenerateSfidCode}>
-          {auth?.admin_province && (
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-              当前账号已限定为 {auth.admin_province}，只需选择本省下的市并填写机构信息。
-            </Typography.Paragraph>
-          )}
-          <Form.Item label="用户公钥">
-            <Input value={sfidToolTargetPubkey} disabled />
-          </Form.Item>
-          <Form.Item
-            label="A3 主体属性"
-            name="a3"
-            rules={[{ required: true, message: '请选择A3主体属性' }]}
-          >
-            <Select
-              options={(sfidMeta?.a3_options || []).map((o) => ({ label: `${o.label} (${o.value})`, value: o.value }))}
-              placeholder="请选择A3主体属性"
-              onChange={(nextA3) => {
-                const nextDefault = defaultInstitutionByA3(nextA3);
-                const currentProvince = sfidToolForm.getFieldValue('province');
-                const nextCity = usesReservedProvinceCityByA3(nextA3) ? reservedProvinceCityName(sfidCities) : '';
-                sfidToolForm.setFieldsValue({
-                  institution: nextDefault,
-                  p1: defaultP1ByA3(nextA3),
-                  city: currentProvince ? nextCity : ''
-                });
-              }}
-            />
-          </Form.Item>
-          <Form.Item
-            label="P1 盈利属性"
-            name="p1"
-            rules={[{ required: true, message: '请选择盈利属性' }]}
-          >
-            <Select
-              options={[
-                { value: '0', label: '非盈利 (0)' },
-                { value: '1', label: '盈利 (1)' }
-              ]}
-              placeholder={p1LockedByA3(sfidToolA3 || '') ? 'P1已按A3自动固定' : '请选择盈利属性'}
-              disabled={p1LockedByA3(sfidToolA3 || '')}
-            />
-          </Form.Item>
-          <Form.Item label="省" name="province" rules={[{ required: true, message: '请选择省' }]}>
-            <Select
-              options={(sfidMeta?.provinces || []).map((p) => ({ label: `${p.name} (${p.code})`, value: p.name }))}
-              placeholder="请选择省"
-              disabled={Boolean(sfidMeta?.scoped_province)}
-              onChange={(provinceName) => {
-                sfidToolForm.setFieldsValue({ city: '' });
-                void (async () => {
-                  const rows = await loadSfidCities(provinceName);
-                  if (usesReservedProvinceCityByA3(sfidToolForm.getFieldValue('a3') || '')) {
-                    sfidToolForm.setFieldsValue({ city: reservedProvinceCityName(rows) });
-                  }
-                })();
-              }}
-            />
-          </Form.Item>
-          <Form.Item label="市" name="city" rules={[{ required: true, message: '请选择市' }]}>
-            <Select
-              loading={sfidCitiesLoading}
-              options={sfidCities.map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }))}
-              placeholder={cityLockedByA3 ? '公民三类默认使用省级占位码 000' : '请选择该省下的市'}
-              disabled={cityLockedByA3}
-            />
-          </Form.Item>
-          <Form.Item
-            label="机构"
-            name="institution"
-            rules={[{ required: true, message: '请选择机构类型' }]}
-          >
-            <Select
-              options={sfidInstitutionOptions}
-              placeholder={institutionLocked ? '机构已按A3自动固定' : '请选择机构类型'}
-              disabled={institutionLocked}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
     </Layout>
   );
 }
