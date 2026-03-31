@@ -942,7 +942,7 @@ export default function App() {
     try {
       if (opScanType === 'register') {
         const result = await registerCpms(auth, { qr_payload: raw });
-        message.success('机构公钥登记成功');
+        message.success(`机构 ${result.qr3_payload ? '公钥登记成功' : '登记成功'}`);
         await refreshCpmsSites(auth);
       } else {
         const result = await scanCpmsStatusQr(auth, { qr_payload: raw });
@@ -1170,7 +1170,7 @@ export default function App() {
 
   const openInstitutionSfidModal = async () => {
     if (!capabilities.canRegisterInstitutions) {
-      message.error('仅机构管理员可生成身份识别码');
+      message.error('仅机构管理员可生成机构身份识别码');
       return;
     }
     if (!auth) return;
@@ -1208,7 +1208,7 @@ export default function App() {
       setInstitutionSfidResult(result);
       message.success(`身份识别码已生成：${result.site_sfid}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '生成身份识别码失败';
+      const msg = err instanceof Error ? err.message : '生成机构身份识别码失败';
       message.error(msg);
     } finally {
       setInstitutionSfidLoading(false);
@@ -1258,7 +1258,7 @@ export default function App() {
 
   const onDownloadInstitutionSfid = () => {
     if (!institutionSfidResult) {
-      message.warning('请先生成身份识别码');
+      message.warning('请先生成机构身份识别码');
       return;
     }
     downloadQrFromRef(institutionQrRef.current, `institution-sfid-${institutionSfidResult.site_sfid}`);
@@ -2301,7 +2301,7 @@ export default function App() {
                 capabilities.canRegisterInstitutions ? (
                   <Space>
                     <Button type="primary" onClick={openInstitutionSfidModal} loading={institutionSfidLoading}>
-                      生成身份识别码
+                      生成机构身份识别码
                     </Button>
                   </Space>
                 ) : null
@@ -2913,7 +2913,7 @@ export default function App() {
       </Modal>
 
       <Modal
-        title="生成身份识别码"
+        title="生成机构身份识别码"
         open={institutionSfidOpen}
         onCancel={() => setInstitutionSfidOpen(false)}
         footer={[
@@ -2963,7 +2963,7 @@ export default function App() {
           <Form.Item label="市" name="city" rules={[{ required: true, message: '请选择市' }]}>
             <Select
               loading={sfidCitiesLoading}
-              options={sfidCities.map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }))}
+              options={sfidCities.filter((c) => c.code !== '000').map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }))}
               placeholder="请选择该省下的市"
             />
           </Form.Item>
