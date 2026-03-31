@@ -49,41 +49,44 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-card__title">CPMS</div>
-        <div className="login-card__subtitle">公民护照管理系统</div>
-
-        {error && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{error}</div>}
-
-        <div className="form-group">
-          <label>管理员公钥</label>
-          <input className="form-input" placeholder="Sr25519 公钥（hex 或 base64）" value={pubkey} onChange={e => setPubkey(e.target.value)} />
+        <div className="login-card__header">
+          <div className="login-card__title">CPMS</div>
+          <div className="login-card__subtitle">公民护照管理系统</div>
         </div>
+        <div className="login-card__body">
+          {error && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{error}</div>}
 
-        {!challenge ? (
-          <button className="btn btn--primary" style={{ width: '100%' }} onClick={handleGetChallenge} disabled={loading}>
-            {loading ? '请求中...' : '获取签名挑战'}
-          </button>
-        ) : (
-          <>
-            <div className="form-group">
-              <label>签名挑战</label>
-              <textarea
-                className="form-input"
-                rows={3}
-                readOnly
-                value={challenge.challenge_payload}
-                style={{ fontSize: 12, fontFamily: 'monospace', resize: 'none' }}
-              />
-            </div>
-            <div className="form-group">
-              <label>签名结果</label>
-              <input className="form-input" placeholder="对上述挑战的 Sr25519 签名（hex 或 base64）" value={signature} onChange={e => setSignature(e.target.value)} />
-            </div>
-            <button className="btn btn--primary" style={{ width: '100%' }} onClick={handleVerify} disabled={loading}>
-              {loading ? '验证中...' : '验证并登录'}
+          <div className="form-group">
+            <label>管理员公钥</label>
+            <input className="form-input" placeholder="Sr25519 公钥（hex 或 base64）" value={pubkey} onChange={e => setPubkey(e.target.value)} />
+          </div>
+
+          {!challenge ? (
+            <button className="btn btn--primary" style={{ width: '100%' }} onClick={handleGetChallenge} disabled={loading}>
+              {loading ? '请求中...' : '获取签名挑战'}
             </button>
-          </>
-        )}
+          ) : (
+            <>
+              <div className="form-group">
+                <label>签名挑战</label>
+                <textarea
+                  className="form-input"
+                  rows={3}
+                  readOnly
+                  value={challenge.challenge_payload}
+                  style={{ fontSize: 12, fontFamily: 'monospace', resize: 'none', height: 'auto' }}
+                />
+              </div>
+              <div className="form-group">
+                <label>签名结果</label>
+                <input className="form-input" placeholder="对上述挑战的 Sr25519 签名（hex 或 base64）" value={signature} onChange={e => setSignature(e.target.value)} />
+              </div>
+              <button className="btn btn--primary" style={{ width: '100%' }} onClick={handleVerify} disabled={loading}>
+                {loading ? '验证中...' : '验证并登录'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
