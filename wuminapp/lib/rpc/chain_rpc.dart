@@ -145,8 +145,13 @@ class ChainRpc {
   /// 瞬断重试已由 `SmoldotClientManager._withRetry` 统一处理。
   Future<Uint8List> submitExtrinsic(Uint8List encoded) async {
     final hex = '0x${_hexEncode(encoded)}';
+    debugPrint('[ChainRpc.submitExtrinsic] 提交 extrinsic (${encoded.length} bytes), hex 前 80 字符: ${hex.substring(0, hex.length.clamp(0, 82))}...');
+    // 诊断：提交前检查 peer 数量
+    final peerCount = await SmoldotClientManager.instance.getPeerCount();
+    debugPrint('[ChainRpc.submitExtrinsic] 当前 peer 数量: $peerCount');
     final result =
         await SmoldotClientManager.instance.submitExtrinsicHex(hex);
+    debugPrint('[ChainRpc.submitExtrinsic] smoldot 返回: $result');
     if (result == null || result.isEmpty) {
       throw StateError('smoldot 轻节点未返回交易哈希');
     }
