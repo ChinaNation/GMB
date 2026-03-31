@@ -20,6 +20,8 @@ import 'package:wuminapp_mobile/util/screenshot_guard.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
+import 'package:wuminapp_mobile/wallet/ui/bind_clearing_page.dart';
+import 'package:wuminapp_mobile/trade/offchain/clearing_banks.dart';
 
 class MyWalletPage extends StatefulWidget {
   const MyWalletPage({
@@ -636,6 +638,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   late final TextEditingController _nameEditController;
   List<ServerTxRecord> _recentRecords = const [];
   bool _screenshotGuardActive = false;
+  /// 当前钱包绑定的清算省储行 shenfen_id（null 表示未绑定）。
+  String? _boundClearingBankId;
 
   @override
   void dispose() {
@@ -650,6 +654,22 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     _walletName = widget.wallet.walletName;
     _nameEditController = TextEditingController(text: _walletName);
     _loadRecentRecords();
+  }
+
+  /// 打开绑定清算省储行页面。
+  Future<void> _openBindClearingBank() async {
+    final result = await Navigator.of(context).push<ClearingBank>(
+      MaterialPageRoute(
+        builder: (_) => BindClearingPage(
+          currentShenfenId: _boundClearingBankId,
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        _boundClearingBankId = result.shenfenId;
+      });
+    }
   }
 
   Future<void> _loadRecentRecords() async {
@@ -965,6 +985,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                           data: TransferQrPayload(
                             to: widget.wallet.address,
                             name: _walletName,
+                            bank: _boundClearingBankId,
                           ).toRawJson(),
                           hollowSize: 48,
                         ),
@@ -1054,7 +1075,48 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            // 绑定清算省储行入口
+            Container(
+              decoration: AppTheme.cardDecoration(),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _openBindClearingBank,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    child: Row(
+                      children: [
+                        const Text(
+                          '清算省储行',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          _boundClearingBankId != null
+                              ? (clearingBankName(_boundClearingBankId!) ?? '已绑定')
+                              : '未绑定',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: _boundClearingBankId != null
+                                ? AppTheme.primary
+                                : AppTheme.textTertiary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right,
+                            size: 18, color: AppTheme.textTertiary),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             // 交易记录标题行
             InkWell(
               onTap: () {

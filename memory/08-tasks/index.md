@@ -52,6 +52,9 @@
 - `memory/08-tasks/open/20260328-164533-全面仔细检查-cpms-系统是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 - `memory/08-tasks/open/20260329-100000-wumin-wuminapp-扫码登录-sfid-cpms.md`
 - `memory/08-tasks/open/20260329-124242-统一切换-libp2p-wss-30333-清理-litep2p-并修复全链节点连接问题.md`
+- `memory/08-tasks/open/20260331-092013-排查本地电脑节点与两台服务器节点无法连通的问题-确认根因并修复相关配置或文档.md`
+- `memory/08-tasks/open/20260331-step2-node-offchain-rpc-链下待结算账本.md`
+- `memory/08-tasks/open/20260331-step3-runtime-offchain-transaction-pos-适配验证.md`
 
 ## done
 

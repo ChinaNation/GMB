@@ -35,9 +35,12 @@ export default function InstallPage() {
 
   return (
     <div className="login-page">
-      <div style={{ background: '#fff', borderRadius: 8, boxShadow: '0 8px 40px rgba(0,0,0,0.25)', padding: 40, width: 560 }}>
-        <div className="login-card__title">CPMS 系统初始化</div>
-        <div className="login-card__subtitle">公民护照管理系统</div>
+      <div className="login-card" style={{ width: 560 }}>
+        <div className="login-card__header">
+          <div className="login-card__title">CPMS 系统初始化</div>
+          <div className="login-card__subtitle">公民护照管理系统</div>
+        </div>
+        <div className="login-card__body">
 
         {error && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{error}</div>}
         {msg && <div style={{ color: 'var(--color-success)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{msg}</div>}
@@ -84,6 +87,7 @@ export default function InstallPage() {
             <a href="/login" className="btn btn--primary">前往登录</a>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
