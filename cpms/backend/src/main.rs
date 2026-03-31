@@ -14,6 +14,7 @@ mod dangan;
 mod initialize;
 mod login;
 mod operator_admin;
+mod rsa_blind_client;
 mod super_admin;
 
 #[derive(Clone)]

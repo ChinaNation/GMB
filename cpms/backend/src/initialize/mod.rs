@@ -90,16 +90,45 @@ pub struct QrSignKeyRuntime {
     pub secret_bytes: Vec<u8>,
 }
 
+/// SFID-CPMS QR v1 协议 QR1 载荷。
 #[derive(Deserialize)]
 struct SfidInstallQrPayload {
-    ver: String,
+    ver: u32,
     qr_type: String,
-    issuer_id: String,
     site_sfid: String,
-    issued_at: i64,
-    qr_id: String,
-    sig_alg: String,
+    install_token: String,
+    /// SFID RSA 公钥 PEM，CPMS 从 QR1 自动获取。
+    rsa_public_key: String,
     signature: String,
+}
+
+/// SFID-CPMS QR v1 协议 QR3 载荷。
+#[derive(Deserialize)]
+struct SfidAnonCertQrPayload {
+    ver: u32,
+    qr_type: String,
+    province_code: String,
+    blind_anon_sig: String,
+}
+
+/// QR2 注册请求载荷（本机构造，展示给 SFID 扫描）。
+#[derive(Serialize)]
+struct CpmsRegisterReqPayload {
+    ver: u32,
+    qr_type: String,
+    site_sfid: String,
+    install_token: String,
+    blind_anon_req: String,
+}
+
+/// 匿名证书（解盲后持久化到 DB）。
+#[derive(Clone, Serialize, Deserialize)]
+pub(crate) struct AnonCert {
+    pub(crate) province_code: String,
+    pub(crate) anon_pubkey: String,
+    pub(crate) sfid_sig: String,
+    #[serde(default)]
+    pub(crate) msg_randomizer: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -110,7 +139,15 @@ struct InstallInitializeRequest {
 #[derive(Serialize)]
 struct InstallInitializeData {
     site_sfid: String,
+    /// QR2 内容，展示给 SFID 管理员扫描以完成匿名证书注册。
+    qr2_payload: String,
     super_admin_bind_qrs: Vec<SuperAdminBindQrData>,
+}
+
+/// QR3 处理请求。
+#[derive(Deserialize)]
+struct ProcessAnonCertRequest {
+    sfid_anon_cert_qr_content: String,
 }
 
 #[derive(Serialize)]
@@ -162,6 +199,10 @@ pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/install/status", get(install_status))
         .route("/api/v1/install/initialize", post(initialize_install))
+        .route(
+            "/api/v1/install/anon-cert",
+            post(process_anon_cert),
+        )
         .route(
             "/api/v1/install/super-admin/bind",
             post(bind_super_admin_from_wuminapp),
@@ -268,11 +309,13 @@ async fn initialize_install(
 
     let now_ts = Utc::now().timestamp();
     sqlx::query(
-        "INSERT INTO system_install (id, site_sfid, initialized_at)
-         VALUES (1, $1, $2)
-         ON CONFLICT (id) DO UPDATE SET site_sfid = EXCLUDED.site_sfid, initialized_at = EXCLUDED.initialized_at",
+        "INSERT INTO system_install (id, site_sfid, install_token, rsa_public_key_pem, initialized_at)
+         VALUES (1, $1, $2, $3, $4)
+         ON CONFLICT (id) DO UPDATE SET site_sfid = EXCLUDED.site_sfid, install_token = EXCLUDED.install_token, rsa_public_key_pem = EXCLUDED.rsa_public_key_pem, initialized_at = EXCLUDED.initialized_at",
     )
     .bind(qr_payload.site_sfid.trim())
+    .bind(qr_payload.install_token.trim())
+    .bind(qr_payload.rsa_public_key.trim())
     .bind(now_ts)
     .execute(tx.as_mut())
     .await
@@ -324,6 +367,44 @@ async fn initialize_install(
         });
     }
 
+    // ── SFID-CPMS QR v1: 生成匿名签发密钥对 ──
+    let (anon_pubkey_hex, anon_secret_raw) = generate_sr25519_keypair_raw();
+    let anon_secret_stored = encrypt_secret("ANON", &anon_secret_raw);
+
+    // 从 site_sfid 提取省代码（r5 段前两位）
+    let province_code = extract_province_code(&qr_payload.site_sfid);
+
+    // RSABSSA PBRSA 盲化（使用 QR1 携带的 RSA 公钥）
+    let blinding_output = crate::rsa_blind_client::blind_message(
+        qr_payload.rsa_public_key.trim(),
+        &anon_pubkey_hex,
+        &province_code,
+    )
+    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &format!("blind failed: {e}")))?;
+
+    // 保存匿名密钥 + 盲化秘密（解盲时需要）
+    let blinding_secret_hex = hex::encode(&blinding_output.blinding_secret);
+    sqlx::query(
+        "UPDATE system_install SET anon_pubkey = $1, anon_key_encrypted = $2, blinding_factor = $3 WHERE id = 1",
+    )
+    .bind(&anon_pubkey_hex)
+    .bind(&anon_secret_stored)
+    .bind(&blinding_secret_hex)
+    .execute(tx.as_mut())
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save anon key failed"))?;
+
+    // 构造 QR2
+    let qr2 = CpmsRegisterReqPayload {
+        ver: 1,
+        qr_type: "CPMS_REGISTER_REQ".to_string(),
+        site_sfid: qr_payload.site_sfid.clone(),
+        install_token: qr_payload.install_token.clone(),
+        blind_anon_req: format!("0x{}", blinding_output.blind_msg_hex),
+    };
+    let qr2_payload = serde_json::to_string(&qr2)
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "serialize QR2 failed"))?;
+
     tx.commit()
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
@@ -335,7 +416,7 @@ async fn initialize_install(
         "CPMS_INSTALL",
         Some(qr_payload.site_sfid.clone()),
         "SUCCESS",
-        serde_json::json!({}),
+        serde_json::json!({ "anon_pubkey": anon_pubkey_hex }),
     )
     .await?;
 
@@ -347,8 +428,99 @@ async fn initialize_install(
 
     Ok(Json(ok(InstallInitializeData {
         site_sfid: qr_payload.site_sfid,
+        qr2_payload,
         super_admin_bind_qrs: bind_qrs,
     })))
+}
+
+/// 处理 QR3 匿名证书二维码。
+///
+/// CPMS 管理员扫描 SFID 返回的 QR3 后调用此端点。
+/// 本机解盲 blind_anon_sig，验证最终签名，持久化匿名证书。
+async fn process_anon_cert(
+    State(state): State<AppState>,
+    Json(req): Json<ProcessAnonCertRequest>,
+) -> Result<Json<ApiResponse<&'static str>>, (StatusCode, Json<ApiError>)> {
+    if req.sfid_anon_cert_qr_content.trim().is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "empty qr content"));
+    }
+
+    let qr3: SfidAnonCertQrPayload =
+        serde_json::from_str(req.sfid_anon_cert_qr_content.trim())
+            .map_err(|_| err(StatusCode::BAD_REQUEST, 1001, "invalid QR3 payload"))?;
+
+    if qr3.qr_type != "SFID_ANON_CERT" {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "qr_type must be SFID_ANON_CERT"));
+    }
+    if qr3.province_code.trim().is_empty() || qr3.blind_anon_sig.trim().is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "province_code and blind_anon_sig are required"));
+    }
+
+    // 读取本机 anon_pubkey、blinding_factor 和 RSA 公钥
+    let row = sqlx::query("SELECT anon_pubkey, blinding_factor, rsa_public_key_pem FROM system_install WHERE id = 1")
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query anon_pubkey failed"))?
+        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "not initialized"))?;
+
+    let anon_pubkey: Option<String> = row.get("anon_pubkey");
+    let anon_pubkey = anon_pubkey.ok_or_else(|| {
+        err(StatusCode::CONFLICT, 4003, "anon_pubkey not found, run initialize first")
+    })?;
+
+    let blinding_factor_hex: Option<String> = row.get("blinding_factor");
+    let blinding_factor_hex = blinding_factor_hex.ok_or_else(|| {
+        err(StatusCode::CONFLICT, 4003, "blinding_factor not found, run initialize first")
+    })?;
+    let blinding_secret = hex::decode(blinding_factor_hex.trim())
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "blinding_factor hex decode failed"))?;
+
+    let rsa_pubkey_pem: Option<String> = row.get("rsa_public_key_pem");
+    let rsa_pubkey_pem = rsa_pubkey_pem.ok_or_else(|| {
+        err(StatusCode::CONFLICT, 4003, "rsa_public_key_pem not found")
+    })?;
+
+    // 解盲 blind_anon_sig
+    let finalized = crate::rsa_blind_client::finalize_signature(
+        &rsa_pubkey_pem,
+        &qr3.blind_anon_sig,
+        &blinding_secret,
+        &anon_pubkey,
+        &qr3.province_code,
+    )
+    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &format!("finalize failed: {e}")))?;
+
+    let anon_cert = AnonCert {
+        province_code: qr3.province_code.clone(),
+        anon_pubkey: anon_pubkey.clone(),
+        sfid_sig: finalized.signature_hex,
+        msg_randomizer: finalized.msg_randomizer_hex,
+    };
+
+    let anon_cert_json = serde_json::to_string(&anon_cert)
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "serialize anon_cert failed"))?;
+
+    // 持久化匿名证书
+    sqlx::query("UPDATE system_install SET anon_cert = $1 WHERE id = 1")
+        .bind(&anon_cert_json)
+        .execute(&state.db)
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save anon_cert failed"))?;
+
+    write_audit(
+        &state,
+        None,
+        "INSTALL_ANON_CERT",
+        "CPMS_INSTALL",
+        None,
+        "SUCCESS",
+        serde_json::json!({
+            "province_code": qr3.province_code,
+        }),
+    )
+    .await?;
+
+    Ok(Json(ok("anon_cert saved")))
 }
 
 async fn bind_super_admin_from_wuminapp(
@@ -511,6 +683,11 @@ async fn bind_super_admin_from_wuminapp(
     })))
 }
 
+/// 公开解密接口，供 dangan 模块解密匿名私钥。
+pub(crate) fn decrypt_secret_public(key_id: &str, stored: &str) -> Option<Vec<u8>> {
+    decrypt_secret(key_id, stored)
+}
+
 pub(crate) async fn load_qr_sign_keys(
     state: &AppState,
 ) -> Result<Vec<QrSignKeyRuntime>, (StatusCode, Json<ApiError>)> {
@@ -647,13 +824,11 @@ fn parse_sfid_install_qr_content(content: &str) -> Result<SfidInstallQrPayload, 
 }
 
 fn validate_sfid_install_qr(payload: &SfidInstallQrPayload) -> Result<(), String> {
-    if payload.ver.trim().is_empty()
-        || payload.qr_type.trim().is_empty()
-        || payload.issuer_id.trim().is_empty()
+    if payload.qr_type.trim().is_empty()
         || payload.site_sfid.trim().is_empty()
-        || payload.sig_alg.trim().is_empty()
+        || payload.install_token.trim().is_empty()
+        || payload.rsa_public_key.trim().is_empty()
         || payload.signature.trim().is_empty()
-        || payload.qr_id.trim().is_empty()
     {
         return Err("invalid sfid install qr payload".to_string());
     }
@@ -671,16 +846,17 @@ fn validate_sfid_install_qr(payload: &SfidInstallQrPayload) -> Result<(), String
         .filter(|v| !v.is_empty())
         .ok_or_else(|| "SFID_ROOT_PUBKEY is required for install qr verification".to_string())?;
 
+    // SFID-CPMS QR v1 协议签名原文
     let sign_source = format!(
-        "sfid-cpms-install-v1|{}|{}|{}",
-        payload.site_sfid, payload.issued_at, payload.qr_id
+        "sfid-cpms-install-v1|{}|{}",
+        payload.site_sfid, payload.install_token
     );
 
     verify_sr25519_signature(
         &sfid_pubkey,
         &sign_source,
         &payload.signature,
-        b"SFID-CPMS-INSTALL-V1",
+        b"substrate",
     )
 }
 
@@ -733,4 +909,14 @@ fn decode_bytes(input: &str) -> Option<Vec<u8>> {
     }
 
     None
+}
+
+/// 从 site_sfid 的 r5 段提取两位字母省代码。
+fn extract_province_code(site_sfid: &str) -> String {
+    let segments: Vec<&str> = site_sfid.split('-').collect();
+    if segments.len() >= 2 && segments[1].len() >= 2 {
+        segments[1][..2].to_string()
+    } else {
+        String::new()
+    }
 }

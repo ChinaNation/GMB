@@ -75,11 +75,12 @@ pub(crate) async fn admin_cpms_status_scan(
         &payload.qr_id,
         &payload.sig_alg,
     );
+    // TODO: 旧 CPMS QR 签名验证已废弃（SFID-CPMS QR v1 使用 archive_import 端点）
     let verified = crate::operate::cpms_qr::verify_cpms_qr_signature(
         &[
-            &site_keys.pubkey_1,
-            &site_keys.pubkey_2,
-            &site_keys.pubkey_3,
+            "",
+            "",
+            "",
         ],
         &canonical,
         &payload.signature,

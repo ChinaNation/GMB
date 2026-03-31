@@ -203,21 +203,16 @@ fn setup_bind_confirm_test_state(
             site_sfid.clone(),
             CpmsSiteKeys {
                 site_sfid: site_sfid.clone(),
-                pubkey_1: "0x11".repeat(32),
-                pubkey_2: "0x22".repeat(32),
-                pubkey_3: "0x33".repeat(32),
+                install_token: "test-token".to_string(),
+                install_token_status: InstallTokenStatus::Used,
                 status: CpmsSiteStatus::Active,
                 version: 1,
-                last_register_issued_at: Utc::now().timestamp(),
-                init_qr_payload: None,
+                province_code: "ZY".to_string(),
                 admin_province: "中原省".to_string(),
                 created_by: key_pubkey,
                 created_at: Utc::now(),
                 updated_by: None,
                 updated_at: None,
-                chain_register_tx_hash: None,
-                chain_register_block_number: None,
-                chain_register_at: None,
             },
         );
         store.pending_bind_scan_by_qr_id.insert(
@@ -955,21 +950,16 @@ fn pending_scope_requires_province_when_admin_is_scoped() {
 fn cpms_site_scope_must_match_admin_province() {
     let site = CpmsSiteKeys {
         site_sfid: "SFID-SITE-001".to_string(),
-        pubkey_1: "0x1".to_string(),
-        pubkey_2: "0x2".to_string(),
-        pubkey_3: "0x3".to_string(),
+        install_token: "test-token".to_string(),
+        install_token_status: InstallTokenStatus::Pending,
         status: CpmsSiteStatus::Active,
         version: 1,
-        last_register_issued_at: Utc::now().timestamp(),
-        init_qr_payload: None,
+        province_code: "GZ".to_string(),
         admin_province: "贵州省".to_string(),
         created_by: "0xSUPER".to_string(),
         created_at: Utc::now(),
         updated_by: None,
         updated_at: None,
-        chain_register_tx_hash: None,
-        chain_register_block_number: None,
-        chain_register_at: None,
     };
     assert!(in_scope_cpms_site(&site, Some("贵州省")));
     assert!(!in_scope_cpms_site(&site, Some("中枢省")));

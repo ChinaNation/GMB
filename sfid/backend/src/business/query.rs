@@ -26,49 +26,66 @@ pub(crate) async fn admin_list_citizens(
     };
     let mut rows: Vec<CitizenRow> = Vec::new();
 
+    // 新模型：从 citizen_records 构建列表
+    for record in store.citizen_records.values() {
+        rows.push(CitizenRow {
+            id: record.id,
+            account_pubkey: record.account_pubkey.clone(),
+            archive_no: record.archive_no.clone(),
+            sfid_code: record.sfid_code.clone(),
+            province_code: record.province_code.clone(),
+            status: record.status(),
+        });
+    }
+
+    // 兼容旧模型：pending_by_pubkey 中尚未迁移的记录
     for pending in store.pending_by_pubkey.values() {
-        if store
-            .bindings_by_pubkey
-            .contains_key(&pending.account_pubkey)
-        {
+        if store.citizen_id_by_pubkey.contains_key(&pending.account_pubkey) {
+            continue; // 已在新模型中
+        }
+        if store.bindings_by_pubkey.contains_key(&pending.account_pubkey) {
             continue;
         }
         if !in_scope_pending(pending, auth_ctx.admin_province.as_deref()) {
             continue;
         }
         rows.push(CitizenRow {
-            seq: pending.seq,
-            account_pubkey: pending.account_pubkey.clone(),
-            archive_index: None,
-            sfid_code: store
-                .generated_sfid_by_pubkey
-                .get(&pending.account_pubkey)
-                .cloned(),
-            citizen_status: None,
-            is_bound: false,
+            id: pending.seq,
+            account_pubkey: Some(pending.account_pubkey.clone()),
+            archive_no: None,
+            sfid_code: store.generated_sfid_by_pubkey.get(&pending.account_pubkey).cloned(),
+            province_code: None,
+            status: CitizenBindStatus::Unbound,
         });
     }
 
+    // 兼容旧模型：bindings_by_pubkey 中尚未迁移的记录
     for b in store.bindings_by_pubkey.values() {
+        if store.citizen_id_by_pubkey.contains_key(&b.account_pubkey) {
+            continue; // 已在新模型中
+        }
         if !in_scope(b, auth_ctx.admin_province.as_deref()) {
             continue;
         }
         rows.push(CitizenRow {
-            seq: b.seq,
-            account_pubkey: b.account_pubkey.clone(),
-            archive_index: Some(b.archive_index.clone()),
-            sfid_code: Some(b.sfid_code.clone()),
-            citizen_status: Some(b.citizen_status.clone()),
-            is_bound: true,
+            id: b.seq,
+            account_pubkey: Some(b.account_pubkey.clone()),
+            archive_no: if b.archive_index.is_empty() { None } else { Some(b.archive_index.clone()) },
+            sfid_code: if b.sfid_code.is_empty() { None } else { Some(b.sfid_code.clone()) },
+            province_code: None,
+            status: if b.archive_index.is_empty() { CitizenBindStatus::Unbound } else { CitizenBindStatus::Bound },
         });
     }
 
-    rows.sort_by_key(|r| r.seq);
+    rows.sort_by_key(|r| r.id);
 
     if !keyword.is_empty() {
         rows.retain(|r| {
-            r.account_pubkey.to_lowercase().contains(&keyword)
-                || r.archive_index
+            r.account_pubkey
+                .as_ref()
+                .map(|v| v.to_lowercase().contains(&keyword))
+                .unwrap_or(false)
+                || r.archive_no
                     .as_ref()
                     .map(|v| v.to_lowercase().contains(&keyword))
                     .unwrap_or(false)

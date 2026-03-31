@@ -58,13 +58,13 @@
 
 协议号：
 
-- `WUMINAPP_CONTACT_V1`（新版）
-- `WUMINAPP_USER_CARD_V1`（旧版，解析兼容）
+- `WUMIN_USER_V1.0.0`
 
-字段（新版）：
+字段：
 
-- `proto` — 协议标识
+- `proto` — 协议标识（固定 `WUMIN_USER_V1.0.0`）
 - `address` — 通信账户 SS58 地址
+- `purpose` — 用途（contact / transfer）
 - `name` — 用户昵称（= 通信钱包名称）
 
 ### 3.3 通讯录 `UserContact`

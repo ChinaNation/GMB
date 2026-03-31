@@ -282,7 +282,7 @@ class _QrScanPageState extends State<QrScanPage> {
   Future<void> _handleContact(String raw) async {
     if (!mounted) return;
     try {
-      final payload = ContactQrPayload.parse(raw);
+      final payload = UserQrPayload.parse(raw);
       final result = await _contactService.addContact(
         address: payload.address,
         name: payload.name,

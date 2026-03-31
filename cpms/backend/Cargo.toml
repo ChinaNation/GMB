@@ -18,3 +18,4 @@ hex = "0.4"
 base64 = "0.22"
 rand = "0.8"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "json"] }
+blind-rsa-signatures = "0.17"

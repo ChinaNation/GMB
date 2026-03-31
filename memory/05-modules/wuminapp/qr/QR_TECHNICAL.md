@@ -44,11 +44,9 @@ lib/qr/
 
 | 协议常量 | 值 | 用途 |
 | --- | --- | --- |
-| `login` | `WUMIN_LOGIN_V1.0.0` | 登录挑战/回执 |
-| `transfer` | `WUMINAPP_TRANSFER_V1` | 收款码 |
-| `contact` | `WUMINAPP_CONTACT_V1` | 用户码 |
-| `sign` | `WUMIN_SIGN_V1.0.0` | 扫码签名（外部设备） |
-| `legacyUserCard` | `WUMINAPP_USER_CARD_V1` | 旧版用户码（向后兼容） |
+| `login` | `WUMIN_LOGIN_V1.0.0` | 登录、绑定签名验证 |
+| `sign` | `WUMIN_SIGN_V1.0.0` | 冷钱包离线交易签名 |
+| `user` | `WUMIN_USER_V1.0.0` | 用户信息传输（联系人、付款，通过 purpose 字段区分） |
 
 ## 4. 路由器（QrRouter）
 
@@ -68,8 +66,8 @@ lib/qr/
 | 类型 | 触发条件 |
 | --- | --- |
 | `login` | `proto == WUMIN_LOGIN_V1.0.0` |
-| `transfer` | `proto == WUMINAPP_TRANSFER_V1` |
-| `contact` | `proto == WUMINAPP_CONTACT_V1` 或 `WUMINAPP_USER_CARD_V1` |
+| `transfer` | `proto == WUMIN_USER_V1.0.0` 且 `purpose == transfer` |
+| `contact` | `proto == WUMIN_USER_V1.0.0` 且 `purpose == contact`（或无 purpose） |
 | `sign` | `proto == WUMIN_SIGN_V1.0.0` |
 | `legacyAddress` | `gmb://account/...` 或裸 SS58 地址 |
 | `unknown` | 无法识别 |
@@ -180,13 +178,13 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 | L1401 | `biometricUnavailable` | 生物识别不可用 |
 | L1402 | `biometricRejected` | 生物识别被拒绝 |
 
-## 6. 收款码协议（WUMINAPP_TRANSFER_V1）
+## 6. 收款码协议（WUMIN_USER_V1.0.0（purpose=transfer））
 
 ### 6.1 字段
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `proto` | string | 是 | 固定 `WUMINAPP_TRANSFER_V1` |
+| `proto` | string | 是 | 固定 `WUMIN_USER_V1.0.0（purpose=transfer）` |
 | `to` | string | 是 | 收款地址（SS58 格式） |
 | `amount` | string | 否 | 金额（字符串避免浮点精度） |
 | `symbol` | string | 否 | 币种，默认 `GMB` |
@@ -203,17 +201,17 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 
 扫码页同时支持：
 
-- `WUMINAPP_TRANSFER_V1` JSON 格式 → 完整解析
+- `WUMIN_USER_V1.0.0（purpose=transfer）` JSON 格式 → 完整解析
 - `gmb://account/<address>` 格式 → 仅填充收款地址
 - 裸 SS58 地址 → 仅填充收款地址
 
-## 7. 用户码协议（WUMINAPP_CONTACT_V1）
+## 7. 用户码协议（WUMIN_USER_V1.0.0）
 
 ### 7.1 新版字段
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `proto` | string | 是 | 固定 `WUMINAPP_CONTACT_V1` |
+| `proto` | string | 是 | 固定 `WUMIN_USER_V1.0.0` |
 | `address` | string | 是 | 链上地址（SS58 格式） |
 | `name` | string | 是 | 用户昵称 |
 
@@ -233,7 +231,7 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 
 - 旧版使用 `account_pubkey`（裸公钥 hex），新版使用 `address`（SS58 地址）
 - SS58 地址包含链标识（ss58 = 2027），更安全且用户可读
-- 生成二维码统一使用新版 `WUMINAPP_CONTACT_V1` 格式
+- 生成二维码统一使用新版 `WUMIN_USER_V1.0.0` 格式
 - 解析二维码同时兼容新旧两版
 
 ## 8. 统一扫码页面
@@ -280,7 +278,7 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 - `trade/onchain/`：
   - 使用 `QrScanTransferResult` 预填转账表单
 - `user/`：
-  - `UserQrPayload` 已迁移到 `WUMINAPP_CONTACT_V1` 格式
+  - `UserQrPayload` 已迁移到 `WUMIN_USER_V1.0.0` 格式
   - 扫码页面由 `qr/pages/qr_scan_page.dart` 统一提供
 
 ## 10. 安全要求
