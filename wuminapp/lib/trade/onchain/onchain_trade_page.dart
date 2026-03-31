@@ -686,56 +686,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // 扫码支付入口（链下快捷支付）
-                    Container(
-                      decoration: AppTheme.cardDecoration(),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _openOffchainPay,
-                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.primary.withAlpha(20),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Center(
-                                    child: SvgPicture.asset(
-                                      'assets/icons/scan-line.svg',
-                                      width: 18,
-                                      height: 18,
-                                      colorFilter: const ColorFilter.mode(
-                                        AppTheme.primary,
-                                        BlendMode.srcIn,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                const Text(
-                                  '扫码支付',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppTheme.textPrimary,
-                                  ),
-                                ),
-                                const Spacer(),
-                                const Icon(Icons.chevron_right,
-                                    size: 20, color: AppTheme.textTertiary),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
                     if (_currentWallet == null && !_loadingWallet)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
@@ -758,6 +708,62 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                         ),
                       ),
                     _buildSubmitCard(),
+                    const SizedBox(height: 12),
+                    // 扫码支付入口（链下快捷支付）
+                    Container(
+                      decoration: AppTheme.cardDecoration(),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _openOffchainPay,
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primary.withAlpha(20),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Center(
+                                    child: Text(
+                                      '链下',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppTheme.primary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  '扫码支付',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                                const Spacer(),
+                                SvgPicture.asset(
+                                  'assets/icons/scan-line.svg',
+                                  width: 18,
+                                  height: 18,
+                                  colorFilter: const ColorFilter.mode(
+                                    AppTheme.primary,
+                                    BlendMode.srcIn,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 24),
                   ],
                 ),
