@@ -154,36 +154,32 @@ export type BindScanResult = {
   expire_at: number;
 };
 
-export type CpmsRegisterResult = {
-  site_sfid: string;
-  genesis_hash: string;
-  sfid_id: string;
-  register_nonce: string;
-  signature: string;
-  status: string;
-  message: string;
-};
-
 export type GenerateCpmsInstitutionSfidResult = {
   site_sfid: string;
-  issued_at: number;
-  expire_at: number;
-  qr_payload: string;
+  qr1_payload: string;
 };
 
 export type CpmsSiteRow = {
   site_sfid: string;
-  pubkey_1: string;
-  pubkey_2: string;
-  pubkey_3: string;
+  install_token_status: 'PENDING' | 'USED' | 'REVOKED';
   status?: 'PENDING' | 'ACTIVE' | 'DISABLED' | 'REVOKED';
   version?: number;
-  init_qr_payload?: string | null;
+  province_code?: string;
   admin_province?: string;
   created_by: string;
   created_at: string;
   updated_by?: string | null;
   updated_at?: string | null;
+};
+
+export type CpmsRegisterResult = {
+  qr3_payload: string;
+};
+
+export type CpmsArchiveImportResult = {
+  archive_no: string;
+  province_code: string;
+  status: string;
 };
 
 export type CpmsStatusScanResult = {
@@ -230,11 +226,29 @@ export type KeyringRotateVerifyResult = {
 };
 
 export type CitizenRow = {
-  seq: number;
-  account_pubkey: string;
-  archive_index?: string;
+  id: number;
+  account_pubkey?: string;
+  archive_no?: string;
   sfid_code?: string;
-  is_bound: boolean;
+  province_code?: string;
+  status: 'UNBOUND' | 'BOUND' | 'UNLINKED';
+};
+
+export type CitizenBindChallengeResult = {
+  challenge_id: string;
+  challenge_text: string;
+  /** WUMIN_SIGN_V1.0.0 签名请求 JSON，前端直接展示为二维码 */
+  sign_request: string;
+  expire_at: number;
+};
+
+export type CitizenBindResult = {
+  id: number;
+  account_pubkey?: string;
+  archive_no?: string;
+  sfid_code?: string;
+  province_code?: string;
+  status: 'UNBOUND' | 'BOUND' | 'UNLINKED';
 };
 
 export type OperatorRow = {
@@ -365,11 +379,27 @@ export async function listCitizens(auth: AdminAuth, keyword?: string): Promise<C
   });
 }
 
-export async function confirmBind(
+export async function citizenBindChallenge(
+  auth: AdminAuth
+): Promise<CitizenBindChallengeResult> {
+  return request<CitizenBindChallengeResult>('/api/v1/admin/citizen/bind/challenge', {
+    method: 'POST',
+    headers: adminHeaders(auth)
+  });
+}
+
+export async function citizenBind(
   auth: AdminAuth,
-  payload: { account_pubkey: string; archive_index: string; qr_id: string }
-): Promise<BindConfirmResult> {
-  return request<BindConfirmResult>('/api/v1/admin/bind/confirm', {
+  payload: {
+    mode: 'bind_archive' | 'bind_pubkey';
+    user_address: string;
+    qr4_payload?: string;
+    citizen_id?: number;
+    challenge_id: string;
+    signature: string;
+  }
+): Promise<CitizenBindResult> {
+  return request<CitizenBindResult>('/api/v1/admin/citizen/bind', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -379,29 +409,11 @@ export async function confirmBind(
   });
 }
 
-export async function unbind(auth: AdminAuth, accountPubkey: string): Promise<string> {
-  return request<string>('/api/v1/admin/bind/unbind', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...adminHeaders(auth)
-    },
-    body: JSON.stringify({ account_pubkey: accountPubkey })
-  });
-}
-
-export async function generateSfid(
+export async function citizenUnbind(
   auth: AdminAuth,
-  payload: {
-    account_pubkey: string;
-    a3: string;
-    p1?: string;
-    province: string;
-    city: string;
-    institution: string;
-  }
-): Promise<GenerateSfidResult> {
-  return request<GenerateSfidResult>('/api/v1/admin/sfid/generate', {
+  payload: { citizen_id: number; challenge_id: string; signature: string }
+): Promise<CitizenBindResult> {
+  return request<CitizenBindResult>('/api/v1/admin/citizen/unbind', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -426,25 +438,11 @@ export async function listSfidCities(auth: AdminAuth, province: string): Promise
   });
 }
 
-export async function scanBindQr(
+export async function scanCpmsStatusQr(
   auth: AdminAuth,
   payload: { qr_payload: string }
-): Promise<BindScanResult> {
-  return request<BindScanResult>('/api/v1/admin/bind/scan', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...adminHeaders(auth)
-    },
-    body: JSON.stringify(payload)
-  });
-}
-
-export async function registerCpmsKeysScan(
-  auth: AdminAuth,
-  payload: { qr_payload: string }
-): Promise<CpmsRegisterResult> {
-  return request<CpmsRegisterResult>('/api/v1/admin/cpms-keys/register-scan', {
+): Promise<CpmsStatusScanResult> {
+  return request<CpmsStatusScanResult>('/api/v1/admin/cpms-status/scan', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -468,11 +466,11 @@ export async function generateCpmsInstitutionSfid(
   });
 }
 
-export async function scanCpmsStatusQr(
+export async function registerCpms(
   auth: AdminAuth,
   payload: { qr_payload: string }
-): Promise<CpmsStatusScanResult> {
-  return request<CpmsStatusScanResult>('/api/v1/admin/cpms-status/scan', {
+): Promise<CpmsRegisterResult> {
+  return request<CpmsRegisterResult>('/api/v1/admin/cpms/register', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -482,25 +480,44 @@ export async function scanCpmsStatusQr(
   });
 }
 
-export async function listCpmsSites(auth: AdminAuth): Promise<CpmsSiteRow[]> {
-  return request<CpmsSiteRow[]>('/api/v1/admin/cpms-keys', {
-    method: 'GET',
-    headers: adminHeaders(auth)
-  });
-}
-
-export async function updateCpmsKeys(
+export async function importArchive(
   auth: AdminAuth,
-  siteSfid: string,
-  payload: { pubkey_1: string; pubkey_2: string; pubkey_3: string }
-): Promise<CpmsSiteRow> {
-  return request<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}`, {
-    method: 'PUT',
+  payload: { qr_payload: string }
+): Promise<CpmsArchiveImportResult> {
+  return request<CpmsArchiveImportResult>('/api/v1/admin/cpms/archive/import', {
+    method: 'POST',
     headers: {
       'content-type': 'application/json',
       ...adminHeaders(auth)
     },
     body: JSON.stringify(payload)
+  });
+}
+
+export async function revokeInstallToken(
+  auth: AdminAuth,
+  siteSfid: string
+): Promise<string> {
+  return request<string>(`/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/revoke-token`, {
+    method: 'POST',
+    headers: adminHeaders(auth)
+  });
+}
+
+export async function reissueInstallToken(
+  auth: AdminAuth,
+  siteSfid: string
+): Promise<GenerateCpmsInstitutionSfidResult> {
+  return request<GenerateCpmsInstitutionSfidResult>(`/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/reissue`, {
+    method: 'POST',
+    headers: adminHeaders(auth)
+  });
+}
+
+export async function listCpmsSites(auth: AdminAuth): Promise<CpmsSiteRow[]> {
+  return request<CpmsSiteRow[]>('/api/v1/admin/cpms-keys', {
+    method: 'GET',
+    headers: adminHeaders(auth)
   });
 }
 

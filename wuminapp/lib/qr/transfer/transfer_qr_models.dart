@@ -4,6 +4,7 @@ import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 
 /// 收款码数据模型。
 ///
+/// 使用统一的 WUMIN_USER_V1.0.0 协议，purpose=transfer。
 /// 收款方生成并展示，付款方扫码后预填转账表单。
 class TransferQrPayload {
   const TransferQrPayload({
@@ -15,18 +16,16 @@ class TransferQrPayload {
     this.bank,
   });
 
-  /// 协议标识。
-  static const String protocol = QrProtocols.transfer;
+  /// 协议标识（统一使用用户协议）。
+  static const String protocol = QrProtocols.user;
 
   /// 收款地址（SS58 格式）。
   final String to;
 
-  /// 钱包名称（= 用户昵称），通讯录扫码时读取。
+  /// 钱包名称（= 用户昵称）。
   final String? name;
 
   /// 金额（字符串避免浮点精度问题）。
-  ///
-  /// 为空或 null 时由付款方手动输入。
   final String? amount;
 
   /// 币种，默认 `GMB`。
@@ -41,7 +40,8 @@ class TransferQrPayload {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'proto': protocol,
-      'to': to,
+      'purpose': 'transfer',
+      'address': to,
       'name': name ?? '',
       'amount': amount ?? '',
       'symbol': symbol,
@@ -54,7 +54,8 @@ class TransferQrPayload {
 
   /// 从 JSON Map 解析收款码。
   static TransferQrPayload fromJson(Map<String, dynamic> data) {
-    final to = (data['to'] ?? '').toString().trim();
+    // 兼容新旧字段名：新版用 address，旧版用 to
+    final to = (data['address'] ?? data['to'] ?? '').toString().trim();
     if (to.isEmpty) {
       throw const FormatException('收款码缺少收款地址');
     }

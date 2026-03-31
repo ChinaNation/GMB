@@ -58,17 +58,36 @@ pub(crate) struct Store {
     pub(crate) pending_by_pubkey: HashMap<String, PendingRequest>,
     pub(crate) bindings_by_pubkey: HashMap<String, BindingRecord>,
     pub(crate) pubkey_by_archive_index: HashMap<String, String>,
+    // ── 公民身份记录（新模型）──
+    #[serde(default)]
+    pub(crate) next_citizen_id: u64,
+    #[serde(default)]
+    pub(crate) citizen_records: HashMap<u64, CitizenRecord>,
+    /// 反向索引：pubkey → citizen_id
+    #[serde(default)]
+    pub(crate) citizen_id_by_pubkey: HashMap<String, u64>,
+    /// 反向索引：archive_no → citizen_id
+    #[serde(default)]
+    pub(crate) citizen_id_by_archive_no: HashMap<String, u64>,
+    /// 绑定 challenge 池
+    #[serde(default)]
+    pub(crate) citizen_bind_challenges: HashMap<String, CitizenBindChallenge>,
     pub(crate) admin_users_by_pubkey: HashMap<String, AdminUser>,
     pub(crate) super_admin_province_by_pubkey: HashMap<String, String>,
     pub(crate) login_challenges: HashMap<String, LoginChallenge>,
     pub(crate) qr_login_results: HashMap<String, QrLoginResultRecord>,
     pub(crate) admin_sessions: HashMap<String, AdminSession>,
     pub(crate) cpms_site_keys: HashMap<String, CpmsSiteKeys>,
+    /// 已录入的档案记录，key = archive_no。
+    pub(crate) imported_archives: HashMap<String, ImportedArchive>,
     pub(crate) consumed_cpms_register_tokens: HashMap<String, DateTime<Utc>>,
     pub(crate) consumed_qr_ids: HashMap<String, DateTime<Utc>>,
     pub(crate) pending_status_by_archive_no: HashMap<String, CitizenStatus>,
     pub(crate) pending_bind_scan_by_qr_id: HashMap<String, PendingBindScan>,
     pub(crate) generated_sfid_by_pubkey: HashMap<String, String>,
+    /// RSABSSA 匿名证书签发 RSA 私钥 PEM（自动生成，持久化）。
+    #[serde(default)]
+    pub(crate) anon_rsa_private_key_pem: Option<String>,
     pub(crate) chain_keyring_state: Option<ChainKeyringState>,
     pub(crate) keyring_rotate_challenges: HashMap<String, KeyringRotateChallenge>,
     pub(crate) audit_logs: Vec<AuditLogEntry>,
@@ -152,17 +171,16 @@ pub(crate) struct AdminUser {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CpmsSiteKeys {
     pub(crate) site_sfid: String,
-    pub(crate) pubkey_1: String,
-    pub(crate) pubkey_2: String,
-    pub(crate) pubkey_3: String,
+    #[serde(default)]
+    pub(crate) install_token: String,
+    #[serde(default = "default_install_token_status")]
+    pub(crate) install_token_status: InstallTokenStatus,
     #[serde(default = "default_cpms_site_status")]
     pub(crate) status: CpmsSiteStatus,
     #[serde(default = "default_cpms_site_version")]
     pub(crate) version: u64,
     #[serde(default)]
-    pub(crate) last_register_issued_at: i64,
-    #[serde(default)]
-    pub(crate) init_qr_payload: Option<String>,
+    pub(crate) province_code: String,
     pub(crate) admin_province: String,
     pub(crate) created_by: String,
     pub(crate) created_at: DateTime<Utc>,
@@ -170,12 +188,42 @@ pub(crate) struct CpmsSiteKeys {
     pub(crate) updated_by: Option<String>,
     #[serde(default)]
     pub(crate) updated_at: Option<DateTime<Utc>>,
-    #[serde(default)]
-    pub(crate) chain_register_tx_hash: Option<String>,
-    #[serde(default)]
-    pub(crate) chain_register_block_number: Option<u64>,
-    #[serde(default)]
-    pub(crate) chain_register_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum InstallTokenStatus {
+    Pending,
+    Used,
+    Revoked,
+}
+
+fn default_install_token_status() -> InstallTokenStatus {
+    InstallTokenStatus::Pending
+}
+
+/// SFID 端录入的档案记录。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ImportedArchive {
+    pub(crate) archive_no: String,
+    /// 以验签通过后的 anon_cert.province_code 为准。
+    pub(crate) province_code: String,
+    /// 匿名证书 SHA-256 摘要，用于审计。
+    pub(crate) anon_cert_hash: String,
+    pub(crate) imported_at: DateTime<Utc>,
+    #[serde(default = "default_archive_import_status")]
+    pub(crate) status: ArchiveImportStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum ArchiveImportStatus {
+    Active,
+    Revoked,
+}
+
+fn default_archive_import_status() -> ArchiveImportStatus {
+    ArchiveImportStatus::Active
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,6 +244,60 @@ pub(crate) struct PendingBindScan {
     pub(crate) status: CitizenStatus,
     pub(crate) expire_at: i64,
     pub(crate) scanned_at: DateTime<Utc>,
+}
+
+// ── 公民身份记录（新模型）──────────────────────────────────────────────
+
+/// 公民身份记录。
+///
+/// 以自增 ID 为主键，account_pubkey / archive_no / sfid_code 各自唯一（非空时）。
+/// 三种状态：
+/// - Unbound：只有 pubkey（区块链传入，未绑定档案）
+/// - Bound：pubkey + archive_no + sfid_code 三者都有
+/// - Unlinked：只有 archive_no + sfid_code（解绑后公钥清除）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct CitizenRecord {
+    pub(crate) id: u64,
+    pub(crate) account_pubkey: Option<String>,
+    pub(crate) archive_no: Option<String>,
+    pub(crate) sfid_code: Option<String>,
+    pub(crate) sfid_signature: Option<String>,
+    pub(crate) province_code: Option<String>,
+    pub(crate) bound_at: Option<DateTime<Utc>>,
+    pub(crate) bound_by: Option<String>,
+    pub(crate) created_at: DateTime<Utc>,
+}
+
+impl CitizenRecord {
+    pub(crate) fn status(&self) -> CitizenBindStatus {
+        match (&self.account_pubkey, &self.archive_no) {
+            (Some(_), Some(_)) => CitizenBindStatus::Bound,
+            (Some(_), None) => CitizenBindStatus::Unbound,
+            (None, Some(_)) => CitizenBindStatus::Unlinked,
+            (None, None) => CitizenBindStatus::Unbound,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum CitizenBindStatus {
+    /// 只有公钥，未绑定档案。
+    Unbound,
+    /// 三者都有，已绑定。
+    Bound,
+    /// 解绑后，只有档案号+SFID码，公钥已清除。
+    Unlinked,
+}
+
+/// 绑定 challenge（公钥签名验证）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct CitizenBindChallenge {
+    pub(crate) challenge_id: String,
+    pub(crate) challenge_text: String,
+    pub(crate) account_pubkey: String,
+    pub(crate) expire_at: DateTime<Utc>,
+    pub(crate) created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -406,6 +508,54 @@ pub(crate) struct AdminUnbindInput {
     pub(crate) account_pubkey: String,
 }
 
+// ── 公民身份绑定接口类型 ──
+
+/// 绑定/解绑 challenge 返回。
+#[derive(Serialize)]
+pub(crate) struct CitizenBindChallengeOutput {
+    pub(crate) challenge_id: String,
+    pub(crate) challenge_text: String,
+    /// WUMIN_SIGN_V1.0.0 签名请求 JSON（前端直接展示为二维码）。
+    pub(crate) sign_request: String,
+    pub(crate) expire_at: i64,
+}
+
+/// 绑定请求（两种模式）。
+#[derive(Deserialize)]
+pub(crate) struct CitizenBindInput {
+    /// "bind_archive"（全新绑定）或 "bind_pubkey"（重新绑定公钥）
+    pub(crate) mode: String,
+    /// 用户 SS58 地址（从 WUMIN_USER_V1.0.0 二维码获取）
+    pub(crate) user_address: String,
+    /// QR4 二维码内容（mode=bind_archive 时必填）
+    pub(crate) qr4_payload: Option<String>,
+    /// 记录 ID（mode=bind_pubkey 时必填）
+    pub(crate) citizen_id: Option<u64>,
+    /// challenge ID
+    pub(crate) challenge_id: String,
+    /// WUMIN_SIGN_V1.0.0 签名结果（hex）
+    pub(crate) signature: String,
+}
+
+/// 绑定返回。
+#[derive(Serialize)]
+pub(crate) struct CitizenBindOutput {
+    pub(crate) id: u64,
+    pub(crate) account_pubkey: Option<String>,
+    pub(crate) archive_no: Option<String>,
+    pub(crate) sfid_code: Option<String>,
+    pub(crate) province_code: Option<String>,
+    pub(crate) status: CitizenBindStatus,
+}
+
+/// 解绑请求（需要公钥签名确认）。
+#[derive(Deserialize)]
+pub(crate) struct CitizenUnbindInput {
+    pub(crate) citizen_id: u64,
+    pub(crate) challenge_id: String,
+    pub(crate) signature: String,
+}
+
 #[derive(Deserialize)]
 pub(crate) struct CitizensQuery {
     pub(crate) keyword: Option<String>,
@@ -430,6 +580,17 @@ pub(crate) struct PublicIdentitySearchOutput {
 
 #[derive(Serialize)]
 pub(crate) struct CitizenRow {
+    pub(crate) id: u64,
+    pub(crate) account_pubkey: Option<String>,
+    pub(crate) archive_no: Option<String>,
+    pub(crate) sfid_code: Option<String>,
+    pub(crate) province_code: Option<String>,
+    pub(crate) status: CitizenBindStatus,
+}
+
+// 保留旧版 CitizenRow 用于兼容旧查询
+#[derive(Serialize)]
+pub(crate) struct CitizenRowLegacy {
     pub(crate) seq: u64,
     pub(crate) account_pubkey: String,
     pub(crate) archive_index: Option<String>,
@@ -567,11 +728,16 @@ pub(crate) struct GenerateCpmsInstitutionSfidInput {
     pub(crate) institution: String,
 }
 
+/// QR2 注册请求输入。
 #[derive(Deserialize)]
-pub(crate) struct UpdateCpmsKeysInput {
-    pub(crate) pubkey_1: String,
-    pub(crate) pubkey_2: String,
-    pub(crate) pubkey_3: String,
+pub(crate) struct CpmsRegisterInput {
+    pub(crate) qr_payload: String,
+}
+
+/// QR4 档案录入输入。
+#[derive(Deserialize)]
+pub(crate) struct CpmsArchiveImportInput {
+    pub(crate) qr_payload: String,
 }
 
 #[derive(Deserialize)]
@@ -590,20 +756,15 @@ pub(crate) struct CpmsKeysListOutput {
 #[derive(Serialize)]
 pub(crate) struct CpmsSiteKeysListRow {
     pub(crate) site_sfid: String,
-    pub(crate) pubkey_1: String,
-    pub(crate) pubkey_2: String,
-    pub(crate) pubkey_3: String,
+    pub(crate) install_token_status: InstallTokenStatus,
     pub(crate) status: CpmsSiteStatus,
     pub(crate) version: u64,
-    pub(crate) last_register_issued_at: i64,
+    pub(crate) province_code: String,
     pub(crate) admin_province: String,
     pub(crate) created_by: String,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) updated_by: Option<String>,
     pub(crate) updated_at: Option<DateTime<Utc>>,
-    pub(crate) chain_register_tx_hash: Option<String>,
-    pub(crate) chain_register_block_number: Option<u64>,
-    pub(crate) chain_register_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Deserialize)]
@@ -639,57 +800,59 @@ pub(crate) struct CitizenStatusQrPayload {
     pub(crate) signature: String,
 }
 
+/// QR2 解析后的注册请求。
 #[derive(Debug, Clone, Deserialize)]
-pub(crate) struct CpmsRegisterQrPayload {
+pub(crate) struct CpmsRegisterReqPayload {
+    pub(crate) ver: u32,
+    pub(crate) qr_type: String,
     pub(crate) site_sfid: String,
-    pub(crate) pubkey_1: String,
-    pub(crate) pubkey_2: String,
-    pub(crate) pubkey_3: String,
-    pub(crate) issued_at: i64,
-    pub(crate) checksum_or_signature: String,
-    pub(crate) init_qr_payload: Option<String>,
+    pub(crate) install_token: String,
+    pub(crate) blind_anon_req: String,
 }
 
+/// QR4 解析后的档案业务载荷。
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct CpmsArchiveQrPayload {
+    pub(crate) ver: u32,
+    pub(crate) qr_type: String,
+    pub(crate) province_code: String,
+    pub(crate) archive_no: String,
+    pub(crate) citizen_status: String,
+    pub(crate) voting_eligible: bool,
+    pub(crate) anon_cert: AnonCert,
+    pub(crate) archive_sig: String,
+}
+
+/// 匿名证书。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct CpmsInstitutionInitQrPayload {
-    pub(crate) ver: String,
-    pub(crate) issuer_id: String,
-    pub(crate) purpose: String,
-    pub(crate) site_sfid: String,
-    pub(crate) a3: String,
-    pub(crate) p1: String,
-    pub(crate) province: String,
-    pub(crate) city: String,
-    pub(crate) institution: String,
-    pub(crate) issued_at: i64,
-    pub(crate) expire_at: i64,
-    pub(crate) qr_id: String,
-    pub(crate) sig_alg: String,
-    pub(crate) key_id: String,
-    pub(crate) key_version: String,
-    pub(crate) public_key: String,
-    pub(crate) signature: String,
+pub(crate) struct AnonCert {
+    pub(crate) province_code: String,
+    pub(crate) anon_pubkey: String,
+    pub(crate) sfid_sig: String,
+    /// 消息随机化因子（RSABSSA finalize 产出，验签时需要）。
+    #[serde(default)]
+    pub(crate) msg_randomizer: Option<String>,
 }
 
+/// 生成 SFID + QR1 的输出。
 #[derive(Serialize)]
-pub(crate) struct CpmsRegisterScanOutput {
+pub(crate) struct GenerateCpmsInstallOutput {
     pub(crate) site_sfid: String,
-    pub(crate) genesis_hash: String,
-    pub(crate) sfid_id: String,
-    pub(crate) register_nonce: String,
-    pub(crate) signature: String,
+    pub(crate) qr1_payload: String,
+}
+
+/// 处理 QR2 注册请求后返回 QR3。
+#[derive(Serialize)]
+pub(crate) struct CpmsRegisterOutput {
+    pub(crate) qr3_payload: String,
+}
+
+/// 档案录入结果。
+#[derive(Serialize)]
+pub(crate) struct CpmsArchiveImportOutput {
+    pub(crate) archive_no: String,
+    pub(crate) province_code: String,
     pub(crate) status: &'static str,
-    pub(crate) message: &'static str,
-    pub(crate) chain_register_tx_hash: String,
-    pub(crate) chain_register_block_number: u64,
-}
-
-#[derive(Serialize)]
-pub(crate) struct GenerateCpmsInstitutionSfidOutput {
-    pub(crate) site_sfid: String,
-    pub(crate) issued_at: i64,
-    pub(crate) expire_at: i64,
-    pub(crate) qr_payload: String,
 }
 
 #[derive(Serialize)]

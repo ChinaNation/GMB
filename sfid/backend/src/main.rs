@@ -2,7 +2,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     middleware,
     response::IntoResponse,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use chrono::{DateTime, NaiveDate, Utc};
@@ -665,11 +665,46 @@ fn main() {
     }
     seed_demo_record(&state);
 
+    // ── SFID-CPMS QR v1: 初始化 RSA 匿名证书密钥对 ──
+    // 注意：store.write() 需要 tokio runtime，因此仅在此处做 read + init，
+    // 如果需要生成新密钥则在 runtime 启动后再 write + persist。
+    {
+        let existing_pem = state
+            .store
+            .read()
+            .ok()
+            .and_then(|s| s.anon_rsa_private_key_pem.clone());
+        if existing_pem.as_deref().map(|s| !s.trim().is_empty()).unwrap_or(false) {
+            // 已有密钥，直接加载（不需要 tokio runtime）
+            match key_admins::rsa_blind::init_from_pem(existing_pem.as_deref().unwrap()) {
+                Ok(()) => info!("loaded existing RSA anon cert keypair from store"),
+                Err(e) => warn!("RSA anon cert keypair load failed: {e}"),
+            }
+        } else {
+            info!("no existing RSA anon cert keypair, will generate after runtime start");
+        }
+    }
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .expect("build tokio runtime");
     runtime.block_on(async move {
+        // ── RSA 密钥生成（需要 tokio runtime 才能 store.write）──
+        if key_admins::rsa_blind::get_public_key_pem().is_err() {
+            info!("generating RSA anon cert keypair...");
+            match key_admins::rsa_blind::generate_keypair_pem() {
+                Ok(new_pem) => {
+                    if let Ok(mut store) = state.store.write() {
+                        store.anon_rsa_private_key_pem = Some(new_pem);
+                    }
+                    persist_runtime_state(&state);
+                    info!("generated and persisted new RSA anon cert keypair");
+                }
+                Err(e) => warn!("RSA keypair generation failed: {e}"),
+            }
+        }
+
         tokio::spawn(bind_callback_worker(state.clone()));
         tokio::spawn(indexer::indexer_worker(state.store.backend.clone()));
 
@@ -724,12 +759,24 @@ fn main() {
                 post(super_admins::generate_cpms_institution_sfid_qr),
             )
             .route(
-                "/api/v1/admin/cpms-keys/register-scan",
-                post(super_admins::register_cpms_keys_scan),
+                "/api/v1/admin/cpms/register",
+                post(super_admins::register_cpms),
+            )
+            .route(
+                "/api/v1/admin/cpms/archive/import",
+                post(super_admins::archive_import),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid",
-                put(super_admins::update_cpms_keys).delete(super_admins::delete_cpms_keys),
+                delete(super_admins::delete_cpms_keys),
+            )
+            .route(
+                "/api/v1/admin/cpms-keys/:site_sfid/revoke-token",
+                post(super_admins::revoke_install_token),
+            )
+            .route(
+                "/api/v1/admin/cpms-keys/:site_sfid/reissue",
+                post(super_admins::reissue_install_token),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/disable",
@@ -755,21 +802,18 @@ fn main() {
                 "/api/v1/admin/citizens",
                 get(business::query::admin_list_citizens),
             )
+            // ── 公民身份绑定 ──
             .route(
-                "/api/v1/admin/bind/scan",
-                post(operate::binding::admin_bind_scan),
+                "/api/v1/admin/citizen/bind/challenge",
+                post(operate::binding::citizen_bind_challenge),
             )
             .route(
-                "/api/v1/admin/bind/query",
-                get(business::query::admin_query_by_pubkey),
+                "/api/v1/admin/citizen/bind",
+                post(operate::binding::citizen_bind),
             )
             .route(
-                "/api/v1/admin/bind/confirm",
-                post(operate::binding::admin_bind_confirm),
-            )
-            .route(
-                "/api/v1/admin/bind/unbind",
-                post(operate::binding::admin_unbind),
+                "/api/v1/admin/citizen/unbind",
+                post(operate::binding::citizen_unbind),
             )
             .route("/api/v1/admin/sfid/meta", get(sfid::admin::admin_sfid_meta))
             .route(
