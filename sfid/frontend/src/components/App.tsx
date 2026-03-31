@@ -337,8 +337,7 @@ export default function App() {
     institution: string;
   }>();
   const [replaceSuperForm] = Form.useForm<{ province: string; admin_pubkey: string }>();
-  const [keyringForm] = Form.useForm<{ initiator_pubkey: string }>();
-  const [keyringCommitForm] = Form.useForm<{ new_backup_pubkey: string }>();
+  const [keyringForm] = Form.useForm<{ new_backup_pubkey: string }>();
   const [sfidToolForm] = Form.useForm<{
     a3: string;
     p1: string;
@@ -714,7 +713,6 @@ export default function App() {
     setKeyringScannerActive(false);
     stopKeyringScanner();
     keyringForm.resetFields();
-    keyringCommitForm.resetFields();
     message.success('已退出登录');
   };
 
@@ -805,16 +803,20 @@ export default function App() {
     setKeyringScannerReady(false);
   };
 
-  const onCreateKeyringRotateChallenge = async (values: { initiator_pubkey: string }) => {
+  const onCreateKeyringRotateChallenge = async (values: { new_backup_pubkey: string }) => {
     if (!auth) return;
+    // 主公钥不能发起轮换
+    if (keyringState && auth.admin_pubkey.replace(/^0x/i, '').toLowerCase() === keyringState.main_pubkey.replace(/^0x/i, '').toLowerCase()) {
+      message.error('主密钥不能发起轮换，请用备用密钥登录');
+      return;
+    }
     setKeyringActionLoading(true);
     try {
       const challenge = await createKeyringRotateChallenge(auth, {
-        initiator_pubkey: values.initiator_pubkey.trim()
+        initiator_pubkey: auth.admin_pubkey
       });
       setKeyringChallenge(challenge);
       setKeyringSignedPayload(null);
-      keyringCommitForm.resetFields();
       setKeyringScannerActive(false);
       stopKeyringScanner();
       message.success('轮换签名二维码已生成，请用备用私钥钱包扫码签名');
@@ -832,6 +834,11 @@ export default function App() {
       message.error('请先生成轮换二维码');
       return;
     }
+    const newBackupPubkey = keyringForm.getFieldValue('new_backup_pubkey')?.trim();
+    if (!newBackupPubkey) {
+      message.error('新备用公钥不能为空');
+      return;
+    }
     setKeyringScanSubmitting(true);
     try {
       const payload = parseKeyringSignedPayload(raw, keyringChallenge.challenge_id);
@@ -842,7 +849,32 @@ export default function App() {
       setKeyringSignedPayload(payload);
       setKeyringScannerActive(false);
       stopKeyringScanner();
-      message.success('签名校验通过，请输入新备用公钥确认轮换');
+      message.success('签名校验通过，正在提交轮换...');
+      // 自动提交 commit
+      setKeyringCommitLoading(true);
+      try {
+        const result = await commitKeyringRotate(auth, {
+          challenge_id: payload.challenge_id,
+          signature: payload.signature,
+          new_backup_pubkey: newBackupPubkey
+        });
+        if (result.chain_submit_ok) {
+          message.success(`主密钥轮换成功，新版本：${result.version}`);
+        } else {
+          message.warning(
+            `主密钥已本地轮换为版本 ${result.version}，但上链提交失败：${result.chain_submit_error || '未知错误'}`
+          );
+        }
+        setKeyringChallenge(null);
+        setKeyringSignedPayload(null);
+        keyringForm.resetFields();
+        await refreshKeyringState(auth);
+      } catch (commitErr) {
+        const commitMsg = commitErr instanceof Error ? commitErr.message : '提交轮换失败';
+        message.error(commitMsg);
+      } finally {
+        setKeyringCommitLoading(false);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : '提交轮换签名失败';
       message.error(msg);
@@ -851,39 +883,6 @@ export default function App() {
     }
   };
 
-  const onCommitKeyringRotate = async (values: { new_backup_pubkey: string }) => {
-    if (!auth || !keyringSignedPayload || !keyringChallenge) {
-      message.error('请先完成签名校验');
-      return;
-    }
-    setKeyringCommitLoading(true);
-    try {
-      const result = await commitKeyringRotate(auth, {
-        challenge_id: keyringSignedPayload.challenge_id,
-        signature: keyringSignedPayload.signature,
-        new_backup_pubkey: values.new_backup_pubkey.trim()
-      });
-      if (result.chain_submit_ok) {
-        message.success(`主密钥轮换成功，新版本：${result.version}`);
-      } else {
-        message.warning(
-          `主密钥已本地轮换为版本 ${result.version}，但上链提交失败：${result.chain_submit_error || '未知错误'}`
-        );
-      }
-      setKeyringChallenge(null);
-      setKeyringSignedPayload(null);
-      setKeyringScannerActive(false);
-      stopKeyringScanner();
-      keyringForm.resetFields(['initiator_pubkey']);
-      keyringCommitForm.resetFields();
-      await refreshKeyringState(auth);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '提交轮换失败';
-      message.error(msg);
-    } finally {
-      setKeyringCommitLoading(false);
-    }
-  };
 
   const onToggleKeyringScanner = () => {
     if (!keyringChallenge) {
@@ -2530,6 +2529,16 @@ export default function App() {
                 </Button>
               }
             >
+              {(() => {
+                const isMainKey = keyringState && auth
+                  ? auth.admin_pubkey.replace(/^0x/i, '').toLowerCase() === keyringState.main_pubkey.replace(/^0x/i, '').toLowerCase()
+                  : false;
+                return isMainKey ? (
+                  <Typography.Paragraph type="warning" style={{ marginBottom: 12, padding: '8px 12px', background: '#fffbe6', borderRadius: 8, border: '1px solid #ffe58f' }}>
+                    当前登录的是主密钥，无法发起轮换。请使用备用密钥（备用A 或 备用B）登录后操作。
+                  </Typography.Paragraph>
+                ) : null;
+              })()}
               <Form
                 form={keyringForm}
                 layout="inline"
@@ -2537,20 +2546,37 @@ export default function App() {
                 style={{ marginBottom: 12, rowGap: 8 }}
               >
                 <Form.Item
-                  name="initiator_pubkey"
-                  rules={[{ required: true, message: '请输入发起轮换的备用公钥' }]}
+                  name="new_backup_pubkey"
+                  rules={[
+                    { required: true, message: '请输入新备用公钥' },
+                    {
+                      validator: async (_rule, value) => {
+                        if (!value || isSr25519HexPubkey(String(value))) return;
+                        throw new Error('公钥格式必须为 32 字节十六进制');
+                      }
+                    }
+                  ]}
                 >
-                  <Input style={{ width: 420, maxWidth: '72vw' }} placeholder="发起轮换的备用公钥" />
+                  <Input
+                    style={{ width: 420, maxWidth: '72vw' }}
+                    placeholder="新备用公钥（0x 开头 32 字节十六进制）"
+                    disabled={keyringState != null && auth != null && auth.admin_pubkey.replace(/^0x/i, '').toLowerCase() === keyringState.main_pubkey.replace(/^0x/i, '').toLowerCase()}
+                  />
                 </Form.Item>
                 <Form.Item style={{ marginBottom: 0 }}>
-                  <Button type="primary" htmlType="submit" loading={keyringActionLoading}>
-                    生成轮换二维码
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    loading={keyringActionLoading}
+                    disabled={keyringState != null && auth != null && auth.admin_pubkey.replace(/^0x/i, '').toLowerCase() === keyringState.main_pubkey.replace(/^0x/i, '').toLowerCase()}
+                  >
+                    发起轮换
                   </Button>
                 </Form.Item>
               </Form>
 
               <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-                {'流程：生成轮换二维码 -> 备用私钥钱包扫码签名 -> 本页面扫码验签 -> 输入新备用公钥 -> 完成一主两备轮换并异步推链。'}
+                {'流程：输入新备用公钥 -> 生成轮换二维码 -> 备用私钥钱包扫码签名 -> 本页面扫码验签 -> 自动完成轮换并推链。'}
               </Typography.Paragraph>
 
               <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 12 }}>
@@ -2610,47 +2636,6 @@ export default function App() {
                 </div>
               </div>
 
-              <Modal
-                open={Boolean(keyringSignedPayload)}
-                title="签名已通过，确认轮换参数"
-                onCancel={() => {
-                  setKeyringSignedPayload(null);
-                  keyringCommitForm.resetFields();
-                }}
-                footer={null}
-                destroyOnClose
-              >
-                <Form form={keyringCommitForm} layout="vertical" onFinish={onCommitKeyringRotate}>
-                  <Form.Item
-                    name="new_backup_pubkey"
-                    label="新备用公钥"
-                    rules={[
-                      { required: true, message: '请输入新备用公钥' },
-                      {
-                        validator: async (_rule, value) => {
-                          if (!value || isSr25519HexPubkey(String(value))) return;
-                          throw new Error('公钥格式必须为 32 字节十六进制');
-                        }
-                      }
-                    ]}
-                  >
-                    <Input placeholder="新备用公钥" />
-                  </Form.Item>
-                  <Space>
-                    <Button
-                      onClick={() => {
-                        setKeyringSignedPayload(null);
-                        keyringCommitForm.resetFields();
-                      }}
-                    >
-                      取消
-                    </Button>
-                    <Button type="primary" htmlType="submit" loading={keyringCommitLoading}>
-                      确认轮换
-                    </Button>
-                  </Space>
-                </Form>
-              </Modal>
 
               <Card
                 size="small"
