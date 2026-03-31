@@ -40,6 +40,10 @@ export const installInitialize = (sfid_init_qr_content: string) =>
   post<{ site_sfid: string }>('/api/v1/install/initialize', { sfid_init_qr_content });
 export const bindSuperAdmin = (body: { key_id: string; admin_pubkey: string; bind_nonce: string; signature: string }) =>
   post<AdminUser>('/api/v1/install/super-admin/bind', body);
+export const installGenerateQr2 = () =>
+  post<{ qr2_payload: string }>('/api/v1/install/generate-qr2');
+export const adminProcessAnonCert = (sfid_anon_cert_qr_content: string) =>
+  post<string>('/api/v1/admin/anon-cert', { sfid_anon_cert_qr_content });
 
 // ── 认证 ──
 export const authIdentify = (admin_pubkey: string) =>

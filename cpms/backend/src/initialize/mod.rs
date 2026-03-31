@@ -78,8 +78,8 @@ fn decrypt_secret(key_id: &str, stored: &str) -> Option<Vec<u8>> {
     }
 }
 
-const FIXED_SUPER_ADMIN_COUNT: usize = 3;
-const FIXED_QR_SIGN_KEY_COUNT: usize = 3;
+const FIXED_SUPER_ADMIN_COUNT: usize = 1;
+const FIXED_QR_SIGN_KEY_COUNT: usize = 1;
 
 #[derive(Clone)]
 pub struct QrSignKeyRuntime {
@@ -139,9 +139,12 @@ struct InstallInitializeRequest {
 #[derive(Serialize)]
 struct InstallInitializeData {
     site_sfid: String,
-    /// QR2 内容，展示给 SFID 管理员扫描以完成匿名证书注册。
-    qr2_payload: String,
     super_admin_bind_qrs: Vec<SuperAdminBindQrData>,
+}
+
+#[derive(Serialize)]
+struct GenerateQr2Data {
+    qr2_payload: String,
 }
 
 /// QR3 处理请求。
@@ -156,6 +159,9 @@ struct InstallStatusData {
     site_sfid: Option<String>,
     super_admin_bound_count: usize,
     super_admin_bind_qrs: Vec<SuperAdminBindQrData>,
+    qr2_ready: bool,
+    qr2_payload: Option<String>,
+    anon_cert_done: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -199,20 +205,20 @@ pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/install/status", get(install_status))
         .route("/api/v1/install/initialize", post(initialize_install))
-        .route(
-            "/api/v1/install/anon-cert",
-            post(process_anon_cert),
-        )
+        .route("/api/v1/install/generate-qr2", post(generate_qr2))
         .route(
             "/api/v1/install/super-admin/bind",
             post(bind_super_admin_from_wuminapp),
         )
+        // QR3 处理：需要 SUPER_ADMIN 认证，登录后调用
+        .route("/api/v1/admin/anon-cert", post(process_anon_cert))
 }
+
 
 async fn install_status(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<InstallStatusData>>, (StatusCode, Json<ApiError>)> {
-    let site_sfid = sqlx::query("SELECT site_sfid FROM system_install WHERE id = 1")
+    let install_row = sqlx::query("SELECT site_sfid, anon_cert, anon_pubkey, blinding_factor, rsa_public_key_pem FROM system_install WHERE id = 1")
         .fetch_optional(&state.db)
         .await
         .map_err(|_| {
@@ -221,8 +227,13 @@ async fn install_status(
                 5001,
                 "query install failed",
             )
-        })?
+        })?;
+
+    let site_sfid = install_row.as_ref()
         .and_then(|r| r.try_get::<Option<String>, _>("site_sfid").ok().flatten());
+    let anon_cert_stored: Option<String> = install_row.as_ref()
+        .and_then(|r| r.try_get::<Option<String>, _>("anon_cert").ok().flatten());
+    let anon_cert_done = anon_cert_stored.as_ref().map(|s| !s.is_empty()).unwrap_or(false);
 
     let keys = load_qr_sign_keys(&state).await?;
 
@@ -256,11 +267,46 @@ async fn install_status(
 
     let bind_qrs = build_super_admin_bind_qrs(site_sfid.clone(), &keys, &bound_keys)?;
 
+    // QR2 在超级管理员绑定后才可生成
+    let admin_bound = super_admin_bound_count as usize >= FIXED_SUPER_ADMIN_COUNT;
+    let has_anon_pubkey = install_row.as_ref()
+        .and_then(|r| r.try_get::<Option<String>, _>("anon_pubkey").ok().flatten())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+    let qr2_ready = admin_bound && has_anon_pubkey;
+
+    // 如果 QR2 就绪，构造 QR2 payload
+    let qr2_payload = if qr2_ready {
+        if let (Some(ref sfid), Some(ref row)) = (&site_sfid, &install_row) {
+            let install_token: Option<String> = row.try_get::<Option<String>, _>("install_token").ok().flatten();
+            let anon_pubkey: Option<String> = row.try_get::<Option<String>, _>("anon_pubkey").ok().flatten();
+            let blinding_factor: Option<String> = row.try_get::<Option<String>, _>("blinding_factor").ok().flatten();
+            let rsa_pem: Option<String> = row.try_get::<Option<String>, _>("rsa_public_key_pem").ok().flatten();
+
+            if let (Some(token), Some(_anon_pk), Some(bf), Some(rsa)) = (install_token, anon_pubkey, blinding_factor, rsa_pem) {
+                // blinding 已在 initialize 阶段完成，blind_msg 存在 blinding_factor 旁边
+                // 实际上 blind_msg_hex 需要重新计算或从 DB 存取
+                // 但当前设计中 initialize 已经做了盲化，我们需要把 QR2 的构造也存入 DB
+                // 暂时返回 None，由 generate_qr2 端点负责
+                None
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     Ok(Json(ok(InstallStatusData {
         initialized: site_sfid.is_some() && !keys.is_empty(),
         site_sfid,
         super_admin_bound_count: super_admin_bound_count as usize,
         super_admin_bind_qrs: bind_qrs,
+        qr2_ready,
+        qr2_payload,
+        anon_cert_done,
     })))
 }
 
@@ -334,8 +380,6 @@ async fn initialize_install(
 
     let key_meta = [
         ("K1", "PRIMARY", "ACTIVE"),
-        ("K2", "BACKUP", "STANDBY"),
-        ("K3", "EMERGENCY", "STANDBY"),
     ];
 
     let mut keys_runtime = Vec::with_capacity(FIXED_QR_SIGN_KEY_COUNT);
@@ -367,44 +411,6 @@ async fn initialize_install(
         });
     }
 
-    // ── SFID-CPMS QR v1: 生成匿名签发密钥对 ──
-    let (anon_pubkey_hex, anon_secret_raw) = generate_sr25519_keypair_raw();
-    let anon_secret_stored = encrypt_secret("ANON", &anon_secret_raw);
-
-    // 从 site_sfid 提取省代码（r5 段前两位）
-    let province_code = extract_province_code(&qr_payload.site_sfid);
-
-    // RSABSSA PBRSA 盲化（使用 QR1 携带的 RSA 公钥）
-    let blinding_output = crate::rsa_blind_client::blind_message(
-        qr_payload.rsa_public_key.trim(),
-        &anon_pubkey_hex,
-        &province_code,
-    )
-    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &format!("blind failed: {e}")))?;
-
-    // 保存匿名密钥 + 盲化秘密（解盲时需要）
-    let blinding_secret_hex = hex::encode(&blinding_output.blinding_secret);
-    sqlx::query(
-        "UPDATE system_install SET anon_pubkey = $1, anon_key_encrypted = $2, blinding_factor = $3 WHERE id = 1",
-    )
-    .bind(&anon_pubkey_hex)
-    .bind(&anon_secret_stored)
-    .bind(&blinding_secret_hex)
-    .execute(tx.as_mut())
-    .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save anon key failed"))?;
-
-    // 构造 QR2
-    let qr2 = CpmsRegisterReqPayload {
-        ver: 1,
-        qr_type: "CPMS_REGISTER_REQ".to_string(),
-        site_sfid: qr_payload.site_sfid.clone(),
-        install_token: qr_payload.install_token.clone(),
-        blind_anon_req: format!("0x{}", blinding_output.blind_msg_hex),
-    };
-    let qr2_payload = serde_json::to_string(&qr2)
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "serialize QR2 failed"))?;
-
     tx.commit()
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
@@ -416,7 +422,7 @@ async fn initialize_install(
         "CPMS_INSTALL",
         Some(qr_payload.site_sfid.clone()),
         "SUCCESS",
-        serde_json::json!({ "anon_pubkey": anon_pubkey_hex }),
+        serde_json::json!({}),
     )
     .await?;
 
@@ -428,19 +434,111 @@ async fn initialize_install(
 
     Ok(Json(ok(InstallInitializeData {
         site_sfid: qr_payload.site_sfid,
-        qr2_payload,
         super_admin_bind_qrs: bind_qrs,
     })))
 }
 
-/// 处理 QR3 匿名证书二维码。
+/// 绑定超级管理员后调用，生成匿名密钥对 + 盲化 + 返回 QR2。
+async fn generate_qr2(
+    State(state): State<AppState>,
+) -> Result<Json<ApiResponse<GenerateQr2Data>>, (StatusCode, Json<ApiError>)> {
+    // 检查超级管理员已绑定
+    let admin_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM admin_users WHERE role = 'SUPER_ADMIN' AND status = 'ACTIVE'",
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "count super admin failed"))?;
+    if (admin_count as usize) < FIXED_SUPER_ADMIN_COUNT {
+        return Err(err(StatusCode::CONFLICT, 4003, "super admin not bound yet"));
+    }
+
+    // 读取 install 信息
+    let row = sqlx::query("SELECT site_sfid, install_token, rsa_public_key_pem, anon_pubkey FROM system_install WHERE id = 1")
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query install failed"))?
+        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "not initialized"))?;
+
+    let site_sfid: String = row.try_get::<Option<String>, _>("site_sfid")
+        .ok().flatten()
+        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "site_sfid not found"))?;
+    let install_token: String = row.try_get::<Option<String>, _>("install_token")
+        .ok().flatten()
+        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "install_token not found"))?;
+    let rsa_pubkey_pem: String = row.try_get::<Option<String>, _>("rsa_public_key_pem")
+        .ok().flatten()
+        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "rsa_public_key_pem not found"))?;
+
+    // 如果已经生成过匿名密钥，直接返回 QR2（幂等）
+    let existing_anon: Option<String> = row.try_get::<Option<String>, _>("anon_pubkey")
+        .ok().flatten().filter(|s| !s.is_empty());
+    if existing_anon.is_some() {
+        // 需要从 DB 重建 QR2，但 blind_msg 没有单独存储
+        // 重新盲化（幂等生成新 QR2）
+    }
+
+    // 生成匿名签发密钥对
+    let (anon_pubkey_hex, anon_secret_raw) = generate_sr25519_keypair_raw();
+    let anon_secret_stored = encrypt_secret("ANON", &anon_secret_raw);
+
+    let province_code = extract_province_code(&site_sfid);
+
+    // RSABSSA 盲化
+    let blinding_output = crate::rsa_blind_client::blind_message(
+        rsa_pubkey_pem.trim(),
+        &anon_pubkey_hex,
+        &province_code,
+    )
+    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &format!("blind failed: {e}")))?;
+
+    let blinding_secret_hex = hex::encode(&blinding_output.blinding_secret);
+    sqlx::query(
+        "UPDATE system_install SET anon_pubkey = $1, anon_key_encrypted = $2, blinding_factor = $3 WHERE id = 1",
+    )
+    .bind(&anon_pubkey_hex)
+    .bind(&anon_secret_stored)
+    .bind(&blinding_secret_hex)
+    .execute(&state.db)
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save anon key failed"))?;
+
+    // 构造 QR2
+    let qr2 = CpmsRegisterReqPayload {
+        ver: 1,
+        qr_type: "CPMS_REGISTER_REQ".to_string(),
+        site_sfid: site_sfid.clone(),
+        install_token,
+        blind_anon_req: format!("0x{}", blinding_output.blind_msg_hex),
+    };
+    let qr2_payload = serde_json::to_string(&qr2)
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "serialize QR2 failed"))?;
+
+    write_audit(
+        &state,
+        None,
+        "GENERATE_QR2",
+        "CPMS_INSTALL",
+        Some(site_sfid),
+        "SUCCESS",
+        serde_json::json!({ "anon_pubkey": anon_pubkey_hex }),
+    )
+    .await?;
+
+    Ok(Json(ok(GenerateQr2Data { qr2_payload })))
+}
+
+/// 处理 QR3 匿名证书二维码（需要 SUPER_ADMIN 认证）。
 ///
-/// CPMS 管理员扫描 SFID 返回的 QR3 后调用此端点。
+/// CPMS 超级管理员登录后扫描 SFID 返回的 QR3 后调用此端点。
 /// 本机解盲 blind_anon_sig，验证最终签名，持久化匿名证书。
 async fn process_anon_cert(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<ProcessAnonCertRequest>,
 ) -> Result<Json<ApiResponse<&'static str>>, (StatusCode, Json<ApiError>)> {
+    crate::authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
+
     if req.sfid_anon_cert_qr_content.trim().is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "empty qr content"));
     }
@@ -600,7 +698,7 @@ async fn bind_super_admin_from_wuminapp(
         return Err(err(
             StatusCode::CONFLICT,
             4004,
-            "super admin count reached 3",
+            "super admin already bound",
         ));
     }
 

@@ -639,6 +639,27 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(16),
                   children: [
+                    if (_currentWallet == null && !_loadingWallet)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Container(
+                          decoration: AppTheme.cardDecoration(),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('未检测到钱包，无法执行链上签名与交易广播'),
+                                const SizedBox(height: 8),
+                                FilledButton(
+                                  onPressed: _openMyWalletPage,
+                                  child: const Text('去创建/导入钱包'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     // 多签交易入口
                     Container(
                       decoration: AppTheme.cardDecoration(),
@@ -685,29 +706,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    if (_currentWallet == null && !_loadingWallet)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Container(
-                          decoration: AppTheme.cardDecoration(),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('未检测到钱包，无法执行链上签名与交易广播'),
-                                const SizedBox(height: 8),
-                                FilledButton(
-                                  onPressed: _openMyWalletPage,
-                                  child: const Text('去创建/导入钱包'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    _buildSubmitCard(),
                     const SizedBox(height: 12),
                     // 扫码支付入口（链下快捷支付）
                     Container(
@@ -764,6 +762,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    _buildSubmitCard(),
                     const SizedBox(height: 24),
                   ],
                 ),
