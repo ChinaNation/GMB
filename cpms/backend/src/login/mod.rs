@@ -5,7 +5,7 @@ use axum::{
     Json, Router,
 };
 use chrono::{Duration, Utc};
-use schnorrkel::{MiniSecretKey, PublicKey, Signature};
+use schnorrkel::{signing_context, MiniSecretKey, PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
@@ -481,6 +481,26 @@ async fn auth_qr_complete(
 
     let challenge_payload: String = row.get("challenge_payload");
 
+    // 先验签和查管理员，全部通过后才消费 challenge（失败时 tx 自动回滚）
+    let admin = find_admin_by_pubkey(&state, req.admin_pubkey.trim()).await?;
+    if admin.status != "ACTIVE" {
+        return Err(err(StatusCode::UNAUTHORIZED, 2002, "admin is not active"));
+    }
+    if verify_wumin_login_signature(
+        req.admin_pubkey.trim(),
+        &challenge_payload,
+        req.signature.trim(),
+    )
+    .is_err()
+    {
+        return Err(err(
+            StatusCode::UNAUTHORIZED,
+            2007,
+            "signature verify failed",
+        ));
+    }
+
+    // 验签通过，消费 challenge
     sqlx::query(
         "UPDATE login_challenges
          SET consumed = TRUE, admin_pubkey = $1
@@ -501,24 +521,6 @@ async fn auth_qr_complete(
     tx.commit()
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
-
-    let admin = find_admin_by_pubkey(&state, req.admin_pubkey.trim()).await?;
-    if admin.status != "ACTIVE" {
-        return Err(err(StatusCode::UNAUTHORIZED, 2002, "admin is not active"));
-    }
-    if verify_wumin_login_signature(
-        req.admin_pubkey.trim(),
-        &challenge_payload,
-        req.signature.trim(),
-    )
-    .is_err()
-    {
-        return Err(err(
-            StatusCode::UNAUTHORIZED,
-            2007,
-            "signature verify failed",
-        ));
-    }
 
     let access_token = generate_secure_token("atk");
     let expires_at = (Utc::now() + Duration::seconds(TOKEN_EXPIRES_SECONDS)).timestamp();
@@ -738,7 +740,7 @@ pub(crate) fn verify_challenge_signature(
     )
 }
 
-fn verify_wumin_login_signature(
+pub(crate) fn verify_wumin_login_signature(
     admin_pubkey: &str,
     challenge_payload: &str,
     signature: &str,
@@ -754,11 +756,11 @@ fn verify_wumin_login_signature(
 
     let pk = PublicKey::from_bytes(&pubkey_bytes).map_err(|_| "invalid sr25519 public key")?;
     let sig = Signature::from_bytes(&sig_bytes).map_err(|_| "invalid sr25519 signature")?;
-    pk.verify_simple(b"", challenge_payload.as_bytes(), &sig)
+    pk.verify(signing_context(b"substrate").bytes(challenge_payload.as_bytes()), &sig)
         .map_err(|_| "sr25519 verify failed")
 }
 
-async fn build_login_qr_system_signature(
+pub(crate) async fn build_login_qr_system_signature(
     state: &AppState,
     system: &str,
     challenge: &str,
@@ -792,7 +794,7 @@ async fn build_login_qr_system_signature(
         "WUMIN_LOGIN_V1.0.0|{}|{}|{}|{}|{}",
         system, challenge, issued_at, expires_at, active.pubkey
     );
-    let signature = keypair.sign_simple(b"", message.as_bytes());
+    let signature = keypair.sign(signing_context(b"substrate").bytes(message.as_bytes()));
     Ok((
         active.pubkey.clone(),
         format!("0x{}", hex::encode(signature.to_bytes())),

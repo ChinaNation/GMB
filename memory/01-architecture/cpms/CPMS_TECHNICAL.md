@@ -58,20 +58,16 @@
 
 ### 5.2 初始化流程
 1. `install/initialize` 接收 `sfid_init_qr_content`（支持 JSON 或 Base64(JSON)）。
-2. 校验 `qr_type=SFID_CPMS_INSTALL`，并使用环境变量 `SFID_ROOT_PUBKEY` 验签。
+2. 校验 `type=INSTALL`（`SFID_CPMS_V1` 协议），CPMS 为离线系统不验签名。
 3. 初始化成功后写入 PostgreSQL：
-   - `system_install.site_sfid`
-   - `qr_sign_keys`（固定 3 把：`K1/K2/K3`，主/备/应急）
-   - 机构管理员绑定信息写入 `admin_users`（`managed_key_id` 标识归属键位）
-4. `install/super-admin/bind` 接收 `key_id/admin_pubkey/bind_nonce/signature` 绑定超管：
-   - `key_id` 仅允许固定键位。
-   - 每个 `key_id` 只能绑定一次，`admin_pubkey` 不可重复。
-   - 固定账号映射：`K1->u_super_admin_01`，`K2->u_super_admin_02`，`K3->u_super_admin_03`。
+   - `system_install.site_sfid`、`rsa_public_key_pem`
+   - `qr_sign_keys`（1 把：`K1`）
+4. `install/super-admin/bind` 接收 `admin_pubkey`（从手机 `WUMIN_USER_V1.0.0` 名片扫码获取）绑定超管。
+5. 超级管理员登录后，在管理后台完成 QR2 生成和 QR3 盲化。
 
 ### 5.3 安全约束
-- 未设置 `SFID_ROOT_PUBKEY` 时拒绝初始化。
 - `system_install.site_sfid` 已存在时拒绝重复初始化。
-- 绑定时 `managed_key_id` 与 `admin_pubkey` 全局唯一，防止重复绑定。
+- 超级管理员只允许绑定 1 个，`admin_pubkey` 不可重复。
 
 ## 6. 登录模块（`login/`）
 
@@ -117,12 +113,14 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 - `PUT /api/v1/admin/operators/:id`
 - `DELETE /api/v1/admin/operators/:id`
 - `PUT /api/v1/admin/operators/:id/status`
-- `POST /api/v1/admin/site-keys/registration-qr`
 - `PUT /api/v1/archives/:archive_id/citizen-status`
+- `POST /api/v1/admin/generate-qr2`（生成 QR2 注册二维码，需认证）
+- `POST /api/v1/admin/anon-cert`（扫描 QR3 完成匿名证书注册，需认证）
 
 ### 7.2 关键行为
 - 系统管理员增删改查与状态更新。
-- 生成机构公钥登记二维码（`CPMS_SITE_KEYS_REGISTER`）供 SFID 录入。
+- 生成 QR2 注册二维码（`SFID_CPMS_V1` 协议 `REGISTER` 类型）。
+- 扫描 QR3 完成匿名证书盲化解密。
 - 更新档案 `citizen_status`（`NORMAL/ABNORMAL`），并派生 `voting_eligible`。
 
 ## 8. 系统管理员模块（`operator_admin/`）
@@ -212,7 +210,8 @@ cpms-qr-v1|site_sfid|sign_key_id|archive_no|citizen_status|voting_eligible|issue
 - `PUT /api/v1/admin/operators/:id`
 - `DELETE /api/v1/admin/operators/:id`
 - `PUT /api/v1/admin/operators/:id/status`
-- `POST /api/v1/admin/site-keys/registration-qr`
+- `POST /api/v1/admin/generate-qr2`
+- `POST /api/v1/admin/anon-cert`
 - `PUT /api/v1/archives/:archive_id/citizen-status`
 
 ### 11.5 系统管理员
@@ -226,9 +225,7 @@ cpms-qr-v1|site_sfid|sign_key_id|archive_no|citizen_status|voting_eligible|issue
 - `CPMS_BIND`：服务监听地址，默认 `0.0.0.0:8080`。
 - `CPMS_DATABASE_URL`：PostgreSQL 连接串（优先级高于 `DATABASE_URL`）。
 - `DATABASE_URL`：PostgreSQL 连接串兜底配置。
-- `SFID_ROOT_PUBKEY`：SFID 初始化二维码验签公钥（初始化必填）。
-- `CPMS_LOGIN_SYSTEM_KEY_*`：登录系统公钥/私钥配置（命名待实现统一）。
-- `CPMS_LOGIN_SYS_CERT`：SFID 对当前 CPMS 登录系统公钥的背书结果（命名待实现统一）。
+- `CPMS_KEY_ENCRYPT_SECRET`：QR 签名私钥加密主密钥（32 字节 hex）。
 
 ## 13. 错误码口径（摘要）
 - `1001`：请求参数非法或字段缺失。
@@ -246,9 +243,10 @@ cpms-qr-v1|site_sfid|sign_key_id|archive_no|citizen_status|voting_eligible|issue
 - `5001+`：服务内部错误。
 
 ## 14. 与 wuminapp / SFID 联调要点
-- wuminapp 扫码登录验签串必须与 CPMS 完全一致（6 段，不含 `aud/origin`）。
-- CPMS 初始化必须基于 SFID 签发的 `SFID_CPMS_INSTALL` 挑战，并通过 `SFID_ROOT_PUBKEY` 验签。
-- SFID 录入机构公钥使用 CPMS 生成的 `CPMS_SITE_KEYS_REGISTER` 二维码。
+- wuminapp 扫码登录使用 `WUMIN_LOGIN_V1.0.0` 协议。
+- CPMS 初始化扫描 SFID 签发的 QR1（`SFID_CPMS_V1` 协议 `INSTALL` 类型），CPMS 不验签（离线系统无 SFID 公钥）。
+- 超级管理员绑定通过扫描手机 `WUMIN_USER_V1.0.0` 名片获取公钥。
+- QR2/QR3/QR4 使用 `SFID_CPMS_V1` 协议（`REGISTER`/`CERT`/`ARCHIVE` 类型）。
 - 业务二维码与机构公钥体系分离于管理员登录公钥体系，不可混用。
 - 登录信任链固定为：区块链持有 SFID 当前公钥 -> SFID 背书 CPMS 登录公钥 -> CPMS 签发登录挑战。
 

@@ -13,6 +13,7 @@ use schnorrkel::{signing_context, MiniSecretKey, PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
+use uuid::Uuid;
 use crate::{err, ok, write_audit, ApiError, ApiResponse, AppState};
 
 // ── 密钥加密存储 ──────────────────────────────────────────────────────────
@@ -90,45 +91,49 @@ pub struct QrSignKeyRuntime {
     pub secret_bytes: Vec<u8>,
 }
 
-/// SFID-CPMS QR v1 协议 QR1 载荷。
+/// SFID_CPMS_V1 协议 QR1 载荷。
 #[derive(Deserialize)]
 struct SfidInstallQrPayload {
-    ver: u32,
-    qr_type: String,
-    site_sfid: String,
-    install_token: String,
-    /// SFID RSA 公钥 PEM，CPMS 从 QR1 自动获取。
-    rsa_public_key: String,
-    signature: String,
+    #[serde(default)]
+    proto: String,
+    #[serde(alias = "qr_type")]
+    r#type: String,
+    sfid: String,
+    token: String,
+    /// SFID RSA 公钥（base64 裸数据，无 PEM 头尾）
+    rsa: String,
+    sig: String,
 }
 
-/// SFID-CPMS QR v1 协议 QR3 载荷。
+/// SFID_CPMS_V1 协议 QR3 载荷。
 #[derive(Deserialize)]
 struct SfidAnonCertQrPayload {
-    ver: u32,
-    qr_type: String,
-    province_code: String,
-    blind_anon_sig: String,
+    #[serde(default)]
+    proto: String,
+    #[serde(alias = "qr_type")]
+    r#type: String,
+    prov: String,
+    bsig: String,
 }
 
 /// QR2 注册请求载荷（本机构造，展示给 SFID 扫描）。
 #[derive(Serialize)]
 struct CpmsRegisterReqPayload {
-    ver: u32,
-    qr_type: String,
-    site_sfid: String,
-    install_token: String,
-    blind_anon_req: String,
+    proto: String,
+    r#type: String,
+    sfid: String,
+    token: String,
+    blind: String,
 }
 
 /// 匿名证书（解盲后持久化到 DB）。
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct AnonCert {
-    pub(crate) province_code: String,
-    pub(crate) anon_pubkey: String,
-    pub(crate) sfid_sig: String,
+    pub(crate) prov: String,
+    pub(crate) pk: String,
+    pub(crate) sig: String,
     #[serde(default)]
-    pub(crate) msg_randomizer: Option<String>,
+    pub(crate) mr: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -139,7 +144,6 @@ struct InstallInitializeRequest {
 #[derive(Serialize)]
 struct InstallInitializeData {
     site_sfid: String,
-    super_admin_bind_qrs: Vec<SuperAdminBindQrData>,
 }
 
 #[derive(Serialize)]
@@ -158,38 +162,14 @@ struct InstallStatusData {
     initialized: bool,
     site_sfid: Option<String>,
     super_admin_bound_count: usize,
-    super_admin_bind_qrs: Vec<SuperAdminBindQrData>,
     qr2_ready: bool,
     qr2_payload: Option<String>,
     anon_cert_done: bool,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-struct SuperAdminBindQrData {
-    key_id: String,
-    bound: bool,
-    qr_payload: SuperAdminBindQrPayload,
-    qr_content: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct SuperAdminBindQrPayload {
-    ver: String,
-    qr_type: String,
-    issuer_id: String,
-    site_sfid: String,
-    sign_key_id: String,
-    sign_key_pubkey: String,
-    bind_nonce: String,
-    issued_at: i64,
-}
-
 #[derive(Deserialize)]
 struct BindSuperAdminRequest {
-    key_id: String,
     admin_pubkey: String,
-    bind_nonce: String,
-    signature: String,
 }
 
 #[derive(Serialize)]
@@ -205,12 +185,12 @@ pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/install/status", get(install_status))
         .route("/api/v1/install/initialize", post(initialize_install))
-        .route("/api/v1/install/generate-qr2", post(generate_qr2))
         .route(
             "/api/v1/install/super-admin/bind",
             post(bind_super_admin_from_wuminapp),
         )
-        // QR3 处理：需要 SUPER_ADMIN 认证，登录后调用
+        // 以下需要 SUPER_ADMIN 认证，登录后调用
+        .route("/api/v1/admin/generate-qr2", post(generate_qr2))
         .route("/api/v1/admin/anon-cert", post(process_anon_cert))
 }
 
@@ -250,23 +230,6 @@ async fn install_status(
         )
     })?;
 
-    let bound_key_rows = sqlx::query(
-        "SELECT managed_key_id FROM admin_users WHERE role = 'SUPER_ADMIN' AND managed_key_id IS NOT NULL",
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query bound keys failed"))?;
-
-    let mut bound_keys = HashSet::new();
-    for row in bound_key_rows {
-        let key_id: Option<String> = row.get("managed_key_id");
-        if let Some(v) = key_id {
-            bound_keys.insert(v);
-        }
-    }
-
-    let bind_qrs = build_super_admin_bind_qrs(site_sfid.clone(), &keys, &bound_keys)?;
-
     // QR2 在超级管理员绑定后才可生成
     let admin_bound = super_admin_bound_count as usize >= FIXED_SUPER_ADMIN_COUNT;
     let has_anon_pubkey = install_row.as_ref()
@@ -303,7 +266,6 @@ async fn install_status(
         initialized: site_sfid.is_some() && !keys.is_empty(),
         site_sfid,
         super_admin_bound_count: super_admin_bound_count as usize,
-        super_admin_bind_qrs: bind_qrs,
         qr2_ready,
         qr2_payload,
         anon_cert_done,
@@ -359,9 +321,9 @@ async fn initialize_install(
          VALUES (1, $1, $2, $3, $4)
          ON CONFLICT (id) DO UPDATE SET site_sfid = EXCLUDED.site_sfid, install_token = EXCLUDED.install_token, rsa_public_key_pem = EXCLUDED.rsa_public_key_pem, initialized_at = EXCLUDED.initialized_at",
     )
-    .bind(qr_payload.site_sfid.trim())
-    .bind(qr_payload.install_token.trim())
-    .bind(qr_payload.rsa_public_key.trim())
+    .bind(qr_payload.sfid.trim())
+    .bind(qr_payload.token.trim())
+    .bind(&rebuild_pem_envelope(qr_payload.rsa.trim()))
     .bind(now_ts)
     .execute(tx.as_mut())
     .await
@@ -420,28 +382,23 @@ async fn initialize_install(
         None,
         "INSTALL_INITIALIZE",
         "CPMS_INSTALL",
-        Some(qr_payload.site_sfid.clone()),
+        Some(qr_payload.sfid.clone()),
         "SUCCESS",
         serde_json::json!({}),
     )
     .await?;
 
-    let bind_qrs = build_super_admin_bind_qrs(
-        Some(qr_payload.site_sfid.clone()),
-        &keys_runtime,
-        &HashSet::new(),
-    )?;
-
     Ok(Json(ok(InstallInitializeData {
-        site_sfid: qr_payload.site_sfid,
-        super_admin_bind_qrs: bind_qrs,
+        site_sfid: qr_payload.sfid,
     })))
 }
 
-/// 绑定超级管理员后调用，生成匿名密钥对 + 盲化 + 返回 QR2。
+/// 登录后调用，生成匿名密钥对 + 盲化 + 返回 QR2。需要 SUPER_ADMIN 认证。
 async fn generate_qr2(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
 ) -> Result<Json<ApiResponse<GenerateQr2Data>>, (StatusCode, Json<ApiError>)> {
+    crate::authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
     // 检查超级管理员已绑定
     let admin_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM admin_users WHERE role = 'SUPER_ADMIN' AND status = 'ACTIVE'",
@@ -505,11 +462,11 @@ async fn generate_qr2(
 
     // 构造 QR2
     let qr2 = CpmsRegisterReqPayload {
-        ver: 1,
-        qr_type: "CPMS_REGISTER_REQ".to_string(),
-        site_sfid: site_sfid.clone(),
-        install_token,
-        blind_anon_req: format!("0x{}", blinding_output.blind_msg_hex),
+        proto: "SFID_CPMS_V1".to_string(),
+        r#type: "REGISTER".to_string(),
+        sfid: site_sfid.clone(),
+        token: install_token,
+        blind: format!("0x{}", blinding_output.blind_msg_hex),
     };
     let qr2_payload = serde_json::to_string(&qr2)
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "serialize QR2 failed"))?;
@@ -547,11 +504,11 @@ async fn process_anon_cert(
         serde_json::from_str(req.sfid_anon_cert_qr_content.trim())
             .map_err(|_| err(StatusCode::BAD_REQUEST, 1001, "invalid QR3 payload"))?;
 
-    if qr3.qr_type != "SFID_ANON_CERT" {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "qr_type must be SFID_ANON_CERT"));
+    if qr3.r#type != "CERT" {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "type must be CERT"));
     }
-    if qr3.province_code.trim().is_empty() || qr3.blind_anon_sig.trim().is_empty() {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "province_code and blind_anon_sig are required"));
+    if qr3.prov.trim().is_empty() || qr3.bsig.trim().is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "prov and bsig are required"));
     }
 
     // 读取本机 anon_pubkey、blinding_factor 和 RSA 公钥
@@ -581,18 +538,18 @@ async fn process_anon_cert(
     // 解盲 blind_anon_sig
     let finalized = crate::rsa_blind_client::finalize_signature(
         &rsa_pubkey_pem,
-        &qr3.blind_anon_sig,
+        &qr3.bsig,
         &blinding_secret,
         &anon_pubkey,
-        &qr3.province_code,
+        &qr3.prov,
     )
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &format!("finalize failed: {e}")))?;
 
     let anon_cert = AnonCert {
-        province_code: qr3.province_code.clone(),
-        anon_pubkey: anon_pubkey.clone(),
-        sfid_sig: finalized.signature_hex,
-        msg_randomizer: finalized.msg_randomizer_hex,
+        prov: qr3.prov.clone(),
+        pk: anon_pubkey.clone(),
+        sig: finalized.signature_hex,
+        mr: finalized.msg_randomizer_hex,
     };
 
     let anon_cert_json = serde_json::to_string(&anon_cert)
@@ -613,7 +570,7 @@ async fn process_anon_cert(
         None,
         "SUCCESS",
         serde_json::json!({
-            "province_code": qr3.province_code,
+            "province_code": qr3.prov,
         }),
     )
     .await?;
@@ -625,56 +582,23 @@ async fn bind_super_admin_from_wuminapp(
     State(state): State<AppState>,
     Json(req): Json<BindSuperAdminRequest>,
 ) -> Result<Json<ApiResponse<BindSuperAdminData>>, (StatusCode, Json<ApiError>)> {
-    if req.key_id.trim().is_empty()
-        || req.admin_pubkey.trim().is_empty()
-        || req.bind_nonce.trim().is_empty()
-        || req.signature.trim().is_empty()
-    {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid bind request"));
+    let raw_pubkey = req.admin_pubkey.trim().to_string();
+    if raw_pubkey.is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "admin_pubkey is required"));
     }
+    // 归一化公钥格式：去掉 0x 前缀，统一为 64 字符小写 hex
+    let admin_pubkey = {
+        let stripped = raw_pubkey.strip_prefix("0x").or_else(|| raw_pubkey.strip_prefix("0X")).unwrap_or(&raw_pubkey);
+        if stripped.len() == 64 && stripped.chars().all(|c| c.is_ascii_hexdigit()) {
+            stripped.to_lowercase()
+        } else {
+            return Err(err(StatusCode::BAD_REQUEST, 1001, "admin_pubkey must be 32-byte hex (64 hex chars, with or without 0x prefix)"));
+        }
+    };
 
-    let site_sfid = sqlx::query("SELECT site_sfid FROM system_install WHERE id = 1")
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "query install failed",
-            )
-        })?
-        .and_then(|r| r.try_get::<Option<String>, _>("site_sfid").ok().flatten())
-        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "cpms not initialized"))?;
-
-    let key_row = sqlx::query("SELECT pubkey FROM qr_sign_keys WHERE key_id = $1")
-        .bind(req.key_id.trim())
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query key failed"))?
-        .ok_or_else(|| err(StatusCode::BAD_REQUEST, 1001, "invalid key_id"))?;
-    let sign_key_pubkey: String = key_row.get("pubkey");
-
-    let expected_nonce = super_admin_bind_nonce(&site_sfid, req.key_id.trim(), &sign_key_pubkey);
-    if req.bind_nonce.trim() != expected_nonce {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid bind_nonce"));
-    }
-
-    let bind_sign_source = super_admin_bind_sign_source(
-        &site_sfid,
-        req.key_id.trim(),
-        req.admin_pubkey.trim(),
-        req.bind_nonce.trim(),
-    );
-    crate::verify_signature_with_context(
-        req.admin_pubkey.trim(),
-        &bind_sign_source,
-        req.signature.trim(),
-        b"CPMS-SUPER-ADMIN-BIND-V1",
-    )
-    .map_err(|reason| err(StatusCode::UNAUTHORIZED, 2002, reason))?;
-
-    let user_id = super_admin_user_id_for_key_id(req.key_id.trim())
-        .ok_or_else(|| err(StatusCode::BAD_REQUEST, 1001, "invalid key_id"))?;
+    // 使用固定的 K1 作为 key_id
+    let user_id = "u_super_admin_01".to_string();
+    let key_id = "K1";
     let now_ts = Utc::now().timestamp();
 
     let mut tx = state
@@ -702,29 +626,9 @@ async fn bind_super_admin_from_wuminapp(
         ));
     }
 
-    let key_occupied: Option<String> =
-        sqlx::query_scalar("SELECT user_id FROM admin_users WHERE managed_key_id = $1 LIMIT 1")
-            .bind(req.key_id.trim())
-            .fetch_optional(tx.as_mut())
-            .await
-            .map_err(|_| {
-                err(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    5001,
-                    "check key binding failed",
-                )
-            })?;
-    if key_occupied.is_some() {
-        return Err(err(
-            StatusCode::CONFLICT,
-            4004,
-            "sign key already bound to super admin",
-        ));
-    }
-
     let pubkey_exists: Option<String> =
         sqlx::query_scalar("SELECT user_id FROM admin_users WHERE admin_pubkey = $1 LIMIT 1")
-            .bind(req.admin_pubkey.trim())
+            .bind(&admin_pubkey)
             .fetch_optional(tx.as_mut())
             .await
             .map_err(|_| {
@@ -747,8 +651,8 @@ async fn bind_super_admin_from_wuminapp(
          VALUES ($1, $2, 'SUPER_ADMIN', 'ACTIVE', TRUE, $3, $4, $5)",
     )
     .bind(&user_id)
-    .bind(req.admin_pubkey.trim())
-    .bind(req.key_id.trim())
+    .bind(&admin_pubkey)
+    .bind(key_id)
     .bind(now_ts)
     .bind(now_ts)
     .execute(tx.as_mut())
@@ -767,17 +671,17 @@ async fn bind_super_admin_from_wuminapp(
         Some(user_id.clone()),
         "SUCCESS",
         serde_json::json!({
-            "managed_key_id": req.key_id.trim(),
+            "managed_key_id": key_id,
         }),
     )
     .await?;
 
     Ok(Json(ok(BindSuperAdminData {
         user_id,
-        admin_pubkey: req.admin_pubkey.trim().to_string(),
+        admin_pubkey: admin_pubkey.clone(),
         role: "SUPER_ADMIN".to_string(),
         status: "ACTIVE".to_string(),
-        managed_key_id: req.key_id.trim().to_string(),
+        managed_key_id: key_id.to_string(),
     })))
 }
 
@@ -833,72 +737,7 @@ pub(crate) async fn load_qr_sign_keys(
     Ok(out)
 }
 
-fn build_super_admin_bind_qrs(
-    site_sfid: Option<String>,
-    keys: &[QrSignKeyRuntime],
-    bound_keys: &HashSet<String>,
-) -> Result<Vec<SuperAdminBindQrData>, (StatusCode, Json<ApiError>)> {
-    let Some(site_sfid) = site_sfid else {
-        return Ok(Vec::new());
-    };
 
-    keys.iter()
-        .map(|key| {
-            let bind_nonce = super_admin_bind_nonce(&site_sfid, &key.key_id, &key.pubkey);
-            let qr_payload = SuperAdminBindQrPayload {
-                ver: "1".to_string(),
-                qr_type: "CPMS_SUPER_ADMIN_BIND".to_string(),
-                issuer_id: "cpms".to_string(),
-                site_sfid: site_sfid.clone(),
-                sign_key_id: key.key_id.clone(),
-                sign_key_pubkey: key.pubkey.clone(),
-                bind_nonce,
-                issued_at: Utc::now().timestamp(),
-            };
-            let qr_content = serde_json::to_string(&qr_payload)
-                .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "qr encode failed"))?;
-            Ok(SuperAdminBindQrData {
-                key_id: key.key_id.clone(),
-                bound: bound_keys.contains(&key.key_id),
-                qr_payload,
-                qr_content,
-            })
-        })
-        .collect()
-}
-
-fn super_admin_bind_nonce(site_sfid: &str, key_id: &str, sign_key_pubkey: &str) -> String {
-    let source = format!(
-        "cpms-super-admin-bind-nonce-v1|{}|{}|{}",
-        site_sfid, key_id, sign_key_pubkey
-    );
-    use blake2::digest::consts::U32;
-    use blake2::{Blake2b, Digest};
-    type Blake2b256 = Blake2b<U32>;
-    let digest = Blake2b256::digest(source.as_bytes());
-    hex::encode(&digest[..16])
-}
-
-fn super_admin_bind_sign_source(
-    site_sfid: &str,
-    key_id: &str,
-    admin_pubkey: &str,
-    bind_nonce: &str,
-) -> String {
-    format!(
-        "cpms-super-admin-bind-v1|{}|{}|{}|{}",
-        site_sfid, key_id, admin_pubkey, bind_nonce
-    )
-}
-
-pub(crate) fn super_admin_user_id_for_key_id(key_id: &str) -> Option<String> {
-    match key_id {
-        "K1" => Some("u_super_admin_01".to_string()),
-        "K2" => Some("u_super_admin_02".to_string()),
-        "K3" => Some("u_super_admin_03".to_string()),
-        _ => None,
-    }
-}
 
 fn parse_sfid_install_qr_content(content: &str) -> Result<SfidInstallQrPayload, String> {
     let trimmed = content.trim();
@@ -922,40 +761,24 @@ fn parse_sfid_install_qr_content(content: &str) -> Result<SfidInstallQrPayload, 
 }
 
 fn validate_sfid_install_qr(payload: &SfidInstallQrPayload) -> Result<(), String> {
-    if payload.qr_type.trim().is_empty()
-        || payload.site_sfid.trim().is_empty()
-        || payload.install_token.trim().is_empty()
-        || payload.rsa_public_key.trim().is_empty()
-        || payload.signature.trim().is_empty()
+    if payload.r#type.trim().is_empty()
+        || payload.sfid.trim().is_empty()
+        || payload.token.trim().is_empty()
+        || payload.rsa.trim().is_empty()
     {
         return Err("invalid sfid install qr payload".to_string());
     }
 
-    if payload.qr_type != "SFID_CPMS_INSTALL" {
+    if payload.r#type != "INSTALL" {
         return Err(format!(
-            "invalid sfid install qr_type '{}', expected SFID_CPMS_INSTALL",
-            payload.qr_type
+            "invalid sfid install type '{}', expected INSTALL",
+            payload.r#type
         ));
     }
 
-    let sfid_pubkey = env::var("SFID_ROOT_PUBKEY")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| "SFID_ROOT_PUBKEY is required for install qr verification".to_string())?;
-
-    // SFID-CPMS QR v1 协议签名原文
-    let sign_source = format!(
-        "sfid-cpms-install-v1|{}|{}",
-        payload.site_sfid, payload.install_token
-    );
-
-    verify_sr25519_signature(
-        &sfid_pubkey,
-        &sign_source,
-        &payload.signature,
-        b"substrate",
-    )
+    // CPMS 是离线系统，初始化时没有 SFID 公钥，不验 QR1 签名。
+    // 安全性靠 install_token 一次性消费保证。
+    Ok(())
 }
 
 fn verify_sr25519_signature(
@@ -1007,6 +830,22 @@ fn decode_bytes(input: &str) -> Option<Vec<u8>> {
     }
 
     None
+}
+
+/// 从裸 base64 重建 PEM 信封。
+fn rebuild_pem_envelope(raw_b64: &str) -> String {
+    let mut pem = String::from("-----BEGIN PUBLIC KEY-----\n");
+    for (i, ch) in raw_b64.chars().enumerate() {
+        pem.push(ch);
+        if (i + 1) % 64 == 0 {
+            pem.push('\n');
+        }
+    }
+    if !pem.ends_with('\n') {
+        pem.push('\n');
+    }
+    pem.push_str("-----END PUBLIC KEY-----");
+    pem
 }
 
 /// 从 site_sfid 的 r5 段提取两位字母省代码。

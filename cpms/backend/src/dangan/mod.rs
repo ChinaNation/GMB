@@ -38,27 +38,6 @@ pub(crate) struct QrPayload {
     pub(crate) signature: String,
 }
 
-#[derive(Serialize)]
-pub(crate) struct SiteKeyRegistrationPayload {
-    pub(crate) ver: String,
-    pub(crate) qr_type: String,
-    pub(crate) issuer_id: String,
-    pub(crate) site_sfid: String,
-    pub(crate) keys: Vec<SiteKeyPublicItem>,
-    pub(crate) issued_at: i64,
-    pub(crate) qr_id: String,
-    pub(crate) sig_alg: String,
-    pub(crate) sign_key_id: String,
-    pub(crate) signature: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub(crate) struct SiteKeyPublicItem {
-    pub(crate) key_id: String,
-    pub(crate) purpose: String,
-    pub(crate) status: String,
-    pub(crate) pubkey: String,
-}
 
 pub(crate) async fn generate_archive_no_with_retry(
     state: &AppState,
@@ -204,14 +183,14 @@ fn ar4_checksum(random_body: &str) -> String {
 /// QR4 档案业务二维码载荷。
 #[derive(Serialize)]
 pub(crate) struct ArchiveQr4Payload {
-    pub(crate) ver: u32,
-    pub(crate) qr_type: String,
-    pub(crate) province_code: String,
-    pub(crate) archive_no: String,
-    pub(crate) citizen_status: String,
-    pub(crate) voting_eligible: bool,
-    pub(crate) anon_cert: serde_json::Value,
-    pub(crate) archive_sig: String,
+    pub(crate) proto: String,
+    pub(crate) r#type: String,
+    pub(crate) prov: String,
+    pub(crate) ano: String,
+    pub(crate) cs: String,
+    pub(crate) ve: bool,
+    pub(crate) cert: serde_json::Value,
+    pub(crate) sig: String,
 }
 
 /// 构造 QR4 载荷（SFID-CPMS QR v1 协议）。
@@ -235,9 +214,9 @@ pub(crate) async fn build_qr4_payload(
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "parse anon_cert failed"))?;
 
     let province_code = anon_cert
-        .get("province_code")
+        .get("prov")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "anon_cert missing province_code"))?
+        .ok_or_else(|| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "cert missing prov"))?
         .to_string();
 
     // 解密匿名私钥
@@ -249,22 +228,22 @@ pub(crate) async fn build_qr4_payload(
 
     let voting_eligible = archive.citizen_status == "NORMAL";
 
-    // 签名原文：cpms-archive-qr-v1|{province_code}|{archive_no}|{citizen_status}|{voting_eligible}
+    // 签名原文：sfid-cpms-v1|archive|{province_code}|{archive_no}|{citizen_status}|{voting_eligible}
     let sign_source = format!(
-        "cpms-archive-qr-v1|{}|{}|{}|{}",
+        "sfid-cpms-v1|archive|{}|{}|{}|{}",
         province_code, archive.archive_no, archive.citizen_status, voting_eligible
     );
     let archive_sig = sign_qr_payload_with_secret(&anon_secret_bytes, &sign_source)?;
 
     Ok(ArchiveQr4Payload {
-        ver: 1,
-        qr_type: "CPMS_ARCHIVE_QR".to_string(),
-        province_code,
-        archive_no: archive.archive_no.clone(),
-        citizen_status: archive.citizen_status.clone(),
-        voting_eligible,
-        anon_cert,
-        archive_sig,
+        proto: "SFID_CPMS_V1".to_string(),
+        r#type: "ARCHIVE".to_string(),
+        prov: province_code,
+        ano: archive.archive_no.clone(),
+        cs: archive.citizen_status.clone(),
+        ve: voting_eligible,
+        cert: anon_cert,
+        sig: archive_sig,
     })
 }
 
@@ -324,57 +303,6 @@ pub(crate) async fn build_qr_payload(
     })
 }
 
-pub(crate) async fn build_site_key_registration_payload(
-    state: &AppState,
-) -> Result<SiteKeyRegistrationPayload, (StatusCode, Json<ApiError>)> {
-    let (site_sfid, keys_runtime) = install_snapshot(state).await?;
-    let sign_key = keys_runtime
-        .iter()
-        .find(|k| k.status == "ACTIVE")
-        .cloned()
-        .ok_or_else(|| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5002,
-                "missing active qr sign key",
-            )
-        })?;
-
-    let issued_at = Utc::now().timestamp();
-    let qr_id = format!("qr_{}", Uuid::new_v4().simple());
-    let keys: Vec<SiteKeyPublicItem> = keys_runtime
-        .iter()
-        .map(|key| SiteKeyPublicItem {
-            key_id: key.key_id.clone(),
-            purpose: key.purpose.clone(),
-            status: key.status.clone(),
-            pubkey: key.pubkey.clone(),
-        })
-        .collect();
-    let key_summary = keys
-        .iter()
-        .map(|k| format!("{}:{}:{}", k.key_id, k.purpose, k.pubkey))
-        .collect::<Vec<String>>()
-        .join("|");
-    let sign_source = format!(
-        "cpms-site-key-register-v1|{}|{}|{}|{}",
-        &site_sfid, key_summary, issued_at, qr_id
-    );
-    let signature = sign_qr_payload_with_secret(&sign_key.secret_bytes, &sign_source)?;
-
-    Ok(SiteKeyRegistrationPayload {
-        ver: "1".to_string(),
-        qr_type: "CPMS_SITE_KEYS_REGISTER".to_string(),
-        issuer_id: "cpms".to_string(),
-        site_sfid: site_sfid.clone(),
-        keys,
-        issued_at,
-        qr_id,
-        sig_alg: "sr25519".to_string(),
-        sign_key_id: sign_key.key_id,
-        signature,
-    })
-}
 
 async fn install_snapshot(
     state: &AppState,

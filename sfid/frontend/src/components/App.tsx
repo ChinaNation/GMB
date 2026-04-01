@@ -1,6 +1,71 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import QrScanner from 'qr-scanner';
+
+type BarcodeDetectorLike = {
+  detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
+};
+type BarcodeDetectorCtor = new (opts: { formats: string[] }) => BarcodeDetectorLike;
+
+/**
+ * 启动摄像头 BarcodeDetector 扫码。返回 cleanup 函数。
+ */
+function startCameraScanner(
+  videoEl: HTMLVideoElement,
+  onDetected: (raw: string) => void,
+  onReady: () => void,
+  onError: (msg: string) => void,
+): () => void {
+  let stopped = false;
+  let stream: MediaStream | null = null;
+  let timer: number | undefined;
+
+  const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
+  if (!win.BarcodeDetector) {
+    onError('当前浏览器不支持摄像头扫码');
+    return () => {};
+  }
+  const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
+
+  (async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false,
+      });
+      if (stopped) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      videoEl.srcObject = stream;
+      await videoEl.play();
+      onReady();
+      timer = window.setInterval(async () => {
+        if (stopped) return;
+        try {
+          const codes = await detector.detect(videoEl);
+          const raw = codes[0]?.rawValue?.trim();
+          if (raw) {
+            window.clearInterval(timer);
+            onDetected(raw);
+          }
+        } catch { /* ignore frame errors */ }
+      }, 500);
+    } catch {
+      onError('无法打开摄像头，请检查权限');
+    }
+  })();
+
+  return () => {
+    stopped = true;
+    if (timer !== undefined) window.clearInterval(timer);
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+    }
+  };
+}
 import { DownloadOutlined, ExclamationCircleFilled, QrcodeOutlined } from '@ant-design/icons';
-import { Button, Card, Divider, Form, Input, Layout, Modal, QRCode, Select, Space, Table, Typography, message } from 'antd';
+import { Button, Card, Divider, Dropdown, Form, Input, Layout, Modal, QRCode, Select, Space, Table, Typography, message } from 'antd';
+import { MoreOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type {
   AdminAuth,
@@ -143,11 +208,6 @@ type KeyringSignedPayload = {
   signature: string;
 };
 
-type BarcodeDetectorLike = {
-  detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
-};
-
-type BarcodeDetectorCtor = new (opts: { formats: string[] }) => BarcodeDetectorLike;
 
 function parseSignedLoginPayload(raw: string, fallbackChallengeId: string): SignedLoginPayload {
   const payload = JSON.parse(raw) as Record<string, unknown>;
@@ -213,6 +273,15 @@ function defaultInstitutionByA3(a3: string): string {
 
 function usesReservedProvinceCityByA3(a3: string): boolean {
   return a3 === 'GMR' || a3 === 'ZRR' || a3 === 'ZNR';
+}
+
+function institutionCodeToName(code: string): string {
+  const map: Record<string, string> = {
+    ZG: '中国', ZF: '政府', LF: '立法院', SF: '司法院',
+    JC: '监察院', JY: '教育委员会', CB: '储备委员会',
+    CH: '储备银行', TG: '他国',
+  };
+  return map[code] || code;
 }
 
 function allowedInstitutionByA3(a3: string): string[] {
@@ -300,7 +369,7 @@ export default function App() {
   const [unbindSubmitting, setUnbindSubmitting] = useState(false);
   const [unbindStep, setUnbindStep] = useState<'confirm' | 'sign_challenge' | 'scan_signature'>('confirm');
   const unbindVideoRef = useRef<HTMLVideoElement | null>(null);
-  const unbindScanStreamRef = useRef<MediaStream | null>(null);
+  const unbindScanCleanupRef = useRef<(() => void) | null>(null);
   const [bindScannerActive, setBindScannerActive] = useState(false);
   const [bindScannerReady, setBindScannerReady] = useState(false);
   const [scannerActive, setScannerActive] = useState(false);
@@ -320,7 +389,6 @@ export default function App() {
   const [institutionSfidOpen, setInstitutionSfidOpen] = useState(false);
   const [institutionSfidLoading, setInstitutionSfidLoading] = useState(false);
   const [institutionSfidResult, setInstitutionSfidResult] = useState<GenerateCpmsInstitutionSfidResult | null>(null);
-  const [institutionSfidDrafts, setInstitutionSfidDrafts] = useState<GenerateCpmsInstitutionSfidResult[]>([]);
   const [institutionQrPreview, setInstitutionQrPreview] = useState<GenerateCpmsInstitutionSfidResult | null>(null);
   const [opScanOpen, setOpScanOpen] = useState(false);
   const [opScanType, setOpScanType] = useState<'register' | 'status'>('register');
@@ -343,17 +411,18 @@ export default function App() {
     province: string;
     city: string;
     institution: string;
+    institution_name: string;
   }>();
   const [replaceSuperForm] = Form.useForm<{ province: string; admin_pubkey: string }>();
   const [keyringForm] = Form.useForm<{ new_backup_pubkey: string }>();
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const scanStreamRef = useRef<MediaStream | null>(null);
+  const loginScanCleanupRef = useRef<(() => void) | null>(null);
   const bindVideoRef = useRef<HTMLVideoElement | null>(null);
-  const bindScanStreamRef = useRef<MediaStream | null>(null);
+  const bindScanCleanupRef = useRef<(() => void) | null>(null);
   const opVideoRef = useRef<HTMLVideoElement | null>(null);
-  const opScanStreamRef = useRef<MediaStream | null>(null);
+  const opScanCleanupRef = useRef<(() => void) | null>(null);
   const keyringVideoRef = useRef<HTMLVideoElement | null>(null);
-  const keyringScanStreamRef = useRef<MediaStream | null>(null);
+  const keyringScanCleanupRef = useRef<(() => void) | null>(null);
   const institutionQrRef = useRef<HTMLDivElement | null>(null);
   const institutionQrPreviewRef = useRef<HTMLDivElement | null>(null);
 
@@ -423,9 +492,9 @@ export default function App() {
   };
 
   const stopScanner = () => {
-    if (scanStreamRef.current) {
-      scanStreamRef.current.getTracks().forEach((t) => t.stop());
-      scanStreamRef.current = null;
+    if (loginScanCleanupRef.current) {
+      loginScanCleanupRef.current();
+      loginScanCleanupRef.current = null;
     }
     setScannerReady(false);
   };
@@ -476,175 +545,46 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!scannerActive || !pendingQrLogin) {
+    if (!scannerActive || !pendingQrLogin || !videoRef.current) {
       stopScanner();
       return;
     }
-    let cancelled = false;
-    const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
-    if (!win.BarcodeDetector) {
-      message.warning('当前浏览器不支持摄像头扫码');
-      return;
-    }
-    const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
-    const start = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        scanStreamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-          setScannerReady(true);
-        }
-        const timer = window.setInterval(async () => {
-          if (!videoRef.current || scanSubmitting) return;
-          try {
-            const codes = await detector.detect(videoRef.current);
-            const raw = codes[0]?.rawValue?.trim();
-            if (raw) {
-              window.clearInterval(timer);
-              await onCompleteSignedLogin(raw);
-            }
-          } catch {
-            // ignore frame failures
-          }
-        }, 700);
-        return () => window.clearInterval(timer);
-      } catch {
-        message.error('无法打开摄像头，请检查权限或改用粘贴方式');
-      }
-    };
-    let clear: (() => void) | undefined;
-    start().then((fn) => {
-      clear = fn;
-    });
-    return () => {
-      cancelled = true;
-      if (clear) clear();
-      stopScanner();
-    };
-  }, [scannerActive, scanSubmitting, pendingQrLogin]);
+    loginScanCleanupRef.current = startCameraScanner(
+      videoRef.current,
+      (raw) => { setScannerActive(false); stopScanner(); void onCompleteSignedLogin(raw); },
+      () => setScannerReady(true),
+      (msg) => message.error(msg),
+    );
+    return () => stopScanner();
+  }, [scannerActive, pendingQrLogin]);
 
   useEffect(() => {
-    if (!opScanOpen) {
+    if (!opScanOpen || !opVideoRef.current) {
       stopOpScanner();
       return;
     }
-    let cancelled = false;
-    const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
-    if (!win.BarcodeDetector) {
-      message.warning('当前浏览器不支持摄像头扫码');
-      return;
-    }
-    const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
-    const start = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        opScanStreamRef.current = stream;
-        if (opVideoRef.current) {
-          opVideoRef.current.srcObject = stream;
-          await opVideoRef.current.play();
-          setOpScannerReady(true);
-        }
-        const timer = window.setInterval(async () => {
-          if (!opVideoRef.current || opScanSubmitting) return;
-          try {
-            const codes = await detector.detect(opVideoRef.current);
-            const raw = codes[0]?.rawValue?.trim();
-            if (raw) {
-              window.clearInterval(timer);
-              await onHandleOperationQr(raw);
-            }
-          } catch {
-            // ignore frame failures
-          }
-        }, 700);
-        return () => window.clearInterval(timer);
-      } catch {
-        message.error('无法打开摄像头，请检查权限');
-      }
-    };
-    let clear: (() => void) | undefined;
-    start().then((fn) => {
-      clear = fn;
-    });
-    return () => {
-      cancelled = true;
-      if (clear) clear();
-      stopOpScanner();
-    };
-  }, [opScanOpen, opScanSubmitting, opScanType, auth]);
+    opScanCleanupRef.current = startCameraScanner(
+      opVideoRef.current,
+      (raw) => void onHandleOperationQr(raw),
+      () => setOpScannerReady(true),
+      (msg) => message.error(msg),
+    );
+    return () => stopOpScanner();
+  }, [opScanOpen, opScanType, auth]);
 
   useEffect(() => {
-    if (!keyringScannerActive || !keyringChallenge) {
+    if (!keyringScannerActive || !keyringChallenge || !keyringVideoRef.current) {
       stopKeyringScanner();
       return;
     }
-    let cancelled = false;
-    const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
-    if (!win.BarcodeDetector) {
-      message.warning('当前浏览器不支持摄像头扫码');
-      return;
-    }
-    const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
-    const start = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        keyringScanStreamRef.current = stream;
-        if (keyringVideoRef.current) {
-          keyringVideoRef.current.srcObject = stream;
-          await keyringVideoRef.current.play();
-          setKeyringScannerReady(true);
-        }
-        const timer = window.setInterval(async () => {
-          if (!keyringVideoRef.current || keyringScanSubmitting) return;
-          try {
-            const codes = await detector.detect(keyringVideoRef.current);
-            const raw = codes[0]?.rawValue?.trim();
-            if (raw) {
-              window.clearInterval(timer);
-              await onCompleteKeyringRotate(raw);
-            }
-          } catch {
-            // ignore frame failures
-          }
-        }, 700);
-        return () => window.clearInterval(timer);
-      } catch {
-        message.error('无法打开摄像头，请检查权限');
-      }
-    };
-    let clear: (() => void) | undefined;
-    start().then((fn) => {
-      clear = fn;
-    });
-    return () => {
-      cancelled = true;
-      if (clear) clear();
-      stopKeyringScanner();
-    };
-  }, [keyringScannerActive, keyringChallenge, keyringScanSubmitting]);
+    keyringScanCleanupRef.current = startCameraScanner(
+      keyringVideoRef.current,
+      (raw) => { setKeyringScannerActive(false); stopKeyringScanner(); void onCompleteKeyringRotate(raw); },
+      () => setKeyringScannerReady(true),
+      (msg) => message.error(msg),
+    );
+    return () => stopKeyringScanner();
+  }, [keyringScannerActive, keyringChallenge]);
 
   const onToggleScanner = () => {
     if (!pendingQrLogin) {
@@ -800,9 +740,9 @@ export default function App() {
   };
 
   const stopKeyringScanner = () => {
-    if (keyringScanStreamRef.current) {
-      keyringScanStreamRef.current.getTracks().forEach((t) => t.stop());
-      keyringScanStreamRef.current = null;
+    if (keyringScanCleanupRef.current) {
+      keyringScanCleanupRef.current();
+      keyringScanCleanupRef.current = null;
     }
     setKeyringScannerReady(false);
   };
@@ -929,9 +869,9 @@ export default function App() {
   };
 
   const stopOpScanner = () => {
-    if (opScanStreamRef.current) {
-      opScanStreamRef.current.getTracks().forEach((t) => t.stop());
-      opScanStreamRef.current = null;
+    if (opScanCleanupRef.current) {
+      opScanCleanupRef.current();
+      opScanCleanupRef.current = null;
     }
     setOpScannerReady(false);
   };
@@ -1196,17 +1136,20 @@ export default function App() {
     }
   };
 
-  const onGenerateInstitutionSfid = async (values: { province: string; city: string; institution: string }) => {
+  const onGenerateInstitutionSfid = async (values: { province: string; city: string; institution: string; institution_name: string }) => {
     if (!auth) return;
     setInstitutionSfidLoading(true);
     try {
       const result = await generateCpmsInstitutionSfid(auth, {
         province: values.province.trim(),
         city: values.city.trim(),
-        institution: values.institution.trim()
+        institution: values.institution.trim(),
+        institution_name: values.institution_name.trim()
       });
       setInstitutionSfidResult(result);
       message.success(`身份识别码已生成：${result.site_sfid}`);
+      setInstitutionSfidOpen(false);
+      await refreshCpmsSites(auth);
     } catch (err) {
       const msg = err instanceof Error ? err.message : '生成机构身份识别码失败';
       message.error(msg);
@@ -1215,16 +1158,12 @@ export default function App() {
     }
   };
 
-  const onFinishInstitutionSfid = () => {
+  const onFinishInstitutionSfid = async () => {
     if (!institutionSfidResult) return;
-    setInstitutionSfidDrafts((prev) => {
-      if (prev.some((item) => item.site_sfid === institutionSfidResult.site_sfid)) return prev;
-      return [institutionSfidResult, ...prev];
-    });
-    if (auth) {
-      void refreshCpmsSites(auth);
-    }
     setInstitutionSfidOpen(false);
+    if (auth) {
+      await refreshCpmsSites(auth);
+    }
   };
 
   const downloadQrFromRef = (container: HTMLDivElement | null, fileBase: string) => {
@@ -1233,24 +1172,47 @@ export default function App() {
       return;
     }
     const safeName = fileBase.replace(/[^\w.-]+/g, '_');
-    const canvas = container.querySelector('canvas');
-    if (canvas) {
+    const padding = 32;
+    const sourceCanvas = container.querySelector('canvas');
+    if (sourceCanvas) {
+      const w = sourceCanvas.width;
+      const h = sourceCanvas.height;
+      const outCanvas = document.createElement('canvas');
+      outCanvas.width = w + padding * 2;
+      outCanvas.height = h + padding * 2;
+      const ctx = outCanvas.getContext('2d')!;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, outCanvas.width, outCanvas.height);
+      ctx.drawImage(sourceCanvas, padding, padding);
       const link = document.createElement('a');
-      link.href = canvas.toDataURL('image/png');
+      link.href = outCanvas.toDataURL('image/png');
       link.download = `${safeName}.png`;
       link.click();
       return;
     }
     const svg = container.querySelector('svg');
     if (svg) {
+      const w = svg.getAttribute('width') ? Number(svg.getAttribute('width')) : 260;
+      const h = svg.getAttribute('height') ? Number(svg.getAttribute('height')) : 260;
+      const outCanvas = document.createElement('canvas');
+      outCanvas.width = w + padding * 2;
+      outCanvas.height = h + padding * 2;
+      const ctx = outCanvas.getContext('2d')!;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, outCanvas.width, outCanvas.height);
       const svgText = new XMLSerializer().serializeToString(svg);
       const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${safeName}.svg`;
-      link.click();
-      URL.revokeObjectURL(url);
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, padding, padding, w, h);
+        URL.revokeObjectURL(url);
+        const link = document.createElement('a');
+        link.href = outCanvas.toDataURL('image/png');
+        link.download = `${safeName}.png`;
+        link.click();
+      };
+      img.src = url;
       return;
     }
     message.error('二维码未就绪，无法下载');
@@ -1352,9 +1314,9 @@ export default function App() {
   };
 
   const stopBindScanner = () => {
-    if (bindScanStreamRef.current) {
-      bindScanStreamRef.current.getTracks().forEach((t) => t.stop());
-      bindScanStreamRef.current = null;
+    if (bindScanCleanupRef.current) {
+      bindScanCleanupRef.current();
+      bindScanCleanupRef.current = null;
     }
     setBindScannerReady(false);
   };
@@ -1370,63 +1332,27 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!bindModalOpen || !bindScannerActive) {
+    if (!bindModalOpen || !bindScannerActive || !bindVideoRef.current) {
       stopBindScanner();
       return;
     }
-    let cancelled = false;
-    const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
-    if (!win.BarcodeDetector) {
-      message.warning('当前浏览器不支持摄像头扫码');
-      setBindScannerActive(false);
-      return;
-    }
-    const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
-    const start = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        bindScanStreamRef.current = stream;
-        if (bindVideoRef.current) {
-          bindVideoRef.current.srcObject = stream;
-          await bindVideoRef.current.play();
-          setBindScannerReady(true);
-        }
-        const timer = window.setInterval(async () => {
-          if (!bindVideoRef.current || bindQr4ScanLoading) return;
-          try {
-            const barcodes = await detector.detect(bindVideoRef.current);
-            const raw = barcodes.find((item) => item.rawValue)?.rawValue?.trim();
-            if (!raw) return;
-            window.clearInterval(timer);
-            if (bindStep === 'scan_qr4') {
-              await onScanBindQr4(raw);
-            } else if (bindStep === 'scan_signature') {
-              await onScanBindSignature(raw);
-            }
-          } catch {
-            // ignore frame errors
-          }
-        }, 300);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : '无法打开摄像头';
-        message.error(msg);
+    const currentStep = bindStep;
+    bindScanCleanupRef.current = startCameraScanner(
+      bindVideoRef.current,
+      (raw) => {
         setBindScannerActive(false);
         stopBindScanner();
-      }
-    };
-    start();
-    return () => {
-      cancelled = true;
-      stopBindScanner();
-    };
-  }, [bindModalOpen, bindScannerActive, bindQr4ScanLoading, bindStep]);
+        if (currentStep === 'scan_qr4') {
+          void onScanBindQr4(raw);
+        } else if (currentStep === 'scan_signature') {
+          void onScanBindSignature(raw);
+        }
+      },
+      () => setBindScannerReady(true),
+      (msg) => { message.error(msg); setBindScannerActive(false); },
+    );
+    return () => stopBindScanner();
+  }, [bindModalOpen, bindScannerActive, bindStep]);
 
   const openUnbindModal = (record: CitizenRow) => {
     setUnbindTarget(record);
@@ -1438,9 +1364,9 @@ export default function App() {
   };
 
   const stopUnbindScanner = () => {
-    if (unbindScanStreamRef.current) {
-      unbindScanStreamRef.current.getTracks().forEach((t) => t.stop());
-      unbindScanStreamRef.current = null;
+    if (unbindScanCleanupRef.current) {
+      unbindScanCleanupRef.current();
+      unbindScanCleanupRef.current = null;
     }
     setUnbindScannerReady(false);
   };
@@ -1489,58 +1415,18 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!unbindModalOpen || !unbindScannerActive) {
+    if (!unbindModalOpen || !unbindScannerActive || !unbindVideoRef.current) {
       stopUnbindScanner();
       return;
     }
-    let cancelled = false;
-    const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
-    if (!win.BarcodeDetector) {
-      message.warning('当前浏览器不支持摄像头扫码');
-      setUnbindScannerActive(false);
-      return;
-    }
-    const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
-    const start = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        unbindScanStreamRef.current = stream;
-        if (unbindVideoRef.current) {
-          unbindVideoRef.current.srcObject = stream;
-          await unbindVideoRef.current.play();
-          setUnbindScannerReady(true);
-        }
-        const timer = window.setInterval(async () => {
-          if (!unbindVideoRef.current || unbindSubmitting) return;
-          try {
-            const barcodes = await detector.detect(unbindVideoRef.current);
-            const raw = barcodes.find((item) => item.rawValue)?.rawValue?.trim();
-            if (!raw) return;
-            window.clearInterval(timer);
-            await onScanUnbindSignature(raw);
-          } catch {
-            // ignore frame errors
-          }
-        }, 300);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : '无法打开摄像头';
-        message.error(msg);
-        setUnbindScannerActive(false);
-      }
-    };
-    start();
-    return () => {
-      cancelled = true;
-      stopUnbindScanner();
-    };
-  }, [unbindModalOpen, unbindScannerActive, unbindSubmitting]);
+    unbindScanCleanupRef.current = startCameraScanner(
+      unbindVideoRef.current,
+      (raw) => { setUnbindScannerActive(false); stopUnbindScanner(); void onScanUnbindSignature(raw); },
+      () => setUnbindScannerReady(true),
+      (msg) => { message.error(msg); setUnbindScannerActive(false); },
+    );
+    return () => stopUnbindScanner();
+  }, [unbindModalOpen, unbindScannerActive]);
 
   const citizenColumns: ColumnsType<CitizenRow> = [
     {
@@ -1600,23 +1486,7 @@ export default function App() {
     });
   }
 
-  const institutionDraftRows: CpmsSiteRow[] = institutionSfidDrafts
-    .filter((item) => !cpmsSites.some((row) => row.site_sfid === item.site_sfid))
-    .map((item) => ({
-      site_sfid: item.site_sfid,
-      install_token_status: 'PENDING' as const,
-      status: 'PENDING' as const,
-      created_by: auth?.admin_pubkey || '-',
-      created_at: new Date().toISOString(),
-      updated_by: null,
-      updated_at: null
-    }));
-  const institutionRows = [...institutionDraftRows, ...cpmsSites];
-  const previewForSite = (siteSfid: string): GenerateCpmsInstitutionSfidResult | null => {
-    const draft = institutionSfidDrafts.find((item) => item.site_sfid === siteSfid);
-    if (draft) return draft;
-    return null;
-  };
+  const institutionRows = cpmsSites;
 
   return (
     <Layout
@@ -1854,14 +1724,17 @@ export default function App() {
                   <div
                     style={{
                       position: 'relative',
-                      padding: 16,
+                      width: 260,
+                      height: 260,
                       background: '#f8fffe',
                       borderRadius: 16,
                       border: '2px solid #e6f7f5',
-                      display: 'inline-block'
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden'
                     }}
                   >
-                    {/* 扫码框四角装饰 */}
                     <div style={{ position: 'absolute', top: 0, left: 0, width: 20, height: 20, borderTop: '3px solid #0d9488', borderLeft: '3px solid #0d9488', borderTopLeftRadius: 8 }} />
                     <div style={{ position: 'absolute', top: 0, right: 0, width: 20, height: 20, borderTop: '3px solid #0d9488', borderRight: '3px solid #0d9488', borderTopRightRadius: 8 }} />
                     <div style={{ position: 'absolute', bottom: 0, left: 0, width: 20, height: 20, borderBottom: '3px solid #0d9488', borderLeft: '3px solid #0d9488', borderBottomLeftRadius: 8 }} />
@@ -1874,7 +1747,7 @@ export default function App() {
                     >
                       <QRCode
                         value={pendingQrLogin?.login_qr_payload || 'SFID_LOGIN_PENDING'}
-                        size={200}
+                        size={228}
                         color="#134e4a"
                       />
                     </div>
@@ -1896,6 +1769,7 @@ export default function App() {
                       style={{
                         borderRadius: 10,
                         fontWeight: 500,
+                        width: 200,
                         boxShadow: '0 2px 8px rgba(13,148,136,0.3)'
                       }}
                     >
@@ -1932,9 +1806,8 @@ export default function App() {
                   </Typography.Text>
                   <div
                     style={{
-                      width: '100%',
-                      maxWidth: 232,
-                      aspectRatio: '1 / 1',
+                      width: 260,
+                      height: 260,
                       background: 'linear-gradient(145deg, #0f172a, #1e293b)',
                       borderRadius: 16,
                       overflow: 'hidden',
@@ -1946,7 +1819,6 @@ export default function App() {
                       boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)'
                     }}
                   >
-                    {/* 扫描框四角装饰 */}
                     <div style={{ position: 'absolute', top: 8, left: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderTopLeftRadius: 4, zIndex: 2 }} />
                     <div style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderTopRightRadius: 4, zIndex: 2 }} />
                     <div style={{ position: 'absolute', bottom: 8, left: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderBottomLeftRadius: 4, zIndex: 2 }} />
@@ -1989,7 +1861,8 @@ export default function App() {
                       disabled={scanSubmitting}
                       style={{
                         borderRadius: 10,
-                        fontWeight: 500
+                        fontWeight: 500,
+                        width: 200
                       }}
                     >
                       {scannerActive ? '停止扫码' : '开启扫码'}
@@ -2317,28 +2190,12 @@ export default function App() {
                     title: '身份识别码',
                     dataIndex: 'site_sfid',
                     width: 260,
-                    align: 'center',
-                    render: (v: string) => {
-                      const issued = previewForSite(v);
-                      return (
-                        <Space size={6}>
-                          <span>{v}</span>
-                          {issued && (
-                            <Button
-                              size="small"
-                              type="text"
-                              icon={<QrcodeOutlined />}
-                              onClick={() => setInstitutionQrPreview(issued)}
-                            />
-                          )}
-                        </Space>
-                      );
-                    }
+                    align: 'center'
                   },
                   {
                     title: '安装令牌',
                     dataIndex: 'install_token_status',
-                    width: 110,
+                    width: 100,
                     align: 'center',
                     render: (v: string) => {
                       if (v === 'PENDING') return '待使用';
@@ -2349,7 +2206,7 @@ export default function App() {
                   },
                   {
                     title: '状态',
-                    width: 110,
+                    width: 90,
                     align: 'center',
                     render: (_v, row) => {
                       const s = row.status || 'PENDING';
@@ -2361,30 +2218,76 @@ export default function App() {
                     }
                   },
                   {
+                    title: '所属机构',
+                    align: 'center',
+                    render: (_v, row) => {
+                      const province = row.admin_province || '-';
+                      const city = (row as CpmsSiteRow).city_name || '-';
+                      const inst = institutionCodeToName((row as CpmsSiteRow).institution_code || '');
+                      return `${province}/${city}/${inst}`;
+                    }
+                  },
+                  {
+                    title: '机构名称',
+                    align: 'center',
+                    width: 160,
+                    render: (_v, row) => (row as CpmsSiteRow).institution_name || '-'
+                  },
+                  {
                     title: '登记人',
                     align: 'center',
-                    render: (_v, row) => `${row.admin_province || ''}机构管理员`
+                    width: 160,
+                    render: (_v, row) => (row as CpmsSiteRow).created_by_name || `${row.admin_province || ''}管理员`
+                  },
+                  {
+                    title: '二维码',
+                    width: 80,
+                    align: 'center',
+                    render: (_v, row) => {
+                      const payload = (row as CpmsSiteRow).qr1_payload;
+                      if (!payload) return '-';
+                      return (
+                        <Button
+                          size="small"
+                          type="text"
+                          icon={<QrcodeOutlined />}
+                          onClick={() => setInstitutionQrPreview({ site_sfid: row.site_sfid, qr1_payload: payload })}
+                        />
+                      );
+                    }
                   },
                   {
                     title: '操作',
-                    width: 300,
+                    width: 80,
                     align: 'center',
                     render: (_v, row) => {
-                      const draft = row.status === 'PENDING' || institutionSfidDrafts.some((item) => item.site_sfid === row.site_sfid);
-                      const status = row.status || 'ACTIVE';
+                      const status = row.status || 'PENDING';
                       const isDisabled = status === 'DISABLED';
+                      const isRevoked = status === 'REVOKED';
+                      const items = [
+                        {
+                          key: 'disable',
+                          label: isDisabled ? '已禁用' : '禁用',
+                          disabled: isDisabled || isRevoked,
+                          onClick: () => onDisableCpmsSite(row),
+                        },
+                        {
+                          key: 'delete',
+                          label: '删除',
+                          danger: true,
+                          onClick: () => onDeleteCpmsSite(row),
+                        },
+                        {
+                          key: 'scan',
+                          label: '扫码登记',
+                          disabled: status !== 'PENDING',
+                          onClick: () => openRegisterScanner(),
+                        },
+                      ];
                       return (
-                        <Space size={4} wrap>
-                          <Button size="small" onClick={() => onDisableCpmsSite(row)} disabled={isDisabled || draft}>
-                            禁用
-                          </Button>
-                          <Button size="small" danger onClick={() => onDeleteCpmsSite(row)} disabled={draft}>
-                            删除
-                          </Button>
-                          <Button size="small" type="primary" onClick={openRegisterScanner} disabled={!draft}>
-                            扫码
-                          </Button>
-                        </Space>
+                        <Dropdown menu={{ items }} trigger={['click']}>
+                          <Button size="small" icon={<MoreOutlined />} />
+                        </Dropdown>
                       );
                     }
                   }
@@ -2462,22 +2365,27 @@ export default function App() {
 
               <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 12 }}>
                 <div style={{ flex: '1 1 320px', minWidth: 300 }}>
+                  <Typography.Text strong style={{ fontSize: 14, color: '#374151', display: 'block', marginBottom: 8 }}>轮换二维码</Typography.Text>
                   <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <QRCode value={keyringChallenge?.challenge_text || 'SFID_KEYRING_ROTATE_PENDING'} size={220} />
+                    <div style={{
+                      filter: keyringChallenge ? 'none' : 'blur(3px) opacity(0.4)',
+                      transition: 'filter 0.3s ease'
+                    }}>
+                      <QRCode value={keyringChallenge?.challenge_text || 'SFID_KEYRING_ROTATE_PENDING'} size={260} color="#134e4a" />
+                    </div>
                   </div>
                   <Typography.Paragraph type="secondary" style={{ marginTop: 10, marginBottom: 8 }}>
                     {keyringChallenge
                       ? `轮换挑战有效期至：${new Date(keyringChallenge.expire_at * 1000).toLocaleTimeString()}`
-                      : '尚未生成轮换挑战'}
+                      : '请输入新备用公钥并点击发起轮换'}
                   </Typography.Paragraph>
                 </div>
                 <div style={{ flex: '1 1 320px', minWidth: 300 }}>
-                  <Typography.Text strong style={{ fontSize: 14, color: '#374151' }}>扫码窗口</Typography.Text>
+                  <Typography.Text strong style={{ fontSize: 14, color: '#374151', display: 'block', marginBottom: 8 }}>扫码窗口</Typography.Text>
                   <div
                     style={{
-                      marginTop: 8,
                       width: '100%',
-                      maxWidth: 232,
+                      maxWidth: 260,
                       aspectRatio: '1 / 1',
                       background: 'linear-gradient(145deg, #0f172a, #1e293b)',
                       borderRadius: 16,
@@ -2683,7 +2591,7 @@ export default function App() {
                 第二步：用 公民 钱包扫码签名
               </Typography.Text>
               <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
-                <QRCode value={bindChallenge.sign_request} size={220} color="#134e4a" />
+                <QRCode value={bindChallenge.sign_request} size={260} color="#134e4a" />
               </div>
               <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
                 有效期至：{new Date(bindChallenge.expire_at * 1000).toLocaleTimeString()}
@@ -2797,7 +2705,7 @@ export default function App() {
                   请用该公钥的 公民 钱包扫码签名
                 </Typography.Text>
                 <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
-                  <QRCode value={unbindChallenge.sign_request} size={220} color="#134e4a" />
+                  <QRCode value={unbindChallenge.sign_request} size={260} color="#134e4a" />
                 </div>
                 <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
                   有效期至：{new Date(unbindChallenge.expire_at * 1000).toLocaleTimeString()}
@@ -2975,12 +2883,24 @@ export default function App() {
               placeholder="请选择机构类型"
             />
           </Form.Item>
+          <Form.Item
+            label="机构名称"
+            name="institution_name"
+            rules={[
+              { required: true, message: '请输入机构名称' },
+              { max: 30, message: '机构名称最多30个字' }
+            ]}
+          >
+            <Input placeholder="请输入机构名称（最多30个字）" maxLength={30} />
+          </Form.Item>
         </Form>
         {institutionSfidResult && (
           <Space direction="vertical" size={8} style={{ width: '100%' }}>
             <Typography.Text strong>身份识别码：{institutionSfidResult.site_sfid}</Typography.Text>
-            <div ref={institutionQrRef} style={{ display: 'flex', justifyContent: 'center' }}>
-              <QRCode value={institutionSfidResult.qr1_payload} size={220} />
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div ref={institutionQrRef} style={{ background: '#fff', padding: 16 }}>
+                <QRCode value={institutionSfidResult.qr1_payload} size={260} />
+              </div>
             </div>
           </Space>
         )}
@@ -3003,8 +2923,10 @@ export default function App() {
         {institutionQrPreview && (
           <Space direction="vertical" size={8} style={{ width: '100%' }}>
             <Typography.Text strong>身份识别码：{institutionQrPreview.site_sfid}</Typography.Text>
-            <div ref={institutionQrPreviewRef} style={{ display: 'flex', justifyContent: 'center' }}>
-              <QRCode value={institutionQrPreview.qr1_payload} size={220} />
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div ref={institutionQrPreviewRef} style={{ background: '#fff', padding: 16 }}>
+                <QRCode value={institutionQrPreview.qr1_payload} size={260} />
+              </div>
             </div>
           </Space>
         )}

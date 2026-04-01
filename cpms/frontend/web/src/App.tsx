@@ -8,10 +8,7 @@ import LoginPage from './login/LoginPage';
 import InstallPage from './install/InstallPage';
 import AdminLayout from './admin/AdminLayout';
 import OperatorList from './admin/OperatorList';
-import SiteKeyRegister from './admin/SiteKeyRegister';
-import CitizenStatusEdit from './admin/CitizenStatusEdit';
-import AnonCertScan from './admin/AnonCertScan';
-import OperatorLayout from './operator/OperatorLayout';
+import SystemSettings from './admin/SystemSettings';
 import ArchiveList from './operator/ArchiveList';
 import ArchiveCreate from './operator/ArchiveCreate';
 import ArchiveDetail from './operator/ArchiveDetail';
@@ -24,7 +21,6 @@ function RootRedirect() {
   useEffect(() => {
     api.installStatus().then(res => {
       const data = res.data;
-      // 未初始化或管理员未绑定 → 去安装页
       if (!data || !data.initialized || data.super_admin_bound_count < 1) {
         setInitialized(false);
       }
@@ -36,7 +32,7 @@ function RootRedirect() {
   if (checking) return null;
   if (!initialized) return <Navigate to="/install" replace />;
   if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={user.role === 'SUPER_ADMIN' ? '/admin' : '/operator'} replace />;
+  return <Navigate to="/admin" replace />;
 }
 
 export default function App() {
@@ -48,20 +44,16 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/install" element={<InstallPage />} />
 
-          <Route element={<ProtectedRoute role="SUPER_ADMIN" />}>
+          <Route element={<ProtectedRoute role="SUPER_ADMIN,OPERATOR_ADMIN" />}>
             <Route element={<AdminLayout />}>
-              <Route path="/admin" element={<OperatorList />} />
-              <Route path="/admin/site-keys" element={<SiteKeyRegister />} />
-              <Route path="/admin/citizen-status" element={<CitizenStatusEdit />} />
-              <Route path="/admin/anon-cert" element={<AnonCertScan />} />
-            </Route>
-          </Route>
-
-          <Route element={<ProtectedRoute role="OPERATOR_ADMIN" />}>
-            <Route element={<OperatorLayout />}>
-              <Route path="/operator" element={<ArchiveList />} />
-              <Route path="/operator/create" element={<ArchiveCreate />} />
-              <Route path="/operator/archives/:id" element={<ArchiveDetail />} />
+              {/* 首页：公民信息 */}
+              <Route path="/admin" element={<ArchiveList />} />
+              <Route path="/admin/create" element={<ArchiveCreate />} />
+              <Route path="/admin/archives/:id" element={<ArchiveDetail />} />
+              {/* 管理员（仅超管） */}
+              <Route path="/admin/operators" element={<OperatorList />} />
+              {/* 系统设置（仅超管） */}
+              <Route path="/admin/settings" element={<SystemSettings />} />
             </Route>
           </Route>
 
