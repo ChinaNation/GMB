@@ -9,4 +9,7 @@ class QrProtocols {
 
   /// 交易签名协议（冷钱包签名中继）。
   static const String sign = 'WUMIN_SIGN_V1.0.0';
+
+  /// 用户名片协议（展示地址/公钥，供扫码转账或管理员绑定）。
+  static const String user = 'WUMIN_USER_V1.0.0';
 }

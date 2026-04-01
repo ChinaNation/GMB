@@ -37,7 +37,7 @@ export default function ArchiveDetail() {
       <div className="card">
         <div className="card__title flex-between">
           档案详情
-          <button className="btn btn--ghost btn--sm" onClick={() => navigate('/operator')}>返回列表</button>
+          <button className="btn btn--ghost btn--sm" onClick={() => navigate('/admin')}>返回列表</button>
         </div>
         <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16 }}>档案号：{archive.archive_no}</div>
         <div className="form-row">
@@ -70,7 +70,7 @@ export default function ArchiveDetail() {
         </div>
         {qrContent && (
           <div className="mt-16 text-center">
-            <QRCodeSVG value={qrContent} size={200} />
+            <QRCodeSVG value={qrContent} size={260} />
             <div style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-secondary)' }}>扫描上方二维码查看公民护照信息</div>
           </div>
         )}

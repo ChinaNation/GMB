@@ -68,16 +68,9 @@ export interface InstallStatus {
   initialized: boolean;
   site_sfid: string | null;
   super_admin_bound_count: number;
-  super_admin_bind_qrs: SuperAdminBindQr[];
   qr2_ready: boolean;
   qr2_payload: string | null;
   anon_cert_done: boolean;
-}
-
-export interface SuperAdminBindQr {
-  key_id: string;
-  bound: boolean;
-  qr_content: string;
 }
 
 export interface ChallengeData {

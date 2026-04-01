@@ -42,12 +42,6 @@ struct OperatorData {
     status: String,
 }
 
-#[derive(Serialize)]
-struct SiteKeyRegistrationData {
-    qr_payload: crate::dangan::SiteKeyRegistrationPayload,
-    qr_content: String,
-}
-
 #[derive(Deserialize)]
 struct UpdateCitizenStatusRequest {
     citizen_status: String,
@@ -74,10 +68,6 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/admin/operators/:id/status",
             put(update_operator_status),
-        )
-        .route(
-            "/api/v1/admin/site-keys/registration-qr",
-            post(generate_site_key_registration_qr),
         )
         .route(
             "/api/v1/archives/:archive_id/citizen-status",
@@ -408,34 +398,6 @@ async fn update_operator_status(
     Ok(Json(ok(serde_json::json!({}))))
 }
 
-async fn generate_site_key_registration_qr(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<ApiResponse<SiteKeyRegistrationData>>, (StatusCode, Json<ApiError>)> {
-    let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
-    let payload = dangan::build_site_key_registration_payload(&state).await?;
-    let qr_content = serde_json::to_string(&payload)
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "qr encode failed"))?;
-
-    write_audit(
-        &state,
-        Some(ctx.user_id),
-        "GENERATE_SITE_KEY_REGISTRATION_QR",
-        "SITE_KEY_QR",
-        Some(payload.qr_id.clone()),
-        "SUCCESS",
-        serde_json::json!({
-            "site_sfid": payload.site_sfid,
-            "sign_key_id": payload.sign_key_id
-        }),
-    )
-    .await?;
-
-    Ok(Json(ok(SiteKeyRegistrationData {
-        qr_payload: payload,
-        qr_content,
-    })))
-}
 
 async fn update_archive_citizen_status(
     State(state): State<AppState>,

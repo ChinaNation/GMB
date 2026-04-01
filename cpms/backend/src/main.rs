@@ -146,12 +146,17 @@ async fn find_admin_by_pubkey(
     state: &AppState,
     admin_pubkey: &str,
 ) -> Result<AdminUser, (StatusCode, Json<ApiError>)> {
+    // 归一化：去 0x 前缀，小写
+    let normalized = admin_pubkey.trim()
+        .strip_prefix("0x").or_else(|| admin_pubkey.trim().strip_prefix("0X"))
+        .unwrap_or(admin_pubkey.trim())
+        .to_lowercase();
     let row = sqlx::query(
         "SELECT user_id, admin_pubkey, role, status, immutable, managed_key_id, created_at, updated_at
          FROM admin_users
          WHERE admin_pubkey = $1",
     )
-    .bind(admin_pubkey)
+    .bind(&normalized)
     .fetch_optional(&state.db)
     .await
     .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query admin failed"))?
