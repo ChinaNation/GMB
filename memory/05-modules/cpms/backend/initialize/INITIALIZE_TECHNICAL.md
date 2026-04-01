@@ -15,13 +15,14 @@
 ## 3. 数据落库（PostgreSQL）
 - `system_install`：安装状态与 `site_sfid`
 - `qr_sign_keys`：机构二维码签名密钥（含用途、状态、公钥、私钥材料）
-- `admin_users`：机构管理员绑定结果（`managed_key_id` 标识对应 `K1/K2/K3`）
+- `admin_users`：超级管理员绑定结果
 
 ## 4. 安全约束
-- `SFID_ROOT_PUBKEY` 必须存在，初始化二维码必须验签通过
+- CPMS 为离线系统，初始化时不验 QR1 签名（无 SFID 公钥）
 - `system_install.site_sfid` 已存在时拒绝重复初始化
-- 机构管理员绑定数量上限为 3
-- 同一 `managed_key_id` 和 `admin_pubkey` 不允许重复绑定
+- 超级管理员绑定数量上限为 1
+- `admin_pubkey` 不允许重复绑定
+- QR2 生成和 QR3 盲化需要 SUPER_ADMIN 认证（登录后操作）
 
 ## 5. 模块边界
 - 初始化相关路由与辅助算法全部集中在 `initialize` 模块

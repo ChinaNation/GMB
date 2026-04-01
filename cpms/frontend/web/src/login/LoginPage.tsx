@@ -1,91 +1,294 @@
-// 登录页：Sr25519 签名挑战验证
+// 登录页：WUMIN_LOGIN_V1.0.0 双向扫码登录
+// 左侧展示 challenge 二维码 → 手机扫码签名
+// 右侧摄像头扫码 → 扫描手机签名回执 → 完成登录
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../auth';
 import * as api from '../api';
+
+type BarcodeDetectorLike = {
+  detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
+};
+type BarcodeDetectorCtor = new (opts: { formats: string[] }) => BarcodeDetectorLike;
 
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const [pubkey, setPubkey] = useState('');
-  const [challenge, setChallenge] = useState<{ challenge_id: string; challenge_payload: string } | null>(null);
-  const [signature, setSignature] = useState('');
+  const [qrChallenge, setQrChallenge] = useState<{
+    challenge_id: string;
+    login_qr_payload: string;
+    session_id: string;
+    expire_at: number;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [scannerActive, setScannerActive] = useState(false);
+  const [scannerReady, setScannerReady] = useState(false);
+  const [scanSubmitting, setScanSubmitting] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const scanCleanupRef = useRef<(() => void) | null>(null);
+  const pollingRef = useRef<number | null>(null);
+  const loggedInRef = useRef(false);
 
-  const handleGetChallenge = async () => {
-    if (!pubkey.trim()) { setError('请输入管理员公钥'); return; }
+  const stopScanner = () => {
+    if (scanCleanupRef.current) {
+      scanCleanupRef.current();
+      scanCleanupRef.current = null;
+    }
+    setScannerReady(false);
+  };
+
+  const stopPolling = () => {
+    if (pollingRef.current !== null) {
+      window.clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  };
+
+  const doLogin = (accessToken: string, user: { user_id: string; role: string }) => {
+    if (loggedInRef.current) return;
+    loggedInRef.current = true;
+    stopPolling();
+    stopScanner();
+    setScannerActive(false);
+    login(accessToken, user);
+    navigate(user.role === 'SUPER_ADMIN' ? '/admin' : '/operator');
+  };
+
+  useEffect(() => {
+    return () => { stopScanner(); stopPolling(); };
+  }, []);
+
+  const handleGenerateQr = async () => {
     setError('');
     setLoading(true);
+    stopPolling();
+    loggedInRef.current = false;
     try {
-      const res = await api.authChallenge(pubkey.trim());
-      if (res.data) setChallenge(res.data);
+      const res = await api.authQrChallenge();
+      if (res.data) {
+        setQrChallenge(res.data);
+        // 同时启动轮询（手机能联网时直接提交，轮询拿到结果）
+        const { challenge_id, session_id } = res.data;
+        pollingRef.current = window.setInterval(async () => {
+          try {
+            const r = await api.authQrResult(challenge_id, session_id);
+            if (r.data?.status === 'SUCCESS' && r.data.access_token && r.data.user) {
+              doLogin(r.data.access_token, r.data.user);
+            } else if (r.data?.status === 'EXPIRED') {
+              stopPolling();
+              setError('二维码已过期，请重新生成');
+              setQrChallenge(null);
+            }
+          } catch { /* keep polling */ }
+        }, 1500);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : '获取挑战失败');
+      setError(e instanceof Error ? e.message : '生成登录二维码失败');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerify = async () => {
-    if (!challenge || !signature.trim()) { setError('请输入签名'); return; }
-    setError('');
-    setLoading(true);
-    try {
-      const res = await api.authVerify(challenge.challenge_id, pubkey.trim(), signature.trim());
-      if (res.data) {
-        login(res.data.access_token, res.data.user);
-        navigate(res.data.user.role === 'SUPER_ADMIN' ? '/admin' : '/operator');
+  // 摄像头扫码（BarcodeDetector）
+  useEffect(() => {
+    if (!scannerActive || !qrChallenge || !videoRef.current) {
+      stopScanner();
+      return;
+    }
+    let stopped = false;
+    let stream: MediaStream | null = null;
+    let timer: number | undefined;
+    const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
+    if (!win.BarcodeDetector) {
+      setError('当前浏览器不支持摄像头扫码');
+      setScannerActive(false);
+      return;
+    }
+    const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
+    const video = videoRef.current;
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        if (stopped) { stream.getTracks().forEach(t => t.stop()); return; }
+        video.srcObject = stream;
+        await video.play();
+        setScannerReady(true);
+        timer = window.setInterval(async () => {
+          if (stopped || scanSubmitting) return;
+          try {
+            const codes = await detector.detect(video);
+            const raw = codes[0]?.rawValue?.trim();
+            if (raw) { window.clearInterval(timer); await handleReceiptScanned(raw); }
+          } catch { /* ignore */ }
+        }, 500);
+      } catch {
+        setError('无法打开摄像头，请检查权限');
+        setScannerActive(false);
       }
+    })();
+    scanCleanupRef.current = () => {
+      stopped = true;
+      if (timer !== undefined) window.clearInterval(timer);
+      if (stream) stream.getTracks().forEach(t => t.stop());
+    };
+    return () => stopScanner();
+  }, [scannerActive, scanSubmitting, qrChallenge]);
+
+  const handleReceiptScanned = async (raw: string) => {
+    if (!qrChallenge) return;
+    setScanSubmitting(true);
+    try {
+      // 解析签名回执
+      const receipt = JSON.parse(raw);
+      const admin_pubkey =
+        (typeof receipt.pubkey === 'string' && receipt.pubkey.trim()) ||
+        (typeof receipt.admin_pubkey === 'string' && receipt.admin_pubkey.trim()) ||
+        (typeof receipt.account === 'string' && receipt.account.trim()) ||
+        '';
+      const signature =
+        (typeof receipt.signature === 'string' && receipt.signature.trim()) ||
+        (typeof receipt.sig === 'string' && receipt.sig.trim()) ||
+        '';
+      if (!admin_pubkey || !signature) {
+        setError('签名二维码缺少必要字段');
+        setScanSubmitting(false);
+        return;
+      }
+
+      // 提交签名到后端
+      await api.authQrComplete({
+        challenge_id: receipt.challenge || receipt.challenge_id || qrChallenge.challenge_id,
+        session_id: receipt.session_id || qrChallenge.session_id,
+        admin_pubkey,
+        signature,
+      });
+
+      // 查询登录结果
+      const result = await api.authQrResult(qrChallenge.challenge_id, qrChallenge.session_id);
+      if (result.data?.status === 'SUCCESS' && result.data.access_token && result.data.user) {
+        doLogin(result.data.access_token, result.data.user);
+        return;
+      }
+      setError('登录验证失败，请重试');
     } catch (e) {
-      setError(e instanceof Error ? e.message : '验证失败');
+      const msg = e instanceof Error ? e.message : '签名处理失败';
+      if (msg.includes('admin not found')) {
+        setError('非管理员禁止登录本系统');
+      } else {
+        setError(msg);
+      }
     } finally {
-      setLoading(false);
+      setScanSubmitting(false);
     }
   };
 
   return (
     <div className="login-page">
-      <div className="login-card">
+      <div className="login-card" style={{ width: 680 }}>
         <div className="login-card__header">
           <div className="login-card__title">CPMS</div>
-          <div className="login-card__subtitle">公民护照管理系统</div>
+          <div className="login-card__subtitle">公民护照管理系统 — 管理员扫码登录</div>
         </div>
         <div className="login-card__body">
           {error && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{error}</div>}
 
-          <div className="form-group">
-            <label>管理员公钥</label>
-            <input className="form-input" placeholder="Sr25519 公钥（hex 或 base64）" value={pubkey} onChange={e => setPubkey(e.target.value)} />
-          </div>
-
-          {!challenge ? (
-            <button className="btn btn--primary" style={{ width: '100%' }} onClick={handleGetChallenge} disabled={loading}>
-              {loading ? '请求中...' : '获取签名挑战'}
-            </button>
-          ) : (
-            <>
-              <div className="form-group">
-                <label>签名挑战</label>
-                <textarea
-                  className="form-input"
-                  rows={3}
-                  readOnly
-                  value={challenge.challenge_payload}
-                  style={{ fontSize: 12, fontFamily: 'monospace', resize: 'none', height: 'auto' }}
-                />
+          <div style={{ display: 'flex', gap: 24, alignItems: 'stretch', flexWrap: 'wrap' }}>
+            {/* 左侧：登录二维码 */}
+            <div style={{ flex: '1 1 260px', minWidth: 240, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', marginBottom: 12 }}>登录二维码</div>
+              <div style={{
+                width: 260, height: 260,
+                background: '#f8fffe',
+                borderRadius: 16,
+                border: '2px solid #e6f7f5',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  filter: qrChallenge ? 'none' : 'blur(3px) opacity(0.4)',
+                  transition: 'filter 0.3s ease',
+                }}>
+                  <QRCodeSVG
+                    value={qrChallenge?.login_qr_payload || 'CPMS_LOGIN_PENDING'}
+                    size={228}
+                    fgColor="#134e4a"
+                  />
+                </div>
               </div>
-              <div className="form-group">
-                <label>签名结果</label>
-                <input className="form-input" placeholder="对上述挑战的 Sr25519 签名（hex 或 base64）" value={signature} onChange={e => setSignature(e.target.value)} />
+              <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                {qrChallenge
+                  ? `有效期至 ${new Date(qrChallenge.expire_at * 1000).toLocaleTimeString()}`
+                  : '请点击按钮生成二维码'}
               </div>
-              <button className="btn btn--primary" style={{ width: '100%' }} onClick={handleVerify} disabled={loading}>
-                {loading ? '验证中...' : '验证并登录'}
+              <button
+                className="btn btn--primary"
+                style={{ width: 200, marginTop: 10 }}
+                onClick={handleGenerateQr}
+                disabled={loading}
+              >
+                {loading ? '生成中...' : qrChallenge ? '重新生成' : '生成二维码'}
               </button>
-            </>
-          )}
+            </div>
+
+            {/* 分割线 */}
+            <div style={{
+              width: 1,
+              background: 'linear-gradient(to bottom, transparent, var(--color-border), transparent)',
+              alignSelf: 'stretch',
+            }} />
+
+            {/* 右侧：扫码窗口 */}
+            <div style={{ flex: '1 1 260px', minWidth: 240, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', marginBottom: 12 }}>扫码窗口</div>
+              <div style={{
+                width: 260, height: 260,
+                background: 'linear-gradient(145deg, #0f172a, #1e293b)',
+                borderRadius: 16,
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                border: '2px solid #334155',
+              }}>
+                <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                {!scannerReady && (
+                  <div style={{
+                    position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}>
+                    <div style={{ fontSize: 28, color: 'rgba(255,255,255,0.25)' }}>📷</div>
+                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+                      {scannerActive ? '摄像头初始化中...' : '等待开启摄像头'}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                开启摄像头扫描签名回执二维码
+              </div>
+              <button
+                className="btn btn--ghost"
+                style={{ width: 200, marginTop: 10 }}
+                onClick={() => {
+                  if (!qrChallenge) {
+                    setError('请先生成登录二维码');
+                    return;
+                  }
+                  setScannerActive(v => !v);
+                }}
+                disabled={scanSubmitting}
+              >
+                {scannerActive ? '停止扫码' : '开启扫码'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

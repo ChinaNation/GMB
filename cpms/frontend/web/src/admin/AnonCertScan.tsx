@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import QrScanner from 'qr-scanner';
 import * as api from '../api';
 
 type BarcodeDetectorLike = {
@@ -14,9 +15,9 @@ export default function AnonCertScan() {
   const [success, setSuccess] = useState('');
   const [anonCertDone, setAnonCertDone] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const scanCleanupRef = useRef<(() => void) | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 检查当前状态
   useEffect(() => {
     api.installStatus().then(res => {
       if (res.data?.anon_cert_done) setAnonCertDone(true);
@@ -24,9 +25,9 @@ export default function AnonCertScan() {
   }, []);
 
   const stopScanner = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
+    if (scanCleanupRef.current) {
+      scanCleanupRef.current();
+      scanCleanupRef.current = null;
     }
     setScannerReady(false);
   };
@@ -47,12 +48,15 @@ export default function AnonCertScan() {
     setSubmitting(false);
   };
 
+  // 摄像头扫码用 BarcodeDetector
   useEffect(() => {
-    if (!scannerActive) {
+    if (!scannerActive || !videoRef.current) {
       stopScanner();
       return;
     }
-    let cancelled = false;
+    let stopped = false;
+    let stream: MediaStream | null = null;
+    let timer: number | undefined;
     const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
     if (!win.BarcodeDetector) {
       setError('当前浏览器不支持摄像头扫码');
@@ -60,47 +64,52 @@ export default function AnonCertScan() {
       return;
     }
     const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
-    const start = async () => {
+    const video = videoRef.current;
+    (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach(t => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-          setScannerReady(true);
-        }
-        const timer = window.setInterval(async () => {
-          if (!videoRef.current || submitting) return;
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        if (stopped) { stream.getTracks().forEach(t => t.stop()); return; }
+        video.srcObject = stream;
+        await video.play();
+        setScannerReady(true);
+        timer = window.setInterval(async () => {
+          if (stopped || submitting) return;
           try {
-            const codes = await detector.detect(videoRef.current);
+            const codes = await detector.detect(video);
             const raw = codes[0]?.rawValue?.trim();
-            if (raw) {
-              window.clearInterval(timer);
-              await handleQr3Scanned(raw);
-            }
+            if (raw) { window.clearInterval(timer); await handleQr3Scanned(raw); }
           } catch { /* ignore */ }
-        }, 700);
-        return () => window.clearInterval(timer);
+        }, 500);
       } catch {
         setError('无法打开摄像头，请检查权限');
         setScannerActive(false);
       }
+    })();
+    scanCleanupRef.current = () => {
+      stopped = true;
+      if (timer !== undefined) window.clearInterval(timer);
+      if (stream) stream.getTracks().forEach(t => t.stop());
     };
-    let clear: (() => void) | undefined;
-    start().then(fn => { clear = fn; });
-    return () => {
-      cancelled = true;
-      if (clear) clear();
-      stopScanner();
-    };
+    return () => stopScanner();
   }, [scannerActive, submitting]);
+
+  // 图片上传用 qr-scanner
+  const onUploadQrImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (!file) return;
+    try {
+      const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true });
+      const raw = result.data?.trim();
+      if (raw) {
+        await handleQr3Scanned(raw);
+      } else {
+        setError('未识别到二维码，请确认图片中包含有效的二维码');
+      }
+    } catch {
+      setError('未识别到二维码，请确认图片中包含有效的二维码');
+    }
+  };
 
   if (anonCertDone) {
     return (
@@ -144,15 +153,15 @@ export default function AnonCertScan() {
         border: '2px solid #334155',
       }}>
         <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
-        {!scannerReady && (
+        {!scannerReady && !scannerActive && (
           <div style={{
             position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center', gap: 8,
-            cursor: scannerActive ? 'default' : 'pointer', userSelect: 'none',
-          }} onClick={() => { if (!scannerActive) setScannerActive(true); }}>
+            cursor: 'pointer', userSelect: 'none',
+          }} onClick={() => setScannerActive(true)}>
             <div style={{ fontSize: 28, color: 'rgba(255,255,255,0.25)' }}>📷</div>
             <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
-              {scannerActive ? '摄像头初始化中...' : '点击开启摄像头扫码'}
+              点击开启摄像头扫码
             </div>
           </div>
         )}
@@ -164,6 +173,15 @@ export default function AnonCertScan() {
           disabled={submitting}
         >
           {submitting ? '处理中...' : scannerActive ? '停止扫码' : '开启扫码'}
+        </button>
+        <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={onUploadQrImage} />
+        <button
+          className="btn btn--ghost"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={submitting}
+          style={{ marginLeft: 8 }}
+        >
+          上传二维码
         </button>
       </div>
     </div>

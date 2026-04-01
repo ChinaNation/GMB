@@ -6,6 +6,6 @@ import { useAuth } from '../auth';
 export default function ProtectedRoute({ role }: { role?: string }) {
   const { token, user } = useAuth();
   if (!token || !user) return <Navigate to="/login" replace />;
-  if (role && user.role !== role) return <Navigate to="/404" replace />;
+  if (role && !role.split(',').map(r => r.trim()).includes(user.role)) return <Navigate to="/404" replace />;
   return <Outlet />;
 }

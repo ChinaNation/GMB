@@ -52,15 +52,15 @@ export default function OperatorList() {
   return (
     <div className="card">
       <div className="card__title flex-between">
-        操作员管理
-        <button className="btn btn--primary" onClick={() => setShowAdd(true)}>+ 新增操作员</button>
+        系统管理员列表
+        <button className="btn btn--primary" onClick={() => setShowAdd(true)}>+ 新增管理员</button>
       </div>
 
       {showAdd && (
         <div style={{ background: '#f0fdfa', padding: 16, borderRadius: 'var(--radius)', marginBottom: 16 }}>
           {error && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
           <div style={{ display: 'flex', gap: 8 }}>
-            <input className="form-input" placeholder="操作员 Sr25519 公钥" value={newPubkey} onChange={e => setNewPubkey(e.target.value)} />
+            <input className="form-input" placeholder="管理员 Sr25519 公钥" value={newPubkey} onChange={e => setNewPubkey(e.target.value)} />
             <button className="btn btn--blue" onClick={handleCreate} disabled={loading}>确认</button>
             <button className="btn btn--ghost" onClick={() => { setShowAdd(false); setError(''); }}>取消</button>
           </div>
@@ -73,7 +73,7 @@ export default function OperatorList() {
         </thead>
         <tbody>
           {operators.length === 0 ? (
-            <tr><td colSpan={5} className="text-center" style={{ color: 'var(--color-text-secondary)' }}>暂无操作员</td></tr>
+            <tr><td colSpan={5} className="text-center" style={{ color: 'var(--color-text-secondary)' }}>暂无管理员</td></tr>
           ) : operators.map(op => (
             <tr key={op.user_id}>
               <td><span className="text-ellipsis">{op.user_id}</span></td>

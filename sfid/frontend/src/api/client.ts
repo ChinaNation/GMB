@@ -166,7 +166,12 @@ export type CpmsSiteRow = {
   version?: number;
   province_code?: string;
   admin_province?: string;
+  city_name?: string;
+  institution_code?: string;
+  institution_name?: string;
+  qr1_payload?: string;
   created_by: string;
+  created_by_name?: string;
   created_at: string;
   updated_by?: string | null;
   updated_at?: string | null;
@@ -454,7 +459,7 @@ export async function scanCpmsStatusQr(
 
 export async function generateCpmsInstitutionSfid(
   auth: AdminAuth,
-  payload: { province?: string; city: string; institution: string }
+  payload: { province?: string; city: string; institution: string; institution_name: string }
 ): Promise<GenerateCpmsInstitutionSfidResult> {
   return request<GenerateCpmsInstitutionSfidResult>('/api/v1/admin/cpms-keys/sfid/generate', {
     method: 'POST',

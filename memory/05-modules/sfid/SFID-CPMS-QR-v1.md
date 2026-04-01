@@ -1,4 +1,4 @@
-# SFID-CPMS QR v1
+# SFID_CPMS_V1
 
 > 省级可见、站点匿名、档案号不透明
 
@@ -9,9 +9,9 @@
 
 ## 原则
 
-- `site_sfid` 只用于 SFID 实名管理 CPMS
-- `archive_no` 本体不带省、市、站点信息
-- `province_code` 由档案二维码携带，并由匿名证书绑定
+- `sfid`（机构身份识别码）只用于 SFID 实名管理 CPMS
+- `ano`（档案号）本体不带省、市、站点信息
+- `prov`（省代码）由档案二维码携带，并由匿名证书绑定
 - CPMS 本地管理员密钥只在本机使用，不回传 SFID
 - SFID 通过"省级匿名证书"判断合法性，不通过实名站点公钥判断
 
@@ -21,36 +21,32 @@
 |------|------|------|
 | QR1 签名 | sr25519 | SFID 主密钥签 |
 | 盲签名（匿名证书） | RSABSSA-SHA384-PSS-Randomized（RFC 9474） | SFID 单独维护 RSA 密钥对 |
-| QR4 archive_sig | sr25519 | CPMS 本地 anon_keypair 签 |
+| QR4 sig | sr25519 | CPMS 本地 anon_keypair 签 |
 
 ## 省代码
 
 全协议统一使用两位字母省码（与 `province.rs` 中的 `ProvinceCode.code` 一致）：`GD`、`LN`、`ZS`……
 
-`site_sfid` 中 r5 段的前两位即为省码，与 `anon_cert.province_code`、`qr.province_code` 同一口径。
-
-## 时间格式
-
-全部使用 UTC RFC3339，例如 `2026-04-30T23:59:59Z`。
+`sfid` 中 r5 段的前两位即为省码，与 `cert.prov`、QR4 的 `prov` 同一口径。
 
 ## 签名原文固定格式
 
 ### QR1 安装授权签名原文（sr25519）
 
 ```
-sfid-cpms-install-v1|{site_sfid}|{install_token}
+sfid-cpms-v1|install|{sfid}|{token}
 ```
 
 ### anon_cert 证书签名原文（RSABSSA）
 
 ```
-sfid-anon-cert-v1|{province_code}|{anon_pubkey}
+sfid-anon-cert-v1|{prov}|{pk}
 ```
 
 ### QR4 档案签名原文（sr25519）
 
 ```
-cpms-archive-qr-v1|{province_code}|{archive_no}|{citizen_status}|{voting_eligible}
+sfid-cpms-v1|archive|{prov}|{ano}|{cs}|{ve}
 ```
 
 ## 扫码总流程
@@ -68,119 +64,118 @@ QR4: CPMS → SFID    档案业务二维码
 
 ```json
 {
-  "ver": 1,
-  "qr_type": "SFID_CPMS_INSTALL",
-  "site_sfid": "GFR-GD001-ZG0X-123456789-20260330",
-  "install_token": "b1c8f0c2e0d84a5cb7c0d0e2f9a8c1d3",
-  "signature": "..."
+  "proto": "SFID_CPMS_V1",
+  "type": "INSTALL",
+  "sfid": "GFR-GD001-ZG0X-123456789-20260330",
+  "token": "b1c8f0c2e0d84a5cb7c0d0e2f9a8c1d3",
+  "rsa": "MIIBIjANBg...",
+  "sig": "0x..."
 }
 ```
 
 | 字段 | 说明 |
 |------|------|
-| ver | 协议版本 |
-| qr_type | 固定 `SFID_CPMS_INSTALL` |
-| site_sfid | SFID 分配给该 CPMS 的实名身份号 |
-| install_token | 一次性安装令牌，只能成功使用一次 |
-| signature | SFID 主密钥 sr25519 签名，原文 `sfid-cpms-install-v1\|{site_sfid}\|{install_token}` |
+| proto | 协议标识 `SFID_CPMS_V1` |
+| type | 固定 `INSTALL` |
+| sfid | SFID 分配给该 CPMS 的实名身份号 |
+| token | 一次性安装令牌，只能成功使用一次 |
+| rsa | SFID RSA 公钥（base64 裸数据，无 PEM 头尾） |
+| sig | SFID 主密钥 sr25519 签名，原文 `sfid-cpms-v1|install|{sfid}|{token}` |
 
-CPMS 收到后先用预置的 SFID 公钥验签名，通过才接受安装。
+CPMS 收到后先用预置的 SFID 公钥验签名，通过才接受安装。RSA 公钥需重建 PEM 信封后使用。
 
 ## QR2 — CPMS → SFID：注册请求
 
 ```json
 {
-  "ver": 1,
-  "qr_type": "CPMS_REGISTER_REQ",
-  "site_sfid": "GFR-GD001-ZG0X-123456789-20260330",
-  "install_token": "b1c8f0c2e0d84a5cb7c0d0e2f9a8c1d3",
-  "blind_anon_req": "..."
+  "proto": "SFID_CPMS_V1",
+  "type": "REGISTER",
+  "sfid": "GFR-GD001-ZG0X-123456789-20260330",
+  "token": "b1c8f0c2e0d84a5cb7c0d0e2f9a8c1d3",
+  "blind": "0x..."
 }
 ```
 
 | 字段 | 说明 |
 |------|------|
-| ver | 协议版本 |
-| qr_type | 固定 `CPMS_REGISTER_REQ` |
-| site_sfid | 本机初始化时读取到的实名站点号 |
-| install_token | 安装令牌，回传给 SFID 校验 |
-| blind_anon_req | 匿名公钥盲签申请，SFID 只负责签，不知道最终匿名公钥是谁 |
+| proto | 协议标识 |
+| type | 固定 `REGISTER` |
+| sfid | 本机初始化时读取到的实名站点号 |
+| token | 安装令牌，回传给 SFID 校验 |
+| blind | 匿名公钥盲签申请，SFID 只负责签，不知道最终匿名公钥是谁 |
 
-CPMS 初始化时本地生成：
-
-- `local_admin_keypair`：本地管理员密钥，只本机使用
-- `anon_keypair`：匿名签发密钥（sr25519），用于签档案二维码
-
-两把私钥都不出机。
+CPMS 初始化时本地生成 `anon_keypair`（sr25519），私钥不出机。
 
 ## QR3 — SFID → CPMS：匿名证书
 
 ```json
 {
-  "ver": 1,
-  "qr_type": "SFID_ANON_CERT",
-  "province_code": "GD",
-  "blind_anon_sig": "..."
+  "proto": "SFID_CPMS_V1",
+  "type": "CERT",
+  "prov": "GD",
+  "bsig": "0x..."
 }
 ```
 
 | 字段 | 说明 |
 |------|------|
-| ver | 协议版本 |
-| qr_type | 固定 `SFID_ANON_CERT` |
-| province_code | 该 CPMS 所属省代码，由 SFID 根据 site_sfid 自动确定 |
-| blind_anon_sig | SFID 对盲请求的 RSABSSA 签名结果 |
+| proto | 协议标识 |
+| type | 固定 `CERT` |
+| prov | 该 CPMS 所属省代码，由 SFID 根据 sfid 自动确定 |
+| bsig | SFID 对盲请求的 RSABSSA 签名结果 |
 
 CPMS 扫描这张码后，本机解盲，得到最终匿名证书：
 
 ```json
 {
-  "province_code": "GD",
-  "anon_pubkey": "0x...",
-  "sfid_sig": "..."
+  "prov": "GD",
+  "pk": "0x...",
+  "sig": "0x...",
+  "mr": "0x..."
 }
 ```
 
-`sfid_sig` 为 RSABSSA-SHA384-PSS-Randomized 签名，原文 `sfid-anon-cert-v1|GD|0x...`。
+`sig` 为 RSABSSA-SHA384-PSS-Randomized 签名，原文 `sfid-anon-cert-v1|GD|0x...`。`mr` 为消息随机化因子（验签时需要）。
 
 匿名证书长期有效，只证明两件事：
 
 1. 这是 SFID 认证过的某个合法 CPMS
 2. 它属于某个省
 
-不暴露：哪个市、哪台 CPMS、哪个 site_sfid。
+不暴露：哪个市、哪台 CPMS、哪个 sfid。
 
 ## QR4 — CPMS → SFID：档案业务
 
 ```json
 {
-  "ver": 1,
-  "qr_type": "CPMS_ARCHIVE_QR",
-  "province_code": "GD",
-  "archive_no": "AR4-K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H",
-  "citizen_status": "NORMAL",
-  "voting_eligible": true,
-  "anon_cert": {
-    "province_code": "GD",
-    "anon_pubkey": "0x...",
-    "sfid_sig": "..."
+  "proto": "SFID_CPMS_V1",
+  "type": "ARCHIVE",
+  "prov": "GD",
+  "ano": "AR4-K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H",
+  "cs": "NORMAL",
+  "ve": true,
+  "cert": {
+    "prov": "GD",
+    "pk": "0x...",
+    "sig": "0x...",
+    "mr": "0x..."
   },
-  "archive_sig": "..."
+  "sig": "0x..."
 }
 ```
 
 | 字段 | 说明 |
 |------|------|
-| ver | 协议版本 |
-| qr_type | 固定 `CPMS_ARCHIVE_QR` |
-| province_code | 档案所属省代码，只精确到省 |
-| archive_no | 不透明档案号，不含市和站点语义 |
-| citizen_status | 公民状态 |
-| voting_eligible | 是否具备投票资格 |
-| anon_cert | SFID 签发的省级匿名证书（完整嵌入） |
-| archive_sig | 匿名私钥（sr25519）对核心字段的签名 |
+| proto | 协议标识 |
+| type | 固定 `ARCHIVE` |
+| prov | 档案所属省代码，只精确到省 |
+| ano | 不透明档案号，不含市和站点语义 |
+| cs | 公民状态（NORMAL/ABNORMAL） |
+| ve | 是否具备投票资格 |
+| cert | SFID 签发的省级匿名证书（完整嵌入） |
+| sig | 匿名私钥（sr25519）对核心字段的签名 |
 
-`archive_sig` 原文 `cpms-archive-qr-v1|GD|AR4-K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H|NORMAL|true`。
+`sig` 原文 `sfid-cpms-v1|archive|GD|AR4-K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H|NORMAL|true`。
 
 ## 档案号格式
 
@@ -190,16 +185,15 @@ AR4-<26位Base32随机体>-<2位校验>
 
 - 随机体必须用安全随机数生成
 - 不编码省、市、站点、日期
-- 只有签发本机因为本地数据库里有这条 archive_no，才知道"这是我发的"
-- 其他 CPMS、SFID、其他系统都不能通过号体判断来源
+- 只有签发本机因为本地数据库里有这条档案号，才知道"这是我发的"
 
 ## SFID 验证 QR4 的顺序
 
-1. 用 SFID 的 RSA 公钥验 `anon_cert.sfid_sig`，原文 `sfid-anon-cert-v1|{province_code}|{anon_pubkey}`
-2. 验 `anon_cert.province_code == qr.province_code`
-3. 用 `anon_cert.anon_pubkey`（sr25519）验 `archive_sig`，原文 `cpms-archive-qr-v1|{province_code}|{archive_no}|{citizen_status}|{voting_eligible}`
-4. 验 `archive_no` 未录入过
-5. 全通过，以 `anon_cert.province_code` 为准落库
+1. 用 SFID 的 RSA 公钥验 `cert.sig`，原文 `sfid-anon-cert-v1|{prov}|{pk}`
+2. 验 `cert.prov == prov`
+3. 用 `cert.pk`（sr25519）验 `sig`，原文 `sfid-cpms-v1|archive|{prov}|{ano}|{cs}|{ve}`
+4. 验 `ano` 未录入过
+5. 全通过，以 `cert.prov` 为准落库
 
 ## install_token 状态管理
 
@@ -220,54 +214,13 @@ AR4-<26位Base32随机体>-<2位校验>
 3. SFID 管理员手工作废该安装令牌后重装
 4. SFID 匿名 RSA 密钥整体轮换
 
-每次重新发证必须重新生成新的 `anon_keypair`，禁止复用旧 `anon_pubkey`。
+每次重新发证必须重新生成新的 `anon_keypair`，禁止复用旧匿名公钥。
 
-## SFID 端存储
+## 协议族关系
 
-### cpms_sites（机构管理）
-
-| 字段 | 说明 |
-|------|------|
-| site_sfid | PK，实名站点号 |
-| install_token | 安装令牌 |
-| install_token_status | PENDING / USED / REVOKED |
-| province_code | 省代码（从 site_sfid 提取） |
-| created_by | 创建人 |
-| created_at | 创建时间 |
-
-不存 anon_pubkey，不存任何能关联匿名身份的字段。
-
-### imported_archives（档案录入）
-
-| 字段 | 说明 |
-|------|------|
-| archive_no | PK |
-| province_code | 以验签通过后的 anon_cert.province_code 为准 |
-| anon_cert_hash | 匿名证书摘要，用于审计 |
-| imported_at | 录入时间 |
-| status | ACTIVE / REVOKED |
-
-## CPMS 端存储
-
-### config（本机配置）
-
-| 字段 | 说明 |
-|------|------|
-| site_sfid | 实名站点号 |
-| install_token | 安装令牌 |
-| local_admin_pubkey | 本地管理员公钥 |
-| anon_pubkey | 匿名签发公钥 |
-| anon_cert | 完整匿名证书 JSON |
-| installed_at | 安装时间 |
-
-私钥只在密钥库中，不出现在任何 QR 码或传输中。
-
-### archives（档案记录）
-
-| 字段 | 说明 |
-|------|------|
-| archive_no | PK |
-| payload_json | 完整业务数据 |
-| created_at | 创建时间 |
-
-本机靠本地库是否存在 archive_no 判断"是不是我发的"，不靠档案号解析判断。
+| 协议 | 用途 | 使用场景 |
+|------|------|----------|
+| `SFID_CPMS_V1` | 两系统间业务交换 | QR1/QR2/QR3/QR4 |
+| `WUMIN_LOGIN_V1.0.0` | 扫码登录 + 管理员绑定 | SFID/CPMS 登录页 ↔ 手机 App |
+| `WUMIN_SIGN_V1.0.0` | 离线签名 | 绑定/解绑/轮换 ↔ 冷钱包 |
+| `WUMIN_USER_V1.0.0` | 用户信息 | 区块链付款码/名片 |

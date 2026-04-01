@@ -23,7 +23,7 @@ export default function ArchiveCreate() {
         height_cm: form.height_cm ? parseFloat(form.height_cm) : undefined,
       };
       const res = await api.createArchive(body);
-      if (res.data) navigate(`/operator/archives/${res.data.archive_id}`);
+      if (res.data) navigate(`/admin/archives/${res.data.archive_id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建失败');
     }
@@ -55,7 +55,7 @@ export default function ArchiveCreate() {
       <div className="form-group"><label>护照号</label><input className="form-input" value={form.passport_no} onChange={e => set('passport_no', e.target.value)} /></div>
       <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
         <button className="btn btn--primary" onClick={handleSubmit} disabled={loading}>{loading ? '提交中...' : '创建档案'}</button>
-        <button className="btn btn--ghost" onClick={() => navigate('/operator')}>取消</button>
+        <button className="btn btn--ghost" onClick={() => navigate('/admin')}>取消</button>
       </div>
     </div>
   );

@@ -1,6 +1,9 @@
-# SFID-CPMS QR v1 改造方案
+# SFID_CPMS_V1 改造方案（已完成）
 
-> 基于 SFID-CPMS-QR-v1.md 定稿协议的实施计划
+> 基于 SFID-CPMS-QR-v1.md 定稿协议的实施计划。
+>
+> **状态：已完成。** 协议已从 `SFID-CPMS QR v1` 统一为 `SFID_CPMS_V1`，字段已精简（见 SFID-CPMS-QR-v1.md）。
+> 以下为历史实施记录，字段名以最新协议文档为准。
 
 ## 一、SFID 后端改造
 

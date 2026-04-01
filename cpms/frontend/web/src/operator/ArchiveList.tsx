@@ -32,8 +32,8 @@ export default function ArchiveList() {
   return (
     <div className="card">
       <div className="card__title flex-between">
-        公民档案列表
-        <button className="btn btn--primary" onClick={() => navigate('/operator/create')}>+ 新建档案</button>
+        公民信息
+        <button className="btn btn--primary" onClick={() => navigate('/admin/create')}>+ 新建档案</button>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -70,7 +70,7 @@ export default function ArchiveList() {
                 </span>
               </td>
               <td>{new Date(a.created_at * 1000).toLocaleDateString()}</td>
-              <td><button className="btn btn--ghost btn--sm" onClick={() => navigate(`/operator/archives/${a.archive_id}`)}>详情</button></td>
+              <td><button className="btn btn--ghost btn--sm" onClick={() => navigate(`/admin/archives/${a.archive_id}`)}>详情</button></td>
             </tr>
           ))}
         </tbody>

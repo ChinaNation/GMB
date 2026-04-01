@@ -153,21 +153,21 @@ pub(crate) async fn citizen_bind(
                 Ok(v) => v,
                 Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid QR4 payload"),
             };
-            if qr4.qr_type != "CPMS_ARCHIVE_QR" {
-                return api_error(StatusCode::BAD_REQUEST, 1001, "qr_type must be CPMS_ARCHIVE_QR");
+            if qr4.r#type != "ARCHIVE" {
+                return api_error(StatusCode::BAD_REQUEST, 1001, "qr_type must be CPMS_ARCHIVE");
             }
 
             // 验证 anon_cert + archive_sig（复用 archive_import 的逻辑）
-            let sfid_sig_bytes = match hex::decode(qr4.anon_cert.sfid_sig.trim().trim_start_matches("0x")) {
+            let sfid_sig_bytes = match hex::decode(qr4.cert.sig.trim().trim_start_matches("0x")) {
                 Ok(v) => v,
                 Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "anon_cert.sfid_sig hex decode failed"),
             };
-            let msg_randomizer = qr4.anon_cert.msg_randomizer.as_deref().and_then(|r| {
+            let msg_randomizer = qr4.cert.mr.as_deref().and_then(|r| {
                 hex::decode(r.trim().trim_start_matches("0x")).ok()
             });
             let cert_valid = match key_admins::rsa_blind::verify_anon_cert(
-                &qr4.anon_cert.province_code,
-                &qr4.anon_cert.anon_pubkey,
+                &qr4.cert.prov,
+                &qr4.cert.pk,
                 &sfid_sig_bytes,
                 msg_randomizer.as_deref(),
             ) {
@@ -177,19 +177,19 @@ pub(crate) async fn citizen_bind(
             if !cert_valid {
                 return api_error(StatusCode::UNAUTHORIZED, 2004, "anon_cert.sfid_sig invalid");
             }
-            if qr4.anon_cert.province_code != qr4.province_code {
+            if qr4.cert.prov != qr4.prov {
                 return api_error(StatusCode::BAD_REQUEST, 1001, "province_code mismatch");
             }
             // 验 archive_sig
             let archive_sign_source = format!(
-                "cpms-archive-qr-v1|{}|{}|{}|{}",
-                qr4.province_code, qr4.archive_no, qr4.citizen_status, qr4.voting_eligible
+                "sfid-cpms-v1|archive|{}|{}|{}|{}",
+                qr4.prov, qr4.ano, qr4.cs, qr4.ve
             );
-            let anon_pk = match crate::login::parse_sr25519_pubkey_bytes(&qr4.anon_cert.anon_pubkey) {
+            let anon_pk = match crate::login::parse_sr25519_pubkey_bytes(&qr4.cert.pk) {
                 Some(v) => v,
                 None => return api_error(StatusCode::BAD_REQUEST, 1001, "anon_pubkey format invalid"),
             };
-            let archive_sig = match hex::decode(qr4.archive_sig.trim().trim_start_matches("0x")) {
+            let archive_sig = match hex::decode(qr4.sig.trim().trim_start_matches("0x")) {
                 Ok(v) => v,
                 Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "archive_sig hex decode failed"),
             };
@@ -197,8 +197,8 @@ pub(crate) async fn citizen_bind(
                 return api_error(StatusCode::UNAUTHORIZED, 2004, "archive_sig invalid");
             }
 
-            let province_code = qr4.anon_cert.province_code.clone();
-            let archive_no = qr4.archive_no.clone();
+            let province_code = qr4.cert.prov.clone();
+            let archive_no = qr4.ano.clone();
 
             // 生成 SFID 码
             let sfid_result = match crate::sfid::generate_sfid_code(crate::sfid::GenerateSfidInput {

@@ -38,10 +38,10 @@ function del<T>(url: string) { return request<ApiResponse<T>>(url, { method: 'DE
 export const installStatus = () => get<InstallStatus>('/api/v1/install/status');
 export const installInitialize = (sfid_init_qr_content: string) =>
   post<{ site_sfid: string }>('/api/v1/install/initialize', { sfid_init_qr_content });
-export const bindSuperAdmin = (body: { key_id: string; admin_pubkey: string; bind_nonce: string; signature: string }) =>
-  post<AdminUser>('/api/v1/install/super-admin/bind', body);
-export const installGenerateQr2 = () =>
-  post<{ qr2_payload: string }>('/api/v1/install/generate-qr2');
+export const bindSuperAdmin = (admin_pubkey: string) =>
+  post<AdminUser>('/api/v1/install/super-admin/bind', { admin_pubkey });
+export const adminGenerateQr2 = () =>
+  post<{ qr2_payload: string }>('/api/v1/admin/generate-qr2');
 export const adminProcessAnonCert = (sfid_anon_cert_qr_content: string) =>
   post<string>('/api/v1/admin/anon-cert', { sfid_anon_cert_qr_content });
 
@@ -53,7 +53,17 @@ export const authChallenge = (admin_pubkey: string) =>
 export const authVerify = (challenge_id: string, admin_pubkey: string, signature: string) =>
   post<VerifyData>('/api/v1/admin/auth/verify', { challenge_id, admin_pubkey, signature });
 export const authLogout = () => post<null>('/api/v1/admin/auth/logout');
-export const authQrChallenge = () => post<{ challenge_id: string; login_qr_payload: string; expire_at: number }>('/api/v1/admin/auth/qr/challenge', {});
+export const authQrChallenge = () => post<{ challenge_id: string; login_qr_payload: string; session_id: string; expire_at: number }>('/api/v1/admin/auth/qr/challenge', {
+  origin: window.location.origin,
+  session_id: `sid-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+});
+export const authQrComplete = (body: {
+  challenge_id: string;
+  session_id: string;
+  admin_pubkey: string;
+  signature: string;
+}) => post<null>('/api/v1/admin/auth/qr/complete', body);
+
 export const authQrResult = (challenge_id: string, session_id: string) =>
   get<{ status: string; access_token?: string; expires_in?: number; user?: { user_id: string; role: string } }>(
     `/api/v1/admin/auth/qr/result?challenge_id=${challenge_id}&session_id=${session_id}`
@@ -68,8 +78,6 @@ export const updateOperatorStatus = (id: string, status: string) =>
 export const deleteOperator = (id: string) => del<null>(`/api/v1/admin/operators/${id}`);
 export const updateCitizenStatus = (archive_id: string, citizen_status: string) =>
   put<{ archive_id: string; citizen_status: string }>(`/api/v1/archives/${archive_id}/citizen-status`, { citizen_status });
-export const siteKeyRegistrationQr = () =>
-  post<{ qr_content: string }>('/api/v1/admin/site-keys/registration-qr');
 
 // ── 操作员 ──
 export const createArchive = (body: {

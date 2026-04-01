@@ -182,6 +182,14 @@ pub(crate) struct CpmsSiteKeys {
     #[serde(default)]
     pub(crate) province_code: String,
     pub(crate) admin_province: String,
+    #[serde(default)]
+    pub(crate) city_name: String,
+    #[serde(default)]
+    pub(crate) institution_code: String,
+    #[serde(default)]
+    pub(crate) institution_name: String,
+    #[serde(default)]
+    pub(crate) qr1_payload: String,
     pub(crate) created_by: String,
     pub(crate) created_at: DateTime<Utc>,
     #[serde(default)]
@@ -726,6 +734,8 @@ pub(crate) struct GenerateCpmsInstitutionSfidInput {
     pub(crate) province: Option<String>,
     pub(crate) city: String,
     pub(crate) institution: String,
+    #[serde(default)]
+    pub(crate) institution_name: Option<String>,
 }
 
 /// QR2 注册请求输入。
@@ -761,7 +771,12 @@ pub(crate) struct CpmsSiteKeysListRow {
     pub(crate) version: u64,
     pub(crate) province_code: String,
     pub(crate) admin_province: String,
+    pub(crate) city_name: String,
+    pub(crate) institution_code: String,
+    pub(crate) institution_name: String,
+    pub(crate) qr1_payload: String,
     pub(crate) created_by: String,
+    pub(crate) created_by_name: String,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) updated_by: Option<String>,
     pub(crate) updated_at: Option<DateTime<Utc>>,
@@ -800,38 +815,41 @@ pub(crate) struct CitizenStatusQrPayload {
     pub(crate) signature: String,
 }
 
-/// QR2 解析后的注册请求。
+/// QR2 解析后的注册请求（SFID_CPMS_V1）。
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct CpmsRegisterReqPayload {
-    pub(crate) ver: u32,
-    pub(crate) qr_type: String,
-    pub(crate) site_sfid: String,
-    pub(crate) install_token: String,
-    pub(crate) blind_anon_req: String,
+    #[serde(default)]
+    pub(crate) proto: String,
+    #[serde(alias = "qr_type")]
+    pub(crate) r#type: String,
+    pub(crate) sfid: String,
+    pub(crate) token: String,
+    pub(crate) blind: String,
 }
 
-/// QR4 解析后的档案业务载荷。
+/// QR4 解析后的档案业务载荷（SFID_CPMS_V1）。
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct CpmsArchiveQrPayload {
-    pub(crate) ver: u32,
-    pub(crate) qr_type: String,
-    pub(crate) province_code: String,
-    pub(crate) archive_no: String,
-    pub(crate) citizen_status: String,
-    pub(crate) voting_eligible: bool,
-    pub(crate) anon_cert: AnonCert,
-    pub(crate) archive_sig: String,
+    #[serde(default)]
+    pub(crate) proto: String,
+    #[serde(alias = "qr_type")]
+    pub(crate) r#type: String,
+    pub(crate) prov: String,
+    pub(crate) ano: String,
+    pub(crate) cs: String,
+    pub(crate) ve: bool,
+    pub(crate) cert: AnonCert,
+    pub(crate) sig: String,
 }
 
 /// 匿名证书。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AnonCert {
-    pub(crate) province_code: String,
-    pub(crate) anon_pubkey: String,
-    pub(crate) sfid_sig: String,
-    /// 消息随机化因子（RSABSSA finalize 产出，验签时需要）。
+    pub(crate) prov: String,
+    pub(crate) pk: String,
+    pub(crate) sig: String,
     #[serde(default)]
-    pub(crate) msg_randomizer: Option<String>,
+    pub(crate) mr: Option<String>,
 }
 
 /// 生成 SFID + QR1 的输出。

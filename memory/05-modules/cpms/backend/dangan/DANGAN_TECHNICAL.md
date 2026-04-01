@@ -20,9 +20,7 @@
 - `validate_citizen_status(...)`
 
 ## 4. 关键数据结构
-- `QrPayload`
-- `SiteKeyRegistrationPayload`
-- `SiteKeyPublicItem`
+- `ArchiveQr4Payload`（QR4 档案业务二维码，`SFID_CPMS_V1` 协议 `ARCHIVE` 类型）
 
 ## 5. 安全与一致性规则
 - 档案号冲突时按 nonce 递增重试，避免重复档案号
