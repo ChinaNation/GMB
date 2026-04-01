@@ -1,3 +1,0 @@
-[submodule "wuminapp/third_party/smoldot-pow"]
-	path = wuminapp/third_party/smoldot-pow
-	url = https://github.com/ChinaNation/smoldot-pow.git

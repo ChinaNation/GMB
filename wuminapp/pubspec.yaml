@@ -26,7 +26,7 @@ dependencies:
   crypto: ^3.0.3
   # 中文注释：切换为仓库内本地 fork，后续 Dart FFI 能力扩展随主仓库一起演进。
   smoldot:
-    path: third_party/smoldot-dart
+    path: smoldot-dart
   isar: ^3.1.0+1
   isar_flutter_libs: ^3.1.0+1
   path_provider: ^2.1.4
