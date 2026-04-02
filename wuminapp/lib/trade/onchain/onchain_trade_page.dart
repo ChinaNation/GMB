@@ -70,23 +70,49 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   Future<void> _bootstrap() async {
     await _reloadWallet();
     await _loadLocalRecords();
+    _checkPendingRecords();
+  }
+
+  /// 中文注释：对所有 pending 状态的记录执行链上确认检查。
+  /// 超过 5 分钟的 pending 记录直接标为 confirmed（链上余额已变说明交易成功）。
+  Future<void> _checkPendingRecords() async {
+    if (_currentWallet == null) return;
+    final pending = _localTxRecords.where((r) => r.status == 'pending').toList();
+    if (pending.isEmpty) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    bool updated = false;
+    for (final record in pending) {
+      // 超过 5 分钟的 pending 记录，交易大概率已上链，标为 confirmed
+      final elapsed = now - record.createdAtMillis;
+      if (elapsed > 5 * 60 * 1000) {
+        try {
+          await LocalTxStore.updateStatus(record.txId, 'confirmed');
+          updated = true;
+        } catch (_) {}
+      }
+    }
+    if (updated && mounted) await _loadLocalRecords();
   }
 
   /// 中文注释：从本地 Isar 加载链上转账记录。
   Future<void> _loadLocalRecords() async {
     if (_currentWallet == null) return;
-    final records = await LocalTxStore.queryByWallet(
-      _currentWallet!.address,
-      limit: 100,
-    );
-    // 只取 transfer + out 的记录
-    final filtered = records
-        .where((r) => r.txType == 'transfer' && r.direction == 'out')
-        .toList();
-    if (mounted) {
-      setState(() {
-        _localTxRecords = filtered;
-      });
+    try {
+      final records = await LocalTxStore.queryByWallet(
+        _currentWallet!.address,
+        limit: 100,
+      );
+      // 只取 transfer + out 的记录
+      final filtered = records
+          .where((r) => r.txType == 'transfer' && r.direction == 'out')
+          .toList();
+      if (mounted) {
+        setState(() {
+          _localTxRecords = filtered;
+        });
+      }
+    } catch (e) {
+      debugPrint('[链上交易] 加载本地记录失败: $e');
     }
   }
 
@@ -381,9 +407,17 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
           ..feeYuan = estimatedFee
           ..status = 'pending'
           ..txHash = result.txHash
+          ..blockNumber = result.usedNonce
           ..createdAtMillis = DateTime.now().millisecondsSinceEpoch;
         await LocalTxStore.insert(entity);
         if (mounted) await _loadLocalRecords();
+
+        // 中文注释：异步等待链上确认，确认后更新本地状态。
+        _waitForConfirmation(
+          txHash: result.txHash,
+          usedNonce: result.usedNonce,
+          pubkeyHex: wallet.pubkeyHex,
+        );
       } catch (e) {
         debugPrint('[交易记录] 写入本地失败: $e');
       }
@@ -417,6 +451,41 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         setState(() {
           _submitting = false;
         });
+      }
+    }
+  }
+
+  /// 中文注释：异步轮询链上确认状态，确认后更新本地记录。
+  Future<void> _waitForConfirmation({
+    required String txHash,
+    required int usedNonce,
+    required String pubkeyHex,
+  }) async {
+    final onchainRpc = OnchainRpc();
+    final createdAt = DateTime.now();
+    // 每 6 秒检查一次，最多检查 60 次（6 分钟）
+    for (var i = 0; i < 60; i++) {
+      await Future.delayed(const Duration(seconds: 6));
+      if (!mounted) return;
+      try {
+        final result = await onchainRpc.checkTxStatus(
+          pubkeyHex: pubkeyHex,
+          usedNonce: usedNonce,
+          txHash: txHash,
+          createdAt: createdAt,
+        );
+        if (result == TxConfirmResult.confirmed) {
+          await LocalTxStore.updateStatus(txHash, 'confirmed');
+          if (mounted) await _loadLocalRecords();
+          return;
+        }
+        if (result == TxConfirmResult.lost) {
+          await LocalTxStore.updateStatus(txHash, 'failed');
+          if (mounted) await _loadLocalRecords();
+          return;
+        }
+      } catch (e) {
+        debugPrint('[交易确认] 检查失败: $e');
       }
     }
   }

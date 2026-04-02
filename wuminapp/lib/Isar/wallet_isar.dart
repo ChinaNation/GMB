@@ -217,6 +217,21 @@ class WalletIsar {
 
   Future<Isar> _openAndMigrate() async {
     await ensureTestCoreInitialized();
+
+    // 中文注释：先检查是否已有同名实例打开（Isar 不允许重复打开同名数据库）。
+    // 如果已有实例但 schema 不完整（缺少新增的 collection），关闭后重新打开。
+    final existing = Isar.getInstance('wuminapp_wallet');
+    if (existing != null && existing.isOpen) {
+      try {
+        // 尝试访问 LocalTxEntity collection��如果成功说明 schema 完整
+        existing.localTxEntitys;
+        return existing;
+      } catch (_) {
+        // schema 不完整，关闭旧实例后重新打开
+        await existing.close();
+      }
+    }
+
     final dir = await _resolveDirectory();
     final schemas = [
       WalletProfileEntitySchema,
