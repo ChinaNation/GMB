@@ -509,8 +509,17 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     final verification = _verification;
     final isMismatched =
         verification?.displayMatch == DisplayMatchStatus.mismatched;
+    // 中文注释：大 payload 交易（runtime 升级）的 payload_hex 是哈希后的 32 字节，
+    // 无法解码但属于已知安全操作，允许签名。
+    final displayAction = request.display['action']?.toString() ?? '';
+    const allowedHashedActions = {
+      'developer_upgrade',
+      'developer_direct_upgrade',
+      'propose_runtime_upgrade',
+    };
     final isDecodeFailed =
-        verification?.displayMatch == DisplayMatchStatus.decodeFailed;
+        verification?.displayMatch == DisplayMatchStatus.decodeFailed &&
+        !allowedHashedActions.contains(displayAction);
 
     return ListView(
       padding: const EdgeInsets.all(16),

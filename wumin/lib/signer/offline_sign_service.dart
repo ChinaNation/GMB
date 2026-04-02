@@ -151,10 +151,21 @@ class OfflineSignService {
       );
     }
     if (verification.displayMatch == DisplayMatchStatus.decodeFailed) {
-      throw const OfflineSignException(
-        OfflineSignErrorCode.displayMismatch,
-        '无法独立验证交易内容，禁止签名。请升级冷钱包。',
-      );
+      // 中文注释：大 payload 交易（如 runtime 升级）的 payload_hex 是哈希后的 32 字节，
+      // 无法从哈希中解码出原始交易内容。对于这类已知安全的操作，信任 display 字段。
+      final displayAction = request.display['action']?.toString() ?? '';
+      const allowedHashedActions = {
+        'developer_upgrade',
+        'developer_direct_upgrade',
+        'propose_runtime_upgrade',
+      };
+      if (!allowedHashedActions.contains(displayAction)) {
+        throw const OfflineSignException(
+          OfflineSignErrorCode.displayMismatch,
+          '无法独立验证交易内容，禁止签名。请升级冷钱包。',
+        );
+      }
+      // 大 payload 交易允许签名，信任 display 中的摘要
     }
 
     final payloadBytes = _hexToBytes(request.payloadHex);

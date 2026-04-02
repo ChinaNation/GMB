@@ -70,6 +70,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
     setState(() {
       _balanceRefreshing = true;
     });
+    Object? refreshError;
     try {
       // 诊断：打印轻节点状态，帮助定位链路问题
       await SmoldotClientManager.instance.printDiagnostics();
@@ -96,6 +97,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
         } catch (e) {
           debugPrint('wallet batch balance refresh failed: $e');
           hasError = true;
+          refreshError = e;
         }
       }
       if (!mounted) return;
@@ -105,12 +107,8 @@ class _MyWalletPageState extends State<MyWalletPage> {
         });
       }
       if (hasError) {
-        final health = SmoldotClientManager.instance.healthStatus;
-        final msg = health == ChainHealthStatus.syncing
-            ? '轻节点正在同步，请稍后再试'
-            : health == ChainHealthStatus.degraded
-                ? '区块链暂不可用，请检查网络连接'
-                : '余额刷新失败';
+        final msg =
+            SmoldotClientManager.instance.buildUserFacingError(refreshError);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg)),
         );
@@ -546,7 +544,8 @@ class _MyWalletPageState extends State<MyWalletPage> {
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           decoration: BoxDecoration(
                             color: AppTheme.danger,
-                            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusMd),
                           ),
                           child: const Icon(
                             Icons.delete_outline,
@@ -640,6 +639,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   late final TextEditingController _nameEditController;
   List<LocalTxEntity> _recentRecords = const [];
   bool _screenshotGuardActive = false;
+
   /// 当前钱包绑定的清算省储行 shenfen_id（null 表示未绑定）。
   String? _boundClearingBankId;
 
@@ -759,7 +759,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         await _openBindClearingBank();
       case 'seed':
         await _revealSecret('私钥', () async {
-          final seed = await _walletService.getSeedHex(widget.wallet.walletIndex);
+          final seed =
+              await _walletService.getSeedHex(widget.wallet.walletIndex);
           return seed != null ? '0x$seed' : null;
         });
       case 'mnemonic':
@@ -815,8 +816,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (total > 0)
-                  LinearProgressIndicator(value: scanned / total),
+                if (total > 0) LinearProgressIndicator(value: scanned / total),
                 const SizedBox(height: 8),
                 Text('已扫描 $scanned / $total 个区块'),
               ],
@@ -1036,7 +1036,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                   const PopupMenuItem(value: 'seed', child: Text('查看私钥')),
                   const PopupMenuItem(value: 'mnemonic', child: Text('查看助记词')),
                 ],
-                const PopupMenuItem(value: 'sync_history', child: Text('同步历史记录')),
+                const PopupMenuItem(
+                    value: 'sync_history', child: Text('同步历史记录')),
               ],
             ),
           ],
@@ -1103,7 +1104,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          AmountFormat.format(widget.wallet.balance, symbol: ''),
+                          AmountFormat.format(widget.wallet.balance,
+                              symbol: ''),
                           style: const TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.w700,
@@ -1286,13 +1288,18 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
               ...List.generate(_recentRecords.length, (index) {
                 final record = _recentRecords[index];
                 final isOut = record.direction == 'out';
-                final label = _localTxTypeLabel(record.txType, record.direction);
+                final label =
+                    _localTxTypeLabel(record.txType, record.direction);
                 final counterparty = isOut
                     ? _shortAddress(record.toAddress)
                     : _shortAddress(record.fromAddress);
-                final dt = DateTime.fromMillisecondsSinceEpoch(record.createdAtMillis).toLocal();
-                final timeStr = '${dt.year}-${_pad(dt.month)}-${_pad(dt.day)} ${_pad(dt.hour)}:${_pad(dt.minute)}';
-                final amountColor = isOut ? AppTheme.danger : AppTheme.primaryDark;
+                final dt =
+                    DateTime.fromMillisecondsSinceEpoch(record.createdAtMillis)
+                        .toLocal();
+                final timeStr =
+                    '${dt.year}-${_pad(dt.month)}-${_pad(dt.day)} ${_pad(dt.hour)}:${_pad(dt.minute)}';
+                final amountColor =
+                    isOut ? AppTheme.danger : AppTheme.primaryDark;
                 return Column(
                   children: [
                     ListTile(
@@ -1307,7 +1314,9 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                       },
                       leading: CircleAvatar(
                         radius: 18,
-                        backgroundColor: isOut ? AppTheme.danger.withAlpha(20) : AppTheme.success.withAlpha(20),
+                        backgroundColor: isOut
+                            ? AppTheme.danger.withAlpha(20)
+                            : AppTheme.success.withAlpha(20),
                         child: Icon(
                           isOut ? Icons.arrow_upward : Icons.arrow_downward,
                           size: 18,
@@ -1316,7 +1325,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                       ),
                       title: Text(
                         label,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600),
                       ),
                       subtitle: Text(
                         '$counterparty\n$timeStr',
@@ -1470,7 +1480,8 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
             const SizedBox(height: 8),
             Text(
               _wordCount == 24 ? '256 位熵，安全性更高' : '128 位熵，标准安全强度',
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 16),
             FilledButton(
@@ -1639,4 +1650,3 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
     );
   }
 }
-
