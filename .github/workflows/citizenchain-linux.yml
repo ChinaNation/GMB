@@ -96,27 +96,3 @@ jobs:
           retention-days: 30
           overwrite: true
 
-      # 导出 chainspec.json 供 wuminapp CI 使用
-      - name: 清理旧版 chainspec artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api repos/${{ github.repository }}/actions/artifacts \
-            --jq '.artifacts[] | select(.name == "citizenchain-chainspec") | .id' \
-          | while read -r id; do
-              echo "删除旧 artifact: $id"
-              gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
-            done
-
-      - name: 导出 chainspec.json
-        run: |
-          chmod +x citizenchain/target/release/citizenchain
-          citizenchain/target/release/citizenchain build-spec --chain citizenchain --raw 2>/dev/null > chainspec.json
-          echo "chainspec.json 已导出 ($(wc -c < chainspec.json) bytes)"
-
-      - name: 上传 chainspec.json
-        uses: actions/upload-artifact@v4
-        with:
-          name: citizenchain-chainspec
-          path: chainspec.json
-          retention-days: 30
