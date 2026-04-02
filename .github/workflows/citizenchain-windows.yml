@@ -1,14 +1,10 @@
 name: CitizenChain Windows
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CitizenChain WASM"]
+    types: [completed]
     branches: [main]
-    paths:
-      - ".github/workflows/citizenchain-windows.yml"
-      - "citizenchain/node/**"
-      - "citizenchain/runtime/**"
-      - "citizenchain/Cargo.toml"
-      - "citizenchain/Cargo.lock"
   workflow_dispatch:
 
 concurrency:
@@ -23,6 +19,8 @@ jobs:
   build-windows:
     name: 打包公民链.exe (Windows)
     runs-on: windows-latest
+    # 仅在 WASM CI 成功后运行，或手动触发时运行
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
