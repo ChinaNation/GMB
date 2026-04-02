@@ -273,19 +273,22 @@ where
                     )
                 })?;
 
-            // Authorities 是 BoundedVec<(AuthorityId, u64)>，SCALE 编码
-            // 直接转成 hex 传给 smoldot
-            let authorities_hex = auth_bytes
-                .map(|d| format!("0x{}", hex::encode(&d.0)))
-                .unwrap_or_default();
+            // 中文注释：将 GRANDPA authorities + set_id 编码为 smoldot 要求的格式。
+            // smoldot 期望 grandpaAuthoritySet 是完整的 SCALE 编码 hex 字符串：
+            // Encode(authorities_raw_bytes) + Encode(set_id: u64)
+            let authority_set_hex = {
+                let auth_raw = auth_bytes.map(|d| d.0).unwrap_or_default();
+                let set_id_encoded = set_id.encode();
+                let mut combined = Vec::with_capacity(auth_raw.len() + set_id_encoded.len());
+                combined.extend_from_slice(&auth_raw);
+                combined.extend_from_slice(&set_id_encoded);
+                format!("0x{}", hex::encode(&combined))
+            };
 
             // 4. 构造 lightSyncState
             let light_sync_state = serde_json::json!({
                 "finalizedBlockHeader": finalized_header_hex,
-                "grandpaAuthoritySet": {
-                    "currentAuthorities": authorities_hex,
-                    "setId": set_id,
-                }
+                "grandpaAuthoritySet": authority_set_hex,
             });
             spec["lightSyncState"] = light_sync_state;
 
