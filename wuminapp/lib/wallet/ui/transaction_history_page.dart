@@ -115,7 +115,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('加载失败', style: TextStyle(color: AppTheme.textSecondary)),
+            Text('加载失败: $_error', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 8),
             TextButton(onPressed: _loadFirstPage, child: const Text('重试')),
           ],
