@@ -258,6 +258,12 @@ message = blake2_256(SCALE.encode(payload))
 - 实际数据删除委托给 `PendingProposalCleanups` 分块状态机，保证大量投票记录（如公民投票上万条）能分多个区块完成
 - 清理状态机阶段：`InternalVotes → JointAdminVotes → JointInstitutionVotes → JointInstitutionTallies → CitizenVotes → VoteCredentials → ProposalObject → FinalCleanup`
 - 提案结束（通过/拒绝/过期）时，活跃提案名额在 `set_status_and_emit` 中**立即释放**，不依赖业务模块
+
+### 6.5 App 侧链路失败展示约束
+
+- 治理列表、机构详情、提案详情读取链上数据时，如果轻节点未初始化、未同步完成或链路降级，必须显示“加载失败 / 轻节点不可用”。
+- 不允许把轻节点读取失败降级成“暂无提案”“暂无管理员”“机构不存在”这类空态。
+- 提案相关页面可继续把“链上 key 确实不存在”解释为空数据，但必须与“轻节点不可用”严格区分。
 - `on_initialize` weight 使用预估最大值（`cleanup_limit` 次读写），确保不超出声明的 weight
 - `UsedPopulationSnapshotNonce`（联合提案防重放）不清理（联合提案极少，累计存储量可忽略）
 

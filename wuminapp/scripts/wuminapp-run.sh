@@ -29,6 +29,8 @@ fi
 DART_DEFINES=(--dart-define=WUMINAPP_API_BASE_URL="$WUMINAPP_API_BASE_URL")
 echo "[启动模式] smoldot 轻节点"
 
+echo "==> 清除 Rust 编译缓存..."
+(cd "rust" && ~/.cargo/bin/cargo clean 2>/dev/null || true)
 echo "==> 编译 Rust 原生库..."
 # 检测目标平台：通过 flutter devices 判断
 DEVICE_LINE=$(flutter devices --machine 2>/dev/null | python3 -c "

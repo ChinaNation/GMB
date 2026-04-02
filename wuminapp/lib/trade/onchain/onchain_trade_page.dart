@@ -20,6 +20,7 @@ import 'package:wuminapp_mobile/trade/duoqian/duoqian_trade_page.dart';
 import 'package:wuminapp_mobile/trade/offchain/offchain_pay_page.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
+import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
 
 class OnchainTradePage extends StatefulWidget {
   const OnchainTradePage({super.key, this.initialToAddress});
@@ -47,6 +48,9 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   bool _loadingWallet = true;
   bool _submitting = false;
 
+  /// 本地链上转账记录（用于状态行显示）。
+  List<LocalTxEntity> _localTxRecords = [];
+
   @override
   void initState() {
     super.initState();
@@ -65,6 +69,42 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
 
   Future<void> _bootstrap() async {
     await _reloadWallet();
+    await _loadLocalRecords();
+  }
+
+  /// 中文注释：从本地 Isar 加载链上转账记录。
+  Future<void> _loadLocalRecords() async {
+    if (_currentWallet == null) return;
+    final records = await LocalTxStore.queryByWallet(
+      _currentWallet!.address,
+      limit: 100,
+    );
+    // 只取 transfer + out 的记录
+    final filtered = records
+        .where((r) => r.txType == 'transfer' && r.direction == 'out')
+        .toList();
+    if (mounted) {
+      setState(() {
+        _localTxRecords = filtered;
+      });
+    }
+  }
+
+  int _countByStatus(String status) {
+    return _localTxRecords.where((r) => r.status == status).length;
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'pending':
+        return AppTheme.warning;
+      case 'confirmed':
+        return AppTheme.success;
+      case 'failed':
+        return AppTheme.danger;
+      default:
+        return AppTheme.textSecondary;
+    }
   }
 
   Future<void> _reloadWallet() async {
@@ -125,16 +165,10 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         ),
       );
     } else {
-      // 无 bank 字段 → 填入链上转账表单
-      setState(() {
-        _toController.text = result.toAddress;
-        if (result.amount != null && result.amount!.isNotEmpty) {
-          _amountController.text = result.amount!;
-        }
-        if (result.symbol != null && result.symbol!.isNotEmpty) {
-          _selectedSymbol = result.symbol!;
-        }
-      });
+      // 无 bank 字段 → 提示不支持扫码支付
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('该收款码不支持扫码支付（未绑定清算行）')),
+      );
     }
   }
 
@@ -327,27 +361,32 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         return;
       }
 
-      // 写入本地交易记录
-      final entity = LocalTxEntity()
-        ..txId = result.txHash
-        ..walletAddress = _currentWallet!.address
-        ..txType = 'transfer'
-        ..direction = 'out'
-        ..fromAddress = _currentWallet!.address
-        ..toAddress = toAddress
-        ..amountYuan = amount
-        ..feeYuan = estimatedFee
-        ..status = 'pending'
-        ..txHash = result.txHash
-        ..createdAtMillis = DateTime.now().millisecondsSinceEpoch;
-      await LocalTxStore.insert(entity);
-
-      if (!mounted) return;
+      // 交易已成功提交，后续写入本地记录失败不影响交易结果
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('签名成功，交易已发送，tx=${result.txHash}')));
       _toController.clear();
       _amountController.clear();
+
+      // 写入本地交易记录（失败不影响交易）
+      try {
+        final entity = LocalTxEntity()
+          ..txId = result.txHash
+          ..walletAddress = _currentWallet!.address
+          ..txType = 'transfer'
+          ..direction = 'out'
+          ..fromAddress = _currentWallet!.address
+          ..toAddress = toAddress
+          ..amountYuan = amount
+          ..feeYuan = estimatedFee
+          ..status = 'pending'
+          ..txHash = result.txHash
+          ..createdAtMillis = DateTime.now().millisecondsSinceEpoch;
+        await LocalTxStore.insert(entity);
+        if (mounted) await _loadLocalRecords();
+      } catch (e) {
+        debugPrint('[交易记录] 写入本地失败: $e');
+      }
     } on WalletAuthException catch (e) {
       if (!mounted) {
         return;
@@ -365,13 +404,14 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) {
         return;
       }
+      debugPrint('[链上交易] 未知异常: $e');
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('签名失败，请稍后重试')));
+      ).showSnackBar(SnackBar(content: Text('交易异常：$e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -379,6 +419,16 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         });
       }
     }
+  }
+
+  Widget _buildStatusText(String label, int count, Color color) {
+    return Text(
+      '$label $count',
+      style: TextStyle(
+        color: color,
+        fontWeight: FontWeight.w700,
+      ),
+    );
   }
 
   Widget _buildSubmitCard() {
@@ -483,6 +533,42 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                         : _submit,
                 child: Text(_submitting ? '签名中' : '签名交易'),
               ),
+            ),
+            const SizedBox(height: 12),
+            // 链上交易状态行
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: [
+                      _buildStatusText('待确认', _countByStatus('pending'), _statusColor('pending')),
+                      _buildStatusText('已确认', _countByStatus('confirmed'), _statusColor('confirmed')),
+                      _buildStatusText('失败', _countByStatus('failed'), _statusColor('failed')),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  onTap: _currentWallet != null
+                      ? () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => TransactionHistoryPage(
+                                walletAddress: _currentWallet!.address,
+                              ),
+                            ),
+                          );
+                        }
+                      : null,
+                  borderRadius: BorderRadius.circular(8),
+                  child: const Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Icon(Icons.chevron_right, size: 22),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

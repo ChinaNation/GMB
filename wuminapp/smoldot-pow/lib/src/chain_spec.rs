@@ -468,47 +468,48 @@ impl LightSyncState {
     pub fn to_chain_information(
         &self,
     ) -> Result<ValidChainInformation, CheckpointToChainInformationError> {
-        // TODO: this code is a bit of a shitshow when it comes to corner cases and should be cleaned up after https://github.com/paritytech/substrate/issues/11184
-
         if self.inner.finalized_block_header.number == 0 {
             return Err(CheckpointToChainInformationError::GenesisBlockCheckpoint);
         }
 
-        // Create a sorted list of all regular epochs that haven't been pruned from the sync state.
-        let mut epochs: Vec<_> = self
-            .inner
-            .babe_epoch_changes
-            .epochs
-            .iter()
-            .filter(|((_, block_num), _)| {
-                u64::from(*block_num) <= self.inner.finalized_block_header.number
-            })
-            .filter_map(|((_, block_num), epoch)| match epoch {
-                light_sync_state::PersistedEpoch::Regular(epoch) => Some((block_num, epoch)),
-                _ => None,
-            })
-            .collect();
+        // 共识类型：有 BABE epoch 数据则用 BABE，否则用 PoW。
+        let consensus = if let Some(ref babe_epoch_changes) = self.inner.babe_epoch_changes {
+            // BABE 共识链
+            let mut epochs: Vec<_> = babe_epoch_changes
+                .epochs
+                .iter()
+                .filter(|((_, block_num), _)| {
+                    u64::from(*block_num) <= self.inner.finalized_block_header.number
+                })
+                .filter_map(|((_, block_num), epoch)| match epoch {
+                    light_sync_state::PersistedEpoch::Regular(epoch) => Some((block_num, epoch)),
+                    _ => None,
+                })
+                .collect();
 
-        epochs.sort_unstable_by_key(|(block_num, _)| **block_num);
+            epochs.sort_unstable_by_key(|(block_num, _)| **block_num);
+            epochs.dedup_by_key(|(_, epoch)| epoch.epoch_index);
 
-        // TODO: it seems that multiple identical epochs can be found in the list ; figure out why Substrate does that and fix it
-        epochs.dedup_by_key(|(_, epoch)| epoch.epoch_index);
+            if epochs.len() < 2 {
+                return Err(CheckpointToChainInformationError::GenesisBlockCheckpoint);
+            }
+            let current_epoch = epochs[epochs.len() - 2].1;
+            let next_epoch = epochs[epochs.len() - 1].1;
 
-        // Get the latest two epochs.
-        if epochs.len() < 2 {
-            return Err(CheckpointToChainInformationError::GenesisBlockCheckpoint);
-        }
-        let current_epoch = epochs[epochs.len() - 2].1;
-        let next_epoch = epochs[epochs.len() - 1].1;
-
-        ChainInformation {
-            finalized_block_header: Box::new(self.inner.finalized_block_header.clone()),
-            consensus: ChainInformationConsensus::Babe {
+            ChainInformationConsensus::Babe {
                 slots_per_epoch: NonZero::<u64>::new(next_epoch.duration)
                     .ok_or(CheckpointToChainInformationError::InvalidBabeSlotsPerEpoch)?,
                 finalized_block_epoch_information: Some(convert_epoch(current_epoch)),
                 finalized_next_epoch_transition: convert_epoch(next_epoch),
-            },
+            }
+        } else {
+            // PoW 共识链（无 BABE 数据）
+            ChainInformationConsensus::Pow
+        };
+
+        ChainInformation {
+            finalized_block_header: Box::new(self.inner.finalized_block_header.clone()),
+            consensus,
             finality: ChainInformationFinality::Grandpa {
                 after_finalized_block_authorities_set_id: self.inner.grandpa_authority_set.set_id,
                 finalized_triggered_authorities: {
@@ -525,7 +526,7 @@ impl LightSyncState {
                         })
                         .collect::<Result<_, _>>()?
                 },
-                finalized_scheduled_change: None, // TODO: unimplemented
+                finalized_scheduled_change: None,
             },
         }
         .try_into()

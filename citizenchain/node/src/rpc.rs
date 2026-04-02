@@ -273,15 +273,23 @@ where
                     )
                 })?;
 
-            // 中文注释：将 GRANDPA authorities + set_id 编码为 smoldot 要求的格式。
-            // smoldot 期望 grandpaAuthoritySet 是完整的 SCALE 编码 hex 字符串：
-            // Encode(authorities_raw_bytes) + Encode(set_id: u64)
+            // 中文注释：将 GRANDPA AuthoritySet 编码为 smoldot 要求的完整格式。
+            // smoldot authority_set 解析器期望：
+            //   Vec<(AuthorityId, u64)>    ← authorities（从 Grandpa::Authorities 存储读取）
+            //   u64                        ← set_id
+            //   ForkTree<PendingChange>    ← pending_standard_changes（空 = 0x00 0x00）
+            //   Vec<PendingChange>         ← pending_forced_changes（空 = 0x00）
+            //   Vec<(u64, u32)>            ← authority_set_changes（空 = 0x00）
             let authority_set_hex = {
                 let auth_raw = auth_bytes.map(|d| d.0).unwrap_or_default();
                 let set_id_encoded = set_id.encode();
-                let mut combined = Vec::with_capacity(auth_raw.len() + set_id_encoded.len());
-                combined.extend_from_slice(&auth_raw);
-                combined.extend_from_slice(&set_id_encoded);
+                let mut combined = Vec::with_capacity(auth_raw.len() + set_id_encoded.len() + 4);
+                combined.extend_from_slice(&auth_raw);          // Vec<(AuthorityId, u64)>
+                combined.extend_from_slice(&set_id_encoded);    // u64 set_id
+                combined.push(0x00u8);                          // ForkTree roots: Compact<0>
+                combined.push(0x00u8);                          // ForkTree best_finalized_number: Option::None
+                combined.push(0x00u8);                          // Vec<PendingChange>: Compact<0>
+                combined.push(0x00u8);                          // Vec<(u64, u32)>: Compact<0>
                 format!("0x{}", hex::encode(&combined))
             };
 

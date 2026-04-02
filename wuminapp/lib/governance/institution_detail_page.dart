@@ -13,6 +13,7 @@ import 'proposal_types_page.dart';
 import 'runtime_upgrade_detail_page.dart';
 import 'transfer_proposal_detail_page.dart';
 import 'transfer_proposal_service.dart';
+import '../rpc/smoldot_client.dart';
 
 /// 机构详情页。
 class InstitutionDetailPage extends StatefulWidget {
@@ -107,7 +108,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = SmoldotClientManager.instance.buildUserFacingError(e);
         _loading = false;
       });
     }
@@ -147,7 +148,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
             const SizedBox(height: 6),
             Text(
               _error!,
-              style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+              style:
+                  const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               textAlign: TextAlign.center,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
@@ -238,14 +240,16 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     const SizedBox(height: 4),
                     Text(
                       '管理员 ${_admins.length} 人　通过阈值 ${inst.internalThreshold}',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                      style:
+                          TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                     ),
                   ],
                 ),
               ),
               // 右侧箭头（仅管理员显示）
               if (_isCurrentUserAdmin)
-                Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
+                Icon(Icons.chevron_right,
+                    size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),
@@ -320,7 +324,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     const SizedBox(height: 2),
                     Text(
                       '共 ${_admins.length} 位管理员',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                      style:
+                          TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                     ),
                   ],
                 ),
@@ -359,7 +364,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
             ),
             child: Column(
               children: [
-                const Icon(Icons.ballot_outlined, size: 40, color: AppTheme.textTertiary),
+                const Icon(Icons.ballot_outlined,
+                    size: 40, color: AppTheme.textTertiary),
                 const SizedBox(height: 8),
                 const Text(
                   '暂无投票事件',
@@ -506,7 +512,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     const SizedBox(height: 2),
                     Text(
                       _proposalSubtitle(proposal),
-                      style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                      style:
+                          TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                     ),
                   ],
                 ),

@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import '../ui/app_theme.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +10,7 @@ import 'duoqian_manage_models.dart';
 import 'duoqian_manage_service.dart';
 import 'institution_admin_service.dart';
 import 'institution_data.dart';
+import '../rpc/smoldot_client.dart';
 import '../wallet/core/wallet_manager.dart';
 
 /// 多签机构详情页。
@@ -37,7 +36,6 @@ class DuoqianInstitutionInfoPage extends StatefulWidget {
 
 class _DuoqianInstitutionInfoPageState
     extends State<DuoqianInstitutionInfoPage> {
-
   final DuoqianManageService _manageService = DuoqianManageService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
 
@@ -77,7 +75,7 @@ class _DuoqianInstitutionInfoPageState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = SmoldotClientManager.instance.buildUserFacingError(e);
         _loading = false;
       });
     }
@@ -186,7 +184,8 @@ class _DuoqianInstitutionInfoPageState
                 value: 'delete',
                 child: Row(
                   children: [
-                    Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),
+                    Icon(Icons.delete_outline,
+                        size: 20, color: AppTheme.danger),
                     SizedBox(width: 8),
                     Text('注销机构', style: TextStyle(color: AppTheme.danger)),
                   ],
@@ -299,7 +298,8 @@ class _DuoqianInstitutionInfoPageState
                     const Divider(height: 20),
                     _buildInfoRow('管理员数量', '${info.adminCount}'),
                     const Divider(height: 20),
-                    _buildInfoRow('通过阈值', '${info.threshold} / ${info.adminCount}'),
+                    _buildInfoRow(
+                        '通过阈值', '${info.threshold} / ${info.adminCount}'),
                   ],
                 ],
               ),
@@ -349,7 +349,8 @@ class _DuoqianInstitutionInfoPageState
                         dense: true,
                         leading: CircleAvatar(
                           radius: 16,
-                          backgroundColor: AppTheme.primaryDark.withValues(alpha: 0.08),
+                          backgroundColor:
+                              AppTheme.primaryDark.withValues(alpha: 0.08),
                           child: Text(
                             '${index + 1}',
                             style: const TextStyle(
@@ -431,8 +432,7 @@ class _DuoqianInstitutionInfoPageState
   }
 
   String _pubkeyToSS58(String pubkeyHex) {
-    final hex =
-        pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex;
+    final hex = pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex;
     final bytes = _hexDecode(hex);
     return Keyring().encodeAddress(bytes, 2027);
   }
