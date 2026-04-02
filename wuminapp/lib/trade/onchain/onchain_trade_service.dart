@@ -18,12 +18,12 @@ class OnchainTradeService {
     return _walletManager.getWallet();
   }
 
-  /// 提交转账交易，返回 pending 记录（仅在内存中，不持久化）。
+  /// 提交转账交易，返回交易哈希和 nonce。
   ///
   /// [sign] 回调由调用方根据钱包模式提供：
   /// - 热钱包：从 seed 派生密钥对，本机签名
   /// - 冷钱包：构造 QR 签名请求，由外部设备签名后回传
-  Future<OnchainTxRecord> submitTransfer(
+  Future<({String txHash, int usedNonce})> submitTransfer(
     OnchainTransferDraft draft, {
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
@@ -63,19 +63,7 @@ class OnchainTradeService {
       );
     }
 
-    final estimatedFee = OnchainRpc.estimateTransferFeeYuan(draft.amount);
-    final now = DateTime.now();
-    return OnchainTxRecord(
-      txHash: result.txHash,
-      fromAddress: wallet.address,
-      toAddress: toAddress,
-      amount: draft.amount,
-      symbol: symbol,
-      createdAt: now,
-      status: OnchainTxStatus.pending,
-      usedNonce: result.usedNonce,
-      estimatedFee: estimatedFee,
-    );
+    return result;
   }
 
   List<int> _hexToBytes(String input) {

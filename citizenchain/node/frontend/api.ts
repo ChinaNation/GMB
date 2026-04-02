@@ -4,6 +4,7 @@ import type {
   ColdWalletList,
   GovernanceOverview,
   ProposeUpgradeRequestResult,
+  SigningAdminInfo,
   UserVoteStatus,
   VoteSignRequestResult,
   VoteSubmitResult,
@@ -82,6 +83,9 @@ export const api = {
     invoke<ColdWalletList>('add_cold_wallet', { address, name, unlockPassword }),
   removeColdWallet: (pubkeyHex: string, unlockPassword: string) =>
     invoke<ColdWalletList>('remove_cold_wallet', { pubkeyHex, unlockPassword }),
+  setSigningAdmin: (pubkeyHex: string, privateKeyHex: string, unlockPassword: string) =>
+    invoke<SigningAdminInfo | null>('set_signing_admin', { pubkeyHex, privateKeyHex, unlockPassword }),
+  getSigningAdmin: () => invoke<SigningAdminInfo | null>('get_signing_admin'),
   checkAdminWallets: (shenfenId: string) =>
     invoke<AdminWalletMatch[]>('check_admin_wallets', { shenfenId }),
   buildVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>

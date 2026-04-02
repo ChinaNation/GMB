@@ -10,7 +10,6 @@ use frame_support::{
     ensure,
     pallet_prelude::*,
     storage::{with_transaction, TransactionOutcome},
-    traits::ConstU32,
     traits::Currency,
     traits::StorageVersion,
     weights::Weight,
@@ -41,15 +40,11 @@ const PACK_BLOCK_THRESHOLD: u32 = primitives::pow_const::BLOCKS_PER_HOUR as u32;
 const OFFCHAIN_MIN_FEE_FEN: u128 = primitives::core_const::OFFCHAIN_MIN_FEE;
 const FEE_ADDRESS_MIN_RESERVE_FEN: u128 = 111_111; // 1111.11元
 const FEE_SWEEP_MAX_PERCENT: u128 = 80; // 单次最多可提可用余额的80%
-const INIT_RELAY_SUBMITTERS_COUNT: u32 = 3; // 初始化白名单固定3个提交账户
-const VERIFY_KEY_ROTATION_DELAY_BLOCKS: u32 = primitives::pow_const::BLOCKS_PER_HOUR as u32; // 新密钥延迟生效（1小时）
-const CLEARING_INSTITUTION_SWITCH_INTERVAL_BLOCKS: u64 = primitives::pow_const::BLOCKS_PER_YEAR; // 每年最多更换1次
 const BP_DENOMINATOR: u128 = 10_000;
 const PROCESSED_TX_RETENTION_BLOCKS: u64 = primitives::pow_const::BLOCKS_PER_YEAR;
 const QUEUED_BATCH_RETENTION_BLOCKS: u64 = primitives::pow_const::BLOCKS_PER_YEAR;
 const BATCH_SUMMARY_RETENTION_BLOCKS: u64 = primitives::pow_const::BLOCKS_PER_YEAR;
 const MAX_QUEUE_RETRY_COUNT: u32 = 50;
-const EMERGENCY_ROTATE_MIN_ADMINS: u32 = 2;
 const MAX_STALE_CANCEL_SCAN_STEPS: u32 = 1024;
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
@@ -114,17 +109,6 @@ fn calc_offchain_fee_fen(amount_fen: u128, rate_bp: u32) -> Result<u128, FeeCalc
     Ok(by_rate.max(OFFCHAIN_MIN_FEE_FEN))
 }
 
-/// 链下批次签名验证器（由 runtime 对接验证算法）。
-pub trait OffchainBatchVerifier {
-    fn verify(verify_key: &[u8], message: &[u8], signature: &[u8]) -> bool;
-}
-
-impl OffchainBatchVerifier for () {
-    fn verify(_verify_key: &[u8], _message: &[u8], _signature: &[u8]) -> bool {
-        false
-    }
-}
-
 /// 付款源地址保护：用于禁止制度保留地址作为转出源。
 pub trait ProtectedSourceChecker<AccountId> {
     fn is_protected(account: &AccountId) -> bool;
@@ -143,39 +127,9 @@ pub struct RateProposalAction {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct VerifyKeyProposalAction<BoundedBytes> {
-    pub institution: InstitutionPalletId,
-    pub new_key: BoundedBytes,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct PendingVerifyKey<BoundedBytes, BlockNumber> {
-    pub key: BoundedBytes,
-    pub activate_at: BlockNumber,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub enum VerifyKeyRotationStage {
-    Idle,
-    Scheduled,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct VerifyKeyRotationStatus<BlockNumber> {
-    pub stage: VerifyKeyRotationStage,
-    pub activate_at: Option<BlockNumber>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct SweepProposalAction<Balance> {
     pub institution: InstitutionPalletId,
     pub amount: Balance,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct RelaySubmittersProposalAction<BoundedSubmitters> {
-    pub institution: InstitutionPalletId,
-    pub submitters: BoundedSubmitters,
 }
 
 #[frame_support::pallet]
@@ -192,30 +146,20 @@ pub mod pallet {
         type Currency: Currency<Self::AccountId>;
 
         #[pallet::constant]
-        type MaxVerifyKeyLen: Get<u32>;
-
-        #[pallet::constant]
         type MaxBatchSize: Get<u32>;
 
         #[pallet::constant]
         type MaxBatchSignatureLength: Get<u32>;
 
-        #[pallet::constant]
-        type MaxRelaySubmitters: Get<u32>;
-
         /// 中文注释：内部投票引擎，返回真实 proposal_id。
         type InternalVoteEngine: voting_engine_system::InternalVoteEngine<Self::AccountId>;
 
-        type OffchainBatchVerifier: OffchainBatchVerifier;
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
         type InstitutionAssetGuard: institution_asset_guard::InstitutionAssetGuard<Self::AccountId>;
         type WeightInfo: crate::weights::WeightInfo;
     }
 
-    pub type VerifyKeyOf<T> = BoundedVec<u8, <T as Config>::MaxVerifyKeyLen>;
     pub type BatchSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxBatchSignatureLength>;
-    pub type RelaySubmittersOf<T> =
-        BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxRelaySubmitters>;
 
     #[derive(
         Encode,
@@ -342,7 +286,6 @@ pub mod pallet {
         pub processed_at: Option<BlockNumber>,
         pub fee_sum_snapshot: Balance,
         pub marker_tx_id: Hash,
-        pub verify_key_epoch_snapshot: u64,
     }
 
     #[pallet::pallet]
@@ -372,45 +315,6 @@ pub mod pallet {
     #[pallet::getter(fn next_enqueue_batch_seq_of)]
     pub type NextEnqueueBatchSeq<T> =
         StorageMap<_, Blake2_128Concat, InstitutionPalletId, u64, ValueQuery>;
-
-    /// 各省储行批次提交白名单账户（中继提交账户）。
-    #[pallet::storage]
-    #[pallet::getter(fn relay_submitters_of)]
-    pub type RelaySubmitters<T: Config> =
-        StorageMap<_, Blake2_128Concat, InstitutionPalletId, RelaySubmittersOf<T>, OptionQuery>;
-
-    /// 各省储行链下交易验证密钥（由内部投票通过后更新）。
-    #[pallet::storage]
-    #[pallet::getter(fn verify_key_of)]
-    pub type VerifyKeys<T: Config> =
-        StorageMap<_, Blake2_128Concat, InstitutionPalletId, VerifyKeyOf<T>, OptionQuery>;
-
-    /// 验签密钥纪元（每次实际切换生效后递增），用于失效旧纪元签名的已入队批次。
-    #[pallet::storage]
-    pub type VerifyKeyEpoch<T> =
-        StorageMap<_, Blake2_128Concat, InstitutionPalletId, u64, ValueQuery>;
-
-    /// 各省储行待生效验证密钥（双轨换钥）。
-    #[pallet::storage]
-    #[pallet::getter(fn pending_verify_key_of)]
-    pub type PendingVerifyKeys<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        InstitutionPalletId,
-        PendingVerifyKey<VerifyKeyOf<T>, BlockNumberFor<T>>,
-        OptionQuery,
-    >;
-
-    /// 验证密钥轮换状态（前端可直接查询）。
-    #[pallet::storage]
-    #[pallet::getter(fn rotation_status_of)]
-    pub type VerifyKeyRotationStatuses<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        InstitutionPalletId,
-        VerifyKeyRotationStatus<BlockNumberFor<T>>,
-        OptionQuery,
-    >;
 
     /// 已处理链下 tx_id 防重放（按省标识 T2 + tx_id 维度，窗口约1年）。
     /// 链下系统必须保证 tx_id 全局唯一；链上只提供窗口内强防重。
@@ -447,28 +351,11 @@ pub mod pallet {
     pub type RateProposalActions<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, RateProposalAction, OptionQuery>;
 
-    /// 验证密钥治理提案动作。
-    #[pallet::storage]
-    #[pallet::getter(fn verify_key_action_by_proposal)]
-    pub type VerifyKeyProposalActions<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, VerifyKeyProposalAction<VerifyKeyOf<T>>, OptionQuery>;
-
     /// fee_address 划转治理提案动作。
     #[pallet::storage]
     #[pallet::getter(fn sweep_action_by_proposal)]
     pub type SweepProposalActions<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, SweepProposalAction<BalanceOf<T>>, OptionQuery>;
-
-    /// relay 提交者白名单治理提案动作。
-    #[pallet::storage]
-    #[pallet::getter(fn relay_submitters_action_by_proposal)]
-    pub type RelaySubmittersProposalActions<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        u64,
-        RelaySubmittersProposalAction<RelaySubmittersOf<T>>,
-        OptionQuery,
-    >;
 
     /// 批次ID。
     #[pallet::storage]
@@ -502,34 +389,11 @@ pub mod pallet {
     pub type QueuedTxIndex<T: Config> =
         StorageDoubleMap<_, Blake2_128Concat, [u8; 2], Blake2_128Concat, T::Hash, u64, OptionQuery>;
 
-    /// 存在待生效 verify key 的机构索引（避免 on_initialize 全量扫描）。
-    #[pallet::storage]
-    #[pallet::getter(fn pending_rotation_institutions)]
-    pub type PendingRotationInstitutions<T> =
-        StorageValue<_, BoundedVec<InstitutionPalletId, ConstU32<64>>, ValueQuery>;
-
     #[pallet::storage]
     pub type QueuedBatchPruneCursor<T> = StorageValue<_, u64, ValueQuery>;
 
-    /// 按机构维度记录 stale cancel 扫描游标，避免重复扫描。
-    #[pallet::storage]
-    pub type StaleCancelCursorByInstitution<T> =
-        StorageMap<_, Blake2_128Concat, InstitutionPalletId, u64, ValueQuery>;
-
     #[pallet::storage]
     pub type BatchSummaryPruneCursor<T> = StorageValue<_, u64, ValueQuery>;
-
-    /// 紧急换钥的管理员确认集合（institution + key_hash 维度）。
-    #[pallet::storage]
-    pub type EmergencyVerifyKeyApprovals<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        InstitutionPalletId,
-        Blake2_128Concat,
-        [u8; 32],
-        BoundedVec<T::AccountId, ConstU32<16>>,
-        ValueQuery,
-    >;
 
     /// 收款账户绑定的链下清算省储行。
     #[pallet::storage]
@@ -537,25 +401,18 @@ pub mod pallet {
     pub type RecipientClearingInstitution<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, InstitutionPalletId, OptionQuery>;
 
-    /// 收款账户上次更换清算省储行的区块高度。
-    #[pallet::storage]
-    #[pallet::getter(fn recipient_last_switch_at)]
-    pub type RecipientClearingInstitutionLastSwitchAt<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, BlockNumberFor<T>, OptionQuery>;
-
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub initial_rates: Vec<(Vec<u8>, u32)>,
-        pub initial_verify_keys: Vec<(Vec<u8>, VerifyKeyOf<T>)>,
-        pub initial_relay_submitters: Vec<(Vec<u8>, RelaySubmittersOf<T>)>,
+        #[serde(skip)]
+        pub _phantom: core::marker::PhantomData<T>,
     }
 
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
             Self {
                 initial_rates: Vec::new(),
-                initial_verify_keys: Vec::new(),
-                initial_relay_submitters: Vec::new(),
+                _phantom: Default::default(),
             }
         }
     }
@@ -585,61 +442,6 @@ pub mod pallet {
                     "Invalid rate in initial_rates"
                 );
                 InstitutionRateBp::<T>::insert(institution, rate_bp);
-            }
-
-            for (idx, (institution_raw, _)) in self.initial_verify_keys.iter().enumerate() {
-                for (other_raw, _) in self.initial_verify_keys.iter().skip(idx + 1) {
-                    assert!(
-                        institution_raw != other_raw,
-                        "Duplicate institution in initial_verify_keys"
-                    );
-                }
-            }
-            for (institution_raw, key) in self.initial_verify_keys.iter() {
-                let institution: InstitutionPalletId = institution_raw
-                    .as_slice()
-                    .try_into()
-                    .expect("invalid institution id length in initial_verify_keys");
-                assert!(
-                    institution_pallet_address(institution).is_some(),
-                    "Invalid institution in initial_verify_keys"
-                );
-                assert!(!key.is_empty(), "Empty verify key in initial_verify_keys");
-                VerifyKeys::<T>::insert(institution, key);
-                VerifyKeyEpoch::<T>::insert(institution, 1u64);
-                VerifyKeyRotationStatuses::<T>::insert(
-                    institution,
-                    VerifyKeyRotationStatus {
-                        stage: VerifyKeyRotationStage::Idle,
-                        activate_at: None,
-                    },
-                );
-            }
-
-            for (idx, (institution_raw, _)) in self.initial_relay_submitters.iter().enumerate() {
-                for (other_raw, _) in self.initial_relay_submitters.iter().skip(idx + 1) {
-                    assert!(
-                        institution_raw != other_raw,
-                        "Duplicate institution in initial_relay_submitters"
-                    );
-                }
-            }
-            for (institution_raw, submitters) in self.initial_relay_submitters.iter() {
-                let institution: InstitutionPalletId = institution_raw
-                    .as_slice()
-                    .try_into()
-                    .expect("invalid institution id length in initial_relay_submitters");
-                assert!(
-                    institution_pallet_address(institution).is_some(),
-                    "Invalid institution in initial_relay_submitters"
-                );
-                assert!(
-                    submitters.len() as u32 == INIT_RELAY_SUBMITTERS_COUNT,
-                    "Empty relay submitters in initial_relay_submitters"
-                );
-                Pallet::<T>::ensure_valid_relay_submitters(submitters)
-                    .expect("invalid relay submitters in genesis");
-                RelaySubmitters::<T>::insert(institution, submitters);
             }
         }
     }
@@ -677,52 +479,6 @@ pub mod pallet {
             institution: InstitutionPalletId,
             rate_bp: u32,
         },
-        VerifyKeyProposed {
-            proposal_id: u64,
-            institution: InstitutionPalletId,
-            proposer: T::AccountId,
-            key_len: u32,
-        },
-        VerifyKeyVoteSubmitted {
-            proposal_id: u64,
-            voter: T::AccountId,
-            approve: bool,
-        },
-        VerifyKeyUpdated {
-            proposal_id: u64,
-            institution: InstitutionPalletId,
-            key_len: u32,
-        },
-        VerifyKeyRotationScheduled {
-            proposal_id: u64,
-            institution: InstitutionPalletId,
-            key_len: u32,
-            activate_at: BlockNumberFor<T>,
-        },
-        VerifyKeyRotated {
-            institution: InstitutionPalletId,
-            key_len: u32,
-            activated_at: BlockNumberFor<T>,
-        },
-        VerifyKeyEmergencyRotated {
-            institution: InstitutionPalletId,
-            key_len: u32,
-            activated_at: BlockNumberFor<T>,
-            operator: T::AccountId,
-        },
-        VerifyKeyEmergencyRotationApproval {
-            institution: InstitutionPalletId,
-            key_hash: [u8; 32],
-            approver: T::AccountId,
-            approvals: u32,
-            required: u32,
-        },
-        VerifyKeyEmergencyRotationApprovalCancelled {
-            institution: InstitutionPalletId,
-            key_hash: [u8; 32],
-            who: T::AccountId,
-            remaining_approvals: u32,
-        },
         SweepToMainProposed {
             proposal_id: u64,
             institution: InstitutionPalletId,
@@ -734,22 +490,6 @@ pub mod pallet {
             voter: T::AccountId,
             approve: bool,
         },
-        RelaySubmittersProposed {
-            proposal_id: u64,
-            institution: InstitutionPalletId,
-            proposer: T::AccountId,
-            count: u32,
-        },
-        RelaySubmittersVoteSubmitted {
-            proposal_id: u64,
-            voter: T::AccountId,
-            approve: bool,
-        },
-        RelaySubmittersUpdated {
-            proposal_id: u64,
-            institution: InstitutionPalletId,
-            count: u32,
-        },
         InternalProposalExecutionFailed {
             proposal_id: u64,
         },
@@ -758,10 +498,6 @@ pub mod pallet {
             institution: InstitutionPalletId,
             amount: BalanceOf<T>,
             reserve_left: BalanceOf<T>,
-        },
-        RelaySubmittersInitialized {
-            institution: InstitutionPalletId,
-            count: u32,
         },
         RecipientClearingInstitutionBound {
             recipient: T::AccountId,
@@ -809,12 +545,6 @@ pub mod pallet {
             cancelled: u32,
             operator: T::AccountId,
         },
-        OffchainQueuedBatchInvalidatedByKeyRotation {
-            queue_id: u64,
-            institution: InstitutionPalletId,
-            expected_epoch: u64,
-            queued_epoch: u64,
-        },
         FailedBatchSkipped {
             queue_id: u64,
             institution: InstitutionPalletId,
@@ -855,34 +585,22 @@ pub mod pallet {
         ProposalInstitutionMismatch,
         RateProposalNotFound,
         RateProposalAlreadyExecuted,
-        VerifyKeyProposalNotFound,
-        VerifyKeyProposalAlreadyExecuted,
         SweepProposalNotFound,
         SweepProposalAlreadyExecuted,
-        RelaySubmittersProposalNotFound,
-        RelaySubmittersProposalAlreadyExecuted,
         UnauthorizedAdmin,
         UnauthorizedSubmitter,
         TxAlreadyProcessed,
         PackThresholdNotReached,
         EmptyBatch,
-        VerifyKeyAlreadyInitialized,
-        VerifyKeyMissing,
         InvalidBatchSignature,
         ProtectedSource,
         InsufficientFeeReserve,
         SweepAmountExceedsCap,
         InvalidSweepAmount,
-        RelaySubmittersNotInitialized,
-        RelaySubmitterNotAllowed,
-        RelaySubmittersAlreadyInitialized,
-        InvalidRelaySubmittersCount,
-        DuplicateRelaySubmitter,
         InvalidBatchSeq,
         QueuedBacklogExists,
         RecipientClearingInstitutionNotBound,
         RecipientClearingInstitutionMismatch,
-        ClearingInstitutionSwitchTooFrequent,
         QueuedBatchNotFound,
         QueuedBatchAlreadyProcessed,
         QueuedBatchNotProcessed,
@@ -891,9 +609,6 @@ pub mod pallet {
         QueuedBatchNotSkippable,
         BatchSummaryNotFound,
         ProcessedTxNotFound,
-        InvalidVerifyKey,
-        VerifyKeyRotationAlreadyScheduled,
-        PendingRotationInstitutionsOverflow,
         QueueRetentionNotReached,
         BatchSummaryRetentionNotReached,
         ProcessedTxRetentionNotReached,
@@ -902,9 +617,6 @@ pub mod pallet {
         ProposalNotPrunable,
         ProposalExecutionRetryNotAllowed,
         CounterOverflow,
-        EmergencyRotationAlreadyApproved,
-        EmergencyApprovalsOverflow,
-        EmergencyRotationNotApproved,
         InvalidOperationCount,
     }
 
@@ -935,7 +647,8 @@ pub mod pallet {
                 Error::<T>::QueuedBacklogExists
             );
             let rate_bp = Self::ensure_rate_and_institution(institution)?;
-            let (t2, verify_key, by_count, by_time) =
+            // 中文注释：直接管理员验证 + sr25519 签名校验，不再需要 verify key。
+            let (t2, by_count, by_time) =
                 Self::precheck_submit_offchain_batch_with_rate(
                     &submitter,
                     institution,
@@ -953,7 +666,6 @@ pub mod pallet {
                     batch_seq,
                     &batch,
                     t2,
-                    &verify_key,
                     by_count,
                     by_time,
                 );
@@ -965,83 +677,10 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 省储行安装时初始化默认验证密钥，仅可初始化一次。
-        /// 该初始化由机构主账户（pallet_address）执行；
-        /// 后续更换必须走内部投票流程（propose_verify_key/vote_verify_key）。
-        #[pallet::call_index(5)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(1, 3))]
-        pub fn init_verify_key(
-            origin: OriginFor<T>,
-            institution: InstitutionPalletId,
-            default_key: VerifyKeyOf<T>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            let institution_account = Self::institution_account(institution)?;
-            ensure!(
-                who == institution_account,
-                Error::<T>::UnauthorizedSubmitter
-            );
-            ensure!(
-                !VerifyKeys::<T>::contains_key(institution),
-                Error::<T>::VerifyKeyAlreadyInitialized
-            );
-            ensure!(!default_key.is_empty(), Error::<T>::InvalidVerifyKey);
-            VerifyKeys::<T>::insert(institution, &default_key);
-            VerifyKeyEpoch::<T>::insert(institution, 1u64);
-            VerifyKeyRotationStatuses::<T>::insert(
-                institution,
-                VerifyKeyRotationStatus {
-                    stage: VerifyKeyRotationStage::Idle,
-                    activate_at: None,
-                },
-            );
-            Self::deposit_event(Event::<T>::VerifyKeyUpdated {
-                proposal_id: 0,
-                institution,
-                key_len: default_key.len() as u32,
-            });
-            Ok(())
-        }
-
-        /// 初始化批次提交白名单（建议初始化 3 个提交账户），仅可初始化一次。
-        /// 由机构主账户（pallet_address）执行。
-        #[pallet::call_index(8)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(2, 1))]
-        pub fn init_relay_submitters(
-            origin: OriginFor<T>,
-            institution: InstitutionPalletId,
-            submitters: RelaySubmittersOf<T>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            let institution_account = Self::institution_account(institution)?;
-            ensure!(
-                who == institution_account,
-                Error::<T>::UnauthorizedSubmitter
-            );
-            ensure!(
-                !RelaySubmitters::<T>::contains_key(institution),
-                Error::<T>::RelaySubmittersAlreadyInitialized
-            );
-            let submitter_count: u32 = submitters.len() as u32;
-            ensure!(
-                submitter_count == INIT_RELAY_SUBMITTERS_COUNT
-                    && submitter_count <= T::MaxRelaySubmitters::get(),
-                Error::<T>::InvalidRelaySubmittersCount
-            );
-            Self::ensure_valid_relay_submitters(&submitters)?;
-            RelaySubmitters::<T>::insert(institution, &submitters);
-            Self::deposit_event(Event::<T>::RelaySubmittersInitialized {
-                institution,
-                count: submitter_count,
-            });
-            Ok(())
-        }
-
         /// 收款方账户绑定链下清算省储行：
-        /// - 首次绑定可立即生效；
-        /// - 更换绑定时，每 87600 区块最多更换 1 次。
+        /// - 不限制绑定次数和更换频率（每次调用收取最低手续费）。
         #[pallet::call_index(9)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(3, 2))]
+        #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
         pub fn bind_clearing_institution(
             origin: OriginFor<T>,
             institution: InstitutionPalletId,
@@ -1052,33 +691,8 @@ pub mod pallet {
                 Error::<T>::InvalidInstitution
             );
 
-            let switched = if let Some(current) = RecipientClearingInstitution::<T>::get(&who) {
-                if current == institution {
-                    false
-                } else {
-                    let now = frame_system::Pallet::<T>::block_number();
-                    if let Some(last) = RecipientClearingInstitutionLastSwitchAt::<T>::get(&who) {
-                        let elapsed: u64 =
-                            <BlockNumberFor<T> as sp_runtime::traits::Saturating>::saturating_sub(
-                                now, last,
-                            )
-                            .saturated_into();
-                        ensure!(
-                            elapsed >= CLEARING_INSTITUTION_SWITCH_INTERVAL_BLOCKS,
-                            Error::<T>::ClearingInstitutionSwitchTooFrequent
-                        );
-                    }
-                    RecipientClearingInstitutionLastSwitchAt::<T>::insert(&who, now);
-                    true
-                }
-            } else {
-                // 中文注释：首次绑定虽然 switched=false，但会启动“下次切换”的冷却计时。
-                RecipientClearingInstitutionLastSwitchAt::<T>::insert(
-                    &who,
-                    frame_system::Pallet::<T>::block_number(),
-                );
-                false
-            };
+            let switched = RecipientClearingInstitution::<T>::get(&who)
+                .map_or(false, |current| current != institution);
 
             RecipientClearingInstitution::<T>::insert(&who, institution);
             Self::deposit_event(Event::<T>::RecipientClearingInstitutionBound {
@@ -1089,7 +703,7 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 将批次持久化进入出队队列（先落库，再由中继账户反复重试打包）。
+        /// 将批次持久化进入出队队列（先落库，再由管理员反复重试打包）。
         #[pallet::call_index(10)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::enqueue_offchain_batch(T::MaxBatchSize::get()))]
         pub fn enqueue_offchain_batch(
@@ -1101,11 +715,10 @@ pub mod pallet {
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             ensure!(!batch.is_empty(), Error::<T>::EmptyBatch);
-            let relay_submitters = RelaySubmitters::<T>::get(institution)
-                .ok_or(Error::<T>::RelaySubmittersNotInitialized)?;
+            // 中文注释：入队时验证管理员身份和 sr25519 签名。
             ensure!(
-                relay_submitters.iter().any(|acc| acc == &submitter),
-                Error::<T>::RelaySubmitterNotAllowed
+                Self::is_prb_admin(institution, &submitter),
+                Error::<T>::UnauthorizedAdmin
             );
             let executed_next_seq = LastBatchSeq::<T>::get(institution)
                 .checked_add(1)
@@ -1118,15 +731,15 @@ pub mod pallet {
             };
             ensure!(batch_seq == expected_seq, Error::<T>::InvalidBatchSeq);
             let rate_bp = Self::ensure_rate_and_institution(institution)?;
-            let verify_key =
-                Self::verify_key_for(institution).ok_or(Error::<T>::VerifyKeyMissing)?;
+            // 中文注释：直接用提交者公钥验证批量签名，无需额外 verify key。
+            let submitter_bytes: [u8; 32] = submitter.encode()[..32].try_into()
+                .map_err(|_| Error::<T>::InvalidBatchSignature)?;
             let message = Self::batch_signing_message(institution, batch_seq, &batch);
+            let sig = sp_core::sr25519::Signature::try_from(batch_signature.as_slice())
+                .map_err(|_| Error::<T>::InvalidBatchSignature)?;
+            let pub_key = sp_core::sr25519::Public::from_raw(submitter_bytes);
             ensure!(
-                T::OffchainBatchVerifier::verify(
-                    verify_key.as_slice(),
-                    message.as_slice(),
-                    batch_signature.as_slice()
-                ),
+                sp_io::crypto::sr25519_verify(&sig, message.as_slice(), &pub_key),
                 Error::<T>::InvalidBatchSignature
             );
 
@@ -1145,7 +758,6 @@ pub mod pallet {
             let item_count = batch.len() as u32;
             // 中文注释：队列在入队时锁定费率快照；后续费率治理不影响已入队批次。
             let fee_sum_snapshot: BalanceOf<T> = fee_sum_u128.saturated_into();
-            let verify_key_epoch_snapshot = VerifyKeyEpoch::<T>::get(institution);
             let marker_tx_id = batch
                 .first()
                 .map(|i| i.tx_id)
@@ -1171,7 +783,6 @@ pub mod pallet {
                     processed_at: None,
                     fee_sum_snapshot,
                     marker_tx_id,
-                    verify_key_epoch_snapshot,
                 },
             );
 
@@ -1199,34 +810,6 @@ pub mod pallet {
             );
 
             let now = frame_system::Pallet::<T>::block_number();
-            let current_epoch = VerifyKeyEpoch::<T>::get(queued.institution);
-            if queued.verify_key_epoch_snapshot != current_epoch {
-                let t2 = institution_t2_code(queued.institution)
-                    .ok_or(Error::<T>::InvalidInstitution)?;
-                queued.status = QueuedBatchStatus::Cancelled;
-                queued.last_attempt_at = Some(now);
-                queued.last_error = Some(QueuedBatchLastError::Cancelled);
-                let current_seq = LastBatchSeq::<T>::get(queued.institution);
-                let expected_seq = current_seq
-                    .checked_add(1)
-                    .ok_or(Error::<T>::CounterOverflow)?;
-                // 中文注释：只有“当前队头批次”在因换钥失效而取消时，才允许推进执行序号。
-                // 否则如果直接把 LastBatchSeq 跳到更大的 batch_seq，会把前面的待处理批次整体跳过。
-                if queued.batch_seq == expected_seq {
-                    LastBatchSeq::<T>::insert(queued.institution, queued.batch_seq);
-                }
-                for item in queued.batch.iter() {
-                    QueuedTxIndex::<T>::remove(t2, item.tx_id);
-                }
-                QueuedBatches::<T>::insert(queue_id, &queued);
-                Self::deposit_event(Event::<T>::OffchainQueuedBatchInvalidatedByKeyRotation {
-                    queue_id,
-                    institution: queued.institution,
-                    expected_epoch: current_epoch,
-                    queued_epoch: queued.verify_key_epoch_snapshot,
-                });
-                return Ok(());
-            }
             let precheck_result = Self::precheck_submit_offchain_batch_with_rate(
                 &submitter,
                 queued.institution,
@@ -1237,7 +820,7 @@ pub mod pallet {
                 false,
                 false,
             );
-            let (t2, verify_key, by_count, by_time) = match precheck_result {
+            let (t2, by_count, by_time) = match precheck_result {
                 Ok(v) => v,
                 Err(e) => {
                     if Self::should_bubble_precheck_error(&e) {
@@ -1303,7 +886,6 @@ pub mod pallet {
                     queued.batch_seq,
                     &queued.batch,
                     t2,
-                    &verify_key,
                     by_count,
                     by_time,
                 );
@@ -1441,84 +1023,6 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 省储行管理员发起“链下验证密钥”更新提案（内部投票）。
-        #[pallet::call_index(3)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
-        pub fn propose_verify_key(
-            origin: OriginFor<T>,
-            institution: InstitutionPalletId,
-            new_key: VerifyKeyOf<T>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            ensure!(!new_key.is_empty(), Error::<T>::InvalidVerifyKey);
-            ensure!(
-                Self::is_prb_admin(institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-
-            let proposal_id =
-                T::InternalVoteEngine::create_internal_proposal(who.clone(), ORG_PRB, institution)?;
-
-            VerifyKeyProposalActions::<T>::insert(
-                proposal_id,
-                VerifyKeyProposalAction {
-                    institution,
-                    new_key: new_key.clone(),
-                },
-            );
-
-            Self::deposit_event(Event::<T>::VerifyKeyProposed {
-                proposal_id,
-                institution,
-                proposer: who,
-                key_len: new_key.len() as u32,
-            });
-            Ok(())
-        }
-
-        /// 省储行管理员对验证密钥提案投票；通过后自动生效。
-        #[pallet::call_index(4)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(6, 5))]
-        pub fn vote_verify_key(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            approve: bool,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            let action = VerifyKeyProposalActions::<T>::get(proposal_id)
-                .ok_or(Error::<T>::VerifyKeyProposalNotFound)?;
-            ensure!(
-                Self::is_prb_admin(action.institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-
-            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
-
-            Self::deposit_event(Event::<T>::VerifyKeyVoteSubmitted {
-                proposal_id,
-                voter: who,
-                approve,
-            });
-
-            if approve {
-                if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
-                    if proposal.status == STATUS_PASSED {
-                        if let Err(_e) =
-                            with_transaction(|| match Self::try_execute_verify_key(proposal_id) {
-                                Ok(()) => TransactionOutcome::Commit(Ok(())),
-                                Err(e) => TransactionOutcome::Rollback(Err(e)),
-                            })
-                        {
-                            Self::deposit_event(Event::<T>::InternalProposalExecutionFailed {
-                                proposal_id,
-                            });
-                        }
-                    }
-                }
-            }
-            Ok(())
-        }
-
         /// 省储行管理员发起 fee_address 向主多签地址划转提案（内部投票）。
         /// 约束：划转后 fee_address 至少保留 1111.11 元。
         #[pallet::call_index(6)]
@@ -1589,79 +1093,6 @@ pub mod pallet {
                                 Err(e) => TransactionOutcome::Rollback(Err(e)),
                             })
                         {
-                            Self::deposit_event(Event::<T>::InternalProposalExecutionFailed {
-                                proposal_id,
-                            });
-                        }
-                    }
-                }
-            }
-            Ok(())
-        }
-
-        /// 省储行管理员发起 relay 提交者白名单更新提案（内部投票）。
-        #[pallet::call_index(12)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
-        pub fn propose_relay_submitters(
-            origin: OriginFor<T>,
-            institution: InstitutionPalletId,
-            submitters: RelaySubmittersOf<T>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            ensure!(
-                Self::is_prb_admin(institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-            Self::ensure_valid_relay_submitters(&submitters)?;
-            let proposal_id =
-                T::InternalVoteEngine::create_internal_proposal(who.clone(), ORG_PRB, institution)?;
-            RelaySubmittersProposalActions::<T>::insert(
-                proposal_id,
-                RelaySubmittersProposalAction {
-                    institution,
-                    submitters: submitters.clone(),
-                },
-            );
-            Self::deposit_event(Event::<T>::RelaySubmittersProposed {
-                proposal_id,
-                institution,
-                proposer: who,
-                count: submitters.len() as u32,
-            });
-            Ok(())
-        }
-
-        /// 省储行管理员对 relay 提交者白名单提案投票；通过后自动生效。
-        #[pallet::call_index(13)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(6, 5))]
-        pub fn vote_relay_submitters(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            approve: bool,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            let action = RelaySubmittersProposalActions::<T>::get(proposal_id)
-                .ok_or(Error::<T>::RelaySubmittersProposalNotFound)?;
-            ensure!(
-                Self::is_prb_admin(action.institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
-            Self::deposit_event(Event::<T>::RelaySubmittersVoteSubmitted {
-                proposal_id,
-                voter: who,
-                approve,
-            });
-
-            if approve {
-                if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
-                    if proposal.status == STATUS_PASSED {
-                        if let Err(_e) = with_transaction(|| {
-                            match Self::try_execute_relay_submitters(proposal_id) {
-                                Ok(()) => TransactionOutcome::Commit(Ok(())),
-                                Err(e) => TransactionOutcome::Rollback(Err(e)),
-                            }
-                        }) {
                             Self::deposit_event(Event::<T>::InternalProposalExecutionFailed {
                                 proposal_id,
                             });
@@ -1779,13 +1210,7 @@ pub mod pallet {
             if RateProposalActions::<T>::take(proposal_id).is_some() {
                 pruned = true;
             }
-            if VerifyKeyProposalActions::<T>::take(proposal_id).is_some() {
-                pruned = true;
-            }
             if SweepProposalActions::<T>::take(proposal_id).is_some() {
-                pruned = true;
-            }
-            if RelaySubmittersProposalActions::<T>::take(proposal_id).is_some() {
                 pruned = true;
             }
             ensure!(pruned, Error::<T>::ProposalActionNotFound);
@@ -1881,19 +1306,13 @@ pub mod pallet {
             #[derive(Clone, Copy)]
             enum ActionKind {
                 Rate,
-                VerifyKey,
                 Sweep,
-                RelaySubmitters,
             }
             let (institution, action_kind) =
                 if let Some(action) = RateProposalActions::<T>::get(proposal_id) {
                     (action.institution, ActionKind::Rate)
-                } else if let Some(action) = VerifyKeyProposalActions::<T>::get(proposal_id) {
-                    (action.institution, ActionKind::VerifyKey)
                 } else if let Some(action) = SweepProposalActions::<T>::get(proposal_id) {
                     (action.institution, ActionKind::Sweep)
-                } else if let Some(action) = RelaySubmittersProposalActions::<T>::get(proposal_id) {
-                    (action.institution, ActionKind::RelaySubmitters)
                 } else {
                     return Err(Error::<T>::ProposalActionNotFound.into());
                 };
@@ -1905,9 +1324,7 @@ pub mod pallet {
             with_transaction(|| {
                 let result = match action_kind {
                     ActionKind::Rate => Self::try_execute_rate(proposal_id),
-                    ActionKind::VerifyKey => Self::try_execute_verify_key(proposal_id),
                     ActionKind::Sweep => Self::try_execute_sweep(proposal_id),
-                    ActionKind::RelaySubmitters => Self::try_execute_relay_submitters(proposal_id),
                 };
                 match result {
                     Ok(()) => TransactionOutcome::Commit(Ok(())),
@@ -1915,124 +1332,6 @@ pub mod pallet {
                 }
             })?;
             Self::deposit_event(Event::<T>::ProposalExecutionRetried { proposal_id });
-            Ok(())
-        }
-
-        /// 紧急立即轮换验证密钥（跳过延迟窗口），用于旧密钥泄露场景。
-        #[pallet::call_index(21)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(26, 10))]
-        pub fn emergency_rotate_verify_key(
-            origin: OriginFor<T>,
-            institution: InstitutionPalletId,
-            new_key: VerifyKeyOf<T>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            ensure!(
-                Self::is_prb_admin(institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-            ensure!(
-                institution_pallet_address(institution).is_some(),
-                Error::<T>::InvalidInstitution
-            );
-            ensure!(!new_key.is_empty(), Error::<T>::InvalidVerifyKey);
-            let key_hash = sp_io::hashing::blake2_256(new_key.as_slice());
-            let approval_count = EmergencyVerifyKeyApprovals::<T>::try_mutate(
-                institution,
-                key_hash,
-                |approvals| -> Result<u32, DispatchError> {
-                    ensure!(
-                        !approvals.iter().any(|acc| acc == &who),
-                        Error::<T>::EmergencyRotationAlreadyApproved
-                    );
-                    approvals
-                        .try_push(who.clone())
-                        .map_err(|_| Error::<T>::EmergencyApprovalsOverflow)?;
-                    let mut filtered: BoundedVec<T::AccountId, ConstU32<16>> =
-                        BoundedVec::default();
-                    for acc in approvals.iter() {
-                        if Self::is_prb_admin(institution, acc) {
-                            let _ = filtered.try_push(acc.clone());
-                        }
-                    }
-                    *approvals = filtered;
-                    Ok(approvals.len() as u32)
-                },
-            )?;
-            if approval_count < EMERGENCY_ROTATE_MIN_ADMINS {
-                Self::deposit_event(Event::<T>::VerifyKeyEmergencyRotationApproval {
-                    institution,
-                    key_hash,
-                    approver: who,
-                    approvals: approval_count,
-                    required: EMERGENCY_ROTATE_MIN_ADMINS,
-                });
-                return Ok(());
-            }
-            let clear_result =
-                EmergencyVerifyKeyApprovals::<T>::clear_prefix(institution, u32::MAX, None);
-            debug_assert!(
-                clear_result.maybe_cursor.is_none(),
-                "emergency rotation approvals were not fully cleared"
-            );
-            if clear_result.maybe_cursor.is_some() {
-                log::warn!(
-                    "emergency rotation approvals were not fully cleared for institution {:?}",
-                    institution
-                );
-            }
-
-            let now = frame_system::Pallet::<T>::block_number();
-            VerifyKeys::<T>::insert(institution, &new_key);
-            PendingVerifyKeys::<T>::remove(institution);
-            PendingRotationInstitutions::<T>::mutate(|institutions| {
-                institutions.retain(|id| *id != institution);
-            });
-            let epoch = VerifyKeyEpoch::<T>::get(institution);
-            let next_epoch = epoch.checked_add(1).ok_or(Error::<T>::CounterOverflow)?;
-            VerifyKeyEpoch::<T>::insert(institution, next_epoch);
-            VerifyKeyRotationStatuses::<T>::insert(
-                institution,
-                VerifyKeyRotationStatus {
-                    stage: VerifyKeyRotationStage::Idle,
-                    activate_at: None,
-                },
-            );
-            Self::deposit_event(Event::<T>::VerifyKeyEmergencyRotated {
-                institution,
-                key_len: new_key.len() as u32,
-                activated_at: now,
-                operator: who,
-            });
-            Ok(())
-        }
-
-        /// 撤回某个紧急换钥审批（按 institution + key_hash + 审批者维度）。
-        #[pallet::call_index(22)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(2, 1))]
-        pub fn cancel_emergency_rotation_approval(
-            origin: OriginFor<T>,
-            institution: InstitutionPalletId,
-            key_hash: [u8; 32],
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            let remaining_approvals = EmergencyVerifyKeyApprovals::<T>::try_mutate(
-                institution,
-                key_hash,
-                |approvals| -> Result<u32, DispatchError> {
-                    let Some(pos) = approvals.iter().position(|acc| acc == &who) else {
-                        return Err(Error::<T>::EmergencyRotationNotApproved.into());
-                    };
-                    approvals.swap_remove(pos);
-                    Ok(approvals.len() as u32)
-                },
-            )?;
-            Self::deposit_event(Event::<T>::VerifyKeyEmergencyRotationApprovalCancelled {
-                institution,
-                key_hash,
-                who,
-                remaining_approvals,
-            });
             Ok(())
         }
 
@@ -2056,10 +1355,8 @@ pub mod pallet {
 
             let now = frame_system::Pallet::<T>::block_number();
             let next_queue_id = NextQueuedBatchId::<T>::get();
-            let mut queue_id = StaleCancelCursorByInstitution::<T>::get(institution);
-            if queue_id == 0 {
-                queue_id = QueuedBatchPruneCursor::<T>::get();
-            }
+            // 中文注释：移除了 StaleCancelCursorByInstitution，直接从 prune cursor 开始扫描。
+            let mut queue_id = QueuedBatchPruneCursor::<T>::get();
             if queue_id >= next_queue_id {
                 queue_id = 0;
             }
@@ -2103,13 +1400,6 @@ pub mod pallet {
                 }
                 queue_id = queue_id.saturating_add(1);
             }
-            let next_cursor = if queue_id >= next_queue_id {
-                0
-            } else {
-                queue_id
-            };
-            StaleCancelCursorByInstitution::<T>::insert(institution, next_cursor);
-
             Self::deposit_event(Event::<T>::OffchainStaleQueuedBatchesCancelled {
                 institution,
                 cancelled,
@@ -2182,30 +1472,27 @@ pub mod pallet {
             rate_bp: u32,
             verify_signature: bool,
             verify_fee: bool,
-        ) -> Result<([u8; 2], VerifyKeyOf<T>, bool, bool), DispatchError> {
+        ) -> Result<([u8; 2], bool, bool), DispatchError> {
             ensure!(!batch.is_empty(), Error::<T>::EmptyBatch);
-            let relay_submitters = RelaySubmitters::<T>::get(institution)
-                .ok_or(Error::<T>::RelaySubmittersNotInitialized)?;
+            // 中文注释：验证提交者是否为机构管理员，替代原有的 relay submitter 白名单。
             ensure!(
-                relay_submitters.iter().any(|acc| acc == submitter),
-                Error::<T>::RelaySubmitterNotAllowed
+                Self::is_prb_admin(institution, submitter),
+                Error::<T>::UnauthorizedAdmin
             );
             let expected_seq = LastBatchSeq::<T>::get(institution)
                 .checked_add(1)
                 .ok_or(Error::<T>::CounterOverflow)?;
             ensure!(batch_seq == expected_seq, Error::<T>::InvalidBatchSeq);
-            let verify_key =
-                Self::verify_key_for(institution).ok_or(Error::<T>::VerifyKeyMissing)?;
             if verify_signature {
-                // 中文注释：直接提交和入队路径必须用“当前生效密钥”验签；
-                // 出队重试则依赖入队时验签结果 + verify_key_epoch_snapshot 保护，不再重复验签。
+                // 中文注释：直接用提交者公钥验证批量签名，无需额外 verify key。
+                let submitter_bytes: [u8; 32] = submitter.encode()[..32].try_into()
+                    .map_err(|_| Error::<T>::InvalidBatchSignature)?;
                 let message = Self::batch_signing_message(institution, batch_seq, batch);
+                let sig = sp_core::sr25519::Signature::try_from(batch_signature.as_slice())
+                    .map_err(|_| Error::<T>::InvalidBatchSignature)?;
+                let pub_key = sp_core::sr25519::Public::from_raw(submitter_bytes);
                 ensure!(
-                    T::OffchainBatchVerifier::verify(
-                        verify_key.as_slice(),
-                        message.as_slice(),
-                        batch_signature.as_slice()
-                    ),
+                    sp_io::crypto::sr25519_verify(&sig, message.as_slice(), &pub_key),
                     Error::<T>::InvalidBatchSignature
                 );
             }
@@ -2213,11 +1500,11 @@ pub mod pallet {
             let now = frame_system::Pallet::<T>::block_number();
             let last = LastPackBlock::<T>::get(institution);
             let (by_count, by_time) = Self::pack_trigger_reason(last, now, batch.len() as u64);
-            // 中文注释：链下批次必须满足“按笔数触发”或“按时间触发”其一，避免碎片化频繁上链。
+            // 中文注释：链下批次必须满足”按笔数触发”或”按时间触发”其一，避免碎片化频繁上链。
             ensure!(by_count || by_time, Error::<T>::PackThresholdNotReached);
             let t2 = institution_t2_code(institution).ok_or(Error::<T>::InvalidInstitution)?;
             let _ = Self::validate_batch_items(batch, institution, t2, rate_bp, verify_fee, false)?;
-            Ok((t2, verify_key, by_count, by_time))
+            Ok((t2, by_count, by_time))
         }
 
         fn execute_batch(
@@ -2226,7 +1513,6 @@ pub mod pallet {
             batch_seq: u64,
             batch: &BatchOf<T>,
             t2: [u8; 2],
-            verify_key: &VerifyKeyOf<T>,
             by_count: bool,
             by_time: bool,
         ) -> Result<u64, DispatchError> {
@@ -2279,7 +1565,8 @@ pub mod pallet {
             let total_transfer_amount: BalanceOf<T> = total_transfer_u128.saturated_into();
             let total_offchain_fee_amount: BalanceOf<T> = total_fee_u128.saturated_into();
             let batch_hash = sp_io::hashing::blake2_256(&(institution, batch_seq, batch).encode());
-            let signer_key_hash = sp_io::hashing::blake2_256(verify_key.as_slice());
+            // 中文注释：使用提交者公钥的哈希作为签名者标识，替代原有的 verify key 哈希。
+            let signer_key_hash = sp_io::hashing::blake2_256(&submitter.encode());
 
             BatchSummaries::<T>::insert(
                 batch_id,
@@ -2323,12 +1610,6 @@ pub mod pallet {
             Self::institution_fee_account(institution)
         }
 
-        /// 返回当前有效验证密钥（仅读取已激活的 current key）。
-        /// pending key 的激活统一由 on_initialize 负责，避免双路径判断漂移。
-        pub fn verify_key_for(institution: InstitutionPalletId) -> Option<VerifyKeyOf<T>> {
-            VerifyKeys::<T>::get(institution)
-        }
-
         fn batch_signing_message(
             institution: InstitutionPalletId,
             batch_seq: u64,
@@ -2337,6 +1618,16 @@ pub mod pallet {
             sp_io::hashing::blake2_256(
                 &(b"GMB_OFFCHAIN_BATCH_V1", institution, batch_seq, batch).encode(),
             )
+        }
+
+        /// 中文注释：暴露签名消息构造函数供测试使用。
+        #[cfg(test)]
+        pub fn batch_signing_message_for_test(
+            institution: InstitutionPalletId,
+            batch_seq: u64,
+            batch: &BatchOf<T>,
+        ) -> [u8; 32] {
+            Self::batch_signing_message(institution, batch_seq, batch)
         }
 
         fn institution_fee_account(
@@ -2371,9 +1662,8 @@ pub mod pallet {
         }
 
         fn should_bubble_precheck_error(e: &DispatchError) -> bool {
-            *e == Error::<T>::RelaySubmitterNotAllowed.into()
-                || *e == Error::<T>::RelaySubmittersNotInitialized.into()
-                || *e == Error::<T>::VerifyKeyMissing.into()
+            // 中文注释：管理员身份校验失败应立即冒泡，不走重试逻辑。
+            *e == Error::<T>::UnauthorizedAdmin.into()
         }
 
         fn should_ignore_precheck_error(e: &DispatchError) -> bool {
@@ -2382,21 +1672,6 @@ pub mod pallet {
 
         fn should_wait_precheck_error(e: &DispatchError) -> bool {
             *e == Error::<T>::InvalidBatchSeq.into()
-        }
-
-        fn ensure_valid_relay_submitters(submitters: &RelaySubmittersOf<T>) -> DispatchResult {
-            let count = submitters.len() as u32;
-            ensure!(
-                count > 0 && count <= T::MaxRelaySubmitters::get(),
-                Error::<T>::InvalidRelaySubmittersCount
-            );
-            for (idx, acc) in submitters.iter().enumerate() {
-                ensure!(
-                    submitters.iter().skip(idx + 1).all(|next| next != acc),
-                    Error::<T>::DuplicateRelaySubmitter
-                );
-            }
-            Ok(())
         }
 
         fn ensure_no_duplicate_tx_ids(batch: &BatchOf<T>) -> DispatchResult {
@@ -2629,18 +1904,6 @@ pub mod pallet {
             }
         }
 
-        fn track_pending_rotation_institution(institution: InstitutionPalletId) -> DispatchResult {
-            PendingRotationInstitutions::<T>::try_mutate(|institutions| {
-                if institutions.iter().any(|id| *id == institution) {
-                    return Ok(());
-                }
-                institutions
-                    .try_push(institution)
-                    .map_err(|_| Error::<T>::PendingRotationInstitutionsOverflow)?;
-                Ok(())
-            })
-        }
-
         fn ensure_rate_and_institution(
             institution: InstitutionPalletId,
         ) -> Result<u32, DispatchError> {
@@ -2696,80 +1959,6 @@ pub mod pallet {
                 institution: action.institution,
                 rate_bp: action.new_rate_bp,
             });
-            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
-            Ok(())
-        }
-
-        fn try_execute_verify_key(proposal_id: u64) -> DispatchResult {
-            let action = VerifyKeyProposalActions::<T>::get(proposal_id)
-                .ok_or(Error::<T>::VerifyKeyProposalNotFound)?;
-
-            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
-                .ok_or(Error::<T>::ProposalNotFound)?;
-            ensure!(
-                proposal.kind == PROPOSAL_KIND_INTERNAL,
-                Error::<T>::ProposalKindMismatch
-            );
-            ensure!(
-                proposal.status == STATUS_PASSED,
-                Error::<T>::ProposalStatusNotPassed
-            );
-            ensure!(
-                proposal.internal_institution == Some(action.institution),
-                Error::<T>::ProposalInstitutionMismatch
-            );
-
-            let current_exists = VerifyKeys::<T>::contains_key(action.institution);
-            let now = frame_system::Pallet::<T>::block_number();
-            let activate_at = now.saturating_add(VERIFY_KEY_ROTATION_DELAY_BLOCKS.into());
-            if current_exists {
-                ensure!(
-                    !PendingVerifyKeys::<T>::contains_key(action.institution),
-                    Error::<T>::VerifyKeyRotationAlreadyScheduled
-                );
-                PendingVerifyKeys::<T>::insert(
-                    action.institution,
-                    PendingVerifyKey {
-                        key: action.new_key.clone(),
-                        activate_at,
-                    },
-                );
-                Self::track_pending_rotation_institution(action.institution)?;
-                VerifyKeyRotationStatuses::<T>::insert(
-                    action.institution,
-                    VerifyKeyRotationStatus {
-                        stage: VerifyKeyRotationStage::Scheduled,
-                        activate_at: Some(activate_at),
-                    },
-                );
-            } else {
-                VerifyKeys::<T>::insert(action.institution, &action.new_key);
-                let epoch = VerifyKeyEpoch::<T>::get(action.institution);
-                let next_epoch = epoch.checked_add(1).ok_or(Error::<T>::CounterOverflow)?;
-                VerifyKeyEpoch::<T>::insert(action.institution, next_epoch);
-                VerifyKeyRotationStatuses::<T>::insert(
-                    action.institution,
-                    VerifyKeyRotationStatus {
-                        stage: VerifyKeyRotationStage::Idle,
-                        activate_at: None,
-                    },
-                );
-            }
-
-            if current_exists {
-                Self::deposit_event(Event::<T>::VerifyKeyRotationScheduled {
-                    proposal_id,
-                    institution: action.institution,
-                    key_len: action.new_key.len() as u32,
-                    activate_at,
-                });
-            } else {
-                Self::deposit_event(Event::<T>::VerifyKeyUpdated {
-                    proposal_id,
-                    institution: action.institution,
-                    key_len: action.new_key.len() as u32,
-                });
-            }
             voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
             Ok(())
         }
@@ -2842,36 +2031,6 @@ pub mod pallet {
             Ok(())
         }
 
-        fn try_execute_relay_submitters(proposal_id: u64) -> DispatchResult {
-            let action = RelaySubmittersProposalActions::<T>::get(proposal_id)
-                .ok_or(Error::<T>::RelaySubmittersProposalNotFound)?;
-            Self::ensure_valid_relay_submitters(&action.submitters)?;
-
-            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
-                .ok_or(Error::<T>::ProposalNotFound)?;
-            ensure!(
-                proposal.kind == PROPOSAL_KIND_INTERNAL,
-                Error::<T>::ProposalKindMismatch
-            );
-            ensure!(
-                proposal.status == STATUS_PASSED,
-                Error::<T>::ProposalStatusNotPassed
-            );
-            ensure!(
-                proposal.internal_institution == Some(action.institution),
-                Error::<T>::ProposalInstitutionMismatch
-            );
-
-            let count = action.submitters.len() as u32;
-            RelaySubmitters::<T>::insert(action.institution, action.submitters);
-            Self::deposit_event(Event::<T>::RelaySubmittersUpdated {
-                proposal_id,
-                institution: action.institution,
-                count,
-            });
-            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
-            Ok(())
-        }
     }
 
     #[pallet::hooks]
@@ -2879,11 +2038,9 @@ pub mod pallet {
         #[cfg(feature = "std")]
         fn integrity_test() {
             assert!(OFFCHAIN_RATE_BP_MIN <= OFFCHAIN_RATE_BP_MAX);
-            assert!(EMERGENCY_ROTATE_MIN_ADMINS >= 2);
             assert!(BP_DENOMINATOR > 0);
             assert!(PACK_TX_THRESHOLD > 0);
             assert!(T::MaxBatchSize::get() > 0);
-            assert!(VERIFY_KEY_ROTATION_DELAY_BLOCKS > 0);
             assert!(MAX_QUEUE_RETRY_COUNT > 0);
             assert!(MAX_STALE_CANCEL_SCAN_STEPS > 0);
             assert!(PROCESSED_TX_RETENTION_BLOCKS > 0);
@@ -2893,54 +2050,9 @@ pub mod pallet {
             assert!(FEE_ADDRESS_MIN_RESERVE_FEN > 0);
         }
 
-        fn on_initialize(now: BlockNumberFor<T>) -> Weight {
-            let institutions = PendingRotationInstitutions::<T>::get();
-            let mut reads: u64 = 1;
-            let mut writes: u64 = 0;
-            if institutions.is_empty() {
-                return T::DbWeight::get().reads_writes(reads, writes);
-            }
-            let mut remaining: BoundedVec<InstitutionPalletId, ConstU32<64>> =
-                BoundedVec::default();
-            for institution in institutions.iter() {
-                reads = reads.saturating_add(1);
-                if let Some(pending) = PendingVerifyKeys::<T>::get(institution) {
-                    if now >= pending.activate_at {
-                        // 中文注释：普通换钥只在这里统一切换，保证纪元递增、状态复位和事件发出始终同一时刻发生。
-                        reads = reads.saturating_add(1);
-                        let epoch = VerifyKeyEpoch::<T>::get(institution);
-                        let Some(next_epoch) = epoch.checked_add(1) else {
-                            let _ = remaining.try_push(*institution);
-                            continue;
-                        };
-                        let key_len = pending.key.len() as u32;
-                        VerifyKeys::<T>::insert(institution, pending.key);
-                        VerifyKeyEpoch::<T>::insert(institution, next_epoch);
-                        PendingVerifyKeys::<T>::remove(institution);
-                        VerifyKeyRotationStatuses::<T>::insert(
-                            institution,
-                            VerifyKeyRotationStatus {
-                                stage: VerifyKeyRotationStage::Idle,
-                                activate_at: None,
-                            },
-                        );
-                        writes = writes.saturating_add(4);
-                        Self::deposit_event(Event::<T>::VerifyKeyRotated {
-                            institution: *institution,
-                            key_len,
-                            activated_at: now,
-                        });
-                    } else {
-                        let _ = remaining.try_push(*institution);
-                    }
-                }
-            }
-            let changed = remaining != institutions;
-            if changed {
-                PendingRotationInstitutions::<T>::put(remaining);
-                writes = writes.saturating_add(1);
-            }
-            T::DbWeight::get().reads_writes(reads, writes)
+        fn on_initialize(_now: BlockNumberFor<T>) -> Weight {
+            // 中文注释：移除了 verify key 轮换逻辑，on_initialize 不再需要处理待生效密钥。
+            Weight::zero()
         }
 
         fn on_idle(now: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
@@ -2999,6 +2111,7 @@ mod tests {
     use sp_runtime::{
         traits::Hash as HashT, traits::IdentityLookup, AccountId32, BuildStorage, TokenError,
     };
+    use sp_core::Pair;
 
     type Balance = u128;
     type Block = frame_system::mocking::MockBlock<Test>;
@@ -3098,6 +2211,19 @@ mod tests {
         }
     }
 
+    // 中文注释：测试用的额外管理员账户列表（用于 sr25519 密钥对测试）。
+    thread_local! {
+        static EXTRA_TEST_ADMINS: core::cell::RefCell<Vec<([u8; 32], InstitutionPalletId)>> =
+            core::cell::RefCell::new(Vec::new());
+    }
+
+    fn add_extra_test_admin(who: &AccountId32, institution: InstitutionPalletId) {
+        let who_bytes: [u8; 32] = who.encode()[..32].try_into().expect("32 bytes");
+        EXTRA_TEST_ADMINS.with(|admins| {
+            admins.borrow_mut().push((who_bytes, institution));
+        });
+    }
+
     pub struct TestInternalAdminProvider;
     impl voting_engine_system::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
@@ -3108,11 +2234,20 @@ mod tests {
             let mut who_arr = [0u8; 32];
             who_arr.copy_from_slice(&who_bytes);
             match org {
-                voting_engine_system::internal_vote::ORG_PRB => CHINA_CH
-                    .iter()
-                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
-                    .unwrap_or(false),
+                voting_engine_system::internal_vote::ORG_PRB => {
+                    let from_china = CHINA_CH
+                        .iter()
+                        .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                        .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
+                        .unwrap_or(false);
+                    if from_china {
+                        return true;
+                    }
+                    // 中文注释：检查额外的测试管理员列表。
+                    EXTRA_TEST_ADMINS.with(|admins| {
+                        admins.borrow().iter().any(|(a, i)| *a == who_arr && *i == institution)
+                    })
+                },
                 _ => false,
             }
         }
@@ -3158,22 +2293,12 @@ mod tests {
         type WeightInfo = ();
     }
 
-    pub struct TestOffchainBatchVerifier;
-    impl OffchainBatchVerifier for TestOffchainBatchVerifier {
-        fn verify(_verify_key: &[u8], _message: &[u8], signature: &[u8]) -> bool {
-            signature == b"ok"
-        }
-    }
-
     impl pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type Currency = Balances;
-        type MaxVerifyKeyLen = ConstU32<128>;
         type MaxBatchSize = ConstU32<8>;
-        type MaxBatchSignatureLength = ConstU32<64>;
-        type MaxRelaySubmitters = ConstU32<8>;
+        type MaxBatchSignatureLength = ConstU32<128>;
         type InternalVoteEngine = voting_engine_system::Pallet<Test>;
-        type OffchainBatchVerifier = TestOffchainBatchVerifier;
         type ProtectedSourceChecker = ();
         type InstitutionAssetGuard = ();
         type WeightInfo = ();
@@ -3199,12 +2324,31 @@ mod tests {
         institution_t2_code(prb_institution()).expect("t2")
     }
 
-    fn relay_account() -> AccountId32 {
-        AccountId32::new([11u8; 32])
-    }
-
     fn last_proposal_id() -> u64 {
         voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+    }
+
+    /// 中文注释：生成测试用 sr25519 密钥对，返回 (AccountId, Pair)。
+    /// AccountId 由 sr25519 公钥字节构造，可直接用于签名验证。
+    fn test_sr25519_admin(seed: &[u8; 32]) -> (AccountId32, sp_core::sr25519::Pair) {
+        use sp_core::Pair;
+        let pair = sp_core::sr25519::Pair::from_seed(seed);
+        let pub_key = pair.public();
+        let account = AccountId32::new(pub_key.0);
+        (account, pair)
+    }
+
+    /// 中文注释：用指定的 sr25519 密钥对签名批次消息。
+    fn sign_batch(
+        pair: &sp_core::sr25519::Pair,
+        institution: InstitutionPalletId,
+        batch_seq: u64,
+        batch: &BatchOf<Test>,
+    ) -> BatchSignatureOf<Test> {
+        use sp_core::Pair;
+        let message = OffchainTransactionPos::batch_signing_message_for_test(institution, batch_seq, batch);
+        let sig = pair.sign(message.as_slice());
+        sig.0.to_vec().try_into().expect("signature fits")
     }
 
     fn new_test_ext() -> sp_io::TestExternalities {
@@ -3225,7 +2369,7 @@ mod tests {
                 (recipient2, 1),
                 (prb_account(), 1_000),
                 (prb_fee_account(), 1_000),
-                (relay_account(), 1_000),
+                (prb_admin(0), 1_000),
             ],
             ..Default::default()
         }
@@ -3239,10 +2383,10 @@ mod tests {
 
     #[test]
     fn calc_fee_round_and_min_work() {
-        assert_eq!(calc_offchain_fee_fen(100, 1), Ok(1)); // 1.00 *0.01%=0.01 => 1分
-        assert_eq!(calc_offchain_fee_fen(150, 1), Ok(1)); // 1.50 *0.01%=0.015 => 1分（四舍五入）
-        assert_eq!(calc_offchain_fee_fen(151, 1), Ok(1)); // 0.0151分 => 1分
-        assert_eq!(calc_offchain_fee_fen(1, 1), Ok(1)); // 最低1分
+        assert_eq!(calc_offchain_fee_fen(100, 1), Ok(1));
+        assert_eq!(calc_offchain_fee_fen(150, 1), Ok(1));
+        assert_eq!(calc_offchain_fee_fen(151, 1), Ok(1));
+        assert_eq!(calc_offchain_fee_fen(1, 1), Ok(1));
     }
 
     #[test]
@@ -3260,17 +2404,15 @@ mod tests {
     }
 
     #[test]
-    fn rate_and_verify_key_update_require_internal_vote_pass() {
+    fn rate_update_requires_internal_vote_pass() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-
             assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
                 5
             ));
             let pid = last_proposal_id();
-
             for i in 0..6 {
                 assert_ok!(OffchainTransactionPos::vote_institution_rate(
                     RuntimeOrigin::signed(prb_admin(i)),
@@ -3278,38 +2420,15 @@ mod tests {
                     true
                 ));
             }
-
             assert_eq!(OffchainTransactionPos::rate_bp_of(institution), 5);
-
-            let key: VerifyKeyOf<Test> = b"new-verify-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionPos::propose_verify_key(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                key.clone()
-            ));
-            let pid2 = last_proposal_id();
-
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_verify_key(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid2,
-                    true
-                ));
-            }
-
-            assert_eq!(
-                OffchainTransactionPos::verify_key_of(institution),
-                Some(key)
-            );
         });
     }
 
     #[test]
-    fn non_admin_cannot_propose_or_vote() {
+    fn non_admin_cannot_propose_or_submit() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
             let non_admin = AccountId32::new([9u8; 32]);
-
             assert_noop!(
                 OffchainTransactionPos::propose_institution_rate(
                     RuntimeOrigin::signed(non_admin.clone()),
@@ -3318,24 +2437,27 @@ mod tests {
                 ),
                 Error::<Test>::UnauthorizedAdmin
             );
-
+            // 中文注释：非管理员提交批次应被拒绝。
+            let (admin_account, admin_pair) = test_sr25519_admin(&[42u8; 32]);
+            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
+                tx_id: <Test as frame_system::Config>::Hashing::hash(b"bad-tx"),
+                payer: AccountId32::new([1u8; 32]),
+                recipient: AccountId32::new([3u8; 32]),
+                transfer_amount: 100,
+                offchain_fee_amount: 1,
+            }]
+            .try_into()
+            .expect("fit");
+            let sig = sign_batch(&admin_pair, institution, 1, &batch);
             assert_noop!(
                 OffchainTransactionPos::submit_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
+                    RuntimeOrigin::signed(admin_account),
                     institution,
                     1,
-                    vec![BatchItemOf::<Test> {
-                        tx_id: <Test as frame_system::Config>::Hashing::hash(b"bad-tx"),
-                        payer: AccountId32::new([1u8; 32]),
-                        recipient: AccountId32::new([2u8; 32]),
-                        transfer_amount: 100,
-                        offchain_fee_amount: 1,
-                    }]
-                    .try_into()
-                    .expect("fit"),
-                    b"ok".to_vec().try_into().expect("fit"),
+                    batch,
+                    sig,
                 ),
-                Error::<Test>::RelaySubmittersNotInitialized
+                Error::<Test>::UnauthorizedAdmin
             );
         });
     }
@@ -3344,8 +2466,11 @@ mod tests {
     fn submit_batch_executes_real_settlement_and_marks_processed() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
+            // 中文注释：创建 sr25519 管理员账户并注册为额外管理员。
+            let (admin_account, admin_pair) = test_sr25519_admin(&[42u8; 32]);
+            add_extra_test_admin(&admin_account, institution);
+            let _ = Balances::deposit_creating(&admin_account, 1_000);
 
-            // 先通过内部投票把费率设为1bp（0.01%），便于构造样例。
             assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
@@ -3390,27 +2515,14 @@ mod tests {
                 RuntimeOrigin::signed(recipient2),
                 institution
             ));
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
 
-            // 首次允许按时间阈值提交。
+            let sig = sign_batch(&admin_pair, institution, 1, &batch);
             assert_ok!(OffchainTransactionPos::submit_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
+                RuntimeOrigin::signed(admin_account.clone()),
                 institution,
                 1,
                 batch,
-                b"ok".to_vec().try_into().expect("fit"),
+                sig,
             ));
 
             assert_eq!(Balances::free_balance(&item1.recipient), 1_001);
@@ -3420,16 +2532,17 @@ mod tests {
             assert!(ProcessedOffchainTx::<Test>::get(t2, item1.tx_id));
             assert!(ProcessedOffchainTx::<Test>::get(t2, item2.tx_id));
 
-            // 重放应被拒绝。
+            // 中文注释：重放应被拒绝。
             System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64);
             let replay: BatchOf<Test> = vec![item1].try_into().expect("fit");
+            let sig2 = sign_batch(&admin_pair, institution, 2, &replay);
             assert_noop!(
                 OffchainTransactionPos::submit_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
+                    RuntimeOrigin::signed(admin_account),
                     institution,
                     2,
                     replay,
-                    b"ok".to_vec().try_into().expect("fit"),
+                    sig2,
                 ),
                 Error::<Test>::TxAlreadyProcessed
             );
@@ -3437,389 +2550,38 @@ mod tests {
     }
 
     #[test]
-    fn enqueue_rejects_already_processed_tx_id() {
+    fn submit_batch_requires_valid_signature() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
+            let (admin_account, _admin_pair) = test_sr25519_admin(&[42u8; 32]);
+            add_extra_test_admin(&admin_account, institution);
+            let _ = Balances::deposit_creating(&admin_account, 1_000);
             let recipient = AccountId32::new([3u8; 32]);
             assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 institution
             ));
 
-            let tx_id = <Test as frame_system::Config>::Hashing::hash(b"enqueue-replay");
             let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id,
-                payer: payer.clone(),
-                recipient: recipient.clone(),
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::submit_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-
-            System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64);
-            let replay: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id,
-                payer,
+                tx_id: <Test as frame_system::Config>::Hashing::hash(b"sig-check"),
+                payer: AccountId32::new([1u8; 32]),
                 recipient,
                 transfer_amount: 100,
                 offchain_fee_amount: 1,
             }]
             .try_into()
             .expect("fit");
-            assert_noop!(
-                OffchainTransactionPos::enqueue_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    2,
-                    replay,
-                    b"ok".to_vec().try_into().expect("fit"),
-                ),
-                Error::<Test>::TxAlreadyProcessed
-            );
-        });
-    }
 
-    #[test]
-    fn enqueue_rejects_tx_id_already_in_pending_queue() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-            let tx_id = <Test as frame_system::Config>::Hashing::hash(b"queued-dup");
-            let b1: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id,
-                payer: payer.clone(),
-                recipient: recipient.clone(),
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                b1,
-                b"ok".to_vec().try_into().expect("fit")
-            ));
-            let b2: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id,
-                payer,
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_noop!(
-                OffchainTransactionPos::enqueue_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    2,
-                    b2,
-                    b"ok".to_vec().try_into().expect("fit")
-                ),
-                Error::<Test>::TxAlreadyProcessed
-            );
-        });
-    }
-
-    #[test]
-    fn prune_processed_tx_removes_expired_entry() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            let tx_id = <Test as frame_system::Config>::Hashing::hash(b"prune-processed");
-            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id,
-                payer,
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::submit_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch,
-                b"ok".to_vec().try_into().expect("fit")
-            ));
-            let t2 = prb_t2();
-            System::set_block_number(System::block_number() + PROCESSED_TX_RETENTION_BLOCKS as u64);
-            assert_ok!(OffchainTransactionPos::prune_processed_tx(
-                RuntimeOrigin::signed(relay_account()),
-                t2,
-                tx_id
-            ));
-            assert!(!ProcessedOffchainTx::<Test>::get(t2, tx_id));
-        });
-    }
-
-    #[test]
-    fn submit_rejects_zero_or_self_transfer() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            let zero_tx = <Test as frame_system::Config>::Hashing::hash(b"zero-transfer");
-            let zero_batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: zero_tx,
-                payer: payer.clone(),
-                recipient: recipient.clone(),
-                transfer_amount: 0,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
+            // 中文注释：使用错误签名应被拒绝。
             assert_noop!(
                 OffchainTransactionPos::submit_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
+                    RuntimeOrigin::signed(admin_account),
                     institution,
                     1,
-                    zero_batch,
-                    b"ok".to_vec().try_into().expect("fit")
+                    batch,
+                    b"bad-signature-not-valid-sr25519".to_vec().try_into().expect("fit"),
                 ),
-                Error::<Test>::InvalidTransferAmount
-            );
-
-            let self_tx = <Test as frame_system::Config>::Hashing::hash(b"self-transfer");
-            let self_batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: self_tx,
-                payer: payer.clone(),
-                recipient: payer,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_noop!(
-                OffchainTransactionPos::submit_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    1,
-                    self_batch,
-                    b"ok".to_vec().try_into().expect("fit")
-                ),
-                Error::<Test>::SelfTransferNotAllowed
-            );
-        });
-    }
-
-    #[test]
-    fn init_verify_key_only_once_and_only_institution_account() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            let key: VerifyKeyOf<Test> = b"boot-default-key".to_vec().try_into().expect("fit");
-
-            assert_noop!(
-                OffchainTransactionPos::init_verify_key(
-                    RuntimeOrigin::signed(prb_admin(0)),
-                    institution,
-                    key.clone()
-                ),
-                Error::<Test>::UnauthorizedSubmitter
-            );
-
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                key.clone()
-            ));
-            assert_eq!(
-                OffchainTransactionPos::verify_key_of(institution),
-                Some(key.clone())
-            );
-
-            assert_noop!(
-                OffchainTransactionPos::init_verify_key(
-                    RuntimeOrigin::signed(prb_account()),
-                    institution,
-                    key
-                ),
-                Error::<Test>::VerifyKeyAlreadyInitialized
-            );
-        });
-    }
-
-    #[test]
-    fn propose_verify_key_rejects_empty_key() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            let empty: VerifyKeyOf<Test> = vec![].try_into().expect("fit");
-            assert_noop!(
-                OffchainTransactionPos::propose_verify_key(
-                    RuntimeOrigin::signed(prb_admin(0)),
-                    institution,
-                    empty
-                ),
-                Error::<Test>::InvalidVerifyKey
-            );
-        });
-    }
-
-    #[test]
-    fn relay_submitters_can_be_rotated_by_internal_vote() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let new_relay = AccountId32::new([77u8; 32]);
-            let new_set: RelaySubmittersOf<Test> =
-                vec![new_relay.clone(), prb_admin(2), prb_admin(3)]
-                    .try_into()
-                    .expect("fit");
-            assert_ok!(OffchainTransactionPos::propose_relay_submitters(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                new_set.clone()
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_relay_submitters(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_eq!(
-                OffchainTransactionPos::relay_submitters_of(institution),
-                Some(new_set)
+                Error::<Test>::InvalidBatchSignature
             );
         });
     }
@@ -3838,68 +2600,10 @@ mod tests {
             System::set_block_number(proposal.end.saturating_add(1));
             assert!(RateProposalActions::<Test>::contains_key(pid));
             assert_ok!(OffchainTransactionPos::prune_expired_proposal_action(
-                RuntimeOrigin::signed(relay_account()),
+                RuntimeOrigin::signed(prb_admin(0)),
                 pid
             ));
             assert!(!RateProposalActions::<Test>::contains_key(pid));
-        });
-    }
-
-    #[test]
-    fn verify_key_rotation_uses_pending_key_after_activation() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            let old_key: VerifyKeyOf<Test> = b"old-key".to_vec().try_into().expect("fit");
-            let new_key: VerifyKeyOf<Test> = b"new-key".to_vec().try_into().expect("fit");
-
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                old_key.clone(),
-            ));
-            assert_eq!(
-                OffchainTransactionPos::verify_key_for(institution),
-                Some(old_key.clone())
-            );
-
-            assert_ok!(OffchainTransactionPos::propose_verify_key(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                new_key.clone(),
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_verify_key(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-
-            let status = OffchainTransactionPos::rotation_status_of(institution)
-                .expect("rotation status should exist");
-            assert!(matches!(status.stage, VerifyKeyRotationStage::Scheduled));
-            assert!(status.activate_at.is_some());
-
-            // 生效前仍用旧密钥。
-            assert_eq!(
-                OffchainTransactionPos::verify_key_for(institution),
-                Some(old_key.clone())
-            );
-
-            // 到达生效高度后切换为新密钥。
-            System::set_block_number(
-                System::block_number() + VERIFY_KEY_ROTATION_DELAY_BLOCKS as u64,
-            );
-            OffchainTransactionPos::on_initialize(System::block_number());
-            assert_eq!(
-                OffchainTransactionPos::verify_key_for(institution),
-                Some(new_key)
-            );
-            let status = OffchainTransactionPos::rotation_status_of(institution)
-                .expect("rotation status should exist");
-            assert!(matches!(status.stage, VerifyKeyRotationStage::Idle));
-            assert!(status.activate_at.is_none());
         });
     }
 
@@ -3929,54 +2633,6 @@ mod tests {
 
             assert_eq!(Balances::free_balance(&main_account), main_before + 100_000);
             assert_eq!(Balances::free_balance(&fee_account), fee_before + 200_000);
-            let mut last_reserve_left = None;
-            for evt in System::events().iter().rev() {
-                if let RuntimeEvent::OffchainTransactionPos(Event::<Test>::SweepToMainExecuted {
-                    reserve_left,
-                    ..
-                }) = &evt.event
-                {
-                    last_reserve_left = Some(*reserve_left);
-                    break;
-                }
-            }
-            assert_eq!(
-                last_reserve_left,
-                Some(Balances::free_balance(&fee_account))
-            );
-
-            assert_ok!(OffchainTransactionPos::propose_sweep_to_main(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                100_000
-            ));
-            let pid2 = last_proposal_id();
-            for i in 0..5 {
-                assert_ok!(OffchainTransactionPos::vote_sweep_to_main(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid2,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::vote_sweep_to_main(
-                RuntimeOrigin::signed(prb_admin(5)),
-                pid2,
-                true
-            ));
-            assert_eq!(Balances::free_balance(&fee_account), fee_before + 200_000);
-            let mut has_failed_event = false;
-            for evt in System::events().iter().rev() {
-                if let RuntimeEvent::OffchainTransactionPos(
-                    Event::<Test>::InternalProposalExecutionFailed { proposal_id },
-                ) = &evt.event
-                {
-                    if *proposal_id == pid2 {
-                        has_failed_event = true;
-                        break;
-                    }
-                }
-            }
-            assert!(has_failed_event);
         });
     }
 
@@ -3996,329 +2652,12 @@ mod tests {
     }
 
     #[test]
-    fn enqueue_offchain_batch_requires_next_seq() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            let tx_id = <Test as frame_system::Config>::Hashing::hash(b"queue-seq-next");
-            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id,
-                payer,
-                recipient,
-                transfer_amount: 10,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-
-            assert_noop!(
-                OffchainTransactionPos::enqueue_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    2,
-                    batch.clone(),
-                    b"ok".to_vec().try_into().expect("fit"),
-                ),
-                Error::<Test>::InvalidBatchSeq
-            );
-
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch.clone(),
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-
-            let tx_id_2 = <Test as frame_system::Config>::Hashing::hash(b"queue-seq-next-2");
-            let batch_2: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx_id_2,
-                payer: AccountId32::new([1u8; 32]),
-                recipient: AccountId32::new([3u8; 32]),
-                transfer_amount: 10,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                2,
-                batch_2,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-            assert_eq!(
-                OffchainTransactionPos::next_enqueue_batch_seq_of(institution),
-                3
-            );
-
-            assert_noop!(
-                OffchainTransactionPos::enqueue_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    2,
-                    batch,
-                    b"ok".to_vec().try_into().expect("fit"),
-                ),
-                Error::<Test>::InvalidBatchSeq
-            );
-        });
-    }
-
-    #[test]
-    fn submit_offchain_batch_rejects_when_queue_backlog_exists() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-            let _ = Balances::deposit_creating(&payer, 100_000);
-
-            let tx_id = <Test as frame_system::Config>::Hashing::hash(b"queue-backlog-1");
-            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id,
-                payer: payer.clone(),
-                recipient: recipient.clone(),
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch.clone(),
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-
-            assert_noop!(
-                OffchainTransactionPos::submit_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    1,
-                    batch.clone(),
-                    b"ok".to_vec().try_into().expect("fit"),
-                ),
-                Error::<Test>::QueuedBacklogExists
-            );
-
-            System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64);
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                0
-            ));
-
-            let tx_id2 = <Test as frame_system::Config>::Hashing::hash(b"queue-backlog-2");
-            let batch2: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx_id2,
-                payer,
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64);
-            assert_ok!(OffchainTransactionPos::submit_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                2,
-                batch2,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-        });
-    }
-
-    #[test]
-    fn submit_batch_requires_valid_signature() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            let item = BatchItemOf::<Test> {
-                tx_id: <Test as frame_system::Config>::Hashing::hash(b"sig-check"),
-                payer: AccountId32::new([1u8; 32]),
-                recipient: AccountId32::new([3u8; 32]),
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            };
-            let batch: BatchOf<Test> = vec![item].try_into().expect("fit");
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-
-            assert_noop!(
-                OffchainTransactionPos::submit_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    1,
-                    batch,
-                    b"bad".to_vec().try_into().expect("fit"),
-                ),
-                Error::<Test>::InvalidBatchSignature
-            );
-        });
-    }
-
-    #[test]
-    fn failed_submit_does_not_consume_seq_or_mark_processed_and_can_retry() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            let tx_id = <Test as frame_system::Config>::Hashing::hash(b"retry-tx");
-            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id,
-                payer: payer.clone(),
-                recipient: recipient.clone(),
-                transfer_amount: 30_000, // 初始余额不足，触发执行阶段失败
-                offchain_fee_amount: 3,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            let failed = OffchainTransactionPos::submit_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch.clone(),
-                b"ok".to_vec().try_into().expect("fit"),
-            );
-            assert!(matches!(
-                failed,
-                Err(sp_runtime::DispatchError::Token(
-                    TokenError::FundsUnavailable
-                ))
-            ));
-            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 0);
-            assert!(!ProcessedOffchainTx::<Test>::get(prb_t2(), tx_id));
-
-            // 补足余额后，同一批次序号可重提并成功。
-            let _ = Balances::deposit_creating(&payer, 20_000);
-            assert_ok!(OffchainTransactionPos::submit_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 1);
-            assert!(ProcessedOffchainTx::<Test>::get(prb_t2(), tx_id));
-        });
-    }
-
-    #[test]
-    fn recipient_bind_clearing_institution_switch_once_per_year() {
+    fn recipient_bind_clearing_institution_switch_freely() {
         new_test_ext().execute_with(|| {
             let recipient = AccountId32::new([3u8; 32]);
             let inst_1 = prb_institution();
             let inst_2 =
                 shengbank_pallet_id_to_bytes(CHINA_CH[1].shenfen_id).expect("valid institution");
-
             assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
                 inst_1
@@ -4326,18 +2665,6 @@ mod tests {
             assert_eq!(
                 OffchainTransactionPos::recipient_clearing_institution(recipient.clone()),
                 Some(inst_1)
-            );
-
-            assert_noop!(
-                OffchainTransactionPos::bind_clearing_institution(
-                    RuntimeOrigin::signed(recipient.clone()),
-                    inst_2
-                ),
-                Error::<Test>::ClearingInstitutionSwitchTooFrequent
-            );
-
-            System::set_block_number(
-                System::block_number() + CLEARING_INSTITUTION_SWITCH_INTERVAL_BLOCKS,
             );
             assert_ok!(OffchainTransactionPos::bind_clearing_institution(
                 RuntimeOrigin::signed(recipient.clone()),
@@ -4351,9 +2678,13 @@ mod tests {
     }
 
     #[test]
-    fn submit_batch_rejects_when_recipient_not_bound_or_mismatched() {
+    fn enqueue_offchain_batch_validates_admin_and_signature() {
         new_test_ext().execute_with(|| {
             let institution = prb_institution();
+            let (admin_account, admin_pair) = test_sr25519_admin(&[42u8; 32]);
+            add_extra_test_admin(&admin_account, institution);
+            let _ = Balances::deposit_creating(&admin_account, 1_000);
+
             assert_ok!(OffchainTransactionPos::propose_institution_rate(
                 RuntimeOrigin::signed(prb_admin(0)),
                 institution,
@@ -4367,100 +2698,6 @@ mod tests {
                     true
                 ));
             }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-
-            let recipient = AccountId32::new([3u8; 32]);
-            let batch_unbound: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: <Test as frame_system::Config>::Hashing::hash(b"recipient-unbound"),
-                payer: AccountId32::new([1u8; 32]),
-                recipient: recipient.clone(),
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_noop!(
-                OffchainTransactionPos::submit_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    1,
-                    batch_unbound,
-                    b"ok".to_vec().try_into().expect("fit"),
-                ),
-                Error::<Test>::RecipientClearingInstitutionNotBound
-            );
-
-            let other_inst =
-                shengbank_pallet_id_to_bytes(CHINA_CH[1].shenfen_id).expect("valid institution");
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                other_inst
-            ));
-            let batch_mismatch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: <Test as frame_system::Config>::Hashing::hash(b"recipient-mismatch"),
-                payer: AccountId32::new([1u8; 32]),
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_noop!(
-                OffchainTransactionPos::submit_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    1,
-                    batch_mismatch,
-                    b"ok".to_vec().try_into().expect("fit"),
-                ),
-                Error::<Test>::RecipientClearingInstitutionMismatch
-            );
-        });
-    }
-
-    #[test]
-    fn queued_batch_persists_on_failure_and_retries_until_success() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-
             let payer = AccountId32::new([1u8; 32]);
             let recipient = AccountId32::new([3u8; 32]);
             assert_ok!(OffchainTransactionPos::bind_clearing_institution(
@@ -4468,663 +2705,26 @@ mod tests {
                 institution
             ));
 
-            let tx_id = <Test as frame_system::Config>::Hashing::hash(b"queue-retry");
+            let tx_id = <Test as frame_system::Config>::Hashing::hash(b"enqueue-test");
             let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
                 tx_id,
-                payer: payer.clone(),
+                payer,
                 recipient,
-                transfer_amount: 30_000, // 初始余额不足
-                offchain_fee_amount: 3,
+                transfer_amount: 100,
+                offchain_fee_amount: 1,
             }]
             .try_into()
             .expect("fit");
+            let sig = sign_batch(&admin_pair, institution, 1, &batch);
 
             assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
+                RuntimeOrigin::signed(admin_account),
                 institution,
                 1,
                 batch,
-                b"ok".to_vec().try_into().expect("fit"),
+                sig,
             ));
             assert_eq!(OffchainTransactionPos::next_queued_batch_id(), 1);
-
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                0
-            ));
-            let queued = OffchainTransactionPos::queued_batch_by_id(0).expect("queued");
-            assert!(matches!(queued.status, QueuedBatchStatus::Pending));
-            assert_eq!(queued.retry_count, 1);
-            assert_eq!(
-                queued.last_error,
-                Some(QueuedBatchLastError::ExecutionFailed)
-            );
-            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 0);
-            assert!(!ProcessedOffchainTx::<Test>::get(prb_t2(), tx_id));
-
-            let _ = Balances::deposit_creating(&payer, 20_000);
-            System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64);
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                0
-            ));
-            let queued = OffchainTransactionPos::queued_batch_by_id(0).expect("queued");
-            assert!(matches!(queued.status, QueuedBatchStatus::Processed));
-            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 1);
-            assert!(ProcessedOffchainTx::<Test>::get(prb_t2(), tx_id));
-        });
-    }
-
-    #[test]
-    fn stress_queued_batches_many_rounds_should_keep_monotonic_seq() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            let rounds: u64 = 200;
-            for i in 0..rounds {
-                let tx_id = <Test as frame_system::Config>::Hashing::hash_of(&i);
-                let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                    tx_id,
-                    payer: payer.clone(),
-                    recipient: recipient.clone(),
-                    transfer_amount: 10,
-                    offchain_fee_amount: 1,
-                }]
-                .try_into()
-                .expect("fit");
-
-                assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    i + 1,
-                    batch,
-                    b"ok".to_vec().try_into().expect("fit"),
-                ));
-                System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64);
-                assert_ok!(OffchainTransactionPos::process_queued_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    i
-                ));
-            }
-
-            assert_eq!(
-                OffchainTransactionPos::last_batch_seq_of(institution),
-                rounds
-            );
-            let last = OffchainTransactionPos::queued_batch_by_id(rounds - 1).expect("queued");
-            assert!(matches!(last.status, QueuedBatchStatus::Processed));
-        });
-    }
-
-    #[test]
-    fn process_queued_batch_rejects_unauthorized_submitter_without_mutating_retry() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            let tx_id = <Test as frame_system::Config>::Hashing::hash(b"unauthorized-queued");
-            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id,
-                payer,
-                recipient,
-                transfer_amount: 10,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-
-            let outsider = AccountId32::new([99u8; 32]);
-            assert_noop!(
-                OffchainTransactionPos::process_queued_batch(RuntimeOrigin::signed(outsider), 0),
-                Error::<Test>::RelaySubmitterNotAllowed
-            );
-            let queued = OffchainTransactionPos::queued_batch_by_id(0).expect("queued");
-            assert_eq!(queued.retry_count, 0);
-            assert!(queued.last_error.is_none());
-            assert!(matches!(queued.status, QueuedBatchStatus::Pending));
-        });
-    }
-
-    #[test]
-    fn process_queued_batch_records_precheck_failed_and_keeps_pending() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-            let _ = Balances::deposit_creating(&payer, 100_000);
-
-            let tx1 = <Test as frame_system::Config>::Hashing::hash(b"precheck-fail-1");
-            let batch1: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx1,
-                payer: payer.clone(),
-                recipient: recipient.clone(),
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch1,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                0
-            ));
-
-            let tx2 = <Test as frame_system::Config>::Hashing::hash(b"precheck-fail-2");
-            let batch2: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx2,
-                payer,
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                2,
-                batch2,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-
-            // 故障注入测试：人为篡改已入队数据，验证预检失败会归类为 PrecheckFailed。
-            QueuedBatches::<Test>::mutate(1, |maybe| {
-                if let Some(inner) = maybe {
-                    inner.batch[0].transfer_amount = 0;
-                }
-            });
-            System::set_block_number(System::block_number() + PACK_BLOCK_THRESHOLD as u64 + 1);
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                1
-            ));
-            let queued = OffchainTransactionPos::queued_batch_by_id(1).expect("queued");
-            assert!(matches!(queued.status, QueuedBatchStatus::Pending));
-            assert_eq!(queued.retry_count, 1);
-            assert_eq!(
-                queued.last_error,
-                Some(QueuedBatchLastError::PrecheckFailed)
-            );
-        });
-    }
-
-    #[test]
-    fn process_queued_batch_marks_failed_after_max_retry() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            let tx = <Test as frame_system::Config>::Hashing::hash(b"max-retry");
-            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx,
-                payer,
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-
-            QueuedBatches::<Test>::mutate(0, |maybe| {
-                if let Some(inner) = maybe {
-                    inner.retry_count = MAX_QUEUE_RETRY_COUNT - 1;
-                    inner.batch[0].transfer_amount = 0;
-                }
-            });
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                0
-            ));
-            let queued = OffchainTransactionPos::queued_batch_by_id(0).expect("queued");
-            assert!(matches!(queued.status, QueuedBatchStatus::Failed));
-            assert_eq!(queued.retry_count, MAX_QUEUE_RETRY_COUNT);
-            assert_eq!(
-                queued.last_error,
-                Some(QueuedBatchLastError::PrecheckFailed)
-            );
-        });
-    }
-
-    #[test]
-    fn skip_failed_batch_unblocks_waiting_sequence() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            let tx1 = <Test as frame_system::Config>::Hashing::hash(b"skip-failed-1");
-            let batch1: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx1,
-                payer: payer.clone(),
-                recipient: recipient.clone(),
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch1,
-                b"ok".to_vec().try_into().expect("fit")
-            ));
-
-            let tx2 = <Test as frame_system::Config>::Hashing::hash(b"skip-failed-2");
-            let batch2: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx2,
-                payer,
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                2,
-                batch2,
-                b"ok".to_vec().try_into().expect("fit")
-            ));
-
-            // 让 seq=1 到达失败上限。
-            QueuedBatches::<Test>::mutate(0, |maybe| {
-                if let Some(inner) = maybe {
-                    inner.retry_count = MAX_QUEUE_RETRY_COUNT - 1;
-                    inner.batch[0].transfer_amount = 0;
-                }
-            });
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                0
-            ));
-            assert!(matches!(
-                OffchainTransactionPos::queued_batch_by_id(0)
-                    .expect("queued")
-                    .status,
-                QueuedBatchStatus::Failed
-            ));
-            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 0);
-
-            // seq=2 会被阻塞。
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                1
-            ));
-            let blocked = OffchainTransactionPos::queued_batch_by_id(1).expect("queued");
-            assert_eq!(
-                blocked.last_error,
-                Some(QueuedBatchLastError::WaitingForPriorBatch)
-            );
-
-            // 管理员跳过失败批次后，seq=2 可继续执行。
-            assert_ok!(OffchainTransactionPos::skip_failed_batch(
-                RuntimeOrigin::signed(prb_admin(0)),
-                0
-            ));
-            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 1);
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                1
-            ));
-            assert!(matches!(
-                OffchainTransactionPos::queued_batch_by_id(1)
-                    .expect("queued")
-                    .status,
-                QueuedBatchStatus::Processed
-            ));
-            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 2);
-        });
-    }
-
-    #[test]
-    fn cancel_queued_batch_requires_head_seq() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            for (seq, seed) in [(1u64, b"cancel-head-1"), (2u64, b"cancel-head-2")] {
-                let tx = <Test as frame_system::Config>::Hashing::hash(seed);
-                let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                    tx_id: tx,
-                    payer: payer.clone(),
-                    recipient: recipient.clone(),
-                    transfer_amount: 100,
-                    offchain_fee_amount: 1,
-                }]
-                .try_into()
-                .expect("fit");
-                assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    seq,
-                    batch,
-                    b"ok".to_vec().try_into().expect("fit")
-                ));
-            }
-
-            assert_noop!(
-                OffchainTransactionPos::cancel_queued_batch(RuntimeOrigin::signed(prb_admin(0)), 1),
-                Error::<Test>::InvalidBatchSeq
-            );
-        });
-    }
-
-    #[test]
-    fn emergency_rotate_verify_key_applies_immediately() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            let old_key: VerifyKeyOf<Test> = b"default-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                old_key
-            ));
-            let pending: VerifyKeyOf<Test> = b"pending-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionPos::propose_verify_key(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                pending
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_verify_key(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert!(OffchainTransactionPos::pending_verify_key_of(institution).is_some());
-
-            let emergency_key: VerifyKeyOf<Test> =
-                b"emergency-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionPos::emergency_rotate_verify_key(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                emergency_key.clone(),
-            ));
-            assert_ok!(OffchainTransactionPos::emergency_rotate_verify_key(
-                RuntimeOrigin::signed(prb_admin(1)),
-                institution,
-                emergency_key.clone()
-            ));
-            assert_eq!(
-                OffchainTransactionPos::verify_key_of(institution).expect("key"),
-                emergency_key
-            );
-            assert!(OffchainTransactionPos::pending_verify_key_of(institution).is_none());
-        });
-    }
-
-    #[test]
-    fn emergency_rotation_single_approval_does_not_rotate_key() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            let old_key: VerifyKeyOf<Test> = b"default-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                old_key.clone()
-            ));
-            let emergency_key: VerifyKeyOf<Test> =
-                b"emergency-key-single".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionPos::emergency_rotate_verify_key(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                emergency_key.clone(),
-            ));
-            assert_eq!(
-                OffchainTransactionPos::verify_key_of(institution).expect("key"),
-                old_key
-            );
-            let key_hash = sp_io::hashing::blake2_256(emergency_key.as_slice());
-            assert_eq!(
-                EmergencyVerifyKeyApprovals::<Test>::get(institution, key_hash).len(),
-                1
-            );
-        });
-    }
-
-    #[test]
-    fn cancel_emergency_rotation_approval_updates_remaining_count() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let emergency_key: VerifyKeyOf<Test> =
-                b"emergency-key-cancel".to_vec().try_into().expect("fit");
-            let key_hash = sp_io::hashing::blake2_256(emergency_key.as_slice());
-            assert_ok!(OffchainTransactionPos::emergency_rotate_verify_key(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                emergency_key,
-            ));
-            assert_eq!(
-                EmergencyVerifyKeyApprovals::<Test>::get(institution, key_hash).len(),
-                1
-            );
-            assert_ok!(OffchainTransactionPos::cancel_emergency_rotation_approval(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                key_hash
-            ));
-            assert_eq!(
-                EmergencyVerifyKeyApprovals::<Test>::get(institution, key_hash).len(),
-                0
-            );
         });
     }
 
@@ -5146,7 +2746,6 @@ mod tests {
                     true
                 ));
             }
-            // 首次自动执行因保底金不足失败。
             assert!(SweepProposalActions::<Test>::contains_key(pid));
             assert_noop!(
                 OffchainTransactionPos::retry_execute_proposal(
@@ -5160,543 +2759,6 @@ mod tests {
                 RuntimeOrigin::signed(prb_admin(0)),
                 pid
             ));
-            assert!(SweepProposalActions::<Test>::contains_key(pid));
-        });
-    }
-
-    #[test]
-    fn on_idle_prunes_stale_pending_queued_batch() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            let tx = <Test as frame_system::Config>::Hashing::hash(b"stale-pending");
-            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx,
-                payer,
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-            System::set_block_number(System::block_number() + QUEUED_BATCH_RETENTION_BLOCKS + 1);
-            let full_weight = Weight::from_parts(u64::MAX, u64::MAX);
-            let _ = OffchainTransactionPos::on_idle(System::block_number(), full_weight);
-            assert!(OffchainTransactionPos::queued_batch_by_id(0).is_none());
-            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 1);
-        });
-    }
-
-    #[test]
-    fn prune_queued_batch_pending_advances_last_batch_seq() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            let tx = <Test as frame_system::Config>::Hashing::hash(b"manual-prune-pending");
-            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx,
-                payer,
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-
-            System::set_block_number(System::block_number() + QUEUED_BATCH_RETENTION_BLOCKS + 1);
-            assert_ok!(OffchainTransactionPos::prune_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                0
-            ));
-            assert!(OffchainTransactionPos::queued_batch_by_id(0).is_none());
-            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 1);
-        });
-    }
-
-    #[test]
-    fn on_initialize_rotation_increments_epoch_and_cleans_index() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let next_key: VerifyKeyOf<Test> = b"next-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionPos::propose_verify_key(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                next_key.clone()
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_verify_key(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            let pending = PendingVerifyKeys::<Test>::get(institution).expect("pending");
-            assert_eq!(VerifyKeyEpoch::<Test>::get(institution), 1);
-            System::set_block_number(pending.activate_at);
-            OffchainTransactionPos::on_initialize(System::block_number());
-            assert_eq!(
-                OffchainTransactionPos::verify_key_of(institution).expect("key"),
-                next_key
-            );
-            assert_eq!(VerifyKeyEpoch::<Test>::get(institution), 2);
-            assert!(OffchainTransactionPos::pending_rotation_institutions().is_empty());
-        });
-    }
-
-    #[test]
-    fn process_queued_batch_key_rotation_invalidation_only_advances_head_sequence() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            for (seq, seed) in [
-                (1u64, b"epoch-head".as_slice()),
-                (2u64, b"epoch-tail".as_slice()),
-            ] {
-                let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                    tx_id: <Test as frame_system::Config>::Hashing::hash(seed),
-                    payer: AccountId32::new([1u8; 32]),
-                    recipient: recipient.clone(),
-                    transfer_amount: 100,
-                    offchain_fee_amount: 1,
-                }]
-                .try_into()
-                .expect("fit");
-                assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    seq,
-                    batch,
-                    b"ok".to_vec().try_into().expect("fit")
-                ));
-            }
-
-            let next_key: VerifyKeyOf<Test> = b"rotated-key".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionPos::propose_verify_key(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                next_key
-            ));
-            let pid2 = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_verify_key(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid2,
-                    true
-                ));
-            }
-            let pending = PendingVerifyKeys::<Test>::get(institution).expect("pending");
-            System::set_block_number(pending.activate_at);
-            OffchainTransactionPos::on_initialize(System::block_number());
-
-            // 先处理非队头批次：应仅将其标记为 Cancelled，不能跳过 seq=1。
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                1
-            ));
-            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 0);
-            assert!(matches!(
-                OffchainTransactionPos::queued_batch_by_id(1)
-                    .expect("queued-1")
-                    .status,
-                QueuedBatchStatus::Cancelled
-            ));
-            assert!(matches!(
-                OffchainTransactionPos::queued_batch_by_id(0)
-                    .expect("queued-0")
-                    .status,
-                QueuedBatchStatus::Pending
-            ));
-        });
-    }
-
-    #[test]
-    fn cancel_stale_queued_batches_cancels_contiguous_head_batches() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            for (seq, seed) in [(1u64, b"stale-batch-1"), (2u64, b"stale-batch-2")] {
-                let tx = <Test as frame_system::Config>::Hashing::hash(seed);
-                let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                    tx_id: tx,
-                    payer: payer.clone(),
-                    recipient: recipient.clone(),
-                    transfer_amount: 100,
-                    offchain_fee_amount: 1,
-                }]
-                .try_into()
-                .expect("fit");
-                assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    seq,
-                    batch,
-                    b"ok".to_vec().try_into().expect("fit")
-                ));
-            }
-
-            System::set_block_number(System::block_number() + QUEUED_BATCH_RETENTION_BLOCKS + 1);
-            assert_ok!(OffchainTransactionPos::cancel_stale_queued_batches(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                2
-            ));
-            assert!(matches!(
-                OffchainTransactionPos::queued_batch_by_id(0)
-                    .expect("q0")
-                    .status,
-                QueuedBatchStatus::Cancelled
-            ));
-            assert!(matches!(
-                OffchainTransactionPos::queued_batch_by_id(1)
-                    .expect("q1")
-                    .status,
-                QueuedBatchStatus::Cancelled
-            ));
-            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 2);
-        });
-    }
-
-    #[test]
-    fn queued_batch_is_invalidated_after_emergency_key_rotation() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            let tx = <Test as frame_system::Config>::Hashing::hash(b"rot-invalidate");
-            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx,
-                payer: payer.clone(),
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-
-            let emergency_key: VerifyKeyOf<Test> =
-                b"emergency-key-2".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionPos::emergency_rotate_verify_key(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                emergency_key.clone(),
-            ));
-            assert_ok!(OffchainTransactionPos::emergency_rotate_verify_key(
-                RuntimeOrigin::signed(prb_admin(1)),
-                institution,
-                emergency_key,
-            ));
-
-            let payer_before = Balances::free_balance(&payer);
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                0
-            ));
-            let queued = OffchainTransactionPos::queued_batch_by_id(0).expect("queued");
-            assert!(matches!(queued.status, QueuedBatchStatus::Cancelled));
-            assert_eq!(queued.last_error, Some(QueuedBatchLastError::Cancelled));
-            assert_eq!(Balances::free_balance(&payer), payer_before);
-            assert_eq!(OffchainTransactionPos::last_batch_seq_of(institution), 1);
-        });
-    }
-
-    #[test]
-    fn verify_key_rotation_does_not_overwrite_existing_pending() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-
-            let key_a: VerifyKeyOf<Test> = b"pending-a".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionPos::propose_verify_key(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                key_a.clone()
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_verify_key(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            let pending_a = OffchainTransactionPos::pending_verify_key_of(institution).expect("a");
-            assert_eq!(pending_a.key, key_a);
-
-            let key_b: VerifyKeyOf<Test> = b"pending-b".to_vec().try_into().expect("fit");
-            assert_ok!(OffchainTransactionPos::propose_verify_key(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                key_b
-            ));
-            let pid2 = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_verify_key(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid2,
-                    true
-                ));
-            }
-            let pending_after = OffchainTransactionPos::pending_verify_key_of(institution)
-                .expect("pending still exists");
-            assert_eq!(pending_after.key, key_a);
-        });
-    }
-
-    #[test]
-    fn submit_rejects_duplicate_tx_id_in_same_batch() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-
-            let tx = <Test as frame_system::Config>::Hashing::hash(b"dup-tx-id");
-            let batch: BatchOf<Test> = vec![
-                BatchItemOf::<Test> {
-                    tx_id: tx,
-                    payer: payer.clone(),
-                    recipient: recipient.clone(),
-                    transfer_amount: 100,
-                    offchain_fee_amount: 1,
-                },
-                BatchItemOf::<Test> {
-                    tx_id: tx,
-                    payer,
-                    recipient,
-                    transfer_amount: 100,
-                    offchain_fee_amount: 1,
-                },
-            ]
-            .try_into()
-            .expect("fit");
-            assert_noop!(
-                OffchainTransactionPos::submit_offchain_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    institution,
-                    1,
-                    batch,
-                    b"ok".to_vec().try_into().expect("fit")
-                ),
-                Error::<Test>::DuplicateTxIdInBatch
-            );
         });
     }
 
@@ -5708,263 +2770,11 @@ mod tests {
             ProcessedOffchainTx::<Test>::insert(t2, tx_id, true);
             ProcessedOffchainTxAt::<Test>::remove(t2, tx_id);
             assert_ok!(OffchainTransactionPos::prune_processed_tx(
-                RuntimeOrigin::signed(relay_account()),
+                RuntimeOrigin::signed(prb_admin(0)),
                 t2,
                 tx_id
             ));
             assert!(!ProcessedOffchainTx::<Test>::get(t2, tx_id));
-        });
-    }
-
-    #[test]
-    fn process_queued_batch_pack_threshold_not_reached_does_not_consume_retry() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-            let _ = Balances::deposit_creating(&payer, 100_000);
-
-            let tx1 = <Test as frame_system::Config>::Hashing::hash(b"pack-threshold-1");
-            let batch1: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx1,
-                payer: payer.clone(),
-                recipient: recipient.clone(),
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch1,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                0
-            ));
-
-            let tx2 = <Test as frame_system::Config>::Hashing::hash(b"pack-threshold-2");
-            let batch2: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx2,
-                payer,
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                2,
-                batch2,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                1
-            ));
-            let queued = OffchainTransactionPos::queued_batch_by_id(1).expect("queued");
-            assert!(matches!(queued.status, QueuedBatchStatus::Pending));
-            assert_eq!(queued.retry_count, 0);
-            assert_eq!(
-                queued.last_error,
-                Some(QueuedBatchLastError::PackThresholdNotReached)
-            );
-        });
-    }
-
-    #[test]
-    fn process_queued_batch_rejects_missing_config_without_mutating_retry() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-            let _ = Balances::deposit_creating(&payer, 100_000);
-
-            let tx = <Test as frame_system::Config>::Hashing::hash(b"missing-config");
-            let batch: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx,
-                payer,
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-
-            VerifyKeys::<Test>::remove(institution);
-            assert_noop!(
-                OffchainTransactionPos::process_queued_batch(
-                    RuntimeOrigin::signed(relay_account()),
-                    0
-                ),
-                Error::<Test>::VerifyKeyMissing
-            );
-            let queued = OffchainTransactionPos::queued_batch_by_id(0).expect("queued");
-            assert_eq!(queued.retry_count, 0);
-            assert!(queued.last_error.is_none());
-            assert!(matches!(queued.status, QueuedBatchStatus::Pending));
-        });
-    }
-
-    #[test]
-    fn process_queued_batch_waiting_for_prior_batch_is_observable_without_retry() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_ok!(OffchainTransactionPos::propose_institution_rate(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                1
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_institution_rate(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert_ok!(OffchainTransactionPos::init_verify_key(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                b"default-key".to_vec().try_into().expect("fit")
-            ));
-            let relays: RelaySubmittersOf<Test> = vec![relay_account(), prb_admin(0), prb_admin(1)]
-                .try_into()
-                .expect("fit");
-            assert_ok!(OffchainTransactionPos::init_relay_submitters(
-                RuntimeOrigin::signed(prb_account()),
-                institution,
-                relays
-            ));
-            let payer = AccountId32::new([1u8; 32]);
-            let recipient = AccountId32::new([3u8; 32]);
-            assert_ok!(OffchainTransactionPos::bind_clearing_institution(
-                RuntimeOrigin::signed(recipient.clone()),
-                institution
-            ));
-            let _ = Balances::deposit_creating(&payer, 100_000);
-
-            let tx1 = <Test as frame_system::Config>::Hashing::hash(b"wait-seq-1");
-            let batch1: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx1,
-                payer: payer.clone(),
-                recipient: recipient.clone(),
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-            let tx2 = <Test as frame_system::Config>::Hashing::hash(b"wait-seq-2");
-            let batch2: BatchOf<Test> = vec![BatchItemOf::<Test> {
-                tx_id: tx2,
-                payer,
-                recipient,
-                transfer_amount: 100,
-                offchain_fee_amount: 1,
-            }]
-            .try_into()
-            .expect("fit");
-
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                1,
-                batch1,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-            assert_ok!(OffchainTransactionPos::enqueue_offchain_batch(
-                RuntimeOrigin::signed(relay_account()),
-                institution,
-                2,
-                batch2,
-                b"ok".to_vec().try_into().expect("fit"),
-            ));
-
-            // 先处理 seq=2，触发 InvalidBatchSeq，应记录 WaitingForPriorBatch 且不增加 retry。
-            assert_ok!(OffchainTransactionPos::process_queued_batch(
-                RuntimeOrigin::signed(relay_account()),
-                1
-            ));
-            let queued = OffchainTransactionPos::queued_batch_by_id(1).expect("queued");
-            assert!(matches!(queued.status, QueuedBatchStatus::Pending));
-            assert_eq!(queued.retry_count, 0);
-            assert_eq!(
-                queued.last_error,
-                Some(QueuedBatchLastError::WaitingForPriorBatch)
-            );
         });
     }
 }
