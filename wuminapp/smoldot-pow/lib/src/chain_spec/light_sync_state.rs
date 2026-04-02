@@ -23,10 +23,13 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
 pub(super) struct LightSyncState {
-    babe_epoch_changes: HexString,
-    babe_finalized_block_weight: u32,
+    /// BABE epoch changes（PoW 链无此字段，设为可选）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    babe_epoch_changes: Option<HexString>,
+    /// BABE finalized block weight（PoW 链无此字段，设为可选）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    babe_finalized_block_weight: Option<u32>,
     finalized_block_header: HexString,
     grandpa_authority_set: HexString,
 }
@@ -36,10 +39,6 @@ impl LightSyncState {
         &self,
         block_number_bytes: usize,
     ) -> Result<DecodedLightSyncState, ParseError> {
-        // We don't use `all_consuming` in order to remain compatible in case new fields are added
-        // in Substrate to these data structures.
-        // This really should be solved by having a proper format for checkpoints, but
-        // there isn't.
         let grandpa_authority_set = match nom::Finish::finish(nom::Parser::parse(
             &mut nom::combinator::complete(authority_set::<nom::error::Error<&[u8]>>),
             &self.grandpa_authority_set.0[..],
@@ -47,12 +46,18 @@ impl LightSyncState {
             Ok((_, v)) => v,
             Err(_err) => return Err(ParseError(ParseErrorInner::Other)),
         };
-        let babe_epoch_changes = match nom::Finish::finish(nom::Parser::parse(
-            &mut nom::combinator::complete(epoch_changes::<nom::error::Error<&[u8]>>),
-            &self.babe_epoch_changes.0[..],
-        )) {
-            Ok((_, v)) => v,
-            Err(_err) => return Err(ParseError(ParseErrorInner::Other)),
+
+        // PoW 链没有 BABE，babe_epoch_changes 为可选。
+        let babe_epoch_changes = if let Some(ref babe_data) = self.babe_epoch_changes {
+            match nom::Finish::finish(nom::Parser::parse(
+                &mut nom::combinator::complete(epoch_changes::<nom::error::Error<&[u8]>>),
+                &babe_data.0[..],
+            )) {
+                Ok((_, v)) => Some(v),
+                Err(_err) => return Err(ParseError(ParseErrorInner::Other)),
+            }
+        } else {
+            None
         };
 
         Ok(DecodedLightSyncState {
@@ -70,7 +75,8 @@ impl LightSyncState {
 
 #[derive(Debug)]
 pub(super) struct DecodedLightSyncState {
-    pub(super) babe_epoch_changes: EpochChanges,
+    /// PoW 链没有 BABE，此字段为 None。
+    pub(super) babe_epoch_changes: Option<EpochChanges>,
     pub(super) finalized_block_header: crate::header::Header,
     pub(super) grandpa_authority_set: AuthoritySet,
 }

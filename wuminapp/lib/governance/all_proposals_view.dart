@@ -7,6 +7,7 @@ import '../ui/widgets/pressable_card.dart';
 import '../ui/widgets/shimmer_loading.dart';
 import '../util/amount_format.dart';
 import '../rpc/chain_event_subscription.dart';
+import '../rpc/smoldot_client.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'duoqian_manage_detail_page.dart';
 import 'duoqian_manage_models.dart';
@@ -169,7 +170,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = SmoldotClientManager.instance.buildUserFacingError(e);
         _loading = false;
       });
       widget.onPendingVoteCountChanged?.call(0);
@@ -227,9 +228,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
 
     // 批量解析提案上下文
     final contexts = await _contextResolver.resolveBatch(
-      proposals
-          .map((p) => p.meta.institutionBytes?.toList())
-          .toList(),
+      proposals.map((p) => p.meta.institutionBytes?.toList()).toList(),
     );
 
     final items = <_ProposalDisplayItem>[];
@@ -284,10 +283,12 @@ class _AllProposalsViewState extends State<AllProposalsView> {
               const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
               const SizedBox(height: 12),
               const Text('加载失败',
-                  style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
+                  style:
+                      TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
               const SizedBox(height: 6),
               Text(_error!,
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                  style: const TextStyle(
+                      fontSize: 12, color: AppTheme.textTertiary),
                   textAlign: TextAlign.center,
                   maxLines: 4,
                   overflow: TextOverflow.ellipsis),
@@ -304,7 +305,8 @@ class _AllProposalsViewState extends State<AllProposalsView> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.ballot_outlined, size: 48, color: AppTheme.textTertiary),
+            const Icon(Icons.ballot_outlined,
+                size: 48, color: AppTheme.textTertiary),
             const SizedBox(height: 12),
             const Text('暂无提案',
                 style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
@@ -370,111 +372,116 @@ class _AllProposalsViewState extends State<AllProposalsView> {
           onTap: () => _openProposalDetail(item),
           borderRadius: BorderRadius.circular(12),
           child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              // 左侧图标
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                    _proposalIcon(detail, upgradeDetail, createDqDetail, closeDqDetail),
-                    size: 18, color: statusColor),
-              ),
-              const SizedBox(width: 12),
-              // 中间信息
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          formatProposalId(meta.proposalId),
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.primaryDark,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        if (inst != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryDark.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              inst.name,
-                              style: const TextStyle(
-                                  fontSize: 10, color: AppTheme.primaryDark),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      detail != null
-                          ? '转账 ${AmountFormat.format(detail.amountYuan, symbol: '')} 元'
-                          : upgradeDetail != null
-                              ? 'Runtime 升级'
-                              : createDqDetail != null
-                                  ? '创建多签 · ${createDqDetail.adminCount} 管理员'
-                                  : closeDqDetail != null
-                                      ? '关闭多签'
-                                      : meta.kind == 1
-                                          ? '联合投票提案'
-                                          : '提案 ${_kindLabel(meta.kind)}',
-                      style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
-                    ),
-                  ],
-                ),
-              ),
-              // 右侧状态 + 红点
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      statusLabel,
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: statusColor),
-                    ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                // 左侧图标
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  if (item.needsVote) ...[
-                    const SizedBox(height: 4),
+                  child: Icon(
+                      _proposalIcon(
+                          detail, upgradeDetail, createDqDetail, closeDqDetail),
+                      size: 18,
+                      color: statusColor),
+                ),
+                const SizedBox(width: 12),
+                // 中间信息
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            formatProposalId(meta.proposalId),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primaryDark,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (inst != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryDark
+                                    .withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                inst.name,
+                                style: const TextStyle(
+                                    fontSize: 10, color: AppTheme.primaryDark),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        detail != null
+                            ? '转账 ${AmountFormat.format(detail.amountYuan, symbol: '')} 元'
+                            : upgradeDetail != null
+                                ? 'Runtime 升级'
+                                : createDqDetail != null
+                                    ? '创建多签 · ${createDqDetail.adminCount} 管理员'
+                                    : closeDqDetail != null
+                                        ? '关闭多签'
+                                        : meta.kind == 1
+                                            ? '联合投票提案'
+                                            : '提案 ${_kindLabel(meta.kind)}',
+                        style: const TextStyle(
+                            fontSize: 12, color: AppTheme.textTertiary),
+                      ),
+                    ],
+                  ),
+                ),
+                // 右侧状态 + 红点
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
                     Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: AppTheme.danger,
-                        shape: BoxShape.circle,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: statusColor),
                       ),
                     ),
+                    if (item.needsVote) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.danger,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-              const SizedBox(width: 4),
-              const Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
-            ],
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right,
+                    size: 20, color: AppTheme.textTertiary),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

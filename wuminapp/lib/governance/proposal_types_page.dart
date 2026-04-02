@@ -7,6 +7,7 @@ import 'institution_data.dart';
 import 'runtime_upgrade_page.dart';
 import 'transfer_proposal_page.dart';
 import 'transfer_proposal_service.dart';
+import '../rpc/smoldot_client.dart';
 import '../wallet/core/wallet_manager.dart';
 
 /// 提案类型选择页。
@@ -29,7 +30,6 @@ class ProposalTypesPage extends StatelessWidget {
 
   /// 当前用户导入的、属于此机构的管理员钱包列表。
   final List<WalletProfile> adminWallets;
-
 
   @override
   Widget build(BuildContext context) {
@@ -261,7 +261,11 @@ class ProposalTypesPage extends StatelessWidget {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('查询失败：$e')),
+        SnackBar(
+          content: Text(
+            SmoldotClientManager.instance.buildUserFacingError(e),
+          ),
+        ),
       );
     }
   }
@@ -323,7 +327,8 @@ class _ProposalTypeCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                      style:
+                          TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),

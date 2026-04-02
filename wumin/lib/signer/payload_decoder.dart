@@ -92,6 +92,18 @@ class PayloadDecoder {
         return _decodeCitizenVote(bytes);
       }
 
+      // RuntimeRootUpgrade / propose_runtime_upgrade
+      if (palletIndex == PalletRegistry.runtimeRootUpgradePallet &&
+          callIndex == PalletRegistry.proposeRuntimeUpgradeCall) {
+        return _decodeProposeRuntimeUpgrade(bytes);
+      }
+
+      // RuntimeRootUpgrade / developer_direct_upgrade
+      if (palletIndex == PalletRegistry.runtimeRootUpgradePallet &&
+          callIndex == PalletRegistry.developerDirectUpgradeCall) {
+        return _decodeDeveloperUpgrade(bytes);
+      }
+
       // OffchainTransactionPos / bind_clearing_institution
       if (palletIndex == PalletRegistry.offchainTransactionPosPallet &&
           callIndex == PalletRegistry.bindClearingInstitutionCall) {
@@ -276,6 +288,71 @@ class PayloadDecoder {
       fields: {
         'proposal_id': proposalId.toString(),
         'approve': approve.toString(),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // RuntimeRootUpgrade(13) / propose_runtime_upgrade(0)
+  // 格式：[13][0][Compact<u32> reason_len][reason_bytes][Compact<u32> wasm_len][wasm_bytes][u64_le eligible_total][Compact nonce][Compact sig]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeRuntimeUpgrade(Uint8List bytes) {
+    if (bytes.length < 3) return null;
+
+    var offset = 2; // 跳过 pallet_index + call_index
+
+    // reason: Vec<u8>
+    final (reasonLen, reasonLenSize) = _decodeCompactU32(bytes, offset);
+    offset += reasonLenSize;
+    var reason = '';
+    if (reasonLen > 0 && offset + reasonLen <= bytes.length) {
+      reason = String.fromCharCodes(
+        bytes.sublist(offset, offset + reasonLen),
+      );
+    }
+    offset += reasonLen;
+
+    // wasm: Vec<u8>
+    if (offset >= bytes.length) return null;
+    final (wasmLen, wasmLenSize) = _decodeCompactU32(bytes, offset);
+    offset += wasmLenSize;
+
+    final sizeKb = (wasmLen / 1024).toStringAsFixed(0);
+    final sizeMb = (wasmLen / (1024 * 1024)).toStringAsFixed(2);
+    final sizeDisplay = wasmLen > 1024 * 1024 ? '$sizeMb MB' : '$sizeKb KB';
+
+    return DecodedPayload(
+      action: 'propose_runtime_upgrade',
+      summary: 'Runtime 升级提案（WASM $sizeDisplay）',
+      fields: {
+        'reason': reason,
+        'wasm_size': sizeDisplay,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // RuntimeRootUpgrade(13) / developer_direct_upgrade(2)
+  // 格式：[13][2][Compact<u32> wasm_len][wasm_bytes...]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeDeveloperUpgrade(Uint8List bytes) {
+    if (bytes.length < 3) return null;
+
+    var offset = 2; // 跳过 pallet_index + call_index
+    final (wasmLen, lenSize) = _decodeCompactU32(bytes, offset);
+    offset += lenSize;
+
+    // 计算 wasm 大小（KB 或 MB）
+    final sizeKb = (wasmLen / 1024).toStringAsFixed(0);
+    final sizeMb = (wasmLen / (1024 * 1024)).toStringAsFixed(2);
+    final sizeDisplay = wasmLen > 1024 * 1024 ? '$sizeMb MB' : '$sizeKb KB';
+
+    return DecodedPayload(
+      action: 'developer_upgrade',
+      summary: '开发者直升 Runtime（WASM $sizeDisplay）',
+      fields: {
+        'wasm_size': sizeDisplay,
+        'wasm_bytes': wasmLen.toString(),
       },
     );
   }

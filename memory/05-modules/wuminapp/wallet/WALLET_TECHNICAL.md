@@ -123,12 +123,11 @@ lib/
 ### 4.5 余额查询
 
 1. 页面 `initState` 和下拉刷新触发 `_refreshBalancesFromChain()`
-2. 遍历所有本地钱包，对每个钱包：
-   - 调用 `ChainRpc.fetchBalance(wallet.pubkeyHex)` 直连链上节点
-   - RPC 方法：`state_getStorage`（`System.Account` storage key）
-   - 解码 SCALE 编码的 `AccountInfo`，提取 `free` 余额（分），转换为元
-3. 若余额有变化，更新 Isar 中的 `WalletProfileEntity.balance`
-4. 刷新 UI 显示
+2. 一次收集所有本地钱包公钥，调用 `ChainRpc.fetchBalances(pubkeys)` 批量读取 `System.Account`
+3. 轻节点先等待同步完成；若轻节点未初始化、同步失败或链路降级，直接向上抛出真实错误
+4. 批量解码 SCALE 编码的 `AccountInfo.free` 余额（分），转换为元
+5. 若余额有变化，更新 Isar 中的 `WalletProfileEntity.balance`
+6. 刷新 UI 显示；若轻节点不可用，则页面显示统一提示，而不是把失败误判为 0 余额
 
 ### 4.6 登录签名
 

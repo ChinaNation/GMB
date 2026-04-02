@@ -12,7 +12,7 @@ class PalletRegistry {
   ///
   /// 链升级后若 pallet 索引未变，将新 spec_version 加入此集合即可。
   /// 若索引发生变化，需同步修改下方常量并更新此集合。
-  static const Set<int> supportedSpecVersions = {3, 4};
+  static const Set<int> supportedSpecVersions = {4};
 
   /// 检查给定 spec_version 是否与当前注册表兼容。
   ///
@@ -37,6 +37,11 @@ class PalletRegistry {
   static const int votingEngineSystemPallet = 9;
   static const int jointVoteCall = 3;
   static const int citizenVoteCall = 4;
+
+  // ---- RuntimeRootUpgrade ----
+  static const int runtimeRootUpgradePallet = 13;
+  static const int proposeRuntimeUpgradeCall = 0;
+  static const int developerDirectUpgradeCall = 2;
 
   // ---- OffchainTransactionPos ----
   static const int offchainTransactionPosPallet = 21;

@@ -1,7 +1,4 @@
 {
-  "name": "CitizenChain",
-  "id": "citizenchain",
-  "chainType": "Live",
   "bootNodes": [
     "/dns4/nrcgch.wuminapp.com/tcp/30333/wss/p2p/12D3KooWHepcMGD3h9VC1XNWmrac3pXo63RimV5jhTU2nC2TLAyS",
     "/dns4/prczss.wuminapp.com/tcp/30333/wss/p2p/12D3KooWPjWNXvCzPv6PPuiGnF3J5uToW3ySfaB7rKkwUrN2CALv",
@@ -48,13 +45,7 @@
     "/dns4/prcxas.wuminapp.com/tcp/30333/wss/p2p/12D3KooWC4errbqKaeyDZVjpNmpryUAfbLM8h6CjvyAbkYjzgnne",
     "/dns4/prchjs.wuminapp.com/tcp/30333/wss/p2p/12D3KooWPciaAo15DT24rXPZK5EUtBdEyotFBhvEdw6d3zBmzVHH"
   ],
-  "telemetryEndpoints": null,
-  "protocolId": "citizenchain",
-  "properties": {
-    "ss58Format": 2027,
-    "tokenDecimals": 2,
-    "tokenSymbol": "GMB"
-  },
+  "chainType": "Live",
   "codeSubstitutes": {},
   "genesis": {
     "raw": {
@@ -341,5 +332,18 @@
       },
       "childrenDefault": {}
     }
-  }
+  },
+  "id": "citizenchain",
+  "lightSyncState": {
+    "finalizedBlockHeader": "0x5820427dfdb8382403248233101924296142e2332a42369d0535eea468c313e1c8d65e10f1080f6fb85099c33770abc7c6d1e532d85dbfafc2b9706ed90f9f56ffcedf5139e6ac1fb613d15e19c13bada2d102c7218a4d71cd93339c25bc41f5c90806706f775f805a7fe8e81346c76226495965724326feba0430d073632371ed1308126321477205706f775f2101a4cdd840493a39369207e77822d2dd34ea0fd9d9d5ac60f28d1114ecbcfb349e78f8d6356e71284539a6049597cd37db50136bf655e2c49b277efc120e3bb8533ba44ce1d25a038e",
+    "grandpaAuthoritySet": "0x043719c39cf92462da2e22a7dfa760f463c801dd86a27a4151d24935e42692e5b50100000000000000000000000000000000000000"
+  },
+  "name": "CitizenChain",
+  "properties": {
+    "ss58Format": 2027,
+    "tokenDecimals": 2,
+    "tokenSymbol": "GMB"
+  },
+  "protocolId": "citizenchain",
+  "telemetryEndpoints": null
 }

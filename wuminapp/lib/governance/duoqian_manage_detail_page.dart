@@ -17,6 +17,7 @@ import 'transfer_proposal_service.dart';
 import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
 import '../rpc/onchain.dart';
+import '../rpc/smoldot_client.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 
@@ -41,7 +42,6 @@ class DuoqianManageDetailPage extends StatefulWidget {
 }
 
 class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
-
   static const int _statusVoting = 0;
   static const int _statusPassed = 1;
   static const int _statusRejected = 2;
@@ -164,7 +164,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = SmoldotClientManager.instance.buildUserFacingError(e);
         _loading = false;
       });
     }
@@ -189,8 +189,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   }
 
   String _pubkeyToSS58(String pubkeyHex) {
-    final hex =
-        pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex;
+    final hex = pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex;
     final bytes = _hexDecode(hex);
     return Keyring().encodeAddress(bytes, 2027);
   }
@@ -263,14 +262,15 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
                 {
                   'key': 'amount_yuan',
                   'label': '初始资金',
-                  'value': AmountFormat.format(_createInfo!.amountYuan,
-                      symbol: ''),
+                  'value':
+                      AmountFormat.format(_createInfo!.amountYuan, symbol: ''),
                   'format': 'currency',
                 },
                 {
                   'key': 'threshold',
                   'label': '阈值',
-                  'value': '${_createInfo!.threshold}/${_createInfo!.adminCount}',
+                  'value':
+                      '${_createInfo!.threshold}/${_createInfo!.adminCount}',
                 },
               ],
               if (_closeInfo != null)
@@ -550,13 +550,14 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
 
   List<Widget> _buildCreateInfoRows() {
     final info = _createInfo!;
-    final duoqianSs58 = Keyring()
-        .encodeAddress(_hexDecode(info.duoqianAddress), 2027);
+    final duoqianSs58 =
+        Keyring().encodeAddress(_hexDecode(info.duoqianAddress), 2027);
     return [
       _buildInfoRow('多签地址', _truncateAddress(duoqianSs58), onCopy: () {
         Clipboard.setData(ClipboardData(text: duoqianSs58));
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('地址已复制'), duration: Duration(seconds: 1)),
+          const SnackBar(
+              content: Text('地址已复制'), duration: Duration(seconds: 1)),
         );
       }),
       const Divider(height: 20),
@@ -575,20 +576,22 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
 
   List<Widget> _buildCloseInfoRows() {
     final info = _closeInfo!;
-    final duoqianSs58 = Keyring()
-        .encodeAddress(_hexDecode(info.duoqianAddress), 2027);
+    final duoqianSs58 =
+        Keyring().encodeAddress(_hexDecode(info.duoqianAddress), 2027);
     return [
       _buildInfoRow('多签地址', _truncateAddress(duoqianSs58), onCopy: () {
         Clipboard.setData(ClipboardData(text: duoqianSs58));
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('地址已复制'), duration: Duration(seconds: 1)),
+          const SnackBar(
+              content: Text('地址已复制'), duration: Duration(seconds: 1)),
         );
       }),
       const Divider(height: 20),
       _buildInfoRow('受益人', _truncateAddress(info.beneficiary), onCopy: () {
         Clipboard.setData(ClipboardData(text: info.beneficiary));
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('地址已复制'), duration: Duration(seconds: 1)),
+          const SnackBar(
+              content: Text('地址已复制'), duration: Duration(seconds: 1)),
         );
       }),
       const Divider(height: 20),
@@ -654,7 +657,8 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
                 value: progress,
                 minHeight: 10,
                 backgroundColor: AppTheme.border,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryDark),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppTheme.primaryDark),
               ),
             ),
             const SizedBox(height: 8),
@@ -685,8 +689,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   }
 
   Widget _buildAdminVoteList() {
-    final proposer =
-        _createInfo?.proposer ?? _closeInfo?.proposer;
+    final proposer = _createInfo?.proposer ?? _closeInfo?.proposer;
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -792,7 +795,8 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
               Row(
                 children: [
                   Text('投票钱包：',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                      style: TextStyle(
+                          fontSize: 12, color: AppTheme.textSecondary)),
                   const SizedBox(width: 4),
                   Expanded(
                     child: DropdownButton<WalletProfile>(
@@ -809,8 +813,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
                           ),
                         );
                       }).toList(),
-                      onChanged: (w) =>
-                          setState(() => _selectedVoteWallet = w),
+                      onChanged: (w) => setState(() => _selectedVoteWallet = w),
                     ),
                   ),
                 ],
@@ -822,8 +825,9 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed:
-                        _canVote && !_submitting ? () => _confirmVote(false) : null,
+                    onPressed: _canVote && !_submitting
+                        ? () => _confirmVote(false)
+                        : null,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.danger,
                       side: BorderSide(
@@ -836,8 +840,9 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed:
-                        _canVote && !_submitting ? () => _confirmVote(true) : null,
+                    onPressed: _canVote && !_submitting
+                        ? () => _confirmVote(true)
+                        : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryDark,
                       foregroundColor: Colors.white,

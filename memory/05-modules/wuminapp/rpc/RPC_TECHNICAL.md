@@ -54,14 +54,16 @@ lib/rpc/
 ## 5. 连接与同步策略
 
 1. App 启动时初始化 `SmoldotClientManager`
-2. 轻节点加入 `chainspec.json` 指定的 citizenchain 网络
-3. `ChainRpc` 在发起余额、nonce、metadata、storage、extrinsic 等链上请求前，先等待轻节点完成同步
-4. 同步完成后才继续真正的 JSON-RPC 请求，避免把“尚未同步”误判成“链上没有数据”
+2. 轻节点读取 `SharedPreferences.smoldot_db_cache`，优先通过 `AddChainConfig.databaseContent` 恢复上次 finalized database
+3. 如果缓存失效或与当前链状态不兼容，会自动清掉缓存并回退到无缓存重连，避免坏缓存永久卡死启动
+4. 轻节点加入 `chainspec.json` 指定的 citizenchain 网络后，立即在后台预热同步
+5. `ChainRpc` 在发起余额、nonce、metadata、storage、extrinsic 等链上请求前，先等待轻节点完成同步
+6. 当轻节点未初始化、同步失败或链路降级时，typed capability 必须抛出真实错误，不能返回 `null` / `[]` / `{}` 伪装成“链上没有数据”
 
 补充说明：
 
 - 钱包余额不更新的首要风险点，不是 UI，而是“轻节点已初始化但尚未同步完成”时过早查询链上状态
-- `smoldot` 返回 JSON-RPC error 时必须抛出，不能把错误吞成 `null`，否则上层会把真实故障误判为余额为 0 或账户不存在
+- `smoldot` 返回 JSON-RPC error 时必须抛出，不能把错误吞成 `null`，否则上层会把真实故障误判为余额为 0、没有提案或机构不存在
 - 当前代码已新增 `SmoldotClientManager.getStatusSnapshot()`，作为结构化轻节点状态接口；其底层已改为 Rust 原生 capability，不再由 Dart 层拼装 `system_health`
 - 当前代码已继续下沉原生能力，且已完成 **异步 FFI 迁移**：
   - `smoldot_get_status_snapshot_async`
@@ -221,11 +223,11 @@ citizenchain 使用自定义 `PowOnchainChargeAdapter`，标准 `payment_queryIn
 - 公式：`fee = max(amount_fen × 0.001, 10 fen)`
 - 舍入：half-up 到 fen 精度（与 Rust `mul_perbill_round` 一致）
 
-## 8. 待实施优化
+## 8. 已落地优化
 
-### 8.1 同步状态缓存（冷启动加速）
+### 8.1 同步状态缓存（已实现）
 
-改动范围：`smoldot_client.dart`
+当前实现：
 
 ```text
 启动时：SharedPreferences.read('smoldot_db_cache')
@@ -236,11 +238,15 @@ citizenchain 使用自定义 `PowOnchainChargeAdapter`，标准 `payment_queryIn
         → SharedPreferences.write('smoldot_db_cache', result)
 ```
 
-不需要新增 FFI 函数。`addChain` 已支持 `databaseContent`，`request()` 已支持任意 JSON-RPC。
+补充约束：
 
-### 8.2 批量余额查询（减少网络往返）
+- 缓存恢复失败时必须自动 `remove('smoldot_db_cache')` 后重试一次
+- 不允许每次启动都主动清空缓存，否则会退化成“每次冷启动全量同步”
+- 当前默认同步超时为 3 分钟，且 App 启动后会立即在后台预热同步
 
-改动范围：`chain_rpc.dart` + `wallet_page.dart`
+### 8.2 批量余额查询（已实现）
+
+当前实现：`ChainRpc.fetchBalances(List<String> pubkeyHexList)`
 
 新增 `ChainRpc.fetchBalances(List<String> pubkeyHexList) → Future<Map<String, double>>`：
 
@@ -251,7 +257,7 @@ citizenchain 使用自定义 `PowOnchainChargeAdapter`，标准 `payment_queryIn
 3. 对每个返回值：从 SCALE 字节 offset 16 读 u128 LE → ÷100 → yuan
 ```
 
-`wallet_page.dart` 的 `_refreshBalancesFromChain()` 改为一次调用 `fetchBalances(allPubkeys)`。
+`wallet_page.dart` 的 `_refreshBalancesFromChain()` 已改为一次调用 `fetchBalances(allPubkeys)`，并在轻节点不可用时向用户展示统一错误文案，而不是把失败静默吞成 0 余额。
 
 不需要改 Rust。blake2b_128 用 polkadart 已有的 `Hasher.blake2b128`。
 

@@ -12,6 +12,7 @@ import 'transfer_proposal_service.dart' show ProposalMeta;
 import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
 import '../rpc/onchain.dart';
+import '../rpc/smoldot_client.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 
@@ -41,7 +42,6 @@ class RuntimeUpgradeDetailPage extends StatefulWidget {
 }
 
 class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
-
   final RuntimeUpgradeService _service = RuntimeUpgradeService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
 
@@ -213,7 +213,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = SmoldotClientManager.instance.buildUserFacingError(e);
         _loading = false;
       });
     }
@@ -328,12 +328,28 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               'action_label': '联合投票',
               'summary': '联合投票 提案 #${widget.proposalId}：$voteText',
               'fields': [
-                {'key': 'proposal_id', 'label': '提案编号', 'value': widget.proposalId.toString()},
+                {
+                  'key': 'proposal_id',
+                  'label': '提案编号',
+                  'value': widget.proposalId.toString()
+                },
                 {'key': 'approve', 'label': '投票', 'value': approve.toString()},
                 if (_proposalInfo != null) ...{
-                  {'key': 'proposer', 'label': '提案人', 'value': _proposalInfo!.proposer},
-                  {'key': 'reason', 'label': '提案理由', 'value': _proposalInfo!.reason},
-                  {'key': 'code_hash', 'label': '代码哈希', 'value': _proposalInfo!.codeHashHex},
+                  {
+                    'key': 'proposer',
+                    'label': '提案人',
+                    'value': _proposalInfo!.proposer
+                  },
+                  {
+                    'key': 'reason',
+                    'label': '提案理由',
+                    'value': _proposalInfo!.reason
+                  },
+                  {
+                    'key': 'code_hash',
+                    'label': '代码哈希',
+                    'value': _proposalInfo!.codeHashHex
+                  },
                 },
               ],
             },
@@ -757,7 +773,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                 value: progress,
                 minHeight: 10,
                 backgroundColor: AppTheme.border,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryDark),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppTheme.primaryDark),
               ),
             ),
             const SizedBox(height: 8),
@@ -837,7 +854,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                 minHeight: 8,
                 backgroundColor: AppTheme.border,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                    _institutionVote == true ? AppTheme.primaryDark : AppTheme.warning),
+                    _institutionVote == true
+                        ? AppTheme.primaryDark
+                        : AppTheme.warning),
               ),
             ),
             const SizedBox(height: 12),
@@ -914,7 +933,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(fontSize: 11, color: AppTheme.textTertiary),
         ),
-        trailing: const Icon(Icons.shield_outlined, size: 18, color: AppTheme.warning),
+        trailing: const Icon(Icons.shield_outlined,
+            size: 18, color: AppTheme.warning),
       );
     }
 
@@ -942,7 +962,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(Icons.shield_outlined, size: 18, color: AppTheme.warning),
+                  const Icon(Icons.shield_outlined,
+                      size: 18, color: AppTheme.warning),
                 ],
               ),
             );
@@ -958,7 +979,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       ),
     );
   }
-
 
   Widget _buildCitizenVotingProgress() {
     return Card(
@@ -1058,13 +1078,13 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _submitting
-                      ? null
-                      : () => _confirmCitizenVote(false),
+                  onPressed:
+                      _submitting ? null : () => _confirmCitizenVote(false),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.danger,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor: AppTheme.danger.withValues(alpha: 0.25),
+                    disabledBackgroundColor:
+                        AppTheme.danger.withValues(alpha: 0.25),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -1085,9 +1105,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _submitting
-                      ? null
-                      : () => _confirmCitizenVote(true),
+                  onPressed:
+                      _submitting ? null : () => _confirmCitizenVote(true),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.success,
                     foregroundColor: Colors.white,
@@ -1190,7 +1209,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.danger,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor: AppTheme.danger.withValues(alpha: 0.25),
+                    disabledBackgroundColor:
+                        AppTheme.danger.withValues(alpha: 0.25),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),

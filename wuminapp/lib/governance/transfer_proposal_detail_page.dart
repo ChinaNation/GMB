@@ -12,6 +12,7 @@ import 'transfer_proposal_service.dart';
 import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
 import '../rpc/onchain.dart';
+import '../rpc/smoldot_client.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 
@@ -125,7 +126,9 @@ class _TransferProposalDetailPageState
       for (final w in widget.adminWallets) {
         var pk = w.pubkeyHex.toLowerCase();
         if (pk.startsWith('0x')) pk = pk.substring(2);
-        if (admins.contains(pk) && votes[pk] == null && !pendingPks.contains(pk)) {
+        if (admins.contains(pk) &&
+            votes[pk] == null &&
+            !pendingPks.contains(pk)) {
           votable.add(w);
         }
       }
@@ -146,7 +149,7 @@ class _TransferProposalDetailPageState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = SmoldotClientManager.instance.buildUserFacingError(e);
         _loading = false;
       });
     }
@@ -254,13 +257,30 @@ class _TransferProposalDetailPageState
             'action_label': '转账投票',
             'summary': '转账提案 #${widget.proposalId} 投票：$voteText',
             'fields': [
-              {'key': 'proposal_id', 'label': '提案编号', 'value': widget.proposalId.toString()},
+              {
+                'key': 'proposal_id',
+                'label': '提案编号',
+                'value': widget.proposalId.toString()
+              },
               {'key': 'approve', 'label': '投票', 'value': approve.toString()},
               if (_proposalInfo != null) ...{
-                {'key': 'beneficiary', 'label': '收款账户', 'value': _proposalInfo!.beneficiary},
-                {'key': 'amount_yuan', 'label': '金额', 'value': AmountFormat.format(_proposalInfo!.amountYuan), 'format': 'currency'},
+                {
+                  'key': 'beneficiary',
+                  'label': '收款账户',
+                  'value': _proposalInfo!.beneficiary
+                },
+                {
+                  'key': 'amount_yuan',
+                  'label': '金额',
+                  'value': AmountFormat.format(_proposalInfo!.amountYuan),
+                  'format': 'currency'
+                },
                 if (_proposalInfo!.remark.isNotEmpty)
-                  {'key': 'remark', 'label': '备注', 'value': _proposalInfo!.remark},
+                  {
+                    'key': 'remark',
+                    'label': '备注',
+                    'value': _proposalInfo!.remark
+                  },
               },
             ],
           },
@@ -555,7 +575,8 @@ class _TransferProposalDetailPageState
             Expanded(
               child: Text(
                 remark,
-                style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
+                style:
+                    const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
                 maxLines: _remarkExpanded ? null : 1,
                 overflow: _remarkExpanded ? null : TextOverflow.ellipsis,
               ),
@@ -637,7 +658,8 @@ class _TransferProposalDetailPageState
                 value: progress,
                 minHeight: 10,
                 backgroundColor: AppTheme.border,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryDark),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppTheme.primaryDark),
               ),
             ),
             const SizedBox(height: 8),
@@ -870,14 +892,15 @@ class _TransferProposalDetailPageState
                 decoration: BoxDecoration(
                   color: AppTheme.success.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(8),
-                  border:
-                      Border.all(color: AppTheme.success.withValues(alpha: 0.2)),
+                  border: Border.all(
+                      color: AppTheme.success.withValues(alpha: 0.2)),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
                     value: _selectedVoteWallet?.walletIndex,
                     isExpanded: true,
-                    icon: const Icon(Icons.arrow_drop_down, color: AppTheme.primaryDark),
+                    icon: const Icon(Icons.arrow_drop_down,
+                        color: AppTheme.primaryDark),
                     items: _votableWallets.map((w) {
                       return DropdownMenuItem<int>(
                         value: w.walletIndex,
@@ -928,7 +951,8 @@ class _TransferProposalDetailPageState
                       ? null
                       : () => _confirmVote(false),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _canVote ? AppTheme.danger : AppTheme.border,
+                    backgroundColor:
+                        _canVote ? AppTheme.danger : AppTheme.border,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
