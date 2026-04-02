@@ -218,6 +218,14 @@ fn build_genesis() -> Value {
         }),
     );
 
+    // 中文注释：链下交易清算模块创世配置（空，不预置任何费率）。
+    root.insert(
+        "offchainTransactionPos".into(),
+        json!({
+            "initialRates": []
+        }),
+    );
+
     // 中文注释：创世常量写入 genesis-pallet 链上存储。
     let citizens_bytes: Vec<u8> = CITIZENS.as_bytes().to_vec();
     let country_bytes: Vec<u8> = COUNTRY.as_bytes().to_vec();
