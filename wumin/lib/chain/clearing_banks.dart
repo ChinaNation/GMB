@@ -2,13 +2,11 @@
 ///
 /// 数据来源：citizenchain/runtime/primitives/china/china_ch.rs 中 CHINA_CH 数组。
 /// shenfen_id 用于链上标识（转为 InstitutionPalletId），shenfen_name 用于用户界面显示。
+/// 与 wuminapp/lib/trade/offchain/clearing_banks.dart 保持同步。
 class ClearingBank {
   const ClearingBank({required this.shenfenId, required this.shenfenName, required this.wssUrl, required this.enabled});
 
-  /// 省储行身份标识（链上唯一标识，对应 china_ch.rs 中 shenfen_id）。
   final String shenfenId;
-
-  /// 省储行中文名称（用户界面显示）。
   final String shenfenName;
 
   /// 省储行链下清算 WSS RPC 地址。
@@ -18,7 +16,6 @@ class ClearingBank {
   final bool enabled;
 }
 
-/// 43 个省储行完整列表。
 const List<ClearingBank> clearingBanks = [
   ClearingBank(shenfenId: 'SFR-ZS001-CH1Z-572590896-20260222', shenfenName: '中枢省公民储备银行', wssUrl: 'wss://prbzss.wuminapp.com', enabled: true),
   ClearingBank(shenfenId: 'SFR-LN001-CH1D-067241191-20260222', shenfenName: '岭南省公民储备银行', wssUrl: 'wss://prblns.wuminapp.com', enabled: false),
@@ -69,14 +66,6 @@ const List<ClearingBank> clearingBanks = [
 String? clearingBankName(String shenfenId) {
   for (final bank in clearingBanks) {
     if (bank.shenfenId == shenfenId) return bank.shenfenName;
-  }
-  return null;
-}
-
-/// 根据 shenfen_id 查找省储行。
-ClearingBank? findClearingBank(String shenfenId) {
-  for (final bank in clearingBanks) {
-    if (bank.shenfenId == shenfenId) return bank;
   }
   return null;
 }

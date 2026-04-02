@@ -6,6 +6,7 @@
 #![warn(missing_docs)]
 
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use citizenchain::{self as runtime, opaque::Block, AccountId, Balance, Nonce};
 use codec::{Decode, Encode};
@@ -16,12 +17,14 @@ use sp_api::Core as CoreApi;
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
-use sp_core::crypto::KeyTypeId;
+use sp_core::{crypto::KeyTypeId, H256};
 use sp_keystore::Keystore;
 use sp_runtime::{
     generic::Era, traits::IdentifyAccount, MultiSigner, OpaqueExtrinsic, SaturatedConversion,
 };
 use substrate_frame_rpc_system::AccountNonceApi;
+
+use crate::offchain_ledger::{OffchainLedger, OffchainTxItem};
 
 /// PoW 矿工密钥类型（与 service.rs 中 POW_AUTHOR_KEY_TYPE 一致）。
 const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
@@ -38,8 +41,12 @@ pub struct FullDeps<C, P> {
     pub cpu_hashrate_fn: fn() -> f64,
     /// GPU 哈希率查询函数（仅在 gpu-mining feature 启用且有 GPU 时为 Some）。
     pub gpu_hashrate_fn: Option<fn() -> f64>,
-    /// Chain spec（用于 sync_state_genSyncSpec RPC，供轻节点获取 lightSyncState）。
+    /// Chain spec（用于 sync_state_genSyncSpec RPC，��轻节点获取 lightSyncState）。
     pub chain_spec: Box<dyn sc_chain_spec::ChainSpec + Send>,
+    /// 链下清算账本（省储行节点启用时为 Some）。
+    pub offchain_ledger: Option<OffchainLedger>,
+    /// 本节点省储行 shenfen_id（省储行节点启用时为 Some）。
+    pub offchain_shenfen_id: Option<String>,
 }
 
 /// 构造并签名一笔交易，提交到交易池。
@@ -196,6 +203,8 @@ where
         cpu_hashrate_fn,
         gpu_hashrate_fn,
         chain_spec,
+        offchain_ledger,
+        offchain_shenfen_id,
     } = deps;
 
     module.merge(System::new(client.clone(), pool.clone()).into_rpc())?;
@@ -386,6 +395,182 @@ where
 
             Ok(total_fee)
         })?;
+    }
+
+    // ──── 链下清算 RPC（仅省储行节点注册）────
+    if let (Some(ledger), Some(shenfen_id)) = (offchain_ledger, offchain_shenfen_id) {
+        let ed_fen: u128 = primitives::core_const::ACCOUNT_EXISTENTIAL_DEPOSIT;
+
+        // offchain_submitSignedTx：接收顾客签名的链下支付交易
+        {
+            let client = client.clone();
+            let ledger = ledger.clone();
+            let shenfen_id = shenfen_id.clone();
+            module.register_async_method(
+                "offchain_submitSignedTx",
+                move |params, _, _| {
+                    let client = client.clone();
+                    let ledger = ledger.clone();
+                    let shenfen_id = shenfen_id.clone();
+                    async move {
+                        use jsonrpsee::types::error::ErrorObject;
+
+                        // 中文注释：解析 JSON-RPC 参数。
+                        let params = params.parse::<serde_json::Value>().map_err(|e| {
+                            ErrorObject::owned(-1, format!("参数解析失败：{e}"), None::<()>)
+                        })?;
+
+                        let bank = params["bank"].as_str().unwrap_or("");
+                        let payer_hex = params["payer"].as_str().unwrap_or("");
+                        let recipient_hex = params["recipient"].as_str().unwrap_or("");
+                        let amount_fen = params["amount_fen"].as_u64().unwrap_or(0) as u128;
+                        let fee_fen = params["fee_fen"].as_u64().unwrap_or(0) as u128;
+                        let signature_hex = params["signature"].as_str().unwrap_or("");
+                        let tx_id_hex = params["tx_id"].as_str().unwrap_or("");
+
+                        // 1. 验证省储行匹配
+                        if bank != shenfen_id {
+                            return Err(ErrorObject::owned(
+                                -2,
+                                "清算行不匹配，本节点不负责该省储行清算",
+                                None::<()>,
+                            ));
+                        }
+
+                        // 2. 解析 tx_id
+                        let tx_id_bytes = hex::decode(
+                            tx_id_hex.strip_prefix("0x").unwrap_or(tx_id_hex),
+                        )
+                        .map_err(|_| {
+                            ErrorObject::owned(-3, "tx_id 格式错误", None::<()>)
+                        })?;
+                        let tx_id = H256::from_slice(&tx_id_bytes);
+
+                        // 3. 防重复
+                        if ledger.is_duplicate(&tx_id) {
+                            return Err(ErrorObject::owned(
+                                -4,
+                                "交易已确认，重复提交",
+                                None::<()>,
+                            ));
+                        }
+
+                        // 4. 解析 payer 地址
+                        let payer = parse_ss58_account(payer_hex)?;
+                        let recipient = parse_ss58_account(recipient_hex)?;
+
+                        // 5. TODO: 验证顾客签名（sr25519）
+                        // 当前暂时跳过签名验证，等 payload 格式对齐后补充
+
+                        // 6. 查链上余额
+                        let best_hash = client.info().best_hash;
+                        let onchain_balance = {
+                            // 中文注释：构造 System.Account storage key 并读取 free 余额。
+                            let payer_bytes: &[u8; 32] = payer.as_ref();
+                            let mut key = Vec::new();
+                            // twox128("System") + twox128("Account")
+                            key.extend_from_slice(&hex_literal::hex!("26aa394eea5630e07c48ae0c9558cef7b99d880ec681799c0cf30e8886371da9"));
+                            // blake2_128_concat(account_id)
+                            let hash = blake2b_simd::Params::new().hash_length(16).hash(payer_bytes);
+                            key.extend_from_slice(hash.as_bytes());
+                            key.extend_from_slice(payer_bytes);
+                            let storage_key = sp_storage::StorageKey(key);
+                            let data = client
+                                .storage(best_hash, &storage_key)
+                                .map_err(|e| {
+                                    ErrorObject::owned(-5, format!("查询余额失败：{e}"), None::<()>)
+                                })?;
+                            match data {
+                                Some(raw) => {
+                                    // AccountInfo: nonce(4) + consumers(4) + providers(4) + sufficients(4) + free(16) + ...
+                                    let bytes = raw.0;
+                                    if bytes.len() >= 32 {
+                                        let mut fen_bytes = [0u8; 16];
+                                        fen_bytes.copy_from_slice(&bytes[16..32]);
+                                        u128::from_le_bytes(fen_bytes)
+                                    } else {
+                                        0u128
+                                    }
+                                }
+                                None => 0u128,
+                            }
+                        };
+
+                        // 7. 虚拟余额校验
+                        let virtual_bal = ledger.virtual_balance(&payer, onchain_balance);
+                        let required = amount_fen.saturating_add(fee_fen).saturating_add(ed_fen);
+                        if virtual_bal < required {
+                            return Err(ErrorObject::owned(
+                                -6,
+                                format!(
+                                    "余额不足：可用 {} 分，需要 {} 分（含 ED）",
+                                    virtual_bal, required
+                                ),
+                                None::<()>,
+                            ));
+                        }
+
+                        // 8. 记入账本
+                        let now = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs();
+                        let item = OffchainTxItem {
+                            tx_id,
+                            payer,
+                            recipient,
+                            transfer_amount: amount_fen,
+                            fee_amount: fee_fen,
+                            confirmed_at: now,
+                        };
+                        ledger.confirm_tx(item).map_err(|e| {
+                            ErrorObject::owned(-7, format!("记入账本失败：{e}"), None::<()>)
+                        })?;
+
+                        // 9. 返回确认回执
+                        Ok(serde_json::json!({
+                            "tx_id": tx_id_hex,
+                            "status": "confirmed",
+                            "confirmed_at": now,
+                        }))
+                    }
+                },
+            )?;
+        }
+
+        // offchain_queryTxStatus：查询链下交易状态
+        {
+            let ledger = ledger.clone();
+            module.register_method("offchain_queryTxStatus", move |params, _, _| {
+                use jsonrpsee::types::error::ErrorObject;
+
+                let params = params.parse::<serde_json::Value>().map_err(|e| {
+                    ErrorObject::owned(-1, format!("参数解析失败：{e}"), None::<()>)
+                })?;
+                let tx_id_hex = params["tx_id"].as_str().unwrap_or("");
+                let tx_id_bytes = hex::decode(
+                    tx_id_hex.strip_prefix("0x").unwrap_or(tx_id_hex),
+                )
+                .map_err(|_| ErrorObject::owned(-2, "tx_id 格式错误", None::<()>))?;
+                let tx_id = H256::from_slice(&tx_id_bytes);
+
+                let result: Result<serde_json::Value, jsonrpsee::types::ErrorObjectOwned> = if ledger.is_duplicate(&tx_id) {
+                    Ok(serde_json::json!({
+                        "tx_id": tx_id_hex,
+                        "status": "confirmed",
+                    }))
+                } else {
+                    // TODO: 查链上 ProcessedOffchainTx 判断是否已上链
+                    Ok(serde_json::json!({
+                        "tx_id": tx_id_hex,
+                        "status": "unknown",
+                    }))
+                };
+                result
+            })?;
+        }
+
+        log::info!("[Offchain] 链下清算 RPC 已注册（{}）", shenfen_id);
     }
 
     Ok(module)

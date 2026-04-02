@@ -1,7 +1,7 @@
-// 冷钱包管理：导入、列表、删除。
+// 冷钱包管理：导入、列表、删除、设置签名管理员。
 import { useEffect, useState, useCallback } from 'react';
 import { api, sanitizeError } from '../api';
-import type { ColdWallet } from './governance-types';
+import type { ColdWallet, SigningAdminInfo } from './governance-types';
 
 export function ColdWalletManager() {
   const [wallets, setWallets] = useState<ColdWallet[]>([]);
@@ -20,12 +20,37 @@ export function ColdWalletManager() {
   const [deletingPubkey, setDeletingPubkey] = useState<string | null>(null);
   const [deletePassword, setDeletePassword] = useState('');
 
+  // 签名管理员状态
+  const [signingAdmin, setSigningAdmin] = useState<SigningAdminInfo | null>(null);
+  const [signingPubkey, setSigningPubkey] = useState<string | null>(null);
+  const [signingPrivateKey, setSigningPrivateKey] = useState('');
+  const [signingPassword, setSigningPassword] = useState('');
+  const [signingSuccess, setSigningSuccess] = useState(false);
+  // 签名管理员失效警告
+  const [adminExpired, setAdminExpired] = useState(false);
+
   const loadWallets = useCallback(() => {
     setLoading(true);
-    api.getColdWallets()
-      .then((list) => {
+    Promise.all([api.getColdWallets(), api.getSigningAdmin()])
+      .then(async ([list, admin]) => {
         setWallets(list.wallets);
+        setSigningAdmin(admin);
         setError(null);
+        // 检测签名管理员是否仍在链上管理员列表中
+        if (admin) {
+          try {
+            const matches = await api.checkAdminWallets(admin.shenfenId);
+            const stillValid = matches.some(
+              (m) => m.pubkeyHex.toLowerCase() === admin.pubkeyHex.toLowerCase()
+            );
+            setAdminExpired(!stillValid);
+          } catch {
+            // 节点未运行时无法查链上，不报警
+            setAdminExpired(false);
+          }
+        } else {
+          setAdminExpired(false);
+        }
       })
       .catch((e) => setError(sanitizeError(e)))
       .finally(() => setLoading(false));
@@ -65,6 +90,24 @@ export function ColdWalletManager() {
       .finally(() => setSubmitting(false));
   };
 
+  // 设置签名管理员
+  const handleSetSigningAdmin = () => {
+    if (!signingPubkey || !signingPrivateKey || !signingPassword) return;
+    setSubmitting(true);
+    setFormError(null);
+    setSigningSuccess(false);
+    api.setSigningAdmin(signingPubkey, signingPrivateKey, signingPassword)
+      .then((info) => {
+        setSigningAdmin(info);
+        setSigningPubkey(null);
+        setSigningPrivateKey('');
+        setSigningPassword('');
+        setSigningSuccess(true);
+      })
+      .catch((e) => setFormError(sanitizeError(e)))
+      .finally(() => setSubmitting(false));
+  };
+
   if (loading) {
     return <div className="governance-section"><p>加载钱包…</p></div>;
   }
@@ -91,6 +134,28 @@ export function ColdWalletManager() {
       <p className="wallet-hint">
         冷钱包只存储公钥地址，不存储私钥。治理投票时通过二维码扫码由离线设备签名。
       </p>
+
+      {/* 签名管理员信息 */}
+      {signingAdmin && (
+        <div className="signing-admin-info">
+          <strong>当前签名管理员：</strong>
+          <span>{signingAdmin.shenfenName}</span>
+          <code style={{ marginLeft: 8 }}>0x{signingAdmin.pubkeyHex.slice(0, 8)}…</code>
+        </div>
+      )}
+      {/* 签名管理员失效警告 */}
+      {adminExpired && signingAdmin && (
+        <div className="error" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 6 }}>
+          ⚠ 签名管理员已失效（已被链上治理更换），请重新设置签名管理员。
+        </div>
+      )}
+
+      {/* 设置成功提示 */}
+      {signingSuccess && (
+        <div className="success-message">
+          签名管理员设置成功，重启节点后生效。
+        </div>
+      )}
 
       {/* 导入表单 */}
       {showForm && (
@@ -148,12 +213,30 @@ export function ColdWalletManager() {
             <div key={w.pubkeyHex} className="wallet-card">
               <div className="wallet-card-header">
                 <span className="wallet-card-name">{w.name}</span>
-                <button
-                  className="wallet-delete-button"
-                  onClick={() => { setDeletingPubkey(w.pubkeyHex); setDeletePassword(''); setFormError(null); }}
-                >
-                  删除
-                </button>
+                <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {signingAdmin?.pubkeyHex === w.pubkeyHex ? (
+                    <span className="signing-admin-badge">签名账户</span>
+                  ) : (
+                    <button
+                      className="wallet-signing-button"
+                      onClick={() => {
+                        setSigningPubkey(w.pubkeyHex);
+                        setSigningPrivateKey('');
+                        setSigningPassword('');
+                        setFormError(null);
+                        setSigningSuccess(false);
+                      }}
+                    >
+                      设为签名管理员
+                    </button>
+                  )}
+                  <button
+                    className="wallet-delete-button"
+                    onClick={() => { setDeletingPubkey(w.pubkeyHex); setDeletePassword(''); setFormError(null); }}
+                  >
+                    删除
+                  </button>
+                </span>
               </div>
               <div className="wallet-card-address">
                 <code>{w.address}</code>
@@ -186,6 +269,45 @@ export function ColdWalletManager() {
                       {submitting ? '删除中…' : '确认删除'}
                     </button>
                     <button className="cancel-button" onClick={() => setDeletingPubkey(null)} disabled={submitting}>
+                      取消
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 设置签名管理员对话框 */}
+              {signingPubkey === w.pubkeyHex && (
+                <div className="wallet-signing-confirm">
+                  {formError && <div className="error">{formError}</div>}
+                  <p>将 "{w.name}" 设为离线清算签名管理员。需要提供该钱包的私钥种子和设备密码。</p>
+                  <div className="wallet-form-field">
+                    <label>私钥种子（64 位十六进制）</label>
+                    <input
+                      type="password"
+                      value={signingPrivateKey}
+                      onChange={(e) => setSigningPrivateKey(e.target.value)}
+                      placeholder="0x 或 64 位十六进制私钥种子"
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="wallet-form-field">
+                    <label>设备开机密码</label>
+                    <input
+                      type="password"
+                      value={signingPassword}
+                      onChange={(e) => setSigningPassword(e.target.value)}
+                      placeholder="验证身份"
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="wallet-form-actions">
+                    <button
+                      onClick={handleSetSigningAdmin}
+                      disabled={submitting || !signingPrivateKey || !signingPassword}
+                    >
+                      {submitting ? '设置中…' : '确认设置'}
+                    </button>
+                    <button className="cancel-button" onClick={() => { setSigningPubkey(null); setFormError(null); }} disabled={submitting}>
                       取消
                     </button>
                   </div>

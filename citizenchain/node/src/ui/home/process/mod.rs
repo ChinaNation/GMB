@@ -25,11 +25,16 @@ static NODE_LIFECYCLE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 pub struct RuntimeState {
     /// 进程内运行的 Substrate 节点句柄。
     pub node_handle: Option<NodeHandle>,
+    /// 链下清算账本（启动时由 service 注入，用于停止前检查待上链交易）。
+    pub offchain_ledger: Option<crate::offchain_ledger::OffchainLedger>,
 }
 
 impl Default for RuntimeState {
     fn default() -> Self {
-        Self { node_handle: None }
+        Self {
+            node_handle: None,
+            offchain_ledger: None,
+        }
     }
 }
 
@@ -89,6 +94,49 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
 
         rpc::clear_genesis_hash_cache();
         thread::sleep(Duration::from_millis(250));
+
+        // 中文注释：检测签名管理员，有则解密并创建链下清算配置。
+        {
+            let app_data = security::app_data_dir(&app)?;
+            let ks = crate::offchain_keystore::OffchainKeystore::new(&app_data);
+            if ks.has_signing_key() {
+                match ks.load_signing_key(&unlock_password) {
+                    Ok(signing_key) => {
+                        let ledger = crate::offchain_ledger::OffchainLedger::new(&app_data);
+                        match ledger.load_from_disk(&unlock_password) {
+                            Ok(count) => {
+                                log::info!("[Offchain] 恢复 {count} 笔待上链交易");
+                            }
+                            Err(e) => {
+                                log::warn!("[Offchain] 账本恢复失败（首次启动或密码不匹配）：{e}");
+                            }
+                        }
+                        // 存入全局配置供 service 读取
+                        crate::service::set_offchain_config(Some(
+                            crate::service::OffchainConfig {
+                                ledger: ledger.clone(),
+                                shenfen_id: signing_key.shenfen_id.clone(),
+                            },
+                        ));
+                        // 存入 AppState 供 stop_node 检查
+                        if let Ok(mut state) = app.state::<AppState>().0.lock() {
+                            state.offchain_ledger = Some(ledger);
+                        }
+                        log::info!(
+                            "[Offchain] 签名管理员已加载（{}），链下清算功能已启用",
+                            signing_key.shenfen_id
+                        );
+                    }
+                    Err(e) => {
+                        log::warn!("[Offchain] 签名管理员解密失败：{e}");
+                        crate::service::set_offchain_config(None);
+                    }
+                }
+            } else {
+                crate::service::set_offchain_config(None);
+                log::info!("[Offchain] 未检测到签名管理员，链下清算未启用");
+            }
+        }
 
         // 准备启动参数。
         let base_path = node_data_dir(&app)?;
@@ -150,6 +198,24 @@ fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
         eprintln!("[审计] stop_node attempt 日志写入失败: {e}");
     }
     let result = (|| -> Result<NodeStatus, String> {
+        // 检查链下账本是否有待上链交易，如有则拒绝停止
+        {
+            let app_state = app.state::<AppState>();
+            let state = app_state
+                .0
+                .lock()
+                .map_err(|_| "acquire process state failed".to_string())?;
+            if let Some(ref ledger) = state.offchain_ledger {
+                let pending = ledger.pending_count();
+                if pending > 0 {
+                    return Err(format!(
+                        "有 {} 笔交易待上链，不允许停止节点",
+                        pending
+                    ));
+                }
+            }
+        }
+
         {
             let app_state = app.state::<AppState>();
             let mut state = app_state

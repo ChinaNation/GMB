@@ -39,6 +39,25 @@ use std::{
 /// CPU 全线程合计哈希率（hashes/sec），以 f64 bits 存入 AtomicU64。
 static CPU_HASHRATE: AtomicU64 = AtomicU64::new(0);
 
+/// 链下清算配置（由 start_node 检测签名管理员后设置，service 读取）。
+static OFFCHAIN_CONFIG: std::sync::OnceLock<Option<OffchainConfig>> = std::sync::OnceLock::new();
+
+/// 链下清算配置。
+pub struct OffchainConfig {
+    pub ledger: crate::offchain_ledger::OffchainLedger,
+    pub shenfen_id: String,
+}
+
+/// 中文注释：由 nodeui start_node 调用，设置链下清算配置。
+pub fn set_offchain_config(config: Option<OffchainConfig>) {
+    let _ = OFFCHAIN_CONFIG.set(config);
+}
+
+/// 中文注释：获取链下清算配置（service 内部使用）。
+fn get_offchain_config() -> Option<&'static OffchainConfig> {
+    OFFCHAIN_CONFIG.get().and_then(|c| c.as_ref())
+}
+
 // 空块 propose 防护在 start_mining_worker_no_empty 中实现。
 
 /// 上次成功提交区块的时刻（自 epoch 起的纳秒数）。
@@ -531,6 +550,9 @@ pub fn new_full(
                 cpu_hashrate_fn: cpu_hashrate as fn() -> f64,
                 gpu_hashrate_fn,
                 chain_spec: chain_spec.cloned_box(),
+                // 中文注释：从全局配置读取链下清算参数（由 nodeui start_node 设置）。
+                offchain_ledger: get_offchain_config().map(|c| c.ledger.clone()),
+                offchain_shenfen_id: get_offchain_config().map(|c| c.shenfen_id.clone()),
             };
             crate::rpc::create_full(deps).map_err(Into::into)
         })

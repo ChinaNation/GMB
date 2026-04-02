@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/rpc/offchain.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
@@ -9,6 +10,8 @@ import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
+import 'package:wuminapp_mobile/trade/local_tx_store.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 
 /// 链下快捷支付确认页面。
 ///
@@ -219,10 +222,27 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
         };
       }
 
-      // 构造待签名 payload（简化版，mock 阶段用交易摘要）
-      final payloadStr =
-          'offchain_pay|${wallet.address}|${widget.toAddress}|$amount|${widget.bank}|$txId';
-      final payloadBytes = Uint8List.fromList(payloadStr.codeUnits);
+      // 构造链下支付 payload（pallet=21, call=99 统一格式）
+      final amountFen = (amount * 100).round();
+      final feeFen = (fee * 100).round();
+      final payerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
+      final recipientPubkey = Uint8List.fromList(
+        Keyring().decodeAddress(widget.toAddress),
+      );
+      final txIdBytes = Uint8List(32);
+      final txIdRaw = txId.codeUnits;
+      for (var i = 0; i < txIdRaw.length && i < 32; i++) {
+        txIdBytes[i] = txIdRaw[i];
+      }
+
+      final payloadBytes = OffchainRpc.buildPayload(
+        payerPubkey: payerPubkey,
+        recipientPubkey: recipientPubkey,
+        amountFen: amountFen,
+        feeFen: feeFen,
+        txIdBytes: txIdBytes,
+        bankShenfenId: widget.bank,
+      );
       final signature = await signCallback(payloadBytes);
 
       // 提交到省储行
@@ -230,7 +250,8 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
         bankShenfenId: widget.bank,
         payerAddress: wallet.address,
         recipientAddress: widget.toAddress,
-        amountFen: (amount * 100).round(),
+        amountFen: amountFen,
+        feeFen: feeFen,
         signature: _toHex(signature),
         txId: txId,
       );
@@ -238,6 +259,23 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
       if (!mounted) return;
 
       if (receipt.status == OffchainTxStatus.confirmed) {
+        // 写入本地交易记录
+        final localEntity = LocalTxEntity()
+          ..txId = txId
+          ..walletAddress = wallet.address
+          ..txType = 'offchain_pay'
+          ..direction = 'out'
+          ..fromAddress = wallet.address
+          ..toAddress = widget.toAddress
+          ..amountYuan = amount
+          ..feeYuan = fee
+          ..bankShenfenId = widget.bank
+          ..status = 'confirmed'
+          ..createdAtMillis = DateTime.now().millisecondsSinceEpoch
+          ..confirmedAtMillis = DateTime.now().millisecondsSinceEpoch;
+        await LocalTxStore.insert(localEntity);
+
+        if (!mounted) return;
         await showDialog<void>(
           context: context,
           builder: (successContext) => AlertDialog(

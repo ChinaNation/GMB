@@ -50,6 +50,8 @@ pub fn run_desktop() {
             settings::cold_wallets::get_cold_wallets,
             settings::cold_wallets::add_cold_wallet,
             settings::cold_wallets::remove_cold_wallet,
+            settings::cold_wallets::set_signing_admin,
+            settings::cold_wallets::get_signing_admin,
             governance::check_admin_wallets,
             governance::build_vote_request,
             governance::build_joint_vote_request,

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../chain/chain_constants.dart';
+import '../chain/clearing_banks.dart';
 import 'pallet_registry.dart';
 
 /// payload_hex 中 call data 的解码结果。
@@ -89,6 +90,18 @@ class PayloadDecoder {
       if (palletIndex == PalletRegistry.votingEngineSystemPallet &&
           callIndex == PalletRegistry.citizenVoteCall) {
         return _decodeCitizenVote(bytes);
+      }
+
+      // OffchainTransactionPos / bind_clearing_institution
+      if (palletIndex == PalletRegistry.offchainTransactionPosPallet &&
+          callIndex == PalletRegistry.bindClearingInstitutionCall) {
+        return _decodeBindClearingInstitution(bytes);
+      }
+
+      // OffchainTransactionPos / offchain_pay（链下支付授权）
+      if (palletIndex == PalletRegistry.offchainTransactionPosPallet &&
+          callIndex == PalletRegistry.offchainPayCall) {
+        return _decodeOffchainPay(bytes);
       }
 
       return null;
@@ -263,6 +276,84 @@ class PayloadDecoder {
       fields: {
         'proposal_id': proposalId.toString(),
         'approve': approve.toString(),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // OffchainTransactionPos(21) / offchain_pay(99) — 链下支付授权
+  // 格式：[21][99][payer:32][recipient:32][amount_fen:u128_LE][fee_fen:u128_LE][tx_id:32][bank:48]
+  // 总长度 178 字节
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeOffchainPay(Uint8List bytes) {
+    if (bytes.length < 178) return null;
+
+    // payer: 32 bytes (offset 2)
+    final payerAccountId = bytes.sublist(2, 34);
+    final payerAddress =
+        Keyring().encodeAddress(payerAccountId.toList(), _ss58Prefix);
+
+    // recipient: 32 bytes (offset 34)
+    final recipientAccountId = bytes.sublist(34, 66);
+    final recipientAddress =
+        Keyring().encodeAddress(recipientAccountId.toList(), _ss58Prefix);
+
+    // amount_fen: u128 LE (offset 66, 16 bytes)
+    final amountFen = _readU128Le(bytes, 66);
+    final amountYuan = _fenToYuan(amountFen);
+
+    // fee_fen: u128 LE (offset 82, 16 bytes)
+    final feeFen = _readU128Le(bytes, 82);
+    final feeYuan = _fenToYuan(feeFen);
+
+    // bank: 48 bytes (offset 130), shenfen_id 补零
+    final bankBytes = bytes.sublist(130, 178);
+    var endIndex = 48;
+    while (endIndex > 0 && bankBytes[endIndex - 1] == 0) {
+      endIndex--;
+    }
+    final shenfenId =
+        endIndex > 0 ? String.fromCharCodes(bankBytes.sublist(0, endIndex)) : '';
+    final bankName = clearingBankName(shenfenId) ?? shenfenId;
+
+    return DecodedPayload(
+      action: 'offchain_pay',
+      summary: '扫码支付 $amountYuan GMB 给 ${_truncateAddress(recipientAddress)}',
+      fields: {
+        'from': payerAddress,
+        'to': recipientAddress,
+        'amount_yuan': '$amountYuan GMB',
+        'fee_yuan': '$feeYuan GMB',
+        'bank': bankName,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // OffchainTransactionPos(21) / bind_clearing_institution(9)
+  // 格式：[0x15][0x09][institution: [u8; 48]]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeBindClearingInstitution(Uint8List bytes) {
+    // 2 (pallet+call) + 48 (InstitutionPalletId) = 50
+    if (bytes.length < 50) return null;
+
+    // institution: [u8; 48] — shenfen_id 补零到 48 字节
+    final institutionBytes = bytes.sublist(2, 50);
+    // 去尾部零字节还原 shenfen_id 字符串
+    var endIndex = 48;
+    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) {
+      endIndex--;
+    }
+    if (endIndex == 0) return null;
+    final shenfenId = String.fromCharCodes(institutionBytes.sublist(0, endIndex));
+    final bankName = clearingBankName(shenfenId) ?? shenfenId;
+
+    return DecodedPayload(
+      action: 'bind_clearing',
+      summary: '绑定清算行：$bankName',
+      fields: {
+        'institution': bankName,
+        'shenfen_id': shenfenId,
       },
     );
   }

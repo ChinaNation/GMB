@@ -78,7 +78,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
     //   the compatible custom types.
-    spec_version: 3,
+    spec_version: 4,
     impl_version: 1,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 1,
@@ -344,6 +344,10 @@ mod runtime {
     // 创世模块：存储创世期/运行期阶段、出块目标时间、开发者直升开关、创世常量
     #[runtime::pallet_index(20)]
     pub type GenesisPallet = genesis_pallet;
+
+    // 链下交易清算模块：省储行即时清算、批量上链、绑定清算行、费率治理
+    #[runtime::pallet_index(21)]
+    pub type OffchainTransactionPos = offchain_transaction_pos::pallet;
 }
 
 #[cfg(test)]

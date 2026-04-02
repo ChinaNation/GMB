@@ -9,8 +9,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
-import 'package:wuminapp_mobile/wallet/capabilities/api_client.dart';
-import 'package:wuminapp_mobile/wallet/models/server_tx_record.dart';
+import 'package:wuminapp_mobile/trade/local_tx_store.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
 import 'package:wuminapp_mobile/user/user_service.dart' show UserProfileService;
 import 'package:wuminapp_mobile/ui/widgets/bip39_input.dart';
@@ -20,7 +20,10 @@ import 'package:wuminapp_mobile/util/screenshot_guard.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
+import 'package:wuminapp_mobile/rpc/onchain.dart';
+import 'package:wuminapp_mobile/rpc/chain_tx_monitor.dart';
 import 'package:wuminapp_mobile/wallet/ui/bind_clearing_page.dart';
+import 'package:wuminapp_mobile/wallet/ui/receive_qr_page.dart';
 import 'package:wuminapp_mobile/trade/offchain/clearing_banks.dart';
 
 class MyWalletPage extends StatefulWidget {
@@ -629,14 +632,13 @@ class WalletDetailPage extends StatefulWidget {
 
 class _WalletDetailPageState extends State<WalletDetailPage> {
   final WalletManager _walletService = WalletManager();
-  final ApiClient _api = ApiClient();
   final GlobalKey _qrKey = GlobalKey();
   late String _walletName;
   bool _isEditingName = false;
   bool _hasChanged = false;
   bool _isSavingQr = false;
   late final TextEditingController _nameEditController;
-  List<ServerTxRecord> _recentRecords = const [];
+  List<LocalTxEntity> _recentRecords = const [];
   bool _screenshotGuardActive = false;
   /// 当前钱包绑定的清算省储行 shenfen_id（null 表示未绑定）。
   String? _boundClearingBankId;
@@ -654,6 +656,29 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     _walletName = widget.wallet.walletName;
     _nameEditController = TextEditingController(text: _walletName);
     _loadRecentRecords();
+    _loadClearingBank();
+    // 中文注释：启动链上交易监控（监控当前钱包的链上事件）。
+    ChainTxMonitor.instance.watchWallet(
+      widget.wallet.address,
+      widget.wallet.pubkeyHex,
+    );
+    ChainTxMonitor.instance.start();
+  }
+
+  /// 从链上查询当前钱包绑定的清算省储行。
+  Future<void> _loadClearingBank() async {
+    try {
+      final onchainRpc = OnchainRpc();
+      final shenfenId = await onchainRpc.queryClearingInstitution(
+        widget.wallet.pubkeyHex,
+      );
+      if (!mounted) return;
+      setState(() {
+        _boundClearingBankId = shenfenId;
+      });
+    } catch (_) {
+      // 查询失败静默忽略，不影响页面其他功能
+    }
   }
 
   /// 打开绑定清算省储行页面。
@@ -662,6 +687,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       MaterialPageRoute(
         builder: (_) => BindClearingPage(
           currentShenfenId: _boundClearingBankId,
+          wallet: widget.wallet,
         ),
       ),
     );
@@ -674,21 +700,63 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
 
   Future<void> _loadRecentRecords() async {
     try {
-      final page = await _api.fetchWalletTransactions(
+      final records = await LocalTxStore.queryRecent(
         widget.wallet.address,
         limit: 5,
       );
       if (!mounted) return;
       setState(() {
-        _recentRecords = page.records;
+        _recentRecords = records;
       });
     } catch (_) {
       // 加载失败静默忽略，钱包详情页仍可正常使用
     }
   }
 
+  String _localTxTypeLabel(String txType, String direction) {
+    switch (txType) {
+      case 'transfer':
+        return direction == 'out' ? '转账支出' : '转账收入';
+      case 'offchain_pay':
+        return direction == 'out' ? '扫码支付' : '扫码收款';
+      case 'proposal_transfer':
+        return direction == 'out' ? '提案转出' : '提案转入';
+      case 'fee_withdraw':
+        return '手续费';
+      case 'fee_deposit':
+        return '手续费分成';
+      case 'block_reward':
+        return '出块奖励';
+      case 'bank_interest':
+        return '银行利息';
+      case 'gov_issuance':
+        return '治理增发';
+      case 'lightnode_reward':
+        return '认证奖励';
+      case 'duoqian_create':
+        return '多签出资';
+      case 'duoqian_close':
+        return direction == 'out' ? '多签关闭' : '多签收款';
+      case 'fund_destroy':
+        return '资金销毁';
+      default:
+        return txType;
+    }
+  }
+
+  String _shortAddress(String? address) {
+    if (address == null || address.length <= 12) return address ?? '-';
+    return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
+  }
+
+  String _pad(int n) => n.toString().padLeft(2, '0');
+
   Future<void> _onMenuAction(String action) async {
     switch (action) {
+      case 'receive':
+        await _openReceiveQr();
+      case 'clearing':
+        await _openBindClearingBank();
       case 'seed':
         await _revealSecret('私钥', () async {
           final seed = await _walletService.getSeedHex(widget.wallet.walletIndex);
@@ -698,7 +766,100 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         await _revealSecret('助记词', () async {
           return _walletService.getMnemonic(widget.wallet.walletIndex);
         });
+      case 'sync_history':
+        await _syncHistory();
     }
+  }
+
+  /// 中文注释：同步历史交易记录。
+  Future<void> _syncHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('同步历史记录'),
+        content: const Text(
+          '将从区块链扫描该钱包最近 100 个区块的交易记录。\n\n确认开始？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('开始同步'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    // 中文注释：显示同步进度对话框。
+    int scanned = 0;
+    int total = 0;
+    void Function(int, int)? progressCallback;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (progressContext) => StatefulBuilder(
+        builder: (ctx, setProgressState) {
+          progressCallback = (s, t) {
+            setProgressState(() {
+              scanned = s;
+              total = t;
+            });
+          };
+          return AlertDialog(
+            title: const Text('正在同步'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (total > 0)
+                  LinearProgressIndicator(value: scanned / total),
+                const SizedBox(height: 8),
+                Text('已扫描 $scanned / $total 个区块'),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    try {
+      await ChainTxMonitor.instance.syncHistory(
+        walletAddress: widget.wallet.address,
+        pubkeyHex: widget.wallet.pubkeyHex,
+        onProgress: (s, t) => progressCallback?.call(s, t),
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('历史记录同步完成')),
+        );
+        _loadRecentRecords();
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('同步失败：$e')),
+        );
+      }
+    }
+  }
+
+  /// 打开临时收款码页面（带金额设置）。
+  Future<void> _openReceiveQr() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ReceiveQrPage(
+          address: widget.wallet.address,
+          walletName: _walletName,
+          bankShenfenId: _boundClearingBankId,
+        ),
+      ),
+    );
   }
 
   Future<void> _revealSecret(
@@ -865,15 +1026,19 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
           title: const Text('钱包详情'),
           centerTitle: true,
           actions: [
-            if (widget.wallet.isHotWallet)
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert),
-                onSelected: _onMenuAction,
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'seed', child: Text('查看私钥')),
-                  PopupMenuItem(value: 'mnemonic', child: Text('查看助记词')),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: _onMenuAction,
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'receive', child: Text('收款')),
+                const PopupMenuItem(value: 'clearing', child: Text('设置清算行')),
+                if (widget.wallet.isHotWallet) ...[
+                  const PopupMenuItem(value: 'seed', child: Text('查看私钥')),
+                  const PopupMenuItem(value: 'mnemonic', child: Text('查看助记词')),
                 ],
-              ),
+                const PopupMenuItem(value: 'sync_history', child: Text('同步历史记录')),
+              ],
+            ),
           ],
         ),
         body: ListView(
@@ -1075,48 +1240,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            // 绑定清算省储行入口
-            Container(
-              decoration: AppTheme.cardDecoration(),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: _openBindClearingBank,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    child: Row(
-                      children: [
-                        const Text(
-                          '清算省储行',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          _boundClearingBankId != null
-                              ? (clearingBankName(_boundClearingBankId!) ?? '已绑定')
-                              : '未绑定',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: _boundClearingBankId != null
-                                ? AppTheme.primary
-                                : AppTheme.textTertiary,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.chevron_right,
-                            size: 18, color: AppTheme.textTertiary),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             // 交易记录标题行
             InkWell(
               onTap: () {
@@ -1161,19 +1285,52 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
             else
               ...List.generate(_recentRecords.length, (index) {
                 final record = _recentRecords[index];
+                final isOut = record.direction == 'out';
+                final label = _localTxTypeLabel(record.txType, record.direction);
+                final counterparty = isOut
+                    ? _shortAddress(record.toAddress)
+                    : _shortAddress(record.fromAddress);
+                final dt = DateTime.fromMillisecondsSinceEpoch(record.createdAtMillis).toLocal();
+                final timeStr = '${dt.year}-${_pad(dt.month)}-${_pad(dt.day)} ${_pad(dt.hour)}:${_pad(dt.minute)}';
+                final amountColor = isOut ? AppTheme.danger : AppTheme.primaryDark;
                 return Column(
                   children: [
-                    ServerTxRecordTile(
-                      record: record,
+                    ListTile(
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => ServerTxRecordDetailPage(
-                              record: record,
+                            builder: (_) => TransactionHistoryPage(
+                              walletAddress: widget.wallet.address,
                             ),
                           ),
                         );
                       },
+                      leading: CircleAvatar(
+                        radius: 18,
+                        backgroundColor: isOut ? AppTheme.danger.withAlpha(20) : AppTheme.success.withAlpha(20),
+                        child: Icon(
+                          isOut ? Icons.arrow_upward : Icons.arrow_downward,
+                          size: 18,
+                          color: amountColor,
+                        ),
+                      ),
+                      title: Text(
+                        label,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        '$counterparty\n$timeStr',
+                        style: const TextStyle(fontSize: 12, height: 1.5),
+                      ),
+                      isThreeLine: true,
+                      trailing: Text(
+                        '${isOut ? "-" : "+"}${AmountFormat.format(record.amountYuan, symbol: '')}',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: amountColor,
+                        ),
+                      ),
                     ),
                     if (index < _recentRecords.length - 1)
                       const Divider(height: 1),

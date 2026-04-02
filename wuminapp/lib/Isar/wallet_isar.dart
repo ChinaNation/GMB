@@ -135,6 +135,55 @@ class DuoqianInstitutionEntity {
   late int addedAtMillis;
 }
 
+/// 本地交易记录（持久化存储，去中心化设计，不依赖 SFID 服务器）。
+@collection
+class LocalTxEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 交易唯一标识。
+  @Index(unique: true, replace: true)
+  late String txId;
+
+  /// 所属钱包地址（SS58）。
+  @Index()
+  late String walletAddress;
+
+  /// 交易类型：transfer / offchain_pay / proposal_transfer / fee_withdraw / fee_deposit /
+  /// block_reward / bank_interest / gov_issuance / lightnode_reward / duoqian_create / duoqian_close / fund_destroy
+  late String txType;
+
+  /// 方向：in / out / info
+  late String direction;
+
+  String? fromAddress;
+  String? toAddress;
+
+  /// 金额（元）。
+  late double amountYuan;
+
+  /// 手续费（元）。
+  double? feeYuan;
+
+  /// 链下交易的清算省储行 shenfen_id。
+  String? bankShenfenId;
+
+  /// 状态：pending / confirmed / onchain
+  late String status;
+
+  /// 链上交易哈希。
+  String? txHash;
+
+  /// 链上区块号。
+  int? blockNumber;
+
+  /// 本地创建时间（毫秒时间戳）。
+  @Index()
+  late int createdAtMillis;
+
+  /// 确认时间（毫秒时间戳）。
+  int? confirmedAtMillis;
+}
+
 class WalletIsar {
   WalletIsar._();
 
@@ -178,6 +227,7 @@ class WalletIsar {
       AppKvEntitySchema,
       DuoqianInstitutionEntitySchema,
       PersonalDuoqianEntitySchema,
+      LocalTxEntitySchema,
     ];
     final isar =
         await Isar.open(schemas, name: 'wuminapp_wallet', directory: dir);

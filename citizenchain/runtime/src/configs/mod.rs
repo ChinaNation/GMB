@@ -335,14 +335,14 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
             }) => onchain_transaction_pow::AmountExtractResult::Amount(Balances::free_balance(
                 duoqian_address,
             )),
-            // 投票调用不涉及资金转移，无金额
+            // 投票调用不涉及资金转移，收取最低手续费防滥用（虚拟金额 10000 分 = 100 元 → 0.1% = 0.1 元）
             RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::vote_create {
                 ..
-            }) => onchain_transaction_pow::AmountExtractResult::NoAmount,
+            }) => onchain_transaction_pow::AmountExtractResult::Amount(10000),
             RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::vote_close {
                 ..
-            }) => onchain_transaction_pow::AmountExtractResult::NoAmount,
-            // 中文注释：以下调用类型明确属于“无金额交易”，放行且不计算手续费。
+            }) => onchain_transaction_pow::AmountExtractResult::Amount(10000),
+            // 中文注释：以下调用类型明确属于”系统内部调用”，放行且不计算手续费。
             RuntimeCall::System(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
             RuntimeCall::Timestamp(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
             RuntimeCall::FullnodePowReward(_) => {
@@ -354,32 +354,46 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
             RuntimeCall::ResolutionIssuanceIss(_) => {
                 onchain_transaction_pow::AmountExtractResult::NoAmount
             }
+            // 中文注释：以下治理类调用收取最低手续费（虚拟金额），防止无成本刷提案/投票。
             RuntimeCall::ResolutionIssuanceGov(_) => {
-                onchain_transaction_pow::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::Amount(10000)
             }
             RuntimeCall::VotingEngineSystem(_) => {
-                onchain_transaction_pow::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::Amount(10000)
             }
-            RuntimeCall::SfidCodeAuth(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
+            RuntimeCall::SfidCodeAuth(_) => onchain_transaction_pow::AmountExtractResult::Amount(10000),
             RuntimeCall::CitizenLightnodeIssuance(_) => {
-                onchain_transaction_pow::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::Amount(10000)
             }
             RuntimeCall::AdminsOriginGov(_) => {
-                onchain_transaction_pow::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::Amount(10000)
             }
             RuntimeCall::RuntimeRootUpgrade(_) => {
-                onchain_transaction_pow::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::Amount(10000)
             }
             RuntimeCall::ResolutionDestroGov(_) => {
-                onchain_transaction_pow::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::Amount(10000)
             }
-            RuntimeCall::GrandpaKeyGov(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
+            RuntimeCall::GrandpaKeyGov(_) => onchain_transaction_pow::AmountExtractResult::Amount(10000),
             RuntimeCall::DuoqianManagePow(_) => {
-                onchain_transaction_pow::AmountExtractResult::NoAmount
+                onchain_transaction_pow::AmountExtractResult::Amount(10000)
             }
             // 机构转账提案/投票：全部免费（手续费在投票通过执行转账时由 pallet 内部扣取并分账）
             RuntimeCall::DuoqianTransferPow(_) => {
                 onchain_transaction_pow::AmountExtractResult::NoAmount
+            }
+            // 链下交易清算模块：批量提交/处理免费（relay submitter 白名单限制），其余收最低手续费
+            RuntimeCall::OffchainTransactionPos(ref offchain_call) => {
+                match offchain_call {
+                    // submit/enqueue/process batch 由 relay submitter 白名单限制，免费
+                    offchain_transaction_pos::pallet::Call::submit_offchain_batch { .. }
+                    | offchain_transaction_pos::pallet::Call::enqueue_offchain_batch { .. }
+                    | offchain_transaction_pos::pallet::Call::process_queued_batch { .. } => {
+                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                    }
+                    // 其余调用（绑定清算行、费率提案/投票、密钥管理等）收最低手续费
+                    _ => onchain_transaction_pow::AmountExtractResult::Amount(10000),
+                }
             }
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免”有金额但漏提取”。
             RuntimeCall::Balances(_) => onchain_transaction_pow::AmountExtractResult::Unknown,
@@ -855,6 +869,29 @@ impl duoqian_transfer_pow::Config for Runtime {
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = TransferFeeRouter;
     type WeightInfo = duoqian_transfer_pow::weights::SubstrateWeight<Runtime>;
+}
+
+// ---------------------------------------------------------------------------
+// 链下交易清算模块配置
+// ---------------------------------------------------------------------------
+
+impl offchain_transaction_pos::ProtectedSourceChecker<AccountId>
+    for RuntimeProtectedSourceChecker
+{
+    fn is_protected(address: &AccountId) -> bool {
+        is_keyless_account(address)
+    }
+}
+
+impl offchain_transaction_pos::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type MaxBatchSize = ConstU32<100_000>;
+    type MaxBatchSignatureLength = ConstU32<128>;
+    type InternalVoteEngine = VotingEngineSystem;
+    type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
+    type InstitutionAssetGuard = RuntimeInstitutionAssetGuard;
+    type WeightInfo = offchain_transaction_pos::weights::SubstrateWeight<Runtime>;
 }
 
 /// 禁用特权原点：始终拒绝任何 Origin，确保不存在可被调用的特权入口。

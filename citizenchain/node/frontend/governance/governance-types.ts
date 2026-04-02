@@ -48,6 +48,14 @@ export type UserVoteStatus = {
   jointVote: boolean | null;
 };
 
+// ── 签名管理员 ──
+
+export interface SigningAdminInfo {
+  pubkeyHex: string;
+  shenfenId: string;
+  shenfenName: string;
+}
+
 // ── 管理员匹配 ──
 
 export type AdminWalletMatch = {

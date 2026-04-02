@@ -76,6 +76,7 @@ runtime-root-upgrade = { path = "governance/runtime-root-upgrade", default-featu
 resolution-destro-gov = { path = "governance/resolution-destro-gov", default-features = false }
 duoqian-transfer-pow = { path = "transaction/duoqian-transfer-pow", default-features = false }
 institution-asset-guard = { path = "transaction/institution-asset-guard", default-features = false }
+offchain-transaction-pos = { path = "transaction/offchain-transaction-pos", default-features = false }
 genesis-pallet = { path = "genesis", default-features = false }
 
 [build-dependencies]
@@ -111,6 +112,7 @@ std = [
 	"resolution-destro-gov/std",
 	"duoqian-transfer-pow/std",
 	"institution-asset-guard/std",
+	"offchain-transaction-pos/std",
 	"genesis-pallet/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
@@ -159,6 +161,7 @@ runtime-benchmarks = [
 	"resolution-destro-gov/runtime-benchmarks",
 	"duoqian-transfer-pow/runtime-benchmarks",
 	"institution-asset-guard/std",
+	"offchain-transaction-pos/runtime-benchmarks",
 	"genesis-pallet/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
@@ -187,6 +190,7 @@ try-runtime = [
 	"resolution-destro-gov/try-runtime",
 	"duoqian-transfer-pow/try-runtime",
 	"institution-asset-guard/std",
+	"offchain-transaction-pos/try-runtime",
 	"genesis-pallet/try-runtime",
 	"sp-runtime/try-runtime",
 ]
