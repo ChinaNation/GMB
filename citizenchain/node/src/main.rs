@@ -13,6 +13,9 @@ mod cli;
 mod command;
 #[cfg(feature = "gpu-mining")]
 mod gpu_miner;
+mod offchain_keystore;
+mod offchain_ledger;
+mod offchain_packer;
 mod rpc;
 mod service;
 mod tls_cert;

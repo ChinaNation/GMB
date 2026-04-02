@@ -53,6 +53,9 @@
 - `memory/08-tasks/open/20260329-100000-wumin-wuminapp-扫码登录-sfid-cpms.md`
 - `memory/08-tasks/open/20260329-124242-统一切换-libp2p-wss-30333-清理-litep2p-并修复全链节点连接问题.md`
 - `memory/08-tasks/open/20260331-092013-排查本地电脑节点与两台服务器节点无法连通的问题-确认根因并修复相关配置或文档.md`
+- `memory/08-tasks/open/20260401-runtime-noamount-fee-无金额交易收取最低手续费.md`
+- `memory/08-tasks/open/20260401-step2a-offchain-pallet-简化密钥机制.md`
+- `memory/08-tasks/open/20260401-step2b-nodeui-签名管理员配置.md`
 - `memory/08-tasks/open/20260331-step2-node-offchain-rpc-链下待结算账本.md`
 - `memory/08-tasks/open/20260331-step3-runtime-offchain-transaction-pos-适配验证.md`
 

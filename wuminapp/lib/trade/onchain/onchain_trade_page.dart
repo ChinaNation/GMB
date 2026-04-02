@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -10,8 +9,8 @@ import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_service.dart';
-import 'package:wuminapp_mobile/wallet/capabilities/api_client.dart';
-import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
+import 'package:wuminapp_mobile/trade/local_tx_store.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
@@ -40,19 +39,13 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   /// 来源：primitives::core_const::ACCOUNT_EXISTENTIAL_DEPOSIT = 111
   static const double _edYuan = 1.11;
   final OnchainTradeService _tradeService = OnchainTradeService();
-  final ApiClient _api = ApiClient();
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
-  static const List<String> _symbols = ['GMB'];
   String _selectedSymbol = 'GMB';
 
   WalletProfile? _currentWallet;
   bool _loadingWallet = true;
   bool _submitting = false;
-  bool _syncing = false;
-  /// 内存中的 pending 交易（刚提交，SFID 尚未索引到）。
-  final List<OnchainTxRecord> _pendingRecords = [];
-  Timer? _syncTimer;
 
   @override
   void initState() {
@@ -61,15 +54,10 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       _toController.text = widget.initialToAddress!;
     }
     _bootstrap();
-    _syncTimer = Timer.periodic(
-      const Duration(seconds: 6),
-      (_) => _reloadRecords(syncPending: true),
-    );
   }
 
   @override
   void dispose() {
-    _syncTimer?.cancel();
     _toController.dispose();
     _amountController.dispose();
     super.dispose();
@@ -77,33 +65,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
 
   Future<void> _bootstrap() async {
     await _reloadWallet();
-    await _reloadRecords(syncPending: true);
-  }
-
-  Future<void> _reloadRecords({
-    bool syncPending = false,
-  }) async {
-    if (_syncing || _currentWallet == null || _pendingRecords.isEmpty) return;
-    _syncing = true;
-    try {
-      final page = await _api.fetchWalletTransactions(
-        _currentWallet!.address,
-        limit: 10,
-      );
-      if (!mounted) return;
-      // 移除已被 SFID 索引到的 pending 记录
-      _pendingRecords.removeWhere((p) =>
-          page.records.any((s) =>
-              s.txType == 'transfer' &&
-              s.fromAddress == p.fromAddress &&
-              s.toAddress == p.toAddress &&
-              (s.amountYuan - p.amount).abs() < 0.001));
-      if (mounted) setState(() {});
-    } catch (_) {
-      // 加载失败静默忽略
-    } finally {
-      _syncing = false;
-    }
   }
 
   Future<void> _reloadWallet() async {
@@ -141,17 +102,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
     setState(() {
       _toController.text = contact.accountPubkeyHex;
     });
-  }
-
-  Future<void> _openTradeRecordsPage() async {
-    if (_currentWallet == null) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => TransactionHistoryPage(
-          walletAddress: _currentWallet!.address,
-        ),
-      ),
-    );
   }
 
   /// 扫码支付：扫商户收款码，根据 bank 字段分流。
@@ -365,7 +315,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         };
       }
 
-      final record = await _tradeService.submitTransfer(
+      final result = await _tradeService.submitTransfer(
         OnchainTransferDraft(
           toAddress: toAddress,
           amount: amount,
@@ -376,13 +326,28 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       if (!mounted) {
         return;
       }
-      _pendingRecords.insert(0, record);
+
+      // 写入本地交易记录
+      final entity = LocalTxEntity()
+        ..txId = result.txHash
+        ..walletAddress = _currentWallet!.address
+        ..txType = 'transfer'
+        ..direction = 'out'
+        ..fromAddress = _currentWallet!.address
+        ..toAddress = toAddress
+        ..amountYuan = amount
+        ..feeYuan = estimatedFee
+        ..status = 'pending'
+        ..txHash = result.txHash
+        ..createdAtMillis = DateTime.now().millisecondsSinceEpoch;
+      await LocalTxStore.insert(entity);
+
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('签名成功，交易已发送，tx=${record.txHash}')));
+      ).showSnackBar(SnackBar(content: Text('签名成功，交易已发送，tx=${result.txHash}')));
       _toController.clear();
       _amountController.clear();
-      await _reloadRecords();
     } on WalletAuthException catch (e) {
       if (!mounted) {
         return;
@@ -414,21 +379,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         });
       }
     }
-  }
-
-  Color _statusColor(OnchainTxStatus status) {
-    switch (status) {
-      case OnchainTxStatus.pending:
-        return AppTheme.warning;
-      case OnchainTxStatus.confirmed:
-        return AppTheme.success;
-      case OnchainTxStatus.failed:
-        return AppTheme.danger;
-    }
-  }
-
-  int _countByStatus(OnchainTxStatus status) {
-    return _pendingRecords.where((it) => it.status == status).length;
   }
 
   Widget _buildSubmitCard() {
@@ -534,59 +484,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                 child: Text(_submitting ? '签名中' : '签名交易'),
               ),
             ),
-            const SizedBox(height: 12),
-            _buildTradeStatusRow(),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildTradeStatusRow() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            children: [
-              _buildStatusText(
-                '待确认',
-                _countByStatus(OnchainTxStatus.pending),
-                _statusColor(OnchainTxStatus.pending),
-              ),
-              _buildStatusText(
-                '已确认',
-                _countByStatus(OnchainTxStatus.confirmed),
-                _statusColor(OnchainTxStatus.confirmed),
-              ),
-              _buildStatusText(
-                '失败',
-                _countByStatus(OnchainTxStatus.failed),
-                _statusColor(OnchainTxStatus.failed),
-              ),
-            ],
-          ),
-        ),
-        InkWell(
-          onTap: _openTradeRecordsPage,
-          borderRadius: BorderRadius.circular(8),
-          child: const Padding(
-            padding: EdgeInsets.all(6),
-            child: Icon(Icons.chevron_right, size: 22),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatusText(String label, int count, Color color) {
-    return Text(
-      '$label $count',
-      style: TextStyle(
-        color: color,
-        fontWeight: FontWeight.w700,
       ),
     );
   }
@@ -633,140 +532,137 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
               ),
             ),
             Expanded(
-              child: RefreshIndicator(
-                onRefresh: () => _reloadRecords(syncPending: true),
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    if (_currentWallet == null && !_loadingWallet)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Container(
-                          decoration: AppTheme.cardDecoration(),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('未检测到钱包，无法执行链上签名与交易广播'),
-                                const SizedBox(height: 8),
-                                FilledButton(
-                                  onPressed: _openMyWalletPage,
-                                  child: const Text('去创建/导入钱包'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    // 多签交易入口
-                    Container(
-                      decoration: AppTheme.cardDecoration(),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const DuoqianTradePage(),
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (_currentWallet == null && !_loadingWallet)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Container(
+                        decoration: AppTheme.cardDecoration(),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('未检测到钱包，无法执行链上签名与交易广播'),
+                              const SizedBox(height: 8),
+                              FilledButton(
+                                onPressed: _openMyWalletPage,
+                                child: const Text('去创建/导入钱包'),
                               ),
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.primary.withAlpha(20),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Icon(Icons.groups_outlined,
-                                      size: 18, color: AppTheme.primary),
-                                ),
-                                const SizedBox(width: 12),
-                                const Text(
-                                  '多签交易',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppTheme.textPrimary,
-                                  ),
-                                ),
-                                const Spacer(),
-                                const Icon(Icons.chevron_right,
-                                    size: 20, color: AppTheme.textTertiary),
-                              ],
-                            ),
+                            ],
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    // 扫码支付入口（链下快捷支付）
-                    Container(
-                      decoration: AppTheme.cardDecoration(),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _openOffchainPay,
-                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.primary.withAlpha(20),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      '链下',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: AppTheme.primary,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                  // 多签交易入口
+                  Container(
+                    decoration: AppTheme.cardDecoration(),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const DuoqianTradePage(),
+                            ),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primary.withAlpha(20),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.groups_outlined,
+                                    size: 18, color: AppTheme.primary),
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                '多签交易',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              const Spacer(),
+                              const Icon(Icons.chevron_right,
+                                  size: 20, color: AppTheme.textTertiary),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // 扫码支付入口（链下快捷支付）
+                  Container(
+                    decoration: AppTheme.cardDecoration(),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _openOffchainPay,
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primary.withAlpha(20),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Center(
+                                  child: Text(
+                                    '链下',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppTheme.primary,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                const Text(
-                                  '扫码支付',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppTheme.textPrimary,
-                                  ),
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                '扫码支付',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
                                 ),
-                                const Spacer(),
-                                SvgPicture.asset(
-                                  'assets/icons/scan-line.svg',
-                                  width: 18,
-                                  height: 18,
-                                  colorFilter: const ColorFilter.mode(
-                                    AppTheme.primary,
-                                    BlendMode.srcIn,
-                                  ),
+                              ),
+                              const Spacer(),
+                              SvgPicture.asset(
+                                'assets/icons/scan-line.svg',
+                                width: 18,
+                                height: 18,
+                                colorFilter: const ColorFilter.mode(
+                                  AppTheme.primary,
+                                  BlendMode.srcIn,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    _buildSubmitCard(),
-                    const SizedBox(height: 24),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildSubmitCard(),
+                  const SizedBox(height: 24),
+                ],
               ),
             ),
           ],
