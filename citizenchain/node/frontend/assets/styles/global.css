@@ -3,29 +3,36 @@
 }
 
 :root {
-  --primary: #3AA8C1;
+  --primary: #06b6d4;
+  --bg-page: #0b1121;
+  --bg-app: #0f172a;
+  --bg-card: #1e293b;
+  --border: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
 }
 
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #FFDAE9;
-  color: #111827;
+  background: var(--bg-page);
+  color: var(--text-primary);
 }
 
 .page {
   width: 100%;
   margin: 0;
   padding: 16px;
-  background: #FFDAE9;
+  background: var(--bg-page);
   min-height: 100vh;
 }
 
 .app {
   margin: 0;
   padding: 24px;
-  background: #ffffff;
-  border: 1px solid #dbe2ea;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
   border-radius: 12px;
 }
 
@@ -38,7 +45,6 @@ body {
 .section {
   margin-top: 12px;
   padding-top: 8px;
-  border-top: 1px solid #eef2f7;
   text-align: left;
 }
 
@@ -61,8 +67,8 @@ body {
 }
 
 .status-dot.running {
-  background: #16a34a;
-  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
 }
 
 .status-dot.stopped {
@@ -85,12 +91,14 @@ body {
 
 .bootnode-inline select,
 .bootnode-inline input {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 14px;
   min-width: 220px;
   height: 40px;
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .bootnode-inline select {
@@ -113,7 +121,7 @@ body {
   margin-left: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #4b5563;
+  color: var(--text-secondary);
 }
 
 .wallet-inline {
@@ -133,9 +141,9 @@ body {
 .settings-version-section {
   margin-top: 16px;
   padding: 12px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: #fbfdff;
+  background: var(--bg-card);
 }
 
 .settings-version-row {
@@ -147,13 +155,13 @@ body {
 
 .settings-version-label {
   font-size: 13px;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .settings-version-value {
   font-size: 13px;
   font-weight: 500;
-  color: #1e293b;
+  color: var(--text-primary);
   font-family: monospace;
 }
 
@@ -167,9 +175,9 @@ body {
 .settings-nodekey-section .bootnode-inline {
   column-gap: 10px;
   min-height: 84px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--bg-card);
   padding: 10px 12px;
   overflow: visible;
 }
@@ -201,17 +209,19 @@ body {
   margin-left: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #4b5563;
+  color: var(--text-secondary);
 }
 
 .wallet-inline input {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 14px;
   min-width: 600px;
   width: 600px;
   margin-left: 0;
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .actions {
@@ -224,11 +234,13 @@ body {
 }
 
 .unlock-password-input {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 14px;
   width: 320px;
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .unlock-modal-mask {
@@ -244,8 +256,8 @@ body {
 .unlock-modal {
   width: 420px;
   max-width: calc(100vw - 32px);
-  background: #ffffff;
-  border: 1px solid #dbe2ea;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px;
   display: grid;
@@ -297,12 +309,12 @@ button[disabled] {
 .top-nav {
   display: flex;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 4px;
   margin-bottom: 10px;
   border: none;
   outline: none;
   box-shadow: none;
-  background: #FFDAE9;
+  background: var(--bg-page);
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -310,17 +322,24 @@ button[disabled] {
 }
 
 .top-nav button {
-  background: rgba(0, 140, 180, 0.12);
-  color: #000000;
+  background: transparent;
+  color: var(--text-secondary);
   min-width: 88px;
   border: none;
   outline: none;
   box-shadow: none;
+  transition: all 0.2s;
+}
+
+.top-nav button:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .top-nav button.active {
-  background: var(--primary);
+  background: linear-gradient(135deg, #0891b2, #06b6d4);
   color: #ffffff;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
 }
 
 .top-nav button:focus,
@@ -333,7 +352,7 @@ button[disabled] {
 button:focus-visible,
 select:focus-visible,
 input:focus-visible {
-  outline: 2px solid rgba(0, 140, 180, 0.25);
+  outline: 2px solid rgba(6, 182, 212, 0.3);
   outline-offset: 1px;
 }
 
@@ -351,20 +370,20 @@ select option:checked {
   margin-top: 16px;
   padding: 10px;
   white-space: pre-wrap;
-  background: #fee2e2;
-  border: 1px solid #fecaca;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 8px;
-  color: #991b1b;
+  color: #fca5a5;
 }
 
 .warning {
   margin-top: 16px;
   padding: 10px;
   white-space: pre-wrap;
-  background: #fef3c7;
-  border: 1px solid #fcd34d;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
   border-radius: 8px;
-  color: #92400e;
+  color: #fbbf24;
 }
 
 .mining-income-grid,
@@ -375,10 +394,10 @@ select option:checked {
 }
 
 .metric-card {
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 12px;
-  background: #fbfdff;
+  background: var(--bg-card);
 }
 
 .mining-section .metric-card,
@@ -394,14 +413,14 @@ select option:checked {
 
 .metric-label {
   font-size: 13px;
-  color: #4b5563;
+  color: var(--text-muted);
 }
 
 .metric-value {
   margin-top: 6px;
   font-size: 20px;
   font-weight: 700;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .metric-value-currency {
@@ -429,26 +448,27 @@ select option:checked {
 
 .mining-table th,
 .mining-table td {
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
   padding: 10px 8px;
   font-size: 14px;
   white-space: nowrap;
+  color: var(--text-primary);
 }
 
 .mining-table th {
-  color: #374151;
+  color: var(--text-secondary);
   font-weight: 600;
 }
 
 .empty-cell {
   text-align: left;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .whitepaper-meta {
   margin: 6px 0 10px;
   font-size: 13px;
-  color: #4b5563;
+  color: var(--text-secondary);
 }
 
 .whitepaper-meta a {
@@ -487,7 +507,7 @@ select option:checked {
   min-height: calc(100vh - 180px);
   border: 0;
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--bg-card);
 }
 
 .markdown-body h1,
@@ -498,18 +518,18 @@ select option:checked {
 .markdown-body h6 {
   margin: 1.2em 0 0.6em;
   line-height: 1.3;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .markdown-body h1 {
   font-size: 28px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
   padding-bottom: 0.35em;
 }
 
 .markdown-body h2 {
   font-size: 22px;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid var(--border);
   padding-bottom: 0.25em;
 }
 
@@ -519,7 +539,7 @@ select option:checked {
 
 .markdown-body p {
   margin: 0.7em 0;
-  color: #1f2937;
+  color: var(--text-secondary);
 }
 
 .markdown-body ul,
@@ -544,16 +564,17 @@ select option:checked {
 .markdown-body blockquote {
   margin: 0.9em 0;
   padding: 0.2em 1em;
-  border-left: 4px solid #cbd5e1;
-  color: #4b5563;
-  background: #f8fafc;
+  border-left: 4px solid var(--border);
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .markdown-body code {
-  background: #f3f4f6;
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 4px;
   padding: 0.1em 0.35em;
   font-size: 0.92em;
+  color: var(--primary);
 }
 
 .markdown-body pre {
@@ -578,13 +599,14 @@ select option:checked {
 
 .markdown-body th,
 .markdown-body td {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   padding: 8px 10px;
   text-align: left;
+  color: var(--text-primary);
 }
 
 .markdown-body th {
-  background: #f8fafc;
+  background: rgba(255, 255, 255, 0.04);
   font-weight: 600;
 }
 
@@ -603,7 +625,7 @@ select option:checked {
 .governance-section h2 {
   margin: 0 0 16px;
   font-size: 20px;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .institution-group {
@@ -614,10 +636,10 @@ select option:checked {
   cursor: pointer;
   user-select: none;
   font-size: 15px;
-  color: #374151;
+  color: var(--text-primary);
   margin: 0 0 8px;
   padding: 6px 0;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
 }
 
 .collapse-arrow {
@@ -638,23 +660,23 @@ select option:checked {
 }
 
 .institution-card {
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
-  background: #fbfdff;
+  background: var(--bg-card);
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .institution-card:hover {
   border-color: var(--primary);
-  box-shadow: 0 1px 4px rgba(0, 140, 180, 0.12);
+  box-shadow: 0 1px 4px rgba(6, 182, 212, 0.2);
 }
 
 .institution-card-name {
   font-size: 14px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .institution-card-meta {
@@ -663,7 +685,7 @@ select option:checked {
 
 .institution-card-type {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 /* 机构详情页 */
@@ -695,7 +717,7 @@ select option:checked {
 
 .institution-info-section h3 {
   font-size: 14px;
-  color: #374151;
+  color: var(--text-secondary);
   margin: 0 0 6px;
 }
 
@@ -703,8 +725,8 @@ select option:checked {
 .duoqian-address {
   display: block;
   font-size: 12px;
-  color: #4b5563;
-  background: #f3f4f6;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
   padding: 6px 8px;
   border-radius: 4px;
   word-break: break-all;
@@ -712,7 +734,7 @@ select option:checked {
 
 .no-data {
   font-size: 13px;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 .admin-list {
@@ -729,13 +751,13 @@ select option:checked {
 
 .admin-index {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-muted);
   min-width: 24px;
 }
 
 .admin-pubkey {
   font-size: 12px;
-  color: #4b5563;
+  color: var(--text-secondary);
   word-break: break-all;
 }
 
@@ -749,19 +771,26 @@ select option:checked {
 }
 
 .governance-sub-tabs button {
-  background: rgba(0, 140, 180, 0.12);
-  color: #000000;
+  background: transparent;
+  color: var(--text-secondary);
   border: none;
   padding: 4px 16px;
   font-size: 14px;
   cursor: pointer;
   min-width: 88px;
   border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.governance-sub-tabs button:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .governance-sub-tabs button.active {
-  background: var(--primary);
+  background: linear-gradient(135deg, #0891b2, #06b6d4);
   color: #ffffff;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
 }
 
 /* ── 提案列表 ── */
@@ -773,10 +802,10 @@ select option:checked {
 }
 
 .proposal-card {
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
-  background: #fbfdff;
+  background: var(--bg-card);
   cursor: pointer;
   transition: border-color 0.15s;
 }
@@ -795,7 +824,7 @@ select option:checked {
 .proposal-id {
   font-size: 14px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .proposal-status {
@@ -806,23 +835,23 @@ select option:checked {
 }
 
 .status-0 {
-  background: #dbeafe;
-  color: #1e40af;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
 }
 
 .status-1 {
-  background: #d1fae5;
-  color: #065f46;
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
 }
 
 .status-2 {
-  background: #fee2e2;
-  color: #991b1b;
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
 }
 
 .status-3 {
-  background: #d1fae5;
-  color: #065f46;
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
 }
 
 .proposal-card-tags {
@@ -834,20 +863,20 @@ select option:checked {
 
 .proposal-tag {
   font-size: 11px;
-  color: #6b7280;
-  background: #f3f4f6;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
   padding: 1px 6px;
   border-radius: 4px;
 }
 
 .institution-tag {
   color: var(--primary);
-  background: rgba(0, 140, 180, 0.08);
+  background: rgba(6, 182, 212, 0.1);
 }
 
 .proposal-summary {
   font-size: 13px;
-  color: #4b5563;
+  color: var(--text-secondary);
   line-height: 1.4;
 }
 
@@ -865,14 +894,14 @@ select option:checked {
 }
 
 .load-more-button:hover {
-  background: rgba(0, 140, 180, 0.06);
+  background: rgba(6, 182, 212, 0.1);
 }
 
 /* ── 提案详情 ── */
 
 .proposal-institution-name {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--text-muted);
   margin: -8px 0 12px;
 }
 
@@ -894,14 +923,14 @@ select option:checked {
 
 .detail-label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--text-muted);
   min-width: 60px;
   flex-shrink: 0;
 }
 
 .detail-value {
   font-size: 13px;
-  color: #111827;
+  color: var(--text-primary);
   word-break: break-all;
 }
 
@@ -921,12 +950,12 @@ select option:checked {
 .vote-tally-title {
   font-size: 13px;
   font-weight: 600;
-  color: #374151;
+  color: var(--text-primary);
 }
 
 .vote-tally-counts {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .vote-threshold {
@@ -936,7 +965,7 @@ select option:checked {
 
 .vote-tally-bar {
   height: 8px;
-  background: #fee2e2;
+  background: rgba(239, 68, 68, 0.2);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -978,17 +1007,17 @@ select option:checked {
 }
 
 .wallet-form {
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 14px;
-  background: #f9fafb;
+  background: var(--bg-card);
   margin-bottom: 16px;
 }
 
 .wallet-form h3 {
   margin: 0 0 10px;
   font-size: 15px;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .wallet-form-field {
@@ -1005,10 +1034,12 @@ select option:checked {
 .wallet-form-field input {
   width: 100%;
   padding: 6px 8px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 13px;
   box-sizing: border-box;
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .wallet-form-actions {
@@ -1024,8 +1055,8 @@ select option:checked {
 
 .cancel-button {
   background: transparent;
-  color: #6b7280;
-  border: 1px solid #d1d5db;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
 }
 
 .danger-button {
@@ -1040,10 +1071,10 @@ select option:checked {
 }
 
 .wallet-card {
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
-  background: #fbfdff;
+  background: var(--bg-card);
 }
 
 .wallet-card-header {
@@ -1056,7 +1087,7 @@ select option:checked {
 .wallet-card-name {
   font-size: 14px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .wallet-delete-button {
@@ -1075,7 +1106,7 @@ select option:checked {
 
 .wallet-card-address code {
   font-size: 12px;
-  color: #4b5563;
+  color: var(--text-secondary);
   word-break: break-all;
 }
 
@@ -1128,16 +1159,16 @@ select option:checked {
   font-size: 12px;
   padding: 2px 10px;
   border-radius: 10px;
-  background: #d1fae5;
-  color: #065f46;
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
   font-weight: 500;
 }
 
 .admin-wallet-notice {
   font-size: 13px;
-  color: #065f46;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.2);
   border-radius: 6px;
   padding: 6px 10px;
   margin-bottom: 12px;
@@ -1153,8 +1184,8 @@ select option:checked {
   font-size: 11px;
   padding: 1px 6px;
   border-radius: 8px;
-  background: #dbeafe;
-  color: #1e40af;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
   font-weight: 500;
   margin-right: 6px;
 }
@@ -1178,7 +1209,7 @@ select option:checked {
 }
 
 .admin-entry-card:hover {
-  border-color: #93c5fd;
+  border-color: var(--primary);
 }
 
 .admin-entry-left {
@@ -1188,7 +1219,7 @@ select option:checked {
 .admin-entry-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--text-primary);
 }
 
 .admin-entry-activated {
@@ -1235,8 +1266,8 @@ select option:checked {
 }
 
 .admin-card-activated {
-  border-color: #a7f3d0;
-  background: #f0fdf4;
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.06);
 }
 
 .admin-card-index {
@@ -1248,7 +1279,7 @@ select option:checked {
 
 .admin-card-address {
   font-size: 11px;
-  color: #475569;
+  color: var(--text-secondary);
   flex: 1;
   min-width: 0;
   word-break: break-all;
@@ -1264,8 +1295,8 @@ select option:checked {
 
 .activated-tag {
   font-size: 11px;
-  color: #059669;
-  background: #d1fae5;
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.15);
   padding: 1px 6px;
   border-radius: 4px;
   font-weight: 500;
@@ -1273,36 +1304,36 @@ select option:checked {
 
 .activate-button {
   font-size: 11px;
-  color: #3b82f6;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
   border-radius: 4px;
   padding: 2px 8px;
   cursor: pointer;
 }
 
 .activate-button:hover {
-  background: #dbeafe;
+  background: rgba(59, 130, 246, 0.2);
 }
 
 .set-validator-button {
   font-size: 11px;
-  color: #7c3aed;
-  background: #f5f3ff;
-  border: 1px solid #ddd6fe;
+  color: #a78bfa;
+  background: rgba(124, 58, 237, 0.1);
+  border: 1px solid rgba(124, 58, 237, 0.3);
   border-radius: 4px;
   padding: 2px 8px;
   cursor: pointer;
 }
 
 .set-validator-button:hover {
-  background: #ede9fe;
+  background: rgba(124, 58, 237, 0.2);
 }
 
 .validator-tag {
   font-size: 11px;
-  color: #7c3aed;
-  background: #ede9fe;
+  color: #a78bfa;
+  background: rgba(124, 58, 237, 0.15);
   padding: 1px 6px;
   border-radius: 4px;
   font-weight: 500;
@@ -1311,16 +1342,16 @@ select option:checked {
 /* ── 投票操作区 ── */
 
 .vote-action-section {
-  border: 1px solid #a7f3d0;
+  border: 1px solid rgba(34, 197, 94, 0.2);
   border-radius: 8px;
   padding: 14px;
-  background: #ecfdf5;
+  background: rgba(34, 197, 94, 0.06);
   margin-bottom: 16px;
 }
 
 .vote-action-hint {
   font-size: 13px;
-  color: #065f46;
+  color: #4ade80;
   margin: 0 0 10px;
 }
 
@@ -1383,12 +1414,13 @@ select option:checked {
 }
 
 .vote-signing-modal {
-  background: #fff;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
   border-radius: 12px;
   width: 400px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
 .vote-signing-header {
@@ -1396,13 +1428,13 @@ select option:checked {
   justify-content: space-between;
   align-items: center;
   padding: 14px 16px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
 }
 
 .vote-signing-header h3 {
   margin: 0;
   font-size: 16px;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .vote-signing-close {
@@ -1427,16 +1459,18 @@ select option:checked {
 .vote-signing-field label {
   display: block;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--text-muted);
   margin-bottom: 4px;
 }
 
 .vote-signing-field select {
   width: 100%;
   padding: 6px 8px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 13px;
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .vote-direction-buttons {
@@ -1447,13 +1481,13 @@ select option:checked {
 .vote-dir-btn {
   flex: 1;
   padding: 10px;
-  border: 2px solid #d1d5db;
+  border: 2px solid var(--border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--bg-card);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  color: #374151;
+  color: var(--text-primary);
   transition: all 0.15s;
 }
 
@@ -1494,7 +1528,7 @@ select option:checked {
 
 .qr-instruction {
   font-size: 13px;
-  color: #4b5563;
+  color: var(--text-secondary);
   margin: 0 0 12px;
 }
 
@@ -1504,13 +1538,13 @@ select option:checked {
   padding: 16px;
   background: #fff;
   border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   margin-bottom: 12px;
 }
 
 .qr-countdown {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--text-muted);
   margin: 0 0 12px;
 }
 
@@ -1522,7 +1556,7 @@ select option:checked {
   margin: 0 auto 12px;
   border-radius: 8px;
   overflow: hidden;
-  border: 2px solid #dbe2ea;
+  border: 2px solid var(--border);
 }
 
 /* ── QrScanner 组件 ── */
@@ -1579,9 +1613,9 @@ select option:checked {
 .tx-hash {
   display: block;
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-muted);
   word-break: break-all;
-  background: #f3f4f6;
+  background: rgba(255, 255, 255, 0.04);
   padding: 6px 8px;
   border-radius: 4px;
 }
@@ -1606,13 +1640,13 @@ select option:checked {
   font-weight: 500;
   margin-left: 6px;
 }
-.vote-yes-tag { background: #d1fae5; color: #065f46; }
-.vote-no-tag { background: #fee2e2; color: #991b1b; }
-.vote-pending-tag { background: #fef3c7; color: #92400e; }
-.vote-none-tag { background: #f1f5f9; color: #94a3b8; }
+.vote-yes-tag { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+.vote-no-tag { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+.vote-pending-tag { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.vote-none-tag { background: rgba(255, 255, 255, 0.06); color: var(--text-muted); }
 
-.admin-card-voted-yes { border-color: #a7f3d0; background: #f0fdf4; }
-.admin-card-voted-no { border-color: #fecaca; background: #fef2f2; }
+.admin-card-voted-yes { border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.06); }
+.admin-card-voted-no { border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.06); }
 
 .vote-button-inline {
   font-size: 12px;
@@ -1664,7 +1698,7 @@ select option:checked {
   padding: 8px 18px;
   border: 1px solid var(--primary);
   border-radius: 6px;
-  background: #fff;
+  background: transparent;
   color: var(--primary);
   font-size: 13px;
   font-weight: 500;
@@ -1674,12 +1708,12 @@ select option:checked {
 }
 
 .proposal-type-button:hover:not(:disabled) {
-  background: rgba(0, 140, 180, 0.08);
+  background: rgba(6, 182, 212, 0.1);
 }
 
 .proposal-type-button:disabled {
-  border-color: #d1d5db;
-  color: #9ca3af;
+  border-color: var(--border);
+  color: var(--text-muted);
   cursor: not-allowed;
 }
 
@@ -1689,14 +1723,14 @@ select option:checked {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  background: #f3f4f6;
+  background: rgba(255, 255, 255, 0.04);
   padding: 6px 8px;
   border-radius: 4px;
 }
 
 .institution-id-inline code {
   font-size: 12px;
-  color: #4b5563;
+  color: var(--text-secondary);
   word-break: break-all;
   background: transparent;
   padding: 0;
@@ -1706,10 +1740,10 @@ select option:checked {
 
 .upgrade-proposal-hint {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--text-secondary);
   margin: -4px 0 12px;
   padding: 8px 12px;
-  background: #f0f9ff;
+  background: rgba(6, 182, 212, 0.06);
   border-left: 3px solid var(--primary);
   border-radius: 0 6px 6px 0;
 }
@@ -1724,7 +1758,7 @@ select option:checked {
   padding: 7px 16px;
   border: 1px solid var(--primary);
   border-radius: 6px;
-  background: #fff;
+  background: transparent;
   color: var(--primary);
   font-size: 13px;
   font-weight: 500;
@@ -1739,14 +1773,14 @@ select option:checked {
 }
 
 .upgrade-file-button:disabled {
-  border-color: #d1d5db;
-  color: #9ca3af;
+  border-color: var(--border);
+  color: var(--text-muted);
   cursor: not-allowed;
 }
 
 .upgrade-file-name {
   font-size: 13px;
-  color: #4b5563;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1760,7 +1794,7 @@ select option:checked {
 
 .upgrade-done-note {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--text-muted);
   text-align: center;
   margin: 0 0 12px;
 }

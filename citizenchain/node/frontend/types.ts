@@ -38,7 +38,6 @@ export type ChainStatus = {
 
 // 节点身份信息
 export type NodeIdentity = {
-  nodeName: string | null;
   peerId: string | null;
   role: string | null;
 };

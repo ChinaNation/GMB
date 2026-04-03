@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>UI 方案 C — 暖灰质感风</title>
+<style>
+* { box-sizing: border-box; margin: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; }
+
+.page { width: 1360px; height: 920px; margin: 0 auto; display: flex; flex-direction: column; }
+
+/* 顶部导航 */
+.top-nav {
+  display: flex; align-items: center; gap: 2px; padding: 10px 20px;
+  background: #16213e;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.top-nav .brand {
+  font-size: 15px; font-weight: 700; color: #e94560; margin-right: 24px;
+  letter-spacing: 1px;
+}
+.top-nav button {
+  background: transparent; border: none; color: #8892a4; font-size: 13px;
+  padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500;
+  transition: all 0.15s; position: relative;
+}
+.top-nav button:hover { color: #fff; }
+.top-nav button.active {
+  color: #fff; background: rgba(233, 69, 96, 0.15);
+}
+.top-nav button.active::after {
+  content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 20px; height: 2px; background: #e94560; border-radius: 1px;
+}
+.top-nav .spacer { flex: 1; }
+.top-nav .status-group {
+  display: flex; align-items: center; gap: 16px; font-size: 12px; color: #8892a4;
+}
+.top-nav .status-group .dot { width: 7px; height: 7px; border-radius: 50%; background: #0ead69; box-shadow: 0 0 6px rgba(14,173,105,0.5); }
+.top-nav .status-group .running { color: #0ead69; font-weight: 600; margin-left: -8px; }
+.top-nav .status-group .block-info { font-family: 'SF Mono', monospace; }
+.top-nav .status-group .block-info span { color: #e94560; font-weight: 600; }
+
+/* 内容区 */
+.app { flex: 1; padding: 24px; background: #1a1a2e; overflow-y: auto; }
+.content { display: grid; gap: 16px; }
+
+/* 操作按钮 */
+.actions-row { display: flex; gap: 8px; }
+.actions-row button {
+  padding: 9px 22px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: none; transition: all 0.15s;
+}
+.btn-start { background: #e94560; color: #fff; }
+.btn-start:hover { background: #d63d56; }
+.btn-stop { background: rgba(255,255,255,0.06); color: #8892a4; border: 1px solid rgba(255,255,255,0.1) !important; }
+.btn-stop:hover { background: rgba(255,255,255,0.1); }
+
+/* 卡片网格 */
+.card-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.card {
+  padding: 20px; border-radius: 12px;
+  background: #16213e; border: 1px solid rgba(255,255,255,0.06);
+  transition: border-color 0.15s;
+}
+.card:hover { border-color: rgba(233, 69, 96, 0.2); }
+.card .card-label { font-size: 11px; color: #8892a4; margin-bottom: 8px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+.card .card-value { font-size: 22px; font-weight: 700; color: #fff; }
+.card .card-value.accent { color: #e94560; }
+.card .card-value.green { color: #0ead69; }
+.card .card-sub { font-size: 11px; color: #8892a4; margin-top: 4px; }
+
+/* 双列信息 */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.info-card {
+  padding: 18px; border-radius: 12px;
+  background: #16213e; border: 1px solid rgba(255,255,255,0.06);
+}
+.info-card h4 { font-size: 12px; color: #8892a4; margin-bottom: 12px; font-weight: 600; }
+.info-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.info-item:last-child { border-bottom: none; }
+.info-item .label { font-size: 13px; color: #8892a4; }
+.info-item .value { font-size: 13px; color: #e0e0e0; font-family: 'SF Mono', monospace; }
+
+/* 底部 */
+.bottom-bar {
+  display: flex; align-items: center; gap: 24px;
+  padding: 8px 20px; background: #16213e;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 11px; color: #5a6478;
+}
+.bottom-bar .val { color: #8892a4; font-family: monospace; }
+.bottom-bar .spacer { flex: 1; }
+.bottom-bar .copy { font-size: 11px; color: #e94560; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="page">
+  <nav class="top-nav">
+    <span class="brand">CITIZENCHAIN</span>
+    <button class="active">首页</button>
+    <button>挖矿</button>
+    <button>治理</button>
+    <button>网络</button>
+    <button>白皮书</button>
+    <button>公民宪法</button>
+    <button>设置</button>
+    <div class="spacer"></div>
+    <div class="status-group">
+      <span class="dot"></span><span class="running">运行中</span>
+      <span class="block-info">区块 <span>#35</span></span>
+      <span class="block-info">确认 <span>#33</span></span>
+    </div>
+  </nav>
+
+  <main class="app">
+    <div class="content">
+      <div class="actions-row">
+        <button class="btn-start">启动节点</button>
+        <button class="btn-stop">停止节点</button>
+      </div>
+
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-label">总发行量</div>
+          <div class="card-value accent">1,000.00</div>
+          <div class="card-sub">GMB</div>
+        </div>
+        <div class="card">
+          <div class="card-label">永久质押</div>
+          <div class="card-value">500.00</div>
+          <div class="card-sub">GMB</div>
+        </div>
+        <div class="card">
+          <div class="card-label">同步状态</div>
+          <div class="card-value green">已同步</div>
+          <div class="card-sub">区块完全同步</div>
+        </div>
+        <div class="card">
+          <div class="card-label">今日收益</div>
+          <div class="card-value accent">12.50</div>
+          <div class="card-sub">GMB</div>
+        </div>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-card">
+          <h4>节点身份</h4>
+          <div class="info-item">
+            <span class="label">名称</span>
+            <span class="value">node-01</span>
+          </div>
+          <div class="info-item">
+            <span class="label">角色</span>
+            <span class="value">验证者</span>
+          </div>
+          <div class="info-item">
+            <span class="label">PeerId</span>
+            <span class="value">12D3KooWRk...7xPz</span>
+          </div>
+        </div>
+        <div class="info-card">
+          <h4>网络状态</h4>
+          <div class="info-item">
+            <span class="label">在线节点</span>
+            <span class="value">3</span>
+          </div>
+          <div class="info-item">
+            <span class="label">全节点</span>
+            <span class="value">2</span>
+          </div>
+          <div class="info-item">
+            <span class="label">轻节点</span>
+            <span class="value">1</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="bottom-bar">
+    <span>Runtime <span class="val">spec 4</span></span>
+    <span>节点 <span class="val">v1.0.0</span></span>
+    <div class="spacer"></div>
+    <span>PeerId: <span class="val">12D3KooWRk...7xPz</span></span>
+    <span class="copy">复制</span>
+  </div>
+</div>
+</body>
+</html>
