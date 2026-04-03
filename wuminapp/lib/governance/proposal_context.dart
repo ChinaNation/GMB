@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../wallet/core/wallet_manager.dart';
+import 'activation_service.dart';
 import 'institution_admin_service.dart';
 import 'institution_data.dart';
 import 'runtime_upgrade_service.dart';
@@ -63,11 +64,14 @@ class ProposalContextResolver {
   ProposalContextResolver({
     InstitutionAdminService? adminService,
     WalletManager? walletManager,
+    ActivationService? activationService,
   })  : _adminService = adminService ?? InstitutionAdminService(),
-        _walletManager = walletManager ?? WalletManager();
+        _walletManager = walletManager ?? WalletManager(),
+        _activationService = activationService ?? ActivationService();
 
   final InstitutionAdminService _adminService;
   final WalletManager _walletManager;
+  final ActivationService _activationService;
 
   /// 已缓存的钱包列表（同一次会话内复用）。
   List<WalletProfile>? _wallets;
@@ -121,7 +125,7 @@ class ProposalContextResolver {
       institution = await _reverseMatchInstitution(coldWallets);
     }
 
-    // 3. 匹配管理员钱包
+    // 3. 匹配管理员钱包（通过激活状态判断）
     if (institution == null) {
       return const ProposalContext();
     }
@@ -143,11 +147,36 @@ class ProposalContextResolver {
       admins = const [];
     }
 
+    // 优先使用激活状态匹配，兼容旧的冷钱包匹配逻辑
+    final activatedAdmins = await _activationService
+        .getActivatedAdmins(institution!.shenfenId)
+        .catchError((_) => <ActivatedAdmin>[]);
+
     final matchedWallets = <WalletProfile>[];
-    for (final w in coldWallets) {
-      final pk = _normalize(w.pubkeyHex);
-      if (admins.contains(pk)) {
-        matchedWallets.add(w);
+
+    // 已激活的管理员 → 在钱包列表中找到对应钱包
+    for (final activated in activatedAdmins) {
+      WalletProfile? wallet;
+      for (final w in wallets) {
+        if (_normalize(w.pubkeyHex) == activated.pubkeyHex) {
+          wallet = w;
+          break;
+        }
+      }
+      if (wallet != null && !matchedWallets.any(
+        (w) => _normalize(w.pubkeyHex) == activated.pubkeyHex,
+      )) {
+        matchedWallets.add(wallet);
+      }
+    }
+
+    // 兼容：冷钱包匹配链上管理员（尚未激活但已导入的）
+    if (matchedWallets.isEmpty) {
+      for (final w in coldWallets) {
+        final pk = _normalize(w.pubkeyHex);
+        if (admins.contains(pk)) {
+          matchedWallets.add(w);
+        }
       }
     }
 

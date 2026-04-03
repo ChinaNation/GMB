@@ -7,13 +7,14 @@ import 'institution_data.dart';
 
 /// 管理员列表页面。
 ///
-/// 展示机构所有管理员的完整 SS58 地址，当前用户标记为"我"。
+/// 展示机构所有管理员的完整 SS58 地址，已激活的管理员标记为绿色。
 class AdminListPage extends StatelessWidget {
   const AdminListPage({
     super.key,
     required this.institution,
     required this.admins,
     required this.adminPubkeys,
+    required this.activatedPubkeys,
     required this.badgeColor,
   });
 
@@ -21,6 +22,8 @@ class AdminListPage extends StatelessWidget {
   final List<String> admins;
   /// 当前用户导入的所有管理员公钥（小写 hex）。
   final Set<String> adminPubkeys;
+  /// 已激活的管理员公钥集合（小写 hex）。
+  final Set<String> activatedPubkeys;
   final Color badgeColor;
 
 
@@ -66,10 +69,12 @@ class AdminListPage extends StatelessWidget {
             ...List.generate(admins.length, (index) {
               final pubkey = admins[index];
               final isSelf = adminPubkeys.contains(pubkey);
+              final isActivated = activatedPubkeys.contains(pubkey);
               return _AdminTile(
                 index: index + 1,
                 pubkeyHex: pubkey,
                 isSelf: isSelf,
+                isActivated: isActivated,
               );
             }),
         ],
@@ -125,11 +130,13 @@ class _AdminTile extends StatelessWidget {
     required this.index,
     required this.pubkeyHex,
     required this.isSelf,
+    required this.isActivated,
   });
 
   final int index;
   final String pubkeyHex;
   final bool isSelf;
+  final bool isActivated;
 
   String _toSs58() {
     try {
@@ -198,7 +205,25 @@ class _AdminTile extends StatelessWidget {
           const SizedBox(width: 6),
           Column(
             children: [
-              if (isSelf)
+              if (isActivated)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.success.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    '已激活',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.success,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                )
+              else if (isSelf)
                 Container(
                   margin: const EdgeInsets.only(bottom: 4),
                   padding:

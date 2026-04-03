@@ -158,6 +158,7 @@ class OfflineSignService {
         'developer_upgrade',
         'developer_direct_upgrade',
         'propose_runtime_upgrade',
+        'activate_admin',
       };
       if (!allowedHashedActions.contains(displayAction)) {
         throw const OfflineSignException(

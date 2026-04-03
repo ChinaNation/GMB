@@ -95,7 +95,8 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
       let wallets = externalAdminWallets;
       if (externalAdminWallets.length === 0 && sid) {
         try {
-          wallets = await api.checkAdminWallets(sid);
+          const activated = await api.getActivatedAdmins(sid);
+          wallets = activated.map(a => ({ address: hexToSs58(a.pubkeyHex), pubkeyHex: a.pubkeyHex, name: '' }));
           setDetectedAdminWallets(wallets);
         } catch (_) {}
       }
@@ -173,10 +174,12 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
           <div className="metric-label">提案类型</div>
           <div className="metric-value">{kindLabel(meta.kind)}</div>
         </div>
-        <div className="metric-card">
-          <div className="metric-label">当前阶段</div>
-          <div className="metric-value">{stageLabel(meta.stage)}</div>
-        </div>
+        {meta.kind === 1 && (
+          <div className="metric-card">
+            <div className="metric-label">当前阶段</div>
+            <div className="metric-value">{stageLabel(meta.stage)}</div>
+          </div>
+        )}
         <div className="metric-card">
           <div className="metric-label">状态</div>
           <div className={`metric-value status-text-${meta.status}`}>
@@ -266,7 +269,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
       {institution && (
         <div className="institution-info-section">
           <h3>管理员投票状态（{institution.admins.length} 人）</h3>
-          <div className="admin-list">
+          <div className="admin-grid">
             {institution.admins.map((pubkey, i) => {
               const pk = pubkey.toLowerCase();
               const myWallet = adminWallets.find(w => w.pubkeyHex.toLowerCase() === pk);
@@ -277,23 +280,24 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
               const canVote = myWallet && meta.status === 0 && !hasVoted && !isPending;
 
               return (
-                <div key={pubkey} className={`admin-item ${myWallet ? 'my-wallet' : ''}`}>
-                  <span className="admin-index">{i + 1}.</span>
-                  <code className="admin-pubkey">{hexToSs58(pubkey)}</code>
-                  {myWallet && <span className="my-wallet-tag">{myWallet.name}</span>}
-                  {hasVoted && (
-                    <span className={`vote-result-tag ${voted ? 'vote-yes-tag' : 'vote-no-tag'}`}>
-                      {voted ? '赞成' : '反对'}
-                    </span>
-                  )}
-                  {isPending && !hasVoted && (
-                    <span className="vote-result-tag vote-pending-tag">投票中…</span>
-                  )}
-                  {canVote && (
-                    <button className="vote-button-inline" onClick={() => setVotingWallet(myWallet)}>
-                      投票
-                    </button>
-                  )}
+                <div key={pubkey} className={`metric-card admin-card ${hasVoted ? (voted ? 'admin-card-voted-yes' : 'admin-card-voted-no') : ''}`}>
+                  <span className="admin-card-index">{i + 1}</span>
+                  <code className="admin-card-address">{hexToSs58(pubkey)}</code>
+                  <div className="admin-card-actions">
+                    {canVote ? (
+                      <button className="vote-button-inline" onClick={() => setVotingWallet(myWallet)}>
+                        投票
+                      </button>
+                    ) : isPending && !hasVoted ? (
+                      <span className="vote-result-tag vote-pending-tag">投票中</span>
+                    ) : hasVoted ? (
+                      <span className={`vote-result-tag ${voted ? 'vote-yes-tag' : 'vote-no-tag'}`}>
+                        {voted ? '赞成' : '反对'}
+                      </span>
+                    ) : (
+                      <span className="vote-result-tag vote-none-tag">未投票</span>
+                    )}
+                  </div>
                 </div>
               );
             })}

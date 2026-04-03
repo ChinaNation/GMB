@@ -13,7 +13,7 @@ type Props = {
 
 export function HomeNodeSection({ onNodeActionBusyChange }: Props) {
   const [status, setStatus] = useState<NodeStatus>({ running: false, state: 'stopped', pid: null });
-  const [chain, setChain] = useState<ChainStatus>({ blockHeight: null, finalizedHeight: null, syncing: null });
+  const [chain, setChain] = useState<ChainStatus>({ blockHeight: null, finalizedHeight: null, syncing: null, specVersion: null, nodeVersion: '' });
   const [identity, setIdentity] = useState<NodeIdentity>({ nodeName: null, peerId: null, role: null });
   const [issuance, setIssuance] = useState<TotalIssuance>({ totalIssuance: null });
   const [stake, setStake] = useState<TotalStake>({ totalStake: null });

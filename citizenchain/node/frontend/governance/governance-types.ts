@@ -1,17 +1,4 @@
-// 治理模块前端类型定义，与后端 governance::types 和 settings::cold_wallets 对应。
-
-// ── 冷钱包 ──
-
-export type ColdWallet = {
-  address: string;
-  pubkeyHex: string;
-  name: string;
-  createdAtMs: number;
-};
-
-export type ColdWalletList = {
-  wallets: ColdWallet[];
-};
+// 治理模块前端类型定义，与后端 governance::types 和 governance::activation 对应。
 
 // ── 签名请求/响应 ──
 
@@ -56,12 +43,27 @@ export interface SigningAdminInfo {
   shenfenName: string;
 }
 
-// ── 管理员匹配 ──
+// ── 管理员匹配（旧，保留兼容投票签名流程） ──
 
 export type AdminWalletMatch = {
   address: string;
   pubkeyHex: string;
   name: string;
+};
+
+// ── 管理员激活 ──
+
+export type ActivatedAdmin = {
+  pubkeyHex: string;
+  shenfenId: string;
+  activatedAtMs: number;
+};
+
+export type ActivateRequestResult = {
+  requestJson: string;
+  requestId: string;
+  expectedPayloadHash: string;
+  payloadHex: string;
 };
 
 // ── 机构 ──

@@ -116,14 +116,33 @@ pub struct ChainStatus {
     pub block_height: Option<u64>,
     pub finalized_height: Option<u64>,
     pub syncing: Option<bool>,
+    /// 链上 runtime 的 spec_version（节点运行时可用）。
+    pub spec_version: Option<u32>,
+    /// 节点程序版本号（始终可用）。
+    pub node_version: String,
+}
+
+/// 从 Cargo.toml 编译时嵌入的节点程序版本号。
+fn cargo_pkg_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+/// 从 state_getRuntimeVersion RPC 获取 spec_version。
+fn fetch_spec_version() -> Option<u32> {
+    let result = rpc_post("state_getRuntimeVersion", Value::Array(vec![])).ok()?;
+    result.get("specVersion").and_then(|v| v.as_u64()).map(|v| v as u32)
 }
 
 fn get_chain_status_sync(app: AppHandle) -> Result<ChainStatus, String> {
+    let node_version = cargo_pkg_version();
+
     if !current_status(&app)?.running {
         return Ok(ChainStatus {
             block_height: None,
             finalized_height: None,
             syncing: None,
+            spec_version: None,
+            node_version,
         });
     }
 
@@ -133,11 +152,14 @@ fn get_chain_status_sync(app: AppHandle) -> Result<ChainStatus, String> {
         .and_then(header_block_height);
     let finalized_height = finalized_block_height();
     let syncing = syncing_flag();
+    let spec_version = fetch_spec_version();
 
     Ok(ChainStatus {
         block_height,
         finalized_height,
         syncing,
+        spec_version,
+        node_version,
     })
 }
 
