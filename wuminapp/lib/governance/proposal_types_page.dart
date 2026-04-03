@@ -22,14 +22,18 @@ class ProposalTypesPage extends StatelessWidget {
     required this.icon,
     required this.badgeColor,
     required this.adminWallets,
+    required this.isActivated,
   });
 
   final InstitutionInfo institution;
   final IconData icon;
   final Color badgeColor;
 
-  /// 当前用户导入的、属于此机构的管理员钱包列表。
+  /// 当前用户已激活的管理员钱包列表。
   final List<WalletProfile> adminWallets;
+
+  /// 用户是否已激活管理员身份。
+  final bool isActivated;
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +98,39 @@ class ProposalTypesPage extends StatelessWidget {
             ),
           ),
 
+          // ──── 非管理员提示 ────
+          if (!isActivated)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.textTertiary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppTheme.textTertiary.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        size: 16, color: AppTheme.textTertiary),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '仅管理员可发起提案，请先在管理员列表中激活身份',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // ──── 通用提案类型（所有机构） ────
           _buildSectionTitle('通用提案'),
           const SizedBox(height: 8),
@@ -102,6 +139,7 @@ class ProposalTypesPage extends StatelessWidget {
             title: '转账',
             subtitle: '从机构多签账户发起转账',
             color: AppTheme.primary,
+            enabled: isActivated,
             onTap: () => _checkAndOpenProposal(
                 context,
                 () => TransferProposalPage(
@@ -117,6 +155,7 @@ class ProposalTypesPage extends StatelessWidget {
             title: '换管理员',
             subtitle: '提议更换本机构管理员',
             color: AppTheme.accent,
+            enabled: isActivated,
             onTap: () => _checkAndOpenProposal(context, null, name: '换管理员'),
           ),
           const SizedBox(height: 8),
@@ -125,6 +164,7 @@ class ProposalTypesPage extends StatelessWidget {
             title: '决议销毁',
             subtitle: '提议销毁机构持有的资产',
             color: AppTheme.danger,
+            enabled: isActivated,
             onTap: () => _checkAndOpenProposal(context, null, name: '决议销毁'),
           ),
 
@@ -138,6 +178,7 @@ class ProposalTypesPage extends StatelessWidget {
               title: '创建多签',
               subtitle: '发起创建多签账户提案',
               color: AppTheme.info,
+              enabled: isActivated,
               onTap: () => _checkAndOpenProposal(
                 context,
                 () => DuoqianCreateProposalPage(
@@ -152,6 +193,7 @@ class ProposalTypesPage extends StatelessWidget {
               title: '关闭多签',
               subtitle: '发起关闭多签账户提案，资金转入指定受益人',
               color: AppTheme.danger,
+              enabled: isActivated,
               onTap: () => _checkAndOpenProposal(
                 context,
                 () => DuoqianCloseProposalPage(
@@ -172,6 +214,7 @@ class ProposalTypesPage extends StatelessWidget {
               title: '决议发行',
               subtitle: '发起公民币发行决议，需联合投票+公民投票',
               color: AppTheme.primaryDark,
+              enabled: isActivated,
               onTap: () => _checkAndOpenProposal(context, null, name: '决议发行'),
             ),
             const SizedBox(height: 8),
@@ -180,6 +223,7 @@ class ProposalTypesPage extends StatelessWidget {
               title: '验证密钥',
               subtitle: '更换 GRANDPA 共识验证密钥',
               color: const Color(0xFF4527A0),
+              enabled: isActivated,
               onTap: () => _checkAndOpenProposal(context, null, name: '验证密钥'),
             ),
             const SizedBox(height: 8),
@@ -188,6 +232,7 @@ class ProposalTypesPage extends StatelessWidget {
               title: '状态升级',
               subtitle: 'Runtime 升级，需联合投票+公民投票',
               color: AppTheme.info,
+              enabled: isActivated,
               onTap: () => _checkAndOpenProposal(
                 context,
                 () => RuntimeUpgradePage(adminWallets: adminWallets),
@@ -278,6 +323,7 @@ class _ProposalTypeCard extends StatelessWidget {
     required this.subtitle,
     required this.color,
     required this.onTap,
+    this.enabled = true,
   });
 
   final IconData icon;
@@ -286,57 +332,69 @@ class _ProposalTypeCard extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
+  /// 是否可点击。未激活管理员时为 false，显示灰色禁用态。
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = enabled ? color : AppTheme.textTertiary;
+
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: color.withValues(alpha: 0.15)),
+        side: BorderSide(color: effectiveColor.withValues(alpha: 0.15)),
       ),
       child: InkWell(
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(10),
+        child: Opacity(
+          opacity: enabled ? 1.0 : 0.5,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: effectiveColor.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 20, color: effectiveColor),
                 ),
-                child: Icon(icon, size: 20, color: color),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: color,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: effectiveColor,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style:
-                          TextStyle(fontSize: 12, color: AppTheme.textTertiary),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                            fontSize: 12, color: AppTheme.textTertiary),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
-            ],
+                Icon(Icons.chevron_right,
+                    size: 20,
+                    color: enabled
+                        ? AppTheme.textTertiary
+                        : AppTheme.textTertiary.withValues(alpha: 0.3)),
+              ],
+            ),
           ),
         ),
       ),
