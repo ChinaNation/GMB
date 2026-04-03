@@ -33,7 +33,6 @@ pub fn run_desktop() {
             settings::bootnodes_address::set_bootnode_key,
             settings::grandpa_address::set_grandpa_key,
             settings::bootnodes_address::get_genesis_bootnode_options,
-            home::identity::set_node_name,
             home::rpc::get_chain_status,
             home::identity::get_node_identity,
             home::rpc::get_total_issuance,

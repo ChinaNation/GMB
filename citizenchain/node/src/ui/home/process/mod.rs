@@ -15,7 +15,7 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 
-use super::identity::{current_status, load_node_name, NodeStatus};
+use super::identity::{current_status, NodeStatus};
 use super::rpc::is_expected_rpc_node;
 
 // 串行化节点启停，避免并发命令冲突。
@@ -142,8 +142,6 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
         let base_path = node_data_dir(&app)?;
         let rpc_port = rpc::current_rpc_port();
         let enable_grandpa_validator = grandpa_address::prepare_grandpa_for_start(&app)?;
-        let node_name = load_node_name(&app)?;
-
         let mining_threads = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1);
@@ -152,7 +150,7 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
         let handle = node_runner::start_node_in_process(
             base_path,
             rpc_port,
-            node_name,
+            None, // 节点名称已移除，不再使用
             enable_grandpa_validator,
             mining_threads,
             None, // gpu_device
