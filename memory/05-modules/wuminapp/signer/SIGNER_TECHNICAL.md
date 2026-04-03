@@ -93,15 +93,20 @@ lib/signer/
 - 按 `pallet_index + call_index` 识别交易类型
 - 返回 `DecodedPayload`（`action`、`summary`、`fields`）或 `null`（未知类型）
 
-已支持的 pallet 解码：
+已支持的 payload 解码：
 
-| pallet_index | call_index | action | 说明 |
-| --- | --- | --- | --- |
-| 2 (Balances) | 3 (transfer_keep_alive) | `transfer` | 转账 |
-| 19 (DuoqianTransferPow) | 0 (propose_transfer) | `propose_transfer` | 提案转账 |
-| 19 (DuoqianTransferPow) | 1 (vote_transfer) | `vote_transfer` | 投票转账提案 |
-| 9 (VotingEngineSystem) | 3 (joint_vote) | `joint_vote` | 联合投票 |
-| 9 (VotingEngineSystem) | 4 (citizen_vote) | `citizen_vote` | 公民投票 |
+| 类型 | action | 说明 |
+| --- | --- | --- |
+| GMB_ACTIVATE 前缀 (非链上) | `activate_admin` | 管理员激活签名 |
+| Balances(2) / transfer_keep_alive(3) | `transfer` | 转账 |
+| DuoqianTransferPow(19) / propose_transfer(0) | `propose_transfer` | 提案转账 |
+| DuoqianTransferPow(19) / vote_transfer(1) | `vote_transfer` | 投票转账提案 |
+| VotingEngineSystem(9) / joint_vote(3) | `joint_vote` | 联合投票 |
+| VotingEngineSystem(9) / citizen_vote(4) | `citizen_vote` | 公民投票 |
+| RuntimeRootUpgrade(13) / propose(0) | `propose_runtime_upgrade` | Runtime 升级提案 |
+| RuntimeRootUpgrade(13) / developer(2) | `developer_upgrade` | 开发者直升 |
+| OffchainTransactionPos(21) / bind(9) | `bind_clearing` | 绑定清算行 |
+| OffchainTransactionPos(21) / pay(99) | `offchain_pay` | 链下支付授权 |
 
 交叉验证三态（`DisplayMatchStatus`）：
 

@@ -52,7 +52,34 @@ class PayloadDecoder {
   /// 避免因 pallet 索引偏移导致错误解码。
   ///
   /// 返回 null 表示无法识别或解码失败。
+  /// "GMB_ACTIVATE" 前缀（12 字节 ASCII）。
+  static const _activatePrefix = [
+    0x47, 0x4D, 0x42, 0x5F, // GMB_
+    0x41, 0x43, 0x54, 0x49, // ACTI
+    0x56, 0x41, 0x54, 0x45, // VATE
+  ];
+
   static DecodedPayload? decode(String payloadHex, {int? specVersion}) {
+    // 先尝试解码非链上交易：管理员激活 payload。
+    // 激活 payload 格式：GMB_ACTIVATE(12B) + shenfen_id(48B) + timestamp(8B) + nonce(16B) = 84B
+    try {
+      final raw = _hexToBytes(payloadHex);
+      if (raw.length == 84) {
+        bool isActivate = true;
+        for (var i = 0; i < 12; i++) {
+          if (raw[i] != _activatePrefix[i]) {
+            isActivate = false;
+            break;
+          }
+        }
+        if (isActivate) {
+          return _decodeActivateAdmin(raw);
+        }
+      }
+    } catch (_) {
+      // 非激活 payload，继续正常解码
+    }
+
     // spec_version 不在已知列表中时放弃解码，由调用方走 decodeFailed 路径。
     if (!PalletRegistry.isSupported(specVersion)) return null;
     try {
@@ -430,6 +457,31 @@ class PayloadDecoder {
       summary: '绑定清算行：$bankName',
       fields: {
         'institution': bankName,
+        'shenfen_id': shenfenId,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 管理员激活（非链上交易）
+  // 格式：GMB_ACTIVATE(12B) + shenfen_id(48B, 右补零) + timestamp(8B, u64 LE) + nonce(16B)
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeActivateAdmin(Uint8List bytes) {
+    if (bytes.length < 84) return null;
+
+    // shenfen_id: 48 bytes (offset 12), 去尾部零字节
+    final idBytes = bytes.sublist(12, 60);
+    var endIndex = 48;
+    while (endIndex > 0 && idBytes[endIndex - 1] == 0) {
+      endIndex--;
+    }
+    if (endIndex == 0) return null;
+    final shenfenId = String.fromCharCodes(idBytes.sublist(0, endIndex));
+
+    return DecodedPayload(
+      action: 'activate_admin',
+      summary: '激活管理员 - $shenfenId',
+      fields: {
         'shenfen_id': shenfenId,
       },
     );

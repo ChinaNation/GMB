@@ -1093,6 +1093,11 @@ fn sha256_hash(data: &[u8]) -> [u8; 32] {
     out
 }
 
+/// SHA-256 哈希（供 activation 模块调用）。
+pub(crate) fn sha256_hash_public(data: &[u8]) -> [u8; 32] {
+    sha256_hash(data)
+}
+
 fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1103,6 +1108,11 @@ fn now_secs() -> u64 {
 fn generate_request_id(prefix: &str) -> String {
     let random_bytes: [u8; 16] = rand::random();
     format!("{}-{}", prefix, hex::encode(random_bytes))
+}
+
+/// 生成请求 ID（供 activation 模块调用）。
+pub(crate) fn generate_request_id_public(prefix: &str) -> String {
+    generate_request_id(prefix)
 }
 
 #[cfg(test)]

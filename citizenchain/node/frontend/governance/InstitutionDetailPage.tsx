@@ -1,13 +1,19 @@
-// 机构详情页：显示机构基本信息、余额、管理员列表、活跃提案列表。
-// 如果用户导入的冷钱包匹配该机构管理员，显示管理员标记和投票入口。
-import { useEffect, useState } from 'react';
+// 机构详情页：机构信息 → 管理员入口 → 发起提案 → 提案列表（分页）。
+// 管理员列表折叠到独立的 AdminListPage，点击入口卡片右箭头进入。
+import { useEffect, useState, useCallback } from 'react';
 import { api, sanitizeError } from '../api';
 import { formatBalance, hexToSs58 } from '../format';
-import type { InstitutionDetail, ProposalListItem, AdminWalletMatch } from './governance-types';
+import type {
+  ActivatedAdmin,
+  AdminWalletMatch,
+  InstitutionDetail,
+  ProposalListItem,
+} from './governance-types';
 
 type Props = {
   shenfenId: string;
   onBack: () => void;
+  onOpenAdminList?: () => void;
   onSelectProposal?: (proposalId: number, adminWallets: AdminWalletMatch[], shenfenId: string) => void;
   onCreateProposal?: (shenfenId: string, orgType: number, institutionName: string, duoqianAddress: string, adminWallets: AdminWalletMatch[]) => void;
   onCreateRuntimeUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
@@ -15,31 +21,74 @@ type Props = {
   hideBackButton?: boolean;
 };
 
-export function InstitutionDetailPage({ shenfenId, onBack, onSelectProposal, onCreateProposal, onCreateRuntimeUpgrade, hideBackButton }: Props) {
+export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateRuntimeUpgrade, hideBackButton }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
-  const [adminWallets, setAdminWallets] = useState<AdminWalletMatch[]>([]);
+  const [proposalHasMore, setProposalHasMore] = useState(false);
+  const [proposalNextStartId, setProposalNextStartId] = useState<number | null>(null);
+  const [loadingMoreProposals, setLoadingMoreProposals] = useState(false);
+  const [activatedAdmins, setActivatedAdmins] = useState<ActivatedAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = adminWallets.length > 0;
+  const PROPOSAL_PAGE_SIZE = 10;
+  const isAdmin = activatedAdmins.length > 0;
+
+  // 将已激活管理员转换为 AdminWalletMatch 格式（兼容现有提案/投票组件）
+  const adminWallets: AdminWalletMatch[] = activatedAdmins.map(a => ({
+    address: hexToSs58(a.pubkeyHex),
+    pubkeyHex: a.pubkeyHex,
+    name: '',
+  }));
 
   useEffect(() => {
     setLoading(true);
     Promise.all([
       api.getInstitutionDetail(shenfenId),
-      api.getInstitutionProposals(shenfenId).catch(() => [] as ProposalListItem[]),
-      api.checkAdminWallets(shenfenId).catch(() => [] as AdminWalletMatch[]),
+      api.getNextProposalId().catch(() => 0),
+      api.getActivatedAdmins(shenfenId).catch(() => [] as ActivatedAdmin[]),
     ])
-      .then(([d, p, aw]) => {
+      .then(async ([d, nextId, aa]) => {
         setDetail(d);
-        setProposals(p);
-        setAdminWallets(aw);
+        setActivatedAdmins(aa);
+        // 加载第一页提案
+        if (nextId > 0) {
+          try {
+            const page = await api.getInstitutionProposalPage(shenfenId, nextId - 1, PROPOSAL_PAGE_SIZE);
+            setProposals(page.items);
+            setProposalHasMore(page.hasMore);
+            if (page.items.length > 0) {
+              const lastId = page.items[page.items.length - 1].proposalId;
+              setProposalNextStartId(lastId > 0 ? lastId - 1 : null);
+            }
+          } catch (_) {
+            setProposals([]);
+          }
+        }
         setError(null);
       })
       .catch((e) => setError(sanitizeError(e)))
       .finally(() => setLoading(false));
   }, [shenfenId]);
+
+  // 加载更多提案
+  const loadMoreProposals = useCallback(() => {
+    if (loadingMoreProposals || proposalNextStartId == null || !proposalHasMore) return;
+    setLoadingMoreProposals(true);
+    api.getInstitutionProposalPage(shenfenId, proposalNextStartId, PROPOSAL_PAGE_SIZE)
+      .then((page) => {
+        setProposals(prev => [...prev, ...page.items]);
+        setProposalHasMore(page.hasMore);
+        if (page.items.length > 0) {
+          const lastId = page.items[page.items.length - 1].proposalId;
+          setProposalNextStartId(lastId > 0 ? lastId - 1 : null);
+        } else {
+          setProposalHasMore(false);
+        }
+      })
+      .catch(() => setProposalHasMore(false))
+      .finally(() => setLoadingMoreProposals(false));
+  }, [shenfenId, loadingMoreProposals, proposalNextStartId, proposalHasMore]);
 
   if (loading) {
     return <div className="governance-section"><p>加载中…</p></div>;
@@ -56,6 +105,8 @@ export function InstitutionDetailPage({ shenfenId, onBack, onSelectProposal, onC
 
   if (!detail) return null;
 
+  const activatedCount = activatedAdmins.length;
+
   return (
     <div className="governance-section">
       {!hideBackButton && (
@@ -71,6 +122,7 @@ export function InstitutionDetailPage({ shenfenId, onBack, onSelectProposal, onC
 
       {detail.warning && <div className="warning">{detail.warning}</div>}
 
+      {/* 机构信息卡片 */}
       <div className="institution-detail-grid">
         <div className="metric-card">
           <div className="metric-label">机构类型 <code className="metric-label-id">{detail.shenfenId}</code></div>
@@ -94,48 +146,68 @@ export function InstitutionDetailPage({ shenfenId, onBack, onSelectProposal, onC
         </div>
       </div>
 
-      {/* 提案类型入口（管理员可见） */}
-      {isAdmin && detail && (
-        <div className="institution-info-section">
-          <h3>发起提案</h3>
-          <div className="proposal-type-grid">
-            <button
-              className="proposal-type-button"
-              onClick={() => onCreateProposal?.(
-                shenfenId, detail.orgType, detail.name, detail.duoqianAddress, adminWallets
-              )}
-            >转账</button>
-            <button className="proposal-type-button" disabled title="即将上线">换管理员</button>
-            <button className="proposal-type-button" disabled title="即将上线">决议销毁</button>
-            {detail.orgType === 0 && (
-              <>
-                <button className="proposal-type-button" disabled title="即将上线">决议发行</button>
-                <button className="proposal-type-button" disabled title="即将上线">验证密钥</button>
-                <button
-                  className="proposal-type-button"
-                  onClick={() => onCreateRuntimeUpgrade?.(adminWallets)}
-                >状态升级</button>
-              </>
+      {/* 管理员入口卡片（折叠，点击进入管理员列表页） */}
+      <div className="institution-info-section">
+        <div
+          className="metric-card admin-entry-card"
+          onClick={onOpenAdminList}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && onOpenAdminList?.()}
+        >
+          <div className="admin-entry-left">
+            <div className="admin-entry-title">管理员列表（{detail.admins.length} 人）</div>
+            {activatedCount > 0 && (
+              <div className="admin-entry-activated">已激活 {activatedCount} 人</div>
             )}
           </div>
+          <span className="admin-entry-arrow">→</span>
         </div>
-      )}
+      </div>
 
-      {/* 活跃提案列表 */}
+      {/* 提案类型入口（始终显示，未激活时灰色禁用） */}
       <div className="institution-info-section">
-        <h3>活跃提案（{proposals.length}）</h3>
+        <h3>发起提案</h3>
+        <div className="proposal-type-grid">
+          <button
+            className="proposal-type-button"
+            disabled={!isAdmin}
+            onClick={() => isAdmin && onCreateProposal?.(
+              shenfenId, detail.orgType, detail.name, detail.duoqianAddress, adminWallets
+            )}
+          >转账</button>
+          <button className="proposal-type-button" disabled title="即将上线">换管理员</button>
+          <button className="proposal-type-button" disabled title="即将上线">决议销毁</button>
+          {detail.orgType === 0 && (
+            <>
+              <button className="proposal-type-button" disabled title="即将上线">决议发行</button>
+              <button className="proposal-type-button" disabled title="即将上线">验证密钥</button>
+              <button
+                className="proposal-type-button"
+                disabled={!isAdmin}
+                onClick={() => isAdmin && onCreateRuntimeUpgrade?.(adminWallets)}
+              >状态升级</button>
+            </>
+          )}
+        </div>
+        {!isAdmin && (
+          <p className="no-data">激活管理员后可操作提案功能</p>
+        )}
+      </div>
+
+      {/* 提案列表（分页） */}
+      <div className="institution-info-section">
+        <h3>提案列表{proposals.length > 0 ? `（${proposals.length}${proposalHasMore ? '+' : ''}）` : ''}</h3>
         {proposals.length === 0 ? (
-          <p className="no-data">暂无活跃提案</p>
+          <p className="no-data">暂无提案</p>
         ) : (
           <div className="proposal-list">
             {proposals.map((item) => (
               <div
                 key={item.proposalId}
-                className={`proposal-card ${isAdmin ? 'clickable' : ''}`}
+                className="proposal-card clickable"
                 onClick={() => {
-                  if (isAdmin) {
-                    onSelectProposal?.(item.proposalId, adminWallets, shenfenId);
-                  }
+                  onSelectProposal?.(item.proposalId, adminWallets, shenfenId);
                 }}
               >
                 <div className="proposal-card-header">
@@ -152,6 +224,9 @@ export function InstitutionDetailPage({ shenfenId, onBack, onSelectProposal, onC
                 <div className="proposal-card-body">
                   <div className="proposal-card-tags">
                     <span className="proposal-tag">{item.kindLabel}</span>
+                    {item.kind === 1 && (
+                      <span className="proposal-tag">{item.stageLabel}</span>
+                    )}
                   </div>
                   <div className="proposal-summary">{item.summary}</div>
                 </div>
@@ -159,27 +234,14 @@ export function InstitutionDetailPage({ shenfenId, onBack, onSelectProposal, onC
             ))}
           </div>
         )}
-      </div>
-
-      <div className="institution-info-section">
-        <h3>管理员列表（{detail.admins.length} 人）</h3>
-        {detail.admins.length === 0 ? (
-          <p className="no-data">暂无数据（需节点运行后查询链上数据）</p>
-        ) : (
-          <div className="admin-list">
-            {detail.admins.map((pubkey, i) => {
-              const isMyWallet = adminWallets.some(
-                w => w.pubkeyHex.toLowerCase() === pubkey.toLowerCase()
-              );
-              return (
-                <div key={pubkey} className={`admin-item ${isMyWallet ? 'my-wallet' : ''}`}>
-                  <span className="admin-index">{i + 1}.</span>
-                  <code className="admin-pubkey">{hexToSs58(pubkey)}</code>
-                  {isMyWallet && <span className="my-wallet-tag">我的钱包</span>}
-                </div>
-              );
-            })}
-          </div>
+        {proposalHasMore && (
+          <button
+            className="load-more-button"
+            onClick={loadMoreProposals}
+            disabled={loadingMoreProposals}
+          >
+            {loadingMoreProposals ? '加载中…' : '加载更多'}
+          </button>
         )}
       </div>
     </div>

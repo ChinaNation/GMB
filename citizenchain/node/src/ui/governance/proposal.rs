@@ -244,6 +244,67 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
     })
 }
 
+/// 分页查询指定机构的所有存在提案（从 start_id 往前，按 ID 倒序）。
+///
+/// 遍历所有提案 ID，过滤 institution_hex 匹配的记录。
+/// 每页最多返回 count 条，has_more 表示是否还有更早的提案。
+pub fn fetch_institution_proposal_page(
+    shenfen_id: &str,
+    start_id: u64,
+    count: u32,
+) -> Result<ProposalPageResult, String> {
+    let institution_hex = hex::encode(storage_keys::shenfen_id_to_fixed48(shenfen_id));
+    let mut items = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
+    let mut id = start_id;
+    // 提案 ID 格式为 YYYY000000 起，年份起始下界（含）
+    let year_start = (start_id / 1_000_000) * 1_000_000;
+
+    while items.len() < count as usize && id >= year_start {
+        match fetch_proposal_meta(id) {
+            Ok(Some(meta)) => {
+                // 过滤：只保留属于该机构的提案
+                let matches = meta.institution_hex.as_deref() == Some(&institution_hex);
+                if matches {
+                    let summary = match fetch_proposal_summary(id, &meta) {
+                        Ok(s) => s,
+                        Err(_) => "（详情查询失败）".to_string(),
+                    };
+                    let institution_name = resolve_institution_name(meta.institution_hex.as_deref());
+                    items.push(ProposalListItem {
+                        proposal_id: id,
+                        display_id: format_proposal_id(id),
+                        kind: meta.kind,
+                        kind_label: kind_label(meta.kind).to_string(),
+                        stage: meta.stage,
+                        stage_label: stage_label(meta.stage).to_string(),
+                        status: meta.status,
+                        status_label: status_label(meta.status).to_string(),
+                        institution_name,
+                        summary,
+                    });
+                }
+            }
+            Ok(None) => {} // 提案不存在，跳过
+            Err(e) => {
+                warnings.push(format!("查询提案 {id} 失败: {e}"));
+            }
+        }
+        if id == year_start {
+            break;
+        }
+        id -= 1;
+    }
+
+    let has_more = id > year_start;
+
+    Ok(ProposalPageResult {
+        items,
+        has_more,
+        warning: if warnings.is_empty() { None } else { Some(warnings.join("；")) },
+    })
+}
+
 /// 查询机构的活跃提案 ID 列表。
 pub fn fetch_active_proposal_ids(shenfen_id: &str) -> Result<Vec<u64>, String> {
     let institution_id = storage_keys::shenfen_id_to_fixed48(shenfen_id);

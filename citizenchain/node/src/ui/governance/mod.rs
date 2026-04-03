@@ -1,5 +1,6 @@
 // 治理模块入口：注册 Tauri 命令，聚合机构数据。
 
+pub mod activation;
 mod institution;
 pub mod proposal;
 pub mod sfid_api;
@@ -8,7 +9,6 @@ mod storage_keys;
 pub mod types;
 
 use crate::ui::home;
-use crate::ui::settings::cold_wallets;
 use types::{GovernanceOverview, InstitutionDetail, InstitutionListItem, OrgType};
 
 use serde::Serialize;
@@ -305,60 +305,25 @@ pub async fn get_institution_proposals(
     .map_err(|e| format!("institution proposals task failed: {e}"))?
 }
 
-/// 匹配到的管理员钱包信息。
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AdminWalletMatch {
-    pub address: String,
-    pub pubkey_hex: String,
-    pub name: String,
-}
-
-/// 检查已导入冷钱包中哪些是指定机构的管理员（需要节点运行）。
+/// 分页查询指定机构的所有提案（需要节点运行）。
+///
+/// 从 start_id 倒序遍历，过滤属于该机构的提案，返回分页结果。
 #[tauri::command]
-pub async fn check_admin_wallets(
+pub async fn get_institution_proposal_page(
     app: AppHandle,
     shenfen_id: String,
-) -> Result<Vec<AdminWalletMatch>, String> {
-    // 读取已导入的冷钱包
-    let wallet_list = cold_wallets::get_cold_wallets(app.clone())?;
-    if wallet_list.wallets.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // 检查节点状态
+    start_id: u64,
+    count: u32,
+) -> Result<proposal::ProposalPageResult, String> {
     let status = home::current_status(&app)?;
     if !status.running {
-        return Ok(Vec::new());
+        return Err("节点未运行，无法查询提案".to_string());
     }
-
-    let wallets = wallet_list.wallets;
     tauri::async_runtime::spawn_blocking(move || {
-        // 查询链上该机构的管理员列表
-        let admins = match institution::fetch_admins(&shenfen_id) {
-            Ok(a) => a,
-            Err(_) => return Ok(Vec::new()),
-        };
-        if admins.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // 匹配冷钱包公钥与管理员列表
-        let mut matches = Vec::new();
-        for wallet in &wallets {
-            let normalized = wallet.pubkey_hex.to_ascii_lowercase();
-            if admins.iter().any(|a| *a == normalized) {
-                matches.push(AdminWalletMatch {
-                    address: wallet.address.clone(),
-                    pubkey_hex: wallet.pubkey_hex.clone(),
-                    name: wallet.name.clone(),
-                });
-            }
-        }
-        Ok(matches)
+        proposal::fetch_institution_proposal_page(&shenfen_id, start_id, count)
     })
     .await
-    .map_err(|e| format!("check admin wallets task failed: {e}"))?
+    .map_err(|e| format!("institution proposal page task failed: {e}"))?
 }
 
 /// 构建投票签名请求 QR JSON（需要节点运行）。

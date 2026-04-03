@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ui/app_theme.dart';
 import '../util/amount_format.dart';
 import '../wallet/core/wallet_manager.dart';
+import 'activation_service.dart';
 import 'admin_list_page.dart';
 import 'duoqian_manage_detail_page.dart';
 import 'institution_admin_service.dart';
@@ -36,9 +37,11 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   final InstitutionAdminService _adminService = InstitutionAdminService();
   final WalletManager _walletManager = WalletManager();
   final TransferProposalService _transferService = TransferProposalService();
+  final ActivationService _activationService = ActivationService();
   late final ProposalContextResolver _contextResolver = ProposalContextResolver(
     adminService: _adminService,
     walletManager: _walletManager,
+    activationService: _activationService,
   );
 
   List<String> _admins = const [];
@@ -51,6 +54,9 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   /// 所有匹配的管理员公钥（小写 hex，不含 0x）。
   Set<String> _adminPubkeys = const {};
+
+  /// 已激活的管理员公钥集合（小写 hex）。
+  Set<String> _activatedPubkeys = const {};
 
   /// 机构页可见的提案事件（本机构内部提案 + 全局联合投票提案）。
   List<ProposalWithDetail> _proposalEvents = const [];
@@ -76,10 +82,12 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         _transferService.fetchInstitutionVisibleProposals(
           widget.institution.shenfenId,
         ),
+        _activationService.getActivatedAdmins(widget.institution.shenfenId),
       ]);
       final admins = results[0] as List<String>;
       final ctx = results[1] as ProposalContext;
       final proposals = results[2] as List<ProposalWithDetail>;
+      final activated = results[3] as List<ActivatedAdmin>;
 
       // 从 ProposalContext 获取匹配的管理员冷钱包
       final matchedPubkeys = <String>{};
@@ -88,6 +96,9 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
         matchedPubkeys.add(pubkey);
       }
+
+      // 已激活公钥集合
+      final activatedPks = activated.map((a) => a.pubkeyHex).toSet();
 
       // 记录管理员机构状态到公共缓存
       if (ctx.isAdmin) {
@@ -101,6 +112,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         _admins = admins;
         _adminWallets = ctx.adminWallets;
         _adminPubkeys = matchedPubkeys;
+        _activatedPubkeys = activatedPks;
         _isCurrentUserAdmin = ctx.isAdmin;
         _proposalEvents = proposals;
         _loading = false;
@@ -621,6 +633,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           institution: widget.institution,
           admins: _admins,
           adminPubkeys: _adminPubkeys,
+          activatedPubkeys: _activatedPubkeys,
           badgeColor: widget.badgeColor,
         ),
       ),
