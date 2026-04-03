@@ -46,6 +46,14 @@ pub struct InstitutionDetail {
     pub internal_threshold: u32,
     /// 联合投票权重。
     pub joint_vote_weight: u32,
+    /// 永久质押账户地址 hex（仅 PRB）。
+    pub staking_address: Option<String>,
+    /// 永久质押账户余额（分，仅 PRB）。
+    pub staking_balance_fen: Option<String>,
+    /// 手续费账户地址 hex（仅 PRB）。
+    pub fee_address: Option<String>,
+    /// 手续费账户余额（分，仅 PRB）。
+    pub fee_balance_fen: Option<String>,
     /// 告警信息。
     pub warning: Option<String>,
 }

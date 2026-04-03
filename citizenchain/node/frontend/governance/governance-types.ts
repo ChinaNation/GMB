@@ -93,6 +93,10 @@ export type InstitutionDetail = {
   admins: string[];
   internalThreshold: number;
   jointVoteWeight: number;
+  stakingAddress: string | null;
+  stakingBalanceFen: string | null;
+  feeAddress: string | null;
+  feeBalanceFen: string | null;
   warning: string | null;
 };
 

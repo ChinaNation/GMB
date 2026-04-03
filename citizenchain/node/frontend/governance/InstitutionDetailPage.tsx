@@ -129,7 +129,7 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
           <div className="metric-value">{detail.orgTypeLabel}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">多签余额 <code className="metric-label-id">{hexToSs58(detail.duoqianAddress)}</code></div>
+          <div className="metric-label">机构主账户 <code className="metric-label-id">{hexToSs58(detail.duoqianAddress)}</code></div>
           <div className="metric-value">
             {detail.balanceFen != null
               ? formatBalance(detail.balanceFen)
@@ -144,6 +144,26 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
           <div className="metric-label">联合投票权重</div>
           <div className="metric-value">{detail.jointVoteWeight}</div>
         </div>
+        {detail.orgType === 2 && detail.stakingAddress && (
+          <div className="metric-card">
+            <div className="metric-label">永久质押账户 <code className="metric-label-id">{hexToSs58(detail.stakingAddress)}</code></div>
+            <div className="metric-value">
+              {detail.stakingBalanceFen != null
+                ? formatBalance(detail.stakingBalanceFen)
+                : '—'}
+            </div>
+          </div>
+        )}
+        {detail.orgType === 2 && detail.feeAddress && (
+          <div className="metric-card">
+            <div className="metric-label">手续费账户 <code className="metric-label-id">{hexToSs58(detail.feeAddress)}</code></div>
+            <div className="metric-value">
+              {detail.feeBalanceFen != null
+                ? formatBalance(detail.feeBalanceFen)
+                : '—'}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 管理员入口卡片（折叠，点击进入管理员列表页） */}

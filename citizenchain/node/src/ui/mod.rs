@@ -53,6 +53,7 @@ pub fn run_desktop() {
             governance::activation::verify_activate_admin,
             governance::activation::get_activated_admins,
             governance::activation::deactivate_admin,
+            governance::activation::has_any_activated_admin,
             governance::build_vote_request,
             governance::build_joint_vote_request,
             governance::build_propose_transfer_request,

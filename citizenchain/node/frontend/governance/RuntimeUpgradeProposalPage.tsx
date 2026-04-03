@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, sanitizeError } from '../api';
+import { hexToSs58 } from '../format';
 import { QrScanner } from './QrScanner';
 import type { AdminWalletMatch, ProposeUpgradeRequestResult } from './governance-types';
 
@@ -124,9 +125,10 @@ export function RuntimeUpgradeProposalPage({ adminWallets, onBack, onSuccess }: 
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="请输入本次升级的理由说明"
-              rows={3}
+              rows={6}
               maxLength={1024}
               disabled={building}
+              style={{ minHeight: '120px', resize: 'vertical' }}
             />
           </div>
 
@@ -143,19 +145,25 @@ export function RuntimeUpgradeProposalPage({ adminWallets, onBack, onSuccess }: 
           </div>
 
           <div className="wallet-form-field">
-            <label>管理员冷钱包</label>
+            <label>发起管理员</label>
             {adminWallets.length === 0 ? (
-              <p className="upgrade-no-wallet">未匹配到管理员冷钱包，请先在钱包管理中导入</p>
-            ) : adminWallets.length === 1 ? (
-              <input type="text" value={`${adminWallets[0].name} (${adminWallets[0].address.slice(0, 12)}…)`} disabled />
+              <p className="upgrade-no-wallet">无已激活管理员</p>
             ) : (
-              <select value={selectedPubkey} onChange={(e) => setSelectedPubkey(e.target.value)}>
-                <option value="">请选择…</option>
-                {adminWallets.map((w) => (
-                  <option key={w.pubkeyHex} value={w.pubkeyHex}>
-                    {w.name} ({w.address.slice(0, 8)}…)
-                  </option>
-                ))}
+              <select
+                value={selectedPubkey}
+                onChange={(e) => setSelectedPubkey(e.target.value)}
+                disabled={adminWallets.length <= 1}
+              >
+                {adminWallets.length === 1 ? (
+                  <option value={adminWallets[0].pubkeyHex}>{hexToSs58(adminWallets[0].pubkeyHex)}</option>
+                ) : (
+                  <>
+                    <option value="">请选择…</option>
+                    {adminWallets.map((w) => (
+                      <option key={w.pubkeyHex} value={w.pubkeyHex}>{hexToSs58(w.pubkeyHex)}</option>
+                    ))}
+                  </>
+                )}
               </select>
             )}
           </div>

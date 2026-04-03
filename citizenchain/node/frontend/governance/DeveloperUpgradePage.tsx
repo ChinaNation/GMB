@@ -1,14 +1,20 @@
-// 开发升级页：选择 WASM 文件 → 选冷钱包 → QR 签名 → 提交 developer_direct_upgrade。
+// 开发升级页：选择 WASM 文件 → 选择已激活管理员 → QR 签名 → 提交 developer_direct_upgrade。
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, sanitizeError } from '../api';
+import { hexToSs58 } from '../format';
 import { QrScanner } from './QrScanner';
-import type { VoteSignRequestResult } from './governance-types';
+import type { ActivatedAdmin, VoteSignRequestResult } from './governance-types';
+
+/// 国储会 shenfenId。
+const NRC_SHENFEN_ID = 'GFR-LN001-CB0C-617776487-20260222';
 
 type FlowStep = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function DeveloperUpgradePage() {
+  const [admins, setAdmins] = useState<ActivatedAdmin[]>([]);
+  const [loadingAdmins, setLoadingAdmins] = useState(true);
   const [wasmPath, setWasmPath] = useState('');
   const [wasmFileName, setWasmFileName] = useState('');
   const [selectedPubkey, setSelectedPubkey] = useState('');
@@ -26,6 +32,17 @@ export function DeveloperUpgradePage() {
   signRequestRef.current = signRequest;
   selectedPubkeyRef.current = selectedPubkey;
   wasmPathRef.current = wasmPath;
+
+  // 加载国储会已激活管理员
+  useEffect(() => {
+    api.getActivatedAdmins(NRC_SHENFEN_ID)
+      .then((list) => {
+        setAdmins(list);
+        if (list.length === 1) setSelectedPubkey(list[0].pubkeyHex);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingAdmins(false));
+  }, []);
 
   // QR 倒计时
   useEffect(() => {
@@ -46,7 +63,6 @@ export function DeveloperUpgradePage() {
       });
       if (selected) {
         setWasmPath(selected);
-        // 显示文件名（取路径最后一段）
         const parts = selected.replace(/\\/g, '/').split('/');
         setWasmFileName(parts[parts.length - 1] || selected);
       }
@@ -92,6 +108,8 @@ export function DeveloperUpgradePage() {
     }
   }, []);
 
+  if (loadingAdmins) return <div className="governance-loading">加载中…</div>;
+
   return (
     <div className="developer-upgrade-page">
       <h2>开发期 Runtime 升级</h2>
@@ -111,14 +129,27 @@ export function DeveloperUpgradePage() {
             </div>
           </div>
           <div className="dev-upgrade-field">
-            <label>NRC 管理员公钥（64 位十六进制）</label>
-            <input
-              type="text"
-              value={selectedPubkey}
-              onChange={(e) => setSelectedPubkey(e.target.value.trim())}
-              placeholder="输入管理员公钥 hex"
-              className="dev-upgrade-pubkey-input"
-            />
+            <label>国储会管理员</label>
+            {admins.length === 0 ? (
+              <p className="upgrade-no-wallet">无已激活的国储会管理员，请先在国储会页面激活</p>
+            ) : (
+              <select
+                value={selectedPubkey}
+                onChange={(e) => setSelectedPubkey(e.target.value)}
+                disabled={admins.length <= 1}
+              >
+                {admins.length === 1 ? (
+                  <option value={admins[0].pubkeyHex}>{hexToSs58(admins[0].pubkeyHex)}</option>
+                ) : (
+                  <>
+                    <option value="">请选择…</option>
+                    {admins.map((a) => (
+                      <option key={a.pubkeyHex} value={a.pubkeyHex}>{hexToSs58(a.pubkeyHex)}</option>
+                    ))}
+                  </>
+                )}
+              </select>
+            )}
           </div>
           {error && <div className="error">{error}</div>}
           <button
@@ -150,8 +181,8 @@ export function DeveloperUpgradePage() {
       )}
 
       {step === 'submit' && (
-        <div className="dev-upgrade-status">
-          <p className="qr-instruction">正在验证签名并提交 runtime 升级…</p>
+        <div className="dev-upgrade-submit-progress">
+          <p className="qr-instruction">正在提交到链…</p>
         </div>
       )}
 
@@ -161,15 +192,16 @@ export function DeveloperUpgradePage() {
             <p>Runtime 升级已提交</p>
             {txHash && <code className="tx-hash">交易哈希: {txHash}</code>}
           </div>
-          <p>新 runtime 将在下一个区块生效。</p>
-          <button className="dev-upgrade-submit" onClick={() => { setStep('form'); setTxHash(null); setWasmPath(''); setWasmFileName(''); }}>完成</button>
+          <button className="dev-upgrade-submit" onClick={() => { setStep('form'); setWasmPath(''); setWasmFileName(''); }}>
+            完成
+          </button>
         </div>
       )}
 
       {step === 'error' && (
         <div className="dev-upgrade-error">
           <div className="error">{error}</div>
-          <button className="dev-upgrade-submit" onClick={() => { setError(null); setStep('form'); }}>重试</button>
+          <button className="cancel-button" onClick={() => { setStep('form'); setError(null); }}>返回</button>
         </div>
       )}
     </div>

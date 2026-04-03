@@ -16,16 +16,19 @@ export function SettingsSection({ disabled }: Props) {
     institutionName: null,
   });
   const [chainStatus, setChainStatus] = useState<ChainStatus | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const loadSettings = useCallback(async () => {
-    const [w, k, c] = await Promise.allSettled([
+    const [w, k, c, a] = await Promise.allSettled([
       api.getRewardWallet(),
       api.getBootnodeKey(),
       api.getChainStatus(),
+      api.hasAnyActivatedAdmin(),
     ]);
     if (w.status === 'fulfilled') setWallet(w.value);
     if (k.status === 'fulfilled') setNodeKey(k.value);
     if (c.status === 'fulfilled') setChainStatus(c.value);
+    if (a.status === 'fulfilled') setIsAdmin(a.value);
   }, []);
 
   useEffect(() => {
@@ -35,14 +38,16 @@ export function SettingsSection({ disabled }: Props) {
   return (
     <>
       <WalletSection wallet={wallet} onUpdated={setWallet} disabled={disabled} />
-      <NodeKeySection
-        nodeKey={nodeKey}
-        onUpdated={setNodeKey}
-        onApplied={() => {
-          void loadSettings();
-        }}
-        disabled={disabled}
-      />
+      {isAdmin && (
+        <NodeKeySection
+          nodeKey={nodeKey}
+          onUpdated={setNodeKey}
+          onApplied={() => {
+            void loadSettings();
+          }}
+          disabled={disabled}
+        />
+      )}
       {chainStatus && (
         <div className="settings-version-section">
           <div className="settings-version-row">

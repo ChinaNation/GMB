@@ -96,6 +96,7 @@ export const api = {
     invoke<ActivatedAdmin[]>('get_activated_admins', { shenfenId }),
   deactivateAdmin: (pubkeyHex: string, shenfenId: string, unlockPassword: string) =>
     invoke<void>('deactivate_admin', { pubkeyHex, shenfenId, unlockPassword }),
+  hasAnyActivatedAdmin: () => invoke<boolean>('has_any_activated_admin'),
   buildVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>
     invoke<VoteSignRequestResult>('build_vote_request', { proposalId, pubkeyHex, approve }),
   buildJointVoteRequest: (proposalId: number, pubkeyHex: string, shenfenId: string, approve: boolean) =>
