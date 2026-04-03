@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, sanitizeError } from '../api';
+import { hexToSs58 } from '../format';
 import { QrScanner } from './QrScanner';
 import type { AdminWalletMatch, VoteSignRequestResult } from './governance-types';
 
@@ -129,27 +130,33 @@ export function CreateProposalPage({
         <div className="create-proposal-form">
           {formError && <div className="error">{formError}</div>}
 
-          {adminWallets.length > 1 && (
-            <div className="wallet-form-field">
-              <label>发起管理员</label>
-              <select
-                value={selectedWallet?.pubkeyHex || ''}
-                onChange={(e) => {
-                  const w = adminWallets.find((w) => w.pubkeyHex === e.target.value);
-                  setSelectedWallet(w || null);
-                }}
-              >
-                <option value="">请选择…</option>
-                {adminWallets.map((w) => (
-                  <option key={w.pubkeyHex} value={w.pubkeyHex}>{w.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="wallet-form-field">
+            <label>发起管理员</label>
+            <select
+              value={selectedWallet?.pubkeyHex || ''}
+              onChange={(e) => {
+                const w = adminWallets.find((w) => w.pubkeyHex === e.target.value);
+                setSelectedWallet(w || null);
+              }}
+              disabled={adminWallets.length <= 1}
+            >
+              {adminWallets.length === 0 && <option value="">无已激活管理员</option>}
+              {adminWallets.length === 1 ? (
+                <option value={adminWallets[0].pubkeyHex}>{hexToSs58(adminWallets[0].pubkeyHex)}</option>
+              ) : (
+                <>
+                  <option value="">请选择…</option>
+                  {adminWallets.map((w) => (
+                    <option key={w.pubkeyHex} value={w.pubkeyHex}>{hexToSs58(w.pubkeyHex)}</option>
+                  ))}
+                </>
+              )}
+            </select>
+          </div>
 
           <div className="wallet-form-field">
             <label>转出地址（机构多签）</label>
-            <input type="text" value={`0x${duoqianAddress}`} disabled />
+            <input type="text" value={hexToSs58(duoqianAddress)} disabled />
           </div>
 
           <div className="wallet-form-field">

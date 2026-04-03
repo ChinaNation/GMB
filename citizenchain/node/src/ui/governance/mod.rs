@@ -9,6 +9,7 @@ mod storage_keys;
 pub mod types;
 
 use crate::ui::home;
+use primitives::china::china_ch::CHINA_CH;
 use types::{GovernanceOverview, InstitutionDetail, InstitutionListItem, OrgType};
 
 use serde::Serialize;
@@ -211,6 +212,14 @@ pub async fn get_institution_detail(
             (Vec::new(), None)
         };
 
+        // PRB 专属：查询质押账户和费用账户余额
+        let (staking_address, staking_balance_fen, fee_address, fee_balance_fen) =
+            if org_type == OrgType::Prb && status.running {
+                query_prb_accounts(&shenfen_id_clone, &mut warnings)
+            } else {
+                (None, None, None, None)
+            };
+
         Ok(InstitutionDetail {
             name,
             shenfen_id: shenfen_id_clone,
@@ -221,6 +230,10 @@ pub async fn get_institution_detail(
             admins,
             internal_threshold: internal_threshold(org_type),
             joint_vote_weight: joint_vote_weight(org_type),
+            staking_address,
+            staking_balance_fen,
+            fee_address,
+            fee_balance_fen,
             warning: if warnings.is_empty() {
                 None
             } else {
@@ -235,6 +248,43 @@ pub async fn get_institution_detail(
 /// 通过 shenfenId 查找机构名称（供 proposal 模块反查用）。
 pub(crate) fn find_institution_name(shenfen_id: &str) -> Option<String> {
     find_entry(shenfen_id).map(|e| e.name.to_string())
+}
+
+/// 查询省储行的质押账户和费用账户地址及余额。
+fn query_prb_accounts(
+    shenfen_id: &str,
+    warnings: &mut Vec<String>,
+) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+    // 在 CHINA_CH 中查找该省储行
+    let ch = match CHINA_CH.iter().find(|c| c.shenfen_id == shenfen_id) {
+        Some(c) => c,
+        None => return (None, None, None, None),
+    };
+
+    // 质押账户（keyless_address）
+    let staking_hex = hex::encode(ch.keyless_address);
+    let staking_balance = match institution::fetch_balance(&staking_hex) {
+        Ok(b) => b.map(|v| v.to_string()),
+        Err(e) => { warnings.push(format!("查询质押余额失败: {e}")); None }
+    };
+
+    // 费用账户：从 shenfen_fee_id 派生 PalletId → AccountId32
+    // Substrate PalletId::into_account_truncating() = b"modl" + 8 字节 pallet_id + 20 字节零填充
+    let fee_id_bytes = ch.shenfen_fee_id.as_bytes();
+    if fee_id_bytes.len() != 8 {
+        return (Some(staking_hex), staking_balance, None, None);
+    }
+    let mut fee_account = [0u8; 32];
+    fee_account[..4].copy_from_slice(b"modl");
+    fee_account[4..12].copy_from_slice(fee_id_bytes);
+    // 12..32 保持零填充
+    let fee_hex = hex::encode(fee_account);
+    let fee_balance = match institution::fetch_balance(&fee_hex) {
+        Ok(b) => b.map(|v| v.to_string()),
+        Err(e) => { warnings.push(format!("查询费用余额失败: {e}")); None }
+    };
+
+    (Some(staking_hex), staking_balance, Some(fee_hex), fee_balance)
 }
 
 /// 获取提案分页列表（需要节点运行）。

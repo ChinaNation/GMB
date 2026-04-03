@@ -33,6 +33,14 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
   const [activateCountdown, setActivateCountdown] = useState(90);
   const [activateError, setActivateError] = useState<string | null>(null);
 
+  // 设为验证者弹窗状态
+  const [showValidatorModal, setShowValidatorModal] = useState(false);
+  const [validatorPubkey, setValidatorPubkey] = useState('');
+  const [privateKeyInput, setPrivateKeyInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [validatorSaving, setValidatorSaving] = useState(false);
+  const [validatorError, setValidatorError] = useState<string | null>(null);
+
   useEffect(() => {
     setLoading(true);
     Promise.all([
@@ -144,13 +152,11 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
                         <button
                           className="set-validator-button"
                           onClick={() => {
-                            const privateKey = prompt('请输入该管理员的私钥种子（64位十六进制）：');
-                            if (!privateKey) return;
-                            const password = prompt('请输入设备密码：');
-                            if (!password) return;
-                            api.setSigningAdmin(pubkey, privateKey, password)
-                              .then((info) => { setSigningAdmin(info); alert('设置成功，重启节点后生效'); })
-                              .catch((e) => alert(sanitizeError(e)));
+                            setValidatorPubkey(pubkey);
+                            setPrivateKeyInput('');
+                            setPasswordInput('');
+                            setValidatorError(null);
+                            setShowValidatorModal(true);
                           }}
                         >设为验证者</button>
                       )}
@@ -218,6 +224,69 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
           </div>
         </div>
       )}
+
+      {/* 设为验证者弹窗 */}
+      {showValidatorModal && (
+        <div className="modal-overlay" onClick={() => !validatorSaving && setShowValidatorModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3>设为验证者</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 12px' }}>
+              输入该管理员的私钥种子，用于链下支付验证签名。私钥可在 wumin 冷钱包中复制。
+            </p>
+            <div className="wallet-form-field">
+              <label>私钥种子（64 位十六进制）</label>
+              <input
+                type="password"
+                value={privateKeyInput}
+                onChange={e => setPrivateKeyInput(e.target.value.trim())}
+                placeholder="输入 64 位 hex 私钥种子"
+                disabled={validatorSaving}
+              />
+            </div>
+            <div className="wallet-form-field" style={{ marginTop: 10 }}>
+              <label>设备密码</label>
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={e => setPasswordInput(e.target.value)}
+                placeholder="输入设备开机密码"
+                disabled={validatorSaving}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && privateKeyInput && passwordInput) {
+                    e.preventDefault();
+                    submitValidator();
+                  }
+                }}
+              />
+            </div>
+            {validatorError && <div className="error" style={{ marginTop: 8 }}>{validatorError}</div>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
+              <button
+                className="cancel-button"
+                onClick={() => setShowValidatorModal(false)}
+                disabled={validatorSaving}
+              >取消</button>
+              <button
+                onClick={submitValidator}
+                disabled={validatorSaving || !privateKeyInput || !passwordInput}
+              >{validatorSaving ? '设置中…' : '确认设置'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+
+  function submitValidator() {
+    if (!privateKeyInput || !passwordInput) return;
+    setValidatorSaving(true);
+    setValidatorError(null);
+    api.setSigningAdmin(validatorPubkey, privateKeyInput, passwordInput)
+      .then((info) => {
+        setSigningAdmin(info);
+        setShowValidatorModal(false);
+      })
+      .catch((e) => setValidatorError(sanitizeError(e)))
+      .finally(() => setValidatorSaving(false));
+  }
 }
