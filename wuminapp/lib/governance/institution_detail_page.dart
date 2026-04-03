@@ -52,8 +52,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   /// 通过 ProposalContext 解析的管理员钱包。
   List<WalletProfile> _adminWallets = const [];
 
-  /// 所有匹配的管理员公钥（小写 hex，不含 0x）。
-  Set<String> _adminPubkeys = const {};
+  /// 用户已导入的冷钱包公钥中，属于本机构链上管理员的集合（小写 hex）。
+  Set<String> _importedColdPubkeys = const {};
 
   /// 已激活的管理员公钥集合（小写 hex）。
   Set<String> _activatedPubkeys = const {};
@@ -89,16 +89,21 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       final proposals = results[2] as List<ProposalWithDetail>;
       final activated = results[3] as List<ActivatedAdmin>;
 
-      // 从 ProposalContext 获取匹配的管理员冷钱包
-      final matchedPubkeys = <String>{};
-      for (final wallet in ctx.adminWallets) {
-        var pubkey = wallet.pubkeyHex.toLowerCase();
-        if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
-        matchedPubkeys.add(pubkey);
-      }
-
       // 已激活公钥集合
       final activatedPks = activated.map((a) => a.pubkeyHex).toSet();
+
+      // 计算用户已导入的冷钱包公钥中，属于本机构链上管理员的集合
+      final allWallets = await _walletManager.getWallets();
+      final coldPubkeys = <String>{};
+      for (final w in allWallets) {
+        if (w.isColdWallet) {
+          var pk = w.pubkeyHex.toLowerCase();
+          if (pk.startsWith('0x')) pk = pk.substring(2);
+          if (admins.contains(pk)) {
+            coldPubkeys.add(pk);
+          }
+        }
+      }
 
       // 记录管理员机构状态到公共缓存
       if (ctx.isAdmin) {
@@ -111,7 +116,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       setState(() {
         _admins = admins;
         _adminWallets = ctx.adminWallets;
-        _adminPubkeys = matchedPubkeys;
+        _importedColdPubkeys = coldPubkeys;
         _activatedPubkeys = activatedPks;
         _isCurrentUserAdmin = ctx.isAdmin;
         _proposalEvents = proposals;
@@ -190,6 +195,9 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           if (_isCurrentUserAdmin) ...[
             _buildAdminBadge(),
             const SizedBox(height: 12),
+          ] else ...[
+            _buildNonAdminHint(),
+            const SizedBox(height: 12),
           ],
           _buildAdminEntry(),
           const SizedBox(height: 12),
@@ -211,7 +219,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         side: BorderSide(color: widget.badgeColor.withValues(alpha: 0.18)),
       ),
       child: InkWell(
-        onTap: _isCurrentUserAdmin ? _openProposalTypes : null,
+        onTap: _openProposalTypes,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -258,10 +266,9 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                   ],
                 ),
               ),
-              // 右侧箭头（仅管理员显示）
-              if (_isCurrentUserAdmin)
-                Icon(Icons.chevron_right,
-                    size: 20, color: AppTheme.textTertiary),
+              // 右侧箭头
+              Icon(Icons.chevron_right,
+                  size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),
@@ -285,6 +292,30 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
             style: TextStyle(
               fontSize: 12,
               color: AppTheme.success,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ──── 非管理员提示 ────
+
+  Widget _buildNonAdminHint() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: AppTheme.bannerDecoration(AppTheme.textTertiary),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.info_outline, size: 14, color: AppTheme.textTertiary),
+          SizedBox(width: 4),
+          Text(
+            '仅管理员可发起提案',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppTheme.textTertiary,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -564,6 +595,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           icon: widget.icon,
           badgeColor: widget.badgeColor,
           adminWallets: _adminWallets,
+          isActivated: _isCurrentUserAdmin,
         ),
       ),
     );
@@ -632,9 +664,15 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         builder: (_) => AdminListPage(
           institution: widget.institution,
           admins: _admins,
-          adminPubkeys: _adminPubkeys,
+          importedColdPubkeys: _importedColdPubkeys,
           activatedPubkeys: _activatedPubkeys,
           badgeColor: widget.badgeColor,
+          onActivated: () {
+            // 激活成功后刷新页面
+            _adminService.clearCache(widget.institution.shenfenId);
+            _contextResolver.clearWalletCache();
+            _load();
+          },
         ),
       ),
     );

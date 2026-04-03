@@ -130,9 +130,7 @@ class ProposalContextResolver {
       return const ProposalContext();
     }
 
-    List<String> admins;
     try {
-      admins = await _adminService.fetchAdmins(institution.shenfenId);
       if (institution.isRegisteredDuoqian) {
         final threshold = await _adminService.fetchThreshold(
           institution.shenfenId,
@@ -144,10 +142,10 @@ class ProposalContextResolver {
         }
       }
     } catch (_) {
-      admins = const [];
+      // ignore
     }
 
-    // 优先使用激活状态匹配，兼容旧的冷钱包匹配逻辑
+    // 仅通过激活记录匹配管理员钱包
     final activatedAdmins = await _activationService
         .getActivatedAdmins(institution!.shenfenId)
         .catchError((_) => <ActivatedAdmin>[]);
@@ -167,16 +165,6 @@ class ProposalContextResolver {
         (w) => _normalize(w.pubkeyHex) == activated.pubkeyHex,
       )) {
         matchedWallets.add(wallet);
-      }
-    }
-
-    // 兼容：冷钱包匹配链上管理员（尚未激活但已导入的）
-    if (matchedWallets.isEmpty) {
-      for (final w in coldWallets) {
-        final pk = _normalize(w.pubkeyHex);
-        if (admins.contains(pk)) {
-          matchedWallets.add(w);
-        }
       }
     }
 
@@ -215,9 +203,7 @@ class ProposalContextResolver {
         continue;
       }
 
-      List<String> admins;
       try {
-        admins = await _adminService.fetchAdmins(institution.shenfenId);
         if (institution.isRegisteredDuoqian) {
           final threshold = await _adminService.fetchThreshold(
             institution.shenfenId,
@@ -229,14 +215,23 @@ class ProposalContextResolver {
           }
         }
       } catch (_) {
-        admins = const [];
+        // ignore
       }
 
+      // 仅通过激活记录匹配管理员钱包
+      final activatedAdmins = await _activationService
+          .getActivatedAdmins(institution!.shenfenId)
+          .catchError((_) => <ActivatedAdmin>[]);
+
       final matchedWallets = <WalletProfile>[];
-      for (final w in coldWallets) {
-        final pk = _normalize(w.pubkeyHex);
-        if (admins.contains(pk)) {
-          matchedWallets.add(w);
+      for (final activated in activatedAdmins) {
+        for (final w in wallets) {
+          if (_normalize(w.pubkeyHex) == activated.pubkeyHex &&
+              !matchedWallets.any(
+                (m) => _normalize(m.pubkeyHex) == activated.pubkeyHex,
+              )) {
+            matchedWallets.add(w);
+          }
         }
       }
 

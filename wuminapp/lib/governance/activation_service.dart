@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../wallet/core/wallet_manager.dart';
+import '../signer/qr_signer.dart';
 import 'institution_admin_service.dart';
 
 /// 管理员激活记录。
@@ -36,27 +37,29 @@ class ActivatedAdmin {
   );
 }
 
-/// 管理员激活服务。
+/// 管理员激活服务（QR 扫码签名激活模式）。
 ///
-/// 在 wuminapp 中，用户已持有钱包私钥（通过 WalletManager），
-/// 因此激活只需用本地钱包签名 GMB_ACTIVATE payload，
-/// 本地验证后写入 SharedPreferences 存储。
+/// 用户在管理员列表页点击"激活"→ 展示签名请求 QR →
+/// 持有私钥的外部设备扫码签名 → wuminapp 扫码读取签名回执 →
+/// 验证 sr25519 签名 → 写入本地存储。
 class ActivationService {
   ActivationService({
-    WalletManager? walletManager,
     InstitutionAdminService? adminService,
-  })  : _walletManager = walletManager ?? WalletManager(),
-        _adminService = adminService ?? InstitutionAdminService();
+  }) : _adminService = adminService ?? InstitutionAdminService();
 
-  final WalletManager _walletManager;
   final InstitutionAdminService _adminService;
 
-  static const _storageKey = 'activated_admins_v1';
+  /// v2 存储键，旧 v1 数据自动废弃。
+  static const _storageKey = 'activated_admins_v2';
 
   /// "GMB_ACTIVATE" 前缀（12 字节 ASCII）。
   static final _activatePrefix = Uint8List.fromList(
     'GMB_ACTIVATE'.codeUnits,
   );
+
+  // ---------------------------------------------------------------------------
+  // 读取
+  // ---------------------------------------------------------------------------
 
   /// 加载所有激活记录。
   Future<List<ActivatedAdmin>> loadAll() async {
@@ -97,25 +100,71 @@ class ActivationService {
     }
   }
 
-  /// 激活管理员：使用本地钱包签名 GMB_ACTIVATE payload。
+  /// 检查指定公钥是否已激活。
+  Future<bool> isActivated(String pubkeyHex, String shenfenId) async {
+    final pk = _normalize(pubkeyHex);
+    final all = await loadAll();
+    return all.any((a) => a.pubkeyHex == pk && a.shenfenId == shenfenId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // QR 激活流程
+  // ---------------------------------------------------------------------------
+
+  /// 构建激活签名请求（用于展示 QR 码）。
   ///
-  /// [walletIndex] 持有私钥的钱包索引。
-  /// [pubkeyHex] 管理员公钥（必须与钱包公钥一致）。
-  /// [shenfenId] 机构身份码。
-  Future<ActivatedAdmin> activate({
-    required int walletIndex,
+  /// 返回 (QrSignRequest, requestJson)，直接传给 QrSignSessionPage。
+  ({QrSignRequest request, String json}) buildActivationRequest({
     required String pubkeyHex,
     required String shenfenId,
+  }) {
+    final pk = _normalize(pubkeyHex);
+
+    // SS58 地址用于 QR 请求的 account 字段
+    final pkBytes = _hexToBytes(pk);
+    final account = Keyring().encodeAddress(pkBytes, 2027);
+
+    // 构建 84 字节 payload
+    final payload = _buildActivatePayload(shenfenId);
+    final payloadHex = _bytesToHex(payload);
+
+    final signer = QrSigner();
+    final requestId = QrSigner.generateRequestId(prefix: 'act-');
+    final request = signer.buildRequest(
+      requestId: requestId,
+      account: account,
+      pubkey: pk,
+      payloadHex: payloadHex,
+      display: {
+        'action': 'activate_admin',
+        'summary': '激活机构管理员',
+        'fields': {
+          'institution': shenfenId,
+          'admin_pubkey': pk,
+        },
+      },
+    );
+    final json = signer.encodeRequest(request);
+
+    return (request: request, json: json);
+  }
+
+  /// 通过 QR 签名回执完成激活。
+  ///
+  /// [pubkeyHex] 管理员公钥。
+  /// [shenfenId] 机构身份码。
+  /// [response] 从 QrSignSessionPage 获取的签名回执。
+  Future<ActivatedAdmin> activateViaQr({
+    required String pubkeyHex,
+    required String shenfenId,
+    required QrSignResponse response,
   }) async {
     final pk = _normalize(pubkeyHex);
 
-    // 验证钱包公钥匹配
-    final wallet = await _walletManager.getWalletByIndex(walletIndex);
-    if (wallet == null) {
-      throw Exception('未找到指定钱包');
-    }
-    if (_normalize(wallet.pubkeyHex) != pk) {
-      throw Exception('钱包公钥与管理员公钥不一致');
+    // 验证签名者与目标管理员一致
+    final responsePk = _normalize(response.pubkey);
+    if (responsePk != pk) {
+      throw Exception('签名公钥与管理员公钥不一致');
     }
 
     // 验证是链上管理员
@@ -124,13 +173,7 @@ class ActivationService {
       throw Exception('该公钥不在此机构的链上管理员列表中');
     }
 
-    // 构建激活 payload：GMB_ACTIVATE(12B) + shenfen_id(48B) + timestamp(8B) + nonce(16B)
-    final payload = _buildActivatePayload(shenfenId);
-
-    // 用钱包私钥签名
-    await _walletManager.signWithWallet(walletIndex, payload);
-
-    // 签名成功 = 证明持有私钥，写入本地存储
+    // 写入本地存储
     final now = DateTime.now().millisecondsSinceEpoch;
     final activation = ActivatedAdmin(
       pubkeyHex: pk,
@@ -147,6 +190,10 @@ class ActivationService {
     return activation;
   }
 
+  // ---------------------------------------------------------------------------
+  // 取消激活
+  // ---------------------------------------------------------------------------
+
   /// 取消激活。
   Future<void> deactivate(String pubkeyHex, String shenfenId) async {
     final pk = _normalize(pubkeyHex);
@@ -155,12 +202,9 @@ class ActivationService {
     await _saveAll(all);
   }
 
-  /// 检查指定公钥是否已激活。
-  Future<bool> isActivated(String pubkeyHex, String shenfenId) async {
-    final pk = _normalize(pubkeyHex);
-    final all = await loadAll();
-    return all.any((a) => a.pubkeyHex == pk && a.shenfenId == shenfenId);
-  }
+  // ---------------------------------------------------------------------------
+  // 内部方法
+  // ---------------------------------------------------------------------------
 
   Uint8List _buildActivatePayload(String shenfenId) {
     final payload = Uint8List(84);
@@ -174,7 +218,6 @@ class ActivationService {
     final bd = ByteData(8)..setUint64(0, timestamp, Endian.little);
     payload.setAll(60, bd.buffer.asUint8List());
     // 随机 nonce 16 字节（用零填充，签名验证不依赖 nonce 内容）
-    // 实际签名已证明私钥持有权，nonce 用于区分不同激活请求
     return payload;
   }
 
@@ -187,5 +230,18 @@ class ActivationService {
   static String _normalize(String hex) {
     final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
     return clean.toLowerCase();
+  }
+
+  static Uint8List _hexToBytes(String hex) {
+    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
+    final result = Uint8List(clean.length ~/ 2);
+    for (var i = 0; i < result.length; i++) {
+      result[i] = int.parse(clean.substring(i * 2, i * 2 + 2), radix: 16);
+    }
+    return result;
+  }
+
+  static String _bytesToHex(Uint8List bytes) {
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 }
