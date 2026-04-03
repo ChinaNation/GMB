@@ -1,7 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  ActivateRequestResult,
+  ActivatedAdmin,
   AdminWalletMatch,
-  ColdWalletList,
   GovernanceOverview,
   ProposeUpgradeRequestResult,
   SigningAdminInfo,
@@ -78,16 +79,25 @@ export const api = {
   getNextProposalId: () => invoke<number>('get_next_proposal_id'),
   getInstitutionProposals: (shenfenId: string) =>
     invoke<ProposalListItem[]>('get_institution_proposals', { shenfenId }),
-  getColdWallets: () => invoke<ColdWalletList>('get_cold_wallets'),
-  addColdWallet: (address: string, name: string, unlockPassword: string) =>
-    invoke<ColdWalletList>('add_cold_wallet', { address, name, unlockPassword }),
-  removeColdWallet: (pubkeyHex: string, unlockPassword: string) =>
-    invoke<ColdWalletList>('remove_cold_wallet', { pubkeyHex, unlockPassword }),
+  getInstitutionProposalPage: (shenfenId: string, startId: number, count: number) =>
+    invoke<ProposalPageResult>('get_institution_proposal_page', { shenfenId, startId, count }),
   setSigningAdmin: (pubkeyHex: string, privateKeyHex: string, unlockPassword: string) =>
     invoke<SigningAdminInfo | null>('set_signing_admin', { pubkeyHex, privateKeyHex, unlockPassword }),
   getSigningAdmin: () => invoke<SigningAdminInfo | null>('get_signing_admin'),
-  checkAdminWallets: (shenfenId: string) =>
-    invoke<AdminWalletMatch[]>('check_admin_wallets', { shenfenId }),
+  // 管理员激活
+  buildActivateAdminRequest: (pubkeyHex: string, shenfenId: string) =>
+    invoke<ActivateRequestResult>('build_activate_admin_request', { pubkeyHex, shenfenId }),
+  verifyActivateAdmin: (
+    requestId: string, pubkeyHex: string, expectedPayloadHash: string,
+    payloadHex: string, responseJson: string,
+  ) =>
+    invoke<ActivatedAdmin>('verify_activate_admin', {
+      requestId, pubkeyHex, expectedPayloadHash, payloadHex, responseJson,
+    }),
+  getActivatedAdmins: (shenfenId: string) =>
+    invoke<ActivatedAdmin[]>('get_activated_admins', { shenfenId }),
+  deactivateAdmin: (pubkeyHex: string, shenfenId: string, unlockPassword: string) =>
+    invoke<void>('deactivate_admin', { pubkeyHex, shenfenId, unlockPassword }),
   buildVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>
     invoke<VoteSignRequestResult>('build_vote_request', { proposalId, pubkeyHex, approve }),
   buildJointVoteRequest: (proposalId: number, pubkeyHex: string, shenfenId: string, approve: boolean) =>

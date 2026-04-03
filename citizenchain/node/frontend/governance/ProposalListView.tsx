@@ -98,7 +98,9 @@ export function ProposalListView({ onSelect }: Props) {
               <div className="proposal-card-body">
                 <div className="proposal-card-tags">
                   <span className="proposal-tag">{item.kindLabel}</span>
-                  <span className="proposal-tag">{item.stageLabel}</span>
+                  {item.kind === 1 && (
+                    <span className="proposal-tag">{item.stageLabel}</span>
+                  )}
                   {item.institutionName && (
                     <span className="proposal-tag institution-tag">
                       {item.institutionName}

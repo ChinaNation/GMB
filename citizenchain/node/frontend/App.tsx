@@ -12,7 +12,6 @@ type TabKey =
   | 'governance'
   | 'network'
   | 'whitepaper'
-  | 'party'
   | 'constitution'
   | 'settings';
 
@@ -28,7 +27,6 @@ export default function App() {
         <button className={tab === 'governance' ? 'active' : ''} onClick={() => setTab('governance')}>治理</button>
         <button className={tab === 'network' ? 'active' : ''} onClick={() => setTab('network')}>网络</button>
         <button className={tab === 'whitepaper' ? 'active' : ''} onClick={() => setTab('whitepaper')}>白皮书</button>
-        <button className={tab === 'party' ? 'active' : ''} onClick={() => setTab('party')}>公民党</button>
         <button className={tab === 'constitution' ? 'active' : ''} onClick={() => setTab('constitution')}>公民宪法</button>
         <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>设置</button>
       </nav>
@@ -57,10 +55,6 @@ export default function App() {
 
           {tab === 'whitepaper' ? (
             <OtherTabsSection activeKey="whitepaper" />
-          ) : null}
-
-          {tab === 'party' ? (
-            <OtherTabsSection activeKey="party" />
           ) : null}
 
           {tab === 'constitution' ? (

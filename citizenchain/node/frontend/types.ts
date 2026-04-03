@@ -32,6 +32,8 @@ export type ChainStatus = {
   blockHeight: number | null;
   finalizedHeight: number | null;
   syncing: boolean | null;
+  specVersion: number | null;
+  nodeVersion: string;
 };
 
 // 节点身份信息

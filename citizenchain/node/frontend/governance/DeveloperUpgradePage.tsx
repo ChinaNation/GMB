@@ -4,14 +4,11 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, sanitizeError } from '../api';
 import { QrScanner } from './QrScanner';
-import type { ColdWallet, VoteSignRequestResult } from './governance-types';
+import type { VoteSignRequestResult } from './governance-types';
 
 type FlowStep = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function DeveloperUpgradePage() {
-  const [wallets, setWallets] = useState<ColdWallet[]>([]);
-  const [loading, setLoading] = useState(true);
-
   const [wasmPath, setWasmPath] = useState('');
   const [wasmFileName, setWasmFileName] = useState('');
   const [selectedPubkey, setSelectedPubkey] = useState('');
@@ -29,13 +26,6 @@ export function DeveloperUpgradePage() {
   signRequestRef.current = signRequest;
   selectedPubkeyRef.current = selectedPubkey;
   wasmPathRef.current = wasmPath;
-
-  useEffect(() => {
-    api.getColdWallets()
-      .then((list) => setWallets(list.wallets))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
 
   // QR 倒计时
   useEffect(() => {
@@ -102,8 +92,6 @@ export function DeveloperUpgradePage() {
     }
   }, []);
 
-  if (loading) return <div className="governance-loading">加载中…</div>;
-
   return (
     <div className="developer-upgrade-page">
       <h2>开发期 Runtime 升级</h2>
@@ -123,17 +111,14 @@ export function DeveloperUpgradePage() {
             </div>
           </div>
           <div className="dev-upgrade-field">
-            <label>管理员冷钱包</label>
-            {wallets.length === 0 ? (
-              <p className="dev-upgrade-warning">未导入冷钱包，请先在「钱包管理」中导入</p>
-            ) : (
-              <select value={selectedPubkey} onChange={(e) => setSelectedPubkey(e.target.value)}>
-                <option value="">请选择…</option>
-                {wallets.map((w) => (
-                  <option key={w.pubkeyHex} value={w.pubkeyHex}>{w.name} ({w.address.slice(0, 8)}…)</option>
-                ))}
-              </select>
-            )}
+            <label>NRC 管理员公钥（64 位十六进制）</label>
+            <input
+              type="text"
+              value={selectedPubkey}
+              onChange={(e) => setSelectedPubkey(e.target.value.trim())}
+              placeholder="输入管理员公钥 hex"
+              className="dev-upgrade-pubkey-input"
+            />
           </div>
           {error && <div className="error">{error}</div>}
           <button
