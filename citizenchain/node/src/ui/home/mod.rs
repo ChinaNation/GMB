@@ -5,7 +5,7 @@ pub(crate) mod process;
 pub(crate) mod rpc;
 
 // 公共类型与 Tauri 命令，供 main.rs 直接使用。
-pub use identity::{get_node_identity, get_node_status, set_node_name};
+pub use identity::{get_node_identity, get_node_status};
 pub(crate) use process::{cleanup_on_exit, cleanup_on_startup};
 pub use process::{start_node, stop_node, AppState, RuntimeState};
 pub use rpc::{get_chain_status, get_total_issuance, get_total_stake};

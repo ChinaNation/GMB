@@ -1,12 +1,8 @@
-// 身份管理子模块：节点身份信息、名称管理、状态查询。
+// 身份管理子模块：节点身份信息、状态查询。
 
-use crate::ui::{
-    settings::{bootnodes_address, device_password},
-    shared::{security, validation::normalize_node_name},
-};
-use serde::{Deserialize, Serialize};
+use crate::ui::settings::bootnodes_address;
+use serde::Serialize;
 use serde_json::Value;
-use std::{fs, path::PathBuf};
 use tauri::AppHandle;
 
 use super::process::AppState;
@@ -26,29 +22,8 @@ pub struct NodeStatus {
 #[serde(rename_all = "camelCase")]
 /// 首页展示的节点身份信息。
 pub struct NodeIdentity {
-    pub node_name: Option<String>,
     pub peer_id: Option<String>,
     pub role: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct StoredNodeName {
-    node_name: String,
-}
-
-fn node_name_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(security::app_data_dir(app)?.join("node-name.json"))
-}
-
-pub(super) fn load_node_name(app: &AppHandle) -> Result<Option<String>, String> {
-    let path = node_name_path(app)?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let raw = fs::read_to_string(path).map_err(|e| format!("read node-name failed: {e}"))?;
-    let record: StoredNodeName =
-        serde_json::from_str(&raw).map_err(|e| format!("parse node-name failed: {e}"))?;
-    Ok(Some(record.node_name))
 }
 
 // 角色由 bootnode 名称映射得出，未命中时统一按"全节点"展示。
@@ -62,8 +37,6 @@ fn role_from_peer_id(peer_id: Option<&str>) -> String {
 }
 
 pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
-    // 只看本会话通过密码验证后启动的托管进程。
-    // 不做端口扫描或 RPC 探测，避免绕过密码验证流程。
     let managed_running = {
         let app_state = app.state::<AppState>();
         let state = app_state
@@ -72,7 +45,7 @@ pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
             .map_err(|_| "acquire process state failed".to_string())?;
         state.node_handle.is_some()
     };
-    let managed_pid: Option<u32> = None; // 进程内模式没有独立 PID
+    let managed_pid: Option<u32> = None;
     Ok(NodeStatus {
         running: managed_running,
         state: if managed_running {
@@ -90,16 +63,12 @@ fn get_node_status_sync(app: AppHandle) -> Result<NodeStatus, String> {
 }
 
 fn get_node_identity_sync(app: AppHandle) -> Result<NodeIdentity, String> {
-    let configured_node_name = load_node_name(&app)?;
     if !current_status(&app)?.running {
         return Ok(NodeIdentity {
-            node_name: configured_node_name,
             peer_id: None,
             role: Some("全节点".to_string()),
         });
     }
-
-    let node_name = configured_node_name;
 
     let local_peer_id = rpc_post("system_localPeerId", Value::Array(vec![]))
         .ok()
@@ -107,7 +76,6 @@ fn get_node_identity_sync(app: AppHandle) -> Result<NodeIdentity, String> {
     let role = role_from_peer_id(local_peer_id.as_deref());
 
     Ok(NodeIdentity {
-        node_name,
         peer_id: local_peer_id,
         role: Some(role),
     })
@@ -124,35 +92,6 @@ pub async fn get_node_status(app: AppHandle) -> Result<NodeStatus, String> {
         tauri::async_runtime::spawn_blocking(move || get_node_status_sync(app)),
     )
     .await
-}
-
-#[tauri::command]
-pub fn set_node_name(
-    app: AppHandle,
-    node_name: String,
-    unlock_password: String,
-) -> Result<NodeIdentity, String> {
-    let unlock = security::ensure_unlock_password(&unlock_password)?;
-    device_password::verify_device_login_password(&app, unlock)?;
-    let normalized = normalize_node_name(&node_name)?;
-    let raw = serde_json::to_string_pretty(&StoredNodeName {
-        node_name: normalized.clone(),
-    })
-    .map_err(|e| format!("encode node-name failed: {e}"))?;
-
-    security::write_text_atomic(&node_name_path(&app)?, &format!("{raw}\n"))
-        .map_err(|e| format!("write node-name failed: {e}"))?;
-
-    let peer_id = rpc_post("system_localPeerId", Value::Array(vec![]))
-        .ok()
-        .and_then(|v| v.as_str().map(|s| s.to_string()));
-    let role = role_from_peer_id(peer_id.as_deref());
-
-    Ok(NodeIdentity {
-        node_name: Some(normalized),
-        peer_id,
-        role: Some(role),
-    })
 }
 
 #[tauri::command]

@@ -87,11 +87,16 @@ export function GovernanceSection() {
   }
 
   // 管理员列表页
+  // NRC(backTab='nrc')直接回到 Tab；PRC/PRB 回到机构详情页
   if (view.page === 'admin-list') {
+    const backToDetail = view.backTab !== 'nrc';
     return (
       <AdminListPage
         shenfenId={view.shenfenId}
-        onBack={() => setView({ page: view.backTab })}
+        onBack={() => backToDetail
+          ? setView({ page: 'institution-detail', shenfenId: view.shenfenId, backTab: view.backTab })
+          : setView({ page: view.backTab })
+        }
       />
     );
   }
