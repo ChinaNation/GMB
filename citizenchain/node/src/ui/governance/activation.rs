@@ -474,3 +474,12 @@ pub fn deactivate_admin(
 
     Ok(())
 }
+
+/// 检查本地是否有任何已激活的管理员（纯本地文件读取，不需要节点运行）。
+///
+/// 用于设置页面判断是否显示引导节点和投票节点设置项。
+#[tauri::command]
+pub fn has_any_activated_admin(app: AppHandle) -> Result<bool, String> {
+    let activations = load_activations(&app)?;
+    Ok(!activations.is_empty())
+}
