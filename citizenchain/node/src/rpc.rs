@@ -47,6 +47,8 @@ pub struct FullDeps<C, P> {
     pub offchain_ledger: Option<OffchainLedger>,
     /// 本节点省储行 shenfen_id（省储行节点启用时为 Some）。
     pub offchain_shenfen_id: Option<String>,
+    /// 链下清算广播发送端（通过 channel 发送广播请求给 gossip worker）。
+    pub offchain_gossip_tx: Option<tokio::sync::mpsc::UnboundedSender<crate::offchain_gossip::OffchainGossipMessage>>,
 }
 
 /// 构造并签名一笔交易，提交到交易池。
@@ -205,6 +207,7 @@ where
         chain_spec,
         offchain_ledger,
         offchain_shenfen_id,
+        offchain_gossip_tx,
     } = deps;
 
     module.merge(System::new(client.clone(), pool.clone()).into_rpc())?;
@@ -411,18 +414,21 @@ where
     // ──── 链下清算 RPC（仅省储行节点注册）────
     if let (Some(ledger), Some(shenfen_id)) = (offchain_ledger, offchain_shenfen_id) {
         let ed_fen: u128 = primitives::core_const::ACCOUNT_EXISTENTIAL_DEPOSIT;
+        let gossip_tx = offchain_gossip_tx;
 
         // offchain_submitSignedTx：接收顾客签名的链下支付交易
         {
             let client = client.clone();
             let ledger = ledger.clone();
             let shenfen_id = shenfen_id.clone();
+            let gossip_tx = gossip_tx.clone();
             module.register_async_method(
                 "offchain_submitSignedTx",
                 move |params, _, _| {
                     let client = client.clone();
                     let ledger = ledger.clone();
                     let shenfen_id = shenfen_id.clone();
+                    let gossip_tx = gossip_tx.clone();
                     async move {
                         use jsonrpsee::types::error::ErrorObject;
 
@@ -518,7 +524,26 @@ where
                             }
                         }
 
-                        // 6. 查链上余额
+                        // 6. 验证手续费金额是否与链上费率一致
+                        {
+                            let rate_bp = query_institution_rate_bp(client.as_ref(), &shenfen_id)
+                                .map_err(|e| {
+                                    ErrorObject::owned(-8, format!("查询费率失败：{e}"), None::<()>)
+                                })?;
+                            let expected_fee = calc_offchain_fee(amount_fen, rate_bp);
+                            if fee_fen != expected_fee {
+                                return Err(ErrorObject::owned(
+                                    -8,
+                                    format!(
+                                        "手续费金额不正确：提交 {} 分，期望 {} 分（费率 {}bp）",
+                                        fee_fen, expected_fee, rate_bp
+                                    ),
+                                    None::<()>,
+                                ));
+                            }
+                        }
+
+                        // 7. 查链上余额
                         let best_hash = client.info().best_hash;
                         let onchain_balance = {
                             // 中文注释：构造 System.Account storage key 并读取 free 余额。
@@ -552,7 +577,7 @@ where
                             }
                         };
 
-                        // 7. 虚拟余额校验
+                        // 8. 虚拟余额校验
                         let virtual_bal = ledger.virtual_balance(&payer, onchain_balance);
                         let required = amount_fen.saturating_add(fee_fen).saturating_add(ed_fen);
                         if virtual_bal < required {
@@ -566,14 +591,14 @@ where
                             ));
                         }
 
-                        // 8. 记入账本
+                        // 9. 记入账本
                         let now = SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .unwrap_or_default()
                             .as_secs();
                         let item = OffchainTxItem {
                             tx_id,
-                            payer,
+                            payer: payer.clone(),
                             recipient,
                             transfer_amount: amount_fen,
                             fee_amount: fee_fen,
@@ -583,7 +608,20 @@ where
                             ErrorObject::owned(-7, format!("记入账本失败：{e}"), None::<()>)
                         })?;
 
-                        // 9. 返回确认回执
+                        // 10. 向其他省储行广播待结算通知
+                        if let Some(ref tx) = gossip_tx {
+                            let _ = tx.send(
+                                crate::offchain_gossip::OffchainGossipMessage::PendingDebit {
+                                    tx_id,
+                                    payer: payer.clone(),
+                                    amount_with_fee: amount_fen.saturating_add(fee_fen),
+                                    clearing_bank: shenfen_id.as_bytes().to_vec(),
+                                    timestamp: now,
+                                },
+                            );
+                        }
+
+                        // 11. 返回确认回执
                         Ok(serde_json::json!({
                             "tx_id": tx_id_hex,
                             "status": "confirmed",
@@ -664,8 +702,82 @@ where
             })?;
         }
 
+        // offchain_queryInstitutionRate：查询本省储行的链下交易费率
+        {
+            let client = client.clone();
+            let shenfen_id = shenfen_id.clone();
+            module.register_method("offchain_queryInstitutionRate", move |_params, _, _| {
+                use jsonrpsee::types::error::ErrorObject;
+
+                let rate_bp = query_institution_rate_bp(client.as_ref(), &shenfen_id)
+                    .map_err(|e| ErrorObject::owned(-1, format!("查询费率失败：{e}"), None::<()>))?;
+
+                Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(serde_json::json!({
+                    "rate_bp": rate_bp,
+                    "min_fee_fen": 1,
+                }))
+            })?;
+        }
+
         log::info!("[Offchain] 链下清算 RPC 已注册（{}）", shenfen_id);
     }
 
     Ok(module)
+}
+
+/// 从链上 InstitutionRateBp 存储查询省储行的链下交易费率（bp）。
+fn query_institution_rate_bp<C>(client: &C, shenfen_id: &str) -> Result<u32, String>
+where
+    C: HeaderBackend<Block> + StorageProvider<Block, sc_service::TFullBackend<Block>>,
+{
+    // 将 shenfen_id 编码为 48 字节
+    let id_bytes = shenfen_id.as_bytes();
+    if id_bytes.is_empty() || id_bytes.len() > 48 {
+        return Err("shenfen_id 长度无效".to_string());
+    }
+    let mut institution = [0u8; 48];
+    institution[..id_bytes.len()].copy_from_slice(id_bytes);
+
+    // 构建 storage key: twox128("OffchainTransactionPos") + twox128("InstitutionRateBp") + blake2_128_concat(institution)
+    let mut key = Vec::new();
+    let pallet_hash = sp_core::hashing::twox_128(b"OffchainTransactionPos");
+    key.extend_from_slice(&pallet_hash);
+    let storage_hash = sp_core::hashing::twox_128(b"InstitutionRateBp");
+    key.extend_from_slice(&storage_hash);
+    let inst_hash = sp_core::hashing::blake2_128(&institution);
+    key.extend_from_slice(&inst_hash);
+    key.extend_from_slice(&institution);
+
+    let best_hash = client.info().best_hash;
+    let data = client
+        .storage(best_hash, &sp_storage::StorageKey(key))
+        .map_err(|e| format!("查询存储失败：{e}"))?;
+
+    match data {
+        Some(raw) => {
+            let bytes = raw.0;
+            if bytes.len() >= 4 {
+                let rate = u32::from_le_bytes(
+                    bytes[..4].try_into().map_err(|_| "费率解码失败".to_string())?,
+                );
+                // 链上默认值 0 等价于 1 bp
+                Ok(if rate == 0 { 1 } else { rate })
+            } else {
+                Ok(1) // 默认 1 bp
+            }
+        }
+        None => Ok(1), // 未设置，默认 1 bp
+    }
+}
+
+/// 根据链上费率计算链下交易手续费（fen），与链上 pallet 的 round_div 保持一致。
+fn calc_offchain_fee(amount_fen: u128, rate_bp: u32) -> u128 {
+    let numerator = amount_fen.saturating_mul(rate_bp as u128);
+    let denominator: u128 = 10_000;
+    let quotient = numerator / denominator;
+    let remainder = numerator % denominator;
+    // 四舍五入：remainder >= ceil(denominator / 2) 则进位
+    let half_up = (denominator / 2) + (denominator % 2);
+    let by_rate = if remainder >= half_up { quotient + 1 } else { quotient };
+    by_rate.max(1) // 最低 1 fen (0.01 元)
 }

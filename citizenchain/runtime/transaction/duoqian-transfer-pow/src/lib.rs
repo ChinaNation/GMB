@@ -14,7 +14,10 @@ use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 
-use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
+
+use primitives::china::china_cb::{
+    shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB, NRC_ANQUAN_ADDRESS,
+};
 use primitives::china::china_ch::{
     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
@@ -24,6 +27,9 @@ use voting_engine_system::{
 };
 
 pub use pallet::*;
+/// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
+pub const MODULE_TAG: &[u8] = b"dq-xfer";
+
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
 pub mod weights;
@@ -47,6 +53,35 @@ pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
     /// 发起管理员
     pub proposer: AccountId,
 }
+
+/// 安全基金转账动作：从国储会安全基金账户向指定收款地址转账。
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[scale_info(skip_type_params(MaxRemarkLen))]
+pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
+    /// 收款地址
+    pub beneficiary: AccountId,
+    /// 转账金额
+    pub amount: Balance,
+    /// 备注
+    pub remark: BoundedVec<u8, MaxRemarkLen>,
+    /// 发起管理员
+    pub proposer: AccountId,
+}
+
+/// 手续费划转动作：从机构手续费账户向机构主账户划转。
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub struct SweepAction<Balance> {
+    /// 机构标识
+    pub institution: InstitutionPalletId,
+    /// 划转金额
+    pub amount: Balance,
+}
+
+/// 手续费账户最低保留余额：1111.11 元（111111 分）。
+const FEE_ADDRESS_MIN_RESERVE_FEN: u128 = 111_111;
+
+/// 单次划转上限：可用余额的 80%。
+const FEE_SWEEP_MAX_PERCENT: u128 = 80;
 
 /// 中文注释：判断机构属于 NRC/PRC/PRB（不含注册多签，注册多签由链上存储判断）。
 fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
@@ -137,6 +172,26 @@ pub mod pallet {
     // 活跃提案数限制已移至 voting-engine-system::active_proposal_limit 全局管控。
     // 提案业务数据和元数据已统一存储到 voting-engine-system（ProposalData / ProposalMeta）。
 
+    /// 安全基金转账提案动作存储。
+    #[pallet::storage]
+    pub type SafetyFundProposalActions<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        SafetyFundAction<T::AccountId, BalanceOf<T>, T::MaxRemarkLen>,
+        OptionQuery,
+    >;
+
+    /// 手续费划转提案动作存储（省储行 + 国储会共用）。
+    #[pallet::storage]
+    pub type SweepProposalActions<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        SweepAction<BalanceOf<T>>,
+        OptionQuery,
+    >;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -168,6 +223,55 @@ pub mod pallet {
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
         },
+        /// 安全基金转账提案已创建
+        SafetyFundTransferProposed {
+            proposal_id: u64,
+            proposer: T::AccountId,
+            beneficiary: T::AccountId,
+            amount: BalanceOf<T>,
+        },
+        /// 安全基金投票已提交
+        SafetyFundVoteSubmitted {
+            proposal_id: u64,
+            who: T::AccountId,
+            approve: bool,
+        },
+        /// 安全基金转账已执行
+        SafetyFundTransferExecuted {
+            proposal_id: u64,
+            beneficiary: T::AccountId,
+            amount: BalanceOf<T>,
+            fee: BalanceOf<T>,
+        },
+        /// 安全基金投票通过但执行失败
+        SafetyFundExecutionFailed {
+            proposal_id: u64,
+        },
+        /// 手续费划转提案已创建
+        SweepToMainProposed {
+            proposal_id: u64,
+            institution: InstitutionPalletId,
+            proposer: T::AccountId,
+            amount: BalanceOf<T>,
+        },
+        /// 手续费划转投票已提交
+        SweepToMainVoteSubmitted {
+            proposal_id: u64,
+            voter: T::AccountId,
+            approve: bool,
+        },
+        /// 手续费划转已执行
+        SweepToMainExecuted {
+            proposal_id: u64,
+            institution: InstitutionPalletId,
+            amount: BalanceOf<T>,
+            fee: BalanceOf<T>,
+            reserve_left: BalanceOf<T>,
+        },
+        /// 手续费划转投票通过但执行失败
+        SweepExecutionFailed {
+            proposal_id: u64,
+        },
     }
 
     #[pallet::error]
@@ -198,6 +302,22 @@ pub mod pallet {
         ProposalNotPassed,
         /// 中文注释：链上转账操作失败。
         TransferFailed,
+        /// 中文注释：安全基金提案未找到。
+        SafetyFundProposalNotFound,
+        /// 中文注释：安全基金余额不足。
+        SafetyFundInsufficientBalance,
+        /// 中文注释：安全基金提案未通过。
+        SafetyFundProposalNotPassed,
+        /// 中文注释：手续费划转提案未找到。
+        SweepProposalNotFound,
+        /// 中文注释：手续费划转金额无效。
+        InvalidSweepAmount,
+        /// 中文注释：手续费账户余额不足（需保留最低余额）。
+        InsufficientFeeReserve,
+        /// 中文注释：手续费划转金额超过上限（可用余额的 80%）。
+        SweepAmountExceedsCap,
+        /// 中文注释：手续费划转提案未通过。
+        SweepProposalNotPassed,
     }
 
     #[pallet::call]
@@ -279,8 +399,9 @@ pub mod pallet {
                 remark,
                 proposer: who.clone(),
             };
-            let data = action.encode();
-            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            let mut encoded = sp_runtime::Vec::from(crate::MODULE_TAG);
+            encoded.extend_from_slice(&action.encode());
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, encoded)?;
             voting_engine_system::Pallet::<T>::store_proposal_meta(
                 proposal_id,
                 frame_system::Pallet::<T>::block_number(),
@@ -307,10 +428,12 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+            let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
+            let tag = crate::MODULE_TAG;
+            ensure!(raw.len() >= tag.len() && &raw[..tag.len()] == tag, Error::<T>::ProposalActionNotFound);
             let action = TransferAction::<T::AccountId, BalanceOf<T>, T::MaxRemarkLen>::decode(
-                &mut &data[..],
+                &mut &raw[tag.len()..],
             )
             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
             let org = Self::resolve_actual_org(action.institution)
@@ -357,6 +480,214 @@ pub mod pallet {
         pub fn execute_transfer(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let _ = ensure_signed(origin)?;
             Self::try_execute_transfer(proposal_id)
+        }
+
+        /// 发起国储会安全基金转账提案（内部投票）。
+        ///
+        /// 从安全基金账户（`NRC_ANQUAN_ADDRESS`）向指定收款地址转账。
+        /// 仅国储会管理员可发起。
+        #[pallet::call_index(3)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
+        pub fn propose_safety_fund_transfer(
+            origin: OriginFor<T>,
+            beneficiary: T::AccountId,
+            amount: BalanceOf<T>,
+            remark: BoundedVec<u8, T::MaxRemarkLen>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
+
+            // 验证国储会管理员
+            let nrc_institution = reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
+                .ok_or(Error::<T>::InvalidInstitution)?;
+            ensure!(
+                <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
+                    ORG_NRC, nrc_institution, &who,
+                ),
+                Error::<T>::UnauthorizedAdmin
+            );
+
+            // 验证安全基金账户余额
+            let safety_fund_account = T::AccountId::decode(
+                &mut &NRC_ANQUAN_ADDRESS[..],
+            ).map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
+            ensure!(
+                <T as duoqian_manage_pow::Config>::InstitutionAssetGuard::can_spend(
+                    &safety_fund_account,
+                    InstitutionAssetAction::NrcSafetyFundTransfer,
+                ),
+                Error::<T>::InstitutionSpendNotAllowed
+            );
+
+            // 预检余额（含手续费，避免创建必定无法执行的提案）
+            let amount_u128: u128 = amount.saturated_into();
+            let fee_u128 = onchain_transaction_pow::calculate_onchain_fee(amount_u128);
+            let fee: BalanceOf<T> = fee_u128.saturated_into();
+            let total = amount.checked_add(&fee).ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
+            let ed: BalanceOf<T> = <T as duoqian_manage_pow::Config>::Currency::minimum_balance();
+            let free = <T as duoqian_manage_pow::Config>::Currency::free_balance(&safety_fund_account);
+            let required = total.checked_add(&ed).ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
+            ensure!(free >= required, Error::<T>::SafetyFundInsufficientBalance);
+
+            // 创建内部投票提案
+            let proposal_id = <T as duoqian_manage_pow::Config>::InternalVoteEngine
+                ::create_internal_proposal(who.clone(), ORG_NRC, nrc_institution)?;
+
+            SafetyFundProposalActions::<T>::insert(
+                proposal_id,
+                SafetyFundAction {
+                    beneficiary: beneficiary.clone(),
+                    amount,
+                    remark,
+                    proposer: who.clone(),
+                },
+            );
+
+            Self::deposit_event(Event::SafetyFundTransferProposed {
+                proposal_id,
+                proposer: who,
+                beneficiary,
+                amount,
+            });
+            Ok(())
+        }
+
+        /// 对国储会安全基金转账提案投票；通过后自动执行。
+        #[pallet::call_index(4)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(7, 6))]
+        pub fn vote_safety_fund_transfer(
+            origin: OriginFor<T>,
+            proposal_id: u64,
+            approve: bool,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            let _action = SafetyFundProposalActions::<T>::get(proposal_id)
+                .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
+
+            // 验证国储会管理员
+            let nrc_institution = reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
+                .ok_or(Error::<T>::InvalidInstitution)?;
+            ensure!(
+                <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
+                    ORG_NRC, nrc_institution, &who,
+                ),
+                Error::<T>::UnauthorizedAdmin
+            );
+
+            // 投票
+            <T as duoqian_manage_pow::Config>::InternalVoteEngine
+                ::cast_internal_vote(who.clone(), proposal_id, approve)?;
+
+            Self::deposit_event(Event::SafetyFundVoteSubmitted {
+                proposal_id,
+                who,
+                approve,
+            });
+
+            // 投票通过后自动执行
+            if approve {
+                if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
+                    if proposal.status == STATUS_PASSED {
+                        let exec_result = frame_support::storage::with_transaction(|| {
+                            match Self::try_execute_safety_fund(proposal_id) {
+                                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                                Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
+                            }
+                        });
+                        if exec_result.is_err() {
+                            Self::deposit_event(Event::SafetyFundExecutionFailed { proposal_id });
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        /// 发起手续费划转提案（省储行或国储会管理员）。
+        ///
+        /// 从机构手续费账户向机构主账户划转。划转后手续费账户至少保留 1111.11 元。
+        #[pallet::call_index(5)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
+        pub fn propose_sweep_to_main(
+            origin: OriginFor<T>,
+            institution: InstitutionPalletId,
+            amount: BalanceOf<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            let amount_u128: u128 = amount.saturated_into();
+            ensure!(amount_u128 > 0, Error::<T>::InvalidSweepAmount);
+
+            // 动态判断 org 类型
+            let org = Self::resolve_sweep_org(institution)?;
+            ensure!(
+                <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
+                    org, institution, &who,
+                ),
+                Error::<T>::UnauthorizedAdmin
+            );
+
+            let proposal_id = <T as duoqian_manage_pow::Config>::InternalVoteEngine
+                ::create_internal_proposal(who.clone(), org, institution)?;
+
+            SweepProposalActions::<T>::insert(
+                proposal_id,
+                SweepAction { institution, amount },
+            );
+
+            Self::deposit_event(Event::SweepToMainProposed {
+                proposal_id,
+                institution,
+                proposer: who,
+                amount,
+            });
+            Ok(())
+        }
+
+        /// 对手续费划转提案投票；通过后自动执行划转。
+        #[pallet::call_index(6)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(7, 6))]
+        pub fn vote_sweep_to_main(
+            origin: OriginFor<T>,
+            proposal_id: u64,
+            approve: bool,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            let action = SweepProposalActions::<T>::get(proposal_id)
+                .ok_or(Error::<T>::SweepProposalNotFound)?;
+
+            let org = Self::resolve_sweep_org(action.institution)?;
+            ensure!(
+                <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
+                    org, action.institution, &who,
+                ),
+                Error::<T>::UnauthorizedAdmin
+            );
+
+            <T as duoqian_manage_pow::Config>::InternalVoteEngine
+                ::cast_internal_vote(who.clone(), proposal_id, approve)?;
+
+            Self::deposit_event(Event::SweepToMainVoteSubmitted {
+                proposal_id,
+                voter: who,
+                approve,
+            });
+
+            if approve {
+                if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
+                    if proposal.status == STATUS_PASSED {
+                        let exec_result = frame_support::storage::with_transaction(|| {
+                            match Self::try_execute_sweep(proposal_id) {
+                                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                                Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
+                            }
+                        });
+                        if exec_result.is_err() {
+                            Self::deposit_event(Event::SweepExecutionFailed { proposal_id });
+                        }
+                    }
+                }
+            }
+            Ok(())
         }
     }
 
@@ -416,6 +747,202 @@ pub mod pallet {
             )
         }
 
+        /// 判断机构的 org 类型用于 sweep 提案。
+        fn resolve_sweep_org(institution: InstitutionPalletId) -> Result<u8, Error<T>> {
+            // 国储会
+            if CHINA_CB
+                .first()
+                .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+                == Some(institution)
+            {
+                return Ok(ORG_NRC);
+            }
+            // 省储行
+            if CHINA_CH
+                .iter()
+                .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
+                .any(|pid| pid == institution)
+            {
+                return Ok(ORG_PRB);
+            }
+            Err(Error::<T>::InvalidInstitution)
+        }
+
+        /// 解析机构手续费账户。
+        fn resolve_fee_account(institution: InstitutionPalletId) -> Result<T::AccountId, DispatchError> {
+            // 国储会：使用常量地址
+            if CHINA_CB
+                .first()
+                .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+                == Some(institution)
+            {
+                return T::AccountId::decode(&mut &CHINA_CB[0].fee_address[..])
+                    .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into());
+            }
+            // 省储行：使用 fee_address（BLAKE2-256 派生）
+            let node = CHINA_CH
+                .iter()
+                .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                .ok_or(Error::<T>::InvalidInstitution)?;
+            T::AccountId::decode(&mut &node.fee_address[..])
+                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into())
+        }
+
+        /// 解析机构主账户。
+        fn resolve_main_account(institution: InstitutionPalletId) -> Result<T::AccountId, DispatchError> {
+            let raw = institution_pallet_address(institution)
+                .ok_or(Error::<T>::InvalidInstitution)?;
+            T::AccountId::decode(&mut &raw[..])
+                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into())
+        }
+
+        /// 执行手续费划转。
+        fn try_execute_sweep(proposal_id: u64) -> DispatchResult {
+            let action = SweepProposalActions::<T>::get(proposal_id)
+                .ok_or(Error::<T>::SweepProposalNotFound)?;
+
+            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .ok_or(Error::<T>::SweepProposalNotFound)?;
+            ensure!(
+                proposal.status == STATUS_PASSED,
+                Error::<T>::SweepProposalNotPassed
+            );
+
+            let fee_account = Self::resolve_fee_account(action.institution)?;
+            let main_account = Self::resolve_main_account(action.institution)?;
+
+            ensure!(
+                <T as duoqian_manage_pow::Config>::InstitutionAssetGuard::can_spend(
+                    &fee_account,
+                    InstitutionAssetAction::OffchainFeeSweepExecute,
+                ),
+                Error::<T>::InstitutionSpendNotAllowed
+            );
+
+            // ── 计算手续费 ──
+            let amount_u128: u128 = action.amount.saturated_into();
+            let tx_fee_u128 = onchain_transaction_pow::calculate_onchain_fee(amount_u128);
+            let tx_fee: BalanceOf<T> = tx_fee_u128.saturated_into();
+
+            let fee_balance_u128: u128 = <T as duoqian_manage_pow::Config>::Currency::free_balance(&fee_account).saturated_into();
+            let reserve_u128 = FEE_ADDRESS_MIN_RESERVE_FEN;
+
+            // ── 余额检查：amount + tx_fee + reserve ──
+            let total_deduct_u128 = amount_u128.saturating_add(tx_fee_u128);
+            ensure!(
+                fee_balance_u128 >= total_deduct_u128
+                    && fee_balance_u128.saturating_sub(total_deduct_u128) >= reserve_u128,
+                Error::<T>::InsufficientFeeReserve
+            );
+            // ── cap 检查：划转金额不超过可用余额的 80%（可用 = 余额 - reserve） ──
+            let available_u128 = fee_balance_u128.saturating_sub(reserve_u128);
+            let cap_u128 = available_u128
+                .saturating_mul(FEE_SWEEP_MAX_PERCENT)
+                .saturating_div(100);
+            ensure!(amount_u128 <= cap_u128, Error::<T>::SweepAmountExceedsCap);
+
+            // ── 执行划转 ──
+            <T as duoqian_manage_pow::Config>::Currency::transfer(
+                &fee_account,
+                &main_account,
+                action.amount,
+                frame_support::traits::ExistenceRequirement::KeepAlive,
+            )?;
+
+            // ── 手续费：从费用账户扣取，通过 FeeRouter 按 80/10/10 分账 ──
+            let fee_imbalance = <T as duoqian_manage_pow::Config>::Currency::withdraw(
+                &fee_account,
+                tx_fee,
+                frame_support::traits::WithdrawReasons::FEE,
+                frame_support::traits::ExistenceRequirement::KeepAlive,
+            ).map_err(|_| Error::<T>::InsufficientFeeReserve)?;
+            <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
+
+            let reserve_left = <T as duoqian_manage_pow::Config>::Currency::free_balance(&fee_account);
+
+            Self::deposit_event(Event::SweepToMainExecuted {
+                proposal_id,
+                institution: action.institution,
+                amount: action.amount,
+                fee: tx_fee,
+                reserve_left,
+            });
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            Ok(())
+        }
+
+        /// 执行安全基金转账（投票通过后自动调用）。
+        fn try_execute_safety_fund(proposal_id: u64) -> DispatchResult {
+            let action = SafetyFundProposalActions::<T>::get(proposal_id)
+                .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
+
+            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
+            ensure!(
+                proposal.status == STATUS_PASSED,
+                Error::<T>::SafetyFundProposalNotPassed
+            );
+
+            let safety_fund_account = T::AccountId::decode(
+                &mut &NRC_ANQUAN_ADDRESS[..],
+            ).map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
+
+            ensure!(
+                <T as duoqian_manage_pow::Config>::InstitutionAssetGuard::can_spend(
+                    &safety_fund_account,
+                    InstitutionAssetAction::NrcSafetyFundTransfer,
+                ),
+                Error::<T>::InstitutionSpendNotAllowed
+            );
+
+            // ── 计算手续费 ──
+            let amount_u128: u128 = action.amount.saturated_into();
+            let fee_u128 = onchain_transaction_pow::calculate_onchain_fee(amount_u128);
+            let fee: BalanceOf<T> = fee_u128.saturated_into();
+            let total = action.amount
+                .checked_add(&fee)
+                .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
+
+            // ── 余额检查：amount + fee + ED ──
+            let free = <T as duoqian_manage_pow::Config>::Currency::free_balance(&safety_fund_account);
+            let ed = <T as duoqian_manage_pow::Config>::Currency::minimum_balance();
+            let required = total
+                .checked_add(&ed)
+                .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
+            ensure!(free >= required, Error::<T>::SafetyFundInsufficientBalance);
+
+            // ── 执行转账 ──
+            <T as duoqian_manage_pow::Config>::Currency::transfer(
+                &safety_fund_account,
+                &action.beneficiary,
+                action.amount,
+                frame_support::traits::ExistenceRequirement::KeepAlive,
+            ).map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
+
+            // ── 手续费：从安全基金扣取，通过 FeeRouter 按 80/10/10 分账 ──
+            let fee_imbalance = <T as duoqian_manage_pow::Config>::Currency::withdraw(
+                &safety_fund_account,
+                fee,
+                frame_support::traits::WithdrawReasons::FEE,
+                frame_support::traits::ExistenceRequirement::KeepAlive,
+            ).map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
+            <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
+
+            voting_engine_system::Pallet::<T>::set_status_and_emit(
+                proposal_id,
+                STATUS_EXECUTED,
+            )?;
+
+            Self::deposit_event(Event::SafetyFundTransferExecuted {
+                proposal_id,
+                beneficiary: action.beneficiary,
+                amount: action.amount,
+                fee,
+            });
+
+            Ok(())
+        }
+
         /// 从 voting-engine-system 读取提案数据并执行转账。
         /// vote_transfer（自动执行）和 execute_transfer（手动重试）共用此逻辑。
         fn try_execute_transfer(proposal_id: u64) -> DispatchResult {
@@ -426,10 +953,12 @@ pub mod pallet {
                 Error::<T>::ProposalNotPassed
             );
 
-            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+            let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
+            let tag = crate::MODULE_TAG;
+            ensure!(raw.len() >= tag.len() && &raw[..tag.len()] == tag, Error::<T>::ProposalActionNotFound);
             let action = TransferAction::<T::AccountId, BalanceOf<T>, T::MaxRemarkLen>::decode(
-                &mut &data[..],
+                &mut &raw[tag.len()..],
             )
             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
             let (_, institution_account) = Self::resolve_institution_account(action.institution)?;

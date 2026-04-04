@@ -1,12 +1,12 @@
 //! 43个初始省储行常量=china_ch.rs
 //! 其中 duoqian_admins 为该节点的创世管理员公钥数组，用于多签权限控制，可通过内部投票更换。
+//! 费用账户地址（FEIYONG_SFID_V1 + SS58前缀 + shenfen_id → BLAKE2-256）。
 
 use hex_literal::hex;
 
 /// 单个省储行常量结构
 pub struct ChinaCh {
     pub shenfen_id: &'static str,
-    pub shenfen_fee_id: &'static str,
     pub shenfen_name: &'static str,
     pub citizens_number: u64,
     pub stake_amount: u128,
@@ -14,6 +14,7 @@ pub struct ChinaCh {
     pub wss_url: &'static str,
     pub keyless_address: [u8; 32],
     pub duoqian_address: [u8; 32],
+    pub fee_address: [u8; 32],
     pub duoqian_admins: &'static [[u8; 32]],
     /// 是否已开通链下清算服务（false 表示未开通，前端禁止选择）。
     pub enabled: bool,
@@ -30,26 +31,15 @@ pub fn shenfen_id_to_fixed48(shenfen_id: &str) -> Option<[u8; 48]> {
     Some(out)
 }
 
-/// 省储行 shenfen_fee_id 仍使用 8 字节直映射。
-pub fn shenfen_fee_id_to_bytes(shenfen_fee_id: &str) -> Option<[u8; 8]> {
-    let b = shenfen_fee_id.as_bytes();
-    if b.len() != 8 {
-        return None;
-    }
-    let mut out = [0u8; 8];
-    out.copy_from_slice(b);
-    Some(out)
-}
-
 /// 所有省储行数组
 pub const CHINA_CH: &[ChinaCh] = &[
     ChinaCh {
         shenfen_id: "SFR-ZS001-CH1Z-572590896-20260222",
-        shenfen_fee_id: "prbzssaa",
         shenfen_name: "中枢省公民储备银行",
         citizens_number: 10_913_902,
         stake_amount: 10_913_902_0000,
         wss_url: "wss://prbzss.wuminapp.com",
+        fee_address: hex!("f725d0f1e003b257ce6db87210f67feafa2fd0554f952f59f9c2654b1edb3d34"),
         keyless_address: hex!("1fba0c01f5fd9089ad83e94de12505bde3961acee6411aaca5d03e34ffa34924"),
         duoqian_address: hex!("fe45d3e78fd7dce6e13715a3e30ffc52ee80551d5f40e68ef4c501c3c2985ab1"),
         duoqian_admins: &[
@@ -67,11 +57,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-LN001-CH1D-067241191-20260222",
-        shenfen_fee_id: "prblnsab",
         shenfen_name: "岭南省公民储备银行",
         citizens_number: 28_157_064,
         stake_amount: 28_157_064_0000,
         wss_url: "wss://prblns.wuminapp.com",
+        fee_address: hex!("1a5d66edb3407b8a0d187a0703f62d88bac010e30b4f9c779a91ee2d35652371"),
         keyless_address: hex!("5a4ffe7b0c17853b38d423c7c7ab562196d48edb6426cadfc5032ed449498473"),
         duoqian_address: hex!("6f26889bc70faa896c2fc464c0c4a4da1cd3f3df1f4347c0d56edf9e3883dc71"),
         duoqian_admins: &[
@@ -89,11 +79,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-GD000-CH1S-539766913-20260222",
-        shenfen_fee_id: "prbgdsac",
         shenfen_name: "广东省公民储备银行",
         citizens_number: 106_012_864,
         stake_amount: 106_012_864_0000,
         wss_url: "wss://prbgds.wuminapp.com",
+        fee_address: hex!("7b314f333690431eb4a5b4dfeaf0cbc0e0306974a85d9ab498cf455645f0c48a"),
         keyless_address: hex!("5af9a4fb48374a0069c2d5f52137a5ca47810ce9d8067b87dca3379fdbcdfece"),
         duoqian_address: hex!("cffd5c331e9323b1fd5b3724a3b35804bba9492e60b63a2353c857c585e2fd63"),
         duoqian_admins: &[
@@ -111,11 +101,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-GX000-CH17-770836097-20260222",
-        shenfen_fee_id: "prbgxsad",
         shenfen_name: "广西省公民储备银行",
         citizens_number: 50_126_804,
         stake_amount: 50_126_804_0000,
         wss_url: "wss://prbgxs.wuminapp.com",
+        fee_address: hex!("36c7571672facac3815a9fe0c472dc37ce31f585d5baf4d35d863f1e9123e916"),
         keyless_address: hex!("04f15c50f9df2be39962d4b1947107190d686363230e1276fa652ac60065873c"),
         duoqian_address: hex!("df01f593daed649ebaaa8b658dd127c792c02b41df515b18df05cccb483787ee"),
         duoqian_admins: &[
@@ -133,11 +123,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-FJ000-CH1Y-285514007-20260222",
-        shenfen_fee_id: "prbfjsae",
         shenfen_name: "福建省公民储备银行",
         citizens_number: 41_540_086,
         stake_amount: 41_540_086_0000,
         wss_url: "wss://prbfjs.wuminapp.com",
+        fee_address: hex!("1df99718e65e45790dd62105fd626c8088ba7b9b2c19b7d2b2a47b2e08e2764f"),
         keyless_address: hex!("4564da48ef85d37378dbf5b297dec56d450d732c6635d1b28024b087ccdfc66d"),
         duoqian_address: hex!("bec1ed0746ea6e6e24db89750fb44a76a289556ca65c84e425c0b448205e18e8"),
         duoqian_admins: &[
@@ -155,11 +145,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-HN000-CH1W-701494632-20260222",
-        shenfen_fee_id: "prbhnsaf",
         shenfen_name: "海南省公民储备银行",
         citizens_number: 10_081_232,
         stake_amount: 10_081_232_0000,
         wss_url: "wss://prbhns.wuminapp.com",
+        fee_address: hex!("616a35f9cbd1c338586a68bebafc0e6bc0a1d3e87dcc1740ba93e6495853dbde"),
         keyless_address: hex!("972df9c96a38acbd6bcea17ba6572604b6c9307aa935dacb2895adaf9d934ddf"),
         duoqian_address: hex!("da92404c22e9f2d52253e737ced41bd1cdbe83c18df0ffaed5408fd1221cae53"),
         duoqian_admins: &[
@@ -177,11 +167,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-YN000-CH1M-088552001-20260222",
-        shenfen_fee_id: "prbynsag",
         shenfen_name: "云南省公民储备银行",
         citizens_number: 46_821_766,
         stake_amount: 46_821_766_0000,
         wss_url: "wss://prbyns.wuminapp.com",
+        fee_address: hex!("856391795c0ef99690a0b41da1c1f28b44fd2f9e3a173a04264958529e2cd993"),
         keyless_address: hex!("535a4d01d368c78791464f423d62a92e05e533217a9b6ef0a21843205d5745e0"),
         duoqian_address: hex!("2dbe1db434c63c032aac0772681f457506c1c022e8f43ab0d656a5f0d9e611d2"),
         duoqian_admins: &[
@@ -199,11 +189,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-GZ000-CH17-073795499-20260222",
-        shenfen_fee_id: "prbgzsah",
         shenfen_name: "贵州省公民储备银行",
         citizens_number: 38_562_148,
         stake_amount: 38_562_148_0000,
         wss_url: "wss://prbgzs.wuminapp.com",
+        fee_address: hex!("2fc857388a6e9808f0066016919fe6d7355f9a68b34bcf8073af53d44f01e34d"),
         keyless_address: hex!("40847fa4145ad3c59691138f405d2abd4239b55289c54f7c0742373093cd2da9"),
         duoqian_address: hex!("e743674d50fd8cac955958b9dd1f46b0fd92bf18be5f709de6e75c9c9b13b681"),
         duoqian_admins: &[
@@ -221,11 +211,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-HU000-CH1P-721228492-20260222",
-        shenfen_fee_id: "prbhnsai",
         shenfen_name: "湖南省公民储备银行",
         citizens_number: 66_444_864,
         stake_amount: 66_444_864_0000,
         wss_url: "wss://prbhus.wuminapp.com",
+        fee_address: hex!("fe8654fed74d1444bf6f1132128a25d9ce33b5a2ec239e9f03be06d9e5f73b3f"),
         keyless_address: hex!("d9c86f52435bf48d5ac183caacf1ecced3639f87be3104cb15e6a9dfcd19a8cb"),
         duoqian_address: hex!("54e7e17e7b493ba360e8035f86976a5e7deef2833738fd41ba955b8794022c73"),
         duoqian_admins: &[
@@ -243,11 +233,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-JX000-CH1T-532829662-20260222",
-        shenfen_fee_id: "prbjxsaj",
         shenfen_name: "江西省公民储备银行",
         citizens_number: 45_188_635,
         stake_amount: 45_188_635_0000,
         wss_url: "wss://prbjxs.wuminapp.com",
+        fee_address: hex!("7fd563fb483d9f2e23339c70697148e87ee6e01dced021b92001a7f2ea7e6f37"),
         keyless_address: hex!("25245835eee11c1bae20986f877b671b055adf707667b05d1d0c73380fd5fdb7"),
         duoqian_address: hex!("c5f77d6ecc1bc1e2bfe144754355ae24b7f5b0909f15705914de87d7e6382e6b"),
         duoqian_admins: &[
@@ -265,11 +255,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-ZJ000-CH19-249528657-20260222",
-        shenfen_fee_id: "prbzjsak",
         shenfen_name: "浙江省公民储备银行",
         citizens_number: 64_567_588,
         stake_amount: 64_567_588_0000,
         wss_url: "wss://prbzjs.wuminapp.com",
+        fee_address: hex!("9834f6dc8b85e6002903e3c530a3e4d0d1d9d348760908c62cc131ba2b2c24c7"),
         keyless_address: hex!("968e85804d00df2e4e9d43c9477e6d7df85ae4bde57ed8aedc4056d3b7218a73"),
         duoqian_address: hex!("a97dfa62d5eca6d2f1bded65fa6528c6372e2bf34f740181beb7b5c8e5e4cc77"),
         duoqian_admins: &[
@@ -287,11 +277,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-JS000-CH1C-191178842-20260222",
-        shenfen_fee_id: "prbjssal",
         shenfen_name: "江苏省公民储备银行",
         citizens_number: 84_748_016,
         stake_amount: 84_748_016_0000,
         wss_url: "wss://prbjss.wuminapp.com",
+        fee_address: hex!("41b4a4e0444a388d3e89cbe0014aafd8c321ced54bf2d53ba94675c25cf397eb"),
         keyless_address: hex!("e9bce880be38c97f6adfe236c3021a9939b429bb58dc4abfbc6cdf4590f3982c"),
         duoqian_address: hex!("c7fc95907a57f04c07869d4e181d17f46393e7c1224f6d2ebf16ddfec348310d"),
         duoqian_admins: &[
@@ -309,11 +299,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-SD000-CH1V-887886640-20260222",
-        shenfen_fee_id: "prbsdsam",
         shenfen_name: "山东省公民储备银行",
         citizens_number: 101_527_453,
         stake_amount: 101_527_453_0000,
         wss_url: "wss://prbsds.wuminapp.com",
+        fee_address: hex!("ea1556e3926927496d45ca5461b5f60fe4dd5ef180d7a7f82e4c1e1fd989eb78"),
         keyless_address: hex!("3ce2ca44b06646e3b97a8b052bdaefd26a98c09c5580f68814855c01eccf16df"),
         duoqian_address: hex!("98d016ea45313719d30d171932500168ed9e3de37fa07ee9f9f6f977fdba0f79"),
         duoqian_admins: &[
@@ -331,11 +321,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-SX000-CH1F-755750488-20260222",
-        shenfen_fee_id: "prbsxsan",
         shenfen_name: "山西省公民储备银行",
         citizens_number: 34_915_616,
         stake_amount: 34_915_616_0000,
         wss_url: "wss://prbsxs.wuminapp.com",
+        fee_address: hex!("43d71b213f98dc15053702a85f2de59c5398891caa7d1961b83e398a8108707f"),
         keyless_address: hex!("921e7d249846467072a9804f61619443d5b4a86efff0df3841a8509cba27a64f"),
         duoqian_address: hex!("735599f633072eff9cc2074520a5db9e5aa4afdfda5d0ec2dd925b0c0c14b2a1"),
         duoqian_admins: &[
@@ -353,11 +343,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-HE000-CH1T-357503840-20260222",
-        shenfen_fee_id: "prbhnsao",
         shenfen_name: "河南省公民储备银行",
         citizens_number: 99_365_519,
         stake_amount: 99_365_519_0000,
         wss_url: "wss://prbhes.wuminapp.com",
+        fee_address: hex!("77f6123de6f9923c4e71514a84421a4b348b0b443e7cb0ede66ceba4408f8e68"),
         keyless_address: hex!("778c697d1aa90356aac69d16177bad17e45c7a476e91b64f718f51c36a03892a"),
         duoqian_address: hex!("736b13ab5bd7242d880e95507a2068d05a5ae6cd78dc72bc5d44c3f474e724d6"),
         duoqian_admins: &[
@@ -375,11 +365,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-HB000-CH12-172598053-20260222",
-        shenfen_fee_id: "prbhbsap",
         shenfen_name: "河北省公民储备银行",
         citizens_number: 56_282_021,
         stake_amount: 56_282_021_0000,
         wss_url: "wss://prbhbs.wuminapp.com",
+        fee_address: hex!("86453fa0f6d716f7f863545cb2823ad99a27f416d75c26ab35702909c365dc70"),
         keyless_address: hex!("a9e433c68a0a3f1c3eae28b95b376e4361ff6eec1d94d41619c6c105aa5d3e82"),
         duoqian_address: hex!("e08397c483d8962e6aea1d2ebf18ae39f7291f8918fd918eba32de54ad50c394"),
         duoqian_admins: &[
@@ -397,11 +387,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-HI000-CH1W-584177104-20260222",
-        shenfen_fee_id: "prbhbsaq",
         shenfen_name: "湖北省公民储备银行",
         citizens_number: 54_543_553,
         stake_amount: 54_543_553_0000,
         wss_url: "wss://prbhis.wuminapp.com",
+        fee_address: hex!("67ca57eedfda7bff1bc6daf763d8d3eebfcf4bd61b3a6e72378c35577fabd55f"),
         keyless_address: hex!("3c7971baa702819d3daff92463c062ffb5fbf3d52272a9915b80ead7dc3610c5"),
         duoqian_address: hex!("98d151fde59630b63b99ba5c9aa56389247ece26689b432d9ebe7baddd7d8191"),
         duoqian_admins: &[
@@ -419,11 +409,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-SI000-CH1G-814942227-20260222",
-        shenfen_fee_id: "prbsxsar",
         shenfen_name: "陕西省公民储备银行",
         citizens_number: 33_824_101,
         stake_amount: 33_824_101_0000,
         wss_url: "wss://prbsis.wuminapp.com",
+        fee_address: hex!("d11d518903163688ba9f4983f71947a4097b3f2a1a54b5f9de4d20c7f4fac2d4"),
         keyless_address: hex!("fad86f285a53dbc6ab76dc84ed5cfa5bcc91ef9ddb944c0e665325ee8b4e291c"),
         duoqian_address: hex!("58c0b0ea8fb4fa430de47c4d70030645ac3a4f464728ab1e7ab304669403a732"),
         duoqian_admins: &[
@@ -441,11 +431,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-CQ001-CH1A-811483361-20260222",
-        shenfen_fee_id: "prbcqsas",
         shenfen_name: "重庆省公民储备银行",
         citizens_number: 32_054_159,
         stake_amount: 32_054_159_0000,
         wss_url: "wss://prbcqs.wuminapp.com",
+        fee_address: hex!("77947f07cdbdeea04cf152d5310f182b2e5c9495c2966661c47b187e54c1b163"),
         keyless_address: hex!("2f2f73a5ad3fea2e18212344bdab823c91f158a12c77fc2889d744cb9130510f"),
         duoqian_address: hex!("072abcf96cb315ab1c654a482172429314f9f15b126c1f51d2bf1ef233e03d1f"),
         duoqian_admins: &[
@@ -463,11 +453,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-SC000-CH19-320507619-20260222",
-        shenfen_fee_id: "prbscsat",
         shenfen_name: "四川省公民储备银行",
         citizens_number: 80_310_245,
         stake_amount: 80_310_245_0000,
         wss_url: "wss://prbscs.wuminapp.com",
+        fee_address: hex!("d4ed3dc299f7849c23e318ac3ef5aba3dd49be265be88a308d712923f8c49cc4"),
         keyless_address: hex!("c3d72526370fe518c98b20f7c29b8536f9ad48f771a2d7882815571f38814697"),
         duoqian_address: hex!("e104ec87a747420fc31702551d8153f0edf0a7ac2a77a5bfe8910adc3f8b0ae9"),
         duoqian_admins: &[
@@ -485,11 +475,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-GS000-CH1U-319639307-20260222",
-        shenfen_fee_id: "prbgssau",
         shenfen_name: "甘肃省公民储备银行",
         citizens_number: 20_617_465,
         stake_amount: 20_617_465_0000,
         wss_url: "wss://prbgss.wuminapp.com",
+        fee_address: hex!("c9f885f895ce74b7338f2caf8d51b7ada9ff35c63cc6b64f82dc278d1029fba4"),
         keyless_address: hex!("43eef7fa53411f5a384d2273823cf5990c5300f4384980ca4c38f9fb92b3b3c0"),
         duoqian_address: hex!("ea360306c0190de49513faede894fc44f827960fa8f45b33be9093800d104791"),
         duoqian_admins: &[
@@ -507,11 +497,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-BP001-CH19-330141933-20260222",
-        shenfen_fee_id: "prbbpsav",
         shenfen_name: "北平省公民储备银行",
         citizens_number: 21_893_095,
         stake_amount: 21_893_095_0000,
         wss_url: "wss://prbbps.wuminapp.com",
+        fee_address: hex!("2c7dd9975e7201280c1de316ca7fc11ada121799cfabe251e2cb9d203abc6b7b"),
         keyless_address: hex!("3cdc238746d3826c6ac77e5ac8a0531a6ac38ce463067504ec126bbf34b75084"),
         duoqian_address: hex!("5b9005b8abfb70803e2b0fdbd31e494044f09e8f3bd369abbafdeb481c0e148a"),
         duoqian_admins: &[
@@ -529,11 +519,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-HA000-CH1N-832919801-20260222",
-        shenfen_fee_id: "prbbhsaw",
         shenfen_name: "滨海省公民储备银行",
         citizens_number: 24_720_871,
         stake_amount: 24_720_871_0000,
         wss_url: "wss://prbhas.wuminapp.com",
+        fee_address: hex!("cdd5d5f8268b81f280e6e9ee4d03541f9cc0152e58468dedfd32fa857758ce8c"),
         keyless_address: hex!("6b529403733123d4672dc168da3fd6a5a32606f06320b7d0fbe3e165540829e1"),
         duoqian_address: hex!("3670a84c5f8a3d0e710e881d59113df7f3d8694532be797c9415e0bdd5d25a3a"),
         duoqian_admins: &[
@@ -551,11 +541,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-SJ000-CH17-991726244-20260222",
-        shenfen_fee_id: "prbsjsax",
         shenfen_name: "松江省公民储备银行",
         citizens_number: 24_870_895,
         stake_amount: 24_870_895_0000,
         wss_url: "wss://prbsjs.wuminapp.com",
+        fee_address: hex!("5c1939d4023aba2ed543419cba7d931bd3cb612e6e185f1ba6423ffc7576969c"),
         keyless_address: hex!("0d78b454f3ad9759010ab632e5ff3529a38a74d0e10c90cd3b71ef828c45515a"),
         duoqian_address: hex!("6842bab4d4c88d0508255d1f6e768262c1dffe5b6f31470757bebbaab37990bb"),
         duoqian_admins: &[
@@ -573,11 +563,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-LJ000-CH1U-321069400-20260222",
-        shenfen_fee_id: "prbljsay",
         shenfen_name: "龙江省公民储备银行",
         citizens_number: 22_780_354,
         stake_amount: 22_780_354_0000,
         wss_url: "wss://prbljs.wuminapp.com",
+        fee_address: hex!("9923fe5f8b15e18498794c20cc3f9778ea752e180419abdcc30a9850ac54c70e"),
         keyless_address: hex!("d9535c5a1d2e096bf9b2eb944901e0676fbcf9bcd30be97c4da3604e03de9815"),
         duoqian_address: hex!("b30f35b0013af60c12cda5c17b997957412a090e2b49987cfba291778774bd92"),
         duoqian_admins: &[
@@ -595,11 +585,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-JL000-CH1Z-114671562-20260222",
-        shenfen_fee_id: "prbjlsaz",
         shenfen_name: "吉林省公民储备银行",
         citizens_number: 24_073_453,
         stake_amount: 24_073_453_0000,
         wss_url: "wss://prbjls.wuminapp.com",
+        fee_address: hex!("518864a753bc0bd0e9b70e2ff0cdbaaf7b9a9e41caa0c2a60be07b472bc46142"),
         keyless_address: hex!("ff9d863e562f0a478a80b3e49c070a4fcc7de1711c0a4554f8660d85f60568e0"),
         duoqian_address: hex!("9ee95711f6dc002676e3da8dc1cb9bf88669b9e12e5349636e0f2700560c0c21"),
         duoqian_admins: &[
@@ -617,11 +607,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-LI000-CH1O-060821950-20260222",
-        shenfen_fee_id: "prblnsba",
         shenfen_name: "辽宁省公民储备银行",
         citizens_number: 42_591_407,
         stake_amount: 42_591_407_0000,
         wss_url: "wss://prblis.wuminapp.com",
+        fee_address: hex!("a49c40b892287d8b3fc036c780ab2c9fcb63ddfa940c3d72a1c385a98839e559"),
         keyless_address: hex!("93277e43d1e83ce68698507751a10b858cb536edd3a921a43a3a76b1c2704553"),
         duoqian_address: hex!("b53e53d962f192c2f081f88bbce75267ff5dd344ed94ea8220b1dfd6e4467882"),
         duoqian_admins: &[
@@ -639,11 +629,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-NX000-CH1W-927112322-20260222",
-        shenfen_fee_id: "prbnxsbb",
         shenfen_name: "宁夏省公民储备银行",
         citizens_number: 7_202_654,
         stake_amount: 7_202_654_0000,
         wss_url: "wss://prbnxs.wuminapp.com",
+        fee_address: hex!("f712de4f05ea8df4dd3dc7537f45a4e092a72a5b9a202ba1973fc62f4ffc4bfe"),
         keyless_address: hex!("3aef029dbf31fdc9d4579cde9b800669d45a946cfc14b53cfe88c5241ee0a8ef"),
         duoqian_address: hex!("5fae794dac4b836be2dd0827f47a84f11531b9447cf6f9ffd1ac770abfda9243"),
         duoqian_admins: &[
@@ -661,11 +651,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-QH000-CH15-480036803-20260222",
-        shenfen_fee_id: "prbqhsbc",
         shenfen_name: "青海省公民储备银行",
         citizens_number: 5_030_542,
         stake_amount: 5_030_542_0000,
         wss_url: "wss://prbqhs.wuminapp.com",
+        fee_address: hex!("9696395cf109da1961dd031b53cbe2c4f2b7beadeba5fa72b90542517c0c3671"),
         keyless_address: hex!("03543e9a7ced28278db004f3ec1d0a6adb4f85a4c41ccc2eec1dd5a09b035ae8"),
         duoqian_address: hex!("b656dbc26f915cc6d5b872f57aaa9a6a4cb80fb899bdbe8e2e60d1a3e18a3f21"),
         duoqian_admins: &[
@@ -683,11 +673,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-AH000-CH14-243470490-20260222",
-        shenfen_fee_id: "prbahsbd",
         shenfen_name: "安徽省公民储备银行",
         citizens_number: 61_027_171,
         stake_amount: 61_027_171_0000,
         wss_url: "wss://prbahs.wuminapp.com",
+        fee_address: hex!("d780f0d4049268d11634645ca4e37f6e84ca0b30a4c01bcf9b7e730fb048f012"),
         keyless_address: hex!("67ec7fc9a47cf903ab1ff94410cba627a260d262990d696c6af0030e98aec97a"),
         duoqian_address: hex!("efc6292e20288623f6cfe838abde86b9fe132018393717e5af3ad2f46b17b895"),
         duoqian_admins: &[
@@ -705,11 +695,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-TW000-CH1O-339827620-20260222",
-        shenfen_fee_id: "prbtwsbe",
         shenfen_name: "台湾省公民储备银行",
         citizens_number: 23_561_236,
         stake_amount: 23_561_236_0000,
         wss_url: "wss://prbtws.wuminapp.com",
+        fee_address: hex!("fd5d5ca613a154c660c96596ddc4ddd88b221c7f69b3d54f9e90c48ee9e69d23"),
         keyless_address: hex!("58fefd565137d1288f908512f49daaa35d9bdcd8f6ec96b939004557627ccc5a"),
         duoqian_address: hex!("b2c055b85357313c990832ef61ac3d9fd1b52476a8671c23a14ca7edd6302e1b"),
         duoqian_admins: &[
@@ -727,11 +717,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-XZ000-CH1A-076183922-20260222",
-        shenfen_fee_id: "prbxzsbf",
         shenfen_name: "西藏省公民储备银行",
         citizens_number: 2_763_853,
         stake_amount: 2_763_853_0000,
         wss_url: "wss://prbxzs.wuminapp.com",
+        fee_address: hex!("5b178164202e0db26ff1ac64a01ac8caf1a40f6151b4ac2b8078c7e9fbc3b211"),
         keyless_address: hex!("aaf6876406ed68576afb9bec25d34804e4a402dd3d743f57ef54c9ccaa8e7039"),
         duoqian_address: hex!("83d7ecc0558c66037fb4bf0b32e03ac152c44ad19c40f22f2271bcb5c5b441db"),
         duoqian_admins: &[
@@ -749,11 +739,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-XJ000-CH1T-624864385-20260222",
-        shenfen_fee_id: "prbxjsbg",
         shenfen_name: "新疆省公民储备银行",
         citizens_number: 9_880_442,
         stake_amount: 9_880_442_0000,
         wss_url: "wss://prbxjs.wuminapp.com",
+        fee_address: hex!("c8ef41c163531883783cd9cb283451986115a35b5d8e3f8169f983156f092a44"),
         keyless_address: hex!("eb8c322c33d6b609769ae0224da07f8301e7ba7cb7db5b3a2b1255d521a3a6c4"),
         duoqian_address: hex!("1024ef3049018c3e045d7025bcb1db301b50dee6c3c6a42259191351b988cb3a"),
         duoqian_admins: &[
@@ -771,11 +761,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-XK000-CH19-727906387-20260222",
-        shenfen_fee_id: "prbxksbh",
         shenfen_name: "西康省公民储备银行",
         citizens_number: 4_513_098,
         stake_amount: 4_513_098_0000,
         wss_url: "wss://prbxks.wuminapp.com",
+        fee_address: hex!("5d631c0e7becf8f7c1a80d01b29fd451211c4eb3784dce969384d10d9832d011"),
         keyless_address: hex!("414f033b520d868e01823cc644122d13af3b55e5ee001ae55837727d640db2df"),
         duoqian_address: hex!("817ecdb4588004991fb7ee6cdc27c212641b278fc0b2b47cccd0ce47ba0c12ca"),
         duoqian_admins: &[
@@ -793,11 +783,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-AL000-CH1Z-823361903-20260222",
-        shenfen_fee_id: "prbalsbi",
         shenfen_name: "阿里省公民储备银行",
         citizens_number: 2_627_999,
         stake_amount: 2_627_999_0000,
         wss_url: "wss://prbals.wuminapp.com",
+        fee_address: hex!("206b4b7ec35d0ae180c848d2c7f41814fbb41698edd2222ea95ec672ae6b2184"),
         keyless_address: hex!("6897d9faf6cd6cd82ebae796208f055d29b9e67651a675a5e5da44e0fef7e50b"),
         duoqian_address: hex!("30990485af39af3e37e3d802319e929091adf4c75b5848dea5de19fee495393e"),
         duoqian_admins: &[
@@ -815,11 +805,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-CL000-CH1I-930688147-20260222",
-        shenfen_fee_id: "prbclsbj",
         shenfen_name: "葱岭省公民储备银行",
         citizens_number: 7_833_021,
         stake_amount: 7_833_021_0000,
         wss_url: "wss://prbcls.wuminapp.com",
+        fee_address: hex!("b172abd98399c76574ef12150ce489e8505af2da080fb5684fb861e2c788b348"),
         keyless_address: hex!("00bee7cb2f8c0607fff7db2e4d2bc508789f27483f26d091c0b91999f2fa16ea"),
         duoqian_address: hex!("00363eb57b4ed7e22ae0f1b11f58f7d8eb17d5d9899967b160682133ca88af1c"),
         duoqian_admins: &[
@@ -837,11 +827,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-TS000-CH1S-351739678-20260222",
-        shenfen_fee_id: "prbtssbk",
         shenfen_name: "天山省公民储备银行",
         citizens_number: 5_634_164,
         stake_amount: 5_634_164_0000,
         wss_url: "wss://prbtss.wuminapp.com",
+        fee_address: hex!("757f1f8f4b5da6e7070ad5c0cef4e611d9b5dd0cf06176052670abbc8ccb3c6c"),
         keyless_address: hex!("ee713538069dfc5baf45619d94c3ce47b50e961adc444bfe24ff1d2340936306"),
         duoqian_address: hex!("72df5a28d36d27568996779bc43b043d4fc91c31d9000e8affa2b15475aa0448"),
         duoqian_admins: &[
@@ -859,11 +849,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-HX000-CH1X-115163356-20260222",
-        shenfen_fee_id: "prbhxsbl",
         shenfen_name: "河西省公民储备银行",
         citizens_number: 4_664_727,
         stake_amount: 4_664_727_0000,
         wss_url: "wss://prbhxs.wuminapp.com",
+        fee_address: hex!("8c8c32cbb4721ade42e5fc03e793c8b65437f4c42fa30a3995feb38d1dcc7dc6"),
         keyless_address: hex!("16b7b874152a37a11ded2614e63ddfd4d30c0767fb8b4aae4722f60df01baba0"),
         duoqian_address: hex!("043cfa9fabcd16c21b55bedd2dd88fae917f25224ba12f4ea0837fae1e4407d4"),
         duoqian_admins: &[
@@ -881,11 +871,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-KL000-CH1F-853206078-20260222",
-        shenfen_fee_id: "prbklsbm",
         shenfen_name: "昆仑省公民储备银行",
         citizens_number: 893_415,
         stake_amount: 893_415_0000,
         wss_url: "wss://prbkls.wuminapp.com",
+        fee_address: hex!("283fa61790fec76d790e55c459afd608dd38ca5296fe362860ad05795137f99f"),
         keyless_address: hex!("34f8281f2340e14f4e8e618726fcbb940dd980c6e849ce200417360233f37348"),
         duoqian_address: hex!("bec71276f83ca65b5fe38748f93540e3b8c935b4c0c219813f40b4a524e87380"),
         duoqian_admins: &[
@@ -903,11 +893,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-HT000-CH1H-294801127-20260222",
-        shenfen_fee_id: "prbhtsbn",
         shenfen_name: "河套省公民储备银行",
         citizens_number: 12_110_780,
         stake_amount: 12_110_780_0000,
         wss_url: "wss://prbhts.wuminapp.com",
+        fee_address: hex!("729e13479a2ad1906de82c439c4e9ff888dd63e43357d02cabb2102e49a8b743"),
         keyless_address: hex!("19833b391020fa341e6ce2772bb2369db16d552acac1c8689e28a156286d06a1"),
         duoqian_address: hex!("3f9f61de83c84bdd9cdc723c878135316fbd88eb9b9a98d91ff389ddb887c4b0"),
         duoqian_admins: &[
@@ -925,11 +915,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-RH000-CH14-762808938-20260222",
-        shenfen_fee_id: "prbrhsbo",
         shenfen_name: "热河省公民储备银行",
         citizens_number: 15_489_562,
         stake_amount: 15_489_562_0000,
         wss_url: "wss://prbrhs.wuminapp.com",
+        fee_address: hex!("5dc31644eebf9ac309bb936b20482c9711820f99a0da60b5da5a81e67f75b848"),
         keyless_address: hex!("f6c160d4ed8e164e6629abcd0f4d68fa880d867bf19833346317ad9a1f397578"),
         duoqian_address: hex!("e8fc4c4266531ac8e056f16458edcccf56e74a5e766e068a23ed95a60a832af8"),
         duoqian_admins: &[
@@ -947,11 +937,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-XA000-CH1P-285320269-20260222",
-        shenfen_fee_id: "prbxasbp",
         shenfen_name: "兴安省公民储备银行",
         citizens_number: 3_991_080,
         stake_amount: 3_991_080_0000,
         wss_url: "wss://prbxas.wuminapp.com",
+        fee_address: hex!("47791efa9ee6e63fe70bc223f1dc35c9ffe6f206f37bcca967f2b1e8c9c51f01"),
         keyless_address: hex!("3ebdd2792e85db27b1cc05e6037d75d8e82bed708c8945f34408ff4bc85bd1fe"),
         duoqian_address: hex!("e0a70ce7e5ae81e8f95f1510ebfa72da10d73116ed49249ea1cc6c96b4773e3c"),
         duoqian_admins: &[
@@ -969,11 +959,11 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-HJ000-CH1C-538936570-20260222",
-        shenfen_fee_id: "prbhjsbq",
         shenfen_name: "合江省公民储备银行",
         citizens_number: 8_738_458,
         stake_amount: 8_738_458_0000,
         wss_url: "wss://prbhjs.wuminapp.com",
+        fee_address: hex!("a7a385e238eb75c139dd4c298e3c421c7db33f0c0b6d0890b519091321e32e4e"),
         keyless_address: hex!("cbc477b84fd503a161b84f5e133266b73bb0be7d3eb330793ba1b5d3318e72ee"),
         duoqian_address: hex!("8907191cf2c30e055072de592c2d29ee5539d13260e23f41f0081c50f845464d"),
         duoqian_admins: &[

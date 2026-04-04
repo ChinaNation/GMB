@@ -45,21 +45,6 @@ pub(crate) fn current_rpc_port() -> u16 {
     }
 }
 
-pub(crate) fn remember_rpc_port(port: u16) {
-    if port == 0 {
-        return;
-    }
-    let mutex = LOCAL_RPC_PORT.get_or_init(|| Mutex::new(initial_rpc_port()));
-    let mut guard = match mutex.lock() {
-        Ok(guard) => guard,
-        Err(err) => err.into_inner(),
-    };
-    if *guard != port {
-        *guard = port;
-        clear_genesis_hash_cache();
-    }
-}
-
 pub(crate) fn local_rpc_http_url() -> String {
     format!("http://127.0.0.1:{}/", current_rpc_port())
 }

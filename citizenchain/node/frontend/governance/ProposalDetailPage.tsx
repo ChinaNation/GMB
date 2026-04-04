@@ -164,6 +164,8 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
           adminWallets={[votingWallet]}
           shenfenId={shenfenId}
           useRateVote={!!info.feeRateDetail}
+          useSafetyFundVote={!!info.safetyFundDetail}
+          useSweepVote={!!info.sweepDetail}
           onClose={() => setVotingWallet(null)}
           onSuccess={handleVoteSuccess}
         />
@@ -257,6 +259,42 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
             <div className="detail-row">
               <span className="detail-label">新费率</span>
               <span className="detail-value">{info.feeRateDetail.newRateBp} bp ({(info.feeRateDetail.newRateBp / 100).toFixed(2)}%)</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 安全基金转账提案详情 */}
+      {info.safetyFundDetail && (
+        <div className="institution-info-section">
+          <h3>安全基金转账详情</h3>
+          <div className="proposal-detail-table">
+            <div className="detail-row">
+              <span className="detail-label">收款地址</span>
+              <code className="detail-value">{hexToSs58(info.safetyFundDetail.beneficiaryHex)}</code>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">金额</span>
+              <span className="detail-value">{formatBalance(parseInt(info.safetyFundDetail.amountFen))}</span>
+            </div>
+            {info.safetyFundDetail.remark && (
+              <div className="detail-row">
+                <span className="detail-label">备注</span>
+                <span className="detail-value">{info.safetyFundDetail.remark}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 手续费划转提案详情 */}
+      {info.sweepDetail && (
+        <div className="institution-info-section">
+          <h3>手续费划转详情</h3>
+          <div className="proposal-detail-table">
+            <div className="detail-row">
+              <span className="detail-label">金额</span>
+              <span className="detail-value">{formatBalance(parseInt(info.sweepDetail.amountFen))}</span>
             </div>
           </div>
         </div>

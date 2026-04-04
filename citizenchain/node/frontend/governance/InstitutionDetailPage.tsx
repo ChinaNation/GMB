@@ -18,11 +18,13 @@ type Props = {
   onCreateProposal?: (shenfenId: string, orgType: number, institutionName: string, duoqianAddress: string, adminWallets: AdminWalletMatch[]) => void;
   onCreateRuntimeUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateFeeRate?: (shenfenId: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateSafetyFund?: (adminWallets: AdminWalletMatch[]) => void;
+  onCreateSweep?: (shenfenId: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
   /** 隐藏返回按钮（用于直接作为 Tab 内容显示时）。 */
   hideBackButton?: boolean;
 };
 
-export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateRuntimeUpgrade, onCreateFeeRate, hideBackButton }: Props) {
+export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateRuntimeUpgrade, onCreateFeeRate, onCreateSafetyFund, onCreateSweep, hideBackButton }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [proposalHasMore, setProposalHasMore] = useState(false);
@@ -157,10 +159,40 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
         )}
         {detail.orgType === 2 && detail.feeAddress && (
           <div className="metric-card">
-            <div className="metric-label">手续费账户 <code className="metric-label-id">{hexToSs58(detail.feeAddress)}</code></div>
+            <div className="metric-label">费用账户 <code className="metric-label-id">{hexToSs58(detail.feeAddress)}</code></div>
             <div className="metric-value">
               {detail.feeBalanceFen != null
                 ? formatBalance(detail.feeBalanceFen)
+                : '—'}
+            </div>
+          </div>
+        )}
+        {detail.orgType === 1 && detail.cbFeeAddress && (
+          <div className="metric-card">
+            <div className="metric-label">费用账户 <code className="metric-label-id">{hexToSs58(detail.cbFeeAddress)}</code></div>
+            <div className="metric-value">
+              {detail.cbFeeBalanceFen != null
+                ? formatBalance(detail.cbFeeBalanceFen)
+                : '—'}
+            </div>
+          </div>
+        )}
+        {detail.nrcFeeAddress && (
+          <div className="metric-card">
+            <div className="metric-label">费用账户 <code className="metric-label-id">{hexToSs58(detail.nrcFeeAddress)}</code></div>
+            <div className="metric-value">
+              {detail.nrcFeeBalanceFen != null
+                ? formatBalance(detail.nrcFeeBalanceFen)
+                : '—'}
+            </div>
+          </div>
+        )}
+        {detail.nrcAnquanAddress && (
+          <div className="metric-card">
+            <div className="metric-label">安全基金账户 <code className="metric-label-id">{hexToSs58(detail.nrcAnquanAddress)}</code></div>
+            <div className="metric-value">
+              {detail.nrcAnquanBalanceFen != null
+                ? formatBalance(detail.nrcAnquanBalanceFen)
                 : '—'}
             </div>
           </div>
@@ -206,8 +238,20 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
               onClick={() => isAdmin && onCreateFeeRate?.(shenfenId, detail.name, adminWallets)}
             >费率设置</button>
           )}
+          {(detail.orgType === 0 || detail.orgType === 2) && (
+            <button
+              className="proposal-type-button"
+              disabled={!isAdmin}
+              onClick={() => isAdmin && onCreateSweep?.(shenfenId, detail.name, adminWallets)}
+            >手续费划转</button>
+          )}
           {detail.orgType === 0 && (
             <>
+              <button
+                className="proposal-type-button"
+                disabled={!isAdmin}
+                onClick={() => isAdmin && onCreateSafetyFund?.(adminWallets)}
+              >安全基金转账</button>
               <button className="proposal-type-button" disabled title="即将上线">决议发行</button>
               <button className="proposal-type-button" disabled title="即将上线">验证密钥</button>
               <button

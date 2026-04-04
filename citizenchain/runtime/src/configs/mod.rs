@@ -40,7 +40,6 @@ use frame_support::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
         ConstantMultiplier, Weight,
     },
-    PalletId,
 };
 use frame_system::limits::{BlockLength, BlockWeights};
 use onchain_transaction_pow::NrcAccountProvider as _;
@@ -50,7 +49,7 @@ use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
 #[allow(unused_imports)]
 use sp_runtime::traits::Hash as _;
 use sp_runtime::{
-    traits::{AccountIdConversion, One},
+    traits::One,
     Perbill,
 };
 use sp_version::RuntimeVersion;
@@ -96,14 +95,21 @@ pub fn is_keyless_account(address: &AccountId) -> bool {
 }
 
 fn is_reserved_fee_account(address: &AccountId) -> bool {
-    primitives::china::china_ch::CHINA_CH.iter().any(|n| {
-        primitives::china::china_ch::shenfen_fee_id_to_bytes(n.shenfen_fee_id)
-            .map(|pid| {
-                let fee_account: AccountId = PalletId(pid).into_account_truncating();
-                address == &fee_account
-            })
-            .unwrap_or(false)
-    })
+    primitives::china::china_ch::CHINA_CH
+        .iter()
+        .any(|n| address == &AccountId::new(n.fee_address))
+}
+
+/// 检查是否为国储会安全基金账户。
+fn is_nrc_anquan_account(address: &AccountId) -> bool {
+    address == &AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS)
+}
+
+/// 检查是否为储委会费用账户（44 个机构的 fee_address）。
+fn is_cb_fee_account(address: &AccountId) -> bool {
+    primitives::china::china_cb::CHINA_CB
+        .iter()
+        .any(|n| address == &AccountId::new(n.fee_address))
 }
 
 fn is_reserved_duoqian_account(address: &AccountId) -> bool {
@@ -263,7 +269,7 @@ pub struct RuntimeNrcAccountProvider;
 impl onchain_transaction_pow::NrcAccountProvider<AccountId> for RuntimeNrcAccountProvider {
     fn nrc_account() -> Option<AccountId> {
         Some(AccountId::new(
-            primitives::china::china_cb::CHINA_CB[0].duoqian_address,
+            primitives::china::china_cb::CHINA_CB[0].fee_address,
         ))
     }
 }
@@ -335,64 +341,152 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
             }) => onchain_transaction_pow::AmountExtractResult::Amount(Balances::free_balance(
                 duoqian_address,
             )),
-            // 投票调用不涉及资金转移，收取最低手续费防滥用（虚拟金额 10000 分 = 100 元 → 0.1% = 0.1 元）
+            // 付费调用交易：多签投票（虚拟金额 100000 分 = 1000 元 → 0.1% = 1 元/次）
             RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::vote_create {
                 ..
-            }) => onchain_transaction_pow::AmountExtractResult::Amount(10000),
+            }) => onchain_transaction_pow::AmountExtractResult::Amount(100000),
             RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::vote_close {
                 ..
-            }) => onchain_transaction_pow::AmountExtractResult::Amount(10000),
-            // 中文注释：以下调用类型明确属于”系统内部调用”，放行且不计算手续费。
+            }) => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+            // 免费调用交易：SFID 注册是证明型操作
+            RuntimeCall::DuoqianManagePow(
+                duoqian_manage_pow::pallet::Call::register_sfid_institution { .. },
+            ) => onchain_transaction_pow::AmountExtractResult::NoAmount,
+            // 付费调用交易：多签管理其他操作（propose_create_personal、cleanup 等）
+            RuntimeCall::DuoqianManagePow(_) => {
+                onchain_transaction_pow::AmountExtractResult::Amount(100000)
+            }
+            // 免费调用交易：系统内部调用
             RuntimeCall::System(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
             RuntimeCall::Timestamp(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
-            RuntimeCall::FullnodePowReward(_) => {
-                onchain_transaction_pow::AmountExtractResult::NoAmount
-            }
             RuntimeCall::ShengBankStakeInterest(_) => {
                 onchain_transaction_pow::AmountExtractResult::NoAmount
             }
             RuntimeCall::ResolutionIssuanceIss(_) => {
                 onchain_transaction_pow::AmountExtractResult::NoAmount
             }
-            // 中文注释：以下治理类调用收取最低手续费（虚拟金额），防止无成本刷提案/投票。
-            RuntimeCall::ResolutionIssuanceGov(_) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(10000)
-            }
-            RuntimeCall::VotingEngineSystem(_) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(10000)
-            }
-            RuntimeCall::SfidCodeAuth(_) => onchain_transaction_pow::AmountExtractResult::Amount(10000),
-            RuntimeCall::CitizenLightnodeIssuance(_) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(10000)
-            }
-            RuntimeCall::AdminsOriginGov(_) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(10000)
-            }
-            RuntimeCall::RuntimeRootUpgrade(_) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(10000)
-            }
-            RuntimeCall::ResolutionDestroGov(_) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(10000)
-            }
-            RuntimeCall::GrandpaKeyGov(_) => onchain_transaction_pow::AmountExtractResult::Amount(10000),
-            RuntimeCall::DuoqianManagePow(_) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(10000)
-            }
-            // 机构转账提案/投票：全部免费（手续费在投票通过执行转账时由 pallet 内部扣取并分账）
-            RuntimeCall::DuoqianTransferPow(_) => {
-                onchain_transaction_pow::AmountExtractResult::NoAmount
-            }
-            // 链下交易清算模块：批量提交/处理免费（relay submitter 白名单限制），其余收最低手续费
-            RuntimeCall::OffchainTransactionPos(ref offchain_call) => {
-                match offchain_call {
-                    // submit/enqueue/process batch 由 relay submitter 白名单限制，免费
-                    offchain_transaction_pos::pallet::Call::submit_offchain_batch { .. }
-                    | offchain_transaction_pos::pallet::Call::enqueue_offchain_batch { .. }
-                    | offchain_transaction_pos::pallet::Call::process_queued_batch { .. } => {
+            // 付费调用交易：治理/用户操作（1 元/次）
+            RuntimeCall::ResolutionIssuanceGov(ref ri_call) => {
+                match ri_call {
+                    // 免费：治理权限终结投票 + 设置收款白名单
+                    resolution_issuance_gov::pallet::Call::finalize_joint_vote { .. }
+                    | resolution_issuance_gov::pallet::Call::set_allowed_recipients { .. } => {
                         onchain_transaction_pow::AmountExtractResult::NoAmount
                     }
-                    // 其余调用（绑定清算行、费率提案/投票、密钥管理等）收最低手续费
-                    _ => onchain_transaction_pow::AmountExtractResult::Amount(10000),
+                    // 付费：管理员主动发起增发提案
+                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                }
+            }
+            // 投票引擎：拆分内部调用（免费）和用户投票（付费）
+            RuntimeCall::VotingEngineSystem(ref ve_call) => {
+                match ve_call {
+                    // 免费：系统内部调用（直接调用会被 pallet 拒绝）
+                    voting_engine_system::pallet::Call::create_internal_proposal { .. }
+                    | voting_engine_system::pallet::Call::create_joint_proposal { .. }
+                    | voting_engine_system::pallet::Call::internal_vote { .. } => {
+                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                    }
+                    // 免费：终结已完成提案
+                    voting_engine_system::pallet::Call::finalize_proposal { .. } => {
+                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                    }
+                    // 付费：用户主动参与投票
+                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                }
+            }
+            RuntimeCall::SfidCodeAuth(_) => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+            RuntimeCall::CitizenLightnodeIssuance(_) => {
+                onchain_transaction_pow::AmountExtractResult::NoAmount
+            }
+            RuntimeCall::FullnodePowReward(_) => {
+                onchain_transaction_pow::AmountExtractResult::Amount(100000)
+            }
+            RuntimeCall::AdminsOriginGov(ref ag_call) => {
+                match ag_call {
+                    // 免费：触发已通过提案的执行
+                    admins_origin_gov::pallet::Call::execute_admin_replacement { .. } => {
+                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                    }
+                    // 付费：管理员主动提案/投票
+                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                }
+            }
+            RuntimeCall::RuntimeRootUpgrade(ref ru_call) => {
+                match ru_call {
+                    // 免费：Root 权限终结联合投票
+                    runtime_root_upgrade::pallet::Call::finalize_joint_vote { .. } => {
+                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                    }
+                    // 付费：管理员主动提案/开发升级
+                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                }
+            }
+            RuntimeCall::ResolutionDestroGov(ref rd_call) => {
+                match rd_call {
+                    // 免费：触发已通过提案的执行
+                    resolution_destro_gov::pallet::Call::execute_destroy { .. } => {
+                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                    }
+                    // 付费：管理员主动提案/投票
+                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                }
+            }
+            RuntimeCall::GrandpaKeyGov(ref gk_call) => {
+                match gk_call {
+                    // 免费：触发已通过提案的执行 + 取消失败变更
+                    grandpa_key_gov::pallet::Call::execute_replace_grandpa_key { .. }
+                    | grandpa_key_gov::pallet::Call::cancel_failed_replace_grandpa_key { .. } => {
+                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                    }
+                    // 付费：管理员主动提案/投票
+                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                }
+            }
+            // 机构转账模块：拆分执行（免费）和提案/投票（付费）
+            RuntimeCall::DuoqianTransferPow(ref dt_call) => {
+                match dt_call {
+                    // 免费：触发已通过提案的执行（手续费在执行时从机构内部扣）
+                    duoqian_transfer_pow::pallet::Call::execute_transfer { .. } => {
+                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                    }
+                    // 付费：管理员主动提案/投票（1 元/次）
+                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                }
+            }
+            // 链下交易清算模块
+            RuntimeCall::OffchainTransactionPos(ref offchain_call) => {
+                match offchain_call {
+                    // 链上资金交易：省储行提交/入队批次，按批次中省储行获得的手续费总额收取链上交易费
+                    offchain_transaction_pos::pallet::Call::submit_offchain_batch {
+                        batch, ..
+                    } | offchain_transaction_pos::pallet::Call::enqueue_offchain_batch {
+                        batch, ..
+                    } => {
+                        let mut total_fee: u128 = 0;
+                        for item in batch.iter() {
+                            total_fee = total_fee.saturating_add(item.offchain_fee_amount);
+                        }
+                        onchain_transaction_pow::AmountExtractResult::Amount(total_fee)
+                    }
+                    // 链上资金交易：处理已入队批次，从存储中读取预算的手续费总额
+                    offchain_transaction_pos::pallet::Call::process_queued_batch {
+                        queue_id,
+                    } => {
+                        if let Some(queued) =
+                            offchain_transaction_pos::pallet::QueuedBatches::<Runtime>::get(
+                                queue_id,
+                            )
+                        {
+                            onchain_transaction_pow::AmountExtractResult::Amount(
+                                queued.fee_sum_snapshot,
+                            )
+                        } else {
+                            // 队列记录不存在时不收费（交易执行时会报错）
+                            onchain_transaction_pow::AmountExtractResult::NoAmount
+                        }
+                    }
+                    // 付费调用交易：绑定清算行、费率提案/投票、运维操作等（1 元/次）
+                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
                 }
             }
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免”有金额但漏提取”。
@@ -405,10 +499,36 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
 pub struct RuntimeFeePayerExtractor;
 
 impl onchain_transaction_pow::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
-    fn fee_payer(_who: &AccountId, _call: &RuntimeCall) -> Option<AccountId> {
-        // 机构转账提案/投票已改为 NoAmount（免费），无需转嫁手续费。
-        // 手续费在投票通过后由 pallet 内部按分账规则扣取。
-        None
+    fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
+        match call {
+            // 省储行批次提交/入队/处理：链上交易费从省储行费用地址扣取
+            RuntimeCall::OffchainTransactionPos(ref offchain_call) => {
+                match offchain_call {
+                    offchain_transaction_pos::pallet::Call::submit_offchain_batch {
+                        institution, ..
+                    }
+                    | offchain_transaction_pos::pallet::Call::enqueue_offchain_batch {
+                        institution, ..
+                    } => {
+                        offchain_transaction_pos::Pallet::<Runtime>::fee_account_of(*institution).ok()
+                    }
+                    offchain_transaction_pos::pallet::Call::process_queued_batch {
+                        queue_id,
+                    } => {
+                        offchain_transaction_pos::pallet::QueuedBatches::<Runtime>::get(queue_id)
+                            .and_then(|queued| {
+                                offchain_transaction_pos::Pallet::<Runtime>::fee_account_of(
+                                    queued.institution,
+                                )
+                                .ok()
+                            })
+                    }
+                    _ => None, // 其他 offchain 调用由调用者个人付费
+                }
+            }
+            // 其他交易由调用者个人账户付费
+            _ => None,
+        }
     }
 }
 
@@ -459,7 +579,7 @@ pub struct RuntimeDuoqianAddressValidator;
 
 impl duoqian_manage_pow::DuoqianAddressValidator<AccountId> for RuntimeDuoqianAddressValidator {
     fn is_valid(address: &AccountId) -> bool {
-        // 中文注释：禁止黑洞地址。
+        // 中文注释：禁止零地址。
         if address == &AccountId::new([0u8; 32]) {
             return false;
         }
@@ -480,15 +600,21 @@ impl duoqian_manage_pow::DuoqianAddressValidator<AccountId> for RuntimeDuoqianAd
             return false;
         }
 
-        // 中文注释：禁止占用“省储行手续费账户”地址（由 shenfen_fee_id 派生）。
-        if primitives::china::china_ch::CHINA_CH.iter().any(|n| {
-            primitives::china::china_ch::shenfen_fee_id_to_bytes(n.shenfen_fee_id)
-                .map(|pid| {
-                    let fee_account: AccountId = PalletId(pid).into_account_truncating();
-                    address == &fee_account
-                })
-                .unwrap_or(false)
-        }) {
+        // 中文注释：禁止占用”省储行费用账户”地址（BLAKE2-256 派生）。
+        if primitives::china::china_ch::CHINA_CH
+            .iter()
+            .any(|n| address == &AccountId::new(n.fee_address))
+        {
+            return false;
+        }
+
+        // 中文注释：禁止占用国储会安全基金账户地址。
+        if is_nrc_anquan_account(address) {
+            return false;
+        }
+
+        // 中文注释：禁止占用储委会费用账户地址（44 个机构）。
+        if is_cb_fee_account(address) {
             return false;
         }
 
@@ -532,6 +658,22 @@ impl institution_asset_guard::InstitutionAssetGuard<AccountId> for RuntimeInstit
             );
         }
 
+        // 中文注释：国储会安全基金账户只允许安全基金转账操作。
+        if source == &AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS) {
+            return matches!(
+                action,
+                institution_asset_guard::InstitutionAssetAction::NrcSafetyFundTransfer
+            );
+        }
+
+        // 中文注释：储委会费用账户只允许手续费归集操作（44 个机构）。
+        if is_cb_fee_account(source) {
+            return matches!(
+                action,
+                institution_asset_guard::InstitutionAssetAction::OffchainFeeSweepExecute
+            );
+        }
+
         true
     }
 }
@@ -548,15 +690,21 @@ impl duoqian_manage_pow::DuoqianReservedAddressChecker<AccountId>
             return true;
         }
 
-        // 中文注释：禁止占用省储行手续费地址（由 shenfen_fee_id 派生）。
-        if primitives::china::china_ch::CHINA_CH.iter().any(|n| {
-            primitives::china::china_ch::shenfen_fee_id_to_bytes(n.shenfen_fee_id)
-                .map(|pid| {
-                    let fee_account: AccountId = PalletId(pid).into_account_truncating();
-                    address == &fee_account
-                })
-                .unwrap_or(false)
-        }) {
+        // 中文注释：禁止占用省储行费用账户地址（BLAKE2-256 派生）。
+        if primitives::china::china_ch::CHINA_CH
+            .iter()
+            .any(|n| address == &AccountId::new(n.fee_address))
+        {
+            return true;
+        }
+
+        // 中文注释：禁止占用国储会安全基金账户地址。
+        if is_nrc_anquan_account(address) {
+            return true;
+        }
+
+        // 中文注释：禁止占用储委会费用账户地址（44 个机构）。
+        if is_cb_fee_account(address) {
             return true;
         }
 
@@ -835,7 +983,7 @@ impl grandpa_key_gov::Config for Runtime {
 }
 
 /// 转账提案手续费分账适配器：将旧 Currency NegativeImbalance 转换后
-/// 交给现有 PowOnchainFeeRouter 处理（80% 矿工 / 10% 国储会 / 10% 销毁）。
+/// 交给现有 PowOnchainFeeRouter 处理（80% 全节点 / 10% 国储会 / 10% 安全基金）。
 pub struct TransferFeeRouter;
 
 impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runtime>>
@@ -1340,11 +1488,7 @@ mod tests {
         let keyless = AccountId::new(primitives::china::china_ch::CHINA_CH[0].keyless_address);
         assert!(RuntimeDuoqianReservedAddressChecker::is_reserved(&keyless));
 
-        let pid = primitives::china::china_ch::shenfen_fee_id_to_bytes(
-            primitives::china::china_ch::CHINA_CH[0].shenfen_fee_id,
-        )
-        .expect("shenfen_fee_id must be 8 bytes");
-        let fee_account: AccountId = PalletId(pid).into_account_truncating();
+        let fee_account = AccountId::new(primitives::china::china_ch::CHINA_CH[0].fee_address);
         assert!(RuntimeDuoqianReservedAddressChecker::is_reserved(
             &fee_account
         ));
@@ -1908,12 +2052,7 @@ mod asset_guard_tests {
     }
 
     fn reserved_fee_account() -> AccountId {
-        use frame_support::PalletId;
-        use sp_runtime::traits::AccountIdConversion;
-        let node = &primitives::china::china_ch::CHINA_CH[0];
-        let pid = primitives::china::china_ch::shenfen_fee_id_to_bytes(node.shenfen_fee_id)
-            .expect("fee id should be valid");
-        PalletId(pid).into_account_truncating()
+        AccountId::new(primitives::china::china_ch::CHINA_CH[0].fee_address)
     }
 
     fn ordinary_account() -> AccountId {

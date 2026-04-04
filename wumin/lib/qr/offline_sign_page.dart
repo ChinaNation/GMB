@@ -519,6 +519,10 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       'activate_admin',
       'propose_institution_rate',
       'vote_institution_rate',
+      'propose_safety_fund_transfer',
+      'vote_safety_fund_transfer',
+      'propose_sweep_to_main',
+      'vote_sweep_to_main',
     };
     final isDecodeFailed =
         verification?.displayMatch == DisplayMatchStatus.decodeFailed &&

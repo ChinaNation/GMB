@@ -162,6 +162,37 @@ export const api = {
       requestId, expectedPubkeyHex, expectedPayloadHash,
       wasmPath, signNonce, signBlockNumber, responseJson,
     }),
+  buildProposeSweepRequest: (pubkeyHex: string, shenfenId: string, amountYuan: number) =>
+    invoke<VoteSignRequestResult>('build_propose_sweep_request', { pubkeyHex, shenfenId, amountYuan }),
+  submitProposeSweep: (
+    requestId: string, expectedPubkeyHex: string, expectedPayloadHash: string,
+    shenfenId: string, amountYuan: number,
+    signNonce: number, signBlockNumber: number, responseJson: string,
+  ) =>
+    invoke<VoteSubmitResult>('submit_propose_sweep', {
+      requestId, expectedPubkeyHex, expectedPayloadHash,
+      shenfenId, amountYuan, signNonce, signBlockNumber, responseJson,
+    }),
+  buildSweepVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>
+    invoke<VoteSignRequestResult>('build_sweep_vote_request', { proposalId, pubkeyHex, approve }),
+  buildProposeSafetyFundRequest: (
+    pubkeyHex: string, beneficiaryAddress: string, amountYuan: number, remark: string,
+  ) =>
+    invoke<VoteSignRequestResult>('build_propose_safety_fund_request', {
+      pubkeyHex, beneficiaryAddress, amountYuan, remark,
+    }),
+  submitProposeSafetyFund: (
+    requestId: string, expectedPubkeyHex: string, expectedPayloadHash: string,
+    beneficiaryAddress: string, amountYuan: number, remark: string,
+    signNonce: number, signBlockNumber: number, responseJson: string,
+  ) =>
+    invoke<VoteSubmitResult>('submit_propose_safety_fund', {
+      requestId, expectedPubkeyHex, expectedPayloadHash,
+      beneficiaryAddress, amountYuan, remark,
+      signNonce, signBlockNumber, responseJson,
+    }),
+  buildSafetyFundVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>
+    invoke<VoteSignRequestResult>('build_safety_fund_vote_request', { proposalId, pubkeyHex, approve }),
   buildRateVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>
     invoke<VoteSignRequestResult>('build_rate_vote_request', { proposalId, pubkeyHex, approve }),
   queryInstitutionRateBp: (shenfenId: string) =>

@@ -13,16 +13,15 @@ use frame_support::{
     traits::Currency,
     traits::StorageVersion,
     weights::Weight,
-    Blake2_128Concat, PalletId,
+    Blake2_128Concat,
 };
 use frame_system::pallet_prelude::*;
 use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
 use scale_info::TypeInfo;
-use sp_runtime::traits::{AccountIdConversion, SaturatedConversion, Saturating, Zero};
+use sp_runtime::traits::{SaturatedConversion, Saturating, Zero};
 use sp_std::vec::Vec;
 
 use primitives::china::china_ch::{
-    shenfen_fee_id_to_bytes as shengbank_shenfen_fee_id_to_bytes,
     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
 use voting_engine_system::{
@@ -38,8 +37,6 @@ const OFFCHAIN_RATE_BP_MAX: u32 = 10; // 0.1%
 const PACK_TX_THRESHOLD: u64 = 100_000;
 const PACK_BLOCK_THRESHOLD: u32 = primitives::pow_const::BLOCKS_PER_HOUR as u32; // 60分钟
 const OFFCHAIN_MIN_FEE_FEN: u128 = primitives::core_const::OFFCHAIN_MIN_FEE;
-const FEE_ADDRESS_MIN_RESERVE_FEN: u128 = 111_111; // 1111.11元
-const FEE_SWEEP_MAX_PERCENT: u128 = 80; // 单次最多可提可用余额的80%
 const BP_DENOMINATOR: u128 = 10_000;
 const PROCESSED_TX_RETENTION_BLOCKS: u64 = primitives::pow_const::BLOCKS_PER_YEAR;
 const QUEUED_BATCH_RETENTION_BLOCKS: u64 = primitives::pow_const::BLOCKS_PER_YEAR;
@@ -55,11 +52,11 @@ fn institution_pallet_address(institution: InstitutionPalletId) -> Option<[u8; 3
         .map(|n| n.duoqian_address)
 }
 
-fn institution_shenfen_fee_id(institution: InstitutionPalletId) -> Option<[u8; 8]> {
+fn institution_fee_address(institution: InstitutionPalletId) -> Option<[u8; 32]> {
     CHINA_CH
         .iter()
         .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-        .and_then(|n| shengbank_shenfen_fee_id_to_bytes(n.shenfen_fee_id))
+        .map(|n| n.fee_address)
 }
 
 fn institution_t2_code(institution: InstitutionPalletId) -> Option<[u8; 2]> {
@@ -124,12 +121,6 @@ impl<AccountId> ProtectedSourceChecker<AccountId> for () {
 pub struct RateProposalAction {
     pub institution: InstitutionPalletId,
     pub new_rate_bp: u32,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct SweepProposalAction<Balance> {
-    pub institution: InstitutionPalletId,
-    pub amount: Balance,
 }
 
 #[frame_support::pallet]
@@ -351,12 +342,6 @@ pub mod pallet {
     pub type RateProposalActions<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, RateProposalAction, OptionQuery>;
 
-    /// fee_address 划转治理提案动作。
-    #[pallet::storage]
-    #[pallet::getter(fn sweep_action_by_proposal)]
-    pub type SweepProposalActions<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, SweepProposalAction<BalanceOf<T>>, OptionQuery>;
-
     /// 批次ID。
     #[pallet::storage]
     #[pallet::getter(fn next_batch_id)]
@@ -479,25 +464,8 @@ pub mod pallet {
             institution: InstitutionPalletId,
             rate_bp: u32,
         },
-        SweepToMainProposed {
-            proposal_id: u64,
-            institution: InstitutionPalletId,
-            proposer: T::AccountId,
-            amount: BalanceOf<T>,
-        },
-        SweepToMainVoteSubmitted {
-            proposal_id: u64,
-            voter: T::AccountId,
-            approve: bool,
-        },
         InternalProposalExecutionFailed {
             proposal_id: u64,
-        },
-        SweepToMainExecuted {
-            proposal_id: u64,
-            institution: InstitutionPalletId,
-            amount: BalanceOf<T>,
-            reserve_left: BalanceOf<T>,
         },
         RecipientClearingInstitutionBound {
             recipient: T::AccountId,
@@ -585,8 +553,6 @@ pub mod pallet {
         ProposalInstitutionMismatch,
         RateProposalNotFound,
         RateProposalAlreadyExecuted,
-        SweepProposalNotFound,
-        SweepProposalAlreadyExecuted,
         UnauthorizedAdmin,
         UnauthorizedSubmitter,
         TxAlreadyProcessed,
@@ -594,9 +560,6 @@ pub mod pallet {
         EmptyBatch,
         InvalidBatchSignature,
         ProtectedSource,
-        InsufficientFeeReserve,
-        SweepAmountExceedsCap,
-        InvalidSweepAmount,
         InvalidBatchSeq,
         QueuedBacklogExists,
         RecipientClearingInstitutionNotBound,
@@ -623,11 +586,11 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// 省储行链下批次上链：
-        /// - 可由任意中继账户提交（fee_pallet_address 无私钥）；
+        /// - 可由任意中继账户提交（fee_address 无私钥）；
         /// - 达到 N 或 T 触发条件才允许提交；
-        /// - 必须通过“本机构验证密钥”对批次做签名校验；
-        /// - 执行时主金额 payer->recipient，链下手续费 payer->fee_pallet_address；
-        /// - 本次上链交易的链上手续费由 fee_pallet_address 自动承担。
+        /// - 必须通过”本机构验证密钥”对批次做签名校验；
+        /// - 执行时主金额 payer->recipient，链下手续费 payer->fee_address；
+        /// - 本次上链交易的链上手续费由 fee_address 自动承担。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::submit_offchain_batch(T::MaxBatchSize::get()))]
         pub fn submit_offchain_batch(
@@ -1023,86 +986,6 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 省储行管理员发起 fee_address 向主多签地址划转提案（内部投票）。
-        /// 约束：划转后 fee_address 至少保留 1111.11 元。
-        #[pallet::call_index(6)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
-        pub fn propose_sweep_to_main(
-            origin: OriginFor<T>,
-            institution: InstitutionPalletId,
-            amount: BalanceOf<T>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            let amount_u128: u128 = amount.saturated_into();
-            ensure!(amount_u128 > 0, Error::<T>::InvalidSweepAmount);
-            ensure!(
-                Self::is_prb_admin(institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-
-            let proposal_id =
-                T::InternalVoteEngine::create_internal_proposal(who.clone(), ORG_PRB, institution)?;
-
-            SweepProposalActions::<T>::insert(
-                proposal_id,
-                SweepProposalAction {
-                    institution,
-                    amount,
-                },
-            );
-
-            Self::deposit_event(Event::<T>::SweepToMainProposed {
-                proposal_id,
-                institution,
-                proposer: who,
-                amount,
-            });
-            Ok(())
-        }
-
-        /// 省储行管理员对划转提案投票；通过后自动执行划转。
-        #[pallet::call_index(7)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(7, 6))]
-        pub fn vote_sweep_to_main(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            approve: bool,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            let action = SweepProposalActions::<T>::get(proposal_id)
-                .ok_or(Error::<T>::SweepProposalNotFound)?;
-            ensure!(
-                Self::is_prb_admin(action.institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-
-            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
-
-            Self::deposit_event(Event::<T>::SweepToMainVoteSubmitted {
-                proposal_id,
-                voter: who,
-                approve,
-            });
-
-            if approve {
-                if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
-                    if proposal.status == STATUS_PASSED {
-                        if let Err(_e) =
-                            with_transaction(|| match Self::try_execute_sweep(proposal_id) {
-                                Ok(()) => TransactionOutcome::Commit(Ok(())),
-                                Err(e) => TransactionOutcome::Rollback(Err(e)),
-                            })
-                        {
-                            Self::deposit_event(Event::<T>::InternalProposalExecutionFailed {
-                                proposal_id,
-                            });
-                        }
-                    }
-                }
-            }
-            Ok(())
-        }
-
         /// 清理已处理且超过保留窗口的队列批次记录。
         #[pallet::call_index(14)]
         #[pallet::weight(T::DbWeight::get().reads_writes(3, 3 + T::MaxBatchSize::get() as u64))]
@@ -1206,13 +1089,7 @@ pub mod pallet {
             let prunable = proposal.status == STATUS_REJECTED || expired;
             ensure!(prunable, Error::<T>::ProposalNotPrunable);
 
-            let mut pruned = false;
-            if RateProposalActions::<T>::take(proposal_id).is_some() {
-                pruned = true;
-            }
-            if SweepProposalActions::<T>::take(proposal_id).is_some() {
-                pruned = true;
-            }
+            let pruned = RateProposalActions::<T>::take(proposal_id).is_some();
             ensure!(pruned, Error::<T>::ProposalActionNotFound);
             Self::deposit_event(Event::<T>::ProposalActionPruned { proposal_id });
             Ok(())
@@ -1303,30 +1180,15 @@ pub mod pallet {
                 Error::<T>::ProposalExecutionRetryNotAllowed
             );
 
-            #[derive(Clone, Copy)]
-            enum ActionKind {
-                Rate,
-                Sweep,
-            }
-            let (institution, action_kind) =
-                if let Some(action) = RateProposalActions::<T>::get(proposal_id) {
-                    (action.institution, ActionKind::Rate)
-                } else if let Some(action) = SweepProposalActions::<T>::get(proposal_id) {
-                    (action.institution, ActionKind::Sweep)
-                } else {
-                    return Err(Error::<T>::ProposalActionNotFound.into());
-                };
+            let action = RateProposalActions::<T>::get(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
             ensure!(
-                Self::is_prb_admin(institution, &who),
+                Self::is_prb_admin(action.institution, &who),
                 Error::<T>::UnauthorizedAdmin
             );
 
             with_transaction(|| {
-                let result = match action_kind {
-                    ActionKind::Rate => Self::try_execute_rate(proposal_id),
-                    ActionKind::Sweep => Self::try_execute_sweep(proposal_id),
-                };
-                match result {
+                match Self::try_execute_rate(proposal_id) {
                     Ok(()) => TransactionOutcome::Commit(Ok(())),
                     Err(e) => TransactionOutcome::Rollback(Err(e)),
                 }
@@ -1410,7 +1272,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        /// 批次提交前置校验（无写入），供 runtime 扣费前判断是否允许 fee_pallet_address 承担手续费。
+        /// 批次提交前置校验（无写入），供 runtime 扣费前判断是否允许 fee_address 承担手续费。
         pub fn precheck_submit_offchain_batch(
             submitter: &T::AccountId,
             institution: InstitutionPalletId,
@@ -1633,19 +1495,10 @@ pub mod pallet {
         fn institution_fee_account(
             institution: InstitutionPalletId,
         ) -> Result<T::AccountId, DispatchError> {
-            let fee_pid =
-                institution_shenfen_fee_id(institution).ok_or(Error::<T>::InvalidInstitution)?;
-            // 中文注释：fee_pallet_address 直接由 shenfen_fee_id 派生，是独立手续费账户。
-            Ok(PalletId(fee_pid).into_account_truncating())
-        }
-
-        fn institution_account(
-            institution: InstitutionPalletId,
-        ) -> Result<T::AccountId, DispatchError> {
-            let raw =
-                institution_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let raw = institution_fee_address(institution)
+                .ok_or(Error::<T>::InvalidInstitution)?;
             T::AccountId::decode(&mut &raw[..])
-                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into())
+                .map_err(|_| Error::<T>::InvalidInstitution.into())
         }
 
         fn pack_trigger_reason(
@@ -1963,74 +1816,6 @@ pub mod pallet {
             Ok(())
         }
 
-        fn try_execute_sweep(proposal_id: u64) -> DispatchResult {
-            let action = SweepProposalActions::<T>::get(proposal_id)
-                .ok_or(Error::<T>::SweepProposalNotFound)?;
-
-            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
-                .ok_or(Error::<T>::ProposalNotFound)?;
-            ensure!(
-                proposal.kind == PROPOSAL_KIND_INTERNAL,
-                Error::<T>::ProposalKindMismatch
-            );
-            ensure!(
-                proposal.status == STATUS_PASSED,
-                Error::<T>::ProposalStatusNotPassed
-            );
-            ensure!(
-                proposal.internal_institution == Some(action.institution),
-                Error::<T>::ProposalInstitutionMismatch
-            );
-
-            let fee_account = Self::institution_fee_account(action.institution)?;
-            let main_account = Self::institution_account(action.institution)?;
-            ensure!(
-                !T::ProtectedSourceChecker::is_protected(&fee_account),
-                Error::<T>::ProtectedSource
-            );
-            ensure!(
-                T::InstitutionAssetGuard::can_spend(
-                    &fee_account,
-                    InstitutionAssetAction::OffchainFeeSweepExecute,
-                ),
-                Error::<T>::ProtectedSource
-            );
-
-            let amount_u128: u128 = action.amount.saturated_into();
-            let fee_balance_u128: u128 = T::Currency::free_balance(&fee_account).saturated_into();
-            let reserve_u128 = FEE_ADDRESS_MIN_RESERVE_FEN;
-
-            ensure!(
-                fee_balance_u128 >= amount_u128
-                    && fee_balance_u128.saturating_sub(amount_u128) >= reserve_u128,
-                Error::<T>::InsufficientFeeReserve
-            );
-            let available_u128 = fee_balance_u128.saturating_sub(reserve_u128);
-            let cap_u128 = available_u128
-                .saturating_mul(FEE_SWEEP_MAX_PERCENT)
-                .saturating_div(100);
-            ensure!(amount_u128 <= cap_u128, Error::<T>::SweepAmountExceedsCap);
-
-            T::Currency::transfer(
-                &fee_account,
-                &main_account,
-                action.amount,
-                frame_support::traits::ExistenceRequirement::KeepAlive,
-            )?;
-            // 中文注释：fee_account 余额仅允许经内部投票划转到 main_account（pallet_address）。
-
-            let reserve_left: BalanceOf<T> = T::Currency::free_balance(&fee_account);
-
-            Self::deposit_event(Event::<T>::SweepToMainExecuted {
-                proposal_id,
-                institution: action.institution,
-                amount: action.amount,
-                reserve_left,
-            });
-            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
-            Ok(())
-        }
-
     }
 
     #[pallet::hooks]
@@ -2046,8 +1831,6 @@ pub mod pallet {
             assert!(PROCESSED_TX_RETENTION_BLOCKS > 0);
             assert!(QUEUED_BATCH_RETENTION_BLOCKS > 0);
             assert!(BATCH_SUMMARY_RETENTION_BLOCKS > 0);
-            assert!(FEE_SWEEP_MAX_PERCENT > 0 && FEE_SWEEP_MAX_PERCENT <= 100);
-            assert!(FEE_ADDRESS_MIN_RESERVE_FEN > 0);
         }
 
         fn on_initialize(_now: BlockNumberFor<T>) -> Weight {
@@ -2608,50 +2391,6 @@ mod tests {
     }
 
     #[test]
-    fn sweep_to_main_requires_internal_vote_and_keeps_reserve() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            let fee_account = OffchainTransactionPos::fee_account_of(institution).expect("fee");
-            let main_account = prb_account();
-            let fee_before = Balances::free_balance(&fee_account);
-            let _ = Balances::deposit_creating(&fee_account, 300_000u128);
-            let main_before = Balances::free_balance(&main_account);
-
-            assert_ok!(OffchainTransactionPos::propose_sweep_to_main(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                100_000
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_sweep_to_main(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-
-            assert_eq!(Balances::free_balance(&main_account), main_before + 100_000);
-            assert_eq!(Balances::free_balance(&fee_account), fee_before + 200_000);
-        });
-    }
-
-    #[test]
-    fn propose_sweep_to_main_rejects_zero_amount() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            assert_noop!(
-                OffchainTransactionPos::propose_sweep_to_main(
-                    RuntimeOrigin::signed(prb_admin(0)),
-                    institution,
-                    0,
-                ),
-                Error::<Test>::InvalidSweepAmount
-            );
-        });
-    }
-
-    #[test]
     fn recipient_bind_clearing_institution_switch_freely() {
         new_test_ext().execute_with(|| {
             let recipient = AccountId32::new([3u8; 32]);
@@ -2728,39 +2467,6 @@ mod tests {
         });
     }
 
-    #[test]
-    fn retry_execute_proposal_sweep_failure_then_success() {
-        new_test_ext().execute_with(|| {
-            let institution = prb_institution();
-            let sweep_amount: Balance = 5_000;
-            assert_ok!(OffchainTransactionPos::propose_sweep_to_main(
-                RuntimeOrigin::signed(prb_admin(0)),
-                institution,
-                sweep_amount
-            ));
-            let pid = last_proposal_id();
-            for i in 0..6 {
-                assert_ok!(OffchainTransactionPos::vote_sweep_to_main(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-            assert!(SweepProposalActions::<Test>::contains_key(pid));
-            assert_noop!(
-                OffchainTransactionPos::retry_execute_proposal(
-                    RuntimeOrigin::signed(prb_admin(0)),
-                    pid
-                ),
-                Error::<Test>::InsufficientFeeReserve
-            );
-            let _ = Balances::deposit_creating(&prb_fee_account(), 200_000);
-            assert_ok!(OffchainTransactionPos::retry_execute_proposal(
-                RuntimeOrigin::signed(prb_admin(0)),
-                pid
-            ));
-        });
-    }
 
     #[test]
     fn prune_processed_tx_without_timestamp_is_allowed() {

@@ -54,6 +54,18 @@ pub struct InstitutionDetail {
     pub fee_address: Option<String>,
     /// 手续费账户余额（分，仅 PRB）。
     pub fee_balance_fen: Option<String>,
+    /// 储委会费用账户地址 hex（省储会，仅 PRC）。
+    pub cb_fee_address: Option<String>,
+    /// 储委会费用账户余额（分，仅 PRC）。
+    pub cb_fee_balance_fen: Option<String>,
+    /// 国储会费用账户地址 hex（仅 NRC）。
+    pub nrc_fee_address: Option<String>,
+    /// 国储会手续费账户余额（分，仅 NRC）。
+    pub nrc_fee_balance_fen: Option<String>,
+    /// 国储会安全基金账户地址 hex（仅 NRC）。
+    pub nrc_anquan_address: Option<String>,
+    /// 国储会安全基金账户余额（分，仅 NRC）。
+    pub nrc_anquan_balance_fen: Option<String>,
     /// 告警信息。
     pub warning: Option<String>,
 }

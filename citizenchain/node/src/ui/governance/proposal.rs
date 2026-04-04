@@ -91,11 +91,32 @@ pub struct ProposalFullInfo {
     pub transfer_detail: Option<TransferProposalDetail>,
     pub runtime_upgrade_detail: Option<RuntimeUpgradeDetail>,
     pub fee_rate_detail: Option<FeeRateProposalDetail>,
+    pub safety_fund_detail: Option<SafetyFundProposalDetail>,
+    pub sweep_detail: Option<SweepProposalDetail>,
     pub internal_tally: Option<VoteTally>,
     pub joint_tally: Option<JointVoteTally>,
     pub citizen_tally: Option<CitizenVoteTally>,
     /// 关联机构名称（通过 institutionBytes 反查）。
     pub institution_name: Option<String>,
+}
+
+/// 安全基金转账提案详情。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SafetyFundProposalDetail {
+    pub proposal_id: u64,
+    pub beneficiary_hex: String,
+    pub amount_fen: String,
+    pub remark: String,
+}
+
+/// 手续费划转提案详情。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SweepProposalDetail {
+    pub proposal_id: u64,
+    pub institution_hex: String,
+    pub amount_fen: String,
 }
 
 /// 费率提案详情。
@@ -254,6 +275,22 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
         None
     };
 
+    // 安全基金提案详情（从 SafetyFundProposalActions 存储查询）
+    let safety_fund_detail = if transfer_detail.is_none() && runtime_upgrade_detail.is_none() && fee_rate_detail.is_none() {
+        fetch_safety_fund_proposal_action(proposal_id).ok().flatten()
+    } else {
+        None
+    };
+
+    // 手续费划转提案详情（从 SweepProposalActions 存储查询）
+    let sweep_detail = if transfer_detail.is_none() && runtime_upgrade_detail.is_none()
+        && fee_rate_detail.is_none() && safety_fund_detail.is_none()
+    {
+        fetch_sweep_proposal_action(proposal_id).ok().flatten()
+    } else {
+        None
+    };
+
     let institution_name = resolve_institution_name(meta.institution_hex.as_deref());
 
     Ok(ProposalFullInfo {
@@ -261,6 +298,8 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
         transfer_detail,
         runtime_upgrade_detail,
         fee_rate_detail,
+        safety_fund_detail,
+        sweep_detail,
         internal_tally,
         joint_tally,
         citizen_tally,
@@ -791,6 +830,20 @@ fn fetch_proposal_summary(proposal_id: u64, meta: &ProposalMeta) -> Result<Strin
                 .unwrap_or_else(|| "未知机构".to_string());
             return Ok(format!("费率设置 {rate_percent}：{inst_name}"));
         }
+
+        // 再尝试安全基金提案
+        if let Ok(Some(_sf)) = fetch_safety_fund_proposal_action(proposal_id) {
+            let amount: u128 = _sf.amount_fen.parse().unwrap_or(0);
+            return Ok(format!("安全基金转账 {}.{:02} 元", amount / 100, amount % 100));
+        }
+
+        // 再尝试手续费划转提案（SweepProposalActions 存储）
+        if let Ok(Some(sweep)) = fetch_sweep_proposal_action(proposal_id) {
+            let amount: u128 = sweep.amount_fen.parse().unwrap_or(0);
+            let inst_name = resolve_institution_name(Some(&sweep.institution_hex))
+                .unwrap_or_else(|| "未知机构".to_string());
+            return Ok(format!("手续费划转 {}.{:02} 元：{inst_name}", amount / 100, amount % 100));
+        }
     }
     Ok("（无法解码详情）".to_string())
 }
@@ -951,5 +1004,86 @@ pub fn fetch_institution_rate_bp(shenfen_id: &str) -> Result<u32, String> {
             Ok(if rate == 0 { 1 } else { rate })
         }
         _ => Ok(1),
+    }
+}
+
+/// 从链上 SafetyFundProposalActions 存储查询安全基金提案数据。
+fn fetch_safety_fund_proposal_action(proposal_id: u64) -> Result<Option<SafetyFundProposalDetail>, String> {
+    let key = storage_keys::map_key(
+        "DuoqianTransferPow",
+        "SafetyFundProposalActions",
+        &proposal_id.to_le_bytes(),
+    );
+    let result = rpc_post(
+        "state_getStorage",
+        Value::Array(vec![Value::String(key)]),
+    )?;
+    match result {
+        Value::Null => Ok(None),
+        Value::String(hex_data) => {
+            let data = decode_hex_storage(&hex_data)?;
+            // SafetyFundAction: beneficiary(32) + amount(u128=16) + remark(compact+bytes) + proposer(32)
+            if data.len() < 80 {
+                return Ok(None);
+            }
+            let beneficiary_hex = hex::encode(&data[..32]);
+            let amount_fen = {
+                let mut bytes = [0u8; 16];
+                bytes.copy_from_slice(&data[32..48]);
+                u128::from_le_bytes(bytes)
+            };
+            // remark: compact length + bytes
+            let (remark_len, compact_size) = read_compact_u32(&data, 48)?;
+            let remark_start = 48 + compact_size;
+            let remark_end = remark_start + remark_len as usize;
+            let remark = if remark_end <= data.len() {
+                String::from_utf8_lossy(&data[remark_start..remark_end]).to_string()
+            } else {
+                String::new()
+            };
+
+            Ok(Some(SafetyFundProposalDetail {
+                proposal_id,
+                beneficiary_hex,
+                amount_fen: amount_fen.to_string(),
+                remark,
+            }))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// 从链上 DuoqianTransferPow::SweepProposalActions 存储查询手续费划转提案数据。
+fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalDetail>, String> {
+    let key = storage_keys::map_key(
+        "DuoqianTransferPow",
+        "SweepProposalActions",
+        &proposal_id.to_le_bytes(),
+    );
+    let result = rpc_post(
+        "state_getStorage",
+        Value::Array(vec![Value::String(key)]),
+    )?;
+    match result {
+        Value::Null => Ok(None),
+        Value::String(hex_data) => {
+            let data = decode_hex_storage(&hex_data)?;
+            // SweepAction: institution([u8;48]) + amount(u128=16)
+            if data.len() < 64 {
+                return Ok(None);
+            }
+            let institution_hex = hex::encode(&data[..48]);
+            let amount_fen = {
+                let mut bytes = [0u8; 16];
+                bytes.copy_from_slice(&data[48..64]);
+                u128::from_le_bytes(bytes)
+            };
+            Ok(Some(SweepProposalDetail {
+                proposal_id,
+                institution_hex,
+                amount_fen: amount_fen.to_string(),
+            }))
+        }
+        _ => Ok(None),
     }
 }

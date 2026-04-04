@@ -352,6 +352,8 @@ pub mod pallet {
     #[pallet::getter(fn next_proposal_id)]
     pub type NextProposalId<T> = StorageValue<_, u64, ValueQuery>;
 
+    /// 全局提案表：proposal_id → 提案元数据（类型/阶段/状态/起止区块/机构等）。
+    /// 由 `create_internal_proposal` 写入，`set_status_and_emit` 更新状态，超时清理自动删除。
     #[pallet::storage]
     #[pallet::getter(fn proposals)]
     pub type Proposals<T: Config> =
@@ -379,6 +381,7 @@ pub mod pallet {
     pub type PendingProposalCleanups<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, PendingCleanupStage, OptionQuery>;
 
+    /// 内部投票记录：(proposal_id, 管理员公钥) → 赞成/反对。防止同一管理员重复投票。
     #[pallet::storage]
     pub type InternalVotesByAccount<T: Config> = StorageDoubleMap<
         _,
@@ -394,6 +397,8 @@ pub mod pallet {
     #[pallet::getter(fn internal_tally)]
     pub type InternalTallies<T> = StorageMap<_, Blake2_128Concat, u64, VoteCountU32, ValueQuery>;
 
+    /// 联合投票——管理员级记录：(proposal_id, (机构, 管理员公钥)) → 赞成/反对。
+    /// 防止同一管理员在同一机构内重复投票。
     #[pallet::storage]
     pub type JointVotesByAdmin<T: Config> = StorageDoubleMap<
         _,
@@ -417,6 +422,8 @@ pub mod pallet {
         ValueQuery,
     >;
 
+    /// 联合投票——机构级汇总：(proposal_id, 机构) → 该机构内部投票的最终结果（赞成/反对）。
+    /// 机构内部达到阈值后写入，用于联合阶段权重汇总。
     #[pallet::storage]
     pub type JointVotesByInstitution<T> = StorageDoubleMap<
         _,
@@ -432,6 +439,8 @@ pub mod pallet {
     #[pallet::getter(fn joint_tally)]
     pub type JointTallies<T> = StorageMap<_, Blake2_128Concat, u64, VoteCountU32, ValueQuery>;
 
+    /// 公民投票记录：(proposal_id, 公民身份绑定哈希) → 赞成/反对。
+    /// 每个公民身份只能投一次，由绑定哈希防重。
     #[pallet::storage]
     pub type CitizenVotesByBindingId<T: Config> =
         StorageDoubleMap<_, Blake2_128Concat, u64, Blake2_128Concat, T::Hash, bool, OptionQuery>;

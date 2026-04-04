@@ -29,6 +29,8 @@ pub enum InstitutionAssetAction {
     OffchainBatchDebit,
     /// 省储行手续费账户归集：从 `fee_account` 划回机构主账户。
     OffchainFeeSweepExecute,
+    /// 国储会安全基金转账：从 `NRC_ANQUAN_ADDRESS` 向指定收款地址转账。
+    NrcSafetyFundTransfer,
 }
 
 /// 机构账户资金白名单检查器。
@@ -67,6 +69,10 @@ mod tests {
         assert!(<() as InstitutionAssetGuard<[u8; 32]>>::can_spend(
             &account,
             InstitutionAssetAction::OffchainFeeSweepExecute,
+        ));
+        assert!(<() as InstitutionAssetGuard<[u8; 32]>>::can_spend(
+            &account,
+            InstitutionAssetAction::NrcSafetyFundTransfer,
         ));
     }
 }

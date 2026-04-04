@@ -495,7 +495,7 @@ fn reward_wallet_bound_at_block(miner_account_hex: &str, block_hash: &str) -> Re
 fn fullnode_fee_income_fen(total_fee_fen: u128) -> u128 {
     let total_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT
         .saturating_add(primitives::core_const::ONCHAIN_FEE_NRC_PERCENT)
-        .saturating_add(primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT);
+        .saturating_add(primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT);
     if total_percent == 0 {
         return 0;
     }

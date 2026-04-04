@@ -1,5 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+/// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
+pub const MODULE_TAG: &[u8] = b"dq-mgmt";
+
 pub use pallet::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
@@ -606,7 +609,8 @@ pub mod pallet {
                 threshold,
                 amount,
             };
-            let mut data = sp_std::vec![ACTION_CREATE];
+            let mut data = sp_std::vec::Vec::from(crate::MODULE_TAG);
+            data.push(ACTION_CREATE);
             data.extend_from_slice(&action.encode());
             voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
             voting_engine_system::Pallet::<T>::store_proposal_meta(proposal_id, now);
@@ -633,14 +637,13 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            // 读取提案数据
-            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+            // 读取提案数据（MODULE_TAG + ACTION_CREATE + payload）
+            let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
-            ensure!(
-                data.first() == Some(&ACTION_CREATE),
-                Error::<T>::ProposalActionNotFound
-            );
-            let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(&mut &data[1..])
+            let tag = crate::MODULE_TAG;
+            ensure!(raw.len() > tag.len() && &raw[..tag.len()] == tag, Error::<T>::ProposalActionNotFound);
+            ensure!(raw[tag.len()] == ACTION_CREATE, Error::<T>::ProposalActionNotFound);
+            let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(&mut &raw[tag.len() + 1..])
                 .map_err(|_| Error::<T>::ProposalActionNotFound)?;
 
             // 校验管理员权限
@@ -848,7 +851,8 @@ pub mod pallet {
                 beneficiary: beneficiary.clone(),
                 proposer: who.clone(),
             };
-            let mut data = sp_std::vec![ACTION_CLOSE];
+            let mut data = sp_std::vec::Vec::from(crate::MODULE_TAG);
+            data.push(ACTION_CLOSE);
             data.extend_from_slice(&action.encode());
             voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
             voting_engine_system::Pallet::<T>::store_proposal_meta(
@@ -873,14 +877,13 @@ pub mod pallet {
         pub fn vote_close(origin: OriginFor<T>, proposal_id: u64, approve: bool) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            // 读取提案数据
-            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+            // 读取提案数据（MODULE_TAG + ACTION_CLOSE + payload）
+            let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
-            ensure!(
-                data.first() == Some(&ACTION_CLOSE),
-                Error::<T>::ProposalActionNotFound
-            );
-            let action = CloseDuoqianAction::<T::AccountId>::decode(&mut &data[1..])
+            let tag = crate::MODULE_TAG;
+            ensure!(raw.len() > tag.len() && &raw[..tag.len()] == tag, Error::<T>::ProposalActionNotFound);
+            ensure!(raw[tag.len()] == ACTION_CLOSE, Error::<T>::ProposalActionNotFound);
+            let action = CloseDuoqianAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
                 .map_err(|_| Error::<T>::ProposalActionNotFound)?;
 
             // 校验管理员权限
@@ -1048,7 +1051,8 @@ pub mod pallet {
                 threshold,
                 amount,
             };
-            let mut data = sp_std::vec![ACTION_CREATE];
+            let mut data = sp_std::vec::Vec::from(crate::MODULE_TAG);
+            data.push(ACTION_CREATE);
             data.extend_from_slice(&action.encode());
             voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
             voting_engine_system::Pallet::<T>::store_proposal_meta(proposal_id, now);
@@ -1077,10 +1081,12 @@ pub mod pallet {
         ) -> DispatchResult {
             let _ = ensure_signed(origin)?;
 
-            // 读取提案数据，判断操作类型
-            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+            // 读取提案数据，校验 MODULE_TAG 后判断操作类型
+            let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
-            let action_tag = *data.first().ok_or(Error::<T>::ProposalActionNotFound)?;
+            let tag = crate::MODULE_TAG;
+            ensure!(raw.len() > tag.len() && &raw[..tag.len()] == tag, Error::<T>::ProposalActionNotFound);
+            let action_tag = raw[tag.len()];
 
             // 校验投票引擎状态必须为 REJECTED
             let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
@@ -1093,13 +1099,13 @@ pub mod pallet {
             match action_tag {
                 ACTION_CREATE => {
                     let action =
-                        CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(&mut &data[1..])
+                        CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(&mut &raw[tag.len() + 1..])
                             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
                     DuoqianAccounts::<T>::remove(&action.duoqian_address);
                     PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
                 }
                 ACTION_CLOSE => {
-                    let action = CloseDuoqianAction::<T::AccountId>::decode(&mut &data[1..])
+                    let action = CloseDuoqianAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
                         .map_err(|_| Error::<T>::ProposalActionNotFound)?;
                     PendingCloseProposal::<T>::remove(&action.duoqian_address);
                 }

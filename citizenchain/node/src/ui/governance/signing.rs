@@ -371,6 +371,298 @@ pub fn build_propose_transfer_sign_request(
     })
 }
 
+/// 构建 propose_safety_fund_transfer 签名请求（安全基金转账提案：pallet=19, call=3）。
+pub fn build_propose_safety_fund_sign_request(
+    pubkey_hex: &str,
+    beneficiary_address: &str,
+    amount_yuan: f64,
+    remark: &str,
+) -> Result<VoteSignRequestResult, String> {
+    let pubkey_clean = pubkey_hex
+        .strip_prefix("0x")
+        .unwrap_or(pubkey_hex)
+        .to_ascii_lowercase();
+    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("公钥格式无效，应为 64 位十六进制".to_string());
+    }
+    let pubkey_bytes = hex::decode(&pubkey_clean)
+        .map_err(|e| format!("公钥解码失败: {e}"))?;
+
+    if amount_yuan < 1.11 {
+        return Err("转账金额不能低于 1.11 元".to_string());
+    }
+    let amount_fen = (amount_yuan * 100.0).round() as u128;
+
+    let remark_bytes = remark.as_bytes();
+    if remark_bytes.len() > 256 {
+        return Err(format!("备注长度不能超过 256 字节，当前 {} 字节", remark_bytes.len()));
+    }
+
+    let beneficiary_bytes = decode_ss58_to_pubkey(beneficiary_address)?;
+
+    let (spec_version, tx_version) = fetch_runtime_version()?;
+    let genesis_hash = fetch_genesis_hash()?;
+    let (block_hash, block_number) = fetch_latest_block()?;
+    let nonce = fetch_nonce(&pubkey_clean)?;
+
+    // call data: [0x13][0x03][beneficiary:32][amount:u128_le][remark:Vec<u8>]
+    let remark_compact = encode_compact_u32(remark_bytes.len() as u32);
+    let mut call_data = Vec::with_capacity(2 + 32 + 16 + remark_compact.len() + remark_bytes.len());
+    call_data.push(19u8); // DuoqianTransferPow pallet
+    call_data.push(3u8);  // propose_safety_fund_transfer call
+    call_data.extend_from_slice(&beneficiary_bytes);
+    call_data.extend_from_slice(&amount_fen.to_le_bytes());
+    call_data.extend_from_slice(&remark_compact);
+    call_data.extend_from_slice(remark_bytes);
+
+    let payload = build_signing_payload(
+        &call_data, &genesis_hash, &block_hash, block_number,
+        nonce, spec_version, tx_version,
+    );
+    let payload_hash = sha256_hash(&payload);
+    let request_id = generate_request_id("safety");
+    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
+
+    let display = serde_json::json!({
+        "action": "propose_safety_fund_transfer",
+        "action_label": "安全基金转账提案",
+        "summary": format!("安全基金转账 {:.2} GMB 给 {beneficiary_address}", amount_yuan),
+        "fields": [
+            { "key": "beneficiary", "label": "收款地址", "value": beneficiary_address },
+            { "key": "amount_yuan", "label": "金额", "value": format!("{:.2} GMB", amount_yuan) },
+            { "key": "remark", "label": "备注", "value": remark }
+        ]
+    });
+
+    let now = now_secs();
+    let request = QrSignRequest {
+        proto: PROTOCOL_VERSION.to_string(),
+        msg_type: "sign_request".to_string(),
+        request_id: request_id.clone(),
+        account: account_ss58,
+        pubkey: format!("0x{pubkey_clean}"),
+        sig_alg: "sr25519".to_string(),
+        payload_hex: format!("0x{}", hex::encode(&payload)),
+        issued_at: now,
+        expires_at: now + DEFAULT_TTL_SECS,
+        display,
+        spec_version: Some(spec_version),
+    };
+
+    let request_json = serde_json::to_string(&request)
+        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+
+    Ok(VoteSignRequestResult {
+        request_json,
+        request_id,
+        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
+        sign_nonce: nonce,
+        sign_block_number: block_number,
+    })
+}
+
+/// 构建 vote_safety_fund_transfer 签名请求（安全基金投票：pallet=19, call=4）。
+pub fn build_safety_fund_vote_sign_request(
+    proposal_id: u64,
+    pubkey_hex: &str,
+    approve: bool,
+) -> Result<VoteSignRequestResult, String> {
+    let pubkey_clean = pubkey_hex
+        .strip_prefix("0x")
+        .unwrap_or(pubkey_hex)
+        .to_ascii_lowercase();
+    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("公钥格式无效，应为 64 位十六进制".to_string());
+    }
+    let pubkey_bytes = hex::decode(&pubkey_clean)
+        .map_err(|e| format!("公钥解码失败: {e}"))?;
+
+    let (spec_version, tx_version) = fetch_runtime_version()?;
+    let genesis_hash = fetch_genesis_hash()?;
+    let (block_hash, block_number) = fetch_latest_block()?;
+    let nonce = fetch_nonce(&pubkey_clean)?;
+
+    // call data: [0x13][0x04][proposal_id:u64_le][approve:bool]
+    let mut call_data = Vec::with_capacity(11);
+    call_data.push(19u8); // DuoqianTransferPow pallet
+    call_data.push(4u8);  // vote_safety_fund_transfer call
+    call_data.extend_from_slice(&proposal_id.to_le_bytes());
+    call_data.push(if approve { 1u8 } else { 0u8 });
+
+    let payload = build_signing_payload(
+        &call_data, &genesis_hash, &block_hash, block_number,
+        nonce, spec_version, tx_version,
+    );
+    let payload_hash = sha256_hash(&payload);
+    let request_id = generate_request_id("sf-vote");
+    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
+
+    let display = serde_json::json!({
+        "action": "vote_safety_fund_transfer",
+        "action_label": "安全基金投票",
+        "summary": format!("安全基金提案 #{proposal_id} 投票：{}", if approve { "赞成" } else { "反对" }),
+        "fields": [
+            { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
+            { "key": "approve", "label": "投票", "value": approve.to_string() }
+        ]
+    });
+
+    let now = now_secs();
+    let request = QrSignRequest {
+        proto: PROTOCOL_VERSION.to_string(),
+        msg_type: "sign_request".to_string(),
+        request_id: request_id.clone(),
+        account: account_ss58,
+        pubkey: format!("0x{pubkey_clean}"),
+        sig_alg: "sr25519".to_string(),
+        payload_hex: format!("0x{}", hex::encode(&payload)),
+        issued_at: now,
+        expires_at: now + DEFAULT_TTL_SECS,
+        display,
+        spec_version: Some(spec_version),
+    };
+
+    let request_json = serde_json::to_string(&request)
+        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+
+    Ok(VoteSignRequestResult {
+        request_json,
+        request_id,
+        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
+        sign_nonce: nonce,
+        sign_block_number: block_number,
+    })
+}
+
+/// 构建 propose_sweep_to_main 签名请求（手续费划转提案：pallet=19, call=5）。
+pub fn build_propose_sweep_sign_request(
+    pubkey_hex: &str,
+    shenfen_id: &str,
+    amount_yuan: f64,
+) -> Result<VoteSignRequestResult, String> {
+    let pubkey_clean = pubkey_hex.strip_prefix("0x").unwrap_or(pubkey_hex).to_ascii_lowercase();
+    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("公钥格式无效".to_string());
+    }
+    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
+    if amount_yuan <= 0.0 { return Err("划转金额必须大于 0".to_string()); }
+    let amount_fen = (amount_yuan * 100.0).round() as u128;
+
+    let institution_id = super::storage_keys::shenfen_id_to_fixed48(shenfen_id);
+    let (spec_version, tx_version) = fetch_runtime_version()?;
+    let genesis_hash = fetch_genesis_hash()?;
+    let (block_hash, block_number) = fetch_latest_block()?;
+    let nonce = fetch_nonce(&pubkey_clean)?;
+
+    // call data: [0x13][0x05][institution:48][amount:u128_le]
+    let mut call_data = Vec::with_capacity(2 + 48 + 16);
+    call_data.push(19u8);
+    call_data.push(5u8);
+    call_data.extend_from_slice(&institution_id);
+    call_data.extend_from_slice(&amount_fen.to_le_bytes());
+
+    let payload = build_signing_payload(&call_data, &genesis_hash, &block_hash, block_number, nonce, spec_version, tx_version);
+    let payload_hash = sha256_hash(&payload);
+    let request_id = generate_request_id("sweep");
+    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
+
+    let entry = super::find_entry(shenfen_id);
+    let inst_name = entry.map(|e| e.name).unwrap_or("未知机构");
+
+    let display = serde_json::json!({
+        "action": "propose_sweep_to_main",
+        "action_label": "手续费划转提案",
+        "summary": format!("{inst_name} 手续费划转 {:.2} 元", amount_yuan),
+        "fields": [
+            { "key": "institution", "label": "机构", "value": inst_name },
+            { "key": "amount_yuan", "label": "金额", "value": format!("{:.2} GMB", amount_yuan) }
+        ]
+    });
+
+    let now = now_secs();
+    let request = QrSignRequest {
+        proto: PROTOCOL_VERSION.to_string(),
+        msg_type: "sign_request".to_string(),
+        request_id: request_id.clone(),
+        account: account_ss58,
+        pubkey: format!("0x{pubkey_clean}"),
+        sig_alg: "sr25519".to_string(),
+        payload_hex: format!("0x{}", hex::encode(&payload)),
+        issued_at: now,
+        expires_at: now + DEFAULT_TTL_SECS,
+        display,
+        spec_version: Some(spec_version),
+    };
+
+    let request_json = serde_json::to_string(&request).map_err(|e| format!("序列化失败: {e}"))?;
+    Ok(VoteSignRequestResult {
+        request_json, request_id,
+        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
+        sign_nonce: nonce, sign_block_number: block_number,
+    })
+}
+
+/// 构建 vote_sweep_to_main 签名请求（手续费划转投票：pallet=19, call=6）。
+pub fn build_sweep_vote_sign_request(
+    proposal_id: u64,
+    pubkey_hex: &str,
+    approve: bool,
+) -> Result<VoteSignRequestResult, String> {
+    let pubkey_clean = pubkey_hex.strip_prefix("0x").unwrap_or(pubkey_hex).to_ascii_lowercase();
+    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("公钥格式无效".to_string());
+    }
+    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
+
+    let (spec_version, tx_version) = fetch_runtime_version()?;
+    let genesis_hash = fetch_genesis_hash()?;
+    let (block_hash, block_number) = fetch_latest_block()?;
+    let nonce = fetch_nonce(&pubkey_clean)?;
+
+    let mut call_data = Vec::with_capacity(11);
+    call_data.push(19u8);
+    call_data.push(6u8);
+    call_data.extend_from_slice(&proposal_id.to_le_bytes());
+    call_data.push(if approve { 1u8 } else { 0u8 });
+
+    let payload = build_signing_payload(&call_data, &genesis_hash, &block_hash, block_number, nonce, spec_version, tx_version);
+    let payload_hash = sha256_hash(&payload);
+    let request_id = generate_request_id("sw-vote");
+    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
+
+    let display = serde_json::json!({
+        "action": "vote_sweep_to_main",
+        "action_label": "手续费划转投票",
+        "summary": format!("手续费划转提案 #{proposal_id} 投票：{}", if approve { "赞成" } else { "反对" }),
+        "fields": [
+            { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
+            { "key": "approve", "label": "投票", "value": approve.to_string() }
+        ]
+    });
+
+    let now = now_secs();
+    let request = QrSignRequest {
+        proto: PROTOCOL_VERSION.to_string(),
+        msg_type: "sign_request".to_string(),
+        request_id: request_id.clone(),
+        account: account_ss58,
+        pubkey: format!("0x{pubkey_clean}"),
+        sig_alg: "sr25519".to_string(),
+        payload_hex: format!("0x{}", hex::encode(&payload)),
+        issued_at: now,
+        expires_at: now + DEFAULT_TTL_SECS,
+        display,
+        spec_version: Some(spec_version),
+    };
+
+    let request_json = serde_json::to_string(&request).map_err(|e| format!("序列化失败: {e}"))?;
+    Ok(VoteSignRequestResult {
+        request_json, request_id,
+        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
+        sign_nonce: nonce, sign_block_number: block_number,
+    })
+}
+
 /// 构建 vote_institution_rate 签名请求（费率投票：pallet=21, call=2）。
 pub fn build_rate_vote_sign_request(
     proposal_id: u64,

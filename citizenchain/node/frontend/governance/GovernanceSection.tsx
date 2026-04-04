@@ -8,6 +8,8 @@ import { ProposalListView } from './ProposalListView';
 import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateProposalPage } from './CreateProposalPage';
 import { FeeRateProposalPage } from './FeeRateProposalPage';
+import { SafetyFundProposalPage } from './SafetyFundProposalPage';
+import { SweepProposalPage } from './SweepProposalPage';
 // ColdWalletManager 已删除，管理员激活改为机构详情页内操作。
 import { DeveloperUpgradePage } from './DeveloperUpgradePage';
 import { RuntimeUpgradeProposalPage } from './RuntimeUpgradeProposalPage';
@@ -27,7 +29,9 @@ type GovernanceView =
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; shenfenId?: string; backTab: SubTab }
   | { page: 'create-proposal'; shenfenId: string; orgType: number; institutionName: string; duoqianAddress: string; adminWallets: AdminWalletMatch[]; backTab: SubTab }
   | { page: 'propose-upgrade'; adminWallets: AdminWalletMatch[]; backTab: SubTab }
-  | { page: 'propose-fee-rate'; shenfenId: string; institutionName: string; adminWallets: AdminWalletMatch[]; backTab: SubTab };
+  | { page: 'propose-fee-rate'; shenfenId: string; institutionName: string; adminWallets: AdminWalletMatch[]; backTab: SubTab }
+  | { page: 'propose-safety-fund'; adminWallets: AdminWalletMatch[]; backTab: SubTab }
+  | { page: 'propose-sweep'; shenfenId: string; institutionName: string; adminWallets: AdminWalletMatch[]; backTab: SubTab };
 
 type SubTab = 'proposals' | 'nrc' | 'prc' | 'prb' | 'dev-upgrade';
 
@@ -74,6 +78,30 @@ export function GovernanceSection() {
         adminWallets={view.adminWallets}
         onBack={() => setView({ page: 'institution-detail', shenfenId: view.shenfenId, backTab: view.backTab })}
         onSuccess={() => setView({ page: 'institution-detail', shenfenId: view.shenfenId, backTab: view.backTab })}
+      />
+    );
+  }
+
+  // 手续费划转提案页
+  if (view.page === 'propose-sweep') {
+    return (
+      <SweepProposalPage
+        shenfenId={view.shenfenId}
+        institutionName={view.institutionName}
+        adminWallets={view.adminWallets}
+        onBack={() => setView({ page: 'institution-detail', shenfenId: view.shenfenId, backTab: view.backTab })}
+        onSuccess={() => setView({ page: 'institution-detail', shenfenId: view.shenfenId, backTab: view.backTab })}
+      />
+    );
+  }
+
+  // 安全基金转账提案页
+  if (view.page === 'propose-safety-fund') {
+    return (
+      <SafetyFundProposalPage
+        adminWallets={view.adminWallets}
+        onBack={() => setView({ page: view.backTab })}
+        onSuccess={() => setView({ page: view.backTab })}
       />
     );
   }
@@ -134,6 +162,9 @@ export function GovernanceSection() {
         onCreateFeeRate={(sid, name, aw) =>
           setView({ page: 'propose-fee-rate', shenfenId: sid, institutionName: name, adminWallets: aw, backTab: view.backTab })
         }
+        onCreateSweep={(sid, name, aw) =>
+          setView({ page: 'propose-sweep', shenfenId: sid, institutionName: name, adminWallets: aw, backTab: view.backTab })
+        }
       />
     );
   }
@@ -172,6 +203,12 @@ export function GovernanceSection() {
           }
           onCreateRuntimeUpgrade={(aw) =>
             setView({ page: 'propose-upgrade', adminWallets: aw, backTab: 'nrc' })
+          }
+          onCreateSafetyFund={(aw) =>
+            setView({ page: 'propose-safety-fund', adminWallets: aw, backTab: 'nrc' })
+          }
+          onCreateSweep={(sid, name, aw) =>
+            setView({ page: 'propose-sweep', shenfenId: sid, institutionName: name, adminWallets: aw, backTab: 'nrc' })
           }
         />
       )}

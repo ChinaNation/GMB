@@ -97,6 +97,12 @@ export type InstitutionDetail = {
   stakingBalanceFen: string | null;
   feeAddress: string | null;
   feeBalanceFen: string | null;
+  cbFeeAddress: string | null;
+  cbFeeBalanceFen: string | null;
+  nrcFeeAddress: string | null;
+  nrcFeeBalanceFen: string | null;
+  nrcAnquanAddress: string | null;
+  nrcAnquanBalanceFen: string | null;
   warning: string | null;
 };
 
@@ -159,11 +165,26 @@ export type FeeRateProposalDetail = {
   newRateBp: number;
 };
 
+export type SweepProposalDetail = {
+  proposalId: number;
+  institutionHex: string;
+  amountFen: string;
+};
+
+export type SafetyFundProposalDetail = {
+  proposalId: number;
+  beneficiaryHex: string;
+  amountFen: string;
+  remark: string;
+};
+
 export type ProposalFullInfo = {
   meta: ProposalMeta;
   transferDetail: TransferProposalDetail | null;
   runtimeUpgradeDetail: RuntimeUpgradeDetail | null;
   feeRateDetail: FeeRateProposalDetail | null;
+  safetyFundDetail: SafetyFundProposalDetail | null;
+  sweepDetail: SweepProposalDetail | null;
   internalTally: VoteTally | null;
   jointTally: VoteTally | null;
   citizenTally: { yes: number; no: number } | null;

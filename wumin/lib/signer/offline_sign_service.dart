@@ -161,6 +161,10 @@ class OfflineSignService {
         'activate_admin',
         'propose_institution_rate',
         'vote_institution_rate',
+        'propose_safety_fund_transfer',
+        'vote_safety_fund_transfer',
+        'propose_sweep_to_main',
+        'vote_sweep_to_main',
       };
       if (!allowedHashedActions.contains(displayAction)) {
         throw const OfflineSignException(
