@@ -195,7 +195,7 @@ String _statusLabel(String status) {
     case 'pending':
       return '待确认';
     case 'confirmed':
-      return '已确认';
+      return '已支付';
     case 'onchain':
       return '已上链';
     default:
@@ -208,9 +208,9 @@ Color _statusColor(String status) {
     case 'pending':
       return AppTheme.warning;
     case 'confirmed':
-      return AppTheme.success;
+      return AppTheme.accent;
     case 'onchain':
-      return AppTheme.primary;
+      return AppTheme.success;
     default:
       return AppTheme.textTertiary;
   }
@@ -442,9 +442,6 @@ class _LocalTxRecordDetailPage extends StatelessWidget {
           const SizedBox(height: 24),
           const Divider(height: 1),
           _buildRow(context, label: '类型', value: label),
-          if (record.blockNumber != null)
-            _buildRow(context,
-                label: '区块', value: record.blockNumber.toString()),
           if (record.fromAddress != null)
             _buildRow(context,
                 label: '发送方', value: record.fromAddress!, copyable: true),

@@ -6,6 +6,7 @@ import '../wallet/core/wallet_manager.dart';
 import 'activation_service.dart';
 import 'admin_list_page.dart';
 import 'duoqian_manage_detail_page.dart';
+import 'fee_rate_detail_page.dart';
 import 'institution_admin_service.dart';
 import 'institution_data.dart';
 import 'proposal_cache.dart';
@@ -638,6 +639,18 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => DuoqianManageDetailPage(
+            institution: widget.institution,
+            proposalId: proposalId,
+            proposalContext: ctx,
+          ),
+        ),
+      );
+    } else if (proposal.meta.kind == 0 &&
+        proposal.meta.institutionBytes != null) {
+      // 内部投票提案（费率设置等）
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => FeeRateDetailPage(
             institution: widget.institution,
             proposalId: proposalId,
             proposalContext: ctx,

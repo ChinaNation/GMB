@@ -38,7 +38,7 @@ class _PersonalDuoqianCreatePageState
   bool _submitting = false;
   final List<String> _adminPubkeys = [];
   WalletProfile? _selectedWallet;
-  List<WalletProfile> _coldWallets = [];
+  List<WalletProfile> _wallets = [];
 
   @override
   void initState() {
@@ -57,11 +57,10 @@ class _PersonalDuoqianCreatePageState
   Future<void> _loadWallets() async {
     final wm = WalletManager();
     final wallets = await wm.getWallets();
-    final cold = wallets.where((w) => w.signMode == 'external').toList();
     if (!mounted) return;
     setState(() {
-      _coldWallets = cold;
-      _selectedWallet = cold.isNotEmpty ? cold.first : null;
+      _wallets = wallets;
+      _selectedWallet = wallets.isNotEmpty ? wallets.first : null;
     });
   }
 
@@ -96,24 +95,39 @@ class _PersonalDuoqianCreatePageState
     final result = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-          builder: (_) => const QrScanPage(mode: QrScanMode.transfer)),
+          builder: (_) => const QrScanPage(
+            mode: QrScanMode.raw,
+            customTitle: '扫码添加管理员',
+          )),
     );
     if (result == null || !mounted) return;
+
+    // 解析 WUMIN_USER_V1.0.0 协议
     try {
-      final pubkey = Keyring().decodeAddress(result.trim());
-      _addAdminPubkey(_toHex(pubkey));
-    } catch (_) {
-      final clean = result.trim().startsWith('0x')
-          ? result.trim().substring(2)
-          : result.trim();
-      if (clean.length == 64) {
-        _addAdminPubkey(clean.toLowerCase());
-      } else {
+      final json = jsonDecode(result.trim());
+      if (json is Map && json['proto'] == 'WUMIN_USER_V1.0.0') {
+        final address = json['address']?.toString();
+        if (address == null || address.isEmpty) {
+          throw FormatException('缺少 address 字段');
+        }
+        final pubkey = Keyring().decodeAddress(address);
+        _addAdminPubkey(_toHex(pubkey));
+        return;
+      }
+    } catch (e) {
+      if (e is FormatException) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法识别为有效地址或公钥')),
+          SnackBar(content: Text('二维码格式错误：$e')),
         );
+        return;
       }
     }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('请扫描有效的用户二维码')),
+    );
   }
 
   void _addAdminPubkey(String hex) {
@@ -367,13 +381,13 @@ class _PersonalDuoqianCreatePageState
             ),
           ),
 
-          if (_coldWallets.length > 1) ...[
+          if (_wallets.length > 1) ...[
             const SizedBox(height: 20),
             _buildSectionTitle('签名钱包'),
             const SizedBox(height: 8),
             DropdownButtonFormField<WalletProfile>(
               value: _selectedWallet,
-              items: _coldWallets.map((w) => DropdownMenuItem(value: w, child: Text('${w.walletName} (${_truncateAddress(w.address)})', style: const TextStyle(fontSize: 13)))).toList(),
+              items: _wallets.map((w) => DropdownMenuItem(value: w, child: Text('${w.walletName} (${_truncateAddress(w.address)})', style: const TextStyle(fontSize: 13)))).toList(),
               onChanged: (w) { if (w != null) setState(() => _selectedWallet = w); },
               decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
             ),

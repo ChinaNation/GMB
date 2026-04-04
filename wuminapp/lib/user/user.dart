@@ -303,21 +303,6 @@ class _ProfilePageState extends State<ProfilePage> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _buildEntryCard(
                 leading: SvgPicture.asset(
-                  'assets/icons/contact-round.svg',
-                  width: 22,
-                  height: 22,
-                  colorFilter: const ColorFilter.mode(
-                      AppTheme.primary, BlendMode.srcIn),
-                ),
-                title: '通讯录',
-                onTap: _openContacts,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildEntryCard(
-                leading: SvgPicture.asset(
                   'assets/icons/wallet.svg',
                   width: 22,
                   height: 22,
@@ -336,12 +321,27 @@ class _ProfilePageState extends State<ProfilePage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _buildEntryCard(
+                leading: SvgPicture.asset(
+                  'assets/icons/contact-round.svg',
+                  width: 22,
+                  height: 22,
+                  colorFilter: const ColorFilter.mode(
+                      AppTheme.primary, BlendMode.srcIn),
+                ),
+                title: '通讯录',
+                onTap: _openContacts,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _buildEntryCard(
                 leading: const Icon(
                   Icons.groups_outlined,
                   color: AppTheme.info,
                   size: 22,
                 ),
-                title: '多签',
+                title: '多签账户',
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(

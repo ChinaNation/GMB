@@ -90,11 +90,21 @@ pub struct ProposalFullInfo {
     pub meta: ProposalMeta,
     pub transfer_detail: Option<TransferProposalDetail>,
     pub runtime_upgrade_detail: Option<RuntimeUpgradeDetail>,
+    pub fee_rate_detail: Option<FeeRateProposalDetail>,
     pub internal_tally: Option<VoteTally>,
     pub joint_tally: Option<JointVoteTally>,
     pub citizen_tally: Option<CitizenVoteTally>,
     /// 关联机构名称（通过 institutionBytes 反查）。
     pub institution_name: Option<String>,
+}
+
+/// 费率提案详情。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeeRateProposalDetail {
+    pub proposal_id: u64,
+    pub institution_hex: String,
+    pub new_rate_bp: u32,
 }
 
 /// 提案列表项（轻量，用于列表展示）。
@@ -231,12 +241,26 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
         None
     };
 
+    // 费率提案详情（从 RateProposalActions 存储查询）
+    let fee_rate_detail = if transfer_detail.is_none() && runtime_upgrade_detail.is_none() {
+        fetch_rate_proposal_action(proposal_id).ok().flatten().map(|r| {
+            FeeRateProposalDetail {
+                proposal_id,
+                institution_hex: r.institution_hex,
+                new_rate_bp: r.new_rate_bp,
+            }
+        })
+    } else {
+        None
+    };
+
     let institution_name = resolve_institution_name(meta.institution_hex.as_deref());
 
     Ok(ProposalFullInfo {
         meta,
         transfer_detail,
         runtime_upgrade_detail,
+        fee_rate_detail,
         internal_tally,
         joint_tally,
         citizen_tally,
@@ -747,7 +771,7 @@ fn fetch_proposal_summary(proposal_id: u64, meta: &ProposalMeta) -> Result<Strin
             return Ok(format!("运行时升级：{reason_short}"));
         }
     } else {
-        // 转账提案
+        // 先尝试转账提案
         if let Some(detail) = decode_transfer_action(proposal_id, data) {
             let amount: u128 = detail.amount_fen.parse().unwrap_or(0);
             let yuan = amount / 100;
@@ -758,6 +782,14 @@ fn fetch_proposal_summary(proposal_id: u64, meta: &ProposalMeta) -> Result<Strin
                 detail.remark.clone()
             };
             return Ok(format!("转账 {yuan}.{fen:02} 元：{remark_short}"));
+        }
+
+        // 再尝试费率提案（RateProposalActions 存储）
+        if let Ok(Some(rate_detail)) = fetch_rate_proposal_action(proposal_id) {
+            let rate_percent = format!("{:.2}%", rate_detail.new_rate_bp as f64 / 100.0);
+            let inst_name = resolve_institution_name(Some(&rate_detail.institution_hex))
+                .unwrap_or_else(|| "未知机构".to_string());
+            return Ok(format!("费率设置 {rate_percent}：{inst_name}"));
         }
     }
     Ok("（无法解码详情）".to_string())
@@ -849,5 +881,75 @@ fn fetch_option_bool(storage_key: &str) -> Result<Option<bool>, String> {
             }
         }
         _ => Ok(None),
+    }
+}
+
+// ──── 费率提案 ────
+
+/// 费率提案详情。
+struct RateProposalActionDetail {
+    institution_hex: String,
+    new_rate_bp: u32,
+}
+
+/// 从链上 RateProposalActions 存储查询费率提案数据。
+fn fetch_rate_proposal_action(proposal_id: u64) -> Result<Option<RateProposalActionDetail>, String> {
+    let key = storage_keys::map_key(
+        "OffchainTransactionPos",
+        "RateProposalActions",
+        &proposal_id.to_le_bytes(),
+    );
+    let result = rpc_post(
+        "state_getStorage",
+        Value::Array(vec![Value::String(key)]),
+    )?;
+    match result {
+        Value::Null => Ok(None),
+        Value::String(hex_data) => {
+            let data = decode_hex_storage(&hex_data)?;
+            // RateProposalAction: institution([u8;48]) + new_rate_bp(u32_le)
+            if data.len() < 52 {
+                return Ok(None);
+            }
+            let institution_hex = hex::encode(&data[..48]);
+            let new_rate_bp = u32::from_le_bytes(
+                data[48..52].try_into().map_err(|_| "rate_bp 解码失败".to_string())?
+            );
+            Ok(Some(RateProposalActionDetail {
+                institution_hex,
+                new_rate_bp,
+            }))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// 查询省储行当前链下交易费率（bp）。
+///
+/// 从链上 InstitutionRateBp 存储读取，未设置时返回默认值 1 bp。
+pub fn fetch_institution_rate_bp(shenfen_id: &str) -> Result<u32, String> {
+    let institution_id = storage_keys::shenfen_id_to_fixed48(shenfen_id);
+    let key = storage_keys::map_key(
+        "OffchainTransactionPos",
+        "InstitutionRateBp",
+        &institution_id,
+    );
+    let result = rpc_post(
+        "state_getStorage",
+        Value::Array(vec![Value::String(key)]),
+    )?;
+    match result {
+        Value::Null => Ok(1), // 默认 1 bp
+        Value::String(hex_data) => {
+            let data = decode_hex_storage(&hex_data)?;
+            if data.len() < 4 {
+                return Ok(1);
+            }
+            let rate = u32::from_le_bytes(
+                data[..4].try_into().map_err(|_| "rate_bp 解码失败".to_string())?
+            );
+            Ok(if rate == 0 { 1 } else { rate })
+        }
+        _ => Ok(1),
     }
 }

@@ -115,28 +115,40 @@ class _DuoqianCreateProposalPageState
   Future<void> _addAdminByQr() async {
     final result = await Navigator.push<String>(
       context,
-      MaterialPageRoute(builder: (_) => const QrScanPage(mode: QrScanMode.transfer)),
+      MaterialPageRoute(builder: (_) => const QrScanPage(
+        mode: QrScanMode.raw,
+        customTitle: '扫码添加管理员',
+      )),
     );
     if (result == null || !mounted) return;
 
-    // 尝试解码为 SS58 地址
+    // 解析 WUMIN_USER_V1.0.0 协议
     try {
-      final pubkey = Keyring().decodeAddress(result.trim());
-      final hex = _toHex(pubkey);
-      _addAdminPubkey(hex);
-    } catch (_) {
-      // 如果不是地址，尝试作为 hex 公钥
-      final clean = result.trim().startsWith('0x')
-          ? result.trim().substring(2)
-          : result.trim();
-      if (clean.length == 64) {
-        _addAdminPubkey(clean.toLowerCase());
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法识别为有效地址或公钥')),
-        );
+      final json = jsonDecode(result.trim());
+      if (json is Map && json['proto'] == 'WUMIN_USER_V1.0.0') {
+        final address = json['address']?.toString();
+        if (address == null || address.isEmpty) {
+          throw FormatException('缺少 address 字段');
+        }
+        final pubkey = Keyring().decodeAddress(address);
+        _addAdminPubkey(_toHex(pubkey));
+        return;
       }
+    } catch (e) {
+      if (e is FormatException) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('二维码格式错误：$e')),
+        );
+        return;
+      }
+      // 非 JSON，继续下方处理
     }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('请扫描有效的用户二维码')),
+    );
   }
 
   void _addAdminPubkey(String hex) {

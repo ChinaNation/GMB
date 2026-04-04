@@ -516,6 +516,9 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       'developer_upgrade',
       'developer_direct_upgrade',
       'propose_runtime_upgrade',
+      'activate_admin',
+      'propose_institution_rate',
+      'vote_institution_rate',
     };
     final isDecodeFailed =
         verification?.displayMatch == DisplayMatchStatus.decodeFailed &&

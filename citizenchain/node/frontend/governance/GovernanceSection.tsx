@@ -7,6 +7,7 @@ import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalListView } from './ProposalListView';
 import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateProposalPage } from './CreateProposalPage';
+import { FeeRateProposalPage } from './FeeRateProposalPage';
 // ColdWalletManager 已删除，管理员激活改为机构详情页内操作。
 import { DeveloperUpgradePage } from './DeveloperUpgradePage';
 import { RuntimeUpgradeProposalPage } from './RuntimeUpgradeProposalPage';
@@ -25,7 +26,8 @@ type GovernanceView =
   | { page: 'admin-list'; shenfenId: string; backTab: SubTab }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; shenfenId?: string; backTab: SubTab }
   | { page: 'create-proposal'; shenfenId: string; orgType: number; institutionName: string; duoqianAddress: string; adminWallets: AdminWalletMatch[]; backTab: SubTab }
-  | { page: 'propose-upgrade'; adminWallets: AdminWalletMatch[]; backTab: SubTab };
+  | { page: 'propose-upgrade'; adminWallets: AdminWalletMatch[]; backTab: SubTab }
+  | { page: 'propose-fee-rate'; shenfenId: string; institutionName: string; adminWallets: AdminWalletMatch[]; backTab: SubTab };
 
 type SubTab = 'proposals' | 'nrc' | 'prc' | 'prb' | 'dev-upgrade';
 
@@ -59,6 +61,19 @@ export function GovernanceSection() {
         adminWallets={view.adminWallets}
         onBack={() => setView({ page: view.backTab })}
         onSuccess={() => setView({ page: view.backTab })}
+      />
+    );
+  }
+
+  // 费率设置提案页
+  if (view.page === 'propose-fee-rate') {
+    return (
+      <FeeRateProposalPage
+        shenfenId={view.shenfenId}
+        institutionName={view.institutionName}
+        adminWallets={view.adminWallets}
+        onBack={() => setView({ page: 'institution-detail', shenfenId: view.shenfenId, backTab: view.backTab })}
+        onSuccess={() => setView({ page: 'institution-detail', shenfenId: view.shenfenId, backTab: view.backTab })}
       />
     );
   }
@@ -115,6 +130,9 @@ export function GovernanceSection() {
         }
         onCreateProposal={(sid, orgType, name, duoqian, aw) =>
           handleCreateProposal(sid, orgType, name, duoqian, aw, view.backTab)
+        }
+        onCreateFeeRate={(sid, name, aw) =>
+          setView({ page: 'propose-fee-rate', shenfenId: sid, institutionName: name, adminWallets: aw, backTab: view.backTab })
         }
       />
     );

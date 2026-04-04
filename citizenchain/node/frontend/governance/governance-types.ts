@@ -153,10 +153,17 @@ export type RuntimeUpgradeDetail = {
   status: number;
 };
 
+export type FeeRateProposalDetail = {
+  proposalId: number;
+  institutionHex: string;
+  newRateBp: number;
+};
+
 export type ProposalFullInfo = {
   meta: ProposalMeta;
   transferDetail: TransferProposalDetail | null;
   runtimeUpgradeDetail: RuntimeUpgradeDetail | null;
+  feeRateDetail: FeeRateProposalDetail | null;
   internalTally: VoteTally | null;
   jointTally: VoteTally | null;
   citizenTally: { yes: number; no: number } | null;

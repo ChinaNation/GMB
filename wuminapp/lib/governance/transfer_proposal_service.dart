@@ -33,6 +33,12 @@ class TransferProposalService {
   /// vote_transfer call_index=1。
   static const _voteCallIndex = 1;
 
+  /// OffchainTransactionPos pallet index（runtime pallet_index=21）。
+  static const _offchainPalletIndex = 21;
+
+  /// vote_institution_rate call_index=2。
+  static const _voteRateCallIndex = 2;
+
   /// Mortal era 周期。
   static const _eraPeriod = 64;
 
@@ -76,6 +82,26 @@ class TransferProposalService {
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     final callData = _buildVoteTransferCall(
+      proposalId: proposalId,
+      approve: approve,
+    );
+    return _signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+    );
+  }
+
+  /// 提交 vote_institution_rate extrinsic（费率投票）。
+  Future<({String txHash, int usedNonce})> submitVoteRate({
+    required int proposalId,
+    required bool approve,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+  }) async {
+    final callData = _buildVoteRateCall(
       proposalId: proposalId,
       approve: approve,
     );
@@ -222,8 +248,9 @@ class TransferProposalService {
       RuntimeUpgradeProposalInfo? runtimeUpgradeDetail;
       CreateDuoqianProposalInfo? createDuoqianDetail;
       CloseDuoqianProposalInfo? closeDuoqianDetail;
+      FeeRateProposalInfo? feeRateDetail;
       if (meta.kind == 0) {
-        // 内部投票提案 → 先尝试管理提案，再尝试转账提案
+        // 内部投票提案 → 先尝试管理提案，再尝试转账提案，最后尝试费率提案
         try {
           final manageService = DuoqianManageService(chainRpc: _rpc);
           final key = _buildStorageKey(
@@ -244,6 +271,14 @@ class TransferProposalService {
             }
           }
         } catch (_) {}
+        // 如果以上都没有匹配，尝试费率提案（RateProposalActions 存储）
+        if (transferDetail == null &&
+            createDuoqianDetail == null &&
+            closeDuoqianDetail == null) {
+          try {
+            feeRateDetail = await fetchRateProposalAction(meta.proposalId);
+          } catch (_) {}
+        }
       } else if (meta.kind == 1) {
         // 联合投票提案 → 尝试解码为 runtime 升级提案
         try {
@@ -259,6 +294,7 @@ class TransferProposalService {
         runtimeUpgradeDetail: runtimeUpgradeDetail,
         createDuoqianDetail: createDuoqianDetail?.copyWithStatus(meta.status),
         closeDuoqianDetail: closeDuoqianDetail?.copyWithStatus(meta.status),
+        feeRateDetail: feeRateDetail,
       ));
     }
 
@@ -401,12 +437,24 @@ class TransferProposalService {
       final runtimeUpgradeDetail = cachedRuntimeUpgradeDetails[id];
       final createDuoqianDetail = cachedCreateDuoqianDetails[id];
       final closeDuoqianDetail = cachedCloseDuoqianDetails[id];
+      // 如果都没匹配到，尝试费率提案
+      FeeRateProposalInfo? feeRateDetail;
+      if (transferDetail == null &&
+          runtimeUpgradeDetail == null &&
+          createDuoqianDetail == null &&
+          closeDuoqianDetail == null &&
+          meta.kind == 0) {
+        try {
+          feeRateDetail = await fetchRateProposalAction(id);
+        } catch (_) {}
+      }
       results.add(ProposalWithDetail(
         meta: meta,
         transferDetail: transferDetail?.copyWithStatus(meta.status),
         runtimeUpgradeDetail: runtimeUpgradeDetail,
         createDuoqianDetail: createDuoqianDetail?.copyWithStatus(meta.status),
         closeDuoqianDetail: closeDuoqianDetail?.copyWithStatus(meta.status),
+        feeRateDetail: feeRateDetail,
       ));
     }
 
@@ -450,6 +498,13 @@ class TransferProposalService {
         final closeDetail = proposal.closeDuoqianDetail;
         if (closeDetail != null &&
             _bytesEqual(closeDetail.institutionBytes, institutionBytes)) {
+          visibleProposals.add(proposal);
+          continue;
+        }
+        // 内部投票提案（费率设置等）：通过 institutionBytes 匹配
+        if (proposal.meta.kind == 0 &&
+            proposal.meta.institutionBytes != null &&
+            _bytesEqual(proposal.meta.institutionBytes!, institutionBytes)) {
           visibleProposals.add(proposal);
           continue;
         }
@@ -750,6 +805,43 @@ class TransferProposalService {
     return output.toBytes();
   }
 
+  /// 构造 vote_institution_rate call data。
+  ///
+  /// 格式：[0x15][0x02][proposal_id:u64_le][approve:bool]
+  Uint8List _buildVoteRateCall({
+    required int proposalId,
+    required bool approve,
+  }) {
+    final output = ByteOutput();
+    output.pushByte(_offchainPalletIndex);
+    output.pushByte(_voteRateCallIndex);
+    output.write(_u64ToLeBytes(proposalId));
+    output.pushByte(approve ? 1 : 0);
+    return output.toBytes();
+  }
+
+  /// 从链上 RateProposalActions 存储查询费率提案详情。
+  Future<FeeRateProposalInfo?> fetchRateProposalAction(int proposalId) async {
+    final key = _buildStorageKey(
+      'OffchainTransactionPos',
+      'RateProposalActions',
+      _u64ToLeBytes(proposalId),
+    );
+    final raw = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (raw == null || raw.length < 52) return null;
+    // RateProposalAction: institution([u8;48]) + new_rate_bp(u32_le)
+    final institutionHex = _hexEncode(raw.sublist(0, 48));
+    final rateBp = raw[48] |
+        (raw[49] << 8) |
+        (raw[50] << 16) |
+        (raw[51] << 24);
+    return FeeRateProposalInfo(
+      proposalId: proposalId,
+      institutionHex: institutionHex,
+      newRateBp: rateBp,
+    );
+  }
+
   /// 签名并提交 extrinsic（复用 onchain.dart 的流程）。
   ///
   /// 返回交易哈希和使用的 nonce（用于链上确认跟踪）。
@@ -1010,6 +1102,19 @@ class ProposalMeta {
 }
 
 /// 提案 + 业务详情（用于全局提案列表展示）。
+/// 费率提案详情。
+class FeeRateProposalInfo {
+  const FeeRateProposalInfo({
+    required this.proposalId,
+    required this.institutionHex,
+    required this.newRateBp,
+  });
+
+  final int proposalId;
+  final String institutionHex;
+  final int newRateBp;
+}
+
 class ProposalWithDetail {
   const ProposalWithDetail({
     required this.meta,
@@ -1017,6 +1122,7 @@ class ProposalWithDetail {
     this.runtimeUpgradeDetail,
     this.createDuoqianDetail,
     this.closeDuoqianDetail,
+    this.feeRateDetail,
   });
 
   final ProposalMeta meta;
@@ -1032,4 +1138,7 @@ class ProposalWithDetail {
 
   /// 关闭多签账户提案详情。
   final CloseDuoqianProposalInfo? closeDuoqianDetail;
+
+  /// 费率提案详情。
+  final FeeRateProposalInfo? feeRateDetail;
 }

@@ -131,11 +131,11 @@ class _DuoqianInstitutionListPageState
   }
 
   Future<void> _openCreateInstitution() async {
-    final wallets = await _getColdWallets();
+    final wallets = await _getWallets();
     if (!mounted || wallets.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请先导入冷钱包')),
+          const SnackBar(content: Text('请先导入钱包')),
         );
       }
       return;
@@ -170,10 +170,9 @@ class _DuoqianInstitutionListPageState
     if (created == true) await _load();
   }
 
-  Future<List<WalletProfile>> _getColdWallets() async {
+  Future<List<WalletProfile>> _getWallets() async {
     final wm = WalletManager();
-    final wallets = await wm.getWallets();
-    return wallets.where((w) => w.signMode == 'external').toList();
+    return wm.getWallets();
   }
 
   // ──── 卡片点击 ────

@@ -181,6 +181,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   void _showUserQrCode(WalletProfile wallet) {
     final qrData = jsonEncode({
       'proto': QrProtocols.user,
+      'purpose': 'transfer',
       'address': wallet.address,
       'pubkey': '0x${wallet.pubkeyHex}',
       'name': wallet.walletName,
