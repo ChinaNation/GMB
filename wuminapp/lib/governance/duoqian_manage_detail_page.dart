@@ -13,6 +13,7 @@ import 'institution_data.dart';
 import 'institution_admin_service.dart';
 import 'pending_vote_store.dart';
 import 'proposal_context.dart';
+import 'proposal_vote_widgets.dart';
 import 'transfer_proposal_service.dart';
 import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
@@ -43,9 +44,6 @@ class DuoqianManageDetailPage extends StatefulWidget {
 
 class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   static const int _statusVoting = 0;
-  static const int _statusPassed = 1;
-  static const int _statusRejected = 2;
-  static const int _statusExecuted = 3;
 
   final TransferProposalService _proposalService = TransferProposalService();
   final DuoqianManageService _manageService = DuoqianManageService();
@@ -188,33 +186,10 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
     return result;
   }
 
-  String _pubkeyToSS58(String pubkeyHex) {
-    final hex = pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex;
-    final bytes = _hexDecode(hex);
-    return Keyring().encodeAddress(bytes, 2027);
-  }
-
   String _truncateAddress(String address) {
     if (address.length <= 14) return address;
     return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
   }
-
-  String _statusLabel(int? status) {
-    switch (status) {
-      case _statusVoting:
-        return '投票中';
-      case _statusPassed:
-        return '已通过';
-      case _statusRejected:
-        return '已拒绝';
-      case _statusExecuted:
-        return '已执行';
-      default:
-        return '未知';
-    }
-  }
-
-  Color _statusColor(int? status) => AppTheme.proposalStatusColor(status ?? -1);
 
   // ──── 投票提交 ────
 
@@ -224,6 +199,18 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
     if (_selectedVoteWallet == null) return false;
     if (_status != _statusVoting) return false;
     return _votableWallets.isNotEmpty;
+  }
+
+  bool get _allVoted {
+    if (widget.adminWallets.isEmpty) return false;
+    for (final w in widget.adminWallets) {
+      var pk = w.pubkeyHex.toLowerCase();
+      if (pk.startsWith('0x')) pk = pk.substring(2);
+      if (_adminVotes[pk] == null && !_pendingPubkeys.contains(pk)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Future<void> _submitVote(bool approve) async {
@@ -401,7 +388,15 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
               _error == null &&
               _status == _statusVoting &&
               _isCurrentUserAdmin)
-          ? _buildVoteButtons()
+          ? ProposalVoteActions(
+              votableWallets: _votableWallets,
+              selectedWallet: _selectedVoteWallet,
+              submitting: _submitting,
+              canVote: _canVote,
+              allVoted: _allVoted,
+              onWalletChanged: (w) => setState(() => _selectedVoteWallet = w),
+              onVote: _confirmVote,
+            )
           : null,
     );
   }
@@ -442,79 +437,23 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          _buildStatusBadge(),
+          ProposalStatusBadge(status: _status, proposalId: widget.proposalId),
           const SizedBox(height: 16),
           _buildProposalInfoCard(),
           const SizedBox(height: 16),
-          _buildVotingProgress(),
+          ProposalVoteProgress(
+            yesCount: _yesCount,
+            noCount: _noCount,
+            threshold: widget.institution.internalThreshold,
+          ),
           const SizedBox(height: 16),
-          _buildAdminVoteList(),
+          ProposalAdminVoteList(
+            admins: _admins,
+            adminVotes: _adminVotes,
+            pendingPubkeys: _pendingPubkeys,
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildStatusBadge() {
-    final color = _statusColor(_status);
-    final label = _statusLabel(_status);
-    final typeLabel = _isCreateProposal ? '创建多签' : '关闭多签';
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _status == _statusVoting
-                    ? Icons.how_to_vote
-                    : _status == _statusPassed || _status == _statusExecuted
-                        ? Icons.check_circle
-                        : _status == _statusRejected
-                            ? Icons.cancel
-                            : Icons.error,
-                size: 16,
-                color: color,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppTheme.primaryDark.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            typeLabel,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.primaryDark,
-            ),
-          ),
-        ),
-        const Spacer(),
-        Text(
-          '提案 ${formatProposalId(widget.proposalId)}',
-          style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
-        ),
-      ],
     );
   }
 
@@ -622,247 +561,6 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
             child: Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
           ),
       ],
-    );
-  }
-
-  Widget _buildVotingProgress() {
-    final threshold = widget.institution.internalThreshold;
-    final progress =
-        threshold > 0 ? (_yesCount / threshold).clamp(0.0, 1.0) : 0.0;
-
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppTheme.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '投票进度',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.primaryDark,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 10,
-                backgroundColor: AppTheme.border,
-                valueColor:
-                    const AlwaysStoppedAnimation<Color>(AppTheme.primaryDark),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '赞成 $_yesCount / 阈值 $threshold',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.primaryDark,
-                  ),
-                ),
-                Text(
-                  '反对 $_noCount',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.danger,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAdminVoteList() {
-    final proposer = _createInfo?.proposer ?? _closeInfo?.proposer;
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppTheme.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Text(
-                '管理员投票明细（共 ${_admins.length} 人）',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.primaryDark,
-                ),
-              ),
-            ),
-            const Divider(),
-            ...List.generate(_admins.length, (index) {
-              final pubkey = _admins[index];
-              final vote = _adminVotes[pubkey];
-              final ss58 = _pubkeyToSS58(pubkey);
-              final isProposer = proposer == ss58;
-              final isPending = _pendingPubkeys.contains(pubkey);
-
-              return ListTile(
-                dense: true,
-                leading: CircleAvatar(
-                  radius: 16,
-                  backgroundColor: AppTheme.primaryDark.withValues(alpha: 0.08),
-                  child: Text(
-                    '${index + 1}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.primaryDark,
-                    ),
-                  ),
-                ),
-                title: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        _truncateAddress(ss58),
-                        style: const TextStyle(fontSize: 13),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (isProposer) ...[
-                      const SizedBox(width: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryDark.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          '发起人',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: AppTheme.primaryDark,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                trailing: isPending
-                    ? Icon(Icons.schedule, size: 18, color: AppTheme.warning)
-                    : vote == null
-                        ? Icon(Icons.remove_circle_outline,
-                            size: 18, color: AppTheme.border)
-                        : vote
-                            ? const Icon(Icons.check_circle,
-                                size: 18, color: AppTheme.success)
-                            : const Icon(Icons.cancel,
-                                size: 18, color: AppTheme.danger),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVoteButtons() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 钱包选择器
-            if (_votableWallets.length > 1) ...[
-              Row(
-                children: [
-                  Text('投票钱包：',
-                      style: TextStyle(
-                          fontSize: 12, color: AppTheme.textSecondary)),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: DropdownButton<WalletProfile>(
-                      isExpanded: true,
-                      isDense: true,
-                      value: _selectedVoteWallet,
-                      items: _votableWallets.map((w) {
-                        return DropdownMenuItem(
-                          value: w,
-                          child: Text(
-                            '${w.walletName} (${_truncateAddress(w.address)})',
-                            style: const TextStyle(fontSize: 12),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (w) => setState(() => _selectedVoteWallet = w),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-            ],
-            // 投票按钮
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _canVote && !_submitting
-                        ? () => _confirmVote(false)
-                        : null,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.danger,
-                      side: BorderSide(
-                          color: _canVote ? AppTheme.danger : AppTheme.border),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: const Text('反对', style: TextStyle(fontSize: 15)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _canVote && !_submitting
-                        ? () => _confirmVote(true)
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryDark,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: _submitting
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('赞成', style: TextStyle(fontSize: 15)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 

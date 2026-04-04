@@ -63,7 +63,11 @@ pub fn run_desktop() {
             governance::build_propose_upgrade_request,
             governance::submit_propose_upgrade,
             governance::submit_vote,
-            governance::check_vote_status
+            governance::check_vote_status,
+            governance::build_rate_vote_request,
+            governance::build_propose_rate_request,
+            governance::submit_propose_rate,
+            governance::query_institution_rate_bp
         ])
         .setup(|app| {
             cleanup_on_startup(app.handle());

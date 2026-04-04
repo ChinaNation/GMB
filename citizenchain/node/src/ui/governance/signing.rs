@@ -371,6 +371,165 @@ pub fn build_propose_transfer_sign_request(
     })
 }
 
+/// 构建 vote_institution_rate 签名请求（费率投票：pallet=21, call=2）。
+pub fn build_rate_vote_sign_request(
+    proposal_id: u64,
+    pubkey_hex: &str,
+    approve: bool,
+) -> Result<VoteSignRequestResult, String> {
+    let pubkey_clean = pubkey_hex
+        .strip_prefix("0x")
+        .unwrap_or(pubkey_hex)
+        .to_ascii_lowercase();
+    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("公钥格式无效，应为 64 位十六进制".to_string());
+    }
+    let pubkey_bytes = hex::decode(&pubkey_clean)
+        .map_err(|e| format!("公钥解码失败: {e}"))?;
+
+    let (spec_version, tx_version) = fetch_runtime_version()?;
+    let genesis_hash = fetch_genesis_hash()?;
+    let (block_hash, block_number) = fetch_latest_block()?;
+    let nonce = fetch_nonce(&pubkey_clean)?;
+
+    // call data: [pallet=21][call=2][proposal_id:u64_le][approve:bool]
+    let mut call_data = Vec::with_capacity(11);
+    call_data.push(21u8); // OffchainTransactionPos pallet
+    call_data.push(2u8);  // vote_institution_rate call
+    call_data.extend_from_slice(&proposal_id.to_le_bytes());
+    call_data.push(if approve { 1u8 } else { 0u8 });
+
+    let payload = build_signing_payload(
+        &call_data, &genesis_hash, &block_hash, block_number,
+        nonce, spec_version, tx_version,
+    );
+    let payload_hash = sha256_hash(&payload);
+    let request_id = generate_request_id("rate-vote");
+    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
+
+    let display = serde_json::json!({
+        "action": "vote_institution_rate",
+        "action_label": "费率投票",
+        "summary": format!("费率提案 #{proposal_id} 投票：{}", if approve { "赞成" } else { "反对" }),
+        "fields": [
+            { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
+            { "key": "approve", "label": "投票", "value": approve.to_string() }
+        ]
+    });
+
+    let now = now_secs();
+    let request = QrSignRequest {
+        proto: PROTOCOL_VERSION.to_string(),
+        msg_type: "sign_request".to_string(),
+        request_id: request_id.clone(),
+        account: account_ss58,
+        pubkey: format!("0x{pubkey_clean}"),
+        sig_alg: "sr25519".to_string(),
+        payload_hex: format!("0x{}", hex::encode(&payload)),
+        issued_at: now,
+        expires_at: now + DEFAULT_TTL_SECS,
+        display,
+        spec_version: Some(spec_version),
+    };
+
+    let request_json = serde_json::to_string(&request)
+        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+
+    Ok(VoteSignRequestResult {
+        request_json,
+        request_id,
+        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
+        sign_nonce: nonce,
+        sign_block_number: block_number,
+    })
+}
+
+/// 构建 propose_institution_rate 签名请求（费率设置提案：pallet=21, call=1）。
+pub fn build_propose_rate_sign_request(
+    pubkey_hex: &str,
+    shenfen_id: &str,
+    new_rate_bp: u32,
+) -> Result<VoteSignRequestResult, String> {
+    // 验证公钥
+    let pubkey_clean = pubkey_hex
+        .strip_prefix("0x")
+        .unwrap_or(pubkey_hex)
+        .to_ascii_lowercase();
+    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("公钥格式无效，应为 64 位十六进制".to_string());
+    }
+    let pubkey_bytes = hex::decode(&pubkey_clean)
+        .map_err(|e| format!("公钥解码失败: {e}"))?;
+
+    // 验证费率范围 1-10 bp
+    if !(1..=10).contains(&new_rate_bp) {
+        return Err(format!("费率必须在 1-10 bp 范围内，当前值: {new_rate_bp}"));
+    }
+
+    let institution_id = super::storage_keys::shenfen_id_to_fixed48(shenfen_id);
+
+    let (spec_version, tx_version) = fetch_runtime_version()?;
+    let genesis_hash = fetch_genesis_hash()?;
+    let (block_hash, block_number) = fetch_latest_block()?;
+    let nonce = fetch_nonce(&pubkey_clean)?;
+
+    // call data: [0x15][0x01][institution:48][new_rate_bp:u32_le]
+    // pallet 21 = OffchainTransactionPos, call_index 1 = propose_institution_rate
+    let mut call_data = Vec::with_capacity(2 + 48 + 4);
+    call_data.push(21u8); // OffchainTransactionPos pallet
+    call_data.push(1u8);  // propose_institution_rate call
+    call_data.extend_from_slice(&institution_id);
+    call_data.extend_from_slice(&new_rate_bp.to_le_bytes());
+
+    let payload = build_signing_payload(
+        &call_data, &genesis_hash, &block_hash, block_number,
+        nonce, spec_version, tx_version,
+    );
+    let payload_hash = sha256_hash(&payload);
+    let request_id = generate_request_id("rate");
+    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
+
+    let rate_percent = format!("{:.2}%", new_rate_bp as f64 / 100.0);
+    let entry = super::find_entry(shenfen_id);
+    let inst_name = entry.map(|e| e.name).unwrap_or("未知机构");
+
+    let display = serde_json::json!({
+        "action": "propose_institution_rate",
+        "action_label": "设置费率提案",
+        "summary": format!("{inst_name} 提案设置链下交易费率为 {rate_percent}"),
+        "fields": [
+            { "key": "institution", "label": "省储行", "value": inst_name },
+            { "key": "new_rate_bp", "label": "新费率", "value": format!("{new_rate_bp} bp ({rate_percent})") }
+        ]
+    });
+
+    let now = now_secs();
+    let request = QrSignRequest {
+        proto: PROTOCOL_VERSION.to_string(),
+        msg_type: "sign_request".to_string(),
+        request_id: request_id.clone(),
+        account: account_ss58,
+        pubkey: format!("0x{pubkey_clean}"),
+        sig_alg: "sr25519".to_string(),
+        payload_hex: format!("0x{}", hex::encode(&payload)),
+        issued_at: now,
+        expires_at: now + DEFAULT_TTL_SECS,
+        display,
+        spec_version: Some(spec_version),
+    };
+
+    let request_json = serde_json::to_string(&request)
+        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+
+    Ok(VoteSignRequestResult {
+        request_json,
+        request_id,
+        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
+        sign_nonce: nonce,
+        sign_block_number: block_number,
+    })
+}
+
 /// 构建 developer_direct_upgrade 签名请求（开发期快捷升级：pallet=13, call=2）。
 /// wasm_path 为编译产物的绝对路径，后端直接读文件。
 pub fn build_developer_upgrade_sign_request(

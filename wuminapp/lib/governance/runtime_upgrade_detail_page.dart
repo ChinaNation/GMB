@@ -15,6 +15,7 @@ import '../rpc/onchain.dart';
 import '../rpc/smoldot_client.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
+import 'proposal_vote_widgets.dart';
 
 /// Runtime 升级提案详情页。
 ///
@@ -422,45 +423,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     );
   }
 
-  String _statusLabel(int? status) {
-    switch (status) {
-      case 0:
-        return '投票中';
-      case 1:
-        return '已通过';
-      case 2:
-        return '已拒绝';
-      case 3:
-        return '已执行';
-      case 4:
-        return '执行失败';
-      default:
-        return '未知';
-    }
-  }
-
-  Color _statusColor(int? status) {
-    if (status == 4) return AppTheme.warning;
-    return AppTheme.proposalStatusColor(status ?? -1);
-  }
-
-  IconData _statusIcon(int? status) {
-    switch (status) {
-      case 0:
-        return Icons.how_to_vote;
-      case 1:
-        return Icons.check_circle;
-      case 2:
-        return Icons.cancel;
-      case 3:
-        return Icons.task_alt;
-      case 4:
-        return Icons.error;
-      default:
-        return Icons.help_outline;
-    }
-  }
-
   int? _resolvedStatusCode() {
     // 中文注释：业务提案自己的 3 表示“执行失败”，投票引擎元数据的 3 表示“已执行”；
     // 详情页优先展示业务状态，避免把已执行误标成失败。
@@ -541,7 +503,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          _buildStatusBadge(),
+          ProposalStatusBadge(status: _meta?.status, proposalId: widget.proposalId),
           const SizedBox(height: 16),
           _buildProposalInfoCard(),
           const SizedBox(height: 16),
@@ -556,45 +518,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           ],
         ],
       ),
-    );
-  }
-
-  Widget _buildStatusBadge() {
-    final status = _resolvedStatusCode();
-    final color = _statusColor(status);
-    final label = _statusLabel(status);
-    final icon = _statusIcon(status);
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Spacer(),
-        Text(
-          '提案 ${formatProposalId(widget.proposalId)}',
-          style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
-        ),
-      ],
     );
   }
 

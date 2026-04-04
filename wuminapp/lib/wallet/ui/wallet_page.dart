@@ -646,6 +646,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   @override
   void dispose() {
     _nameEditController.dispose();
+    ChainTxMonitor.instance.onBalanceChanged = null;
     if (_screenshotGuardActive) ScreenshotGuard.disable();
     super.dispose();
   }
@@ -657,11 +658,19 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     _nameEditController = TextEditingController(text: _walletName);
     _loadRecentRecords();
     _loadClearingBank();
-    // 中文注释：启动链上交易监控（监控当前钱包的链上事件）。
+    // 中文注释：启动链上交易监控（余额变化触发模式）。
     ChainTxMonitor.instance.watchWallet(
       widget.wallet.address,
       widget.wallet.pubkeyHex,
     );
+    // 中文注释：注册余额变动回调，刷新交易记录和余额显示。
+    ChainTxMonitor.instance.onBalanceChanged = (address, newBalance) {
+      if (mounted && address == widget.wallet.address) {
+        _loadRecentRecords();
+        // 更新本地存储的余额
+        _walletService.setWalletBalance(widget.wallet.walletIndex, newBalance);
+      }
+    };
     ChainTxMonitor.instance.start();
   }
 
@@ -767,85 +776,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         await _revealSecret('助记词', () async {
           return _walletService.getMnemonic(widget.wallet.walletIndex);
         });
-      case 'sync_history':
-        await _syncHistory();
-    }
-  }
-
-  /// 中文注释：同步历史交易记录。
-  Future<void> _syncHistory() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('同步历史记录'),
-        content: const Text(
-          '将从区块链扫描该钱包最近 100 个区块的交易记录。\n\n确认开始？',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('开始同步'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    // 中文注释：显示同步进度对话框。
-    int scanned = 0;
-    int total = 0;
-    void Function(int, int)? progressCallback;
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (progressContext) => StatefulBuilder(
-        builder: (ctx, setProgressState) {
-          progressCallback = (s, t) {
-            setProgressState(() {
-              scanned = s;
-              total = t;
-            });
-          };
-          return AlertDialog(
-            title: const Text('正在同步'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (total > 0) LinearProgressIndicator(value: scanned / total),
-                const SizedBox(height: 8),
-                Text('已扫描 $scanned / $total 个区块'),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-
-    try {
-      await ChainTxMonitor.instance.syncHistory(
-        walletAddress: widget.wallet.address,
-        pubkeyHex: widget.wallet.pubkeyHex,
-        onProgress: (s, t) => progressCallback?.call(s, t),
-      );
-      if (mounted) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('历史记录同步完成')),
-        );
-        _loadRecentRecords();
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('同步失败：$e')),
-        );
-      }
     }
   }
 
@@ -1036,8 +966,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                   const PopupMenuItem(value: 'seed', child: Text('查看私钥')),
                   const PopupMenuItem(value: 'mnemonic', child: Text('查看助记词')),
                 ],
-                const PopupMenuItem(
-                    value: 'sync_history', child: Text('同步历史记录')),
               ],
             ),
           ],

@@ -17,7 +17,7 @@ use sp_api::Core as CoreApi;
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
-use sp_core::{crypto::KeyTypeId, H256};
+use sp_core::{crypto::KeyTypeId, sr25519, Pair, H256};
 use sp_keystore::Keystore;
 use sp_runtime::{
     generic::Era, traits::IdentifyAccount, MultiSigner, OpaqueExtrinsic, SaturatedConversion,
@@ -470,8 +470,53 @@ where
                         let payer = parse_ss58_account(payer_hex)?;
                         let recipient = parse_ss58_account(recipient_hex)?;
 
-                        // 5. TODO: 验证顾客签名（sr25519）
-                        // 当前暂时跳过签名验证，等 payload 格式对齐后补充
+                        // 5. 验证顾客 sr25519 签名
+                        {
+                            let sig_bytes = hex::decode(
+                                signature_hex.strip_prefix("0x").unwrap_or(signature_hex),
+                            )
+                            .map_err(|_| {
+                                ErrorObject::owned(-5, "签名格式错误", None::<()>)
+                            })?;
+                            if sig_bytes.len() != 64 {
+                                return Err(ErrorObject::owned(
+                                    -5,
+                                    format!("签名长度无效：期望 64 字节，实际 {}", sig_bytes.len()),
+                                    None::<()>,
+                                ));
+                            }
+
+                            // 重建 178 字节 payload：[21][99][payer:32][recipient:32][amount:u128][fee:u128][tx_id:32][bank:48]
+                            let payer_bytes: &[u8; 32] = payer.as_ref();
+                            let recipient_bytes: &[u8; 32] = recipient.as_ref();
+                            let mut payload = Vec::with_capacity(178);
+                            payload.push(21u8);  // pallet OffchainTransactionPos
+                            payload.push(99u8);  // call offchain_pay
+                            payload.extend_from_slice(payer_bytes);
+                            payload.extend_from_slice(recipient_bytes);
+                            payload.extend_from_slice(&amount_fen.to_le_bytes());
+                            payload.extend_from_slice(&fee_fen.to_le_bytes());
+                            payload.extend_from_slice(&tx_id_bytes);
+                            // bank shenfen_id 补零到 48 字节
+                            let bank_raw = bank.as_bytes();
+                            let mut bank_padded = [0u8; 48];
+                            let copy_len = bank_raw.len().min(48);
+                            bank_padded[..copy_len].copy_from_slice(&bank_raw[..copy_len]);
+                            payload.extend_from_slice(&bank_padded);
+
+                            // sr25519 验签
+                            let public = sp_core::sr25519::Public::from_raw(*payer_bytes);
+                            let mut sig_arr = [0u8; 64];
+                            sig_arr.copy_from_slice(&sig_bytes);
+                            let signature = sp_core::sr25519::Signature::from_raw(sig_arr);
+                            if !<sr25519::Pair as Pair>::verify(&signature, &payload, &public) {
+                                return Err(ErrorObject::owned(
+                                    -5,
+                                    "签名验证失败：签名与付款人不匹配",
+                                    None::<()>,
+                                ));
+                            }
+                        }
 
                         // 6. 查链上余额
                         let best_hash = client.info().best_hash;
@@ -549,9 +594,11 @@ where
             )?;
         }
 
-        // offchain_queryTxStatus：查询链下交易状态
+        // offchain_queryTxStatus：查询链下交易状态（三级：confirmed / onchain / unknown）
         {
             let ledger = ledger.clone();
+            let client = client.clone();
+            let shenfen_id = shenfen_id.clone();
             module.register_method("offchain_queryTxStatus", move |params, _, _| {
                 use jsonrpsee::types::error::ErrorObject;
 
@@ -565,19 +612,55 @@ where
                 .map_err(|_| ErrorObject::owned(-2, "tx_id 格式错误", None::<()>))?;
                 let tx_id = H256::from_slice(&tx_id_bytes);
 
-                let result: Result<serde_json::Value, jsonrpsee::types::ErrorObjectOwned> = if ledger.is_duplicate(&tx_id) {
-                    Ok(serde_json::json!({
-                        "tx_id": tx_id_hex,
-                        "status": "confirmed",
-                    }))
+                // 判断三级状态
+                let status = if ledger.is_duplicate(&tx_id) {
+                    // 1. 在本地账本中 → "confirmed"（已支付，待上链）
+                    "confirmed"
                 } else {
-                    // TODO: 查链上 ProcessedOffchainTx 判断是否已上链
-                    Ok(serde_json::json!({
-                        "tx_id": tx_id_hex,
-                        "status": "unknown",
-                    }))
+                    // 2. 查链上 ProcessedOffchainTx 存储
+                    let t2 = shenfen_id
+                        .split('-')
+                        .nth(1)
+                        .and_then(|seg| {
+                            let b = seg.as_bytes();
+                            if b.len() >= 2 && b[0].is_ascii_uppercase() && b[1].is_ascii_uppercase() {
+                                Some([b[0], b[1]])
+                            } else {
+                                None
+                            }
+                        });
+
+                    let on_chain = match t2 {
+                        Some(t2_code) => {
+                            let mut key = Vec::new();
+                            let pallet_hash = sp_core::hashing::twox_128(b"OffchainTransactionPos");
+                            key.extend_from_slice(&pallet_hash);
+                            let storage_hash = sp_core::hashing::twox_128(b"ProcessedOffchainTx");
+                            key.extend_from_slice(&storage_hash);
+                            let t2_hash = sp_core::hashing::blake2_128(&t2_code);
+                            key.extend_from_slice(&t2_hash);
+                            key.extend_from_slice(&t2_code);
+                            let tx_hash = sp_core::hashing::blake2_128(tx_id.as_ref());
+                            key.extend_from_slice(&tx_hash);
+                            key.extend_from_slice(tx_id.as_ref());
+
+                            let best_hash = client.info().best_hash;
+                            client
+                                .storage(best_hash, &sp_storage::StorageKey(key))
+                                .ok()
+                                .flatten()
+                                .is_some()
+                        }
+                        None => false,
+                    };
+
+                    if on_chain { "onchain" } else { "unknown" }
                 };
-                result
+
+                Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(serde_json::json!({
+                    "tx_id": tx_id_hex,
+                    "status": status,
+                }))
             })?;
         }
 
