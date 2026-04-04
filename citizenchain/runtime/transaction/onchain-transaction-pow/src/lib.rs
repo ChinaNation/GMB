@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use codec::Decode;
 use frame_support::traits::{
     fungible::Inspect,
     tokens::{
@@ -38,7 +39,7 @@ const EXPECTED_FEE_PERCENT_TOTAL: u32 = 100;
 const _: () = {
     let total_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT
         .saturating_add(primitives::core_const::ONCHAIN_FEE_NRC_PERCENT)
-        .saturating_add(primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT);
+        .saturating_add(primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT);
     assert!(
         total_percent == EXPECTED_FEE_PERCENT_TOTAL,
         "fee distribution percents must sum to 100"
@@ -54,16 +55,16 @@ const _: () = {
 };
 
 /// 链上 PoW 交易手续费分配器（统一入口）：
-/// - 全节点（绑定钱包）分成：`ONCHAIN_FEE_FULLNODE_PERCENT`
-/// - 国储会分成：`ONCHAIN_FEE_NRC_PERCENT`
-/// - 黑洞销毁：`ONCHAIN_FEE_BLACKHOLE_PERCENT`
+/// - 全节点（绑定钱包）分成：`ONCHAIN_FEE_FULLNODE_PERCENT`（80%）
+/// - 国储会手续费账户分成：`ONCHAIN_FEE_NRC_PERCENT`（10%）
+/// - 安全基金账户分成：`ONCHAIN_FEE_SAFETY_FUND_PERCENT`（10%）
 pub struct PowOnchainFeeRouter<T, Currency, AuthorFinder, NrcAccountProvider>(
     PhantomData<(T, Currency, AuthorFinder, NrcAccountProvider)>,
 );
 
 /// 金额提取分类结果：
-/// - Amount: 确认是“有金额交易”，并返回金额
-/// - NoAmount: 确认是“无金额交易”
+/// - Amount: 确认是"有金额交易"，并返回金额
+/// - NoAmount: 确认是"无金额交易"
 /// - Unknown: 无法确认（按制度应拒绝，避免漏提取）
 pub enum AmountExtractResult<Balance> {
     Amount(Balance),
@@ -71,9 +72,9 @@ pub enum AmountExtractResult<Balance> {
     Unknown,
 }
 
-/// 统一抽象：由 Runtime 提供“交易金额提取器”。
+/// 统一抽象：由 Runtime 提供"交易金额提取器"。
 pub trait CallAmount<AccountId, Call, Balance> {
-    /// 从具体交易中抽取“制度定义的交易金额”。
+    /// 从具体交易中抽取"制度定义的交易金额"。
     /// 这里故意不和 weight fee/length fee 绑定，避免 runtime 规则被默认手续费模型覆盖。
     fn amount(who: &AccountId, call: &Call) -> AmountExtractResult<Balance>;
 }
@@ -83,7 +84,7 @@ pub trait CallAmount<AccountId, Call, Balance> {
 /// - Some(account)：从指定账户扣费
 pub trait CallFeePayer<AccountId, Call> {
     /// 返回代付账户；若为 None，则仍由交易提交者本人扣费。
-    /// 该扩展点只负责“选择谁付款”，不改变手续费金额计算规则。
+    /// 该扩展点只负责"选择谁付款"，不改变手续费金额计算规则。
     fn fee_payer(who: &AccountId, call: &Call) -> Option<AccountId>;
 }
 
@@ -139,7 +140,7 @@ where
         tip: Self::Balance,
     ) -> Result<Self::LiquidityInfo, TransactionValidityError> {
         // 中文注释：这里完全忽略 pallet-transaction-payment 传入的 _fee_with_tip，
-        // 改为执行本模块自定义的“按业务金额收费”规则。
+        // 改为执行本模块自定义的"按业务金额收费"规则。
         let fee_with_tip =
             custom_fee_with_tip::<T, Currency, AmountExtractor>(who, call, dispatch_info, tip)?;
         if fee_with_tip.is_zero() {
@@ -147,7 +148,7 @@ where
         }
         let payer = FeePayerExtractor::fee_payer(who, call).unwrap_or_else(|| who.clone());
 
-        // 中文注释：扣费使用 Exact，避免”只扣到一部分也继续执行”。
+        // 中文注释：扣费使用 Exact，避免"只扣到一部分也继续执行"。
         let credit = Currency::withdraw(
             &payer,
             fee_with_tip,
@@ -179,7 +180,7 @@ where
         tip: Self::Balance,
     ) -> Result<(), TransactionValidityError> {
         // 中文注释：预检查与正式扣费保持同一套金额计算逻辑，
-        // 否则容易出现“预检查能过、正式扣费失败”的行为偏差。
+        // 否则容易出现"预检查能过、正式扣费失败"的行为偏差。
         let fee_with_tip =
             custom_fee_with_tip::<T, Currency, AmountExtractor>(who, call, dispatch_info, tip)?;
         if fee_with_tip.is_zero() {
@@ -200,7 +201,7 @@ where
         _tip: Self::Balance,
         liquidity_info: Self::LiquidityInfo,
     ) -> Result<(), TransactionValidityError> {
-        // 中文注释：本制度按交易金额固定收费，协议上明确“不做执行后退款”；
+        // 中文注释：本制度按交易金额固定收费，协议上明确"不做执行后退款"；
         // 因此 corrected_fee_with_tip 在此实现中被有意忽略。
         if let Some((fee_credit, tip_credit)) = liquidity_info {
             Router::on_unbalanceds(Some(fee_credit).into_iter().chain(Some(tip_credit)));
@@ -239,10 +240,10 @@ where
     fn on_nonzero_unbalanced(amount: Credit<T::AccountId, Currency>) {
         let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT;
         let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT;
-        let blackhole_percent = primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT;
+        let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT;
         let total_percent = fullnode_percent
             .saturating_add(nrc_percent)
-            .saturating_add(blackhole_percent);
+            .saturating_add(safety_fund_percent);
         debug_assert_eq!(
             total_percent, EXPECTED_FEE_PERCENT_TOTAL,
             "fee distribution constants must sum to 100"
@@ -253,15 +254,15 @@ where
             return;
         }
 
-        // 中文注释：先切出全节点份额，再把剩余部分在 NRC 和黑洞之间二次切分，
+        // 中文注释：先切出全节点份额，再把剩余部分在 NRC 和安全基金之间二次切分，
         // 可以避免三项分账时因为整数除法带来更复杂的舍入误差。
         let (fullnode_credit, remainder) = amount.ration(
             fullnode_percent,
             total_percent.saturating_sub(fullnode_percent),
         );
-        let (nrc_credit, blackhole_credit) = remainder.ration(nrc_percent, blackhole_percent);
+        let (nrc_credit, safety_fund_credit) = remainder.ration(nrc_percent, safety_fund_percent);
 
-        // 中文注释：手续费全节点分成只发给“当前区块作者对应绑定钱包”；未绑定则不分配（自动销毁）。
+        // 中文注释：手续费全节点分成只发给"当前区块作者对应绑定钱包"；未绑定则不分配（自动销毁）。
         let digest = <frame_system::Pallet<T>>::digest();
         let pre_runtime_digests = digest.logs().iter().filter_map(|d| d.as_pre_runtime());
         match AuthorFinder::find_author(pre_runtime_digests) {
@@ -291,26 +292,44 @@ where
             }
         }
 
-        // 中文注释：国储会分成发到 CHINA_CB[0] 对应交易地址；解析失败则自动销毁。
-        if let Some(nrc_account) = NrcProvider::nrc_account() {
-            // 中文注释：resolve 失败通常意味着目标账户状态不满足入账条件，
-            // 此时继续保留 credit 比误转更危险，因此直接销毁。
-            if let Err(remaining) = Currency::resolve(&nrc_account, nrc_credit) {
+        // 中文注释：国储会手续费账户分成。
+        if let Some(nrc_fee_account) = NrcProvider::nrc_account() {
+            if let Err(remaining) = Currency::resolve(&nrc_fee_account, nrc_credit) {
                 log::warn!(
                     target: "runtime::onchain_transaction_pow",
-                    "burn nrc fee share: failed to resolve nrc account credit: {:?}",
+                    "nrc fee share: failed to resolve nrc fee account credit: {:?}",
                     remaining.peek()
                 );
             }
         } else {
             log::warn!(
                 target: "runtime::onchain_transaction_pow",
-                "burn nrc fee share: nrc account decode failed"
+                "nrc fee share: nrc fee account not configured"
             );
         }
-        // 中文注释：黑洞分成改为“直接销毁”（不入任何地址），总发行量同步减少。
-        drop(blackhole_credit);
-        // 未被 resolve 的余额离开作用域后自动销毁。
+
+        // 中文注释：安全基金账户分成（NRC_ANQUAN_ADDRESS 常量地址）。
+        let safety_fund_account = T::AccountId::decode(
+            &mut &primitives::china::china_cb::NRC_ANQUAN_ADDRESS[..],
+        );
+        match safety_fund_account {
+            Ok(account) => {
+                if let Err(remaining) = Currency::resolve(&account, safety_fund_credit) {
+                    log::warn!(
+                        target: "runtime::onchain_transaction_pow",
+                        "safety fund fee share: failed to resolve credit: {:?}",
+                        remaining.peek()
+                    );
+                }
+            }
+            Err(_) => {
+                log::error!(
+                    target: "runtime::onchain_transaction_pow",
+                    "safety fund fee share: NRC_ANQUAN_ADDRESS decode failed (should never happen)"
+                );
+                drop(safety_fund_credit);
+            }
+        }
     }
 }
 
@@ -336,7 +355,7 @@ where
     let amount_u128: u128 = amount.saturated_into();
     let by_rate: u128 = mul_perbill_round(amount_u128, primitives::core_const::ONCHAIN_FEE_RATE);
     let min_fee: u128 = primitives::core_const::ONCHAIN_MIN_FEE; // 0.1元=10分
-                                                                 // 中文注释：业务制度要求“按比例收费，但永远不少于最低费”。
+                                                                 // 中文注释：业务制度要求"按比例收费，但永远不少于最低费"。
     let base_fee: <Currency as Inspect<T::AccountId>>::Balance =
         by_rate.max(min_fee).saturated_into();
     Ok(base_fee.saturating_add(tip))
@@ -344,7 +363,7 @@ where
 
 /// 使用旧版 `Currency` trait 从指定账户扣取手续费并按制度分账。
 ///
-/// 分账规则：全节点矿工奖励钱包 80% / 国储会 10% / 销毁 10%。
+/// 分账规则：全节点矿工奖励钱包 80% / 国储会 10% / 安全基金 10%。
 /// `miner_wallet`：当前区块矿工绑定的奖励钱包；`nrc_account`：国储会账户。
 /// 按交易金额计算链上手续费（对外公开，供其他 pallet 复用）。
 ///
@@ -356,13 +375,13 @@ pub fn calculate_onchain_fee(amount: u128) -> u128 {
 }
 
 fn mul_perbill_round(amount: u128, rate: sp_runtime::Perbill) -> u128 {
-    // 中文注释：链上精度为“分”，这里做四舍五入到分。
+    // 中文注释：链上精度为"分"，这里做四舍五入到分。
     const PERBILL_DENOMINATOR: u128 = 1_000_000_000;
     let parts: u128 = rate.deconstruct() as u128;
     let whole = amount / PERBILL_DENOMINATOR;
     let remainder = amount % PERBILL_DENOMINATOR;
 
-    // 中文注释：先拆成“整分量”和“小数尾量”分别计算，避免 `amount * parts`
+    // 中文注释：先拆成"整分量"和"小数尾量"分别计算，避免 `amount * parts`
     // 在极大金额下先溢出再饱和，导致费率结果被错误压扁。
     let whole_component = whole * parts;
     let remainder_component =
@@ -680,31 +699,30 @@ mod tests {
     }
 
     #[test]
-    fn fee_router_distributes_to_bound_author_wallet_and_nrc_then_burns_remainder() {
+    fn fee_router_distributes_to_bound_author_wallet_and_nrc_and_safety_fund() {
         new_test_ext().execute_with(|| {
             let payer = account(1);
             let miner = account(9);
             let reward_wallet = account(8);
             let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
+            let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let issuance_before = Balances::total_issuance();
             let total_fee = 100u128;
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let blackhole_percent = primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT as u128;
+            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
-                .saturating_add(blackhole_percent);
+                .saturating_add(safety_fund_percent);
             let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
             let remainder = total_fee.saturating_sub(expected_fullnode);
-            let expected_nrc = if nrc_percent.saturating_add(blackhole_percent) == 0 {
+            let expected_nrc = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
                 0
             } else {
                 remainder.saturating_mul(nrc_percent)
-                    / nrc_percent.saturating_add(blackhole_percent)
+                    / nrc_percent.saturating_add(safety_fund_percent)
             };
-            let expected_burn = total_fee
-                .saturating_sub(expected_fullnode)
-                .saturating_sub(expected_nrc);
+            let expected_safety_fund = remainder.saturating_sub(expected_nrc);
 
             fullnode_pow_reward::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
@@ -721,9 +739,11 @@ mod tests {
             PowOnchainFeeRouter::<Test, Balances, MockFindAuthor, MockNrcAccountProvider>::on_nonzero_unbalanced(credit);
 
             assert_eq!(Balances::free_balance(payer), 900);
-            assert_eq!(Balances::free_balance(reward_wallet), expected_fullnode);
-            assert_eq!(Balances::free_balance(nrc), expected_nrc);
-            assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
+            assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
+            assert_eq!(Balances::free_balance(&nrc), expected_nrc);
+            assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
+            // 所有手续费都已分配到各账户，无销毁。
+            assert_eq!(Balances::total_issuance(), issuance_before);
         });
     }
 
@@ -734,24 +754,26 @@ mod tests {
             let miner = account(7);
             let missing_wallet = account(6);
             let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
+            let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let issuance_before = Balances::total_issuance();
             let total_fee = 100u128;
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let blackhole_percent = primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT as u128;
+            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
-                .saturating_add(blackhole_percent);
+                .saturating_add(safety_fund_percent);
             let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
             let remainder = total_fee.saturating_sub(expected_fullnode);
-            let expected_nrc = if nrc_percent.saturating_add(blackhole_percent) == 0 {
+            let expected_nrc = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
                 0
             } else {
                 remainder.saturating_mul(nrc_percent)
-                    / nrc_percent.saturating_add(blackhole_percent)
+                    / nrc_percent.saturating_add(safety_fund_percent)
             };
-            let expected_burn = total_fee
-                .saturating_sub(expected_nrc);
+            let expected_safety_fund = remainder.saturating_sub(expected_nrc);
+            // 无作者钱包时：全节点分成销毁，NRC 和安全基金正常分配。
+            let expected_burn = expected_fullnode;
 
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
             assert_eq!(fullnode_pow_reward::RewardWalletByMiner::<Test>::get(&miner), None);
@@ -769,8 +791,8 @@ mod tests {
 
             assert_eq!(Balances::free_balance(payer), 900);
             assert_eq!(Balances::free_balance(missing_wallet), 0);
-            assert_eq!(Balances::free_balance(nrc), expected_nrc);
-            // 无作者钱包时：全节点分成+黑洞分成均销毁。
+            assert_eq!(Balances::free_balance(&nrc), expected_nrc);
+            assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
             assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
         });
     }
@@ -780,23 +802,26 @@ mod tests {
         new_test_ext().execute_with(|| {
             let payer = account(1);
             let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
+            let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let issuance_before = Balances::total_issuance();
             let total_fee = 100u128;
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let blackhole_percent = primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT as u128;
+            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
-                .saturating_add(blackhole_percent);
+                .saturating_add(safety_fund_percent);
             let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
             let remainder = total_fee.saturating_sub(expected_fullnode);
-            let expected_nrc = if nrc_percent.saturating_add(blackhole_percent) == 0 {
+            let expected_nrc = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
                 0
             } else {
                 remainder.saturating_mul(nrc_percent)
-                    / nrc_percent.saturating_add(blackhole_percent)
+                    / nrc_percent.saturating_add(safety_fund_percent)
             };
-            let expected_burn = total_fee.saturating_sub(expected_nrc);
+            let expected_safety_fund = remainder.saturating_sub(expected_nrc);
+            // 无作者时：全节点分成销毁，NRC 和安全基金正常分配。
+            let expected_burn = expected_fullnode;
 
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = None);
             let credit = <Balances as Balanced<AccountId32>>::withdraw(
@@ -811,7 +836,8 @@ mod tests {
             PowOnchainFeeRouter::<Test, Balances, MockFindAuthor, MockNrcAccountProvider>::on_nonzero_unbalanced(credit);
 
             assert_eq!(Balances::free_balance(payer), 900);
-            assert_eq!(Balances::free_balance(nrc), expected_nrc);
+            assert_eq!(Balances::free_balance(&nrc), expected_nrc);
+            assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
             assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
         });
     }
@@ -822,16 +848,26 @@ mod tests {
             let payer = account(1);
             let miner = account(9);
             let reward_wallet = account(8);
+            let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let issuance_before = Balances::total_issuance();
             let total_fee = 100u128;
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let blackhole_percent = primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT as u128;
+            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
-                .saturating_add(blackhole_percent);
+                .saturating_add(safety_fund_percent);
             let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
-            let expected_burn = total_fee.saturating_sub(expected_fullnode);
+            let remainder = total_fee.saturating_sub(expected_fullnode);
+            // NRC 账户缺失时：NRC 份额的 nrc_credit 被 drop（销毁），安全基金正常分配。
+            let expected_nrc_for_split = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
+                0
+            } else {
+                remainder.saturating_mul(nrc_percent)
+                    / nrc_percent.saturating_add(safety_fund_percent)
+            };
+            let expected_safety_fund = remainder.saturating_sub(expected_nrc_for_split);
+            let expected_burn = expected_nrc_for_split;
 
             fullnode_pow_reward::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
@@ -847,7 +883,8 @@ mod tests {
             PowOnchainFeeRouter::<Test, Balances, MockFindAuthor, MockNrcAccountProviderNone>::on_nonzero_unbalanced(credit);
 
             assert_eq!(Balances::free_balance(payer), 900);
-            assert_eq!(Balances::free_balance(reward_wallet), expected_fullnode);
+            assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
+            assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
             assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
         });
     }
@@ -867,19 +904,22 @@ mod tests {
             let reward_wallet = account(8);
             let nrc = MockNrcAccountProviderResolveFail::nrc_account()
                 .expect("nrc account must exist for resolve failure test");
+            let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let issuance_before = Balances::total_issuance();
             let total_fee = 500u128;
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let blackhole_percent = primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT as u128;
+            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
-                .saturating_add(blackhole_percent);
+                .saturating_add(safety_fund_percent);
             let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
             let remainder = total_fee.saturating_sub(expected_fullnode);
             let expected_nrc = remainder.saturating_mul(nrc_percent)
-                / nrc_percent.saturating_add(blackhole_percent);
-            let expected_burn = total_fee.saturating_sub(expected_fullnode);
+                / nrc_percent.saturating_add(safety_fund_percent);
+            let expected_safety_fund = remainder.saturating_sub(expected_nrc);
+            // NRC resolve 失败（ED 过高），NRC 份额销毁；安全基金正常分配。
+            let expected_burn = expected_nrc;
 
             TestExistentialDeposit::set(100);
             fullnode_pow_reward::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
@@ -896,8 +936,9 @@ mod tests {
             PowOnchainFeeRouter::<Test, Balances, MockFindAuthor, MockNrcAccountProviderResolveFail>::on_nonzero_unbalanced(credit);
 
             assert_eq!(Balances::free_balance(payer), 500);
-            assert_eq!(Balances::free_balance(reward_wallet), expected_fullnode);
-            assert_eq!(Balances::free_balance(nrc), 0);
+            assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
+            assert_eq!(Balances::free_balance(&nrc), 0);
+            assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
             assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
             assert!(expected_nrc < 100, "nrc share should stay below high ED");
             TestExistentialDeposit::set(1);
@@ -917,7 +958,26 @@ mod tests {
             let who = account(1);
             let call = sample_call();
             let info = call.get_dispatch_info();
+            let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let issuance_before = Balances::total_issuance();
+            let total_fee = 55u128; // base 50 + tip 5
+            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+            let total_percent = fullnode_percent
+                .saturating_add(nrc_percent)
+                .saturating_add(safety_fund_percent);
+            let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
+            let remainder = total_fee.saturating_sub(expected_fullnode);
+            let expected_nrc_split = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
+                0
+            } else {
+                remainder.saturating_mul(nrc_percent)
+                    / nrc_percent.saturating_add(safety_fund_percent)
+            };
+            let expected_safety_fund = remainder.saturating_sub(expected_nrc_split);
+            // 无作者 + 无 NRC 账户：全节点分成和 NRC 分成销毁，安全基金正常分配。
+            let expected_burn = total_fee.saturating_sub(expected_safety_fund);
 
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = None);
             let liquidity =
@@ -937,7 +997,8 @@ mod tests {
             );
 
             assert_eq!(Balances::free_balance(&who), 945);
-            assert_eq!(Balances::total_issuance(), issuance_before - 55);
+            assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
+            assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
         });
     }
 
@@ -957,6 +1018,7 @@ mod tests {
             let miner = account(9);
             let reward_wallet = account(8);
             let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
+            let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
 
             fullnode_pow_reward::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
@@ -964,18 +1026,19 @@ mod tests {
             let total_fee = 15u128; // base 10 + tip 5
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let blackhole_percent = primitives::core_const::ONCHAIN_FEE_BLACKHOLE_PERCENT as u128;
+            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
-                .saturating_add(blackhole_percent);
+                .saturating_add(safety_fund_percent);
             let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
             let remainder = total_fee.saturating_sub(expected_fullnode);
-            let expected_nrc = if nrc_percent.saturating_add(blackhole_percent) == 0 {
+            let expected_nrc = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
                 0
             } else {
                 remainder.saturating_mul(nrc_percent)
-                    / nrc_percent.saturating_add(blackhole_percent)
+                    / nrc_percent.saturating_add(safety_fund_percent)
             };
+            let expected_safety_fund = remainder.saturating_sub(expected_nrc);
 
             let liquidity =
                 <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 5)
@@ -992,8 +1055,9 @@ mod tests {
             );
 
             assert_eq!(Balances::free_balance(who), 985);
-            assert_eq!(Balances::free_balance(reward_wallet), expected_fullnode);
-            assert_eq!(Balances::free_balance(nrc), expected_nrc);
+            assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
+            assert_eq!(Balances::free_balance(&nrc), expected_nrc);
+            assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
         });
     }
 }

@@ -59,7 +59,7 @@ pub fn start_node_in_process(
         .name("substrate-node".into())
         .spawn(move || {
             use clap::Parser;
-            use sc_cli::{CliConfiguration, SubstrateCli};
+            use sc_cli::CliConfiguration;
 
             // 设置 SS58 地址前缀。
             let _ = sp_core::crypto::set_default_ss58_version(

@@ -475,6 +475,11 @@ pub fn new_full(
         );
     net_config.add_notification_protocol(grandpa_protocol_config);
 
+    // 注册链下清算 P2P 广播协议
+    let (offchain_clearing_config, offchain_clearing_notification_service) =
+        crate::offchain_gossip::offchain_clearing_protocol_config();
+    net_config.add_notification_protocol(offchain_clearing_config);
+
     let warp_sync = Arc::new(sc_consensus_grandpa::warp_proof::NetworkProvider::new(
         backend.clone(),
         grandpa_link.shared_authority_set().clone(),
@@ -536,6 +541,16 @@ pub fn new_full(
         }
     };
 
+    // 创建链下清算广播 channel
+    let (offchain_gossip_tx, offchain_gossip_rx) = {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<crate::offchain_gossip::OffchainGossipMessage>();
+        if get_offchain_config().is_some() {
+            (Some(tx), Some(rx))
+        } else {
+            (None, None)
+        }
+    };
+
     let rpc_extensions_builder = {
         let client = client.clone();
         let pool = transaction_pool.clone();
@@ -553,6 +568,7 @@ pub fn new_full(
                 // 中文注释：从全局配置读取链下清算参数（由 nodeui start_node 设置）。
                 offchain_ledger: get_offchain_config().map(|c| c.ledger.clone()),
                 offchain_shenfen_id: get_offchain_config().map(|c| c.shenfen_id.clone()),
+                offchain_gossip_tx: offchain_gossip_tx.clone(),
             };
             crate::rpc::create_full(deps).map_err(Into::into)
         })
@@ -573,6 +589,23 @@ pub fn new_full(
         telemetry: telemetry.as_mut(),
         tracing_execute_block: None,
     })?;
+
+    // 启动链下清算广播 worker（收发合一，省储行节点和普通节点都启动）
+    {
+        let ledger_for_gossip = get_offchain_config()
+            .map(|c| c.ledger.clone())
+            .unwrap_or_else(|| crate::offchain_ledger::OffchainLedger::new(std::path::Path::new("/tmp")));
+
+        task_manager.spawn_essential_handle().spawn(
+            "offchain-clearing-gossip",
+            None,
+            crate::offchain_gossip::run_offchain_gossip_worker(
+                offchain_clearing_notification_service,
+                ledger_for_gossip,
+                offchain_gossip_rx,
+            ),
+        );
+    }
 
     // 中文注释：本链制度要求"安装全节点软件即可参与挖矿"，不再依赖 authority 角色开关。
     ensure_powr_key(&keystore)?;

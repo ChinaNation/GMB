@@ -112,13 +112,41 @@ class OffchainRpc {
     }
   }
 
-  /// 预估链下交易手续费（元）。
+  /// 查询省储行的链下交易费率（bp）。
   ///
-  /// 费率 1-10 bp（0.01%-0.1%），此处取中间值 5 bp = 0.05%，最低 0.01 元。
-  static double estimateOffchainFeeYuan(double amountYuan) {
-    const int rateBp = 5;
-    final fee = amountYuan * rateBp / 10000;
-    return fee < 0.01 ? 0.01 : double.parse(fee.toStringAsFixed(2));
+  /// 通过 WSS 调用省储行节点 offchain_queryInstitutionRate。
+  /// 返回费率 bp（1-10），查询失败时默认返回 1 bp。
+  static Future<int> queryInstitutionRate(String bankShenfenId) async {
+    final bank = findClearingBank(bankShenfenId);
+    if (bank == null) return 1;
+
+    try {
+      final result = await _callRpc(
+        bank.wssUrl,
+        'offchain_queryInstitutionRate',
+        {},
+      );
+      return (result['rate_bp'] as num?)?.toInt() ?? 1;
+    } catch (_) {
+      return 1; // 查询失败默认 1 bp
+    }
+  }
+
+  /// 根据真实费率计算链下交易手续费（元）。
+  ///
+  /// [amountYuan] 支付金额（元）。
+  /// [rateBp] 省储行费率（bp，从 queryInstitutionRate 获取）。
+  /// 最低 0.01 元。与链上 pallet round_div 保持一致（四舍五入到分）。
+  static double calculateOffchainFeeYuan(double amountYuan, int rateBp) {
+    // 转为整数 fen 运算，避免浮点精度偏差
+    final amountFen = (amountYuan * 100).round();
+    final numerator = amountFen * rateBp;
+    final quotient = numerator ~/ 10000;
+    final remainder = numerator % 10000;
+    // 四舍五入：remainder >= 5000 则进位
+    final feeFen = remainder >= 5000 ? quotient + 1 : quotient;
+    final result = feeFen < 1 ? 1 : feeFen; // 最低 1 fen = 0.01 元
+    return result / 100.0;
   }
 
   /// 构造链下支付 payload（pallet=21, call=99）。

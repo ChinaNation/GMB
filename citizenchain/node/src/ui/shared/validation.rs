@@ -1,7 +1,6 @@
 // 共享输入校验与标准化逻辑。
 use crate::ui::settings::address_utils::decode_ss58_prefix;
 use crate::ui::shared::constants::SS58_PREFIX;
-use unicode_normalization::UnicodeNormalization;
 const SS58_PRE: &[u8] = b"SS58PRE";
 
 #[derive(Debug, thiserror::Error)]
@@ -26,12 +25,6 @@ pub enum ValidationError {
     NodeKeyEmpty,
     #[error("node-key 必须是 64 位十六进制字符串")]
     NodeKeyInvalidHex,
-    #[error("节点名称不能为空")]
-    NodeNameEmpty,
-    #[error("节点名称不能超过 64 个字符")]
-    NodeNameTooLong,
-    #[error("节点名称不能包含控制字符")]
-    NodeNameControlChar,
     #[error("GRANDPA 私钥不能为空")]
     GrandpaKeyEmpty,
     #[error("GRANDPA 私钥必须是 64 位十六进制字符串")]
@@ -109,23 +102,6 @@ pub fn normalize_node_key(input: &str) -> Result<String, String> {
     }
 
     Ok(raw.to_ascii_lowercase())
-}
-
-pub fn normalize_node_name(input: &str) -> Result<String, String> {
-    let value = input.trim();
-    if value.is_empty() {
-        return Err(ValidationError::NodeNameEmpty.into());
-    }
-    // Unicode NFC 归一化：将组合字符序列（如 e + ◌́）合并为预组合形式（如 é），
-    // 避免视觉相同但字节不同的名称被视为不同节点。
-    let normalized: String = value.nfc().collect();
-    if normalized.chars().count() > 64 {
-        return Err(ValidationError::NodeNameTooLong.into());
-    }
-    if normalized.chars().any(|c| c.is_control()) {
-        return Err(ValidationError::NodeNameControlChar.into());
-    }
-    Ok(normalized)
 }
 
 pub fn normalize_grandpa_key(input: &str) -> Result<String, String> {
@@ -207,41 +183,6 @@ mod tests {
     #[test]
     fn node_key_wrong_length() {
         assert!(normalize_node_key("abcdef").is_err());
-    }
-
-    // --- normalize_node_name ---
-
-    #[test]
-    fn node_name_empty_rejected() {
-        assert!(normalize_node_name("").is_err());
-    }
-
-    #[test]
-    fn node_name_too_long() {
-        let long_name = "a".repeat(65);
-        assert!(normalize_node_name(&long_name).is_err());
-    }
-
-    #[test]
-    fn node_name_max_length_ok() {
-        let name = "a".repeat(64);
-        assert!(normalize_node_name(&name).is_ok());
-    }
-
-    #[test]
-    fn node_name_control_char_rejected() {
-        assert!(normalize_node_name("hello\x00world").is_err());
-        assert!(normalize_node_name("te\nst").is_err());
-    }
-
-    #[test]
-    fn node_name_unicode_ok() {
-        assert_eq!(normalize_node_name("测试节点").unwrap(), "测试节点");
-    }
-
-    #[test]
-    fn node_name_trimmed() {
-        assert_eq!(normalize_node_name("  hello  ").unwrap(), "hello");
     }
 
     // --- normalize_grandpa_key ---

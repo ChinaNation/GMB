@@ -29,6 +29,9 @@ use voting_engine_system::{
     InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED, STATUS_REJECTED,
 };
 
+/// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
+pub const MODULE_TAG: &[u8] = b"gra-key";
+
 pub use pallet::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
@@ -278,8 +281,9 @@ pub mod pallet {
                 institution,
             )?;
 
-            let data = action.encode();
-            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            let mut encoded = sp_std::vec::Vec::from(crate::MODULE_TAG);
+            encoded.extend_from_slice(&action.encode());
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, encoded)?;
             voting_engine_system::Pallet::<T>::store_proposal_meta(
                 proposal_id,
                 frame_system::Pallet::<T>::block_number(),
@@ -415,10 +419,15 @@ pub mod pallet {
         }
 
         /// 中文注释：从投票引擎读取并解码提案动作数据。
+        /// 先校验 MODULE_TAG 前缀，防止跨模块误解码。
         fn decode_action(proposal_id: u64) -> Result<GrandpaKeyReplacementAction, DispatchError> {
-            let data = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+            let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
-            GrandpaKeyReplacementAction::decode(&mut &data[..])
+            let tag = crate::MODULE_TAG;
+            if raw.len() < tag.len() || &raw[..tag.len()] != tag {
+                return Err(Error::<T>::ProposalActionNotFound.into());
+            }
+            GrandpaKeyReplacementAction::decode(&mut &raw[tag.len()..])
                 .map_err(|_| Error::<T>::ProposalActionNotFound.into())
         }
 

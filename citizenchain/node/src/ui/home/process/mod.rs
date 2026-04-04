@@ -16,7 +16,6 @@ use std::{
 use tauri::{AppHandle, Manager};
 
 use super::identity::{current_status, NodeStatus};
-use super::rpc::is_expected_rpc_node;
 
 // 串行化节点启停，避免并发命令冲突。
 static NODE_LIFECYCLE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();

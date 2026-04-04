@@ -35,6 +35,8 @@ pub struct OffchainPacker {
     last_pack_block: Arc<RwLock<u64>>,
     /// 节点启动密码（用于账本持久化）。
     password: String,
+    /// 链下清算广播发送端（用于结算后通知其他省储行）。
+    gossip_tx: Option<tokio::sync::mpsc::UnboundedSender<crate::offchain_gossip::OffchainGossipMessage>>,
 }
 
 impl OffchainPacker {
@@ -43,6 +45,7 @@ impl OffchainPacker {
         ledger: OffchainLedger,
         signing_key: SigningKey,
         password: String,
+        gossip_tx: Option<tokio::sync::mpsc::UnboundedSender<crate::offchain_gossip::OffchainGossipMessage>>,
     ) -> Self {
         let shenfen_id = signing_key.shenfen_id.clone();
         Self {
@@ -51,6 +54,7 @@ impl OffchainPacker {
             shenfen_id,
             last_pack_block: Arc::new(RwLock::new(0)),
             password,
+            gossip_tx,
         }
     }
 
@@ -137,11 +141,20 @@ impl OffchainPacker {
         })
     }
 
-    /// 中文注释：上链成功后清理已结算交易。
+    /// 中文注释：上链成功后清理已结算交易，并向其他省储行广播结算通知。
     pub fn on_settled(&self, tx_ids: &[sp_core::H256]) {
         self.ledger.remove_settled(tx_ids);
         if let Err(e) = self.ledger.save_to_disk(&self.password) {
             log::warn!("[Offchain] 结算后持久化账本失败：{e}");
+        }
+        // 向其他省储行广播结算完成通知
+        if let Some(ref tx) = self.gossip_tx {
+            let _ = tx.send(
+                crate::offchain_gossip::OffchainGossipMessage::Settled {
+                    tx_ids: tx_ids.to_vec(),
+                    clearing_bank: self.shenfen_id.as_bytes().to_vec(),
+                },
+            );
         }
     }
 
