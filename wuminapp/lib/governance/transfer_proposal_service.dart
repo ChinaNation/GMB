@@ -33,6 +33,18 @@ class TransferProposalService {
   /// vote_transfer call_index=1。
   static const _voteCallIndex = 1;
 
+  /// propose_safety_fund_transfer call_index=3。
+  static const _proposeSafetyFundCallIndex = 3;
+
+  /// vote_safety_fund_transfer call_index=4。
+  static const _voteSafetyFundCallIndex = 4;
+
+  /// propose_sweep_to_main call_index=5。
+  static const _proposeSweepCallIndex = 5;
+
+  /// vote_sweep_to_main call_index=6。
+  static const _voteSweepCallIndex = 6;
+
   /// OffchainTransactionPos pallet index（runtime pallet_index=21）。
   static const _offchainPalletIndex = 21;
 
@@ -102,6 +114,88 @@ class TransferProposalService {
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     final callData = _buildVoteRateCall(
+      proposalId: proposalId,
+      approve: approve,
+    );
+    return _signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+    );
+  }
+
+  /// 提交 propose_safety_fund_transfer extrinsic（安全基金转账提案）。
+  Future<({String txHash, int usedNonce})> submitProposeSafetyFund({
+    required String beneficiaryAddress,
+    required double amountYuan,
+    required String remark,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+  }) async {
+    final callData = _buildProposeSafetyFundCall(
+      beneficiaryAddress: beneficiaryAddress,
+      amountYuan: amountYuan,
+      remark: remark,
+    );
+    return _signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+    );
+  }
+
+  /// 提交 vote_safety_fund_transfer extrinsic（安全基金投票）。
+  Future<({String txHash, int usedNonce})> submitVoteSafetyFund({
+    required int proposalId,
+    required bool approve,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+  }) async {
+    final callData = _buildVoteSafetyFundCall(
+      proposalId: proposalId,
+      approve: approve,
+    );
+    return _signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+    );
+  }
+
+  /// 提交 propose_sweep_to_main extrinsic（手续费划转提案）。
+  Future<({String txHash, int usedNonce})> submitProposeSweep({
+    required InstitutionInfo institution,
+    required double amountYuan,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+  }) async {
+    final callData = _buildProposeSweepCall(
+      institutionIdentity: institution.shenfenId,
+      amountYuan: amountYuan,
+    );
+    return _signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+    );
+  }
+
+  /// 提交 vote_sweep_to_main extrinsic（手续费划转投票）。
+  Future<({String txHash, int usedNonce})> submitVoteSweep({
+    required int proposalId,
+    required bool approve,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+  }) async {
+    final callData = _buildVoteSweepCall(
       proposalId: proposalId,
       approve: approve,
     );
@@ -815,6 +909,94 @@ class TransferProposalService {
     final output = ByteOutput();
     output.pushByte(_offchainPalletIndex);
     output.pushByte(_voteRateCallIndex);
+    output.write(_u64ToLeBytes(proposalId));
+    output.pushByte(approve ? 1 : 0);
+    return output.toBytes();
+  }
+
+  /// 构造 propose_sweep_to_main call data。
+  ///
+  /// 格式：[0x13][0x05][institution:48][amount:u128_le]
+  Uint8List _buildProposeSweepCall({
+    required String institutionIdentity,
+    required double amountYuan,
+  }) {
+    final output = ByteOutput();
+    output.pushByte(_palletIndex);
+    output.pushByte(_proposeSweepCallIndex);
+    output.write(_institutionIdentityToFixed48(institutionIdentity));
+    final amountFen = BigInt.from((amountYuan * 100).round());
+    final amountBytes = Uint8List(16);
+    var rem = amountFen;
+    for (var i = 0; i < 16; i++) {
+      amountBytes[i] = (rem & BigInt.from(0xFF)).toInt();
+      rem = rem >> 8;
+    }
+    output.write(amountBytes);
+    return output.toBytes();
+  }
+
+  /// 构造 vote_sweep_to_main call data。
+  ///
+  /// 格式：[0x13][0x06][proposal_id:u64_le][approve:bool]
+  Uint8List _buildVoteSweepCall({
+    required int proposalId,
+    required bool approve,
+  }) {
+    final output = ByteOutput();
+    output.pushByte(_palletIndex);
+    output.pushByte(_voteSweepCallIndex);
+    output.write(_u64ToLeBytes(proposalId));
+    output.pushByte(approve ? 1 : 0);
+    return output.toBytes();
+  }
+
+  /// 构造 propose_safety_fund_transfer call data。
+  ///
+  /// 格式：[0x13][0x03][beneficiary:32][amount:u128_le][remark:Vec<u8>]
+  Uint8List _buildProposeSafetyFundCall({
+    required String beneficiaryAddress,
+    required double amountYuan,
+    required String remark,
+  }) {
+    final output = ByteOutput();
+    output.pushByte(_palletIndex);
+    output.pushByte(_proposeSafetyFundCallIndex);
+
+    // beneficiary: 32 bytes
+    final beneficiaryId = Keyring().decodeAddress(beneficiaryAddress);
+    output.write(beneficiaryId);
+
+    // amount: u128 LE
+    final amountFen = BigInt.from((amountYuan * 100).round());
+    final amountBytes = Uint8List(16);
+    var rem = amountFen;
+    for (var i = 0; i < 16; i++) {
+      amountBytes[i] = (rem & BigInt.from(0xFF)).toInt();
+      rem = rem >> 8;
+    }
+    output.write(amountBytes);
+
+    // remark: Vec<u8>
+    final remarkBytes = utf8.encode(remark);
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(remarkBytes.length)));
+    if (remarkBytes.isNotEmpty) {
+      output.write(Uint8List.fromList(remarkBytes));
+    }
+
+    return output.toBytes();
+  }
+
+  /// 构造 vote_safety_fund_transfer call data。
+  ///
+  /// 格式：[0x13][0x04][proposal_id:u64_le][approve:bool]
+  Uint8List _buildVoteSafetyFundCall({
+    required int proposalId,
+    required bool approve,
+  }) {
+    final output = ByteOutput();
+    output.pushByte(_palletIndex);
+    output.pushByte(_voteSafetyFundCallIndex);
     output.write(_u64ToLeBytes(proposalId));
     output.pushByte(approve ? 1 : 0);
     return output.toBytes();

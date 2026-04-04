@@ -27,7 +27,7 @@
 
 链上交易费 = 500 元 × 0.1% = 0.50 元
 fee_address 净收入 = 500 - 0.50 = 499.50 元
-链上交易费分账：矿工 80% + 国储会 10% + 销毁 10%
+链上交易费分账：矿工 80% + 国储会手续费账户 10% + 安全基金 10%
 ```
 
 ## 技术方案
@@ -116,9 +116,9 @@ Step 5: 补充测试
 
 ## 验收标准
 
-- submit_offchain_batch 链上交易费 = 批次链下手续费总额 × 0.1%
-- 链上交易费从 fee_address 扣取，不从 signing admin 扣取
-- enqueue/process batch 仍免费
+- submit_offchain_batch / enqueue_offchain_batch 链上交易费 = 批次链下手续费总额 × 0.1%
+- process_queued_batch 链上交易费 = 入队时快照的手续费总额 × 0.1%
+- 链上交易费从提交者账户扣取
 - fee_address 的多签保护不受影响
 - 首笔清算 fee_address 为空时有兜底方案
 - spec_version 已递增

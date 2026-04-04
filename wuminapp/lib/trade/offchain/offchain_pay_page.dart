@@ -50,6 +50,10 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
   bool _loadingWallet = true;
   bool _submitting = false;
 
+  /// 省储行真实费率（bp），从省储行节点查询。
+  int _rateBp = 1;
+  bool _loadingRate = true;
+
   /// 后台轮询链上状态，确认上链后更新本地交易记录。
   ///
   /// fire-and-forget，不阻塞 UI。每 30 秒查询一次，最多 2 小时。
@@ -80,6 +84,17 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
       _amountController.text = widget.amount!;
     }
     _loadWallet();
+    _loadRate();
+  }
+
+  Future<void> _loadRate() async {
+    final rate = await OffchainRpc.queryInstitutionRate(widget.bank);
+    if (mounted) {
+      setState(() {
+        _rateBp = rate;
+        _loadingRate = false;
+      });
+    }
   }
 
   @override
@@ -111,7 +126,7 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
     }
 
     // 预估手续费
-    final fee = OffchainRpc.estimateOffchainFeeYuan(amount);
+    final fee = OffchainRpc.calculateOffchainFeeYuan(amount, _rateBp);
     final availableBalance = _currentWallet!.balance - _edYuan;
     if (amount + fee > availableBalance) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -443,7 +458,7 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: (_submitting || _loadingWallet || _currentWallet == null)
+                  onPressed: (_submitting || _loadingWallet || _loadingRate || _currentWallet == null)
                       ? null
                       : _submit,
                   child: Padding(

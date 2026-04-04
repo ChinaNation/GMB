@@ -4,11 +4,8 @@ pub(crate) mod identity;
 pub(crate) mod process;
 pub(crate) mod rpc;
 
-// 公共类型与 Tauri 命令，供 main.rs 直接使用。
-pub use identity::{get_node_identity, get_node_status};
-pub(crate) use process::{cleanup_on_exit, cleanup_on_startup};
-pub use process::{start_node, stop_node, AppState, RuntimeState};
-pub use rpc::{get_chain_status, get_total_issuance, get_total_stake};
+// 公共类型与 Tauri 命令（Tauri command 注册在 ui/mod.rs 中使用子模块全路径）。
+pub(crate) use process::{cleanup_on_exit, cleanup_on_startup, AppState, RuntimeState};
 
 // crate 内部使用的阻塞版本函数。
 pub(crate) use identity::{current_status, get_node_identity_blocking};

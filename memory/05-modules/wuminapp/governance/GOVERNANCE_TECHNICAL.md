@@ -431,7 +431,7 @@ message = blake2_256(SCALE.encode(payload))
 | --- | --- | --- |
 | 全节点矿工奖励钱包 | 80% | 通过 `MinerRewardWalletProvider` 查找当前区块矿工绑定钱包 |
 | 国储会账户 | 10% | 通过 `NrcAccountProvider` 提供 |
-| 销毁（黑洞） | 10% | 直接从流通中移除 |
+| 安全基金账户 | 10% | NRC_ANQUAN_ADDRESS |
 
 分账在 pallet 内部的 `distribute_fee` 函数中完成，与 `PowOnchainFeeRouter` 规则一致。
 

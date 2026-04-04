@@ -38,15 +38,31 @@ pub struct OffchainTxItem {
     pub confirmed_at: u64,
 }
 
+/// 远程待结算记录（其他省储行广播过来的）。
+#[derive(Clone, Encode, Decode, Debug)]
+pub struct RemotePendingItem {
+    pub payer: AccountId32,
+    pub amount_with_fee: u128,
+    pub clearing_bank: Vec<u8>,
+    pub received_at: u64,
+}
+
+/// 远程待结算过期时间：2 小时（打包阈值 60 分钟 × 2 倍安全边际）。
+const REMOTE_PENDING_EXPIRE_SECS: u64 = 7200;
+
 /// 链下待结算账本。
 #[derive(Default)]
 struct LedgerInner {
-    /// 中文注释：每个 payer 的待结算总额（用于虚拟余额计算）。
+    /// 中文注释：每个 payer 的本地待结算总额（本省储行确认的交易）。
     pending_by_payer: HashMap<AccountId32, u128>,
     /// 中文注释：待打包交易列表（按确认时间排序）。
     pending_txs: Vec<OffchainTxItem>,
     /// 中文注释：已确认 tx_id 索引（防重复提交）。
     confirmed_tx_ids: HashSet<H256>,
+    /// 中文注释：远程待结算——其他省储行广播的待结算记录（防跨省储行双花）。
+    remote_pending_by_payer: HashMap<AccountId32, u128>,
+    /// 中文注释：远程待结算明细（用于结算后清除和过期清理）。
+    remote_pending_txs: HashMap<H256, RemotePendingItem>,
 }
 
 /// 线程安全的链下账本。
@@ -85,11 +101,14 @@ impl OffchainLedger {
         Ok(())
     }
 
-    /// 中文注释：计算虚拟余额 = 链上余额 - 待结算累计。
+    /// 中文注释：计算虚拟余额 = 链上余额 - 本地待结算 - 远程待结算。
     pub fn virtual_balance(&self, payer: &AccountId32, onchain_balance: u128) -> u128 {
         let ledger = self.inner.read().unwrap_or_else(|e| e.into_inner());
-        let pending = ledger.pending_by_payer.get(payer).copied().unwrap_or(0);
-        onchain_balance.saturating_sub(pending)
+        let local_pending = ledger.pending_by_payer.get(payer).copied().unwrap_or(0);
+        let remote_pending = ledger.remote_pending_by_payer.get(payer).copied().unwrap_or(0);
+        onchain_balance
+            .saturating_sub(local_pending)
+            .saturating_sub(remote_pending)
     }
 
     /// 中文注释：检查 tx_id 是否已确认。
@@ -143,6 +162,78 @@ impl OffchainLedger {
         // confirmed_tx_ids 中也移除（已上链，链上有记录）
         for id in tx_ids {
             ledger.confirmed_tx_ids.remove(id);
+        }
+    }
+
+    /// 中文注释：添加远程待结算记录（收到其他省储行的广播通知）。
+    pub fn add_remote_pending(
+        &self,
+        tx_id: H256,
+        payer: AccountId32,
+        amount_with_fee: u128,
+        clearing_bank: Vec<u8>,
+        timestamp: u64,
+    ) {
+        let mut ledger = self.inner.write().unwrap_or_else(|e| e.into_inner());
+        // 防重复
+        if ledger.remote_pending_txs.contains_key(&tx_id) {
+            return;
+        }
+        *ledger.remote_pending_by_payer.entry(payer.clone()).or_insert(0) += amount_with_fee;
+        ledger.remote_pending_txs.insert(
+            tx_id,
+            RemotePendingItem {
+                payer,
+                amount_with_fee,
+                clearing_bank,
+                received_at: timestamp,
+            },
+        );
+    }
+
+    /// 中文注释：清除已结算的远程待结算记录（收到结算完成广播）。
+    pub fn remove_remote_settled(&self, tx_ids: &[H256]) {
+        let mut ledger = self.inner.write().unwrap_or_else(|e| e.into_inner());
+        for tx_id in tx_ids {
+            if let Some(item) = ledger.remote_pending_txs.remove(tx_id) {
+                if let Some(pending) = ledger.remote_pending_by_payer.get_mut(&item.payer) {
+                    *pending = pending.saturating_sub(item.amount_with_fee);
+                    if *pending == 0 {
+                        ledger.remote_pending_by_payer.remove(&item.payer);
+                    }
+                }
+            }
+        }
+    }
+
+    /// 中文注释：清理过期的远程待结算记录（超过 2 小时未收到结算通知）。
+    pub fn cleanup_expired_remote(&self) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let mut ledger = self.inner.write().unwrap_or_else(|e| e.into_inner());
+        let expired: Vec<H256> = ledger
+            .remote_pending_txs
+            .iter()
+            .filter(|(_, item)| now.saturating_sub(item.received_at) > REMOTE_PENDING_EXPIRE_SECS)
+            .map(|(tx_id, _)| *tx_id)
+            .collect();
+        for tx_id in &expired {
+            if let Some(item) = ledger.remote_pending_txs.remove(tx_id) {
+                if let Some(pending) = ledger.remote_pending_by_payer.get_mut(&item.payer) {
+                    *pending = pending.saturating_sub(item.amount_with_fee);
+                    if *pending == 0 {
+                        ledger.remote_pending_by_payer.remove(&item.payer);
+                    }
+                }
+            }
+        }
+        if !expired.is_empty() {
+            log::debug!(
+                "[Offchain] 清理 {} 笔过期远程待结算",
+                expired.len()
+            );
         }
     }
 

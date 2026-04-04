@@ -93,7 +93,7 @@ pub fn propose_transfer(
 5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验）。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
 7. `beneficiary` 不能是机构自身的 `duoqian_address`（不允许自转账）。
-8. `beneficiary` 不能是受保护地址（如 `keyless_address`、黑洞地址）。
+8. `beneficiary` 不能是受保护地址（如 `keyless_address`、安全基金账户、费用账户等保留地址）。
 9. 机构 `duoqian_address` 的可用余额 >= `amount + fee + ED`（预检含手续费，防止创建必定无法执行的提案）。
 10. 活跃提案数由 `voting-engine-system` 在 `create_internal_proposal` 中统一检查（全局限额）。
 
@@ -259,7 +259,7 @@ pub enum Error<T> {
 按 `TransferFeeRouter`（复用 `PowOnchainFeeRouter` 规则）：
 - 80% → 全节点出块者
 - 10% → 国储会
-- 10% → 黑洞销毁
+- 10% → 安全基金账户
 
 ## 7. 转账执行逻辑
 

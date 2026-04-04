@@ -120,6 +120,9 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
+    /// 各机构当前管理员列表：institution_pallet_id → 管理员公钥有序列表。
+    /// 创世时从 china_cb / china_ch 常量加载，通过 `propose_replace_admin` 治理流程 1:1 替换。
+    /// 列表长度恒定（NRC=19, PRC=9, PRB=9），由 `validate_admin_count` 校验。
     #[pallet::storage]
     pub type CurrentAdmins<T: Config> = StorageMap<
         _,

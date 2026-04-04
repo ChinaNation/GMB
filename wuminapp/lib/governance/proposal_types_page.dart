@@ -210,6 +210,15 @@ class ProposalTypesPage extends StatelessWidget {
             _buildSectionTitle('国储会专属提案'),
             const SizedBox(height: 8),
             _ProposalTypeCard(
+              icon: Icons.shield_outlined,
+              title: '安全基金转账',
+              subtitle: '从安全基金账户向指定地址转账',
+              color: AppTheme.info,
+              enabled: isActivated,
+              onTap: () => _checkAndOpenProposal(context, null, name: '安全基金转账'),
+            ),
+            const SizedBox(height: 8),
+            _ProposalTypeCard(
               icon: Icons.account_balance,
               title: '决议发行',
               subtitle: '发起公民币发行决议，需联合投票+公民投票',

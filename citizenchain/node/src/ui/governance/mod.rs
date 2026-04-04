@@ -212,13 +212,54 @@ pub async fn get_institution_detail(
             (Vec::new(), None)
         };
 
-        // PRB 专属：查询质押账户和费用账户余额
+        // PRB 专属：质押账户和费用账户（地址始终返回，余额仅节点运行时查询）
         let (staking_address, staking_balance_fen, fee_address, fee_balance_fen) =
-            if org_type == OrgType::Prb && status.running {
-                query_prb_accounts(&shenfen_id_clone, &mut warnings)
+            if org_type == OrgType::Prb {
+                query_prb_accounts(&shenfen_id_clone, status.running, &mut warnings)
             } else {
                 (None, None, None, None)
             };
+
+        // NRC 专属：费用账户和安全基金账户（地址始终返回，余额仅节点运行时查询）
+        let (nrc_fee_address, nrc_fee_balance_fen, nrc_anquan_address, nrc_anquan_balance_fen) =
+            if org_type == OrgType::Nrc {
+                let fee_hex = hex::encode(primitives::china::china_cb::CHINA_CB[0].fee_address);
+                let anquan_hex = hex::encode(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
+                let fee_bal = if status.running {
+                    institution::fetch_balance(&fee_hex).ok().flatten().map(|b| b.to_string())
+                } else {
+                    None
+                };
+                let anquan_bal = if status.running {
+                    institution::fetch_balance(&anquan_hex).ok().flatten().map(|b| b.to_string())
+                } else {
+                    None
+                };
+                (Some(fee_hex), fee_bal, Some(anquan_hex), anquan_bal)
+            } else {
+                (None, None, None, None)
+            };
+
+        // PRC 专属：省储会费用账户（从 CHINA_CB 中查找对应 fee_address）
+        let (cb_fee_address, cb_fee_balance_fen) = if org_type == OrgType::Prc {
+            let entry = primitives::china::china_cb::CHINA_CB
+                .iter()
+                .find(|n| n.shenfen_id == shenfen_id_clone);
+            match entry {
+                Some(n) => {
+                    let fee_hex = hex::encode(n.fee_address);
+                    let fee_bal = if status.running {
+                        institution::fetch_balance(&fee_hex).ok().flatten().map(|b| b.to_string())
+                    } else {
+                        None
+                    };
+                    (Some(fee_hex), fee_bal)
+                }
+                None => (None, None),
+            }
+        } else {
+            (None, None)
+        };
 
         Ok(InstitutionDetail {
             name,
@@ -234,6 +275,12 @@ pub async fn get_institution_detail(
             staking_balance_fen,
             fee_address,
             fee_balance_fen,
+            cb_fee_address,
+            cb_fee_balance_fen,
+            nrc_fee_address,
+            nrc_fee_balance_fen,
+            nrc_anquan_address,
+            nrc_anquan_balance_fen,
             warning: if warnings.is_empty() {
                 None
             } else {
@@ -251,37 +298,37 @@ pub(crate) fn find_institution_name(shenfen_id: &str) -> Option<String> {
 }
 
 /// 查询省储行的质押账户和费用账户地址及余额。
+/// 地址始终返回（常量派生），余额仅在 `running` 为 true 时查询。
 fn query_prb_accounts(
     shenfen_id: &str,
+    running: bool,
     warnings: &mut Vec<String>,
 ) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
-    // 在 CHINA_CH 中查找该省储行
     let ch = match CHINA_CH.iter().find(|c| c.shenfen_id == shenfen_id) {
         Some(c) => c,
         None => return (None, None, None, None),
     };
 
-    // 质押账户（keyless_address）
+    // 质押账户（keyless_address）——地���始终返回
     let staking_hex = hex::encode(ch.keyless_address);
-    let staking_balance = match institution::fetch_balance(&staking_hex) {
-        Ok(b) => b.map(|v| v.to_string()),
-        Err(e) => { warnings.push(format!("查询质押余额失败: {e}")); None }
+    let staking_balance = if running {
+        match institution::fetch_balance(&staking_hex) {
+            Ok(b) => b.map(|v| v.to_string()),
+            Err(e) => { warnings.push(format!("查询质押余额失败: {e}")); None }
+        }
+    } else {
+        None
     };
 
-    // 费用账户：从 shenfen_fee_id 派生 PalletId → AccountId32
-    // Substrate PalletId::into_account_truncating() = b"modl" + 8 字节 pallet_id + 20 字节零填充
-    let fee_id_bytes = ch.shenfen_fee_id.as_bytes();
-    if fee_id_bytes.len() != 8 {
-        return (Some(staking_hex), staking_balance, None, None);
-    }
-    let mut fee_account = [0u8; 32];
-    fee_account[..4].copy_from_slice(b"modl");
-    fee_account[4..12].copy_from_slice(fee_id_bytes);
-    // 12..32 保持零填充
-    let fee_hex = hex::encode(fee_account);
-    let fee_balance = match institution::fetch_balance(&fee_hex) {
-        Ok(b) => b.map(|v| v.to_string()),
-        Err(e) => { warnings.push(format!("查询费用余额失败: {e}")); None }
+    // 费用账户——地址始终返回（BLAKE2-256 派生）
+    let fee_hex = hex::encode(ch.fee_address);
+    let fee_balance = if running {
+        match institution::fetch_balance(&fee_hex) {
+            Ok(b) => b.map(|v| v.to_string()),
+            Err(e) => { warnings.push(format!("查询费用余额失败: {e}")); None }
+        }
+    } else {
+        None
     };
 
     (Some(staking_hex), staking_balance, Some(fee_hex), fee_balance)
@@ -687,6 +734,148 @@ pub async fn submit_propose_transfer(
     })
     .await
     .map_err(|e| format!("submit propose transfer task failed: {e}"))?
+}
+
+/// 构建安全基金转账提案签名请求 QR JSON（需要节点运行）。
+#[tauri::command]
+pub async fn build_propose_safety_fund_request(
+    app: AppHandle,
+    pubkey_hex: String,
+    beneficiary_address: String,
+    amount_yuan: f64,
+    remark: String,
+) -> Result<signing::VoteSignRequestResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法构建签名请求".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        signing::build_propose_safety_fund_sign_request(
+            &pubkey_hex, &beneficiary_address, amount_yuan, &remark,
+        )
+    })
+    .await
+    .map_err(|e| format!("build propose safety fund request task failed: {e}"))?
+}
+
+/// 验证签名响应并提交安全基金转账提案。
+#[tauri::command]
+pub async fn submit_propose_safety_fund(
+    app: AppHandle,
+    request_id: String,
+    expected_pubkey_hex: String,
+    expected_payload_hash: String,
+    beneficiary_address: String,
+    amount_yuan: f64,
+    remark: String,
+    sign_nonce: u32,
+    sign_block_number: u64,
+    response_json: String,
+) -> Result<signing::VoteSubmitResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法提交提案".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let amount_fen = (amount_yuan * 100.0).round() as u128;
+        let beneficiary_bytes = signing::decode_ss58_to_pubkey(&beneficiary_address)?;
+        let remark_bytes = remark.as_bytes();
+        let remark_compact = signing::encode_compact_u32_pub(remark_bytes.len() as u32);
+
+        let mut call_data = Vec::new();
+        call_data.push(19u8); // DuoqianTransferPow pallet
+        call_data.push(3u8);  // propose_safety_fund_transfer call
+        call_data.extend_from_slice(&beneficiary_bytes);
+        call_data.extend_from_slice(&amount_fen.to_le_bytes());
+        call_data.extend_from_slice(&remark_compact);
+        call_data.extend_from_slice(remark_bytes);
+
+        signing::verify_and_submit(
+            &request_id, &expected_pubkey_hex, &expected_payload_hash,
+            &call_data, sign_nonce, sign_block_number, &response_json,
+        )
+    })
+    .await
+    .map_err(|e| format!("submit propose safety fund task failed: {e}"))?
+}
+
+/// 构建安全基金投票签名请求 QR JSON（需要节点运行）。
+#[tauri::command]
+pub async fn build_safety_fund_vote_request(
+    app: AppHandle,
+    proposal_id: u64,
+    pubkey_hex: String,
+    approve: bool,
+) -> Result<signing::VoteSignRequestResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法构建签名请求".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        signing::build_safety_fund_vote_sign_request(proposal_id, &pubkey_hex, approve)
+    })
+    .await
+    .map_err(|e| format!("build safety fund vote request task failed: {e}"))?
+}
+
+/// 构建手续费划转提案签名请求。
+#[tauri::command]
+pub async fn build_propose_sweep_request(
+    app: AppHandle,
+    pubkey_hex: String,
+    shenfen_id: String,
+    amount_yuan: f64,
+) -> Result<signing::VoteSignRequestResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running { return Err("节点未运行".to_string()); }
+    tauri::async_runtime::spawn_blocking(move || {
+        signing::build_propose_sweep_sign_request(&pubkey_hex, &shenfen_id, amount_yuan)
+    }).await.map_err(|e| format!("build propose sweep failed: {e}"))?
+}
+
+/// 验证签名并提交手续费划转提案。
+#[tauri::command]
+pub async fn submit_propose_sweep(
+    app: AppHandle,
+    request_id: String,
+    expected_pubkey_hex: String,
+    expected_payload_hash: String,
+    shenfen_id: String,
+    amount_yuan: f64,
+    sign_nonce: u32,
+    sign_block_number: u64,
+    response_json: String,
+) -> Result<signing::VoteSubmitResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running { return Err("节点未运行".to_string()); }
+    tauri::async_runtime::spawn_blocking(move || {
+        let amount_fen = (amount_yuan * 100.0).round() as u128;
+        let institution_id = storage_keys::shenfen_id_to_fixed48(&shenfen_id);
+        let mut call_data = Vec::with_capacity(66);
+        call_data.push(19u8);
+        call_data.push(5u8);
+        call_data.extend_from_slice(&institution_id);
+        call_data.extend_from_slice(&amount_fen.to_le_bytes());
+        signing::verify_and_submit(
+            &request_id, &expected_pubkey_hex, &expected_payload_hash,
+            &call_data, sign_nonce, sign_block_number, &response_json,
+        )
+    }).await.map_err(|e| format!("submit propose sweep failed: {e}"))?
+}
+
+/// 构建手续费划转投票签名请求。
+#[tauri::command]
+pub async fn build_sweep_vote_request(
+    app: AppHandle,
+    proposal_id: u64,
+    pubkey_hex: String,
+    approve: bool,
+) -> Result<signing::VoteSignRequestResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running { return Err("节点未运行".to_string()); }
+    tauri::async_runtime::spawn_blocking(move || {
+        signing::build_sweep_vote_sign_request(proposal_id, &pubkey_hex, approve)
+    }).await.map_err(|e| format!("build sweep vote failed: {e}"))?
 }
 
 /// 构建费率投票签名请求 QR JSON（需要节点运行）。
