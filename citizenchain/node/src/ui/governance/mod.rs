@@ -688,3 +688,103 @@ pub async fn submit_propose_transfer(
     .await
     .map_err(|e| format!("submit propose transfer task failed: {e}"))?
 }
+
+/// 构建费率投票签名请求 QR JSON（需要节点运行）。
+#[tauri::command]
+pub async fn build_rate_vote_request(
+    app: AppHandle,
+    proposal_id: u64,
+    pubkey_hex: String,
+    approve: bool,
+) -> Result<signing::VoteSignRequestResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法构建签名请求".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        signing::build_rate_vote_sign_request(proposal_id, &pubkey_hex, approve)
+    })
+    .await
+    .map_err(|e| format!("build rate vote request task failed: {e}"))?
+}
+
+/// 构建费率设置提案签名请求 QR JSON（需要节点运行）。
+#[tauri::command]
+pub async fn build_propose_rate_request(
+    app: AppHandle,
+    pubkey_hex: String,
+    shenfen_id: String,
+    new_rate_bp: u32,
+) -> Result<signing::VoteSignRequestResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法构建签名请求".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        signing::build_propose_rate_sign_request(
+            &pubkey_hex,
+            &shenfen_id,
+            new_rate_bp,
+        )
+    })
+    .await
+    .map_err(|e| format!("build propose rate request task failed: {e}"))?
+}
+
+/// 验证签名响应并提交费率设置提案。
+#[tauri::command]
+pub async fn submit_propose_rate(
+    app: AppHandle,
+    request_id: String,
+    expected_pubkey_hex: String,
+    expected_payload_hash: String,
+    shenfen_id: String,
+    new_rate_bp: u32,
+    sign_nonce: u32,
+    sign_block_number: u64,
+    response_json: String,
+) -> Result<signing::VoteSubmitResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法提交提案".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let institution_id = storage_keys::shenfen_id_to_fixed48(&shenfen_id);
+
+        // call data: [0x15][0x01][institution:48][new_rate_bp:u32_le]
+        let mut call_data = Vec::with_capacity(2 + 48 + 4);
+        call_data.push(21u8); // OffchainTransactionPos pallet
+        call_data.push(1u8);  // propose_institution_rate call
+        call_data.extend_from_slice(&institution_id);
+        call_data.extend_from_slice(&new_rate_bp.to_le_bytes());
+
+        signing::verify_and_submit(
+            &request_id,
+            &expected_pubkey_hex,
+            &expected_payload_hash,
+            &call_data,
+            sign_nonce,
+            sign_block_number,
+            &response_json,
+        )
+    })
+    .await
+    .map_err(|e| format!("submit propose rate task failed: {e}"))?
+}
+
+/// 查询省储行当前链下交易费率（bp）。
+#[tauri::command]
+pub async fn query_institution_rate_bp(
+    app: AppHandle,
+    shenfen_id: String,
+) -> Result<u32, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        proposal::fetch_institution_rate_bp(&shenfen_id)
+    })
+    .await
+    .map_err(|e| format!("query rate bp task failed: {e}"))?
+}

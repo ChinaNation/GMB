@@ -1,11 +1,13 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
 import '../ui/app_theme.dart';
-import '../util/amount_format.dart';
 import 'institution_data.dart';
 import 'institution_admin_service.dart';
 import 'pending_vote_store.dart';
 import 'proposal_context.dart';
+import 'proposal_vote_widgets.dart';
 import 'transfer_proposal_service.dart';
 import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
@@ -13,11 +15,10 @@ import '../rpc/onchain.dart';
 import '../rpc/smoldot_client.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
-import 'proposal_vote_widgets.dart';
 
-/// 转账提案详情页：展示提案信息、投票进度、管理员投票明细及投票操作。
-class TransferProposalDetailPage extends StatefulWidget {
-  const TransferProposalDetailPage({
+/// 费率提案详情页。
+class FeeRateDetailPage extends StatefulWidget {
+  const FeeRateDetailPage({
     super.key,
     required this.institution,
     required this.proposalId,
@@ -26,20 +27,15 @@ class TransferProposalDetailPage extends StatefulWidget {
 
   final InstitutionInfo institution;
   final int proposalId;
-
-  /// 统一的提案上下文。
   final ProposalContext proposalContext;
 
-  /// 便捷访问。
   List<WalletProfile> get adminWallets => proposalContext.adminWallets;
 
   @override
-  State<TransferProposalDetailPage> createState() =>
-      _TransferProposalDetailPageState();
+  State<FeeRateDetailPage> createState() => _FeeRateDetailPageState();
 }
 
-class _TransferProposalDetailPageState
-    extends State<TransferProposalDetailPage> {
+class _FeeRateDetailPageState extends State<FeeRateDetailPage> {
   static const int _statusVoting = 0;
 
   final TransferProposalService _proposalService = TransferProposalService();
@@ -48,28 +44,35 @@ class _TransferProposalDetailPageState
   String? _error;
   bool _submitting = false;
 
-  // 提案状态
   int? _status;
-
-  // 提案详情（从链上读取）
-  TransferProposalInfo? _proposalInfo;
-  bool _remarkExpanded = false;
-
-  // 投票计数
   int _yesCount = 0;
   int _noCount = 0;
+  int? _newRateBp;
 
-  // 管理员列表与投票记录
   List<String> _admins = const [];
-  // pubkeyHex → true(赞成) / false(反对) / null(未投票)
   Map<String, bool?> _adminVotes = {};
-
-  // 当前用户可投票的管理员钱包
   List<WalletProfile> _votableWallets = const [];
   WalletProfile? _selectedVoteWallet;
-
-  // 已提交投票但尚未上链确认的管理员公钥集合
   Set<String> _pendingPubkeys = const {};
+
+  bool get _isCurrentUserAdmin => widget.proposalContext.isAdmin;
+
+  bool get _canVote =>
+      _selectedVoteWallet != null &&
+      _status == _statusVoting &&
+      _votableWallets.isNotEmpty;
+
+  bool get _allVoted {
+    if (widget.adminWallets.isEmpty) return false;
+    for (final w in widget.adminWallets) {
+      var pk = w.pubkeyHex.toLowerCase();
+      if (pk.startsWith('0x')) pk = pk.substring(2);
+      if (_adminVotes[pk] == null && !_pendingPubkeys.contains(pk)) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   @override
   void initState() {
@@ -78,30 +81,24 @@ class _TransferProposalDetailPageState
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    setState(() { _loading = true; _error = null; });
 
     try {
-      // 并行加载管理员列表、提案状态、投票计数、提案详情
       final results = await Future.wait([
         _adminService.fetchAdmins(widget.institution.shenfenId),
         _proposalService.fetchProposalStatus(widget.proposalId),
         _proposalService.fetchVoteTally(widget.proposalId),
-        _proposalService.fetchProposalAction(widget.proposalId),
+        _proposalService.fetchRateProposalAction(widget.proposalId),
       ]);
 
       final admins = results[0] as List<String>;
       final status = results[1] as int?;
       final tally = results[2] as ({int yes, int no});
-      final proposalInfo = results[3] as TransferProposalInfo?;
+      final rateInfo = results[3] as FeeRateProposalInfo?;
 
-      // 逐个查询每位管理员的投票记录
       final votes = <String, bool?>{};
       final voteFutures = admins.map((pubkey) async {
-        final vote =
-            await _proposalService.fetchAdminVote(widget.proposalId, pubkey);
+        final vote = await _proposalService.fetchAdminVote(widget.proposalId, pubkey);
         return MapEntry(pubkey, vote);
       });
       final voteResults = await Future.wait(voteFutures);
@@ -109,22 +106,16 @@ class _TransferProposalDetailPageState
         votes[entry.key] = entry.value;
       }
 
-      // 检查待确认投票：先批量确认，再获取仍在等待的记录
       final pendingRecords = await PendingVoteStore.instance.confirmAll(
-        'transfer',
-        widget.proposalId,
-        OnchainRpc(),
+        'rate', widget.proposalId, OnchainRpc(),
       );
       final pendingPks = pendingRecords.map((r) => r.walletPubkey).toSet();
 
-      // 筛选出可投票的管理员钱包（未投票且无待确认投票的）
       final votable = <WalletProfile>[];
       for (final w in widget.adminWallets) {
         var pk = w.pubkeyHex.toLowerCase();
         if (pk.startsWith('0x')) pk = pk.substring(2);
-        if (admins.contains(pk) &&
-            votes[pk] == null &&
-            !pendingPks.contains(pk)) {
+        if (admins.contains(pk) && votes[pk] == null && !pendingPks.contains(pk)) {
           votable.add(w);
         }
       }
@@ -135,11 +126,11 @@ class _TransferProposalDetailPageState
         _status = status;
         _yesCount = tally.yes;
         _noCount = tally.no;
+        _newRateBp = rateInfo?.newRateBp;
         _adminVotes = votes;
         _pendingPubkeys = pendingPks;
         _votableWallets = votable;
         _selectedVoteWallet = votable.isNotEmpty ? votable.first : null;
-        _proposalInfo = proposalInfo;
         _loading = false;
       });
     } catch (e) {
@@ -151,15 +142,12 @@ class _TransferProposalDetailPageState
     }
   }
 
-  // ──── SS58 编码工具 ────
+  // ──── 工具 ────
 
   String _toHex(List<int> bytes) {
-    const chars = '0123456789abcdef';
     final buf = StringBuffer();
     for (final b in bytes) {
-      buf
-        ..write(chars[(b >> 4) & 0x0f])
-        ..write(chars[b & 0x0f]);
+      buf..write((b >> 4).toRadixString(16))..write((b & 0x0f).toRadixString(16));
     }
     return buf.toString();
   }
@@ -178,42 +166,35 @@ class _TransferProposalDetailPageState
     return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
   }
 
-  // ──── 投票提交 ────
+  // ──── 投票 ────
 
-  /// 当前用户是否是此机构的管理员（可能导入了多个管理员钱包）。
-  bool get _isCurrentUserAdmin => widget.proposalContext.isAdmin;
-
-  /// 是否还有可投票的钱包（未投票的管理员钱包）。
-  bool get _canVote {
-    if (_selectedVoteWallet == null) return false;
-    if (_status != _statusVoting) return false;
-    return _votableWallets.isNotEmpty;
-  }
-
-  /// 所有管理员钱包都已投过票或正在投票中。
-  bool get _allVoted {
-    if (widget.adminWallets.isEmpty) return false;
-    for (final w in widget.adminWallets) {
-      var pk = w.pubkeyHex.toLowerCase();
-      if (pk.startsWith('0x')) pk = pk.substring(2);
-      if (_adminVotes[pk] == null && !_pendingPubkeys.contains(pk)) {
-        return false;
-      }
-    }
-    return true;
+  void _confirmVote(bool approve) {
+    final label = approve ? '赞成' : '反对';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('确认$label'),
+        content: Text('确定要对此费率提案投"$label"票吗？投票后不可更改。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () { Navigator.pop(ctx); _submitVote(approve); },
+            child: Text(label),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _submitVote(bool approve) async {
     final wallet = _selectedVoteWallet;
     if (wallet == null) return;
-
     setState(() => _submitting = true);
 
     try {
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
 
       Future<Uint8List> signCallback(Uint8List payload) async {
-        // 管理员投票统一通过 QR 码签名（wumin 冷钱包）
         final qrSigner = QrSigner();
         final voteText = approve ? '赞成' : '反对';
         final rv = await ChainRpc().fetchRuntimeVersion();
@@ -224,35 +205,12 @@ class _TransferProposalDetailPageState
           payloadHex: '0x${_toHex(payload)}',
           specVersion: rv.specVersion,
           display: {
-            'action': 'vote_transfer',
-            'action_label': '转账投票',
-            'summary': '转账提案 #${widget.proposalId} 投票：$voteText',
+            'action': 'vote_institution_rate',
+            'action_label': '费率投票',
+            'summary': '费率提案 #${widget.proposalId} 投票：$voteText',
             'fields': [
-              {
-                'key': 'proposal_id',
-                'label': '提案编号',
-                'value': widget.proposalId.toString()
-              },
-              {'key': 'approve', 'label': '投票', 'value': approve.toString()},
-              if (_proposalInfo != null) ...{
-                {
-                  'key': 'beneficiary',
-                  'label': '收款账户',
-                  'value': _proposalInfo!.beneficiary
-                },
-                {
-                  'key': 'amount_yuan',
-                  'label': '金额',
-                  'value': AmountFormat.format(_proposalInfo!.amountYuan),
-                  'format': 'currency'
-                },
-                if (_proposalInfo!.remark.isNotEmpty)
-                  {
-                    'key': 'remark',
-                    'label': '备注',
-                    'value': _proposalInfo!.remark
-                  },
-              },
+              {'key': 'proposal_id', 'label': '提案编号', 'value': widget.proposalId.toString()},
+              {'key': 'approve', 'label': '投票', 'value': voteText},
             ],
           },
         );
@@ -261,16 +219,17 @@ class _TransferProposalDetailPageState
           context,
           MaterialPageRoute(
             builder: (_) => QrSignSessionPage(
-                request: request,
-                requestJson: requestJson,
-                expectedPubkey: '0x${wallet.pubkeyHex}'),
+              request: request,
+              requestJson: requestJson,
+              expectedPubkey: '0x${wallet.pubkeyHex}',
+            ),
           ),
         );
         if (response == null) throw Exception('签名已取消');
         return Uint8List.fromList(_hexDecode(response.signature));
       }
 
-      final result = await _proposalService.submitVoteTransfer(
+      final result = await _proposalService.submitVoteRate(
         proposalId: widget.proposalId,
         approve: approve,
         fromAddress: wallet.address,
@@ -278,11 +237,10 @@ class _TransferProposalDetailPageState
         sign: signCallback,
       );
 
-      // 持久化待确认投票记录
       var pubkey = wallet.pubkeyHex.toLowerCase();
       if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
       await PendingVoteStore.instance.save(PendingVoteRecord(
-        proposalType: 'transfer',
+        proposalType: 'rate',
         proposalId: widget.proposalId,
         walletPubkey: pubkey,
         approve: approve,
@@ -299,57 +257,27 @@ class _TransferProposalDetailPageState
         ),
       );
 
-      // 刷新数据
       _adminService.clearCache(widget.institution.shenfenId);
       await _load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('投票失败：$e'),
-          backgroundColor: AppTheme.danger,
-        ),
+        SnackBar(content: Text('投票失败：$e'), backgroundColor: AppTheme.danger),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  void _confirmVote(bool approve) {
-    final label = approve ? '赞成' : '反对';
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('确认$label'),
-        content: Text('确定要对此提案投"$label"票吗？投票后不可更改。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _submitVote(approve);
-            },
-            child: Text(label),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ──── 构建 UI ────
+  // ──── UI ────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
-        title: const Text(
-          '提案详情',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-        ),
+        title: const Text('提案详情',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
         centerTitle: true,
         foregroundColor: AppTheme.textPrimary,
       ),
@@ -387,13 +315,9 @@ class _TransferProposalDetailPageState
             const Text('加载失败',
                 style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
             const SizedBox(height: 6),
-            Text(
-              _error!,
-              style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
-              textAlign: TextAlign.center,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-            ),
+            Text(_error!,
+              style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+              textAlign: TextAlign.center, maxLines: 4, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 16),
             OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],
@@ -425,21 +349,15 @@ class _TransferProposalDetailPageState
             admins: _admins,
             adminVotes: _adminVotes,
             pendingPubkeys: _pendingPubkeys,
-            proposerPubkey: _proposalInfo != null
-                ? _proposalInfo!.proposer
-                : null,
           ),
         ],
       ),
     );
   }
 
-  // ──── 提案信息卡片 ────
+  // ──── 提案信息卡（费率专属） ────
 
   Widget _buildProposalInfoCard() {
-    final info = _proposalInfo;
-    final remark = info?.remark ?? '';
-
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -452,117 +370,32 @@ class _TransferProposalDetailPageState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '提案信息',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.primaryDark,
-              ),
-            ),
+            const Text('提案信息',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.primaryDark)),
             const SizedBox(height: 12),
-            _buildInfoRow(
-              '机构名称',
-              widget.institution.name,
-            ),
-            if (info != null) ...[
-              const Divider(height: 20),
-              _buildInfoRow(
-                '转账金额',
-                '${AmountFormat.format(info.amountYuan, symbol: '')} 元',
-              ),
-              const Divider(height: 20),
-              _buildInfoRow(
-                '收款地址',
-                _truncateAddress(info.beneficiary),
-                onCopy: () {
-                  Clipboard.setData(ClipboardData(text: info.beneficiary));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('地址已复制'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                },
-              ),
-            ],
+            _buildInfoRow('机构名称', widget.institution.name),
             const Divider(height: 20),
-            // 备注（可折叠）
-            _buildRemarkRow(remark),
+            _buildInfoRow('提案类型', '费率设置'),
+            const Divider(height: 20),
+            if (_newRateBp != null) ...[
+              _buildInfoRow('新设费率', '$_newRateBp bp (${(_newRateBp! / 100).toStringAsFixed(2)}%)'),
+              const Divider(height: 20),
+            ],
+            _buildInfoRow('提案编号', '#${widget.proposalId}'),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRemarkRow(String remark) {
-    if (remark.isEmpty) {
-      return _buildInfoRow('备注', '无');
-    }
-    final isLong = remark.length > 30;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 80,
-              child: Text(
-                '备注',
-                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
-              ),
-            ),
-            Expanded(
-              child: Text(
-                remark,
-                style:
-                    const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
-                maxLines: _remarkExpanded ? null : 1,
-                overflow: _remarkExpanded ? null : TextOverflow.ellipsis,
-              ),
-            ),
-            if (isLong)
-              GestureDetector(
-                onTap: () => setState(() => _remarkExpanded = !_remarkExpanded),
-                child: Icon(
-                  _remarkExpanded
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
-                  size: 20,
-                  color: AppTheme.textTertiary,
-                ),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value, {VoidCallback? onCopy}) {
+  Widget _buildInfoRow(String label, String value) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 80,
-          child: Text(
-            label,
-            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
-          ),
-        ),
+        SizedBox(width: 80,
+          child: Text(label, style: TextStyle(fontSize: 13, color: AppTheme.textTertiary))),
         Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
-          ),
-        ),
-        if (onCopy != null)
-          GestureDetector(
-            onTap: onCopy,
-            child: Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
-          ),
+          child: Text(value, style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
       ],
     );
   }
-
 }

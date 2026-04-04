@@ -32,6 +32,9 @@ enum QrScanMode {
 
   /// 扫码添加好友：仅识别用户码。
   contact,
+
+  /// 通用扫码：直接返回原始字符串，不做协议路由。
+  raw,
 }
 
 /// 统一扫码页。
@@ -45,6 +48,7 @@ class QrScanPage extends StatefulWidget {
     required this.mode,
     this.selfAccountPubkeyHex,
     this.initialCode,
+    this.customTitle,
   });
 
   /// 扫码模式。
@@ -55,6 +59,9 @@ class QrScanPage extends StatefulWidget {
 
   /// 如果已扫码，可直接传入原始字符串跳过扫码步骤。
   final String? initialCode;
+
+  /// 自定义标题（为 null 时使用默认标题）。
+  final String? customTitle;
 
   @override
   State<QrScanPage> createState() => _QrScanPageState();
@@ -145,6 +152,10 @@ class _QrScanPageState extends State<QrScanPage> {
           } else {
             await _showUnrecognized();
           }
+        case QrScanMode.raw:
+          // 通用扫码：直接返回原始字符串
+          if (!mounted) return;
+          Navigator.of(context).pop(raw);
       }
     } catch (e) {
       if (!mounted) {
@@ -321,14 +332,16 @@ class _QrScanPageState extends State<QrScanPage> {
   // 未识别
   // ---------------------------------------------------------------------------
 
-  String get _hintText => switch (widget.mode) {
+  String get _hintText => widget.customTitle ?? switch (widget.mode) {
         QrScanMode.transfer => '扫描收款码',
         QrScanMode.contact => '扫描对方收款码',
+        QrScanMode.raw => '扫描二维码',
       };
 
-  String get _titleText => switch (widget.mode) {
+  String get _titleText => widget.customTitle ?? switch (widget.mode) {
         QrScanMode.transfer => '扫码支付',
         QrScanMode.contact => '扫码添加好友',
+        QrScanMode.raw => '扫描二维码',
       };
 
   Future<void> _handleLogin(String raw) async {

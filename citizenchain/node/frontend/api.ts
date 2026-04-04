@@ -162,4 +162,19 @@ export const api = {
       requestId, expectedPubkeyHex, expectedPayloadHash,
       wasmPath, signNonce, signBlockNumber, responseJson,
     }),
+  buildRateVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>
+    invoke<VoteSignRequestResult>('build_rate_vote_request', { proposalId, pubkeyHex, approve }),
+  queryInstitutionRateBp: (shenfenId: string) =>
+    invoke<number>('query_institution_rate_bp', { shenfenId }),
+  buildProposeRateRequest: (pubkeyHex: string, shenfenId: string, newRateBp: number) =>
+    invoke<VoteSignRequestResult>('build_propose_rate_request', { pubkeyHex, shenfenId, newRateBp }),
+  submitProposeRate: (
+    requestId: string, expectedPubkeyHex: string, expectedPayloadHash: string,
+    shenfenId: string, newRateBp: number,
+    signNonce: number, signBlockNumber: number, responseJson: string,
+  ) =>
+    invoke<VoteSubmitResult>('submit_propose_rate', {
+      requestId, expectedPubkeyHex, expectedPayloadHash,
+      shenfenId, newRateBp, signNonce, signBlockNumber, responseJson,
+    }),
 };

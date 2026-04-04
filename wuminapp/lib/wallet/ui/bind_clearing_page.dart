@@ -145,6 +145,26 @@ class _BindClearingPageState extends State<BindClearingPage> {
 
     setState(() => _submitting = true);
 
+    // 余额预检查：需要 0.1 元手续费 + 1.11 元 ED = 1.21 元
+    try {
+      final balance = await ChainRpc().fetchBalance(widget.wallet.pubkeyHex);
+      if (balance < 1.21) {
+        if (!mounted) return;
+        setState(() => _submitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('余额不足，绑定需至少 1.21 元（手续费 0.1 元 + 最低余额 1.11 元）')),
+        );
+        return;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('查询余额失败：$e')),
+      );
+      return;
+    }
+
     try {
       final wallet = widget.wallet;
       final Future<Uint8List> Function(Uint8List payload) signCallback;

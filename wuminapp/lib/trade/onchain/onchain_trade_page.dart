@@ -74,22 +74,27 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   }
 
   /// 中文注释：对所有 pending 状态的记录执行链上确认检查。
-  /// 超过 5 分钟的 pending 记录直接标为 confirmed（链上余额已变说明交易成功）。
+  /// 查询链上已确认 nonce，如果 nonce 已推进超过该记录的 nonce，标为 confirmed。
   Future<void> _checkPendingRecords() async {
     if (_currentWallet == null) return;
     final pending = _localTxRecords.where((r) => r.status == 'pending').toList();
     if (pending.isEmpty) return;
-    final now = DateTime.now().millisecondsSinceEpoch;
+
     bool updated = false;
-    for (final record in pending) {
-      // 超过 5 分钟的 pending 记录，交易大概率已上链，标为 confirmed
-      final elapsed = now - record.createdAtMillis;
-      if (elapsed > 5 * 60 * 1000) {
-        try {
+    try {
+      final confirmedNonce = await ChainRpc().fetchConfirmedNonce(
+        _currentWallet!.pubkeyHex,
+      );
+      for (final record in pending) {
+        // blockNumber 字段存的是 usedNonce
+        final usedNonce = record.blockNumber;
+        if (usedNonce != null && confirmedNonce > usedNonce) {
           await LocalTxStore.updateStatus(record.txId, 'confirmed');
           updated = true;
-        } catch (_) {}
+        }
       }
+    } catch (_) {
+      // RPC 查询失败时不处理，下次再检查
     }
     if (updated && mounted) await _loadLocalRecords();
   }
@@ -196,25 +201,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         const SnackBar(content: Text('该收款码不支持扫码支付（未绑定清算行）')),
       );
     }
-  }
-
-  Future<void> _scanToAddress() async {
-    final result = await Navigator.of(context).push<QrScanTransferResult>(
-      MaterialPageRoute(
-          builder: (_) => const QrScanPage(mode: QrScanMode.transfer)),
-    );
-    if (result == null || !mounted) {
-      return;
-    }
-    setState(() {
-      _toController.text = result.toAddress;
-      if (result.amount != null && result.amount!.isNotEmpty) {
-        _amountController.text = result.amount!;
-      }
-      if (result.symbol != null && result.symbol!.isNotEmpty) {
-        _selectedSymbol = result.symbol!;
-      }
-    });
   }
 
   Future<void> _submit() async {
@@ -504,41 +490,40 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
     return Container(
       decoration: AppTheme.cardDecoration(),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_currentWallet != null)
               Padding(
-                padding: const EdgeInsets.only(left: 4, bottom: 12),
+                padding: const EdgeInsets.only(left: 0, bottom: 12),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(
-                      '可用余额：${AmountFormat.format(_currentWallet!.balance, symbol: '')} 元',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    const Spacer(),
                     Container(
-                      width: 32,
-                      height: 18,
+                      width: 22,
+                      height: 22,
                       decoration: BoxDecoration(
-                        color: AppTheme.primary,
-                        borderRadius: BorderRadius.circular(100),
+                        color: AppTheme.primary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: const Center(
                         child: Text(
                           '链上',
                           style: TextStyle(
                             fontSize: 8,
-                            color: AppTheme.textOnPrimary,
+                            color: AppTheme.primary,
                             fontWeight: FontWeight.w600,
-                            height: 1.0,
                           ),
                         ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '钱包可用余额：${AmountFormat.format(_currentWallet!.balance, symbol: '')} 元',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
                       ),
                     ),
                   ],
@@ -546,17 +531,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
               ),
             TextField(
               controller: _toController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: '收款地址',
-                suffixIcon: IconButton(
-                  tooltip: '扫码填入收款地址',
-                  onPressed: _scanToAddress,
-                  icon: SvgPicture.asset(
-                    'assets/icons/scan-line.svg',
-                    width: 18,
-                    height: 18,
-                  ),
-                ),
               ),
             ),
             const SizedBox(height: 12),

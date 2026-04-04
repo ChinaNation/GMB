@@ -50,6 +50,25 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
   bool _loadingWallet = true;
   bool _submitting = false;
 
+  /// 后台轮询链上状态，确认上链后更新本地交易记录。
+  ///
+  /// fire-and-forget，不阻塞 UI。每 30 秒查询一次，最多 2 小时。
+  static Future<void> _pollOnchainStatus(String txId, String bank) async {
+    const maxAttempts = 240; // 240 × 30s = 2 小时
+    for (var i = 0; i < maxAttempts; i++) {
+      await Future.delayed(const Duration(seconds: 30));
+      try {
+        final receipt = await OffchainRpc.queryTxStatus(bank, txId);
+        if (receipt.status == OffchainTxStatus.onchain) {
+          await LocalTxStore.updateStatus(txId, 'onchain');
+          return;
+        }
+      } catch (_) {
+        // 查询失败继续重试
+      }
+    }
+  }
+
   /// 商户是否预设了金额。
   bool get _amountPreset =>
       widget.amount != null && widget.amount!.isNotEmpty;
@@ -274,6 +293,9 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
           ..createdAtMillis = DateTime.now().millisecondsSinceEpoch
           ..confirmedAtMillis = DateTime.now().millisecondsSinceEpoch;
         await LocalTxStore.insert(localEntity);
+
+        // 后台轮询链上状态，确认上链后更新本地记录
+        _pollOnchainStatus(txId, widget.bank);
 
         if (!mounted) return;
         await showDialog<void>(
