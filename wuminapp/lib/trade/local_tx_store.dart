@@ -1,5 +1,5 @@
 import 'package:isar/isar.dart';
-import 'package:wuminapp_mobile/isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
 
 /// 本地交易记录存储服务。
 class LocalTxStore {

@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'chain_event_subscription.dart';
 import 'chain_rpc.dart';
 import 'smoldot_client.dart';
-import 'package:wuminapp_mobile/isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/trade/local_tx_store.dart';
 
 /// 链上交易监控服务（余额变化触发模式）。

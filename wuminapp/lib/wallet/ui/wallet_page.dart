@@ -10,7 +10,7 @@ import 'package:saver_gallery/saver_gallery.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/trade/local_tx_store.dart';
-import 'package:wuminapp_mobile/isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
 import 'package:wuminapp_mobile/user/user_service.dart' show UserProfileService;
 import 'package:wuminapp_mobile/ui/widgets/bip39_input.dart';
