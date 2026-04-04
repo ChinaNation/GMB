@@ -10,7 +10,7 @@ import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_service.dart';
 import 'package:wuminapp_mobile/trade/local_tx_store.dart';
-import 'package:wuminapp_mobile/isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
@@ -500,21 +500,14 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: 0.10),
+                    Transform.rotate(
+                      angle: 0.785398,
+                      child: ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          '链上',
-                          style: TextStyle(
-                            fontSize: 8,
-                            color: AppTheme.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        child: Image.asset(
+                          'assets/icons/icons8-96.png',
+                          width: 22,
+                          height: 22,
                         ),
                       ),
                     ),
@@ -754,14 +747,12 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                                   color: AppTheme.primary.withAlpha(20),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Center(
-                                  child: Text(
-                                    '链下',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppTheme.primary,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                child: Center(
+                                  child: Image.asset(
+                                    'assets/icons/icons8-64.png',
+                                    width: 20,
+                                    height: 20,
+                                    color: AppTheme.primary,
                                   ),
                                 ),
                               ),

@@ -275,7 +275,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
             </div>
             <div className="detail-row">
               <span className="detail-label">金额</span>
-              <span className="detail-value">{formatBalance(parseInt(info.safetyFundDetail.amountFen))}</span>
+              <span className="detail-value">{formatBalance(info.safetyFundDetail.amountFen)}</span>
             </div>
             {info.safetyFundDetail.remark && (
               <div className="detail-row">
@@ -294,7 +294,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
           <div className="proposal-detail-table">
             <div className="detail-row">
               <span className="detail-label">金额</span>
-              <span className="detail-value">{formatBalance(parseInt(info.sweepDetail.amountFen))}</span>
+              <span className="detail-value">{formatBalance(info.sweepDetail.amountFen)}</span>
             </div>
           </div>
         </div>

@@ -12,9 +12,9 @@ set -euo pipefail
 # ║                     【密钥配置（可选）】                       ║
 # ╚══════════════════════════════════════════════════════════════╝
 
-NODE_KEY=""
-GRANDPA_KEY=""
-MINER_REWARD_ADDRESS="w5FFpe2pXieqMSoYHvRvXCRgh8ywSpuUjf8dYXkDSFkyTvQX1"
+NODE_KEY="0x5c6af799c41d6be52bbff24a8eaaca91b6beea292910442d50507d5a01d1e67a"
+GRANDPA_KEY="0xd35913f0e122cc5e6621ac51fdcd1867c6d45a0fced8b3d3051723765b51a427"
+MINER_REWARD_ADDRESS="w5D8NC99pbhhvq1znhu63XSUnjukm5ozqXnqg6jxP5Ged9ZiP"
 
 # ══════════════════════════════════════════════════════════════
 
