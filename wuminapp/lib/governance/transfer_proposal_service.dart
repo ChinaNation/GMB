@@ -683,8 +683,13 @@ class TransferProposalService {
       offset += lenBytes;
       if (offset + vecLen > raw.length) return null;
       final data = raw.sublist(offset, offset + vecLen);
-      if (data.length < 48 + 32 + 16 + 1 + 32) return null;
-      return _decodeTransferAction(proposalId, data);
+      // 跳过 MODULE_TAG 前缀（"dq-xfer" = 7 字节）
+      const tag = [0x64, 0x71, 0x2d, 0x78, 0x66, 0x65, 0x72]; // "dq-xfer"
+      if (data.length < tag.length + 48 + 32 + 16 + 1 + 32) return null;
+      for (var i = 0; i < tag.length; i++) {
+        if (data[i] != tag[i]) return null;
+      }
+      return _decodeTransferAction(proposalId, data.sublist(tag.length));
     } catch (_) {
       return null;
     }
@@ -751,8 +756,13 @@ class TransferProposalService {
     if (offset + vecLen > raw.length) return null;
     final data = raw.sublist(offset, offset + vecLen);
 
-    if (data.length < 48 + 32 + 16 + 1 + 32) return null;
-    return _decodeTransferAction(proposalId, data);
+    // 跳过 MODULE_TAG 前缀（"dq-xfer" = 7 字节）
+    const tag = [0x64, 0x71, 0x2d, 0x78, 0x66, 0x65, 0x72]; // "dq-xfer"
+    if (data.length < tag.length + 48 + 32 + 16 + 1 + 32) return null;
+    for (var i = 0; i < tag.length; i++) {
+      if (data[i] != tag[i]) return null;
+    }
+    return _decodeTransferAction(proposalId, data.sublist(tag.length));
   }
 
   /// 解码 TransferAction SCALE 数据。
