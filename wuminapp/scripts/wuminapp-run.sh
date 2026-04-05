@@ -29,6 +29,35 @@ fi
 DART_DEFINES=(--dart-define=WUMINAPP_API_BASE_URL="$WUMINAPP_API_BASE_URL")
 echo "[启动模式] smoldot 轻节点"
 
+# ── 同步最新 chainspec（从本地节点二进制导出） ──
+CHAIN_ROOT="$SCRIPT_DIR/../../citizenchain"
+NODE_BIN="$CHAIN_ROOT/target/debug/citizenchain"
+WASM_DIR="$CHAIN_ROOT/target/ci-wasm"
+CHAINSPEC_OUT="$SCRIPT_DIR/../assets/chainspec.json"
+
+if [[ -x "$NODE_BIN" ]]; then
+  # 查找 WASM 文件（CI 下载的或本地编译的）
+  WASM_FILE="${WASM_FILE:-}"
+  if [[ -z "$WASM_FILE" && -f "$WASM_DIR/citizenchain.compact.compressed.wasm" ]]; then
+    WASM_FILE="$WASM_DIR/citizenchain.compact.compressed.wasm"
+  fi
+  if [[ -n "$WASM_FILE" && -f "$WASM_FILE" ]]; then
+    echo "==> 从本地节点导出 chainspec..."
+    WASM_FILE="$WASM_FILE" "$NODE_BIN" build-spec --raw 2>/dev/null > "$CHAINSPEC_OUT.tmp"
+    if [[ -s "$CHAINSPEC_OUT.tmp" ]]; then
+      mv "$CHAINSPEC_OUT.tmp" "$CHAINSPEC_OUT"
+      echo "    已更新 assets/chainspec.json"
+    else
+      rm -f "$CHAINSPEC_OUT.tmp"
+      echo "    警告：build-spec 输出为空，保留旧 chainspec"
+    fi
+  else
+    echo "    跳过 chainspec 同步（未找到 WASM 文件，请先运行 citizenchain/scripts/run.sh）"
+  fi
+else
+  echo "    跳过 chainspec 同步（未找到节点二进制 $NODE_BIN，请先编译 citizenchain）"
+fi
+
 echo "==> 清除 Rust 编译缓存..."
 (cd "rust" && ~/.cargo/bin/cargo clean 2>/dev/null || true)
 echo "==> 编译 Rust 原生库..."

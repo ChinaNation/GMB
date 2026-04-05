@@ -8,6 +8,10 @@ use std::time::Duration;
 use super::storage_keys;
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// MODULE_TAG 前缀（必须与对应 pallet 保持一致）。
+const TAG_TRANSFER: &[u8] = b"dq-xfer";
+const TAG_RUNTIME_UPGRADE: &[u8] = b"rt-upg";
 use crate::ui::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
@@ -591,12 +595,16 @@ fn decode_proposal_meta(proposal_id: u64, data: &[u8]) -> Option<ProposalMeta> {
 }
 
 fn decode_transfer_action(proposal_id: u64, data: &[u8]) -> Option<TransferProposalDetail> {
-    // institution: [u8;48] + beneficiary: [u8;32] + amount: u128(16)
+    // MODULE_TAG("dq-xfer":7) + institution: [u8;48] + beneficiary: [u8;32] + amount: u128(16)
     // + remark: Vec<u8> + proposer: [u8;32]
-    if data.len() < 48 + 32 + 16 + 1 + 32 {
+    let tag = TAG_TRANSFER;
+    if data.len() < tag.len() + 48 + 32 + 16 + 1 + 32 {
         return None;
     }
-    let mut offset = 0;
+    if &data[..tag.len()] != tag {
+        return None;
+    }
+    let mut offset = tag.len();
 
     let institution_hex = hex::encode(&data[offset..offset + 48]);
     offset += 48;
@@ -636,7 +644,12 @@ fn decode_runtime_upgrade_action(
     proposal_id: u64,
     data: &[u8],
 ) -> Option<RuntimeUpgradeDetail> {
-    let mut offset = 0;
+    // 跳过 MODULE_TAG("rt-upg":6)
+    let tag = TAG_RUNTIME_UPGRADE;
+    if data.len() < tag.len() || &data[..tag.len()] != tag {
+        return None;
+    }
+    let mut offset = tag.len();
 
     // proposer: [u8;32]
     if offset + 32 > data.len() {

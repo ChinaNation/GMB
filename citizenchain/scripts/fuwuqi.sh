@@ -11,9 +11,10 @@ set -euo pipefail
 # ╔══════════════════════════════════════════════════════════════╗
 # ║                     【密钥配置（可选）】                       ║
 # ╚══════════════════════════════════════════════════════════════╝
+# 用法：引导节点不带0x；
 
-NODE_KEY="83e5af5b66ace1501e7bc2379a76873382883dd37ccdda791578ae50f8c72587"
-GRANDPA_KEY=""
+NODE_KEY="5c6af799c41d6be52bbff24a8eaaca91b6beea292910442d50507d5a01d1e67a"
+GRANDPA_KEY="0xd35913f0e122cc5e6621ac51fdcd1867c6d45a0fced8b3d3051723765b51a427"
 MINER_REWARD_ADDRESS="w5D8NC99pbhhvq1znhu63XSUnjukm5ozqXnqg6jxP5Ged9ZiP"
 
 # ══════════════════════════════════════════════════════════════
@@ -150,9 +151,10 @@ echo ""
 echo ">>> 配置密钥..."
 
 if [ -n "$NODE_KEY" ]; then
+  NODE_KEY_STRIPPED="${NODE_KEY#0x}"
   ssh $SSH_OPTS "$SSH_TARGET" "
     sudo mkdir -p $REMOTE_DATA/node-key
-    printf '%s' '$NODE_KEY' | sudo tee $REMOTE_DATA/node-key/secret_ed25519 > /dev/null
+    printf '%s' '$NODE_KEY_STRIPPED' | sudo tee $REMOTE_DATA/node-key/secret_ed25519 > /dev/null
     sudo chmod 600 $REMOTE_DATA/node-key/secret_ed25519
     sudo chown citizenchain:citizenchain $REMOTE_DATA/node-key/secret_ed25519
   "
