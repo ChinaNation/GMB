@@ -475,10 +475,16 @@ pub fn new_full(
         );
     net_config.add_notification_protocol(grandpa_protocol_config);
 
-    // 注册链下清算 P2P 广播协议
-    let (offchain_clearing_config, offchain_clearing_notification_service) =
-        crate::offchain_gossip::offchain_clearing_protocol_config();
-    net_config.add_notification_protocol(offchain_clearing_config);
+    // 注册链下清算 P2P 广播协议（仅省储行节点——已配置清算签名私钥时才注册）
+    let offchain_clearing_notification_service = if get_offchain_config().is_some() {
+        let (offchain_clearing_config, notification_service) =
+            crate::offchain_gossip::offchain_clearing_protocol_config();
+        net_config.add_notification_protocol(offchain_clearing_config);
+        log::info!("[Offchain] 省储行清算协议已注册");
+        Some(notification_service)
+    } else {
+        None
+    };
 
     let warp_sync = Arc::new(sc_consensus_grandpa::warp_proof::NetworkProvider::new(
         backend.clone(),
@@ -541,15 +547,14 @@ pub fn new_full(
         }
     };
 
-    // 创建链下清算广播 channel
-    let (offchain_gossip_tx, offchain_gossip_rx) = {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<crate::offchain_gossip::OffchainGossipMessage>();
+    // 创建链下清算广播 channel（仅省储行节点）
+    let (offchain_gossip_tx, offchain_gossip_rx) =
         if get_offchain_config().is_some() {
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<crate::offchain_gossip::OffchainGossipMessage>();
             (Some(tx), Some(rx))
         } else {
             (None, None)
-        }
-    };
+        };
 
     let rpc_extensions_builder = {
         let client = client.clone();
@@ -590,17 +595,16 @@ pub fn new_full(
         tracing_execute_block: None,
     })?;
 
-    // 启动链下清算广播 worker（收发合一，省储行节点和普通节点都启动）
+    // 启动链下清算广播 worker（仅省储行节点——已配置清算签名私钥时才启动）
+    if let (Some(notification_service), Some(offchain_cfg)) =
+        (offchain_clearing_notification_service, get_offchain_config())
     {
-        let ledger_for_gossip = get_offchain_config()
-            .map(|c| c.ledger.clone())
-            .unwrap_or_else(|| crate::offchain_ledger::OffchainLedger::new(std::path::Path::new("/tmp")));
-
-        task_manager.spawn_essential_handle().spawn(
+        let ledger_for_gossip = offchain_cfg.ledger.clone();
+        task_manager.spawn_handle().spawn(
             "offchain-clearing-gossip",
             None,
             crate::offchain_gossip::run_offchain_gossip_worker(
-                offchain_clearing_notification_service,
+                notification_service,
                 ledger_for_gossip,
                 offchain_gossip_rx,
             ),

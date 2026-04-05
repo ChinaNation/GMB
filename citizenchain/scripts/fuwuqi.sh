@@ -12,8 +12,8 @@ set -euo pipefail
 # ║                     【密钥配置（可选）】                       ║
 # ╚══════════════════════════════════════════════════════════════╝
 
-NODE_KEY="0x5c6af799c41d6be52bbff24a8eaaca91b6beea292910442d50507d5a01d1e67a"
-GRANDPA_KEY="0xd35913f0e122cc5e6621ac51fdcd1867c6d45a0fced8b3d3051723765b51a427"
+NODE_KEY="83e5af5b66ace1501e7bc2379a76873382883dd37ccdda791578ae50f8c72587"
+GRANDPA_KEY=""
 MINER_REWARD_ADDRESS="w5D8NC99pbhhvq1znhu63XSUnjukm5ozqXnqg6jxP5Ged9ZiP"
 
 # ══════════════════════════════════════════════════════════════
@@ -40,8 +40,10 @@ SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=accept-new"
 
 validate_hex_key() {
   local name="$1" value="$2"
-  if [ -n "$value" ] && ! echo "$value" | grep -qE '^[0-9a-fA-F]{64}$'; then
-    echo "错误：$name 格式无效，应为 64 位十六进制字符串"
+  # 去掉可选的 0x 前缀后校验
+  local stripped="${value#0x}"
+  if [ -n "$stripped" ] && ! echo "$stripped" | grep -qE '^[0-9a-fA-F]{64}$'; then
+    echo "错误：$name 格式无效，应为 64 位十六进制字符串（可带 0x 前缀）"
     exit 1
   fi
 }
@@ -76,9 +78,10 @@ GRANDPA_PUBKEY=""
 if [ -n "$GRANDPA_KEY" ]; then
   echo ""
   echo ">>> 推导 GRANDPA 公钥..."
+  GRANDPA_KEY_STRIPPED="${GRANDPA_KEY#0x}"
   GRANDPA_PUBKEY=$(python3 -c "
 from nacl.signing import SigningKey
-sk = SigningKey(bytes.fromhex('$GRANDPA_KEY'))
+sk = SigningKey(bytes.fromhex('$GRANDPA_KEY_STRIPPED'))
 print(sk.verify_key.encode().hex())
 ")
   echo "GRANDPA 公钥: $GRANDPA_PUBKEY"
@@ -160,7 +163,7 @@ fi
 
 if [ -n "$GRANDPA_KEY" ] && [ -n "$GRANDPA_PUBKEY" ]; then
   GRAN_FILENAME="6772616e${GRANDPA_PUBKEY}"
-  GRAN_CONTENT="\"0x${GRANDPA_KEY}\""
+  GRAN_CONTENT="\"${GRANDPA_KEY}\""
   ssh $SSH_OPTS "$SSH_TARGET" "
     sudo mkdir -p $REMOTE_KEYSTORE
     echo -n '$GRAN_CONTENT' | sudo tee $REMOTE_KEYSTORE/$GRAN_FILENAME > /dev/null
