@@ -99,6 +99,9 @@ pub(crate) struct Store {
     pub(crate) reward_state_by_pubkey: HashMap<String, RewardStateRecord>,
     pub(crate) vote_verify_cache: HashMap<String, VoteVerifyCacheEntry>,
     pub(crate) metrics: ServiceMetrics,
+    /// 多签机构 SFID 注册记录，key = site_sfid
+    #[serde(default)]
+    pub(crate) multisig_sfid_records: HashMap<String, MultisigSfidRecord>,
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -1095,4 +1098,81 @@ pub(crate) struct BindCallbackSignablePayload {
     pub(crate) bound_at: i64,
     pub(crate) proof: SignatureEnvelope,
     pub(crate) client_request_id: Option<String>,
+}
+
+// ── 多签管理 ──────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum MultisigChainStatus {
+    Pending,
+    Registered,
+    Failed,
+}
+
+impl Default for MultisigChainStatus {
+    fn default() -> Self {
+        Self::Pending
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct MultisigSfidRecord {
+    pub(crate) site_sfid: String,
+    pub(crate) a3: String,
+    pub(crate) p1: String,
+    pub(crate) province: String,
+    pub(crate) city: String,
+    pub(crate) institution_code: String,
+    pub(crate) institution_name: String,
+    pub(crate) province_code: String,
+    pub(crate) chain_tx_hash: Option<String>,
+    pub(crate) chain_block_number: Option<u64>,
+    #[serde(default)]
+    pub(crate) chain_status: MultisigChainStatus,
+    pub(crate) created_by: String,
+    pub(crate) created_at: DateTime<Utc>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct GenerateMultisigSfidInput {
+    pub(crate) a3: String,
+    pub(crate) p1: Option<String>,
+    pub(crate) province: Option<String>,
+    pub(crate) city: String,
+    pub(crate) institution: String,
+    pub(crate) institution_name: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct GenerateMultisigSfidOutput {
+    pub(crate) site_sfid: String,
+    pub(crate) chain_status: MultisigChainStatus,
+    pub(crate) chain_tx_hash: Option<String>,
+    pub(crate) chain_block_number: Option<u64>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct MultisigSfidListRow {
+    pub(crate) site_sfid: String,
+    pub(crate) a3: String,
+    pub(crate) institution_code: String,
+    pub(crate) institution_name: String,
+    pub(crate) province: String,
+    pub(crate) city: String,
+    pub(crate) province_code: String,
+    pub(crate) chain_status: MultisigChainStatus,
+    pub(crate) chain_tx_hash: Option<String>,
+    pub(crate) chain_block_number: Option<u64>,
+    pub(crate) created_by: String,
+    pub(crate) created_by_name: String,
+    pub(crate) created_at: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct MultisigSfidListOutput {
+    pub(crate) total: usize,
+    pub(crate) limit: usize,
+    pub(crate) offset: usize,
+    pub(crate) rows: Vec<MultisigSfidListRow>,
 }

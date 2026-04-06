@@ -287,6 +287,9 @@ class DuoqianManageService {
   /// ACTION_CLOSE(2): duoqian_address(32B) + beneficiary(32B) + proposer(32B)
   ///
   /// 返回 CreateDuoqianProposalInfo 或 CloseDuoqianProposalInfo，解码失败返回 null。
+  /// MODULE_TAG 前缀（与链上 duoqian-manage-pow 的 MODULE_TAG 一致）。
+  static const _moduleTag = [0x64, 0x71, 0x2d, 0x6d, 0x67, 0x6d, 0x74]; // "dq-mgmt"
+
   Object? decodeManageProposalData(int proposalId, Uint8List raw) {
     try {
       var offset = 0;
@@ -297,9 +300,13 @@ class DuoqianManageService {
       if (offset + vecLen > raw.length) return null;
       final data = raw.sublist(offset, offset + vecLen);
 
-      if (data.isEmpty) return null;
-      final actionType = data[0];
-      final payload = data.sublist(1);
+      // 跳过 MODULE_TAG 前缀（"dq-mgmt", 7 bytes）
+      if (data.length < _moduleTag.length + 1) return null;
+      for (var i = 0; i < _moduleTag.length; i++) {
+        if (data[i] != _moduleTag[i]) return null;
+      }
+      final actionType = data[_moduleTag.length];
+      final payload = data.sublist(_moduleTag.length + 1);
 
       if (actionType == actionCreate) {
         return _decodeCreateAction(proposalId, payload);

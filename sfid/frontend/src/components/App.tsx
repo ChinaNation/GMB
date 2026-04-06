@@ -64,7 +64,7 @@ function startCameraScanner(
   };
 }
 import { DownloadOutlined, ExclamationCircleFilled, QrcodeOutlined } from '@ant-design/icons';
-import { Button, Card, Divider, Dropdown, Form, Input, Layout, Modal, QRCode, Select, Space, Table, Typography, message } from 'antd';
+import { Button, Card, Divider, Dropdown, Form, Input, Layout, Modal, QRCode, Select, Space, Table, Tag, Typography, message } from 'antd';
 import { MoreOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type {
@@ -74,8 +74,10 @@ import type {
   CitizenRow,
   CpmsSiteRow,
   GenerateCpmsInstitutionSfidResult,
+  GenerateMultisigSfidResult,
   KeyringRotateChallengeResult,
   KeyringStateResult,
+  MultisigSfidRow,
   OperatorRow,
   SfidCityItem,
   SfidMetaResult,
@@ -107,6 +109,8 @@ import {
   replaceSuperAdmin,
   registerCpms,
   scanCpmsStatusQr,
+  generateMultisigSfid,
+  listMultisigSfids,
   updateOperator,
   updateOperatorStatus
 } from '../api/client';
@@ -309,6 +313,7 @@ function reservedProvinceCityName(cities: SfidCityItem[]): string {
 
 type RoleCapabilities = {
   canViewInstitutions: boolean;
+  canViewMultisig: boolean;
   canViewKeyring: boolean;
   canViewInstitutionAdmins: boolean;
   canViewSystemAdmins: boolean;
@@ -328,6 +333,7 @@ function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilities {
   const isSystemAdmin = role === 'SYSTEM_ADMIN';
   return {
     canViewInstitutions: isKeyAdmin || isInstitutionAdmin,
+    canViewMultisig: isKeyAdmin || isInstitutionAdmin || isSystemAdmin,
     canViewKeyring: isKeyAdmin,
     canViewInstitutionAdmins: isKeyAdmin || isInstitutionAdmin,
     canViewSystemAdmins: isKeyAdmin || isInstitutionAdmin || isSystemAdmin,
@@ -375,7 +381,7 @@ export default function App() {
   const [scannerActive, setScannerActive] = useState(false);
   const [scanSubmitting, setScanSubmitting] = useState(false);
   const [scannerReady, setScannerReady] = useState(false);
-  const [activeView, setActiveView] = useState<'citizens' | 'institutions' | 'keyring' | 'super-admins' | 'operators'>('citizens');
+  const [activeView, setActiveView] = useState<'citizens' | 'institutions' | 'multisig' | 'keyring' | 'super-admins' | 'operators'>('citizens');
   const [operators, setOperators] = useState<OperatorRow[]>([]);
   const [operatorsLoading, setOperatorsLoading] = useState(false);
   const [operatorPage, setOperatorPage] = useState(1);
@@ -406,6 +412,14 @@ export default function App() {
   const [sfidMeta, setSfidMeta] = useState<SfidMetaResult | null>(null);
   const [sfidCities, setSfidCities] = useState<SfidCityItem[]>([]);
   const [sfidCitiesLoading, setSfidCitiesLoading] = useState(false);
+  // ── 多签管理 ──
+  const [multisigRows, setMultisigRows] = useState<MultisigSfidRow[]>([]);
+  const [multisigLoading, setMultisigLoading] = useState(false);
+  const [multisigModalOpen, setMultisigModalOpen] = useState(false);
+  const [multisigGenerating, setMultisigGenerating] = useState(false);
+  const [multisigPage, setMultisigPage] = useState(1);
+  const [multisigA3, setMultisigA3] = useState('GFR');
+  const [multisigForm] = Form.useForm();
   const [addOperatorForm] = Form.useForm<{ operator_pubkey: string; operator_name: string }>();
   const [institutionSfidForm] = Form.useForm<{
     province: string;
@@ -723,6 +737,79 @@ export default function App() {
       message.error(msg);
     } finally {
       setCpmsSitesLoading(false);
+    }
+  };
+
+  // ── 多签管理 ──
+  const refreshMultisigSfids = async (currentAuth: AdminAuth) => {
+    setMultisigLoading(true);
+    try {
+      const rows = await listMultisigSfids(currentAuth);
+      setMultisigRows(Array.isArray(rows) ? rows : []);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '加载多签机构列表失败';
+      message.error(msg);
+    } finally {
+      setMultisigLoading(false);
+    }
+  };
+
+  const openMultisigModal = async () => {
+    if (!auth) return;
+    try {
+      const meta = await getSfidMeta(auth);
+      setSfidMeta(meta);
+      const defaultA3 = 'GFR';
+      setMultisigA3(defaultA3);
+      const provinceDefault = auth.admin_province || meta.provinces[0]?.name || '';
+      multisigForm.setFieldsValue({
+        a3: defaultA3,
+        p1: '0',
+        province: provinceDefault,
+        city: '',
+        institution: defaultInstitutionByA3(defaultA3),
+        institution_name: '',
+      });
+      if (provinceDefault) {
+        await loadSfidCities(provinceDefault);
+      } else {
+        setSfidCities([]);
+      }
+      setMultisigModalOpen(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '加载SFID工具配置失败';
+      message.error(msg);
+    }
+  };
+
+  const onGenerateMultisigSfid = async (values: {
+    a3: string;
+    p1?: string;
+    province: string;
+    city: string;
+    institution: string;
+    institution_name: string;
+  }) => {
+    if (!auth) return;
+    setMultisigGenerating(true);
+    try {
+      await generateMultisigSfid(auth, {
+        a3: values.a3.trim(),
+        p1: values.p1?.trim(),
+        province: values.province.trim(),
+        city: values.city.trim(),
+        institution: values.institution.trim(),
+        institution_name: values.institution_name.trim(),
+      });
+      message.success('多签机构 SFID 已生成并上链注册');
+      setMultisigModalOpen(false);
+      multisigForm.resetFields();
+      await refreshMultisigSfids(auth);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '生成多签机构 SFID 失败';
+      message.error(msg);
+    } finally {
+      setMultisigGenerating(false);
     }
   };
 
@@ -1902,6 +1989,17 @@ export default function App() {
                   }
                 },
                 {
+                  key: 'multisig' as const,
+                  label: '多签管理',
+                  visible: capabilities.canViewMultisig,
+                  onClick: async () => {
+                    setActiveView('multisig');
+                    if (auth) {
+                      await refreshMultisigSfids(auth);
+                    }
+                  }
+                },
+                {
                   key: 'keyring' as const,
                   label: '密钥管理员',
                   visible: capabilities.canViewKeyring,
@@ -2291,6 +2389,66 @@ export default function App() {
                       );
                     }
                   }
+                ]}
+              />
+            </Card>
+          ) : activeView === 'multisig' && capabilities.canViewMultisig ? (
+            <Card
+              title="多签机构 SFID 列表"
+              bordered={false}
+              style={glassCardStyle}
+              headStyle={glassCardHeadStyle}
+              extra={
+                <Button type="primary" onClick={openMultisigModal}>
+                  生成多签机构 SFID
+                </Button>
+              }
+            >
+              <Table<MultisigSfidRow>
+                rowKey={(r) => r.site_sfid}
+                loading={multisigLoading}
+                dataSource={multisigRows}
+                pagination={{
+                  pageSize: 10,
+                  current: multisigPage,
+                  onChange: (page) => setMultisigPage(page)
+                }}
+                columns={[
+                  {
+                    title: '序号',
+                    width: 70,
+                    align: 'center',
+                    render: (_v, _row, index) => (multisigPage - 1) * 10 + index + 1
+                  },
+                  { title: 'SFID 号', dataIndex: 'site_sfid', width: 280 },
+                  { title: 'A3', dataIndex: 'a3', width: 60, align: 'center' },
+                  { title: '机构名称', dataIndex: 'institution_name', width: 160, align: 'center' },
+                  { title: '省', dataIndex: 'province', width: 100, align: 'center' },
+                  { title: '市', dataIndex: 'city', width: 100, align: 'center' },
+                  {
+                    title: '链上状态',
+                    dataIndex: 'chain_status',
+                    width: 110,
+                    align: 'center',
+                    render: (status: string) => {
+                      const colorMap: Record<string, string> = { REGISTERED: 'green', PENDING: 'orange', FAILED: 'red' };
+                      const labelMap: Record<string, string> = { REGISTERED: '已注册', PENDING: '等待中', FAILED: '失败' };
+                      return <Tag color={colorMap[status] || 'default'}>{labelMap[status] || status}</Tag>;
+                    }
+                  },
+                  {
+                    title: '交易哈希',
+                    dataIndex: 'chain_tx_hash',
+                    width: 160,
+                    render: (v: string | null) => v ? `${v.slice(0, 10)}...${v.slice(-6)}` : '-'
+                  },
+                  { title: '创建者', dataIndex: 'created_by_name', width: 120, align: 'center' },
+                  {
+                    title: '创建时间',
+                    dataIndex: 'created_at',
+                    width: 180,
+                    render: (v: string) => v ? new Date(v).toLocaleString('zh-CN') : '-'
+                  },
                 ]}
               />
             </Card>
@@ -2930,6 +3088,97 @@ export default function App() {
             </div>
           </Space>
         )}
+      </Modal>
+
+      {/* ── 多签机构 SFID 生成弹窗 ── */}
+      <Modal
+        title="生成多签机构 SFID"
+        open={multisigModalOpen}
+        onCancel={() => setMultisigModalOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setMultisigModalOpen(false)}>取消</Button>,
+          <Button
+            key="submit"
+            type="primary"
+            loading={multisigGenerating}
+            onClick={() => multisigForm.submit()}
+          >
+            {multisigGenerating ? '上链中，请等待...' : '生成并上链注册'}
+          </Button>
+        ]}
+        destroyOnClose
+      >
+        {multisigGenerating && (
+          <Typography.Text type="warning" style={{ display: 'block', marginBottom: 12 }}>
+            正在提交到区块链，最长等待约 2 分钟，请勿关闭...
+          </Typography.Text>
+        )}
+        <Form form={multisigForm} layout="vertical" onFinish={onGenerateMultisigSfid}>
+          <Form.Item label="A3 主体属性" name="a3" rules={[{ required: true, message: '请选择 A3 类型' }]}>
+            <Select
+              options={(sfidMeta?.a3_options || []).filter((o) => ['GFR', 'SFR', 'FFR'].includes(o.value)).map((o) => ({ label: `${o.label} (${o.value})`, value: o.value }))}
+              placeholder="请选择 A3 主体属性"
+              onChange={(a3Value: string) => {
+                setMultisigA3(a3Value);
+                multisigForm.setFieldsValue({
+                  institution: defaultInstitutionByA3(a3Value),
+                  p1: p1LockedByA3(a3Value) ? (a3Value === 'GFR' ? '0' : '1') : undefined,
+                });
+              }}
+            />
+          </Form.Item>
+          {!p1LockedByA3(multisigA3) ? (
+            <Form.Item label="P1 盈利属性" name="p1" rules={[{ required: true, message: '请选择盈利属性' }]}>
+              <Select
+                options={[
+                  { label: '非盈利 (0)', value: '0' },
+                  { label: '盈利 (1)', value: '1' },
+                ]}
+                placeholder="请选择盈利属性"
+              />
+            </Form.Item>
+          ) : (
+            <Form.Item label="P1 盈利属性">
+              <Input value={multisigA3 === 'GFR' ? '非盈利 (0)' : '盈利 (1)'} disabled />
+            </Form.Item>
+          )}
+          <Form.Item label="省" name="province" rules={[{ required: true, message: '请选择省' }]}>
+            <Select
+              options={(sfidMeta?.provinces || []).map((p) => ({ label: `${p.name} (${p.code})`, value: p.name }))}
+              placeholder="请选择省"
+              disabled={Boolean(auth?.admin_province)}
+              onChange={(provinceName: string) => {
+                multisigForm.setFieldsValue({ city: '' });
+                void loadSfidCities(provinceName);
+              }}
+            />
+          </Form.Item>
+          <Form.Item label="市" name="city" rules={[{ required: true, message: '请选择市' }]}>
+            <Select
+              loading={sfidCitiesLoading}
+              options={sfidCities.filter((c) => c.code !== '000').map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }))}
+              placeholder="请选择该省下的市"
+            />
+          </Form.Item>
+          <Form.Item label="机构类型" name="institution" rules={[{ required: true, message: '请选择机构类型' }]}>
+            <Select
+              options={(sfidMeta?.institution_options || [])
+                .filter((o) => allowedInstitutionByA3(multisigA3).includes(o.value))
+                .map((o) => ({ label: `${o.label} (${o.value})`, value: o.value }))}
+              placeholder="请选择机构类型"
+            />
+          </Form.Item>
+          <Form.Item
+            label="机构名称"
+            name="institution_name"
+            rules={[
+              { required: true, message: '请输入机构名称' },
+              { max: 30, message: '机构名称最多30个字' },
+            ]}
+          >
+            <Input placeholder="请输入机构名称（最多30个字）" maxLength={30} />
+          </Form.Item>
+        </Form>
       </Modal>
 
     </Layout>

@@ -696,3 +696,57 @@ export async function commitKeyringRotate(
     body: JSON.stringify(payload)
   });
 }
+
+// ── 多签管理 ──────────────────────────────────────────
+
+export type MultisigSfidRow = {
+  site_sfid: string;
+  a3: string;
+  institution_code: string;
+  institution_name: string;
+  province: string;
+  city: string;
+  province_code: string;
+  chain_status: 'PENDING' | 'REGISTERED' | 'FAILED';
+  chain_tx_hash?: string | null;
+  chain_block_number?: number | null;
+  created_by: string;
+  created_by_name: string;
+  created_at: string;
+};
+
+export type GenerateMultisigSfidResult = {
+  site_sfid: string;
+  chain_status: string;
+  chain_tx_hash?: string | null;
+  chain_block_number?: number | null;
+};
+
+export async function generateMultisigSfid(
+  auth: AdminAuth,
+  payload: {
+    a3: string;
+    p1?: string;
+    province?: string;
+    city: string;
+    institution: string;
+    institution_name: string;
+  }
+): Promise<GenerateMultisigSfidResult> {
+  return request<GenerateMultisigSfidResult>('/api/v1/admin/multisig-sfids/generate', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...adminHeaders(auth)
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function listMultisigSfids(auth: AdminAuth): Promise<MultisigSfidRow[]> {
+  const result = await request<{ total: number; limit: number; offset: number; rows: MultisigSfidRow[] }>(
+    '/api/v1/admin/multisig-sfids',
+    { method: 'GET', headers: adminHeaders(auth) }
+  );
+  return result.rows ?? [];
+}
