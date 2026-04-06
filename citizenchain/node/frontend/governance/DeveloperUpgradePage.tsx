@@ -5,15 +5,13 @@ import { QRCodeSVG } from 'qrcode.react';
 import { api, sanitizeError } from '../api';
 import { hexToSs58 } from '../format';
 import { QrScanner } from './QrScanner';
-import type { ActivatedAdmin, VoteSignRequestResult } from './governance-types';
-
-/// 国储会 shenfenId。
-const NRC_SHENFEN_ID = 'GFR-LN001-CB0C-617776487-20260222';
+import type { ActivatedAdmin, InstitutionListItem, VoteSignRequestResult } from './governance-types';
 
 type FlowStep = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
+type JointProposerAdmin = ActivatedAdmin & { institutionName: string };
 
 export function DeveloperUpgradePage() {
-  const [admins, setAdmins] = useState<ActivatedAdmin[]>([]);
+  const [admins, setAdmins] = useState<JointProposerAdmin[]>([]);
   const [loadingAdmins, setLoadingAdmins] = useState(true);
   const [wasmPath, setWasmPath] = useState('');
   const [wasmFileName, setWasmFileName] = useState('');
@@ -33,15 +31,48 @@ export function DeveloperUpgradePage() {
   selectedPubkeyRef.current = selectedPubkey;
   wasmPathRef.current = wasmPath;
 
-  // 加载国储会已激活管理员
+  // 加载国储会 + 43 个省储会已激活管理员，供开发期直升入口复用联合提案发起权限。
   useEffect(() => {
-    api.getActivatedAdmins(NRC_SHENFEN_ID)
-      .then((list) => {
-        setAdmins(list);
-        if (list.length === 1) setSelectedPubkey(list[0].pubkeyHex);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingAdmins(false));
+    let cancelled = false;
+    async function loadJointProposerAdmins() {
+      try {
+        const overview = await api.getGovernanceOverview();
+        const institutions: InstitutionListItem[] = [
+          ...overview.nationalCouncils,
+          ...overview.provincialCouncils,
+        ];
+        const adminGroups = await Promise.all(
+          institutions.map(async (institution) => {
+            const list = await api.getActivatedAdmins(institution.shenfenId).catch(() => [] as ActivatedAdmin[]);
+            return list.map((admin) => ({
+              ...admin,
+              institutionName: institution.name,
+            }));
+          }),
+        );
+        const deduped = Array.from(
+          new Map(
+            adminGroups
+              .flat()
+              .map((admin) => [admin.pubkeyHex, admin] as const),
+          ).values(),
+        );
+        if (cancelled) return;
+        setAdmins(deduped);
+        setSelectedPubkey((current) => {
+          if (deduped.some((admin) => admin.pubkeyHex === current)) return current;
+          return deduped.length === 1 ? deduped[0].pubkeyHex : '';
+        });
+      } catch {
+        if (!cancelled) setAdmins([]);
+      } finally {
+        if (!cancelled) setLoadingAdmins(false);
+      }
+    }
+    loadJointProposerAdmins();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // QR 倒计时
@@ -114,7 +145,7 @@ export function DeveloperUpgradePage() {
     <div className="developer-upgrade-page">
       <h2>开发期 Runtime 升级</h2>
       <p className="dev-upgrade-hint">
-        NRC 管理员直接 set_code，不走联合投票。仅在开发期（DeveloperUpgradeEnabled = true）可用。
+        国储会和省储会管理员可直接 set_code，不走联合投票。仅在开发期（DeveloperUpgradeEnabled = true）可用。
       </p>
 
       {step === 'form' && (
@@ -129,9 +160,9 @@ export function DeveloperUpgradePage() {
             </div>
           </div>
           <div className="dev-upgrade-field">
-            <label>国储会管理员</label>
+            <label>联合提案发起人管理员</label>
             {admins.length === 0 ? (
-              <p className="upgrade-no-wallet">无已激活的国储会管理员，请先在国储会页面激活</p>
+              <p className="upgrade-no-wallet">无已激活的国储会或省储会管理员，请先在对应机构页面激活</p>
             ) : (
               <select
                 value={selectedPubkey}
@@ -139,12 +170,16 @@ export function DeveloperUpgradePage() {
                 disabled={admins.length <= 1}
               >
                 {admins.length === 1 ? (
-                  <option value={admins[0].pubkeyHex}>{hexToSs58(admins[0].pubkeyHex)}</option>
+                  <option value={admins[0].pubkeyHex}>
+                    {admins[0].institutionName} · {hexToSs58(admins[0].pubkeyHex)}
+                  </option>
                 ) : (
                   <>
                     <option value="">请选择…</option>
                     {admins.map((a) => (
-                      <option key={a.pubkeyHex} value={a.pubkeyHex}>{hexToSs58(a.pubkeyHex)}</option>
+                      <option key={a.pubkeyHex} value={a.pubkeyHex}>
+                        {a.institutionName} · {hexToSs58(a.pubkeyHex)}
+                      </option>
                     ))}
                   </>
                 )}

@@ -6,6 +6,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../Isar/wallet_isar.dart';
 import 'duoqian_close_proposal_page.dart';
+import 'duoqian_qr_sheet.dart';
 import 'duoqian_manage_models.dart';
 import 'duoqian_manage_service.dart';
 import 'institution_admin_service.dart';
@@ -79,6 +80,24 @@ class _DuoqianInstitutionInfoPageState
         _loading = false;
       });
     }
+  }
+
+  // ──── 账户二维码 ────
+
+  void _showDuoqianQr() {
+    final duoqianSs58 = _pubkeyToSS58(widget.institution.duoqianAddress);
+    final name = widget.institution.name;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => DuoqianQrSheet(
+        address: duoqianSs58,
+        name: name,
+      ),
+    );
   }
 
   // ──── 注销 ────
@@ -164,9 +183,9 @@ class _DuoqianInstitutionInfoPageState
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text(
-          '机构详情',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        title: Text(
+          widget.isPersonal ? '个人多签账户' : '机构多签账户',
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
@@ -177,9 +196,20 @@ class _DuoqianInstitutionInfoPageState
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
+              if (value == 'qr') _showDuoqianQr();
               if (value == 'delete') _showDeleteMenu();
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'qr',
+                child: Row(
+                  children: [
+                    Icon(Icons.qr_code, size: 20, color: AppTheme.primaryDark),
+                    SizedBox(width: 8),
+                    Text('账户二维码'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'delete',
                 child: Row(
@@ -281,7 +311,7 @@ class _DuoqianInstitutionInfoPageState
                   const Divider(height: 20),
                   _buildInfoRow(
                     '多签地址',
-                    _truncateAddress(duoqianSs58),
+                    duoqianSs58,
                     onCopy: () {
                       Clipboard.setData(ClipboardData(text: duoqianSs58));
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -361,21 +391,8 @@ class _DuoqianInstitutionInfoPageState
                           ),
                         ),
                         title: Text(
-                          _truncateAddress(ss58),
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                        trailing: IconButton(
-                          icon: Icon(Icons.copy,
-                              size: 16, color: AppTheme.textTertiary),
-                          onPressed: () {
-                            Clipboard.setData(ClipboardData(text: ss58));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('地址已复制'),
-                                duration: Duration(seconds: 1),
-                              ),
-                            );
-                          },
+                          ss58,
+                          style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
                         ),
                       );
                     }),
@@ -442,10 +459,6 @@ class _DuoqianInstitutionInfoPageState
     return Keyring().encodeAddress(Uint8List.fromList(bytes), 2027);
   }
 
-  String _truncateAddress(String address) {
-    if (address.length <= 14) return address;
-    return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
-  }
 
   Uint8List _hexDecode(String hex) {
     final h = hex.startsWith('0x') ? hex.substring(2) : hex;

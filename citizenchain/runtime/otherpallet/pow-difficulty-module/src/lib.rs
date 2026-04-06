@@ -119,7 +119,7 @@ pub mod pallet {
             let is_adjustment_block = block_num > 1 && (block_num - 1) % interval == 0;
 
             if is_adjustment_block {
-                // 中文注释：实际重活在 on_finalize，但 FRAME 只能在 on_initialize 预申报预算。
+                // 中文注释：实际重点在 on_finalize，但 FRAME 只能在 on_initialize 预申报预算。
                 <T as Config>::WeightInfo::on_initialize_adjustment()
             } else if WindowStartMs::<T>::get().is_none() {
                 <T as Config>::WeightInfo::on_initialize_start_window()
@@ -162,7 +162,8 @@ pub mod pallet {
                     let actual_window_ms = now_ms.saturating_sub(start_ms).max(1);
                     // 中文注释：从 genesis-pallet 链上存储读取动态出块目标时间，
                     // 替代编译期常量 DIFFICULTY_TARGET_WINDOW_MS。
-                    let target_block_time = genesis_pallet::Pallet::<T>::target_block_time_ms();
+                    // 中文注释：.max(1) 防御 genesis-pallet 返回 0 导致 target_window_ms 为 0。
+                    let target_block_time = genesis_pallet::Pallet::<T>::target_block_time_ms().max(1);
                     let target_window_ms =
                         DIFFICULTY_ADJUSTMENT_INTERVAL as u64 * target_block_time;
                     let old_difficulty = CurrentDifficulty::<T>::get();

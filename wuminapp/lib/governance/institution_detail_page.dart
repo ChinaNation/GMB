@@ -446,6 +446,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         return '已拒绝';
       case 3:
         return '已执行';
+      case 4:
+        return '执行失败';
       default:
         return '未知';
     }

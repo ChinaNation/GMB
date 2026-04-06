@@ -82,7 +82,6 @@ fn insert_voting_proposal<T: Config>(proposal_id: u64) {
         proposer,
         reason,
         code_hash,
-        has_code: true,
         status: ProposalStatus::Voting,
     };
     let mut encoded = sp_runtime::sp_std::vec::Vec::from(crate::MODULE_TAG);
@@ -95,6 +94,15 @@ fn insert_voting_proposal<T: Config>(proposal_id: u64) {
         code.into_inner(),
     )
     .expect("benchmark store_proposal_object should succeed");
+}
+
+fn decode_tagged_proposal<T: Config>(raw: &[u8]) -> Proposal<T> {
+    let tag = crate::MODULE_TAG;
+    assert!(
+        raw.len() >= tag.len() && &raw[..tag.len()] == tag,
+        "benchmark proposal data must keep MODULE_TAG prefix"
+    );
+    Proposal::<T>::decode(&mut &raw[tag.len()..]).expect("benchmark proposal should decode")
 }
 
 #[benchmarks]
@@ -119,10 +127,10 @@ mod benchmarks {
             signature,
         );
 
-        // 提案数据应已存入 voting engine
+        let proposal_id = voting_engine_system::Pallet::<T>::next_proposal_id().saturating_sub(1);
         assert!(
-            voting_engine_system::Pallet::<T>::get_proposal_data(0u64).is_some()
-                || voting_engine_system::Pallet::<T>::get_proposal_data(100u64).is_some()
+            voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id).is_some(),
+            "runtime upgrade benchmark should store proposal data in voting engine"
         );
     }
 
@@ -135,12 +143,8 @@ mod benchmarks {
 
         let raw = voting_engine_system::Pallet::<T>::get_proposal_data(0u64)
             .expect("proposal should exist");
-        let proposal = Proposal::<T>::decode(&mut &raw[..]).expect("should decode");
+        let proposal = decode_tagged_proposal::<T>(&raw);
         assert!(matches!(proposal.status, ProposalStatus::Passed));
-        assert!(
-            proposal.has_code,
-            "successful finalize should retain archived wasm object"
-        );
     }
 
     #[benchmark]
@@ -152,11 +156,7 @@ mod benchmarks {
 
         let raw = voting_engine_system::Pallet::<T>::get_proposal_data(1u64)
             .expect("proposal should exist");
-        let proposal = Proposal::<T>::decode(&mut &raw[..]).expect("should decode");
+        let proposal = decode_tagged_proposal::<T>(&raw);
         assert!(matches!(proposal.status, ProposalStatus::Rejected));
-        assert!(
-            proposal.has_code,
-            "rejected finalize should retain archived wasm object"
-        );
     }
 }

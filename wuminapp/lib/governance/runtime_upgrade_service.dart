@@ -96,8 +96,7 @@ class RuntimeUpgradeService {
   /// ProposalData 是 BoundedVec<u8>，SCALE 编码为 Compact 长度前缀 + 原始字节。
   /// 原始字节布局：
   ///   proposer: AccountId32(32) + reason: Vec<u8>(Compact len + bytes)
-  ///   + code_hash: [u8;32] + has_code: bool
-  ///   + status: u8 enum (0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed)
+  ///   + code_hash: [u8;32] + status: u8 enum (0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed)
   Future<RuntimeUpgradeProposalInfo?> fetchRuntimeUpgradeProposal(
       int proposalId) async {
     final key = _buildStorageKey(
@@ -302,11 +301,6 @@ class RuntimeUpgradeService {
       final codeHashBytes = data.sublist(offset, offset + 32);
       offset += 32;
 
-      // has_code: bool (1 byte)
-      if (offset >= data.length) return null;
-      final hasCode = data[offset] != 0;
-      offset += 1;
-
       // status: u8 enum (0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed)
       if (offset >= data.length) return null;
       final status = data[offset];
@@ -320,7 +314,6 @@ class RuntimeUpgradeService {
         proposer: proposerSs58,
         reason: reason,
         codeHashHex: codeHashHex,
-        hasCode: hasCode,
         status: status,
       );
     } catch (_) {
@@ -607,7 +600,6 @@ class RuntimeUpgradeProposalInfo {
     required this.proposer,
     required this.reason,
     required this.codeHashHex,
-    required this.hasCode,
     required this.status,
   });
 
@@ -615,7 +607,6 @@ class RuntimeUpgradeProposalInfo {
   final String proposer; // SS58 (ss58Format 2027)
   final String reason; // UTF-8 decoded
   final String codeHashHex; // 32-byte hash as hex
-  final bool hasCode; // whether object-layer wasm is still retained on-chain
   final int status; // 0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed
 }
 

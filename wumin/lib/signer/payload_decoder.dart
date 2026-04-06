@@ -143,6 +143,41 @@ class PayloadDecoder {
         return _decodeOffchainPay(bytes);
       }
 
+      // ── DuoqianManagePow(17) ──
+      if (palletIndex == PalletRegistry.duoqianManagePowPallet) {
+        if (callIndex == PalletRegistry.proposeCreateCall) return _decodeProposeCreate(bytes);
+        if (callIndex == PalletRegistry.proposeCloseCall) return _decodeProposeClose(bytes);
+        if (callIndex == PalletRegistry.voteCreateCall) return _decodeVoteProposal(bytes, 'vote_create', '多签创建提案');
+        if (callIndex == PalletRegistry.proposeCreatePersonalCall) return _decodeProposeCreatePersonal(bytes);
+        if (callIndex == PalletRegistry.voteCloseCall) return _decodeVoteProposal(bytes, 'vote_close', '多签关闭提案');
+      }
+
+      // ── DuoqianTransferPow(19) 补充 ──
+      if (palletIndex == PalletRegistry.duoqianTransferPowPallet) {
+        if (callIndex == PalletRegistry.proposeSafetyFundCall) return _decodeProposeSafetyFund(bytes);
+        if (callIndex == PalletRegistry.voteSafetyFundCall) return _decodeVoteProposal(bytes, 'vote_safety_fund', '安全基金提案');
+        if (callIndex == PalletRegistry.proposeSweepCall) return _decodeProposeSweep(bytes);
+        if (callIndex == PalletRegistry.voteSweepCall) return _decodeVoteProposal(bytes, 'vote_sweep', '手续费划转提案');
+      }
+
+      // ── ResolutionDestroGov(14) ──
+      if (palletIndex == PalletRegistry.resolutionDestroGovPallet) {
+        if (callIndex == PalletRegistry.proposeDestroyCall) return _decodeProposeDestroy(bytes);
+        if (callIndex == PalletRegistry.voteDestroyCall) return _decodeVoteProposal(bytes, 'vote_destroy', '决议销毁提案');
+      }
+
+      // ── AdminsOriginGov(12) ──
+      if (palletIndex == PalletRegistry.adminsOriginGovPallet) {
+        if (callIndex == PalletRegistry.proposeAdminReplacementCall) return _decodeProposeAdminReplacement(bytes);
+        if (callIndex == PalletRegistry.voteAdminReplacementCall) return _decodeVoteProposal(bytes, 'vote_admin_replacement', '管理员替换提案');
+      }
+
+      // ── GrandpaKeyGov(16) ──
+      if (palletIndex == PalletRegistry.grandpaKeyGovPallet) {
+        if (callIndex == PalletRegistry.proposeKeyChangeCall) return _decodeProposeKeyChange(bytes);
+        if (callIndex == PalletRegistry.voteKeyChangeCall) return _decodeVoteProposal(bytes, 'vote_key_change', 'GRANDPA 密钥提案');
+      }
+
       return null;
     } catch (_) {
       return null;
@@ -483,6 +518,270 @@ class PayloadDecoder {
       summary: '激活管理员 - $shenfenId',
       fields: {
         'shenfen_id': shenfenId,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 通用投票解码（proposal_id:u64 + approve:bool）
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeVoteProposal(Uint8List bytes, String action, String label) {
+    if (bytes.length < 11) return null;
+    final proposalId = _readU64Le(bytes, 2);
+    final approve = bytes[10] != 0;
+    return DecodedPayload(
+      action: action,
+      summary: '$label #$proposalId 投票：${approve ? "赞成" : "反对"}',
+      fields: {
+        'proposal_id': proposalId.toString(),
+        'approve': approve.toString(),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // DuoqianManagePow(17) / propose_create(0)
+  // 格式：[17][0][BoundedVec sfid_id][u32 admin_count][BoundedVec<AccountId32> admins][u32 threshold][u128 amount]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeCreate(Uint8List bytes) {
+    if (bytes.length < 10) return null;
+    var offset = 2;
+
+    // sfid_id: BoundedVec<u8>
+    final (sfidLen, sfidLenSize) = _decodeCompactU32(bytes, offset);
+    offset += sfidLenSize;
+    if (offset + sfidLen > bytes.length) return null;
+    final sfidId = utf8.decode(bytes.sublist(offset, offset + sfidLen), allowMalformed: true);
+    offset += sfidLen;
+
+    // name: BoundedVec<u8>
+    final (nameLen, nameLenSize) = _decodeCompactU32(bytes, offset);
+    offset += nameLenSize;
+    if (offset + nameLen > bytes.length) return null;
+    final name = utf8.decode(bytes.sublist(offset, offset + nameLen), allowMalformed: true);
+    offset += nameLen;
+
+    // admin_count: u32
+    if (offset + 4 > bytes.length) return null;
+    final adminCount = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24);
+    offset += 4;
+
+    // admins: BoundedVec<AccountId32> — 跳过
+    final (adminsLen, adminsLenSize) = _decodeCompactU32(bytes, offset);
+    offset += adminsLenSize;
+    offset += adminsLen * 32;
+    if (offset + 4 + 16 > bytes.length) return null;
+
+    // threshold: u32
+    final threshold = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24);
+    offset += 4;
+
+    // amount: u128
+    final amountFen = _readU128Le(bytes, offset);
+    final amountYuan = _fenToYuan(amountFen);
+
+    return DecodedPayload(
+      action: 'propose_create',
+      summary: '创建多签账户「$name」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
+      fields: {
+        'sfid_id': sfidId,
+        'name': name,
+        'admin_count': adminCount.toString(),
+        'threshold': '$threshold/$adminCount',
+        'amount_yuan': '$amountYuan GMB',
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // DuoqianManagePow(17) / propose_create_personal(4)
+  // 格式：[17][4][BoundedVec name][u32 admin_count][BoundedVec<AccountId32> admins][u32 threshold][u128 amount]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeCreatePersonal(Uint8List bytes) {
+    if (bytes.length < 10) return null;
+    var offset = 2;
+
+    // name: BoundedVec<u8>
+    final (nameLen, nameLenSize) = _decodeCompactU32(bytes, offset);
+    offset += nameLenSize;
+    if (offset + nameLen > bytes.length) return null;
+    final name = utf8.decode(bytes.sublist(offset, offset + nameLen), allowMalformed: true);
+    offset += nameLen;
+
+    // admin_count: u32
+    if (offset + 4 > bytes.length) return null;
+    final adminCount = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24);
+    offset += 4;
+
+    // admins: BoundedVec<AccountId32> — 跳过
+    final (adminsLen, adminsLenSize) = _decodeCompactU32(bytes, offset);
+    offset += adminsLenSize;
+    offset += adminsLen * 32;
+    if (offset + 4 + 16 > bytes.length) return null;
+
+    // threshold: u32
+    final threshold = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24);
+    offset += 4;
+
+    // amount: u128
+    final amountFen = _readU128Le(bytes, offset);
+    final amountYuan = _fenToYuan(amountFen);
+
+    return DecodedPayload(
+      action: 'propose_create_personal',
+      summary: '创建个人多签「$name」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
+      fields: {
+        'name': name,
+        'admin_count': adminCount.toString(),
+        'threshold': '$threshold/$adminCount',
+        'amount_yuan': '$amountYuan GMB',
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // DuoqianManagePow(17) / propose_close(1)
+  // 格式：[17][1][duoqian_address:32][beneficiary:32]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeClose(Uint8List bytes) {
+    if (bytes.length < 66) return null;
+    final duoqianId = bytes.sublist(2, 34);
+    final beneficiaryId = bytes.sublist(34, 66);
+    final duoqian = Keyring().encodeAddress(duoqianId.toList(), _ss58Prefix);
+    final beneficiary = Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
+    return DecodedPayload(
+      action: 'propose_close',
+      summary: '提案关闭多签 ${_truncateAddress(duoqian)}',
+      fields: {
+        'duoqian_address': duoqian,
+        'beneficiary': beneficiary,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // DuoqianTransferPow(19) / propose_safety_fund(3)
+  // 格式：[19][3][beneficiary:32][amount:u128][BoundedVec remark]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeSafetyFund(Uint8List bytes) {
+    if (bytes.length < 50) return null;
+    var offset = 2;
+    final beneficiaryId = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    final beneficiary = Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
+    final amountFen = _readU128Le(bytes, offset);
+    offset += 16;
+    final amountYuan = _fenToYuan(amountFen);
+    final (remarkLen, remarkLenSize) = _decodeCompactU32(bytes, offset);
+    offset += remarkLenSize;
+    var remark = '';
+    if (remarkLen > 0 && offset + remarkLen <= bytes.length) {
+      remark = utf8.decode(bytes.sublist(offset, offset + remarkLen), allowMalformed: true);
+    }
+    return DecodedPayload(
+      action: 'propose_safety_fund_transfer',
+      summary: '安全基金转账 $amountYuan GMB 给 ${_truncateAddress(beneficiary)}',
+      fields: {
+        'beneficiary': beneficiary,
+        'amount_yuan': '$amountYuan GMB',
+        'remark': remark,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // DuoqianTransferPow(19) / propose_sweep(5)
+  // 格式：[19][5][institution:48][amount:u128]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeSweep(Uint8List bytes) {
+    if (bytes.length < 66) return null;
+    var offset = 2;
+    final institutionBytes = bytes.sublist(offset, offset + 48);
+    offset += 48;
+    var endIndex = 48;
+    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) { endIndex--; }
+    final shenfenId = endIndex > 0 ? String.fromCharCodes(institutionBytes.sublist(0, endIndex)) : '';
+    final bankName = clearingBankName(shenfenId) ?? shenfenId;
+    final amountFen = _readU128Le(bytes, offset);
+    final amountYuan = _fenToYuan(amountFen);
+    return DecodedPayload(
+      action: 'propose_sweep_to_main',
+      summary: '手续费划转 $amountYuan GMB：$bankName',
+      fields: {
+        'institution': bankName,
+        'amount_yuan': '$amountYuan GMB',
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // ResolutionDestroGov(14) / propose_destroy(0)
+  // 格式：[14][0][org:u8][institution:48][amount:u128]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeDestroy(Uint8List bytes) {
+    if (bytes.length < 67) return null;
+    var offset = 2;
+    final org = bytes[offset];
+    offset += 1;
+    offset += 48; // institution 跳过
+    final amountFen = _readU128Le(bytes, offset);
+    final amountYuan = _fenToYuan(amountFen);
+    return DecodedPayload(
+      action: 'propose_destroy',
+      summary: '${_orgName(org)} 决议销毁 $amountYuan GMB',
+      fields: {
+        'org': _orgName(org),
+        'amount_yuan': '$amountYuan GMB',
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // AdminsOriginGov(12) / propose_admin_replacement(0)
+  // 格式：[12][0][org:u8][institution:48][old_admin:32][new_admin:32]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeAdminReplacement(Uint8List bytes) {
+    if (bytes.length < 115) return null;
+    var offset = 2;
+    final org = bytes[offset];
+    offset += 1;
+    offset += 48; // institution 跳过
+    final oldAdminId = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    final newAdminId = bytes.sublist(offset, offset + 32);
+    final oldAdmin = Keyring().encodeAddress(oldAdminId.toList(), _ss58Prefix);
+    final newAdmin = Keyring().encodeAddress(newAdminId.toList(), _ss58Prefix);
+    return DecodedPayload(
+      action: 'propose_admin_replacement',
+      summary: '${_orgName(org)} 替换管理员',
+      fields: {
+        'org': _orgName(org),
+        'old_admin': oldAdmin,
+        'new_admin': newAdmin,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // GrandpaKeyGov(16) / propose_key_change(0)
+  // 格式：[16][0][institution:48][new_key:32]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeKeyChange(Uint8List bytes) {
+    if (bytes.length < 82) return null;
+    var offset = 2;
+    final institutionBytes = bytes.sublist(offset, offset + 48);
+    offset += 48;
+    var endIndex = 48;
+    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) { endIndex--; }
+    final shenfenId = endIndex > 0 ? String.fromCharCodes(institutionBytes.sublist(0, endIndex)) : '';
+    final keyBytes = bytes.sublist(offset, offset + 32);
+    final keyHex = keyBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return DecodedPayload(
+      action: 'propose_replace_grandpa_key',
+      summary: 'GRANDPA 密钥替换提案',
+      fields: {
+        'institution': shenfenId,
+        'new_key': '0x$keyHex',
       },
     );
   }

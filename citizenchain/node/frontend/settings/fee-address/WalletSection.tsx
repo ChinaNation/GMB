@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { api, sanitizeError } from '../../api';
+import { AddressScanModal } from '../../governance/AddressScanModal';
 import type { RewardWallet } from '../../types';
 
 const SS58_PREFIX = 2027;
@@ -120,6 +121,7 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bindStatus, setBindStatus] = useState<BindStatus>(null);
+  const [showAddressScan, setShowAddressScan] = useState(false);
   const hasBoundAddress = Boolean(wallet.address);
   const actionText = hasBoundAddress ? '变更地址' : '绑定地址';
 
@@ -205,6 +207,12 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
           placeholder="请输入手续费收款钱包地址"
           disabled={disabled || saving}
         />
+        <button type="button" className="scan-icon-btn" onClick={() => setShowAddressScan(true)} disabled={disabled || saving} title="扫码填入">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+            <rect x="7" y="7" width="10" height="10" rx="1"/>
+          </svg>
+        </button>
         <button
           disabled={disabled || saving}
           onClick={() => {
@@ -226,6 +234,13 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
       </div>
       {bindHint ? <p className="section-inline-hint">{bindHint}</p> : null}
       {error ? <p className="section-inline-error">{error}</p> : null}
+
+      {showAddressScan && (
+        <AddressScanModal
+          onResult={({ address }) => { setInput(address); setShowAddressScan(false); }}
+          onClose={() => setShowAddressScan(false)}
+        />
+      )}
 
       {showPasswordModal ? (
         <div className="unlock-modal-mask" onClick={() => !saving && setShowPasswordModal(false)}>

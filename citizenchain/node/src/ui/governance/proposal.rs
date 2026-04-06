@@ -12,6 +12,10 @@ const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 /// MODULE_TAG 前缀（必须与对应 pallet 保持一致）。
 const TAG_TRANSFER: &[u8] = b"dq-xfer";
 const TAG_RUNTIME_UPGRADE: &[u8] = b"rt-upg";
+const TAG_RESOLUTION_ISSUANCE: &[u8] = b"res-iss";
+const TAG_RESOLUTION_DESTROY: &[u8] = b"res-dst";
+/// 多签管理提案 TAG — 不属于治理提案，在治理列表中过滤掉。
+const TAG_DUOQIAN_MANAGE: &[u8] = b"dq-mgmt";
 use crate::ui::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
@@ -27,7 +31,7 @@ pub struct ProposalMeta {
     pub kind: u8,
     /// 0=内部阶段, 1=联合阶段, 2=公民阶段。
     pub stage: u8,
-    /// 0=投票中, 1=通过, 2=否决。
+    /// 0=投票中, 1=通过, 2=否决, 3=已执行, 4=执行失败。
     pub status: u8,
     pub internal_org: Option<u8>,
     /// 机构 48 字节 hex（不含 0x）。
@@ -58,7 +62,6 @@ pub struct RuntimeUpgradeDetail {
     pub proposer_hex: String,
     pub reason: String,
     pub code_hash_hex: String,
-    pub has_code: bool,
     /// 0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed。
     pub status: u8,
 }
@@ -97,6 +100,8 @@ pub struct ProposalFullInfo {
     pub fee_rate_detail: Option<FeeRateProposalDetail>,
     pub safety_fund_detail: Option<SafetyFundProposalDetail>,
     pub sweep_detail: Option<SweepProposalDetail>,
+    pub resolution_issuance_detail: Option<ResolutionIssuanceDetail>,
+    pub resolution_destroy_detail: Option<ResolutionDestroyDetail>,
     pub internal_tally: Option<VoteTally>,
     pub joint_tally: Option<JointVoteTally>,
     pub citizen_tally: Option<CitizenVoteTally>,
@@ -132,6 +137,34 @@ pub struct FeeRateProposalDetail {
     pub new_rate_bp: u32,
 }
 
+/// 决议发行提案详情。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolutionIssuanceDetail {
+    pub proposal_id: u64,
+    pub proposer_hex: String,
+    pub reason: String,
+    pub total_amount_fen: String,
+    pub allocations: Vec<IssuanceAllocationItem>,
+}
+
+/// 决议发行分配项。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssuanceAllocationItem {
+    pub recipient_hex: String,
+    pub amount_fen: String,
+}
+
+/// 决议销毁提案详情。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolutionDestroyDetail {
+    pub proposal_id: u64,
+    pub institution_hex: String,
+    pub amount_fen: String,
+}
+
 /// 提案列表项（轻量，用于列表展示）。
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -159,6 +192,12 @@ pub struct ProposalPageResult {
     pub warning: Option<String>,
 }
 
+struct ProposalDisplayInfo {
+    summary: String,
+    status: u8,
+    status_label: String,
+}
+
 // ──── 公开查询函数 ────
 
 /// 查询 NextProposalId（VotingEngineSystem 全局递增 ID）。
@@ -181,7 +220,27 @@ pub fn fetch_next_proposal_id() -> Result<u64, String> {
     }
 }
 
+/// 检查提案是否为多签管理提案（创建/关闭多签账户），这类提案不在治理列表中显示。
+fn is_duoqian_manage_proposal(proposal_id: u64) -> bool {
+    let Ok(Some(raw)) = fetch_proposal_data_raw(proposal_id) else {
+        return false;
+    };
+    if raw.is_empty() {
+        return false;
+    }
+    // ProposalData 存储为 BoundedVec<u8>：Compact<len> + bytes
+    let Ok((vec_len, len_bytes)) = read_compact_u32(&raw, 0) else {
+        return false;
+    };
+    let offset = len_bytes;
+    let tag = TAG_DUOQIAN_MANAGE;
+    offset + tag.len() <= raw.len()
+        && (vec_len as usize) >= tag.len()
+        && raw[offset..offset + tag.len()] == *tag
+}
+
 /// 分页查询提案列表（从 start_id 往前 count 个，按 ID 倒序）。
+/// 自动过滤多签管理提案（创建/关闭多签账户），这些在多签账户详情页单独展示。
 pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResult, String> {
     let mut items = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
@@ -192,10 +251,21 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
     while id > min_id {
         match fetch_proposal_meta(id) {
             Ok(Some(meta)) => {
-                // 获取业务详情用于 summary
-                let summary = match fetch_proposal_summary(id, &meta) {
-                    Ok(s) => s,
-                    Err(_) => "（详情查询失败）".to_string(),
+                // 中文注释：多签管理提案（创建/关闭多签账户）不在治理列表中显示。
+                if is_duoqian_manage_proposal(id) {
+                    if id == 0 { break; }
+                    id -= 1;
+                    continue;
+                }
+                // 中文注释：runtime-root-upgrade 的业务终态保存在 ProposalData，
+                // 这里只把它折叠成列表展示状态，避免 UI 把”已否决/执行失败”误显示成”已执行”。
+                let display = match fetch_proposal_display(id, &meta) {
+                    Ok(v) => v,
+                    Err(_) => ProposalDisplayInfo {
+                        summary: "（详情查询失败）".to_string(),
+                        status: meta.status,
+                        status_label: status_label(meta.status).to_string(),
+                    },
                 };
                 let institution_name = resolve_institution_name(meta.institution_hex.as_deref());
 
@@ -206,10 +276,10 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
                     kind_label: kind_label(meta.kind).to_string(),
                     stage: meta.stage,
                     stage_label: stage_label(meta.stage).to_string(),
-                    status: meta.status,
-                    status_label: status_label(meta.status).to_string(),
+                    status: display.status,
+                    status_label: display.status_label,
                     institution_name,
-                    summary,
+                    summary: display.summary,
                 });
             }
             Ok(None) => {} // 提案不存在，跳过
@@ -245,7 +315,11 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
     let meta = fetch_proposal_meta(proposal_id)?
         .ok_or_else(|| format!("提案 {proposal_id} 不存在"))?;
 
-    let (transfer_detail, runtime_upgrade_detail) = fetch_proposal_details(proposal_id, &meta)?;
+    let details = fetch_proposal_details(proposal_id, &meta)?;
+    let transfer_detail = details.transfer;
+    let runtime_upgrade_detail = details.runtime_upgrade;
+    let resolution_issuance_detail = details.resolution_issuance;
+    let resolution_destroy_detail = details.resolution_destroy;
 
     // 根据提案阶段查询对应的投票计数
     let internal_tally = if meta.kind == 0 || meta.stage == 0 {
@@ -267,7 +341,9 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
     };
 
     // 费率提案详情（从 RateProposalActions 存储查询）
-    let fee_rate_detail = if transfer_detail.is_none() && runtime_upgrade_detail.is_none() {
+    let fee_rate_detail = if transfer_detail.is_none() && runtime_upgrade_detail.is_none()
+        && resolution_issuance_detail.is_none() && resolution_destroy_detail.is_none()
+    {
         fetch_rate_proposal_action(proposal_id).ok().flatten().map(|r| {
             FeeRateProposalDetail {
                 proposal_id,
@@ -280,7 +356,10 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
     };
 
     // 安全基金提案详情（从 SafetyFundProposalActions 存储查询）
-    let safety_fund_detail = if transfer_detail.is_none() && runtime_upgrade_detail.is_none() && fee_rate_detail.is_none() {
+    let safety_fund_detail = if transfer_detail.is_none() && runtime_upgrade_detail.is_none()
+        && resolution_issuance_detail.is_none() && resolution_destroy_detail.is_none()
+        && fee_rate_detail.is_none()
+    {
         fetch_safety_fund_proposal_action(proposal_id).ok().flatten()
     } else {
         None
@@ -288,6 +367,7 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
 
     // 手续费划转提案详情（从 SweepProposalActions 存储查询）
     let sweep_detail = if transfer_detail.is_none() && runtime_upgrade_detail.is_none()
+        && resolution_issuance_detail.is_none() && resolution_destroy_detail.is_none()
         && fee_rate_detail.is_none() && safety_fund_detail.is_none()
     {
         fetch_sweep_proposal_action(proposal_id).ok().flatten()
@@ -304,6 +384,8 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
         fee_rate_detail,
         safety_fund_detail,
         sweep_detail,
+        resolution_issuance_detail,
+        resolution_destroy_detail,
         internal_tally,
         joint_tally,
         citizen_tally,
@@ -330,12 +412,16 @@ pub fn fetch_institution_proposal_page(
     while items.len() < count as usize && id >= year_start {
         match fetch_proposal_meta(id) {
             Ok(Some(meta)) => {
-                // 过滤：只保留属于该机构的提案
+                // 过滤：只保留属于该机构的提案，且排除多签管理提案
                 let matches = meta.institution_hex.as_deref() == Some(&institution_hex);
-                if matches {
-                    let summary = match fetch_proposal_summary(id, &meta) {
-                        Ok(s) => s,
-                        Err(_) => "（详情查询失败）".to_string(),
+                if matches && !is_duoqian_manage_proposal(id) {
+                    let display = match fetch_proposal_display(id, &meta) {
+                        Ok(v) => v,
+                        Err(_) => ProposalDisplayInfo {
+                            summary: "（详情查询失败）".to_string(),
+                            status: meta.status,
+                            status_label: status_label(meta.status).to_string(),
+                        },
                     };
                     let institution_name = resolve_institution_name(meta.institution_hex.as_deref());
                     items.push(ProposalListItem {
@@ -345,10 +431,10 @@ pub fn fetch_institution_proposal_page(
                         kind_label: kind_label(meta.kind).to_string(),
                         stage: meta.stage,
                         stage_label: stage_label(meta.stage).to_string(),
-                        status: meta.status,
-                        status_label: status_label(meta.status).to_string(),
+                        status: display.status,
+                        status_label: display.status_label,
                         institution_name,
-                        summary,
+                        summary: display.summary,
                     });
                 }
             }
@@ -436,32 +522,69 @@ fn fetch_proposal_data_raw(proposal_id: u64) -> Result<Option<Vec<u8>>, String> 
     }
 }
 
+struct ProposalDetailSet {
+    transfer: Option<TransferProposalDetail>,
+    runtime_upgrade: Option<RuntimeUpgradeDetail>,
+    resolution_issuance: Option<ResolutionIssuanceDetail>,
+    resolution_destroy: Option<ResolutionDestroyDetail>,
+}
+
 fn fetch_proposal_details(
     proposal_id: u64,
     meta: &ProposalMeta,
-) -> Result<(Option<TransferProposalDetail>, Option<RuntimeUpgradeDetail>), String> {
+) -> Result<ProposalDetailSet, String> {
+    let empty = ProposalDetailSet {
+        transfer: None,
+        runtime_upgrade: None,
+        resolution_issuance: None,
+        resolution_destroy: None,
+    };
     let raw = match fetch_proposal_data_raw(proposal_id)? {
         Some(r) => r,
-        None => return Ok((None, None)),
+        None => return Ok(empty),
     };
     if raw.is_empty() {
-        return Ok((None, None));
+        return Ok(empty);
     }
 
     // ProposalData 存储为 BoundedVec<u8>：Compact<len> + bytes
     let (vec_len, len_bytes) = read_compact_u32(&raw, 0)?;
     let offset = len_bytes;
     if offset + vec_len as usize > raw.len() {
-        return Ok((None, None));
+        return Ok(empty);
     }
     let data = &raw[offset..offset + vec_len as usize];
 
     if meta.kind == 1 {
-        // 联合投票提案 → runtime 升级
-        Ok((None, decode_runtime_upgrade_action(proposal_id, data)))
+        // 联合投票提案：先尝试 runtime 升级，再尝试决议发行
+        if let Some(detail) = decode_runtime_upgrade_action(proposal_id, data) {
+            return Ok(ProposalDetailSet {
+                runtime_upgrade: Some(detail),
+                ..empty
+            });
+        }
+        if let Some(detail) = decode_resolution_issuance_action(proposal_id, data) {
+            return Ok(ProposalDetailSet {
+                resolution_issuance: Some(detail),
+                ..empty
+            });
+        }
+        Ok(empty)
     } else {
-        // 内部投票提案 → 转账
-        Ok((decode_transfer_action(proposal_id, data), None))
+        // 内部投票提案：先尝试转账，再尝试销毁
+        if let Some(detail) = decode_transfer_action(proposal_id, data) {
+            return Ok(ProposalDetailSet {
+                transfer: Some(detail),
+                ..empty
+            });
+        }
+        if let Some(detail) = decode_resolution_destroy_action(proposal_id, data) {
+            return Ok(ProposalDetailSet {
+                resolution_destroy: Some(detail),
+                ..empty
+            });
+        }
+        Ok(empty)
     }
 }
 
@@ -675,13 +798,6 @@ fn decode_runtime_upgrade_action(
     let code_hash_hex = hex::encode(&data[offset..offset + 32]);
     offset += 32;
 
-    // has_code: bool
-    if offset >= data.len() {
-        return None;
-    }
-    let has_code = data[offset] != 0;
-    offset += 1;
-
     // status: u8
     if offset >= data.len() {
         return None;
@@ -693,8 +809,94 @@ fn decode_runtime_upgrade_action(
         proposer_hex,
         reason,
         code_hash_hex,
-        has_code,
         status,
+    })
+}
+
+fn decode_resolution_issuance_action(
+    proposal_id: u64,
+    data: &[u8],
+) -> Option<ResolutionIssuanceDetail> {
+    // SCALE 布局：MODULE_TAG("res-iss":7) + proposer(32) + reason(Compact+bytes) + total_amount(u128:16)
+    //            + allocations(Compact<count> + N × (recipient(32) + amount(u128:16)))
+    let tag = TAG_RESOLUTION_ISSUANCE;
+    if data.len() < tag.len() || &data[..tag.len()] != tag {
+        return None;
+    }
+    let mut offset = tag.len();
+
+    // proposer: [u8;32]
+    if offset + 32 > data.len() {
+        return None;
+    }
+    let proposer_hex = hex::encode(&data[offset..offset + 32]);
+    offset += 32;
+
+    // reason: Vec<u8>
+    let (reason_len, reason_len_size) = read_compact_u32(data, offset).ok()?;
+    offset += reason_len_size;
+    if offset + reason_len as usize > data.len() {
+        return None;
+    }
+    let reason =
+        String::from_utf8_lossy(&data[offset..offset + reason_len as usize]).to_string();
+    offset += reason_len as usize;
+
+    // total_amount: u128 (16 bytes LE)
+    if offset + 16 > data.len() {
+        return None;
+    }
+    let total_amount = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
+    offset += 16;
+
+    // allocations: Vec<RecipientAmount>
+    let (alloc_count, alloc_count_size) = read_compact_u32(data, offset).ok()?;
+    offset += alloc_count_size;
+
+    let mut allocations = Vec::new();
+    for _ in 0..alloc_count {
+        if offset + 32 + 16 > data.len() {
+            return None;
+        }
+        let recipient_hex = hex::encode(&data[offset..offset + 32]);
+        offset += 32;
+        let amount = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
+        offset += 16;
+        allocations.push(IssuanceAllocationItem {
+            recipient_hex,
+            amount_fen: amount.to_string(),
+        });
+    }
+
+    Some(ResolutionIssuanceDetail {
+        proposal_id,
+        proposer_hex,
+        reason,
+        total_amount_fen: total_amount.to_string(),
+        allocations,
+    })
+}
+
+fn decode_resolution_destroy_action(
+    proposal_id: u64,
+    data: &[u8],
+) -> Option<ResolutionDestroyDetail> {
+    // SCALE 布局：MODULE_TAG("res-dst":7) + institution(48) + amount(u128:16)
+    let tag = TAG_RESOLUTION_DESTROY;
+    if data.len() < tag.len() + 48 + 16 || &data[..tag.len()] != tag {
+        return None;
+    }
+    let mut offset = tag.len();
+
+    let institution_hex = hex::encode(&data[offset..offset + 48]);
+    offset += 48;
+
+    let amount = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
+
+    Some(ResolutionDestroyDetail {
+        proposal_id,
+        institution_hex,
+        amount_fen: amount.to_string(),
     })
 }
 
@@ -777,6 +979,7 @@ fn status_label(status: u8) -> &'static str {
         1 => "已通过",
         2 => "已否决",
         3 => "已执行",
+        4 => "执行失败",
         _ => "未知",
     }
 }
@@ -797,30 +1000,76 @@ fn resolve_institution_name(institution_hex: Option<&str>) -> Option<String> {
 
 /// 获取提案简要描述。
 fn fetch_proposal_summary(proposal_id: u64, meta: &ProposalMeta) -> Result<String, String> {
+    Ok(fetch_proposal_display(proposal_id, meta)?.summary)
+}
+
+fn fetch_proposal_display(
+    proposal_id: u64,
+    meta: &ProposalMeta,
+) -> Result<ProposalDisplayInfo, String> {
     let raw = match fetch_proposal_data_raw(proposal_id)? {
         Some(r) => r,
-        None => return Ok("（无详情数据）".to_string()),
+        None => {
+            return Ok(ProposalDisplayInfo {
+                summary: "（无详情数据）".to_string(),
+                status: meta.status,
+                status_label: status_label(meta.status).to_string(),
+            })
+        }
     };
     if raw.is_empty() {
-        return Ok("（无详情数据）".to_string());
+        return Ok(ProposalDisplayInfo {
+            summary: "（无详情数据）".to_string(),
+            status: meta.status,
+            status_label: status_label(meta.status).to_string(),
+        });
     }
 
     let (vec_len, len_bytes) = read_compact_u32(&raw, 0)?;
     let offset = len_bytes;
     if offset + vec_len as usize > raw.len() {
-        return Ok("（数据截断）".to_string());
+        return Ok(ProposalDisplayInfo {
+            summary: "（数据截断）".to_string(),
+            status: meta.status,
+            status_label: status_label(meta.status).to_string(),
+        });
     }
     let data = &raw[offset..offset + vec_len as usize];
 
     if meta.kind == 1 {
-        // Runtime 升级提案
+        // 联合投票提案：先尝试 runtime 升级
         if let Some(detail) = decode_runtime_upgrade_action(proposal_id, data) {
             let reason_short = if detail.reason.len() > 50 {
                 format!("{}…", &detail.reason[..50])
             } else {
                 detail.reason.clone()
             };
-            return Ok(format!("运行时升级：{reason_short}"));
+            let (display_status, display_label) =
+                runtime_upgrade_display_status(detail.status, meta.status);
+            return Ok(ProposalDisplayInfo {
+                summary: format!("运行时升级：{reason_short}"),
+                status: display_status,
+                status_label: display_label.to_string(),
+            });
+        }
+        // 再尝试决议发行
+        if let Some(detail) = decode_resolution_issuance_action(proposal_id, data) {
+            let total: u128 = detail.total_amount_fen.parse().unwrap_or(0);
+            let reason_short = if detail.reason.len() > 30 {
+                format!("{}…", &detail.reason[..30])
+            } else {
+                detail.reason.clone()
+            };
+            return Ok(ProposalDisplayInfo {
+                summary: format!(
+                    "决议发行 {}.{:02} 元（{}条分配）：{reason_short}",
+                    total / 100,
+                    total % 100,
+                    detail.allocations.len()
+                ),
+                status: meta.status,
+                status_label: status_label(meta.status).to_string(),
+            });
         }
     } else {
         // 先尝试转账提案
@@ -833,7 +1082,23 @@ fn fetch_proposal_summary(proposal_id: u64, meta: &ProposalMeta) -> Result<Strin
             } else {
                 detail.remark.clone()
             };
-            return Ok(format!("转账 {yuan}.{fen:02} 元：{remark_short}"));
+            return Ok(ProposalDisplayInfo {
+                summary: format!("转账 {yuan}.{fen:02} 元：{remark_short}"),
+                status: meta.status,
+                status_label: status_label(meta.status).to_string(),
+            });
+        }
+
+        // 再尝试销毁提案
+        if let Some(detail) = decode_resolution_destroy_action(proposal_id, data) {
+            let amount: u128 = detail.amount_fen.parse().unwrap_or(0);
+            let inst_name = resolve_institution_name(Some(&detail.institution_hex))
+                .unwrap_or_else(|| "未知机构".to_string());
+            return Ok(ProposalDisplayInfo {
+                summary: format!("决议销毁 {}.{:02} 元：{inst_name}", amount / 100, amount % 100),
+                status: meta.status,
+                status_label: status_label(meta.status).to_string(),
+            });
         }
 
         // 再尝试费率提案（RateProposalActions 存储）
@@ -841,13 +1106,21 @@ fn fetch_proposal_summary(proposal_id: u64, meta: &ProposalMeta) -> Result<Strin
             let rate_percent = format!("{:.2}%", rate_detail.new_rate_bp as f64 / 100.0);
             let inst_name = resolve_institution_name(Some(&rate_detail.institution_hex))
                 .unwrap_or_else(|| "未知机构".to_string());
-            return Ok(format!("费率设置 {rate_percent}：{inst_name}"));
+            return Ok(ProposalDisplayInfo {
+                summary: format!("费率设置 {rate_percent}：{inst_name}"),
+                status: meta.status,
+                status_label: status_label(meta.status).to_string(),
+            });
         }
 
         // 再尝试安全基金提案
         if let Ok(Some(_sf)) = fetch_safety_fund_proposal_action(proposal_id) {
             let amount: u128 = _sf.amount_fen.parse().unwrap_or(0);
-            return Ok(format!("安全基金转账 {}.{:02} 元", amount / 100, amount % 100));
+            return Ok(ProposalDisplayInfo {
+                summary: format!("安全基金转账 {}.{:02} 元", amount / 100, amount % 100),
+                status: meta.status,
+                status_label: status_label(meta.status).to_string(),
+            });
         }
 
         // 再尝试手续费划转提案（SweepProposalActions 存储）
@@ -855,10 +1128,28 @@ fn fetch_proposal_summary(proposal_id: u64, meta: &ProposalMeta) -> Result<Strin
             let amount: u128 = sweep.amount_fen.parse().unwrap_or(0);
             let inst_name = resolve_institution_name(Some(&sweep.institution_hex))
                 .unwrap_or_else(|| "未知机构".to_string());
-            return Ok(format!("手续费划转 {}.{:02} 元：{inst_name}", amount / 100, amount % 100));
+            return Ok(ProposalDisplayInfo {
+                summary: format!("手续费划转 {}.{:02} 元：{inst_name}", amount / 100, amount % 100),
+                status: meta.status,
+                status_label: status_label(meta.status).to_string(),
+            });
         }
     }
-    Ok("（无法解码详情）".to_string())
+    Ok(ProposalDisplayInfo {
+        summary: "（无法解码详情）".to_string(),
+        status: meta.status,
+        status_label: status_label(meta.status).to_string(),
+    })
+}
+
+fn runtime_upgrade_display_status(runtime_status: u8, fallback_status: u8) -> (u8, &'static str) {
+    match runtime_status {
+        0 => (0, status_label(0)),
+        1 => (3, status_label(3)),
+        2 => (2, status_label(2)),
+        3 => (4, status_label(4)),
+        _ => (fallback_status, status_label(fallback_status)),
+    }
 }
 
 // ──── 投票状态查询 ────

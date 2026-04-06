@@ -44,7 +44,7 @@ pub mod pallet {
     use crate::weights::WeightInfo;
     use frame_support::{
         pallet_prelude::*,
-        traits::{Currency, FindAuthor},
+        traits::{Currency, FindAuthor, Imbalance},
     };
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::SaturatedConversion;
@@ -222,7 +222,8 @@ pub mod pallet {
             // 中文注释：奖励金额完全由制度常量决定，绑定表只决定”发给谁”，不影响”发多少”。
             let reward: BalanceOf<T> = FULLNODE_BLOCK_REWARD.saturated_into();
             // 中文注释：deposit_creating 会在钱包尚未建户时自动建户，并同步增加总发行量。
-            let _imbalance = T::Currency::deposit_creating(&recipient, reward);
+            let imbalance = T::Currency::deposit_creating(&recipient, reward);
+            debug_assert_eq!(imbalance.peek(), reward, "deposit_creating must return full reward");
             Self::deposit_event(Event::<T>::PowRewardIssued {
                 block: block_number,
                 miner: author,

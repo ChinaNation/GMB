@@ -25,6 +25,16 @@ impl OrgType {
 }
 
 /// 机构详情，返回给前端的聚合结果。
+/// 管理员信息（公钥 + 链上余额）。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminInfo {
+    /// 管理员公钥（hex，不含 0x 前缀）。
+    pub pubkey_hex: String,
+    /// 链上余额（分），节点未运行时为 null。
+    pub balance_fen: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionDetail {
@@ -40,8 +50,8 @@ pub struct InstitutionDetail {
     pub duoqian_address: String,
     /// 多签账户余额（分），节点未运行时为 null。
     pub balance_fen: Option<String>,
-    /// 管理员公钥列表（hex，不含 0x 前缀），节点未运行时为空。
-    pub admins: Vec<String>,
+    /// 管理员列表（含公钥和链上余额），节点未运行时为空。
+    pub admins: Vec<AdminInfo>,
     /// 内部投票通过阈值。
     pub internal_threshold: u32,
     /// 联合投票权重。

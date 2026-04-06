@@ -722,6 +722,46 @@ mod tests {
     }
 
     #[test]
+    fn vote_nonce_is_scoped_per_proposal_and_cannot_replay_within_same_proposal() {
+        new_test_ext().execute_with(|| {
+            let credential = bind_credential(b"binding-replay", "bind-nonce", "bind-ok");
+            let binding_id = credential.binding_id;
+            assert_ok!(SfidCodeAuth::bind_sfid(
+                RuntimeOrigin::signed(1),
+                credential
+            ));
+
+            let proposal_a = 10u64;
+            let proposal_b = 20u64;
+
+            // 提案 A 投票成功
+            assert!(<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &binding_id, &1, proposal_a, b"same-nonce", b"vote-ok"
+            ));
+
+            // 同一 nonce 对同一提案重放 → 失败
+            assert!(!<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &binding_id, &1, proposal_a, b"same-nonce", b"vote-ok"
+            ));
+
+            // 同一 nonce 对不同提案 → 成功（nonce 按 proposal_id 分区存储，
+            // 生产环境中签名包含 proposal_id 所以无法跨提案重放签名）
+            assert!(<Pallet<Test> as SfidEligibilityProvider<
+                u64,
+                <Test as frame_system::Config>::Hash,
+            >>::verify_and_consume_vote_credential(
+                &binding_id, &1, proposal_b, b"same-nonce", b"vote-ok"
+            ));
+        });
+    }
+
+    #[test]
     fn rotate_sfid_keys_keeps_two_distinct_backups() {
         new_test_ext().execute_with(|| {
             assert_ok!(SfidCodeAuth::rotate_sfid_keys(

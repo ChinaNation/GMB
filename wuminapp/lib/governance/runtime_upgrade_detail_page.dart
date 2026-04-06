@@ -595,7 +595,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   String _codeStatusLabel(RuntimeUpgradeProposalInfo info) {
-    if (!info.hasCode) return '已清理';
     if (info.status == 0) return '待执行';
     return '已归档';
   }

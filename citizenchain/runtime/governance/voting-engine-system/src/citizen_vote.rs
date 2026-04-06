@@ -1,6 +1,6 @@
 use crate::{
     pallet::{CitizenTallies, CitizenVotesByBindingId, Config, Error, Event, Pallet},
-    PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STATUS_PASSED,
+    PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STATUS_PASSED, STATUS_REJECTED,
 };
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 
@@ -60,11 +60,19 @@ impl<AccountId, Hash> SfidEligibility<AccountId, Hash> for () {
 }
 
 pub fn is_citizen_vote_passed(yes_votes: u64, eligible_total: u64) -> bool {
-    // 中文注释：公民投票必须严格“大于 50%”才算通过，恰好一半不通过。
+    // 中文注释：公民投票必须严格”大于 50%”才算通过，恰好一半不通过。
     if eligible_total == 0 {
         return false;
     }
     yes_votes.saturating_mul(100) > eligible_total.saturating_mul(50)
+}
+
+/// 公民投票是否已注定无法通过：反对票 ≥ 50% 时，赞成票不可能严格 > 50%。
+pub fn is_citizen_vote_rejected(no_votes: u64, eligible_total: u64) -> bool {
+    if eligible_total == 0 {
+        return false;
+    }
+    no_votes.saturating_mul(100) >= eligible_total.saturating_mul(50)
 }
 
 impl<T: Config> Pallet<T> {
@@ -130,7 +138,12 @@ impl<T: Config> Pallet<T> {
         });
 
         if is_citizen_vote_passed(tally.yes, proposal.citizen_eligible_total) {
+            // 中文注释：赞成票严格 > 50%，提前通过。
             Self::set_status_and_emit(proposal_id, STATUS_PASSED)?;
+        } else if is_citizen_vote_rejected(tally.no, proposal.citizen_eligible_total) {
+            // 中文注释：反对票 ≥ 50%，赞成票不可能再严格过半，提前否决。
+            // 30 天超时只是兜底，不应让注定失败的提案空等。
+            Self::set_status_and_emit(proposal_id, STATUS_REJECTED)?;
         }
 
         Ok(())

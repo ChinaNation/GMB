@@ -1,5 +1,5 @@
 [package]
-name = "duoqian-transfer-pow"  # 机构多签名地址转账模块
+name = "duoqian-transfer-pow"  # 多签名地址转账模块
 edition.workspace = true
 version.workspace = true
 authors.workspace = true

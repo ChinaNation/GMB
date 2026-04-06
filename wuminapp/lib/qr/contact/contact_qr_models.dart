@@ -11,6 +11,7 @@ class UserQrPayload {
     required this.name,
     this.purpose = 'contact',
     this.amount,
+    this.proposalId,
   });
 
   /// 协议标识。
@@ -19,14 +20,17 @@ class UserQrPayload {
   /// 链上地址（SS58 格式）。
   final String address;
 
-  /// 用户昵称。
+  /// 用户昵称 / 多签账户名称。
   final String name;
 
-  /// 用途：contact（联系人）/ transfer（付款）。
+  /// 用途：contact（联系人）/ transfer（付款）/ duoqian（多签账户）。
   final String purpose;
 
   /// 转账金额（purpose=transfer 时使用）。
   final String? amount;
+
+  /// 提案 ID（purpose=duoqian 且状态为 Pending 时使用）。
+  final int? proposalId;
 
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{
@@ -37,6 +41,9 @@ class UserQrPayload {
     };
     if (amount != null && amount!.isNotEmpty) {
       map['amount'] = amount;
+    }
+    if (proposalId != null) {
+      map['proposal_id'] = proposalId;
     }
     return map;
   }
@@ -52,11 +59,13 @@ class UserQrPayload {
     }
     final purpose = (data['purpose'] ?? 'contact').toString().trim();
     final amount = data['amount']?.toString().trim();
+    final proposalId = data['proposal_id'] as int?;
     return UserQrPayload(
       address: address,
       name: name,
       purpose: purpose,
       amount: (amount != null && amount.isNotEmpty) ? amount : null,
+      proposalId: proposalId,
     );
   }
 

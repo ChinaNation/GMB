@@ -23,7 +23,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use genesis_pallet::DeveloperUpgradeCheck;
     use sp_runtime::{traits::Hash, DispatchError};
-    use voting_engine_system::{JointVoteEngine, STATUS_EXECUTED};
+    use voting_engine_system::JointVoteEngine;
 
     pub type ReasonOf<T> = BoundedVec<u8, <T as Config>::MaxReasonLen>;
     pub type CodeOf<T> = BoundedVec<u8, <T as Config>::MaxRuntimeCodeSize>;
@@ -46,14 +46,12 @@ pub mod pallet {
     )]
     #[scale_info(skip_type_params(T))]
     pub struct Proposal<T: Config> {
-        /// 提案发起人（仅允许 NRC 管理员）
+        /// 提案发起人（国储会或省储会管理员）
         pub proposer: T::AccountId,
         /// 升级理由
         pub reason: ReasonOf<T>,
         /// 代码哈希，便于事件与链下审计对齐
         pub code_hash: T::Hash,
-        /// 是否仍保留链上对象层 wasm 数据。
-        pub has_code: bool,
         /// 当前治理状态
         pub status: ProposalStatus,
     }
@@ -87,8 +85,8 @@ pub mod pallet {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// 仅允许国储会管理员发起 runtime 升级提案。
-        type NrcProposeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
+        /// 允许国储会或省储会管理员发起 runtime 升级提案。
+        type ProposeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
 
         type JointVoteEngine: JointVoteEngine<Self::AccountId>;
         type RuntimeCodeExecutor: RuntimeCodeExecutor;
@@ -157,7 +155,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 国储会管理员发起 runtime 升级提案，升级流程走联合投票。
+        /// 国储会或省储会管理员发起 runtime 升级提案，升级流程走联合投票。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_runtime_upgrade())]
         pub fn propose_runtime_upgrade(
@@ -168,7 +166,7 @@ pub mod pallet {
             snapshot_nonce: SnapshotNonceOf<T>,
             signature: SnapshotSignatureOf<T>,
         ) -> DispatchResult {
-            let proposer = T::NrcProposeOrigin::ensure_origin(origin)?;
+            let proposer = T::ProposeOrigin::ensure_origin(origin)?;
 
             ensure!(!reason.is_empty(), Error::<T>::EmptyReason);
             ensure!(!code.is_empty(), Error::<T>::EmptyRuntimeCode);
@@ -186,7 +184,6 @@ pub mod pallet {
                 proposer: proposer.clone(),
                 reason,
                 code_hash,
-                has_code: true,
                 status: ProposalStatus::Voting,
             };
             let mut encoded = sp_runtime::sp_std::vec::Vec::from(crate::MODULE_TAG);
@@ -210,7 +207,7 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 开发期快捷通道：NRC 管理员直接 set_code，不走投票。
+        /// 开发期快捷通道：联合提案发起人直接 set_code，不走投票。
         /// 仅在 genesis-pallet 的 DeveloperUpgradeEnabled 为 true 时可用。
         /// 链进入运行期后此调用永久失效，升级必须走 propose_runtime_upgrade 联合投票。
         #[pallet::call_index(2)]
@@ -218,7 +215,7 @@ pub mod pallet {
             <<T as frame_system::Config>::SystemWeightInfo as frame_system::weights::WeightInfo>::set_code()
         )]
         pub fn developer_direct_upgrade(origin: OriginFor<T>, code: CodeOf<T>) -> DispatchResult {
-            let who = T::NrcProposeOrigin::ensure_origin(origin)?;
+            let who = T::ProposeOrigin::ensure_origin(origin)?;
             ensure!(
                 T::DeveloperUpgradeCheck::is_enabled(),
                 Error::<T>::DeveloperUpgradeDisabled
@@ -250,6 +247,13 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        /// 快速判断 proposal_id 是否属于本模块（通过 MODULE_TAG 前缀匹配）。
+        pub fn owns_proposal(proposal_id: u64) -> bool {
+            voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+                .map(|raw| raw.starts_with(crate::MODULE_TAG))
+                .unwrap_or(false)
+        }
+
         /// 从投票引擎 ProposalData 中读取并解码本模块的提案摘要。
         /// 先校验 MODULE_TAG 前缀，防止跨模块误解码。
         fn load_proposal(proposal_id: u64) -> Result<Proposal<T>, DispatchError> {
@@ -282,6 +286,12 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::RuntimeCodeMissing.into())
         }
 
+        /// 联合投票结果回调（由 voting-engine 的 set_status_and_emit 在事务内调用）。
+        ///
+        /// 状态处理模式与 resolution-issuance-gov 对齐：
+        /// - approved + 执行成功 → 不覆盖投票引擎状态，保持 set_status_and_emit 设置的 STATUS_PASSED
+        /// - approved + 执行失败 → override_proposal_status(STATUS_EXECUTION_FAILED)
+        /// - rejected → 不覆盖投票引擎状态，保持 set_status_and_emit 设置的 STATUS_REJECTED
         pub(crate) fn apply_joint_vote_result(proposal_id: u64, approved: bool) -> DispatchResult {
             let mut proposal = Self::load_proposal(proposal_id)?;
             ensure!(
@@ -291,9 +301,6 @@ pub mod pallet {
 
             if approved {
                 let code_to_execute = Self::load_runtime_code(proposal_id)?;
-                // 中文注释：只有真正 set_code 成功，提案才允许进入 Passed；
-                // 否则进入 ExecutionFailed。原始 wasm 继续保留在投票引擎对象层，
-                // 交由统一 90 天延迟清理流程处理，不由业务模块自行删除。
                 let exec_ok =
                     T::RuntimeCodeExecutor::execute_runtime_code(code_to_execute.as_slice())
                         .is_ok();
@@ -305,13 +312,15 @@ pub mod pallet {
                 }
                 Self::save_proposal(proposal_id, &proposal)?;
 
-                // 将投票引擎状态设为 EXECUTED，标记提案已终结。
-                // 直接修改存储而非调用 set_status_and_emit，以避免回调重入。
-                voting_engine_system::pallet::Proposals::<T>::mutate(proposal_id, |maybe| {
-                    if let Some(p) = maybe {
-                        p.status = STATUS_EXECUTED;
-                    }
-                });
+                // 执行失败时覆盖投票引擎状态为 STATUS_EXECUTION_FAILED，
+                // 本回调运行在 set_status_and_emit 的 with_transaction 内，修改是原子的。
+                // 执行成功时不覆盖，保持 STATUS_PASSED。
+                if !exec_ok {
+                    voting_engine_system::Pallet::<T>::override_proposal_status(
+                        proposal_id,
+                        voting_engine_system::STATUS_EXECUTION_FAILED,
+                    )?;
+                }
 
                 Self::deposit_event(Event::<T>::JointVoteFinalized {
                     proposal_id,
@@ -330,16 +339,9 @@ pub mod pallet {
                 }
                 Ok(())
             } else {
+                // 否决：只更新业务层数据，不覆盖投票引擎状态（保持 STATUS_REJECTED）。
                 proposal.status = ProposalStatus::Rejected;
                 Self::save_proposal(proposal_id, &proposal)?;
-
-                // 将投票引擎状态设为 EXECUTED，与 approved 路径保持一致，
-                // 防止投票引擎侧对已终结提案的误操作。
-                voting_engine_system::pallet::Proposals::<T>::mutate(proposal_id, |maybe| {
-                    if let Some(p) = maybe {
-                        p.status = STATUS_EXECUTED;
-                    }
-                });
 
                 Self::deposit_event(Event::<T>::JointVoteFinalized {
                     proposal_id,
@@ -403,13 +405,13 @@ mod tests {
         type Lookup = IdentityLookup<Self::AccountId>;
     }
 
-    pub struct EnsureNrcAdminForTest;
-    impl frame_support::traits::EnsureOrigin<RuntimeOrigin> for EnsureNrcAdminForTest {
+    pub struct EnsureJointProposerForTest;
+    impl frame_support::traits::EnsureOrigin<RuntimeOrigin> for EnsureJointProposerForTest {
         type Success = AccountId32;
 
         fn try_origin(o: RuntimeOrigin) -> Result<Self::Success, RuntimeOrigin> {
             let who = frame_system::EnsureSigned::<AccountId32>::try_origin(o)?;
-            if who == AccountId32::new([1u8; 32]) {
+            if who == nrc_admin() || who == prc_admin() {
                 Ok(who)
             } else {
                 Err(RuntimeOrigin::from(frame_system::RawOrigin::Signed(who)))
@@ -472,6 +474,7 @@ mod tests {
         type InternalAdminProvider = ();
         type InternalThresholdProvider = ();
         type InternalAdminCountProvider = ();
+        type MaxAdminsPerInstitution = ConstU32<32>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
@@ -489,7 +492,7 @@ mod tests {
 
     impl pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
-        type NrcProposeOrigin = EnsureNrcAdminForTest;
+        type ProposeOrigin = EnsureJointProposerForTest;
         type JointVoteEngine = TestJointVoteEngine;
         type RuntimeCodeExecutor = TestRuntimeCodeExecutor;
         type DeveloperUpgradeCheck = TestDeveloperUpgradeCheck;
@@ -530,6 +533,18 @@ mod tests {
         ext
     }
 
+    fn nrc_admin() -> AccountId32 {
+        AccountId32::new([1u8; 32])
+    }
+
+    fn outsider() -> AccountId32 {
+        AccountId32::new([2u8; 32])
+    }
+
+    fn prc_admin() -> AccountId32 {
+        AccountId32::new([3u8; 32])
+    }
+
     fn reason_ok() -> pallet::ReasonOf<Test> {
         b"upgrade reason"
             .to_vec()
@@ -568,7 +583,7 @@ mod tests {
 
     fn propose_ok() {
         assert_ok!(RuntimeRootUpgrade::propose_runtime_upgrade(
-            RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            RuntimeOrigin::signed(nrc_admin()),
             reason_ok(),
             code_ok(),
             10,
@@ -577,12 +592,31 @@ mod tests {
         ));
     }
 
+    /// 在投票引擎中插入一个 Voting 状态的 Proposal，使 override_proposal_status 可用。
+    /// 测试 mock 的 TestJointVoteEngine 不创建真实 Proposals 条目，
+    /// 需手工补一个以模拟真实回调上下文。
+    fn insert_engine_proposal(proposal_id: u64) {
+        voting_engine_system::pallet::Proposals::<Test>::insert(
+            proposal_id,
+            voting_engine_system::Proposal {
+                kind: voting_engine_system::PROPOSAL_KIND_JOINT,
+                stage: voting_engine_system::STAGE_JOINT,
+                status: voting_engine_system::STATUS_VOTING,
+                internal_org: None,
+                internal_institution: None,
+                start: 0u64,
+                end: 100u64,
+                citizen_eligible_total: 10,
+            },
+        );
+    }
+
     #[test]
-    fn only_nrc_admin_can_propose_runtime_upgrade() {
+    fn joint_proposers_can_propose_runtime_upgrade() {
         new_test_ext().execute_with(|| {
             assert_noop!(
                 RuntimeRootUpgrade::propose_runtime_upgrade(
-                    RuntimeOrigin::signed(AccountId32::new([2u8; 32])),
+                    RuntimeOrigin::signed(outsider()),
                     reason_ok(),
                     code_ok(),
                     10,
@@ -593,13 +627,31 @@ mod tests {
             );
 
             assert_ok!(RuntimeRootUpgrade::propose_runtime_upgrade(
-                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                RuntimeOrigin::signed(nrc_admin()),
                 reason_ok(),
                 code_ok(),
                 10,
                 nonce_ok(),
                 sig_ok()
             ));
+
+            assert_ok!(RuntimeRootUpgrade::propose_runtime_upgrade(
+                RuntimeOrigin::signed(prc_admin()),
+                reason_ok(),
+                code_ok(),
+                10,
+                nonce_ok(),
+                sig_ok()
+            ));
+
+            assert!(
+                voting_engine_system::Pallet::<Test>::get_proposal_data(100).is_some(),
+                "NRC proposer should create proposal data"
+            );
+            assert!(
+                voting_engine_system::Pallet::<Test>::get_proposal_data(101).is_some(),
+                "PRC proposer should create proposal data"
+            );
         });
     }
 
@@ -615,10 +667,6 @@ mod tests {
             let proposal = decode_proposal(100);
             assert!(matches!(proposal.status, pallet::ProposalStatus::Voting));
             assert!(
-                proposal.has_code,
-                "summary should mark runtime code as retained"
-            );
-            assert!(
                 voting_engine_system::Pallet::<Test>::get_proposal_object(100).is_some(),
                 "runtime wasm should be stored in proposal object layer"
             );
@@ -633,10 +681,6 @@ mod tests {
             assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, false));
             let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
-            assert!(
-                p.has_code,
-                "rejected proposal object should stay until unified cleanup"
-            );
         });
     }
 
@@ -648,10 +692,6 @@ mod tests {
 
             let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::Passed));
-            assert!(
-                p.has_code,
-                "approved proposal object should stay until unified cleanup"
-            );
             assert!(
                 voting_engine_system::Pallet::<Test>::get_proposal_object(100).is_some(),
                 "approved proposal should still keep object data for unified cleanup"
@@ -665,26 +705,30 @@ mod tests {
     fn approved_joint_vote_execution_failure_emits_event() {
         new_test_ext().execute_with(|| {
             propose_ok();
+            insert_engine_proposal(100);
             EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = true);
 
             assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, true));
 
             let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::ExecutionFailed));
-            assert!(
-                p.has_code,
-                "execution failed proposal object should stay until unified cleanup"
-            );
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
             assert!(
                 !code_executed,
                 "runtime code executor should fail in this test"
             );
+            // 投票引擎侧应为 STATUS_EXECUTION_FAILED
+            let engine_proposal =
+                voting_engine_system::pallet::Proposals::<Test>::get(100).unwrap();
+            assert_eq!(
+                engine_proposal.status,
+                voting_engine_system::STATUS_EXECUTION_FAILED
+            );
         });
     }
 
     #[test]
-    fn rejected_joint_vote_clears_runtime_code() {
+    fn rejected_joint_vote_retains_object_for_unified_cleanup() {
         new_test_ext().execute_with(|| {
             propose_ok();
             assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, false));
@@ -692,8 +736,35 @@ mod tests {
             let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
             assert!(
-                p.has_code,
+                voting_engine_system::Pallet::<Test>::get_proposal_object(100).is_some(),
                 "rejected proposal object should stay until unified cleanup"
+            );
+        });
+    }
+
+    #[test]
+    fn owns_proposal_returns_true_for_own_proposals() {
+        new_test_ext().execute_with(|| {
+            propose_ok();
+            assert!(pallet::Pallet::<Test>::owns_proposal(100));
+            assert!(!pallet::Pallet::<Test>::owns_proposal(999));
+        });
+    }
+
+    #[test]
+    fn approved_success_does_not_override_engine_status() {
+        new_test_ext().execute_with(|| {
+            propose_ok();
+            insert_engine_proposal(100);
+            assert_ok!(RuntimeRootUpgrade::on_joint_vote_finalized(100, true));
+
+            // 执行成功时不覆盖投票引擎状态（保持 STATUS_VOTING 因为单测没走 set_status_and_emit）
+            let engine_proposal =
+                voting_engine_system::pallet::Proposals::<Test>::get(100).unwrap();
+            assert_eq!(
+                engine_proposal.status,
+                voting_engine_system::STATUS_VOTING,
+                "success path should not override engine status"
             );
         });
     }
@@ -725,14 +796,23 @@ mod tests {
     // ─── developer_direct_upgrade 测试 ─────────────────────────────────
 
     #[test]
-    fn developer_direct_upgrade_succeeds_when_enabled() {
+    fn developer_direct_upgrade_allows_joint_proposer_when_enabled() {
         new_test_ext().execute_with(|| {
             assert_ok!(RuntimeRootUpgrade::developer_direct_upgrade(
-                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                RuntimeOrigin::signed(nrc_admin()),
                 code_ok(),
             ));
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
             assert!(code_executed, "runtime code executor should be called");
+
+            RUNTIME_CODE_EXECUTED.with(|v| *v.borrow_mut() = false);
+
+            assert_ok!(RuntimeRootUpgrade::developer_direct_upgrade(
+                RuntimeOrigin::signed(prc_admin()),
+                code_ok(),
+            ));
+            let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
+            assert!(code_executed, "PRC proposer should also trigger runtime code executor");
         });
     }
 
@@ -742,7 +822,7 @@ mod tests {
             DEV_UPGRADE_ENABLED.with(|v| *v.borrow_mut() = false);
             assert_noop!(
                 RuntimeRootUpgrade::developer_direct_upgrade(
-                    RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                    RuntimeOrigin::signed(nrc_admin()),
                     code_ok(),
                 ),
                 pallet::Error::<Test>::DeveloperUpgradeDisabled
@@ -751,11 +831,11 @@ mod tests {
     }
 
     #[test]
-    fn developer_direct_upgrade_rejects_non_nrc_admin() {
+    fn developer_direct_upgrade_rejects_non_joint_proposer() {
         new_test_ext().execute_with(|| {
             assert_noop!(
                 RuntimeRootUpgrade::developer_direct_upgrade(
-                    RuntimeOrigin::signed(AccountId32::new([2u8; 32])),
+                    RuntimeOrigin::signed(outsider()),
                     code_ok(),
                 ),
                 sp_runtime::DispatchError::BadOrigin
@@ -769,7 +849,7 @@ mod tests {
             let empty_code: pallet::CodeOf<Test> = vec![].try_into().expect("empty code");
             assert_noop!(
                 RuntimeRootUpgrade::developer_direct_upgrade(
-                    RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                    RuntimeOrigin::signed(nrc_admin()),
                     empty_code,
                 ),
                 pallet::Error::<Test>::EmptyRuntimeCode

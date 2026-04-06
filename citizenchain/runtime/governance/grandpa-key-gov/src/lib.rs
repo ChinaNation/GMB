@@ -57,6 +57,7 @@ fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
 }
 
 /// 中文注释：判断机构属于 NRC 还是 PRC，不属于任何一类则返回 None。
+/// PRB（省储行）不参与 GRANDPA 共识出块，故不纳入密钥治理范围。
 fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
     if Some(institution) == nrc_pallet_id_bytes() {
         return Some(ORG_NRC);
@@ -300,7 +301,10 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 对“GRANDPA 密钥替换”提案投票，达到阈值通过后自动执行替换。
+        /// 对”GRANDPA 密钥替换”提案投票，达到阈值通过后自动执行替换。
+        ///
+        /// 权限双重校验：业务层 `is_internal_admin`（实时名单）+ 投票引擎 `is_admin_in_snapshot`（快照）。
+        /// 实时检查确保已被撤换的管理员无法继续投票，快照确保投票期间名单稳定。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as Config>::WeightInfo::vote_replace_grandpa_key())]
         pub fn vote_replace_grandpa_key(
@@ -325,10 +329,14 @@ pub mod pallet {
                 approve,
             });
 
-            if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
-                if proposal.status == STATUS_PASSED {
-                    if Self::try_execute_from_action(proposal_id, action).is_err() {
-                        Self::deposit_event(Event::<T>::GrandpaKeyExecutionFailed { proposal_id });
+            if approve {
+                if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
+                    if proposal.status == STATUS_PASSED {
+                        if Self::try_execute_from_action(proposal_id, action).is_err() {
+                            Self::deposit_event(Event::<T>::GrandpaKeyExecutionFailed {
+                                proposal_id,
+                            });
+                        }
                     }
                 }
             }
@@ -354,6 +362,7 @@ pub mod pallet {
         }
 
         /// 清理”已通过但确定无法执行”的提案。
+        /// 注：call_index(3) 已废弃（旧版 cleanup extrinsic），编号保留以兼容已编码的交易。
         #[pallet::call_index(4)]
         #[pallet::weight(<T as Config>::WeightInfo::cancel_failed_replace_grandpa_key())]
         pub fn cancel_failed_replace_grandpa_key(
@@ -634,6 +643,24 @@ mod tests {
                 _ => false,
             }
         }
+
+        fn get_admin_list(
+            org: u8,
+            institution: InstitutionPalletId,
+        ) -> Option<sp_std::vec::Vec<AccountId32>> {
+            match org {
+                ORG_NRC | ORG_PRC => CHINA_CB
+                    .iter()
+                    .find(|node| reserve_pallet_id_to_bytes(node.shenfen_id) == Some(institution))
+                    .map(|node| {
+                        node.duoqian_admins
+                            .iter()
+                            .map(|raw| AccountId32::new(*raw))
+                            .collect()
+                    }),
+                _ => None,
+            }
+        }
     }
 
     pub struct TestTimeProvider;
@@ -659,6 +686,7 @@ mod tests {
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalThresholdProvider = ();
         type InternalAdminCountProvider = ();
+        type MaxAdminsPerInstitution = ConstU32<32>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }

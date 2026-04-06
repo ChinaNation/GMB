@@ -1,7 +1,7 @@
 //! # 决议发行治理模块 (resolution-issuance-gov)
 //!
 //! 本模块将"国储会决议发行"治理流程接入联合投票：
-//! - 仅国储会管理员可发起决议发行提案，分配明细必须与链上白名单精确匹配。
+//! - 国储会或省储会管理员可发起决议发行提案，分配明细必须与链上白名单精确匹配。
 //! - 借助 `voting-engine-system` 联合投票达成通过后，自动调用 `resolution-issuance-iss` 执行铸币。
 //! - 执行失败时提案状态覆盖为 `STATUS_EXECUTION_FAILED`，与通过明确区分。
 //! - 治理进行中禁止修改合法收款账户集合，避免口径漂移。
@@ -84,8 +84,8 @@ pub mod pallet {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// 仅允许国储会管理员发起提案。
-        type NrcProposeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
+        /// 允许国储会或省储会管理员发起提案。
+        type ProposeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
         /// 更新合法收款账户集合。
         type RecipientSetOrigin: EnsureOrigin<Self::RuntimeOrigin>;
         /// 回放联合投票结果的受限来源（生产可配置为拒绝所有外部来源）。
@@ -286,7 +286,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 国储会提案：创建"决议发行"联合投票提案。
+        /// 国储会或省储会提案：创建"决议发行"联合投票提案。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_resolution_issuance())]
         pub fn propose_resolution_issuance(
@@ -298,7 +298,7 @@ pub mod pallet {
             snapshot_nonce: SnapshotNonceOf<T>,
             signature: SnapshotSignatureOf<T>,
         ) -> DispatchResult {
-            let proposer = T::NrcProposeOrigin::ensure_origin(origin)?;
+            let proposer = T::ProposeOrigin::ensure_origin(origin)?;
 
             ensure!(!reason.is_empty(), Error::<T>::EmptyReason);
             Self::validate_allocations(total_amount, allocations.as_slice())?;
@@ -862,13 +862,14 @@ mod tests {
         type InternalAdminProvider = ();
         type InternalThresholdProvider = ();
         type InternalAdminCountProvider = ();
+        type MaxAdminsPerInstitution = ConstU32<32>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
 
     impl pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
-        type NrcProposeOrigin = EnsureNrcAdminForTest;
+        type ProposeOrigin = EnsureNrcAdminForTest;
         type RecipientSetOrigin = frame_system::EnsureRoot<AccountId32>;
         type JointVoteFinalizeOrigin = frame_system::EnsureRoot<AccountId32>;
         type IssuanceExecutor = TestIssuanceExecutor;
@@ -935,7 +936,7 @@ mod tests {
     }
 
     #[test]
-    fn only_nrc_admin_can_propose() {
+    fn only_authorized_admin_can_propose() {
         new_test_ext().execute_with(|| {
             assert_noop!(
                 ResolutionIssuanceGov::propose_resolution_issuance(

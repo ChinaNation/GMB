@@ -360,6 +360,8 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     final upgradeDetail = item.proposal.runtimeUpgradeDetail;
     final createDqDetail = item.proposal.createDuoqianDetail;
     final closeDqDetail = item.proposal.closeDuoqianDetail;
+    final resIssuance = item.proposal.resolutionIssuanceSummary;
+    final resDestroy = item.proposal.resolutionDestroySummary;
 
     return PressableCard(
       child: Card(
@@ -386,7 +388,8 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                   ),
                   child: Icon(
                       _proposalIcon(
-                          detail, upgradeDetail, createDqDetail, closeDqDetail),
+                          detail, upgradeDetail, createDqDetail, closeDqDetail,
+                          resIssuance, resDestroy),
                       size: 18,
                       color: statusColor),
                 ),
@@ -435,9 +438,13 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                                     ? '创建多签 · ${createDqDetail.adminCount} 管理员'
                                     : closeDqDetail != null
                                         ? '关闭多签'
-                                        : meta.kind == 1
-                                            ? '联合投票提案'
-                                            : '提案 ${_kindLabel(meta.kind)}',
+                                        : resIssuance != null
+                                            ? '决议发行'
+                                            : resDestroy != null
+                                                ? '决议销毁'
+                                                : meta.kind == 1
+                                                    ? '联合投票提案'
+                                                    : '提案 ${_kindLabel(meta.kind)}',
                         style: const TextStyle(
                             fontSize: 12, color: AppTheme.textTertiary),
                       ),
@@ -497,6 +504,8 @@ class _AllProposalsViewState extends State<AllProposalsView> {
         return '已拒绝';
       case 3:
         return '已执行';
+      case 4:
+        return '执行失败';
       default:
         return '未知';
     }
@@ -510,11 +519,15 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     RuntimeUpgradeProposalInfo? upgradeDetail, [
     CreateDuoqianProposalInfo? createDqDetail,
     CloseDuoqianProposalInfo? closeDqDetail,
+    String? resIssuance,
+    String? resDestroy,
   ]) {
     if (detail != null) return Icons.send_outlined; // 转账
     if (upgradeDetail != null) return Icons.arrow_upward; // Runtime 升级
     if (createDqDetail != null) return Icons.group_add; // 创建多签
     if (closeDqDetail != null) return Icons.group_remove; // 关闭多签
+    if (resIssuance != null) return Icons.add_circle_outline; // 决议发行
+    if (resDestroy != null) return Icons.remove_circle_outline; // 决议销毁
     return Icons.description_outlined; // 其他/未知
   }
 

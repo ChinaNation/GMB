@@ -192,13 +192,23 @@ pub async fn get_institution_detail(
         // 检查节点是否运行
         let status = home::current_status(&app)?;
         let (admins, balance_fen) = if status.running {
-            let admins = match institution::fetch_admins(&shenfen_id_clone) {
+            let pubkeys = match institution::fetch_admins(&shenfen_id_clone) {
                 Ok(a) => a,
                 Err(e) => {
                     warnings.push(format!("查询管理员失败: {e}"));
                     Vec::new()
                 }
             };
+            let admins: Vec<types::AdminInfo> = pubkeys
+                .into_iter()
+                .map(|pk| {
+                    let bal = institution::fetch_balance(&pk)
+                        .ok()
+                        .flatten()
+                        .map(|v| v.to_string());
+                    types::AdminInfo { pubkey_hex: pk, balance_fen: bal }
+                })
+                .collect();
             let balance = match institution::fetch_balance(&duoqian_address) {
                 Ok(b) => b.map(|v| v.to_string()),
                 Err(e) => {
