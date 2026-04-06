@@ -45,6 +45,15 @@ jobs:
           WASM_BUILD_FROM_SOURCE: "1"
         run: cargo build --release -p citizenchain
 
+      - name: 拷贝 WASM 到 target/wasm-ci
+        run: |
+          mkdir -p citizenchain/target/wasm-ci
+          rm -f citizenchain/target/wasm-ci/*.wasm
+          cp citizenchain/target/release/wbuild/citizenchain/citizenchain.wasm citizenchain/target/wasm-ci/
+          cp citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.wasm citizenchain/target/wasm-ci/
+          cp citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm citizenchain/target/wasm-ci/
+          ls -la citizenchain/target/wasm-ci/
+
       - name: 清理旧版 WASM artifact
         env:
           GH_TOKEN: ${{ github.token }}
@@ -60,8 +69,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: citizenchain-wasm
-          path: |
-            citizenchain/target/release/wbuild/citizenchain/citizenchain.wasm
-            citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.wasm
-            citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
+          path: citizenchain/target/wasm-ci/*.wasm
           retention-days: 30
+
+      - name: 触发本地下载（通过 repository_dispatch）
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X POST repos/${{ github.repository }}/dispatches \
+            -f event_type=wasm-ready \
+            -f client_payload[run_id]=${{ github.run_id }} || true
