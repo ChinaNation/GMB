@@ -36,6 +36,7 @@ class _DuoqianCreateProposalPageState
     extends State<DuoqianCreateProposalPage> {
 
   final _sfidIdController = TextEditingController();
+  final _nameController = TextEditingController();
   final _amountController = TextEditingController();
   final _thresholdController = TextEditingController();
 
@@ -48,6 +49,7 @@ class _DuoqianCreateProposalPageState
 
   // 管理员列表（公钥 hex，不含 0x）
   final List<String> _adminPubkeys = [];
+  String? _creatorPubkey; // 创建人公钥（始终占管理员列表第一位，不可移除）
 
   late WalletProfile _selectedWallet;
 
@@ -55,11 +57,25 @@ class _DuoqianCreateProposalPageState
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
+    _syncCreatorAdmin(widget.adminWallets.first);
+  }
+
+  /// 钱包切换时同步更新创建人在管理员列表中的位置。
+  void _syncCreatorAdmin(WalletProfile wallet) {
+    var pubkey = wallet.pubkeyHex.toLowerCase();
+    if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
+    if (_creatorPubkey != null) {
+      _adminPubkeys.remove(_creatorPubkey);
+    }
+    _creatorPubkey = pubkey;
+    _adminPubkeys.remove(pubkey);
+    _adminPubkeys.insert(0, pubkey);
   }
 
   @override
   void dispose() {
     _sfidIdController.dispose();
+    _nameController.dispose();
     _amountController.dispose();
     _thresholdController.dispose();
     super.dispose();
@@ -73,12 +89,18 @@ class _DuoqianCreateProposalPageState
       setState(() => _sfidError = 'SFID ID 不能为空');
       return;
     }
+    final nameText = _nameController.text.trim();
+    if (nameText.isEmpty) {
+      setState(() => _sfidError = '请输入账户名称');
+      return;
+    }
 
     final sfidBytes = Uint8List.fromList(utf8.encode(sfidText));
     if (sfidBytes.length > 96) {
       setState(() => _sfidError = 'SFID ID 超过最大长度（96 字节）');
       return;
     }
+    final nameBytes = Uint8List.fromList(utf8.encode(nameText));
 
     setState(() {
       _checkingSfid = true;
@@ -87,7 +109,7 @@ class _DuoqianCreateProposalPageState
     });
 
     try {
-      final address = await _manageService.fetchSfidRegisteredAddress(sfidBytes);
+      final address = await _manageService.fetchSfidRegisteredAddress(sfidBytes, nameBytes);
       if (!mounted) return;
 
       if (address == null) {
@@ -168,6 +190,7 @@ class _DuoqianCreateProposalPageState
   }
 
   void _removeAdmin(int index) {
+    if (_adminPubkeys[index] == _creatorPubkey) return;
     setState(() => _adminPubkeys.removeAt(index));
   }
 
@@ -223,7 +246,18 @@ class _DuoqianCreateProposalPageState
       final wallet = _selectedWallet;
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
 
+      // 热钱包：先认证，后续用本地签名；冷钱包：走 QR 签名。
+      WalletManager? hotWalletManager;
+      if (wallet.isHotWallet) {
+        hotWalletManager = WalletManager();
+        await hotWalletManager.authenticateForSigning();
+      }
+
       Future<Uint8List> signCallback(Uint8List payload) async {
+        if (hotWalletManager != null) {
+          return await hotWalletManager.signWithWalletNoAuth(wallet.walletIndex, payload);
+        }
+        // 冷钱包 QR 签名
         final qrSigner = QrSigner();
         final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
@@ -258,8 +292,11 @@ class _DuoqianCreateProposalPageState
         return Uint8List.fromList(_hexDecode(response.signature));
       }
 
+      final nameBytes =
+          Uint8List.fromList(utf8.encode(_nameController.text.trim()));
       final result = await _manageService.submitProposeCreate(
         sfidId: sfidBytes,
+        name: nameBytes,
         adminCount: _adminPubkeys.length,
         adminPubkeys: adminPubkeyBytes,
         threshold: threshold,
@@ -373,6 +410,18 @@ class _DuoqianCreateProposalPageState
           ],
 
           const SizedBox(height: 20),
+          _buildSectionTitle('账户名称'),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _nameController,
+            decoration: InputDecoration(
+              hintText: '输入多签账户名称（如：运营账户）',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+
+          const SizedBox(height: 20),
 
           // 管理员列表
           _buildSectionTitle('管理员列表（${_adminPubkeys.length}/64）'),
@@ -381,6 +430,7 @@ class _DuoqianCreateProposalPageState
             final index = entry.key;
             final pubkey = entry.value;
             final ss58 = _hexToSs58(pubkey);
+            final isCreator = pubkey == _creatorPubkey;
             return ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
@@ -396,14 +446,28 @@ class _DuoqianCreateProposalPageState
                   ),
                 ),
               ),
-              title: Text(
-                _truncateAddress(ss58),
-                style: const TextStyle(fontSize: 13),
+              title: Row(
+                children: [
+                  Flexible(child: Text(_truncateAddress(ss58), style: const TextStyle(fontSize: 13))),
+                  if (isCreator) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppTheme.success.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text('创建人', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.success)),
+                    ),
+                  ],
+                ],
               ),
-              trailing: IconButton(
-                icon: Icon(Icons.close, size: 18, color: AppTheme.danger),
-                onPressed: () => _removeAdmin(index),
-              ),
+              trailing: isCreator
+                  ? null
+                  : IconButton(
+                      icon: Icon(Icons.close, size: 18, color: AppTheme.danger),
+                      onPressed: () => _removeAdmin(index),
+                    ),
             );
           }),
           OutlinedButton.icon(
@@ -468,7 +532,7 @@ class _DuoqianCreateProposalPageState
                 );
               }).toList(),
               onChanged: (w) {
-                if (w != null) setState(() => _selectedWallet = w);
+                if (w != null) setState(() { _selectedWallet = w; _syncCreatorAdmin(w); });
               },
               decoration: InputDecoration(
                 border: OutlineInputBorder(

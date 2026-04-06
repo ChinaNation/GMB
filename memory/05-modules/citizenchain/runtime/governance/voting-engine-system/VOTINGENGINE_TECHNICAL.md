@@ -123,11 +123,11 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 ## 4. 状态终结与回调
 统一通过 `set_status_and_emit`（`pub`，允许消费模块直接调用）完成终结：
 1. 原子更新 `Proposals.status`
-2. 发送 `ProposalFinalized` 事件
-3. 对联合提案触发 `JointVoteResultCallback`
-4. 若联合回调失败，则整个终结动作回滚，不留下”投票引擎已终结、业务模块未消费”的不一致状态
+2. 对联合提案触发 `JointVoteResultCallback`
+3. 若联合回调失败，则整个终结动作回滚，不留下”投票引擎已终结、业务模块未消费”的不一致状态
+4. 联合回调成功后，再发送 `ProposalFinalized` 事件；若业务模块在回调中覆盖了最终状态，事件里的 `status` 也会使用覆盖后的值
 5. 消费模块在业务执行成功后，可调用 `set_status_and_emit(proposal_id, STATUS_EXECUTED)` 将提案标记为已执行终态，防止重复执行
-6. 当 status 从 `STATUS_VOTING` 转为终态（`PASSED` / `REJECTED` / `EXECUTED`）时，自动调用 `schedule_cleanup` 注册 90 天延迟清理，消费模块无需手动调用清理方法
+6. 当 status 从 `STATUS_VOTING` 转为终态（`PASSED` / `REJECTED` / `EXECUTED` / `EXECUTION_FAILED`）时，自动调用 `schedule_cleanup` 注册 90 天延迟清理，消费模块无需手动调用清理方法
 
 注：`set_status_and_emit` 可见性已从 `pub(crate)` 提升为 `pub`，以便上层治理模块直接调用设置 `STATUS_EXECUTED`。
 
@@ -172,6 +172,7 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 ### 5.6 联合回调一致性
 `set_status_and_emit` 现已使用存储事务包裹：
 - 若 `JointVoteResultCallback` 返回错误，则回滚 `Proposal.status` 与 `ProposalFinalized` 事件。
+- `ProposalFinalized` 在联合回调完成后才发出，避免事件状态与回调内覆盖后的最终状态不一致。
 - 避免联合提案在业务模块拒绝/异常时被错误标记为已通过或已否决。
 
 ### 5.7 自动结算失败重试

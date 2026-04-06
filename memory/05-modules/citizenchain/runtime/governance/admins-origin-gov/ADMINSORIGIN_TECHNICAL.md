@@ -194,7 +194,7 @@ pub struct AdminReplacementAction<AccountId> {
 cargo test -p admins-origin-gov
 ```
 
-当前结果：14 passed
+当前结果：20 passed
 
 覆盖重点：
 - NRC/PRC/PRB 三种组织达阈值自动执行成功

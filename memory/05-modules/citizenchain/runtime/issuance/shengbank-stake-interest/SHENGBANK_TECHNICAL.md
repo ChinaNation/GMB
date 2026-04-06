@@ -43,7 +43,7 @@ Runtime 注入：
 - `Config::WeightInfo = shengbank_stake_interest::weights::SubstrateWeight<Runtime>`
 
 Runtime 接线：
-- `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs:404`
+- `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs:538`
 
 ## 3. 存储结构
 - `LastSettledYear: u32`
@@ -124,6 +124,10 @@ Runtime 接线：
 - `force_settle_years(max_years)`
 - `force_advance_year()`
 
+已知待改进：
+- `on_initialize` 的权重仍使用手工估算（`SETTLEMENT_CPU_OP_WEIGHT` + 读写计数），未接入 benchmark 生成的 `WeightInfo`。`benchmarks.rs` 已定义 `on_initialize_settlement` 和 `on_initialize_noop` 两个 benchmark，但 `WeightInfo` trait 只暴露了两个 Root 调用，未包含 on_initialize 路径。当前过估是安全的，但结算逻辑变化后权重不会自动跟着变。
+- `weights.rs` 硬编码 43 个省储行的读写次数，如果 `CHINA_CH` 数量变化需要重新跑 benchmark。
+
 补充说明：
 - `weights.rs` 当前为 `frame-benchmarking` 生成产物。
 - `benchmarks.rs` 覆盖两个 Root 调用和两个 `on_initialize` 路径（结算路径 + 空操作路径），`force_settle_years` 的组件范围应与 `MAX_FORCE_SETTLE_YEARS` 保持一致。
@@ -142,7 +146,7 @@ Hooks 中实现了 `try_state` 钩子，校验：
 执行命令：
 - `cargo test -p shengbank-stake-interest`
 
-当前覆盖（16 个业务测试）：
+当前覆盖（18 个业务测试）：
 - 第 1 / 2 年正常发放与利率递减。
 - 晚到边界时自动补结算。
 - 年限达到上限后停止继续发放。
@@ -156,6 +160,9 @@ Hooks 中实现了 `try_state` 钩子，校验：
 - 故障恢复后自动结算恢复（`force_advance_then_settle_resumes`）。
 - `force_settle_years` 不超过当前年度（`force_settle_years_caps_at_current_year`）。
 - 第 100 年边界利率 1 BP 正确发放，第 101 年不再发放（`year_100_boundary_settles_with_minimum_rate`）。
+
+已知待补充：
+- 5 个审计/失败事件（`ShengBankDecodeFailed`、`ShengBankIdEncodeFailed`、`ShengBankPrincipalOverflow`、`ShengBankYearSettlementFailed`、`ShengBankInterestBelowED`）缺少显式触发和断言的回归测试。当前测试覆盖正常流程和边界条件，未覆盖错误分支。修改 CHINA_CH、账户解码、ED 兜底或结算中止逻辑时应优先补充。
 
 ## 11. 审查结论与建议
 本轮没有发现新的高风险权限绕过或资金记账一致性漏洞。

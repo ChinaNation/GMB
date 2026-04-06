@@ -14,7 +14,8 @@ import '../wallet/core/wallet_manager.dart';
 ///
 /// 根据机构类型条件显示可发起的提案类型：
 /// - 所有机构：转账、换管理员、决议销毁
-/// - 仅国储会（NRC）：决议发行、验证密钥、状态升级
+/// - 国储会 + 省储会（NRC/PRC）：决议发行、状态升级（联合投票提案）
+/// - 仅国储会（NRC）：安全基金转账、验证密钥
 class ProposalTypesPage extends StatelessWidget {
   const ProposalTypesPage({
     super.key,
@@ -204,7 +205,35 @@ class ProposalTypesPage extends StatelessWidget {
             ),
           ],
 
-          // ──── 国储会专属提案类型 ────
+          // ──── 联合投票提案（国储会 + 省储会可发起）────
+          if (institution.orgType == OrgType.nrc ||
+              institution.orgType == OrgType.prc) ...[
+            const SizedBox(height: 20),
+            _buildSectionTitle('联合投票提案'),
+            const SizedBox(height: 8),
+            _ProposalTypeCard(
+              icon: Icons.account_balance,
+              title: '决议发行',
+              subtitle: '发起公民币发行决议，需联合投票+公民投票',
+              color: AppTheme.primaryDark,
+              enabled: isActivated,
+              onTap: () => _checkAndOpenProposal(context, null, name: '决议发行'),
+            ),
+            const SizedBox(height: 8),
+            _ProposalTypeCard(
+              icon: Icons.arrow_upward,
+              title: '状态升级',
+              subtitle: 'Runtime 升级，需联合投票+公民投票',
+              color: AppTheme.info,
+              enabled: isActivated,
+              onTap: () => _checkAndOpenProposal(
+                context,
+                () => RuntimeUpgradePage(adminWallets: adminWallets),
+              ),
+            ),
+          ],
+
+          // ──── 国储会专属提案 ────
           if (institution.orgType == OrgType.nrc) ...[
             const SizedBox(height: 20),
             _buildSectionTitle('国储会专属提案'),
@@ -219,33 +248,12 @@ class ProposalTypesPage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             _ProposalTypeCard(
-              icon: Icons.account_balance,
-              title: '决议发行',
-              subtitle: '发起公民币发行决议，需联合投票+公民投票',
-              color: AppTheme.primaryDark,
-              enabled: isActivated,
-              onTap: () => _checkAndOpenProposal(context, null, name: '决议发行'),
-            ),
-            const SizedBox(height: 8),
-            _ProposalTypeCard(
               icon: Icons.vpn_key_outlined,
               title: '验证密钥',
               subtitle: '更换 GRANDPA 共识验证密钥',
               color: const Color(0xFF4527A0),
               enabled: isActivated,
               onTap: () => _checkAndOpenProposal(context, null, name: '验证密钥'),
-            ),
-            const SizedBox(height: 8),
-            _ProposalTypeCard(
-              icon: Icons.arrow_upward,
-              title: '状态升级',
-              subtitle: 'Runtime 升级，需联合投票+公民投票',
-              color: AppTheme.info,
-              enabled: isActivated,
-              onTap: () => _checkAndOpenProposal(
-                context,
-                () => RuntimeUpgradePage(adminWallets: adminWallets),
-              ),
             ),
           ],
         ],

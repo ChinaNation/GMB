@@ -4,6 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { api, sanitizeError } from '../api';
 import { hexToSs58 } from '../format';
 import { QrScanner } from './QrScanner';
+import { AddressScanModal } from './AddressScanModal';
 import type { AdminWalletMatch, VoteSignRequestResult } from './governance-types';
 
 type Props = {
@@ -25,6 +26,7 @@ export function SafetyFundProposalPage({ adminWallets, onBack, onSuccess }: Prop
   const [remark, setRemark] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showAddressScan, setShowAddressScan] = useState(false);
 
   const [signRequest, setSignRequest] = useState<VoteSignRequestResult | null>(null);
   const [requestJson, setRequestJson] = useState('');
@@ -144,12 +146,20 @@ export function SafetyFundProposalPage({ adminWallets, onBack, onSuccess }: Prop
 
           <div className="wallet-form-field">
             <label>收款地址（SS58）</label>
-            <input
-              type="text" value={beneficiary}
-              onChange={(e) => setBeneficiary(e.target.value)}
-              placeholder="输入 SS58 格式收款地址"
-              disabled={submitting}
-            />
+            <div className="address-input-row">
+              <input
+                type="text" value={beneficiary}
+                onChange={(e) => setBeneficiary(e.target.value)}
+                placeholder="输入 SS58 格式收款地址"
+                disabled={submitting}
+              />
+              <button type="button" className="scan-icon-btn" onClick={() => setShowAddressScan(true)} disabled={submitting} title="扫码填入">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+                  <rect x="7" y="7" width="10" height="10" rx="1"/>
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div className="wallet-form-field">
@@ -178,6 +188,18 @@ export function SafetyFundProposalPage({ adminWallets, onBack, onSuccess }: Prop
           >
             {submitting ? '生成中…' : '生成签名请求'}
           </button>
+
+          {showAddressScan && (
+            <AddressScanModal
+              onResult={({ address, amount, memo }) => {
+                setBeneficiary(address);
+                if (amount !== undefined) setAmountYuan(String(amount));
+                if (memo !== undefined) setRemark(memo);
+                setShowAddressScan(false);
+              }}
+              onClose={() => setShowAddressScan(false)}
+            />
+          )}
         </div>
       )}
 

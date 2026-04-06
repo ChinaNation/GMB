@@ -95,11 +95,16 @@
 - **风险场景**：nodeui 启动时使用 `--unsafe-rpc-external --rpc-methods Unsafe --rpc-cors all`，会将代签 RPC 暴露到外部网络。
 - **建议**：生产部署必须限制 RPC 绑定地址或加鉴权中间件；或改为 nodeui 本地签名后提交。
 
-### 7.2 PoW 作者身份无密码学绑定
-协议层 `SimplePow::verify` 仅要求 `pre_digest` 能解码为 `AccountId`，不验证签名。
-- **影响**：奖励归属、手续费分账依赖"诚实 node 实现"，不是链上强约束。恶意矿工可伪造 pre_digest 指向任意账户。
-- **当前缓解**：PoW 奖励模块在 `on_finalize` 中读取 pre_digest 分配奖励，伪造者只会把奖励分给目标账户（经济上无意义的攻击）。
-- **建议**：后续版本可在 pre_digest 中增加矿工签名字段。
+### 7.2 空块策略仍与 runtime panic 耦合
+当前 `service.rs` 已要求：
+- `pre_digest` 中放入矿工 `sr25519` 公钥
+- `seal` 中附带 `(nonce, 签名)`
+- `SimplePow::verify` 同时验证难度和矿工对 `pre_hash` 的签名
+
+但 `pow-difficulty-module` 仍在 `on_finalize` 中对空块执行 `assert!(extrinsic_count > 1)`。
+- **影响**：节点层虽然已经在交易池为空时停止挖矿，但 runtime 仍把“运营策略兜底”实现成 panic 型链规则；一旦有空块漏过节点侧门控，可能直接触发拒块甚至停链风险。
+- **当前缓解**：CPU / GPU 矿工都在交易池为空时跳过挖矿，代码中也明确写了“避免触发 runtime 的空块 assert panic”。
+- **建议**：后续应把空块限制从 runtime panic 改成非 panic 的制度约束或完全下沉到节点策略，避免状态机层面承受运营错误。
 
 ## 8. 已知限制
 

@@ -988,24 +988,34 @@ pub mod pallet {
                 .ok_or(Error::<T>::InsufficientBalance)?;
             ensure!(free >= required, Error::<T>::InsufficientBalance);
 
-            // ── 执行转账 ──
-            <T as duoqian_manage_pow::Config>::Currency::transfer(
-                &institution_account,
-                &action.beneficiary,
-                action.amount,
-                ExistenceRequirement::KeepAlive,
-            )
-            .map_err(|_| Error::<T>::TransferFailed)?;
+            // ── 原子执行：手续费扣取 + 转账，任一失败整体回滚 ──
+            let exec_result = frame_support::storage::with_transaction(|| {
+                // 先扣手续费
+                let fee_imbalance = match <T as duoqian_manage_pow::Config>::Currency::withdraw(
+                    &institution_account,
+                    fee,
+                    frame_support::traits::WithdrawReasons::FEE,
+                    ExistenceRequirement::KeepAlive,
+                ) {
+                    Ok(imbalance) => imbalance,
+                    Err(_) => return frame_support::storage::TransactionOutcome::Rollback(
+                        Err(Error::<T>::InsufficientBalance.into())
+                    ),
+                };
+                <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
-            // ── 手续费：从机构账户扣取，通过 FeeRouter 按现有规则分账 ──
-            let fee_imbalance = <T as duoqian_manage_pow::Config>::Currency::withdraw(
-                &institution_account,
-                fee,
-                frame_support::traits::WithdrawReasons::FEE,
-                ExistenceRequirement::KeepAlive,
-            )
-            .map_err(|_| Error::<T>::InsufficientBalance)?;
-            <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
+                // 再转账
+                match <T as duoqian_manage_pow::Config>::Currency::transfer(
+                    &institution_account,
+                    &action.beneficiary,
+                    action.amount,
+                    ExistenceRequirement::KeepAlive,
+                ) {
+                    Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                    Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
+                }
+            });
+            exec_result?;
 
             // ── 标记为已执行，防止双重执行 ──
             voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
@@ -1202,6 +1212,28 @@ mod tests {
                 _ => false,
             }
         }
+
+        fn get_admin_list(
+            org: u8,
+            institution: InstitutionPalletId,
+        ) -> Option<Vec<AccountId32>> {
+            match org {
+                ORG_NRC | ORG_PRC => CHINA_CB
+                    .iter()
+                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .map(|n| n.duoqian_admins.iter().copied().map(AccountId32::new).collect()),
+                ORG_PRB => CHINA_CH
+                    .iter()
+                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .map(|n| n.duoqian_admins.iter().copied().map(AccountId32::new).collect()),
+                ORG_DUOQIAN => {
+                    let account = AccountId32::decode(&mut &institution[..32]).ok()?;
+                    let duoqian = duoqian_manage_pow::DuoqianAccounts::<Test>::get(&account)?;
+                    Some(duoqian.duoqian_admins.into_inner())
+                }
+                _ => None,
+            }
+        }
     }
 
     pub struct TestInternalAdminCountProvider;
@@ -1286,6 +1318,7 @@ mod tests {
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalAdminCountProvider = TestInternalAdminCountProvider;
         type InternalThresholdProvider = TestInternalThresholdProvider;
+        type MaxAdminsPerInstitution = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<1024>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
         type TimeProvider = TestTimeProvider;

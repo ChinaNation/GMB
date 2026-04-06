@@ -66,7 +66,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
       setInfo(d);
     } catch (_) {}
     if (curInst && curSid) {
-      const statuses = await fetchVoteStatuses(proposalId, curInst.admins, curSid);
+      const statuses = await fetchVoteStatuses(proposalId, curInst.admins.map(a => a.pubkeyHex), curSid);
       // 已确认上链的投票或超时的投票，从 pending 中移除
       setPendingVotes((prev) => {
         const next = new Map(prev);
@@ -104,7 +104,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
         try {
           const inst = await api.getInstitutionDetail(sid);
           setInstitution(inst);
-          await fetchVoteStatuses(proposalId, inst.admins, sid);
+          await fetchVoteStatuses(proposalId, inst.admins.map(a => a.pubkeyHex), sid);
         } catch (_) {}
       }
     };
@@ -148,6 +148,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
 
   const { meta } = info;
   const displayId = formatProposalId(meta.proposalId);
+  const displayStatus = proposalDisplayStatus(meta.status, info.runtimeUpgradeDetail?.status);
 
   return (
     <div className="governance-section">
@@ -185,8 +186,8 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
         )}
         <div className="metric-card">
           <div className="metric-label">状态</div>
-          <div className={`metric-value status-text-${meta.status}`}>
-            {statusLabel(meta.status)}
+          <div className={`metric-value status-text-${displayStatus.code}`}>
+            {displayStatus.label}
           </div>
         </div>
         {meta.internalOrg != null && (
@@ -238,9 +239,9 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
               <code className="detail-value">0x{info.runtimeUpgradeDetail.codeHashHex}</code>
             </div>
             <div className="detail-row">
-              <span className="detail-label">代码已上传</span>
-              <span className="detail-value">
-                {info.runtimeUpgradeDetail.hasCode ? '是' : '否'}
+              <span className="detail-label">业务状态</span>
+              <span className={`detail-value status-text-${displayStatus.code}`}>
+                {runtimeUpgradeStatusLabel(info.runtimeUpgradeDetail.status)}
               </span>
             </div>
             <div className="detail-row">
@@ -322,7 +323,8 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
         <div className="institution-info-section">
           <h3>管理员投票状态（{institution.admins.length} 人）</h3>
           <div className="admin-grid">
-            {institution.admins.map((pubkey, i) => {
+            {institution.admins.map((admin, i) => {
+              const pubkey = admin.pubkeyHex;
               const pk = pubkey.toLowerCase();
               const myWallet = adminWallets.find(w => w.pubkeyHex.toLowerCase() === pk);
               const vs = voteStatuses[pk];
@@ -393,7 +395,28 @@ function stageLabel(stage: number): string {
   switch (stage) { case 0: return '内部阶段'; case 1: return '联合阶段'; case 2: return '公民阶段'; default: return '未知'; }
 }
 function statusLabel(status: number): string {
-  switch (status) { case 0: return '投票中'; case 1: return '已通过'; case 2: return '已否决'; case 3: return '已执行'; default: return '未知'; }
+  switch (status) { case 0: return '投票中'; case 1: return '已通过'; case 2: return '已否决'; case 3: return '已执行'; case 4: return '执行失败'; default: return '未知'; }
+}
+function runtimeUpgradeStatusLabel(status: number): string {
+  switch (status) {
+    case 0: return '投票中';
+    case 1: return '已执行';
+    case 2: return '已否决';
+    case 3: return '执行失败';
+    default: return '未知';
+  }
+}
+function proposalDisplayStatus(metaStatus: number, runtimeUpgradeStatus?: number): { code: number; label: string } {
+  if (runtimeUpgradeStatus == null) {
+    return { code: metaStatus, label: statusLabel(metaStatus) };
+  }
+  switch (runtimeUpgradeStatus) {
+    case 0: return { code: 0, label: statusLabel(0) };
+    case 1: return { code: 3, label: statusLabel(3) };
+    case 2: return { code: 2, label: statusLabel(2) };
+    case 3: return { code: 4, label: statusLabel(4) };
+    default: return { code: metaStatus, label: statusLabel(metaStatus) };
+  }
 }
 function orgTypeLabel(orgType: number): string {
   switch (orgType) { case 0: return '国储会'; case 1: return '省储会'; case 2: return '省储行'; default: return '未知'; }

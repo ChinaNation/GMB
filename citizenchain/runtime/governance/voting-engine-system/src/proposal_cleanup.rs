@@ -126,14 +126,14 @@ fn trigger_cleanup<T: Config>(proposal_id: u64) -> Weight {
     }
 
     // 2. 注册到分块清理状态机。
-    //    所有提案（无论内部/联合）统一从 InternalVotes 阶段开始：
-    //    InternalVotes → JointVotes → CitizenVotes → VoteCredentials → ProposalObject → FinalCleanup
+    //    所有提案（无论内部/联合）统一从 AdminSnapshots 阶段开始：
+    //    AdminSnapshots → InternalVotes → JointVotes → CitizenVotes → VoteCredentials → ProposalObject → FinalCleanup
     //    如果某阶段没有数据（比如内部提案没有 JointVotes），clear_prefix 返回空结果，
     //    自动跳到下一阶段，不会卡住。最后 FinalCleanup 删除核心数据和业务数据。
     if !pallet::PendingProposalCleanups::<T>::contains_key(proposal_id) {
         pallet::PendingProposalCleanups::<T>::insert(
             proposal_id,
-            PendingCleanupStage::InternalVotes,
+            PendingCleanupStage::AdminSnapshots,
         );
         weight = weight.saturating_add(db_weight.reads_writes(1, 1));
     }

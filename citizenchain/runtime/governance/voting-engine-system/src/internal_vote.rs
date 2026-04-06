@@ -18,7 +18,7 @@ use primitives::count_const::{
 use crate::{
     pallet::{Config, Error, Event, InternalTallies, InternalVotesByAccount, Pallet, Proposals},
     InstitutionPalletId, InternalAdminProvider, InternalThresholdProvider, Proposal,
-    PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
+    PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED, STATUS_REJECTED,
 };
 
 pub const ORG_NRC: u8 = 0;
@@ -159,6 +159,9 @@ impl<T: Config> Pallet<T> {
                 return TransactionOutcome::Rollback(Err(err));
             }
 
+            // 中文注释：锁定该机构当前管理员快照，投票期间只认快照内的管理员。
+            Self::snapshot_institution_admins(id, org, institution);
+
             Proposals::<T>::insert(id, proposal);
             if let Err(err) = Self::schedule_proposal_expiry(id, end) {
                 return TransactionOutcome::Rollback(Err(err));
@@ -198,9 +201,9 @@ impl<T: Config> Pallet<T> {
         let institution = proposal
             .internal_institution
             .ok_or(Error::<T>::InvalidInstitution)?;
-        // 中文注释：内部投票仅允许该机构管理员投票
+        // 中文注释：内部投票仅允许快照中的管理员投票，管理员更换不影响已有提案。
         ensure!(
-            is_internal_admin::<T>(org, institution, &who),
+            Self::is_admin_in_snapshot(proposal_id, institution, &who),
             Error::<T>::NoPermission
         );
 
@@ -223,7 +226,19 @@ impl<T: Config> Pallet<T> {
         let threshold = T::InternalThresholdProvider::pass_threshold(org, institution)
             .ok_or(Error::<T>::InvalidInternalOrg)?;
         if tally.yes >= threshold {
+            // 中文注释：赞成票达到阈值，提前通过。
             Self::set_status_and_emit(proposal_id, STATUS_PASSED)?;
+        } else {
+            // 中文注释：检查剩余管理员全投赞成是否还能达到阈值，不能则提前否决。
+            // 30 天超时只是兜底，不应让注定失败的提案空等。
+            // admin_count 从快照取，保证阈值计算不受管理员更换影响。
+            let admin_count = Self::snapshot_admin_count(proposal_id, institution)
+                .ok_or(Error::<T>::InvalidInternalOrg)?;
+            let casted = tally.yes.saturating_add(tally.no);
+            let remaining = admin_count.saturating_sub(casted);
+            if tally.yes.saturating_add(remaining) < threshold {
+                Self::set_status_and_emit(proposal_id, STATUS_REJECTED)?;
+            }
         }
 
         Ok(())
@@ -233,7 +248,8 @@ impl<T: Config> Pallet<T> {
         proposal: &crate::Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
         proposal_id: u64,
     ) -> DispatchResult {
-        // 中文注释：内部投票超时只存在两种结果：已在投票期内提前通过，或到期直接否决。
+        // 中文注释：内部投票超时兜底否决。正常情况下提案会在投票期内提前通过或提前否决，
+        // 此处仅处理极端情况（如恰好卡在边界、管理员数量变动等）。
         ensure!(
             proposal.stage == STAGE_INTERNAL,
             Error::<T>::InvalidProposalStage

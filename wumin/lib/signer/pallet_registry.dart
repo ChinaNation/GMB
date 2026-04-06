@@ -43,6 +43,39 @@ class PalletRegistry {
   static const int proposeRuntimeUpgradeCall = 0;
   static const int developerDirectUpgradeCall = 2;
 
+  // ---- DuoqianManagePow ----
+  static const int duoqianManagePowPallet = 17;
+  static const int proposeCreateCall = 0;
+  static const int proposeCloseCall = 1;
+  static const int voteCreateCall = 3;
+  static const int proposeCreatePersonalCall = 4;
+  static const int voteCloseCall = 5;
+
+  // ---- ResolutionDestroGov ----
+  static const int resolutionDestroGovPallet = 14;
+  static const int proposeDestroyCall = 0;
+  static const int voteDestroyCall = 1;
+
+  // ---- AdminsOriginGov ----
+  static const int adminsOriginGovPallet = 12;
+  static const int proposeAdminReplacementCall = 0;
+  static const int voteAdminReplacementCall = 1;
+
+  // ---- GrandpaKeyGov ----
+  static const int grandpaKeyGovPallet = 16;
+  static const int proposeKeyChangeCall = 0;
+  static const int voteKeyChangeCall = 1;
+
+  // ---- ResolutionIssuanceGov ----
+  static const int resolutionIssuanceGovPallet = 8;
+  static const int proposeResolutionIssuanceCall = 0;
+
+  // ---- DuoqianTransferPow 补充 ----
+  static const int proposeSafetyFundCall = 3;
+  static const int voteSafetyFundCall = 4;
+  static const int proposeSweepCall = 5;
+  static const int voteSweepCall = 6;
+
   // ---- OffchainTransactionPos ----
   static const int offchainTransactionPosPallet = 21;
   static const int bindClearingInstitutionCall = 9;

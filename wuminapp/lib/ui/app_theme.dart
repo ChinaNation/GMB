@@ -147,6 +147,7 @@ class AppTheme {
       case 1: return passed;
       case 2: return rejected;
       case 3: return passed;
+      case 4: return danger;
       default: return textTertiary;
     }
   }

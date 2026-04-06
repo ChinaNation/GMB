@@ -39,6 +39,7 @@ class _PersonalDuoqianCreatePageState
   final List<String> _adminPubkeys = [];
   WalletProfile? _selectedWallet;
   List<WalletProfile> _wallets = [];
+  String? _creatorPubkey; // 创建人公钥（始终占管理员列表第一位，不可移除）
 
   @override
   void initState() {
@@ -60,8 +61,24 @@ class _PersonalDuoqianCreatePageState
     if (!mounted) return;
     setState(() {
       _wallets = wallets;
-      _selectedWallet = wallets.isNotEmpty ? wallets.first : null;
+      if (wallets.isNotEmpty) {
+        _selectedWallet = wallets.first;
+        _syncCreatorAdmin(wallets.first);
+      }
     });
+  }
+
+  /// 钱包切换时同步更新创建人在管理员列表中的位置。
+  void _syncCreatorAdmin(WalletProfile wallet) {
+    var pubkey = wallet.pubkeyHex.toLowerCase();
+    if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
+    // 移除旧创建人
+    if (_creatorPubkey != null) {
+      _adminPubkeys.remove(_creatorPubkey);
+    }
+    _creatorPubkey = pubkey;
+    _adminPubkeys.remove(pubkey); // 防重复
+    _adminPubkeys.insert(0, pubkey);
   }
 
   // ──── 地址预览 ────
@@ -147,6 +164,8 @@ class _PersonalDuoqianCreatePageState
   }
 
   void _removeAdmin(int index) {
+    // 创建人不可移除
+    if (_adminPubkeys[index] == _creatorPubkey) return;
     setState(() => _adminPubkeys.removeAt(index));
   }
 
@@ -157,7 +176,7 @@ class _PersonalDuoqianCreatePageState
     if (name.isEmpty) return '请输入多签账户名称';
     if (utf8.encode(name).length > 128) return '名称超过最大长度（128 字节）';
     if (_adminPubkeys.length < 2) return '管理员至少 2 人';
-    if (_selectedWallet == null) return '请先导入冷钱包';
+    if (_selectedWallet == null) return '请先导入钱包';
 
     final thresholdText = _thresholdController.text.trim();
     final threshold = int.tryParse(thresholdText);
@@ -201,7 +220,18 @@ class _PersonalDuoqianCreatePageState
           .toList();
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
 
+      // 热钱包：先认证，后续用本地签名；冷钱包：走 QR 签名。
+      WalletManager? hotWalletManager;
+      if (wallet.isHotWallet) {
+        hotWalletManager = WalletManager();
+        await hotWalletManager.authenticateForSigning();
+      }
+
       Future<Uint8List> signCallback(Uint8List payload) async {
+        if (hotWalletManager != null) {
+          return await hotWalletManager.signWithWalletNoAuth(wallet.walletIndex, payload);
+        }
+        // 冷钱包 QR 签名
         final qrSigner = QrSigner();
         final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
@@ -333,6 +363,7 @@ class _PersonalDuoqianCreatePageState
           const SizedBox(height: 8),
           ..._adminPubkeys.asMap().entries.map((entry) {
             final ss58 = _hexToSs58(entry.value);
+            final isCreator = entry.value == _creatorPubkey;
             return ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
@@ -341,11 +372,28 @@ class _PersonalDuoqianCreatePageState
                 backgroundColor: AppTheme.primaryDark.withValues(alpha: 0.08),
                 child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryDark)),
               ),
-              title: Text(_truncateAddress(ss58), style: const TextStyle(fontSize: 13)),
-              trailing: IconButton(
-                icon: Icon(Icons.close, size: 18, color: AppTheme.danger),
-                onPressed: () => _removeAdmin(entry.key),
+              title: Row(
+                children: [
+                  Flexible(child: Text(_truncateAddress(ss58), style: const TextStyle(fontSize: 13))),
+                  if (isCreator) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppTheme.success.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text('创建人', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.success)),
+                    ),
+                  ],
+                ],
               ),
+              trailing: isCreator
+                  ? null
+                  : IconButton(
+                      icon: Icon(Icons.close, size: 18, color: AppTheme.danger),
+                      onPressed: () => _removeAdmin(entry.key),
+                    ),
             );
           }),
           OutlinedButton.icon(
@@ -388,7 +436,7 @@ class _PersonalDuoqianCreatePageState
             DropdownButtonFormField<WalletProfile>(
               value: _selectedWallet,
               items: _wallets.map((w) => DropdownMenuItem(value: w, child: Text('${w.walletName} (${_truncateAddress(w.address)})', style: const TextStyle(fontSize: 13)))).toList(),
-              onChanged: (w) { if (w != null) setState(() => _selectedWallet = w); },
+              onChanged: (w) { if (w != null) setState(() { _selectedWallet = w; _syncCreatorAdmin(w); }); },
               decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
             ),
           ],

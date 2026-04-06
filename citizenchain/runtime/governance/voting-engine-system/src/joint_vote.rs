@@ -22,46 +22,63 @@ use crate::{
         Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
         JointVotesByInstitution, Pallet, Proposals, ProposalsByExpiry, UsedPopulationSnapshotNonce,
     },
-    InstitutionPalletId, InternalAdminCountProvider, InternalAdminProvider,
-    InternalThresholdProvider, PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT,
-    STAGE_JOINT, STATUS_PASSED,
+    InstitutionPalletId, InternalAdminProvider, InternalThresholdProvider,
+    PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
 
 use crate::nrc_pallet_id_bytes;
 
-#[cfg(test)]
-fn is_nrc_admin_account(who: &[u8; 32]) -> bool {
-    CHINA_CB
-        .first()
-        .map(|n| n.duoqian_admins.iter().any(|admin| admin == who))
-        .unwrap_or(false)
-}
-
-fn is_nrc_admin<T: Config>(who: &T::AccountId) -> bool {
-    // 中文注释：生产环境仅信任动态管理员来源（链上治理替换后的最终状态）。
+/// 判定 who 是否为国储会或省储会管理员，返回其所属机构 ID。
+/// 省储行（PRB）管理员不具备联合提案发起权。
+fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<InstitutionPalletId> {
     #[cfg(not(test))]
     {
-        let Some(nrc) = nrc_pallet_id_bytes() else {
-            return false;
-        };
-        T::InternalAdminProvider::is_internal_admin(crate::internal_vote::ORG_NRC, nrc, who)
+        // 1. 国储会
+        if let Some(nrc) = nrc_pallet_id_bytes() {
+            if T::InternalAdminProvider::is_internal_admin(ORG_NRC, nrc, who) {
+                return Some(nrc);
+            }
+        }
+        // 2. 43个省储会
+        for entry in CHINA_CB.iter().skip(1) {
+            if let Some(prc) = reserve_pallet_id_to_bytes(entry.shenfen_id) {
+                if T::InternalAdminProvider::is_internal_admin(ORG_PRC, prc, who) {
+                    return Some(prc);
+                }
+            }
+        }
+        None
     }
-    // 中文注释：单测环境允许回退到常量管理员，便于独立测试本 pallet。
     #[cfg(test)]
     {
-        let Some(nrc) = nrc_pallet_id_bytes() else {
-            return false;
-        };
-        if T::InternalAdminProvider::is_internal_admin(crate::internal_vote::ORG_NRC, nrc, who) {
-            return true;
+        // 生产路径优先
+        if let Some(nrc) = nrc_pallet_id_bytes() {
+            if T::InternalAdminProvider::is_internal_admin(ORG_NRC, nrc, who) {
+                return Some(nrc);
+            }
         }
+        for entry in CHINA_CB.iter().skip(1) {
+            if let Some(prc) = reserve_pallet_id_to_bytes(entry.shenfen_id) {
+                if T::InternalAdminProvider::is_internal_admin(ORG_PRC, prc, who) {
+                    return Some(prc);
+                }
+            }
+        }
+        // 回退到常量管理员（便于独立单测）
         let who_bytes = who.encode();
         if who_bytes.len() != 32 {
-            return false;
+            return None;
         }
         let mut who_arr = [0u8; 32];
         who_arr.copy_from_slice(&who_bytes);
-        is_nrc_admin_account(&who_arr)
+        for entry in CHINA_CB.iter() {
+            if let Some(institution) = reserve_pallet_id_to_bytes(entry.shenfen_id) {
+                if entry.duoqian_admins.iter().any(|admin| *admin == who_arr) {
+                    return Some(institution);
+                }
+            }
+        }
+        None
     }
 }
 
@@ -98,44 +115,6 @@ pub fn institution_info(id: InstitutionPalletId) -> Option<u32> {
     institution_profile(id).map(|(_, weight)| weight)
 }
 
-fn is_joint_admin<T: Config>(
-    org: u8,
-    institution: InstitutionPalletId,
-    who: &T::AccountId,
-) -> bool {
-    #[cfg(not(test))]
-    {
-        T::InternalAdminProvider::is_internal_admin(org, institution, who)
-    }
-    #[cfg(test)]
-    {
-        if T::InternalAdminProvider::is_internal_admin(org, institution, who) {
-            return true;
-        }
-
-        let who_bytes = who.encode();
-        if who_bytes.len() != 32 {
-            return false;
-        }
-        let mut who_arr = [0u8; 32];
-        who_arr.copy_from_slice(&who_bytes);
-
-        match org {
-            ORG_NRC | ORG_PRC => CHINA_CB
-                .iter()
-                .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
-                .unwrap_or(false),
-            ORG_PRB => CHINA_CH
-                .iter()
-                .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
-                .unwrap_or(false),
-            _ => false,
-        }
-    }
-}
-
 pub fn is_joint_unanimous(yes_weight: u32) -> bool {
     // 中文注释：联合投票采用“票权全同意即通过”，不是简单人数多数制。
     yes_weight >= JOINT_VOTE_PASS_THRESHOLD
@@ -153,13 +132,16 @@ impl<T: Config> Pallet<T> {
     }
 
     /// 创建联合投票提案：独立计算本阶段 30 天截止区块，并在创建时锁定公民总人口快照。
+    /// 国储会和省储会管理员均可发起，活跃提案名额计入发起人所属机构。
     pub(crate) fn do_create_joint_proposal(
         who: T::AccountId,
         eligible_total: u64,
         snapshot_nonce: crate::pallet::VoteNonceOf<T>,
         signature: crate::pallet::VoteSignatureOf<T>,
     ) -> Result<u64, sp_runtime::DispatchError> {
-        ensure!(is_nrc_admin::<T>(&who), Error::<T>::NoPermission);
+        // 中文注释：国储会和省储会管理员可发起联合提案，同时解析发起人所属机构用于名额管控。
+        let proposer_institution =
+            resolve_proposer_institution::<T>(&who).ok_or(Error::<T>::NoPermission)?;
         ensure!(eligible_total > 0, Error::<T>::CitizenEligibleTotalNotSet);
         ensure!(
             !snapshot_nonce.is_empty(),
@@ -186,16 +168,12 @@ impl<T: Config> Pallet<T> {
         // 中文注释：联合提案创建时就锁定公民投票分母与人口快照，后续阶段切换不再改写。
         let end = now.saturating_add(Self::joint_stage_duration());
 
-        // 中文注释：联合提案由 NRC 发起，活跃提案名额计入 NRC 机构。
-        let nrc_institution =
-            nrc_pallet_id_bytes().ok_or(Error::<T>::InvalidInstitution)?;
-
         let proposal = Proposal {
             kind: PROPOSAL_KIND_JOINT,
             stage: STAGE_JOINT,
             status: crate::STATUS_VOTING,
             internal_org: None,
-            internal_institution: Some(nrc_institution),
+            internal_institution: Some(proposer_institution),
             start: now,
             end,
             citizen_eligible_total: eligible_total,
@@ -207,11 +185,29 @@ impl<T: Config> Pallet<T> {
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
 
-            // 中文注释：联合提案与内部提案共享每机构活跃提案上限，统一管控。
+            // 中文注释：联合提案活跃名额计入发起人所属机构（国储会或省储会），每机构最多10个。
             if let Err(err) =
-                crate::active_proposal_limit::try_add_active_proposal::<T>(nrc_institution, id)
+                crate::active_proposal_limit::try_add_active_proposal::<T>(proposer_institution, id)
             {
                 return TransactionOutcome::Rollback(Err(err));
+            }
+
+            // 中文注释：锁定所有参与机构的管理员快照，投票期间只认快照内的管理员。
+            // 国储会
+            if let Some(nrc) = nrc_pallet_id_bytes() {
+                Self::snapshot_institution_admins(id, ORG_NRC, nrc);
+            }
+            // 43个省储会
+            for entry in CHINA_CB.iter().skip(1) {
+                if let Some(prc) = reserve_pallet_id_to_bytes(entry.shenfen_id) {
+                    Self::snapshot_institution_admins(id, ORG_PRC, prc);
+                }
+            }
+            // 省储行
+            for entry in CHINA_CH.iter() {
+                if let Some(prb) = shengbank_pallet_id_to_bytes(entry.shenfen_id) {
+                    Self::snapshot_institution_admins(id, ORG_PRB, prb);
+                }
             }
 
             UsedPopulationSnapshotNonce::<T>::insert(snapshot_nonce_hash, true);
@@ -250,8 +246,9 @@ impl<T: Config> Pallet<T> {
             Error::<T>::AlreadyVoted
         );
         let (org, _) = institution_profile(institution).ok_or(Error::<T>::InvalidInstitution)?;
+        // 中文注释：联合投票仅允许快照中的管理员投票，管理员更换不影响已有提案。
         ensure!(
-            is_joint_admin::<T>(org, institution, &who),
+            Self::is_admin_in_snapshot(proposal_id, institution, &who),
             Error::<T>::NoPermission
         );
         ensure!(
@@ -278,7 +275,8 @@ impl<T: Config> Pallet<T> {
 
         let threshold = T::InternalThresholdProvider::pass_threshold(org, institution)
             .ok_or(Error::<T>::InvalidInstitution)?;
-        let admin_count = T::InternalAdminCountProvider::admin_count(org, institution)
+        // 中文注释：admin_count 从快照取，保证阈值计算不受管理员更换影响。
+        let admin_count = Self::snapshot_admin_count(proposal_id, institution)
             .ok_or(Error::<T>::InvalidInstitution)?;
 
         if tally.yes >= threshold {

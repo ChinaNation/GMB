@@ -54,6 +54,7 @@ class DuoqianManageService {
   ///   + duoqian_admins(BoundedVec<AccountId32>) + threshold(u32 LE) + amount(u128 LE)
   Future<({String txHash, int usedNonce})> submitProposeCreate({
     required Uint8List sfidId,
+    required Uint8List name,
     required int adminCount,
     required List<Uint8List> adminPubkeys,
     required int threshold,
@@ -70,6 +71,11 @@ class DuoqianManageService {
     output.write(
         CompactBigIntCodec.codec.encode(BigInt.from(sfidId.length)));
     output.write(sfidId);
+
+    // name: BoundedVec<u8> = Compact<u32> length + bytes
+    output.write(
+        CompactBigIntCodec.codec.encode(BigInt.from(name.length)));
+    output.write(name);
 
     // admin_count: u32 little-endian
     output.write(_u32ToLeBytes(adminCount));
@@ -209,12 +215,13 @@ class DuoqianManageService {
 
   // ──── 链上查询 ────
 
-  /// 查询 SFID ID 是否已注册，返回派生的多签地址 hex（null 表示未注册）。
-  Future<String?> fetchSfidRegisteredAddress(Uint8List sfidId) async {
-    final key = _buildStorageKey(
+  /// 查询 SFID (sfid_id + name) 是否已注册，返回派生的多签地址 hex（null 表示未注册）。
+  Future<String?> fetchSfidRegisteredAddress(Uint8List sfidId, Uint8List name) async {
+    final key = _buildDoubleMapStorageKey(
       'DuoqianManagePow',
       'SfidRegisteredAddress',
       sfidId,
+      name,
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null || data.length < 32) return null;
@@ -475,6 +482,31 @@ class DuoqianManageService {
     result.setAll(offset, storageHash);
     offset += storageHash.length;
     result.setAll(offset, keyHash);
+    return result;
+  }
+
+  /// StorageDoubleMap key: twox128(pallet) + twox128(storage) + blake2_128_concat(key1) + blake2_128_concat(key2)
+  Uint8List _buildDoubleMapStorageKey(
+    String palletName,
+    String storageName,
+    Uint8List key1Data,
+    Uint8List key2Data,
+  ) {
+    final palletHash = Hasher.twoxx128.hashString(palletName);
+    final storageHash = Hasher.twoxx128.hashString(storageName);
+    final key1Hash = _blake2128Concat(key1Data);
+    final key2Hash = _blake2128Concat(key2Data);
+
+    final result = Uint8List(
+        palletHash.length + storageHash.length + key1Hash.length + key2Hash.length);
+    var offset = 0;
+    result.setAll(offset, palletHash);
+    offset += palletHash.length;
+    result.setAll(offset, storageHash);
+    offset += storageHash.length;
+    result.setAll(offset, key1Hash);
+    offset += key1Hash.length;
+    result.setAll(offset, key2Hash);
     return result;
   }
 

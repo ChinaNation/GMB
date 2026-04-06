@@ -126,7 +126,7 @@ body {
 
 .wallet-inline {
   display: grid;
-  grid-template-columns: 1fr 600px max-content;
+  grid-template-columns: 1fr 600px max-content max-content;
   align-items: center;
   gap: 10px;
   min-height: 84px;
@@ -402,13 +402,16 @@ select option:checked {
 
 .mining-section .metric-card,
 .network-section .metric-card {
-  min-height: 100px;
-  padding: 20px 18px 14px;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding-top: 10px;
 }
 
 .mining-section .metric-value,
 .network-section .metric-value {
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .metric-label {
@@ -711,6 +714,18 @@ select option:checked {
   margin-bottom: 16px;
 }
 
+.institution-detail-grid .metric-card {
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding-top: 10px;
+}
+
+.institution-detail-grid .metric-value {
+  margin-top: 12px;
+}
+
 .institution-info-section {
   margin-bottom: 16px;
 }
@@ -796,9 +811,9 @@ select option:checked {
 /* ── 提案列表 ── */
 
 .proposal-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(200px, 1fr));
+  gap: 10px;
 }
 
 .proposal-card {
@@ -808,6 +823,7 @@ select option:checked {
   background: var(--bg-card);
   cursor: pointer;
   transition: border-color 0.15s;
+  min-height: 80px;
 }
 
 .proposal-card:hover {
@@ -852,6 +868,11 @@ select option:checked {
 .status-3 {
   background: rgba(34, 197, 94, 0.15);
   color: #4ade80;
+}
+
+.status-4 {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
 }
 
 .proposal-card-tags {
@@ -909,6 +930,7 @@ select option:checked {
 .status-text-1 { color: #065f46; }
 .status-text-2 { color: #991b1b; }
 .status-text-3 { color: #92400e; }
+.status-text-4 { color: #b45309; }
 
 .proposal-detail-table {
   display: flex;
@@ -1040,6 +1062,72 @@ select option:checked {
   box-sizing: border-box;
   background: var(--bg-card);
   color: var(--text-primary);
+}
+
+/* 地址输入行：input + 扫码按钮 */
+
+.address-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.address-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.scan-icon-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.scan-icon-btn:hover:not(:disabled) {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.scan-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 扫码地址 Modal */
+
+.address-scan-modal-mask {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.address-scan-modal {
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 360px;
+  text-align: center;
+}
+
+.address-scan-error {
+  color: #ef4444;
+  font-size: 13px;
+  margin: 8px 0 0;
 }
 
 .wallet-form-actions {
@@ -1280,10 +1368,17 @@ select option:checked {
 .admin-card-address {
   font-size: 11px;
   color: var(--text-secondary);
-  flex: 1;
   min-width: 0;
   word-break: break-all;
   line-height: 1.3;
+  flex: 1;
+}
+
+.admin-card-balance {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .admin-card-actions {

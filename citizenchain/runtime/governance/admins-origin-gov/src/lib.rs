@@ -128,7 +128,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         InstitutionPalletId,
-        BoundedVec<T::AccountId, T::MaxAdminsPerInstitution>,
+        BoundedVec<T::AccountId, <T as Config>::MaxAdminsPerInstitution>,
         OptionQuery,
     >;
 
@@ -151,7 +151,7 @@ pub mod pallet {
         fn integrity_test() {
             let required = NRC_ADMIN_COUNT.max(PRC_ADMIN_COUNT).max(PRB_ADMIN_COUNT);
             assert!(
-                T::MaxAdminsPerInstitution::get() >= required,
+                <T as Config>::MaxAdminsPerInstitution::get() >= required,
                 "MaxAdminsPerInstitution must be >= largest expected admin count"
             );
         }
@@ -172,9 +172,10 @@ pub mod pallet {
                             .expect("reserve admin account must decode")
                     })
                     .collect();
-                let bounded: BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> = admins
-                    .try_into()
-                    .expect("reserve admins must fit MaxAdminsPerInstitution");
+                let bounded: BoundedVec<T::AccountId, <T as Config>::MaxAdminsPerInstitution> =
+                    admins
+                        .try_into()
+                        .expect("reserve admins must fit MaxAdminsPerInstitution");
                 CurrentAdmins::<T>::insert(institution, bounded);
             }
 
@@ -190,9 +191,10 @@ pub mod pallet {
                             .expect("shengbank admin account must decode")
                     })
                     .collect();
-                let bounded: BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> = admins
-                    .try_into()
-                    .expect("shengbank admins must fit MaxAdminsPerInstitution");
+                let bounded: BoundedVec<T::AccountId, <T as Config>::MaxAdminsPerInstitution> =
+                    admins
+                        .try_into()
+                        .expect("shengbank admins must fit MaxAdminsPerInstitution");
                 CurrentAdmins::<T>::insert(institution, bounded);
             }
         }
@@ -301,6 +303,10 @@ pub mod pallet {
             Ok(())
         }
 
+        /// 对"管理员更换"提案投票，达到阈值通过后自动执行替换。
+        ///
+        /// 权限双重校验：业务层 `admins_for_institution`（实时名单）+ 投票引擎 `is_admin_in_snapshot`（快照）。
+        /// 实时检查确保已被替换的管理员无法继续投票，快照确保投票期间名单稳定。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::vote_admin_replacement())]
         pub fn vote_admin_replacement(
@@ -310,8 +316,8 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let action = Self::load_proposal_data(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            let action =
+                Self::load_proposal_data(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
 
             // 仅目标机构管理员可参与该提案投票
             let admins = Self::admins_for_institution(action.institution)?;
@@ -377,9 +383,7 @@ pub mod pallet {
 
         /// 从投票引擎 ProposalData 中读取并解码本模块的业务数据。
         /// 先校验 MODULE_TAG 前缀，防止跨模块误解码。
-        fn load_proposal_data(
-            proposal_id: u64,
-        ) -> Option<AdminReplacementAction<T::AccountId>> {
+        fn load_proposal_data(proposal_id: u64) -> Option<AdminReplacementAction<T::AccountId>> {
             let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)?;
             let tag = crate::MODULE_TAG;
             if raw.len() < tag.len() || &raw[..tag.len()] != tag {
@@ -389,8 +393,8 @@ pub mod pallet {
         }
 
         fn try_execute_replacement(proposal_id: u64) -> DispatchResult {
-            let action = Self::load_proposal_data(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            let action =
+                Self::load_proposal_data(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
             Self::try_execute_replacement_from_action(proposal_id, action)
         }
 
@@ -422,10 +426,9 @@ pub mod pallet {
             // 只替换，不增删：列表长度保持不变
             admins[old_pos] = action.new_admin.clone();
 
-            let bounded: BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> =
-                admins
-                    .try_into()
-                    .map_err(|_| Error::<T>::InvalidAdminCount)?;
+            let bounded: BoundedVec<T::AccountId, <T as Config>::MaxAdminsPerInstitution> = admins
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidAdminCount)?;
             CurrentAdmins::<T>::insert(action.institution, bounded);
 
             Self::deposit_event(Event::<T>::AdminReplaced {
@@ -566,6 +569,13 @@ mod tests {
                 _ => false,
             }
         }
+
+        fn get_admin_list(org: u8, institution: InstitutionPalletId) -> Option<Vec<AccountId32>> {
+            if !matches!(org, ORG_NRC | ORG_PRC | ORG_PRB) {
+                return None;
+            }
+            pallet::CurrentAdmins::<Test>::get(institution).map(|admins| admins.into_inner())
+        }
     }
 
     pub struct TestTimeProvider;
@@ -591,6 +601,7 @@ mod tests {
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalThresholdProvider = ();
         type InternalAdminCountProvider = ();
+        type MaxAdminsPerInstitution = ConstU32<32>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
@@ -926,8 +937,11 @@ mod tests {
             assert_eq!(proposal.status, STATUS_PASSED);
             let data = voting_engine_system::Pallet::<Test>::get_proposal_data(pid)
                 .expect("proposal data should exist");
-            let _action = AdminReplacementAction::<AccountId32>::decode(&mut &data[..])
-                .expect("should decode");
+            let tag = MODULE_TAG;
+            assert!(data.len() >= tag.len() && &data[..tag.len()] == tag);
+            let _action =
+                AdminReplacementAction::<AccountId32>::decode(&mut &data[tag.len()..])
+                    .expect("should decode");
             assert_noop!(
                 AdminsOriginGov::execute_admin_replacement(
                     RuntimeOrigin::signed(nrc_admin(0)),

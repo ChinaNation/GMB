@@ -134,16 +134,21 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
         <p className="no-data">暂无数据（需节点运行后查询链上数据）</p>
       ) : (
         <div className="admin-grid">
-          {detail.admins.map((pubkey, i) => {
+          {detail.admins.map((admin, i) => {
+            const pubkey = admin.pubkeyHex;
             const isActivated = activatedAdmins.some(
               a => a.pubkeyHex.toLowerCase() === pubkey.toLowerCase()
             );
             const isSigningAdminKey = signingAdmin?.pubkeyHex.toLowerCase() === pubkey.toLowerCase();
             const ss58 = hexToSs58(pubkey);
+            const balanceDisplay = admin.balanceFen != null
+              ? `${(parseInt(admin.balanceFen) / 100).toFixed(2)} 元`
+              : '—';
             return (
               <div key={pubkey} className={`metric-card admin-card ${isActivated ? 'admin-card-activated' : ''}`}>
                 <span className="admin-card-index">{i + 1}</span>
                 <code className="admin-card-address">{ss58}</code>
+                <span className="admin-card-balance">｜ {balanceDisplay}</span>
                 <div className="admin-card-actions">
                   {isActivated ? (
                     <>

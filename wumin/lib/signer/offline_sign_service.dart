@@ -165,6 +165,9 @@ class OfflineSignService {
         'vote_safety_fund_transfer',
         'propose_sweep_to_main',
         'vote_sweep_to_main',
+        'propose_create',
+        'propose_create_personal',
+        'propose_resolution_issuance',
       };
       if (!allowedHashedActions.contains(displayAction)) {
         throw const OfflineSignException(

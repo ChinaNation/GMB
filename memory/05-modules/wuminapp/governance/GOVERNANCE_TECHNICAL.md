@@ -74,8 +74,8 @@
 
 | 业务类型 | 提案入口 | 必填字段 | 发起权限 | 投票入口 |
 | --- | --- | --- | --- | --- |
-| 决议发行 | `propose_resolution_issuance` | `reason, total_amount, allocations[], eligible_total, snapshot_nonce, signature` | 国储会管理员（NRC） | 联合+公民 |
-| Runtime 升级 | `propose_runtime_upgrade` | `reason, code, eligible_total, snapshot_nonce, signature` | 国储会管理员（NRC） | 联合+公民 |
+| 决议发行 | `propose_resolution_issuance` | `reason, total_amount, allocations[], eligible_total, snapshot_nonce, signature` | 国储会 + 43 个省储会管理员 | 联合+公民 |
+| Runtime 升级 | `propose_runtime_upgrade` | `reason, code, eligible_total, snapshot_nonce, signature` | 国储会 + 43 个省储会管理员 | 联合+公民 |
 | 管理员更换 | `propose_admin_replacement` | `org, institution, old_admin, new_admin` | 目标机构管理员 | 内部 |
 | 决议销毁 | `propose_destroy` | `org, institution, amount` | 目标机构管理员 | 内部 |
 | GRANDPA 密钥更换 | `propose_replace_grandpa_key` | `institution, new_key(32B)` | NRC/PRC 机构管理员 | 内部 |
@@ -298,13 +298,14 @@ message = blake2_256(SCALE.encode(payload))
 
 ### 6.4.1 Runtime 升级提案的摘要 / 对象分层
 
-- `runtime-root-upgrade` 现在只把 `proposer + reason + code_hash + has_code + status` 编进 `ProposalData`
+- `runtime-root-upgrade` 现在只把 `proposer + reason + code_hash + status` 编进 `ProposalData`
 - 原始 wasm 不再塞进摘要层，而是统一进入 `ProposalObject(kind=runtime_wasm)`
 - App 列表与详情页默认只读取摘要层，不主动拉取大对象
-- 详情页里的 `hasCode` 含义已调整为“链上对象层 wasm 是否仍保留”，因此：
-  - 投票中且 `hasCode=true`：显示“待执行”
-  - 终态且 `hasCode=true`：显示“已归档”
-  - `hasCode=false`：显示“已清理”
+- App 展示 runtime 升级提案真实结果时，应优先解码摘要层里的业务 `status`：
+  - `Voting`：显示“投票中”
+  - `Passed`：显示“已执行”
+  - `Rejected`：显示“已否决”
+  - `ExecutionFailed`：显示“执行失败”
 
 ## 7. App 侧管理员权限检测与机构详情
 
@@ -578,19 +579,19 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 - `lib/governance/transfer_proposal_detail_page.dart`
 - `lib/governance/transfer_proposal_service.dart`
 - `lib/rpc/chain_rpc.dart`
-- `citizenchain/transaction/duoqian-transfer-pow/src/lib.rs`
-- `citizenchain/transaction/duoqian-manage-pow/src/lib.rs`
-- `citizenchain/governance/voting-engine-system/src/lib.rs`
-- `citizenchain/governance/voting-engine-system/src/internal_vote.rs`
-- `citizenchain/governance/voting-engine-system/src/joint_vote.rs`
-- `citizenchain/governance/voting-engine-system/src/citizen_vote.rs`
-- `citizenchain/governance/voting-engine-system/src/proposal_cleanup.rs`
-- `citizenchain/governance/voting-engine-system/src/active_proposal_limit.rs`
-- `citizenchain/governance/resolution-issuance-gov/src/lib.rs`
-- `citizenchain/governance/runtime-root-upgrade/src/lib.rs`
-- `citizenchain/governance/admins-origin-gov/src/lib.rs`
-- `citizenchain/governance/resolution-destro-gov/src/lib.rs`
-- `citizenchain/governance/grandpa-key-gov/src/lib.rs`
-- `citizenchain/transaction/offchain-transaction-pos/src/lib.rs`
+- `citizenchain/runtime/transaction/duoqian-transfer-pow/src/lib.rs`
+- `citizenchain/runtime/transaction/duoqian-manage-pow/src/lib.rs`
+- `citizenchain/runtime/governance/voting-engine-system/src/lib.rs`
+- `citizenchain/runtime/governance/voting-engine-system/src/internal_vote.rs`
+- `citizenchain/runtime/governance/voting-engine-system/src/joint_vote.rs`
+- `citizenchain/runtime/governance/voting-engine-system/src/citizen_vote.rs`
+- `citizenchain/runtime/governance/voting-engine-system/src/proposal_cleanup.rs`
+- `citizenchain/runtime/governance/voting-engine-system/src/active_proposal_limit.rs`
+- `citizenchain/runtime/governance/resolution-issuance-gov/src/lib.rs`
+- `citizenchain/runtime/governance/runtime-root-upgrade/src/lib.rs`
+- `citizenchain/runtime/governance/admins-origin-gov/src/lib.rs`
+- `citizenchain/runtime/governance/resolution-destro-gov/src/lib.rs`
+- `citizenchain/runtime/governance/grandpa-key-gov/src/lib.rs`
+- `citizenchain/runtime/transaction/offchain-transaction-pos/src/lib.rs`
 - `citizenchain/runtime/src/configs/mod.rs`
 - `primitives/src/count_const.rs`

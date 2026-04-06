@@ -639,10 +639,40 @@ impl institution_asset_guard::InstitutionAssetGuard<AccountId> for RuntimeInstit
         source: &AccountId,
         action: institution_asset_guard::InstitutionAssetAction,
     ) -> bool {
+        // 中文注释：匹配顺序很重要——更具体的账户类型必须放在更宽泛的类型之前。
+        // fee_address 同时出现在 CHINA_RESERVED_DUOQIAN_ADDRESSES 列表中（duoqian 派生地址），
+        // 如果 is_reserved_duoqian_account 先匹配，fee_address 会被错误地按 duoqian 规则放行。
+
+        // 1. 无私钥系统账户：全禁
         if is_keyless_account(source) {
             return false;
         }
 
+        // 2. 省储行费用账户（最具体）：只允许手续费归集
+        if is_reserved_fee_account(source) {
+            return matches!(
+                action,
+                institution_asset_guard::InstitutionAssetAction::OffchainFeeSweepExecute
+            );
+        }
+
+        // 3. 储委会费用账户（44 个机构）：只允许手续费归集
+        if is_cb_fee_account(source) {
+            return matches!(
+                action,
+                institution_asset_guard::InstitutionAssetAction::OffchainFeeSweepExecute
+            );
+        }
+
+        // 4. 国储会安全基金账户：只允许安全基金转账
+        if source == &AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS) {
+            return matches!(
+                action,
+                institution_asset_guard::InstitutionAssetAction::NrcSafetyFundTransfer
+            );
+        }
+
+        // 5. 多签保留地址（范围最宽）：只允许多签转账和关闭
         if is_reserved_duoqian_account(source) {
             return matches!(
                 action,
@@ -651,29 +681,7 @@ impl institution_asset_guard::InstitutionAssetGuard<AccountId> for RuntimeInstit
             );
         }
 
-        if is_reserved_fee_account(source) {
-            return matches!(
-                action,
-                institution_asset_guard::InstitutionAssetAction::OffchainFeeSweepExecute
-            );
-        }
-
-        // 中文注释：国储会安全基金账户只允许安全基金转账操作。
-        if source == &AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS) {
-            return matches!(
-                action,
-                institution_asset_guard::InstitutionAssetAction::NrcSafetyFundTransfer
-            );
-        }
-
-        // 中文注释：储委会费用账户只允许手续费归集操作（44 个机构）。
-        if is_cb_fee_account(source) {
-            return matches!(
-                action,
-                institution_asset_guard::InstitutionAssetAction::OffchainFeeSweepExecute
-            );
-        }
-
+        // 6. 普通账户：全放行
         true
     }
 }
@@ -955,7 +963,9 @@ parameter_types! {
     /// Runtime wasm 最大长度（字节）。
     pub const RuntimeUpgradeMaxCodeSize: u32 = 5 * 1024 * 1024;
     /// 管理员治理：单机构管理员列表上限（覆盖国储会 19 人规模）。
-    pub const MaxAdminsPerInstitution: u32 = 32;
+    // 必须 >= admins_origin_gov::MaxAdminsPerInstitution (32)
+    // 且 >= duoqian_manage_pow::MaxAdmins (64)，否则快照写入会静默失败。
+    pub const MaxAdminsPerInstitution: u32 = 64;
     /// GRANDPA authority set 变更生效延迟（单位：区块）。
     /// 取非 0，给运维注入新 gran 私钥预留窗口，避免立即切换导致短时失票。
     pub const GrandpaAuthoritySetChangeDelay: u32 = 30;
@@ -1115,6 +1125,43 @@ fn is_nrc_admin(who: &AccountId) -> bool {
     }
 }
 
+/// 联合提案发起权限：国储会（CHINA_CB[0]）+ 43个省储会（CHINA_CB[1..44]）。
+pub struct EnsureJointProposer;
+
+impl EnsureOrigin<RuntimeOrigin> for EnsureJointProposer {
+    type Success = AccountId;
+
+    fn try_origin(o: RuntimeOrigin) -> Result<Self::Success, RuntimeOrigin> {
+        let who = frame_system::EnsureSigned::<AccountId>::try_origin(o)?;
+        if is_joint_proposer(&who) {
+            Ok(who)
+        } else {
+            Err(RuntimeOrigin::from(frame_system::RawOrigin::Signed(who)))
+        }
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
+        let admin = AccountId::new(primitives::china::china_cb::CHINA_CB[0].duoqian_admins[0]);
+        Ok(RuntimeOrigin::from(frame_system::RawOrigin::Signed(admin)))
+    }
+}
+
+/// 国储会和省储会管理员均可发起联合提案（含运行时升级、决议发行等）。
+fn is_joint_proposer(who: &AccountId) -> bool {
+    use primitives::china::china_cb::{shenfen_id_to_fixed48, CHINA_CB};
+    for entry in CHINA_CB.iter() {
+        if let Some(institution) = shenfen_id_to_fixed48(entry.shenfen_id) {
+            if let Some(admins) = admins_origin_gov::CurrentAdmins::<Runtime>::get(institution) {
+                if admins.into_inner().iter().any(|admin| admin == who) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 impl resolution_issuance_iss::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
@@ -1131,7 +1178,7 @@ impl resolution_issuance_iss::Config for Runtime {
 
 impl resolution_issuance_gov::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type NrcProposeOrigin = EnsureNrcAdmin;
+    type ProposeOrigin = EnsureJointProposer;
     type RecipientSetOrigin = frame_system::EnsureRoot<AccountId>;
     // 中文注释：禁用外部 finalize 入口，只允许投票引擎回调路径落地结果。
     type JointVoteFinalizeOrigin = EnsureJointVoteFinalizeOrigin;
@@ -1146,7 +1193,7 @@ impl resolution_issuance_gov::Config for Runtime {
 
 impl runtime_root_upgrade::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type NrcProposeOrigin = EnsureNrcAdmin;
+    type ProposeOrigin = EnsureJointProposer;
     type JointVoteEngine = VotingEngineSystem;
     type RuntimeCodeExecutor = RuntimeSetCodeExecutor;
     type DeveloperUpgradeCheck = GenesisPallet;
@@ -1204,13 +1251,11 @@ impl voting_engine_system::JointVoteResultCallback for RuntimeJointVoteResultCal
             );
             }
 
-            // runtime_root_upgrade 使用统一 ID，尝试直接回调；
-            // 如果 proposal_id 不属于该模块，on_joint_vote_finalized 会返回 ProposalNotFound。
-            if let Ok(()) = <RuntimeRootUpgrade as voting_engine_system::JointVoteResultCallback>::on_joint_vote_finalized(
-                vote_proposal_id,
-                approved,
-            ) {
-                return Ok(());
+            if runtime_root_upgrade::Pallet::<Runtime>::owns_proposal(vote_proposal_id) {
+                return <RuntimeRootUpgrade as voting_engine_system::JointVoteResultCallback>::on_joint_vote_finalized(
+                    vote_proposal_id,
+                    approved,
+                );
             }
 
             Err(sp_runtime::DispatchError::Other(
@@ -1236,6 +1281,7 @@ impl voting_engine_system::Config for Runtime {
     type InternalAdminProvider = RuntimeInternalAdminProvider;
     type InternalAdminCountProvider = RuntimeInternalAdminCountProvider;
     type InternalThresholdProvider = RuntimeInternalThresholdProvider;
+    type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type TimeProvider = pallet_timestamp::Pallet<Runtime>;
     type WeightInfo = voting_engine_system::weights::SubstrateWeight<Runtime>;
 }
@@ -1583,7 +1629,6 @@ mod tests {
                 proposer,
                 reason,
                 code_hash,
-                has_code: true,
                 status: runtime_root_upgrade::pallet::ProposalStatus::Voting,
             };
             let mut encoded = Vec::from(runtime_root_upgrade::MODULE_TAG);
@@ -1614,7 +1659,6 @@ mod tests {
                 updated.status,
                 runtime_root_upgrade::pallet::ProposalStatus::Rejected
             ));
-            assert!(updated.has_code, "对象层数据应保留到统一清理阶段");
         });
     }
 
@@ -1898,6 +1942,21 @@ impl voting_engine_system::InternalAdminProvider<AccountId> for RuntimeInternalA
                     false
                 }
             }
+        }
+    }
+
+    fn get_admin_list(
+        org: u8,
+        institution: voting_engine_system::InstitutionPalletId,
+    ) -> Option<alloc::vec::Vec<AccountId>> {
+        match org {
+            voting_engine_system::internal_vote::ORG_DUOQIAN => {
+                let account = AccountId::decode(&mut &institution[..32]).ok()?;
+                let duoqian = duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(&account)?;
+                Some(duoqian.duoqian_admins.into_inner())
+            }
+            _ => admins_origin_gov::CurrentAdmins::<Runtime>::get(institution)
+                .map(|admins| admins.into_inner()),
         }
     }
 }

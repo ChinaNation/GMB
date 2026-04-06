@@ -496,7 +496,11 @@ class ProposalStatusBadge extends StatelessWidget {
                         ? Icons.check_circle
                         : status == 2
                             ? Icons.cancel
-                            : Icons.error,
+                            : status == 3
+                                ? Icons.check_circle
+                                : status == 4
+                                    ? Icons.error_outline
+                                    : Icons.error,
                 size: 16,
                 color: color,
               ),
@@ -531,6 +535,8 @@ class ProposalStatusBadge extends StatelessWidget {
         return '已拒绝';
       case 3:
         return '已执行';
+      case 4:
+        return '执行失败';
       default:
         return '未知';
     }

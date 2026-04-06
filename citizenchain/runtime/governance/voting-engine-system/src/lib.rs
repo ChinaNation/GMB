@@ -1,9 +1,16 @@
 //! # 投票引擎系统 (voting-engine-system)
 //!
 //! 治理投票基础设施模块，统一承载三类投票流程：
-//! - **内部投票**（INTERNAL）：机构内部管理员按阈值投票。
-//! - **联合机构投票**（JOINT）：国储会/省储会/省储行管理员按票权加权投票。
-//! - **公民投票**（CITIZEN）：SFID 持有者按 >50% 严格多数投票。
+//! - **内部投票**（INTERNAL）：机构内部管理员按阈值投票，赞成 ≥ 阈值提前通过，
+//!   剩余票不足达到阈值提前否决，30 天超时兜底否决。
+//! - **联合机构投票**（JOINT）：国储会/省储会/省储行管理员按票权加权投票，
+//!   105 票全票通过直接执行，任一机构反对立即进入公民投票，30 天超时进入公民投票。
+//! - **公民投票**（CITIZEN）：SFID 持有者按 >50% 严格多数投票，
+//!   赞成 > 50% 提前通过，反对 ≥ 50% 提前否决，30 天超时按最终票数判定。
+//!
+//! 关键机制：
+//! - **管理员快照锁定**：提案创建时锁定管理员名单，投票期间不受链上管理员更换影响。
+//! - **联合提案发起权**：国储会和省储会管理员均可发起联合投票提案。
 //!
 //! 通过 trait 为上层治理模块提供标准化能力：
 //! - `InternalVoteEngine` / `JointVoteEngine`：提案创建和投票。
@@ -139,6 +146,14 @@ impl JointVoteResultCallback for () {
 /// 中文注释：内部管理员动态提供器（可由其他治理模块提供最新管理员集合）。
 pub trait InternalAdminProvider<AccountId> {
     fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId) -> bool;
+
+    /// 获取机构当前管理员列表（用于提案创建时锁定快照）。
+    fn get_admin_list(
+        _org: u8,
+        _institution: InstitutionPalletId,
+    ) -> Option<sp_std::vec::Vec<AccountId>> {
+        None
+    }
 }
 
 impl<AccountId> InternalAdminProvider<AccountId> for () {
@@ -230,6 +245,7 @@ pub struct VoteCountU64 {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub enum PendingCleanupStage {
+    AdminSnapshots,
     InternalVotes,
     JointAdminVotes,
     JointInstitutionVotes,
@@ -323,6 +339,10 @@ pub mod pallet {
         type InternalAdminCountProvider: InternalAdminCountProvider;
         /// 内部投票阈值动态提供器（治理机构硬编码，注册多签动态读取）。
         type InternalThresholdProvider: InternalThresholdProvider;
+
+        /// 每个机构最大管理员数量（与 admins-origin-gov 一致），用于管理员快照 BoundedVec。
+        #[pallet::constant]
+        type MaxAdminsPerInstitution: Get<u32>;
 
         /// 时间源，用于提案 ID 编码年份。
         type TimeProvider: frame_support::traits::UnixTime;
@@ -449,6 +469,20 @@ pub mod pallet {
     #[pallet::getter(fn citizen_tally)]
     pub type CitizenTallies<T> = StorageMap<_, Blake2_128Concat, u64, VoteCountU64, ValueQuery>;
 
+    /// 提案管理员快照：提案创建时锁定各机构管理员名单，投票期间不随链上名单变化。
+    /// 内部提案只存一条（提案所属机构），联合提案存所有参与机构（约105条）。
+    /// 投票时查快照判定资格，保证管理员更换不影响已有提案的投票过程。
+    #[pallet::storage]
+    pub type AdminSnapshot<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        Blake2_128Concat,
+        InstitutionPalletId,
+        BoundedVec<T::AccountId, T::MaxAdminsPerInstitution>,
+        OptionQuery,
+    >;
+
     /// 中文注释：总人口快照 nonce 防重放（全局维度，防止跨提案重放）。
     #[pallet::storage]
     #[pallet::getter(fn used_population_snapshot_nonce)]
@@ -517,10 +551,7 @@ pub mod pallet {
             eligible_total: u64,
         },
         /// 中文注释：提案终结，status 为最终状态（PASSED/REJECTED/EXECUTED/EXECUTION_FAILED）。
-        ProposalFinalized {
-            proposal_id: u64,
-            status: u8,
-        },
+        ProposalFinalized { proposal_id: u64, status: u8 },
         /// 中文注释：内部投票已投出一票。
         InternalVoteCast {
             proposal_id: u64,
@@ -864,7 +895,7 @@ pub mod pallet {
             Ok(proposal)
         }
 
-        /// 更新提案状态并发出 ProposalFinalized 事件。
+        /// 更新提案状态，并在联合回调完成后发出最终 ProposalFinalized 事件。
         /// 消费模块在执行成功后调用此方法设置 STATUS_EXECUTED。
         pub fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
             with_transaction(|| {
@@ -889,11 +920,6 @@ pub mod pallet {
                     }
                 }
 
-                Self::deposit_event(Event::<T>::ProposalFinalized {
-                    proposal_id,
-                    status,
-                });
-
                 if kind == PROPOSAL_KIND_JOINT && status != STATUS_VOTING {
                     if let Err(err) = T::JointVoteResultCallback::on_joint_vote_finalized(
                         proposal_id,
@@ -905,10 +931,23 @@ pub mod pallet {
                     }
                 }
 
+                let final_status = match Proposals::<T>::get(proposal_id) {
+                    Some(proposal) => proposal.status,
+                    None => {
+                        return TransactionOutcome::Rollback(Err(
+                            Error::<T>::ProposalNotFound.into()
+                        ))
+                    }
+                };
+                Self::deposit_event(Event::<T>::ProposalFinalized {
+                    proposal_id,
+                    status: final_status,
+                });
+
                 // 终态转换时自动注册 90 天延迟清理（PASSED/REJECTED/EXECUTED 均触发）。
                 // 同一提案可能多次进入终态（PASSED → EXECUTED），schedule_cleanup
                 // 内部用 try_push 保证幂等，重复注册不会导致重复清理。
-                if status != STATUS_VOTING {
+                if final_status != STATUS_VOTING {
                     let now = frame_system::Pallet::<T>::block_number();
                     let _ = proposal_cleanup::schedule_cleanup::<T>(proposal_id, now);
                 }
@@ -975,6 +1014,17 @@ pub mod pallet {
             let db_weight = T::DbWeight::get();
 
             match stage {
+                PendingCleanupStage::AdminSnapshots => {
+                    let result = AdminSnapshot::<T>::clear_prefix(proposal_id, cleanup_limit, None);
+                    let weight =
+                        db_weight.reads_writes(u64::from(result.loops), u64::from(result.unique));
+                    let next = if result.maybe_cursor.is_some() {
+                        Some(PendingCleanupStage::AdminSnapshots)
+                    } else {
+                        Some(PendingCleanupStage::InternalVotes)
+                    };
+                    (next, weight)
+                }
                 PendingCleanupStage::InternalVotes => {
                     let result =
                         InternalVotesByAccount::<T>::clear_prefix(proposal_id, cleanup_limit, None);
@@ -1074,6 +1124,50 @@ pub mod pallet {
                     ProposalMeta::<T>::remove(proposal_id);
                     let weight = db_weight.writes(6);
                     (None, weight) // 全部完成
+                }
+            }
+        }
+    }
+
+    // ──── 管理员快照查询 ────
+
+    impl<T: Config> Pallet<T> {
+        /// 查询快照中某管理员是否在指定机构的管理员名单中。
+        pub fn is_admin_in_snapshot(
+            proposal_id: u64,
+            institution: InstitutionPalletId,
+            who: &T::AccountId,
+        ) -> bool {
+            AdminSnapshot::<T>::get(proposal_id, institution)
+                .map(|admins| admins.iter().any(|a| a == who))
+                .unwrap_or(false)
+        }
+
+        /// 查询快照中某机构的管理员数量。
+        pub fn snapshot_admin_count(
+            proposal_id: u64,
+            institution: InstitutionPalletId,
+        ) -> Option<u32> {
+            AdminSnapshot::<T>::get(proposal_id, institution).map(|admins| admins.len() as u32)
+        }
+
+        /// 将当前管理员列表写入快照存储。
+        /// 如果管理员数量超过 MaxAdminsPerInstitution，触发 defensive 告警。
+        pub(crate) fn snapshot_institution_admins(
+            proposal_id: u64,
+            org: u8,
+            institution: InstitutionPalletId,
+        ) {
+            if let Some(admins) = T::InternalAdminProvider::get_admin_list(org, institution) {
+                match BoundedVec::<T::AccountId, T::MaxAdminsPerInstitution>::try_from(admins) {
+                    Ok(bounded) => {
+                        AdminSnapshot::<T>::insert(proposal_id, institution, bounded);
+                    }
+                    Err(_) => {
+                        frame_support::defensive!(
+                            "snapshot_institution_admins: admin list exceeds MaxAdminsPerInstitution, snapshot not written"
+                        );
+                    }
                 }
             }
         }
@@ -1281,9 +1375,10 @@ mod tests {
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = TestJointVoteResultCallback;
-        type InternalAdminProvider = ();
+        type InternalAdminProvider = TestInternalAdminProvider;
         type InternalAdminCountProvider = ();
         type InternalThresholdProvider = ();
+        type MaxAdminsPerInstitution = ConstU32<32>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
@@ -1294,10 +1389,68 @@ mod tests {
     thread_local! {
         static JOINT_CALLBACK_SHOULD_FAIL: RefCell<bool> = const { RefCell::new(false) };
     }
+    thread_local! {
+        static JOINT_CALLBACK_OVERRIDE_STATUS: RefCell<Option<u8>> = const { RefCell::new(None) };
+    }
 
     pub struct TestSfidEligibility;
     pub struct TestPopulationSnapshotVerifier;
     pub struct TestJointVoteResultCallback;
+    pub struct TestInternalAdminProvider;
+
+    impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
+        fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
+            let who_bytes = who.encode();
+            if who_bytes.len() != 32 {
+                return false;
+            }
+            let mut who_arr = [0u8; 32];
+            who_arr.copy_from_slice(&who_bytes);
+
+            match org {
+                internal_vote::ORG_NRC | internal_vote::ORG_PRC => CHINA_CB
+                    .iter()
+                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
+                    .unwrap_or(false),
+                internal_vote::ORG_PRB => CHINA_CH
+                    .iter()
+                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
+                    .unwrap_or(false),
+                _ => false,
+            }
+        }
+
+        fn get_admin_list(
+            org: u8,
+            institution: InstitutionPalletId,
+        ) -> Option<sp_std::vec::Vec<AccountId32>> {
+            match org {
+                internal_vote::ORG_NRC | internal_vote::ORG_PRC => CHINA_CB
+                    .iter()
+                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .map(|n| {
+                        n.duoqian_admins
+                            .iter()
+                            .copied()
+                            .map(AccountId32::new)
+                            .collect()
+                    }),
+                internal_vote::ORG_PRB => CHINA_CH
+                    .iter()
+                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .map(|n| {
+                        n.duoqian_admins
+                            .iter()
+                            .copied()
+                            .map(AccountId32::new)
+                            .collect()
+                    }),
+                _ => None,
+            }
+        }
+    }
 
     /// 测试用时间提供器：返回 2026 年中（2026-07-01 00:00:00 UTC）。
     pub struct TestTimeProvider;
@@ -1390,10 +1543,13 @@ mod tests {
     }
 
     impl JointVoteResultCallback for TestJointVoteResultCallback {
-        fn on_joint_vote_finalized(_vote_proposal_id: u64, _approved: bool) -> DispatchResult {
+        fn on_joint_vote_finalized(vote_proposal_id: u64, _approved: bool) -> DispatchResult {
             if JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow()) {
                 Err(DispatchError::Other("joint callback failed"))
             } else {
+                if let Some(status) = JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow()) {
+                    VotingEngineSystem::override_proposal_status(vote_proposal_id, status)?;
+                }
                 Ok(())
             }
         }
@@ -1407,6 +1563,7 @@ mod tests {
         ext.execute_with(|| {
             USED_VOTE_NONCES.with(|set| set.borrow_mut().clear());
             JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
+            JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
             System::set_block_number(1);
         });
         ext
@@ -1582,6 +1739,10 @@ mod tests {
 
     fn set_joint_callback_should_fail(should_fail: bool) {
         JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = should_fail);
+    }
+
+    fn set_joint_callback_override_status(status: Option<u8>) {
+        JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = status);
     }
 
     fn mark_vote_nonce_used(
@@ -1808,7 +1969,7 @@ mod tests {
     }
 
     #[test]
-    fn joint_proposal_must_be_created_by_nrc_admin() {
+    fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
         new_test_ext().execute_with(|| {
             // 中文注释：外部 extrinsic 入口已禁用，统一要求事项模块通过 trait 创建联合投票提案。
             assert_noop!(
@@ -1821,6 +1982,7 @@ mod tests {
                 pallet::Error::<Test>::NoPermission
             );
 
+            // 外部人员不能创建联合提案
             let outsider = AccountId32::new([9u8; 32]);
             let nonce = snapshot_nonce_ok();
             let sig = snapshot_sig_ok();
@@ -1834,25 +1996,28 @@ mod tests {
                 .is_err()
             );
 
-            let nonce = snapshot_nonce_ok();
+            // 省储会管理员可以创建联合提案
+            let nonce_prc: pallet::VoteNonceOf<Test> =
+                b"snap-nonce-prc".to_vec().try_into().expect("nonce fits");
             let sig = snapshot_sig_ok();
-            assert!(
+            assert_ok!(
                 <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
                     prc_admin(0),
                     10,
-                    nonce.as_slice(),
+                    nonce_prc.as_slice(),
                     sig.as_slice()
                 )
-                .is_err()
             );
 
-            let nonce = snapshot_nonce_ok();
+            // 国储会管理员可以创建联合提案
+            let nonce_nrc: pallet::VoteNonceOf<Test> =
+                b"snap-nonce-nrc".to_vec().try_into().expect("nonce fits");
             let sig = snapshot_sig_ok();
             assert_ok!(
                 <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
                     nrc_admin(0),
                     10,
-                    nonce.as_slice(),
+                    nonce_nrc.as_slice(),
                     sig.as_slice()
                 )
             );
@@ -2296,6 +2461,18 @@ mod tests {
     }
 
     #[test]
+    fn citizen_reject_threshold_function_boundaries_are_correct() {
+        // eligible_total=0 → 不否决（无意义）
+        assert!(!citizen_vote::is_citizen_vote_rejected(0, 0));
+        // 反对 4/10 = 40% < 50% → 不否决（赞成仍有可能 > 50%）
+        assert!(!citizen_vote::is_citizen_vote_rejected(4, 10));
+        // 反对 5/10 = 50% → 否决（赞成最多 50%，无法严格 > 50%）
+        assert!(citizen_vote::is_citizen_vote_rejected(5, 10));
+        // 反对 6/10 = 60% → 否决
+        assert!(citizen_vote::is_citizen_vote_rejected(6, 10));
+    }
+
+    #[test]
     fn joint_vote_all_yes_passes_immediately() {
         new_test_ext().execute_with(|| {
             let nonce = snapshot_nonce_ok();
@@ -2508,6 +2685,44 @@ mod tests {
                 STATUS_VOTING
             );
             assert!(has_used_vote_nonce(0, binding_id_ok(), "keep-on-fail"));
+        });
+    }
+
+    #[test]
+    fn proposal_finalized_event_uses_status_after_joint_callback_override() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngineSystem as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    100,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                )
+                .expect("joint proposal should be created");
+
+            set_joint_callback_override_status(Some(STATUS_EXECUTION_FAILED));
+            assert_ok!(VotingEngineSystem::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
+
+            let finalized = System::events()
+                .into_iter()
+                .rev()
+                .find_map(|record| match record.event {
+                    RuntimeEvent::VotingEngineSystem(Event::ProposalFinalized {
+                        proposal_id: event_id,
+                        status,
+                    }) if event_id == proposal_id => Some(status),
+                    _ => None,
+                })
+                .expect("proposal finalized event should exist");
+            assert_eq!(finalized, STATUS_EXECUTION_FAILED);
         });
     }
 

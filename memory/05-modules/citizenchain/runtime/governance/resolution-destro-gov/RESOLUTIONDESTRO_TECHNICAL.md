@@ -1,4 +1,4 @@
-# RESOLUTION_DESTRO_GOV Technical Notes
+# resolution-destro-gov 技术说明
 
 ## 0. 功能需求
 `resolution-destro-gov` 的功能需求是：为国储会、各省储会、各省储行提供"机构自有资金销毁"治理流程，由机构内部管理员发起和投票，在提案通过后自动或手动执行链上销毁。
@@ -7,7 +7,7 @@
 - 仅允许有效机构发起销毁提案，且 `org` 必须与 `institution` 的真实归属一致。
 - 仅允许目标机构自己的内部管理员发起提案和参与投票。
 - 销毁金额必须大于 0，且执行时必须保证机构账户保留最小余额 `ED`。
-- 提案投票通过后，系统应自动尝试执行销毁；若自动执行失败，提案保留为已通过状态，允许后续手动重试执行。
+- 提案投票通过后，系统应自动尝试执行销毁；若自动执行失败，提案状态覆写为 `STATUS_EXECUTION_FAILED`，允许后续手动重试执行。
 - 自动执行失败不能回滚已通过的投票结果。
 - 销毁执行通过 `Currency::slash` 减少机构账户余额与总发行量，实现链上销毁。
 
@@ -41,7 +41,7 @@
   - `Pallet::store_proposal_meta` / `get_proposal_meta` / `set_proposal_passed`
   - `Pallet::proposals`
   - `Pallet::set_status_and_emit`
-- 状态常量：`STATUS_PASSED`、`STATUS_EXECUTED`
+- 状态常量：`STATUS_PASSED`、`STATUS_EXECUTION_FAILED`、`STATUS_EXECUTED`
 - 管理员校验：`InternalAdminProvider::is_internal_admin`
 
 Runtime 接线：
@@ -96,20 +96,20 @@ pub struct DestroyAction<Balance> {
 5. 若投票引擎状态达到 `STATUS_PASSED`：
    - 首次进入 PASSED 时记录 `passed_at`。
    - 若本票是 `approve=true`，尝试自动执行。
-   - 自动执行失败只发 `DestroyExecutionFailed` 事件，不回滚投票。
+   - 自动执行失败时覆写投票引擎状态为 `STATUS_EXECUTION_FAILED`，并发出 `DestroyExecutionFailed` 事件；不回滚投票。
 
 ### 4.3 `execute_destroy`（call index = 2）
 语义：
 - 任意签名账户可调用（公开重试入口）。
-- 仅当提案已 `STATUS_PASSED` 且余额校验通过时执行销毁。
+- 仅当提案已 `STATUS_PASSED` 或 `STATUS_EXECUTION_FAILED` 且余额校验通过时执行销毁。
 
 用途：
-- 解决"提案已通过但自动执行失败（如余额不足）"的后续重试。
+- 解决"提案已通过但自动执行失败（如余额不足）"、状态已覆写为 `STATUS_EXECUTION_FAILED` 的后续重试。
 
 ---
 
 ## 5. 执行逻辑（`try_execute_destroy_from_action`）
-1. 校验投票引擎提案状态为 `STATUS_PASSED`。
+1. 校验投票引擎提案状态为 `STATUS_PASSED` 或 `STATUS_EXECUTION_FAILED`。
 2. 从常量表查找机构账户地址并 decode 为 `AccountId`。
 3. 校验 `free_balance >= amount + minimum_balance`（ED 保护）。
 4. 调用 `Currency::slash` 执行销毁。
@@ -118,7 +118,7 @@ pub struct DestroyAction<Balance> {
 7. 发 `DestroyExecuted` 事件。
 
 重复执行防护：
-- `STATUS_EXECUTED` 后提案不再是 `STATUS_PASSED`，后续执行被 `ProposalNotPassed` 拒绝。
+- `STATUS_EXECUTED` 后提案不再是 `STATUS_PASSED` 或 `STATUS_EXECUTION_FAILED`，后续执行被 `ProposalNotPassed` 拒绝。
 
 ---
 
@@ -167,17 +167,20 @@ pub struct DestroyAction<Balance> {
 - `vote_destroy()`
 - `execute_destroy()`
 
-注意：当前 `weights.rs` 在旧代码上生成，包含已删除存储项（ProposalActions、ActiveProposalByInstitution、ProposalCreatedAt、ProposalPassedAt）的 proof 注释。权重数值为过估（安全），须在代码稳定后重跑 benchmark。
+注意：
+- 当前 `weights.rs` 仍是在旧代码上生成，包含已删除存储项（ProposalActions、ActiveProposalByInstitution、ProposalCreatedAt、ProposalPassedAt）的 proof 注释。权重数值为过估（安全），但不精确。
+- 2026-04-05 复查时已确认 `resolution-destro-gov` 自身 benchmark 夹具可编译，且不再把 `proposal_id` 写死为 `0`。
+- 若本地直接拿标准 CI WASM 构建的节点跑 benchmark，会因为 runtime blob 不带 benchmarking runtime api 而失败；要重生成正式 `weights.rs`，需要使用带 benchmark api 的 runtime blob（例如专门的 benchmark 构建，而不是默认 CI 运行时产物）。
 
 ---
 
 ## 9. 测试覆盖
 运行命令：
 ```
-cargo test -p resolution-destro-gov
+cargo test --offline --manifest-path citizenchain/runtime/governance/resolution-destro-gov/Cargo.toml -- --nocapture
 ```
 
-当前结果：12 passed
+当前结果：14 passed
 
 覆盖重点：
 - NRC/PRC/PRB 三种组织达阈值自动执行销毁
@@ -190,6 +193,7 @@ cargo test -p resolution-destro-gov
 - 重复投票由投票引擎拒绝
 - 非管理员可触发 execute_destroy
 - 无效机构返回 None
+- mock runtime 已跟进投票引擎新契约：`MaxAdminsPerInstitution` 与管理员快照 `get_admin_list`
 
 ---
 

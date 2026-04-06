@@ -9,9 +9,9 @@ use sp_runtime::traits::{Hash as HashT, SaturatedConversion, Saturating};
 
 use crate::{
     CitizenTallies, CitizenVotesByBindingId, Config, InstitutionPalletId, JointInstitutionTallies,
-    JointTallies, NextProposalId, Pallet, Proposal, Proposals, VoteCountU32, VoteCountU64,
-    VoteNonceOf, VoteSignatureOf, PROPOSAL_KIND_INTERNAL, PROPOSAL_KIND_JOINT, STAGE_CITIZEN,
-    STAGE_INTERNAL, STAGE_JOINT, STATUS_VOTING,
+    JointTallies, Pallet, Proposal, Proposals, VoteCountU32, VoteCountU64, VoteNonceOf,
+    VoteSignatureOf, PROPOSAL_KIND_INTERNAL, PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STAGE_INTERNAL,
+    STAGE_JOINT, STATUS_VOTING,
 };
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> Result<T::AccountId, BenchmarkError> {
@@ -30,31 +30,21 @@ mod benchmarks {
 
     #[benchmark]
     fn create_internal_proposal() -> Result<(), BenchmarkError> {
-        NextProposalId::<T>::put(0u64);
-        let now = frame_system::Pallet::<T>::block_number();
-        let proposal = Proposal {
-            kind: PROPOSAL_KIND_INTERNAL,
-            stage: STAGE_INTERNAL,
-            status: STATUS_VOTING,
-            internal_org: Some(crate::internal_vote::ORG_NRC),
-            internal_institution: Some(nrc_institution()?),
-            start: now,
-            end: now,
-            citizen_eligible_total: 0,
-        };
-
+        let who = decode_account::<T>(CHINA_CB[0].duoqian_admins[0])?;
         let institution = nrc_institution()?;
+        let created_id;
 
         #[block]
         {
-            let id = Pallet::<T>::allocate_proposal_id()
-                .map_err(|_| BenchmarkError::Stop("id should allocate"))?;
-            crate::active_proposal_limit::try_add_active_proposal::<T>(institution, id)
-                .map_err(|_| BenchmarkError::Stop("active proposal limit"))?;
-            Proposals::<T>::insert(id, proposal);
+            created_id = Pallet::<T>::do_create_internal_proposal(
+                who,
+                crate::internal_vote::ORG_NRC,
+                institution,
+            )
+            .map_err(|_| BenchmarkError::Stop("create internal proposal should succeed"))?;
         }
 
-        assert!(Proposals::<T>::contains_key(0u64));
+        assert!(Proposals::<T>::contains_key(created_id));
         Ok(())
     }
 
@@ -78,6 +68,8 @@ mod benchmarks {
             },
         );
         JointInstitutionTallies::<T>::insert(1u64, institution, VoteCountU32 { yes: 0, no: 0 });
+        // 写入管理员快照，否则 do_joint_vote 权限校验会失败。
+        Pallet::<T>::snapshot_institution_admins(1u64, crate::internal_vote::ORG_NRC, institution);
 
         #[block]
         {

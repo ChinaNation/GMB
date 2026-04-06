@@ -3,7 +3,7 @@
 ## 0. 功能需求
 ### 0.1 模块职责
 `runtime-root-upgrade` 负责把"Runtime wasm 升级"包装成一个受治理约束的链上流程，核心要求是：
-- 仅允许国储会（NRC）管理员发起升级提案。
+- 仅允许国储会（NRC）和 43 个省储会（PRC）管理员发起升级提案。
 - 升级提案必须先经过 `voting-engine-system` 的联合投票。
 - 联合阶段由各机构管理员个人钱包直接上链投票，链上按机构阈值自动形成机构结果。
 - 联合投票通过后才允许执行 `set_code`。
@@ -17,7 +17,7 @@
 ### 0.3 联合投票回调需求
 - 联合投票拒绝时，提案必须进入 `Rejected`。
 - 联合投票通过时，模块必须尝试执行 runtime code。
-- 联合投票结束后，将投票引擎侧提案状态设为 `STATUS_EXECUTED`，标记投票引擎职责完成。
+- 联合投票结束后，投票引擎侧状态保持真实治理结果：通过保持 `STATUS_PASSED`，否决保持 `STATUS_REJECTED`，仅执行失败时覆写为 `STATUS_EXECUTION_FAILED`。
 - 回调直接使用投票引擎的 `proposal_id`，无需映射反查。
 
 ### 0.4 执行失败处理
@@ -35,7 +35,7 @@
 
 ## 1. 模块定位
 `runtime-root-upgrade` 是"Runtime 升级治理编排模块"，负责：
-- 接收 NRC 管理员提交的 wasm 升级提案；
+- 接收国储会或省储会管理员提交的 wasm 升级提案；
 - 调用 `voting-engine-system` 创建联合投票；
 - 在联合投票回调后执行 `set_code`；
 - 摘要数据存储在 `voting-engine-system` 的 `ProposalData`；
@@ -50,7 +50,7 @@ Runtime 配置位置：
 - `runtime/src/configs/mod.rs`
 
 当前接线：
-- `NrcProposeOrigin = EnsureNrcAdmin`
+- `ProposeOrigin = EnsureJointProposer`
 - `JointVoteEngine = VotingEngineSystem`
 - `RuntimeCodeExecutor = RuntimeSetCodeExecutor`
 - `MaxReasonLen = RuntimeUpgradeMaxReasonLen`（1024）
@@ -73,10 +73,9 @@ Runtime 配置位置：
 - `ExecutionFailed`：联合投票通过，但 runtime code 执行失败
 
 ### 3.2 Proposal（摘要，序列化存入 voting-engine-system ProposalData）
-- `proposer: AccountId`：提案发起人（仅允许 NRC 管理员）
+- `proposer: AccountId`：提案发起人（国储会或省储会管理员）
 - `reason: BoundedVec<u8, MaxReasonLen>`：升级理由
 - `code_hash: Hash`：升级 code 哈希，便于事件与链下审计对齐
-- `has_code: bool`：对象层 wasm 是否仍保留在链上
 - `status: ProposalStatus`：当前提案状态
 
 ### 3.3 对象层数据（统一存入 voting-engine-system ProposalObject）
@@ -90,7 +89,7 @@ Runtime 配置位置：
 
 ## 4. 存储模型
 本模块无本地存储。所有提案数据、投票数据、元数据均存储在 `voting-engine-system`：
-- `ProposalData`：存放 `Proposal<T>` 摘要的 SCALE 编码
+- `ProposalData`：存放 `MODULE_TAG + Proposal<T>` 摘要的 SCALE 编码
 - `ProposalObjectMeta`：存放 runtime wasm 的对象元数据（kind / len / hash）
 - `ProposalObject`：存放 runtime wasm 原始字节
 - `ProposalMeta`：存放提案创建时间
@@ -99,7 +98,7 @@ Runtime 配置位置：
 ## 5. 外部接口
 ### 5.1 `propose_runtime_upgrade`（call index = 0）
 流程：
-1. 校验 `NrcProposeOrigin`。
+1. 校验 `ProposeOrigin`（`EnsureJointProposer`）。
 2. 校验 `reason` 与 `code` 非空。
 3. 调用 `JointVoteEngine::create_joint_proposal` 创建联合投票，获取统一 `proposal_id`。
 4. 计算 `code_hash`，构造摘要 `Proposal` 并序列化存入 `ProposalData`。
@@ -117,25 +116,24 @@ Runtime 配置位置：
 2. 从 `ProposalData` 加载提案摘要并要求当前状态为 `Voting`。
 3. 若 `approved=false`：
    - 标记 `Rejected`
-   - 设投票引擎状态为 `STATUS_EXECUTED`
+   - 保持投票引擎状态为 `STATUS_REJECTED`
    - 发出 `JointVoteFinalized`
 4. 若 `approved=true`：
    - 从 `ProposalObject` 加载 runtime wasm
    - 尝试执行 `RuntimeCodeExecutor::execute_runtime_code`
-   - 成功：标记 `Passed`
-   - 失败：标记 `ExecutionFailed`
-   - 设投票引擎状态为 `STATUS_EXECUTED`
+   - 成功：标记 `Passed`，保持投票引擎状态为 `STATUS_PASSED`
+   - 失败：标记 `ExecutionFailed`，并覆写投票引擎状态为 `STATUS_EXECUTION_FAILED`
    - 发出 `JointVoteFinalized` + 执行成功或失败事件
 5. wasm 对象不由本模块手工删除，统一交由投票引擎 90 天延迟清理。
 
 ### 5.3 `developer_direct_upgrade`（call index = 2）
 说明：
-- 开发期快捷通道：NRC 管理员直接 `set_code`，不走联合投票。
+- 开发期快捷通道：联合提案发起人（国储会或省储会管理员）直接 `set_code`，不走联合投票。
 - 仅在 `genesis-pallet` 的 `DeveloperUpgradeEnabled` 为 `true` 时可用。
 - 链进入运行期后此调用永久失效，升级必须走 `propose_runtime_upgrade` 联合投票。
 
 流程：
-1. 校验 `NrcProposeOrigin`。
+1. 校验 `ProposeOrigin`。
 2. 校验 `DeveloperUpgradeCheck::is_enabled()`，关闭则拒绝（`DeveloperUpgradeDisabled`）。
 3. 校验 `code` 非空。
 4. 计算 `code_hash`，调用 `RuntimeCodeExecutor::execute_runtime_code`。
@@ -143,19 +141,29 @@ Runtime 配置位置：
 
 权重：使用 `frame_system::set_code()` 的系统权重。
 
-### 5.4 投票引擎 STATUS_EXECUTED 标记
+### 5.4 投票引擎状态协同
 
-无论执行成功、失败还是被拒绝，本模块都会将投票引擎侧 `Proposals` 的状态直接修改为 `STATUS_EXECUTED`。
+本模块不再把所有终态统一收口到 `STATUS_EXECUTED`。当前实现与 `voting-engine-system` 的协作关系如下：
 
-实现方式：直接通过 `Proposals::<T>::mutate` 修改投票引擎存储中的 `status` 字段，而非调用 `set_status_and_emit`。
+- 联合投票通过时，投票引擎先按通用路径把提案写成 `STATUS_PASSED`
+- 联合投票拒绝时，投票引擎保持 `STATUS_REJECTED`
+- 只有“联合投票已通过，但 runtime code 执行失败”这一条路径，本模块才会调用 `override_proposal_status` 原子覆写成 `STATUS_EXECUTION_FAILED`
 
-原因：本模块的执行逻辑运行在投票引擎的回调路径中（`on_joint_vote_finalized`）。若在回调内部再调用 `set_status_and_emit`，会触发投票引擎的状态变更事件和潜在的回调链，产生回调重入风险。直接修改存储字段可以安全地标记提案为已执行，同时避免重入问题。
+原因：本模块的执行逻辑运行在投票引擎 `set_status_and_emit` 的回调事务内。执行失败时只需最小化覆写状态字段，不应在回调内部再次触发一轮状态机和事件链，以避免重入和双重事件问题。
 
-提案状态流转（投票引擎侧）：`VOTING → PASSED/REJECTED → EXECUTED`
+提案状态流转（投票引擎侧）：
+- `VOTING → PASSED`（联合投票通过且 runtime code 执行成功）
+- `VOTING → REJECTED`（联合投票拒绝）
+- `VOTING → PASSED → EXECUTION_FAILED`（联合投票通过，但 runtime code 执行失败并在回调内被覆写）
 
 说明：
-- 本模块自身的 `ProposalStatus`（`Passed`/`ExecutionFailed`/`Rejected`）与投票引擎侧的 `STATUS_EXECUTED` 是独立的状态维度。
-- 投票引擎侧的 `EXECUTED` 标记在所有终态都会设置，因为无论结果如何，投票引擎的职责（投票与回调触发）已经完成。
+- 本模块自身的 `ProposalStatus`（`Passed`/`ExecutionFailed`/`Rejected`）与投票引擎侧通用状态并非一一等价，前者表达业务结果，后者表达投票引擎主状态机结果。
+- 节点 UI / RPC 查询层如果需要面向用户展示真实升级结果，不能只读 `VotingEngineSystem::Proposals.status`；
+  必须继续解码本模块写入 `ProposalData` 的 `ProposalStatus`：
+  - `Voting` → `投票中`
+  - `Passed` → `已执行`
+  - `Rejected` → `已否决`
+  - `ExecutionFailed` → `执行失败`
 
 ## 6. 回调路径
 `JointVoteResultCallback::on_joint_vote_finalized`：
@@ -185,16 +193,20 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - 投票引擎对象层上限提升到 `10MB`
 - runtime 升级业务自身 `MaxRuntimeCodeSize` 继续保持 `5MB`
 
-### 7.3 已修复风险：Rejected 路径未设 STATUS_EXECUTED
-旧实现中 `approved=true` 路径会设投票引擎 `STATUS_EXECUTED`，但 `approved=false` 路径不设，导致两种终态行为不一致。
+### 7.3 已修复风险：投票引擎状态与业务执行结果脱节
+旧实现/旧文档把投票引擎终态过度抽象成统一的 `STATUS_EXECUTED`，无法准确表达“联合投票已通过，但 runtime code 执行失败”的差异，也容易让查询层误判真实业务结果。
 
 现已修复：
-- 三种终态（Passed/ExecutionFailed/Rejected）均统一设置 `STATUS_EXECUTED`
+- 联合投票通过且执行成功时保持 `STATUS_PASSED`
+- 联合投票拒绝时保持 `STATUS_REJECTED`
+- 联合投票通过但执行失败时覆写为 `STATUS_EXECUTION_FAILED`
+- 查询层文档已明确：展示真实升级结果时优先解码业务 `ProposalStatus`
 
 ### 7.4 已修复风险：benchmark 与实际逻辑不一致
 旧版 benchmark 存在偏差。现已修复：
 - `propose_runtime_upgrade` benchmark 改为真实 extrinsic
 - `finalize_joint_vote` 拆分为 `approved/rejected` 两条 benchmark
+- `finalize_joint_vote` benchmark 的断言已改为先跳过 `MODULE_TAG` 再解码 `ProposalData`，避免把带标签摘要误当成裸 `Proposal` 解析
 - 由于 benchmark 环境不会真的改写链上 `:code`，`finalize_joint_vote(approved)` 在权重声明中会额外叠加 `frame_system::set_code()` 的系统权重
 
 ### 7.5 推荐改进
@@ -205,21 +217,23 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - `RuntimeCodeExecutor` 职责边界
 - `ProposalStatus` 各状态语义
 - 联合投票通过后的执行/失败分叉
-- `STATUS_EXECUTED` 直接修改存储的原因
+- `STATUS_EXECUTION_FAILED` 覆写投票引擎状态的原因
 - `on_joint_vote_finalized` 回调入口
 
 ## 9. 测试覆盖
-已覆盖（14 个测试）：
-- 仅 NRC 管理员可发起提案
+已覆盖（当前单测与框架完整性检查共 16 个测试）：
+- 国储会和省储会管理员均可发起提案，非联合提案发起人拒绝
 - 提案摘要与对象数据正确分别存入 voting-engine-system
 - 联合投票拒绝进入 `Rejected`（含 wasm 对象保留到统一清理）
 - 联合投票通过并成功执行进入 `Passed`
 - 联合投票通过但执行失败进入 `ExecutionFailed`
+- 联合投票通过成功时不额外覆写投票引擎状态
+- `owns_proposal` 能正确识别本模块提案
 - 已终结的提案不可重复终结（`ProposalNotVoting`）
 - 不存在的提案终结失败（`ProposalNotFound`）
-- 开发者直升：开关开启时成功执行
+- 开发者直升：联合提案发起人可直接升级
 - 开发者直升：开关关闭时拒绝（`DeveloperUpgradeDisabled`）
-- 开发者直升：非 NRC 管理员拒绝（`BadOrigin`）
+- 开发者直升：非联合提案发起人拒绝（`BadOrigin`）
 - 开发者直升：空 code 拒绝（`EmptyRuntimeCode`）
 - GenesisConfig 构建成功
 - Runtime 完整性检查

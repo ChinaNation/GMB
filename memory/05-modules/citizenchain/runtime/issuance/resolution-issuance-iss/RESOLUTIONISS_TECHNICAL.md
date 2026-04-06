@@ -228,4 +228,4 @@ benchmark 口径：
 2. 排查异常提案与参数来源
 3. 修复后 `set_paused(false)` 恢复
 - `clear_executed` 仅用于清理可见状态，不应用于“允许重放”。
-- 治理侧语义：若治理模块调用执行失败，提案状态仍可能保持 `Passed`，需结合治理模块事件 `IssuanceExecutionFailed` 进行联动排查。
+- 治理侧语义：若治理模块调用执行失败，投票引擎提案状态会落为 `STATUS_EXECUTION_FAILED`；排障时可结合治理模块事件 `IssuanceExecutionFailed` 进一步确认失败原因。

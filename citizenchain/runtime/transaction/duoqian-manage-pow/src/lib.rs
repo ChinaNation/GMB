@@ -258,11 +258,18 @@ pub mod pallet {
     pub type DuoqianAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, DuoqianAccountOf<T>, OptionQuery>;
 
-    /// SFID 机构登记：sfid_id -> duoqian_address（由 blake2b_256 派生）
+    /// SFID 机构登记：(sfid_id, name) -> duoqian_address（由 blake2b_256 派生）。
+    /// 同一 sfid_id 可通过不同 name 注册多个多签地址。
     #[pallet::storage]
-    #[pallet::getter(fn sfid_registered_address)]
-    pub type SfidRegisteredAddress<T: Config> =
-        StorageMap<_, Blake2_128Concat, SfidIdOf<T>, T::AccountId, OptionQuery>;
+    pub type SfidRegisteredAddress<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        SfidIdOf<T>,
+        Blake2_128Concat,
+        SfidNameOf<T>,
+        T::AccountId,
+        OptionQuery,
+    >;
 
     /// SFID 机构登记反向索引：duoqian_address -> { sfid_id, nonce }
     #[pallet::storage]
@@ -501,6 +508,7 @@ pub mod pallet {
         pub fn propose_create(
             origin: OriginFor<T>,
             sfid_id: SfidIdOf<T>,
+            name: SfidNameOf<T>,
             admin_count: u32,
             duoqian_admins: DuoqianAdminsOf<T>,
             threshold: u32,
@@ -553,8 +561,8 @@ pub mod pallet {
                 Error::<T>::PermissionDenied
             );
 
-            // 解析 SFID 机构登记
-            let duoqian_address = SfidRegisteredAddress::<T>::get(&sfid_id)
+            // 解析 SFID 机构登记（sfid_id + name 双键查询）
+            let duoqian_address = SfidRegisteredAddress::<T>::get(&sfid_id, &name)
                 .ok_or(Error::<T>::InstitutionNotRegistered)?;
             let registered = AddressRegisteredSfid::<T>::get(&duoqian_address)
                 .ok_or(Error::<T>::InstitutionNotRegistered)?;
@@ -721,11 +729,11 @@ pub mod pallet {
                 Error::<T>::InvalidSfidInstitutionSignature
             );
             ensure!(
-                !SfidRegisteredAddress::<T>::contains_key(&sfid_id),
+                !SfidRegisteredAddress::<T>::contains_key(&sfid_id, &name),
                 Error::<T>::SfidAlreadyRegistered
             );
 
-            let duoqian_address = Self::derive_duoqian_address_from_sfid_id(sfid_id.as_slice())?;
+            let duoqian_address = Self::derive_duoqian_address_from_sfid_id(sfid_id.as_slice(), name.as_slice())?;
             ensure!(
                 !AddressRegisteredSfid::<T>::contains_key(&duoqian_address),
                 Error::<T>::AddressAlreadyExists
@@ -743,7 +751,7 @@ pub mod pallet {
                 Error::<T>::ProtectedSource
             );
 
-            SfidRegisteredAddress::<T>::insert(&sfid_id, &duoqian_address);
+            SfidRegisteredAddress::<T>::insert(&sfid_id, &name, &duoqian_address);
             UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
             AddressRegisteredSfid::<T>::insert(
                 &duoqian_address,
@@ -1122,13 +1130,18 @@ pub mod pallet {
             T::SS58Prefix::get().to_le_bytes()
         }
 
-        /// 从 sfid_id 派生 duoqian 地址。
+        /// 从 sfid_id（+ 可选 name）派生 duoqian 地址。
+        /// name 非空时参与派生（注册机构多签），为空时不参与（治理机构多签），保持向后兼容。
         pub fn derive_duoqian_address_from_sfid_id(
             sfid_id: &[u8],
+            name: &[u8],
         ) -> Result<T::AccountId, DispatchError> {
             let mut input = b"DUOQIAN_SFID_V1".to_vec();
             input.extend_from_slice(&Self::chain_domain_prefix());
             input.extend_from_slice(sfid_id);
+            if !name.is_empty() {
+                input.extend_from_slice(name);
+            }
             let digest = sp_runtime::traits::BlakeTwo256::hash(input.as_slice());
             T::AccountId::decode(&mut digest.as_ref())
                 .map_err(|_| Error::<T>::DerivedAddressDecodeFailed.into())
@@ -1470,6 +1483,18 @@ mod tests {
                 false
             }
         }
+
+        fn get_admin_list(
+            org: u8,
+            institution: InstitutionPalletId,
+        ) -> Option<Vec<AccountId32>> {
+            if org != ORG_DUOQIAN {
+                return None;
+            }
+            let account = AccountId32::decode(&mut &institution[..32]).ok()?;
+            let duoqian = DuoqianAccounts::<Test>::get(&account)?;
+            Some(duoqian.duoqian_admins.into_inner())
+        }
     }
 
     pub struct TestInternalAdminCountProvider;
@@ -1518,6 +1543,7 @@ mod tests {
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalAdminCountProvider = TestInternalAdminCountProvider;
         type InternalThresholdProvider = TestInternalThresholdProvider;
+        type MaxAdminsPerInstitution = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<4096>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
         type TimeProvider = TestTimeProvider;
@@ -1552,7 +1578,7 @@ mod tests {
         AccountId32::new([seed; 32])
     }
 
-    fn register_sfid_and_get_address(tag: &str) -> (SfidIdOf<Test>, AccountId32) {
+    fn register_sfid_and_get_address(tag: &str) -> (SfidIdOf<Test>, SfidNameOf<Test>, AccountId32) {
         let sfid: SfidIdOf<Test> = format!("GFR-LN001-CB0C-{}-20260222", tag)
             .as_bytes()
             .to_vec()
@@ -1574,13 +1600,13 @@ mod tests {
         assert_ok!(Duoqian::register_sfid_institution(
             RuntimeOrigin::signed(relayer()),
             sfid.clone(),
-            name,
+            name.clone(),
             register_nonce,
             signature,
         ));
-        let duoqian_address =
-            Duoqian::sfid_registered_address(sfid.clone()).expect("sfid should be registered");
-        (sfid, duoqian_address)
+        let duoqian_address = SfidRegisteredAddress::<Test>::get(&sfid, &name)
+            .expect("sfid should be registered");
+        (sfid, name, duoqian_address)
     }
 
     fn new_test_ext() -> sp_io::TestExternalities {
@@ -1624,8 +1650,8 @@ mod tests {
     #[test]
     fn register_sfid_works() {
         new_test_ext().execute_with(|| {
-            let (sfid, duoqian_address) = register_sfid_and_get_address("A001");
-            assert!(SfidRegisteredAddress::<Test>::contains_key(&sfid));
+            let (sfid, name, duoqian_address) = register_sfid_and_get_address("A001");
+            assert!(SfidRegisteredAddress::<Test>::contains_key(&sfid, &name));
             assert!(AddressRegisteredSfid::<Test>::contains_key(
                 &duoqian_address
             ));
@@ -1667,13 +1693,14 @@ mod tests {
     #[test]
     fn propose_create_and_vote_to_activate() {
         new_test_ext().execute_with(|| {
-            let (sfid, duoqian_address) = register_sfid_and_get_address("B001");
+            let (sfid, name, duoqian_address) = register_sfid_and_get_address("B001");
             let admins = make_admins(&[1, 2, 3]);
 
             // 发起创建提案
             assert_ok!(Duoqian::propose_create(
                 RuntimeOrigin::signed(admin(1)),
                 sfid.clone(),
+                name.clone(),
                 3,
                 admins.clone(),
                 2,
@@ -1711,7 +1738,7 @@ mod tests {
     #[test]
     fn propose_close_and_vote_to_close() {
         new_test_ext().execute_with(|| {
-            let (sfid, duoqian_address) = register_sfid_and_get_address("C001");
+            let (sfid, name, duoqian_address) = register_sfid_and_get_address("C001");
             let admins = make_admins(&[1, 2, 3]);
             let beneficiary = admin(4);
 
@@ -1719,6 +1746,7 @@ mod tests {
             assert_ok!(Duoqian::propose_create(
                 RuntimeOrigin::signed(admin(1)),
                 sfid.clone(),
+                name.clone(),
                 3,
                 admins.clone(),
                 2,
@@ -1774,7 +1802,7 @@ mod tests {
     #[test]
     fn non_admin_cannot_propose_create() {
         new_test_ext().execute_with(|| {
-            let (sfid, _) = register_sfid_and_get_address("D001");
+            let (sfid, name, _) = register_sfid_and_get_address("D001");
             let admins = make_admins(&[1, 2, 3]);
 
             // admin(4) 不在管理员列表中
@@ -1782,6 +1810,7 @@ mod tests {
                 Duoqian::propose_create(
                     RuntimeOrigin::signed(admin(4)),
                     sfid.clone(),
+                    name.clone(),
                     3,
                     admins,
                     2,
@@ -1795,12 +1824,13 @@ mod tests {
     #[test]
     fn non_admin_cannot_vote() {
         new_test_ext().execute_with(|| {
-            let (sfid, _) = register_sfid_and_get_address("E001");
+            let (sfid, name, _) = register_sfid_and_get_address("E001");
             let admins = make_admins(&[1, 2, 3]);
 
             assert_ok!(Duoqian::propose_create(
                 RuntimeOrigin::signed(admin(1)),
                 sfid.clone(),
+                name.clone(),
                 3,
                 admins,
                 2,
@@ -1820,13 +1850,14 @@ mod tests {
     #[test]
     fn cannot_close_pending_account() {
         new_test_ext().execute_with(|| {
-            let (sfid, duoqian_address) = register_sfid_and_get_address("F001");
+            let (sfid, name, duoqian_address) = register_sfid_and_get_address("F001");
             let admins = make_admins(&[1, 2, 3]);
 
             // propose create 但不投票通过
             assert_ok!(Duoqian::propose_create(
                 RuntimeOrigin::signed(admin(1)),
                 sfid,
+                name.clone(),
                 3,
                 admins,
                 2,
@@ -1843,12 +1874,13 @@ mod tests {
     #[test]
     fn propose_close_is_blocked_when_institution_guard_denies_source() {
         new_test_ext().execute_with(|| {
-            let (sfid, duoqian_address) = register_sfid_and_get_address("F002");
+            let (sfid, name, duoqian_address) = register_sfid_and_get_address("F002");
             let admins = make_admins(&[1, 2, 3]);
 
             assert_ok!(Duoqian::propose_create(
                 RuntimeOrigin::signed(admin(1)),
                 sfid,
+                name.clone(),
                 3,
                 admins,
                 2,
@@ -1881,7 +1913,7 @@ mod tests {
     #[test]
     fn duplicate_admin_is_rejected() {
         new_test_ext().execute_with(|| {
-            let (sfid, _) = register_sfid_and_get_address("G001");
+            let (sfid, name, _) = register_sfid_and_get_address("G001");
             let admins: DuoqianAdminsOf<Test> = vec![admin(1), admin(1), admin(2)]
                 .try_into()
                 .expect("should fit");
@@ -1890,6 +1922,7 @@ mod tests {
                 Duoqian::propose_create(
                     RuntimeOrigin::signed(admin(1)),
                     sfid,
+                    name.clone(),
                     3,
                     admins,
                     2,
@@ -1903,13 +1936,14 @@ mod tests {
     #[test]
     fn amount_below_minimum_is_rejected() {
         new_test_ext().execute_with(|| {
-            let (sfid, _) = register_sfid_and_get_address("H001");
+            let (sfid, name, _) = register_sfid_and_get_address("H001");
             let admins = make_admins(&[1, 2, 3]);
 
             assert_noop!(
                 Duoqian::propose_create(
                     RuntimeOrigin::signed(admin(1)),
                     sfid,
+                    name.clone(),
                     3,
                     admins,
                     2,
@@ -1926,13 +1960,14 @@ mod tests {
     #[test]
     fn duplicate_close_proposal_is_rejected() {
         new_test_ext().execute_with(|| {
-            let (sfid, duoqian_address) = register_sfid_and_get_address("I001");
+            let (sfid, name, duoqian_address) = register_sfid_and_get_address("I001");
             let admins = make_admins(&[1, 2]);
 
             // 创建并激活
             assert_ok!(Duoqian::propose_create(
                 RuntimeOrigin::signed(admin(1)),
                 sfid,
+                name.clone(),
                 2,
                 admins,
                 2,
@@ -1967,12 +2002,13 @@ mod tests {
     #[test]
     fn execute_create_failure_releases_address() {
         new_test_ext().execute_with(|| {
-            let (sfid, duoqian_address) = register_sfid_and_get_address("J001");
+            let (sfid, name, duoqian_address) = register_sfid_and_get_address("J001");
             let admins = make_admins(&[1, 2]);
 
             assert_ok!(Duoqian::propose_create(
                 RuntimeOrigin::signed(admin(1)),
                 sfid.clone(),
+                name.clone(),
                 2,
                 admins.clone(),
                 2,
