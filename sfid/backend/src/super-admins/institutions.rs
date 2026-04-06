@@ -871,16 +871,16 @@ fn resolve_admin_display_name(store: &Store, pubkey: &str) -> String {
 }
 
 #[derive(Debug, Clone)]
-struct ChainInstitutionRegisterReceipt {
-    genesis_hash: String,
-    sfid_id: String,
-    register_nonce: String,
-    signature: String,
-    tx_hash: String,
-    block_number: u64,
+pub(super) struct ChainInstitutionRegisterReceipt {
+    pub(super) genesis_hash: String,
+    pub(super) sfid_id: String,
+    pub(super) register_nonce: String,
+    pub(super) signature: String,
+    pub(super) tx_hash: String,
+    pub(super) block_number: u64,
 }
 
-fn validate_sfid_id_format(raw: &str) -> Result<String, &'static str> {
+pub(super) fn validate_sfid_id_format(raw: &str) -> Result<String, &'static str> {
     let normalized = raw.trim();
     if normalized.is_empty() {
         return Err("site_sfid is required");
@@ -986,7 +986,7 @@ fn resolve_chain_signer_material(state: &AppState) -> Result<(String, SensitiveS
     Ok((signer_pubkey, signer_seed))
 }
 
-async fn submit_register_sfid_institution_extrinsic(
+pub(super) async fn submit_register_sfid_institution_extrinsic(
     state: &AppState,
     site_sfid: &str,
     institution_name: &str,
@@ -1108,7 +1108,7 @@ fn is_trusted_attestor_pubkey(state: &AppState, public_key: &str) -> bool {
 ///
 /// site_sfid 格式：`{a3}-{r5}-{t2p1c1}-{n9}-{d8}`
 /// r5 段 = 2 位字母省码 + 3 位数字城市码。
-fn extract_province_code_from_sfid(site_sfid: &str) -> String {
+pub(super) fn extract_province_code_from_sfid(site_sfid: &str) -> String {
     let segments: Vec<&str> = site_sfid.split('-').collect();
     if segments.len() >= 2 && segments[1].len() >= 2 {
         segments[1][..2].to_string()

@@ -36,7 +36,7 @@ mod operator_admins;
 mod sfid;
 #[path = "super-admins/mod.rs"]
 mod super_admins;
-use business::scope::{in_scope, in_scope_cpms_site, in_scope_pending};
+use business::scope::{in_scope, in_scope_cpms_site, in_scope_multisig, in_scope_pending};
 use key_admins::chain_keyring::ChainKeyringState;
 
 pub(crate) use app_core::http_security::*;
@@ -789,6 +789,15 @@ fn main() {
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/revoke",
                 put(super_admins::revoke_cpms_keys),
+            )
+            // ── 多签管理 ──
+            .route(
+                "/api/v1/admin/multisig-sfids",
+                get(super_admins::list_multisig_sfids),
+            )
+            .route(
+                "/api/v1/admin/multisig-sfids/generate",
+                post(super_admins::generate_multisig_sfid),
             )
             .route(
                 "/api/v1/admin/cpms-status/scan",

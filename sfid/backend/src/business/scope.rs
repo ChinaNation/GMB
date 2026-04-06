@@ -1,5 +1,5 @@
 use crate::sfid::province::super_admin_province;
-use crate::{AdminRole, BindingRecord, CpmsSiteKeys, PendingRequest, Store};
+use crate::{AdminRole, BindingRecord, CpmsSiteKeys, MultisigSfidRecord, PendingRequest, Store};
 
 pub(crate) fn province_scope_for_role(
     store: &Store,
@@ -52,6 +52,13 @@ pub(crate) fn in_scope_pending(pending: &PendingRequest, admin_province: Option<
 pub(crate) fn in_scope_cpms_site(site: &CpmsSiteKeys, admin_province: Option<&str>) -> bool {
     match admin_province {
         Some(scope) => site.admin_province == scope,
+        None => true,
+    }
+}
+
+pub(crate) fn in_scope_multisig(record: &MultisigSfidRecord, admin_province: Option<&str>) -> bool {
+    match admin_province {
+        Some(scope) => record.province == scope,
         None => true,
     }
 }
