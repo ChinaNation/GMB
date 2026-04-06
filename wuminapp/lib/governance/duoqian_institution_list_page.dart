@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -6,8 +7,12 @@ import 'package:isar/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../Isar/wallet_isar.dart';
+import '../qr/contact/contact_qr_models.dart';
+import '../qr/pages/qr_scan_page.dart' show QrScanPage, QrScanMode;
 import 'duoqian_create_proposal_page.dart';
 import 'duoqian_institution_info_page.dart';
+import 'duoqian_manage_models.dart';
+import 'duoqian_manage_service.dart';
 import 'institution_data.dart';
 import 'personal_duoqian_create_page.dart';
 import '../wallet/core/wallet_manager.dart';
@@ -124,6 +129,16 @@ class _DuoqianInstitutionListPageState
                 _openCreatePersonal();
               },
             ),
+            const Divider(height: 1),
+            ListTile(
+              leading: Icon(Icons.qr_code_scanner, color: AppTheme.primaryDark),
+              title: const Text('扫码加入多签账户'),
+              subtitle: const Text('扫描多签账户二维码加入'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _scanJoinDuoqian();
+              },
+            ),
           ],
         ),
       ),
@@ -168,6 +183,132 @@ class _DuoqianInstitutionListPageState
       ),
     );
     if (created == true) await _load();
+  }
+
+  // ──── 扫码加入多签 ────
+
+  Future<void> _scanJoinDuoqian() async {
+    final result = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const QrScanPage(
+          mode: QrScanMode.raw,
+          customTitle: '扫码加入多签账户',
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    // 解析二维码
+    UserQrPayload qrPayload;
+    try {
+      final json = jsonDecode(result.trim());
+      if (json is! Map<String, dynamic>) throw const FormatException('格式错误');
+      if (json['proto'] != UserQrPayload.protocol) throw const FormatException('不是用户码');
+      qrPayload = UserQrPayload.fromJson(json);
+      if (qrPayload.purpose != 'duoqian') throw const FormatException('不是多签账户码');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('请扫描多签账户二维码：$e'), backgroundColor: AppTheme.danger),
+      );
+      return;
+    }
+
+    // SS58 → hex
+    String hexAddress;
+    try {
+      final pubkey = Keyring().decodeAddress(qrPayload.address);
+      hexAddress = pubkey.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('多签地址无效'), backgroundColor: AppTheme.danger),
+      );
+      return;
+    }
+
+    // 检查本地是否已存在
+    final isar = await WalletIsar.instance.db();
+    final existsPersonal = await isar.personalDuoqianEntitys
+        .filter()
+        .duoqianAddressEqualTo(hexAddress)
+        .findFirst();
+    final existsInstitution = await isar.duoqianInstitutionEntitys
+        .filter()
+        .duoqianAddressEqualTo(hexAddress)
+        .findFirst();
+    if (existsPersonal != null || existsInstitution != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('该多签账户已在列表中')),
+      );
+      return;
+    }
+
+    // 查链上 DuoqianAccounts
+    final manageService = DuoqianManageService();
+    final accountInfo = await manageService.fetchDuoqianAccount(hexAddress);
+    if (accountInfo == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('链上未找到该多签账户'), backgroundColor: AppTheme.danger),
+      );
+      return;
+    }
+
+    // 检查用户钱包公钥是否在管理员列表中
+    final wallets = await _getWallets();
+    WalletProfile? matchedWallet;
+    for (final w in wallets) {
+      var pk = w.pubkeyHex.toLowerCase();
+      if (pk.startsWith('0x')) pk = pk.substring(2);
+      if (accountInfo.adminPubkeys.contains(pk)) {
+        matchedWallet = w;
+        break;
+      }
+    }
+    if (matchedWallet == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('你不是该多签账户的管理员'), backgroundColor: AppTheme.danger),
+      );
+      return;
+    }
+
+    // Active → 直接保存
+    if (accountInfo.status == DuoqianStatus.active) {
+      await _saveDuoqianToLocal(hexAddress, qrPayload.name);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已加入多签账户「${qrPayload.name}」'), backgroundColor: AppTheme.success),
+      );
+      await _load();
+      return;
+    }
+
+    // Pending → 保存并提示用户去投票
+    await _saveDuoqianToLocal(hexAddress, qrPayload.name);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已加入「${qrPayload.name}」，该账户待投票激活'),
+        backgroundColor: AppTheme.warning,
+      ),
+    );
+    await _load();
+  }
+
+  Future<void> _saveDuoqianToLocal(String hexAddress, String name) async {
+    final isar = await WalletIsar.instance.db();
+    await isar.writeTxn(() async {
+      final entity = PersonalDuoqianEntity()
+        ..duoqianAddress = hexAddress
+        ..name = name
+        ..creatorAddress = ''
+        ..addedAtMillis = DateTime.now().millisecondsSinceEpoch;
+      await isar.personalDuoqianEntitys.put(entity);
+    });
   }
 
   Future<List<WalletProfile>> _getWallets() async {
@@ -217,7 +358,7 @@ class _DuoqianInstitutionListPageState
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
-          isSelect ? '选择多签账户' : '多签',
+          isSelect ? '选择多签账户' : '多签账户',
           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,

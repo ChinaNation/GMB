@@ -382,13 +382,35 @@ class TransferProposalService {
         } catch (_) {}
       }
 
+      // 如果联合提案且不是 runtime 升级，尝试检测决议发行/销毁 TAG
+      String? resIssuanceSummary;
+      String? resDestroySummary;
+      if (meta.kind == 1 && runtimeUpgradeDetail == null) {
+        try {
+          final raw = await fetchProposalDataRaw(meta.proposalId);
+          if (raw != null) {
+            final tag = _detectJointProposalTag(raw);
+            if (tag == 'res-iss') {
+              resIssuanceSummary = '决议发行提案';
+            } else if (tag == 'res-dst') {
+              resDestroySummary = '决议销毁提案';
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 多签管理提案不在治理列表中显示
+      if (createDuoqianDetail != null || closeDuoqianDetail != null) {
+        continue;
+      }
+
       results.add(ProposalWithDetail(
         meta: meta,
         transferDetail: transferDetail?.copyWithStatus(meta.status),
         runtimeUpgradeDetail: runtimeUpgradeDetail,
-        createDuoqianDetail: createDuoqianDetail?.copyWithStatus(meta.status),
-        closeDuoqianDetail: closeDuoqianDetail?.copyWithStatus(meta.status),
         feeRateDetail: feeRateDetail,
+        resolutionIssuanceSummary: resIssuanceSummary,
+        resolutionDestroySummary: resDestroySummary,
       ));
     }
 
@@ -523,10 +545,15 @@ class TransferProposalService {
       }
     }
 
-    // 组装结果
+    // 组装结果（跳过多签管理提案，这些在多签账户详情页单独展示）
     for (var id = startId; id > startId - count && id >= 0; id--) {
       final meta = cachedMetas[id];
       if (meta == null) continue;
+      // 多签管理提案不在治理列表中显示
+      if (cachedCreateDuoqianDetails.containsKey(id) ||
+          cachedCloseDuoqianDetails.containsKey(id)) {
+        continue;
+      }
       final transferDetail = cachedTransferDetails[id];
       final runtimeUpgradeDetail = cachedRuntimeUpgradeDetails[id];
       final createDuoqianDetail = cachedCreateDuoqianDetails[id];
@@ -542,6 +569,22 @@ class TransferProposalService {
           feeRateDetail = await fetchRateProposalAction(id);
         } catch (_) {}
       }
+      // 联合提案且不是 runtime 升级，尝试检测决议发行/销毁
+      String? resIssuanceSummary;
+      String? resDestroySummary;
+      if (meta.kind == 1 && runtimeUpgradeDetail == null) {
+        try {
+          final raw = await fetchProposalDataRaw(id);
+          if (raw != null) {
+            final tag = _detectJointProposalTag(raw);
+            if (tag == 'res-iss') {
+              resIssuanceSummary = '决议发行提案';
+            } else if (tag == 'res-dst') {
+              resDestroySummary = '决议销毁提案';
+            }
+          }
+        } catch (_) {}
+      }
       results.add(ProposalWithDetail(
         meta: meta,
         transferDetail: transferDetail?.copyWithStatus(meta.status),
@@ -549,6 +592,8 @@ class TransferProposalService {
         createDuoqianDetail: createDuoqianDetail?.copyWithStatus(meta.status),
         closeDuoqianDetail: closeDuoqianDetail?.copyWithStatus(meta.status),
         feeRateDetail: feeRateDetail,
+        resolutionIssuanceSummary: resIssuanceSummary,
+        resolutionDestroySummary: resDestroySummary,
       ));
     }
 
@@ -582,19 +627,7 @@ class TransferProposalService {
           visibleProposals.add(proposal);
           continue;
         }
-        // 多签管理提案：通过 duoqianAddress 匹配（institutionBytes 前 32 字节）
-        final createDetail = proposal.createDuoqianDetail;
-        if (createDetail != null &&
-            _bytesEqual(createDetail.institutionBytes, institutionBytes)) {
-          visibleProposals.add(proposal);
-          continue;
-        }
-        final closeDetail = proposal.closeDuoqianDetail;
-        if (closeDetail != null &&
-            _bytesEqual(closeDetail.institutionBytes, institutionBytes)) {
-          visibleProposals.add(proposal);
-          continue;
-        }
+        // 中文注释：多签管理提案已在 fetchProposalPage 中过滤，此处不再匹配。
         // 内部投票提案（费率设置等）：通过 institutionBytes 匹配
         if (proposal.meta.kind == 0 &&
             proposal.meta.institutionBytes != null &&
@@ -673,6 +706,44 @@ class TransferProposalService {
       internalOrg: internalOrg,
       institutionBytes: institutionBytes,
     );
+  }
+
+  /// 读取原始 ProposalData 存储字节。
+  Future<Uint8List?> fetchProposalDataRaw(int proposalId) async {
+    final key = _buildStorageKey(
+      'VotingEngineSystem',
+      'ProposalData',
+      _u64ToLeBytes(proposalId),
+    );
+    return _rpc.fetchStorage('0x${_hexEncode(key)}');
+  }
+
+  /// 检测联合提案 ProposalData 的 MODULE_TAG 前缀。
+  /// 返回 'rt-upg'、'res-iss'、'res-dst' 或 null。
+  static String? _detectJointProposalTag(Uint8List raw) {
+    if (raw.length < 2) return null;
+    // BoundedVec<u8>：Compact<len> + bytes
+    final first = raw[0];
+    final mode = first & 0x03;
+    int offset;
+    if (mode == 0) {
+      offset = 1;
+    } else if (mode == 1) {
+      offset = 2;
+    } else if (mode == 2) {
+      offset = 4;
+    } else {
+      return null;
+    }
+    if (offset + 7 > raw.length) return null;
+    final tag = String.fromCharCodes(raw.sublist(offset, offset + 7));
+    if (tag == 'res-iss') return 'res-iss';
+    if (tag == 'res-dst') return 'res-dst';
+    if (offset + 6 <= raw.length) {
+      final tag6 = String.fromCharCodes(raw.sublist(offset, offset + 6));
+      if (tag6 == 'rt-upg') return 'rt-upg';
+    }
+    return null;
   }
 
   /// 从原始 SCALE 字节解码 ProposalData（BoundedVec<u8> → TransferAction）。
@@ -1315,6 +1386,8 @@ class ProposalWithDetail {
     this.createDuoqianDetail,
     this.closeDuoqianDetail,
     this.feeRateDetail,
+    this.resolutionIssuanceSummary,
+    this.resolutionDestroySummary,
   });
 
   final ProposalMeta meta;
@@ -1333,4 +1406,10 @@ class ProposalWithDetail {
 
   /// 费率提案详情。
   final FeeRateProposalInfo? feeRateDetail;
+
+  /// 决议发行提案摘要（仅列表展示用）。
+  final String? resolutionIssuanceSummary;
+
+  /// 决议销毁提案摘要（仅列表展示用）。
+  final String? resolutionDestroySummary;
 }

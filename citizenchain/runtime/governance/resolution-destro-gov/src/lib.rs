@@ -15,7 +15,7 @@ use primitives::china::china_ch::{
 };
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED,
+    InstitutionPalletId, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -194,7 +194,10 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 对“决议销毁”提案投票，达到阈值通过后自动执行销毁。
+        /// 对”决议销毁”提案投票，达到阈值通过后自动执行销毁。
+        ///
+        /// 权限双重校验：业务层 `is_internal_admin`（实时名单）+ 投票引擎 `is_admin_in_snapshot`（快照）。
+        /// 实时检查确保已被替换的管理员无法继续投票，快照确保投票期间名单稳定。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::vote_destroy())]
         pub fn vote_destroy(
@@ -234,6 +237,12 @@ pub mod pallet {
                     if approve
                         && Self::try_execute_destroy_from_action(proposal_id, action).is_err()
                     {
+                        // 中文注释：执行失败，覆写投票引擎状态为 STATUS_EXECUTION_FAILED，
+                        // 与 resolution-issuance-gov 保持一致。手动 execute_destroy 仍可重试。
+                        let _ = voting_engine_system::Pallet::<T>::override_proposal_status(
+                            proposal_id,
+                            STATUS_EXECUTION_FAILED,
+                        );
                         Self::deposit_event(Event::<T>::DestroyExecutionFailed { proposal_id });
                     }
                 }
@@ -288,8 +297,11 @@ pub mod pallet {
         ) -> DispatchResult {
             let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
+            // 中文注释：允许 STATUS_PASSED 和 STATUS_EXECUTION_FAILED 状态执行，
+            // 后者是自动执行失败后手动重试的入口。
             ensure!(
-                proposal.status == STATUS_PASSED,
+                proposal.status == STATUS_PASSED
+                    || proposal.status == STATUS_EXECUTION_FAILED,
                 Error::<T>::ProposalNotPassed
             );
 
@@ -335,7 +347,7 @@ mod tests {
     };
     use frame_system as system;
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-    use voting_engine_system::{STATUS_PASSED, STATUS_REJECTED};
+    use voting_engine_system::STATUS_REJECTED;
 
     type Balance = u128;
     type Block = frame_system::mocking::MockBlock<Test>;
@@ -458,6 +470,35 @@ mod tests {
                 _ => false,
             }
         }
+
+        fn get_admin_list(
+            org: u8,
+            institution: InstitutionPalletId,
+        ) -> Option<sp_std::vec::Vec<AccountId32>> {
+            match org {
+                ORG_NRC | ORG_PRC => CHINA_CB
+                    .iter()
+                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .map(|n| {
+                        n.duoqian_admins
+                            .iter()
+                            .copied()
+                            .map(AccountId32::new)
+                            .collect()
+                    }),
+                ORG_PRB => CHINA_CH
+                    .iter()
+                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .map(|n| {
+                        n.duoqian_admins
+                            .iter()
+                            .copied()
+                            .map(AccountId32::new)
+                            .collect()
+                    }),
+                _ => None,
+            }
+        }
     }
 
     pub struct TestTimeProvider;
@@ -471,6 +512,7 @@ mod tests {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
+        type MaxAdminsPerInstitution = ConstU32<32>;
         type MaxAutoFinalizePerBlock = ConstU32<64>;
         type MaxProposalsPerExpiry = ConstU32<128>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
@@ -688,7 +730,7 @@ mod tests {
                 ));
             }
 
-            // 第 13 票应被记录，自动执行失败不回滚投票。
+            // 第 13 票应被记录，自动执行失败不回滚投票，状态覆写为 EXECUTION_FAILED。
             assert_ok!(ResolutionDestroGov::vote_destroy(
                 RuntimeOrigin::signed(nrc_admin(12)),
                 pid,
@@ -698,7 +740,7 @@ mod tests {
                 voting_engine_system::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
-                STATUS_PASSED
+                STATUS_EXECUTION_FAILED
             );
             assert_eq!(
                 Balances::free_balance(institution_account(institution)),
@@ -804,15 +846,17 @@ mod tests {
                 ));
             }
 
+            // 自动执行失败后状态为 STATUS_EXECUTION_FAILED
             assert_eq!(
                 voting_engine_system::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
-                STATUS_PASSED
+                STATUS_EXECUTION_FAILED
             );
             assert_eq!(Balances::free_balance(&account), 1_000);
             assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
 
+            // 补充余额后手动重试执行
             let _ = Balances::deposit_creating(&account, 200);
             assert_ok!(ResolutionDestroGov::execute_destroy(
                 RuntimeOrigin::signed(nrc_admin(0)),

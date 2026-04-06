@@ -222,7 +222,18 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
     try {
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
 
+      // 热钱包：先认证，后续用本地签名；冷钱包：走 QR 签名。
+      WalletManager? hotWalletManager;
+      if (wallet.isHotWallet) {
+        hotWalletManager = WalletManager();
+        await hotWalletManager.authenticateForSigning();
+      }
+
       Future<Uint8List> signCallback(Uint8List payload) async {
+        if (hotWalletManager != null) {
+          return await hotWalletManager.signWithWalletNoAuth(wallet.walletIndex, payload);
+        }
+        // 冷钱包 QR 签名
         final qrSigner = QrSigner();
         final voteText = approve ? '赞成' : '反对';
         final rv = await ChainRpc().fetchRuntimeVersion();

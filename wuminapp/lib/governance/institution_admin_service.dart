@@ -67,11 +67,23 @@ class InstitutionAdminService {
   // Storage key 构造
   // ---------------------------------------------------------------------------
 
+  /// "personal:" 前缀，用于个人多签 shenfenId。
+  static const String _personalPrefix = 'personal:';
+
   Future<InstitutionAdminState> _fetchState(String shenfenId) async {
     final cached = _cache[shenfenId];
     if (cached != null) return cached;
 
-    final duoqianAddress = registeredDuoqianAddressFromIdentity(shenfenId);
+    // 注册多签（duoqian: 前缀）和个人多签（personal: 前缀）都走 DuoqianAccounts 查询
+    String? duoqianAddress = registeredDuoqianAddressFromIdentity(shenfenId);
+    if (duoqianAddress == null && shenfenId.startsWith(_personalPrefix)) {
+      final hex = shenfenId.substring(_personalPrefix.length);
+      final normalized = hex.startsWith('0x') ? hex.substring(2) : hex;
+      if (normalized.length == 64) {
+        duoqianAddress = normalized;
+      }
+    }
+
     final state = duoqianAddress == null
         ? await _fetchGovernanceAdmins(shenfenId)
         : await _fetchRegisteredDuoqianState(duoqianAddress);

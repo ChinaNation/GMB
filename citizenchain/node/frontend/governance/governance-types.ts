@@ -83,6 +83,11 @@ export type GovernanceOverview = {
   warning: string | null;
 };
 
+export type AdminInfo = {
+  pubkeyHex: string;
+  balanceFen: string | null;
+};
+
 export type InstitutionDetail = {
   name: string;
   shenfenId: string;
@@ -90,7 +95,7 @@ export type InstitutionDetail = {
   orgTypeLabel: string;
   duoqianAddress: string;
   balanceFen: string | null;
-  admins: string[];
+  admins: AdminInfo[];
   internalThreshold: number;
   jointVoteWeight: number;
   stakingAddress: string | null;
@@ -155,7 +160,6 @@ export type RuntimeUpgradeDetail = {
   proposerHex: string;
   reason: string;
   codeHashHex: string;
-  hasCode: boolean;
   status: number;
 };
 

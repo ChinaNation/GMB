@@ -30,7 +30,7 @@
 - SFID 验签主备账户轮换必须保证三把账户两两不同，避免主备塌缩成同一把密钥。
 - 绑定凭证与投票凭证必须带链域隔离信息（`genesis_hash`），防止跨链重放。
 - 绑定 nonce（`UsedBindNonce`）当前为永久存储，无回收机制。以 `CITIZEN_LIGHTNODE_MAX_COUNT` 为上界，存储增长有限。
-- 投票 nonce 当前没有按块自动回收机制，运维流程必须在提案结束时通过 `cleanup_vote_credentials` 触发清理，否则会产生长期状态膨胀。当前清理实现使用 `clear_prefix(u32::MAX)` 一次性清除，如果单提案投票量极大，需考���分批清理。
+- 投票 nonce 当前没有按块自动回收机制，运维流程必须在提案结束时通过 `cleanup_vote_credentials` 触发清理，否则会产生长期状态膨胀。当前清理实现使用 `clear_prefix(u32::MAX)` 一次性清除，如果单提案投票量极大，需考虑分批清理。
 
 ### 0.5 Runtime 对齐基线（冻结）
 1. 以链上 Runtime 为唯一验签真值。
@@ -135,7 +135,8 @@ Runtime 配置与验签桥接：
 
 weight：
 - `T::WeightInfo::bind_sfid().saturating_add(T::OnSfidBound::on_sfid_bound_weight())`
-- 由 Substrate benchmark CLI 自动生成（见 `src/weights.rs`）。
+- `src/weights.rs` 当前仍是旧代码路径生成的产物，proof 注释仍引用已删除的旧存储名（如 `UsedCredentialNonce`、`SfidToAccount`、`AccountToSfid`、`CredentialNoncesByExpiry`）。
+- 当前文件只能视为待重生的历史 benchmark 结果，不能当作完全贴合现状的存储访问说明。
 
 ### 5.2 `unbind_sfid(origin)`（call index = 1）
 校验：
@@ -294,7 +295,7 @@ weight：
 - `BindingIdAlreadyBoundToAnotherAccount`：该 binding_id 已被另一个账户绑定。
 - `SameBindingIdAlreadyBound`：该账户已绑定到同一 binding_id。
 - `NotBound`：账户当前未绑定 SFID。
-- `UnauthorizedSfidOperator`：调��者不是备用账户，无权轮换。
+- `UnauthorizedSfidOperator`：调用者不是备用账户，无权轮换。
 - `DuplicateSfidKey`：新备用账户与现有账户重复。
 
 ---

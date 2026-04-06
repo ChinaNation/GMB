@@ -28,7 +28,7 @@ fn find_safe_sfid<T: Config>() -> Result<(SfidIdOf<T>, T::AccountId), BenchmarkE
             .map_err(|_| BenchmarkError::Stop("benchmark sfid id should fit"))?;
 
         let Ok(duoqian_address) =
-            Pallet::<T>::derive_duoqian_address_from_sfid_id(sfid_id.as_slice())
+            Pallet::<T>::derive_duoqian_address_from_sfid_id(sfid_id.as_slice(), b"")
         else {
             continue;
         };

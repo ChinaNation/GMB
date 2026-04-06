@@ -32,6 +32,10 @@ fn institution_account<T: Config>(institution: InstitutionPalletId) -> T::Accoun
     decode_account::<T>(raw)
 }
 
+fn last_proposal_id<T: Config>() -> u64 {
+    voting_engine_system::Pallet::<T>::next_proposal_id().saturating_sub(1)
+}
+
 #[benchmarks]
 mod benchmarks {
     use super::*;
@@ -50,7 +54,8 @@ mod benchmarks {
             amount,
         );
 
-        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(0).is_some());
+        let proposal_id = last_proposal_id::<T>();
+        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id).is_some());
     }
 
     #[benchmark]
@@ -68,17 +73,20 @@ mod benchmarks {
             amount,
         )
         .is_ok());
+        let proposal_id = last_proposal_id::<T>();
 
         let institution_account = institution_account::<T>(institution);
         let _ = T::Currency::deposit_creating(&institution_account, top_up);
 
         for i in 0..5 {
             let voter = prc_admin::<T>(i);
-            assert!(T::InternalVoteEngine::cast_internal_vote(voter, 0, true).is_ok());
+            assert!(
+                T::InternalVoteEngine::cast_internal_vote(voter, proposal_id, true).is_ok()
+            );
         }
 
         #[extrinsic_call]
-        vote_destroy(RawOrigin::Signed(final_voter), 0, true);
+        vote_destroy(RawOrigin::Signed(final_voter), proposal_id, true);
 
         // 执行完成后提案数据仍在 voting-engine-system 中（由统一清理流程处理）。
     }
@@ -98,17 +106,20 @@ mod benchmarks {
             amount,
         )
         .is_ok());
+        let proposal_id = last_proposal_id::<T>();
 
         let institution_account = institution_account::<T>(institution);
         let _ = T::Currency::deposit_creating(&institution_account, top_up);
 
         for i in 0..6 {
             let voter = prc_admin::<T>(i);
-            assert!(T::InternalVoteEngine::cast_internal_vote(voter, 0, true).is_ok());
+            assert!(
+                T::InternalVoteEngine::cast_internal_vote(voter, proposal_id, true).is_ok()
+            );
         }
 
         #[extrinsic_call]
-        execute_destroy(RawOrigin::Signed(caller), 0);
+        execute_destroy(RawOrigin::Signed(caller), proposal_id);
 
         // 执行完成后提案数据仍在 voting-engine-system 中（由统一清理流程处理）。
     }
