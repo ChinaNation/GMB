@@ -39,6 +39,7 @@ pub(crate) fn seed_super_admins(state: &AppState) {
                 created_by: "SYSTEM".to_string(),
                 created_at: now,
                 updated_at: Some(now),
+                city: String::new(),
             },
         );
         store
@@ -104,6 +105,7 @@ pub(crate) fn sync_builtin_institution_admins(state: &AppState) {
                 created_by: "SYSTEM".to_string(),
                 created_at: now,
                 updated_at: Some(now),
+                city: String::new(),
             },
         );
         store

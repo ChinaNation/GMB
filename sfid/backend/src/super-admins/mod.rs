@@ -9,7 +9,7 @@ pub(crate) use institutions::{
     generate_cpms_institution_sfid_qr, list_cpms_keys, register_cpms, reissue_install_token,
     revoke_cpms_keys, revoke_install_token,
 };
-pub(crate) use multisig::{generate_multisig_sfid, list_multisig_sfids};
+pub(crate) use multisig::{delete_multisig_sfid, generate_multisig_sfid, list_multisig_sfids};
 pub(crate) use operators::{
     create_operator, delete_operator, list_operators, update_operator, update_operator_status,
 };

@@ -4,6 +4,8 @@ export type TokenAdminAuth = {
   role: 'KEY_ADMIN' | 'INSTITUTION_ADMIN' | 'SYSTEM_ADMIN';
   admin_name?: string;
   admin_province?: string | null;
+  /// 仅 SystemAdmin 有值：操作员所属的市（用于多签管理页锁定 / 列表过滤）
+  admin_city?: string | null;
 };
 
 export type AdminAuth = TokenAdminAuth;
@@ -51,6 +53,7 @@ export type AdminAuthCheck = {
   role: 'KEY_ADMIN' | 'INSTITUTION_ADMIN' | 'SYSTEM_ADMIN';
   admin_name: string;
   admin_province?: string | null;
+  admin_city?: string | null;
 };
 
 export type AdminIdentifyResult = {
@@ -59,6 +62,7 @@ export type AdminIdentifyResult = {
   status: 'ACTIVE' | 'DISABLED';
   admin_name: string;
   admin_province?: string | null;
+  admin_city?: string | null;
 };
 
 export type AdminChallengeResult = {
@@ -266,14 +270,18 @@ export type OperatorRow = {
   created_by: string;
   created_by_name?: string;
   created_at: string;
+  city: string;
 };
 
+// 机构管理员对外行（API 返回结构）。
+//
+// SFID 业务语义：机构永久存在（43 个省份），机构管理员只是当前替机构发声的人，
+// 不存在停用 / 状态切换的概念。被替换即彻底失效。所以**没有 status 字段**。
 export type SuperAdminRow = {
   id: number;
   province: string;
   admin_pubkey: string;
   admin_name: string;
-  status: 'ACTIVE' | 'DISABLED';
   built_in: boolean;
   created_at: string;
 };
@@ -573,7 +581,7 @@ export async function listOperators(auth: AdminAuth): Promise<OperatorRow[]> {
 
 export async function createOperator(
   auth: AdminAuth,
-  payload: { admin_pubkey: string; admin_name: string }
+  payload: { admin_pubkey: string; admin_name: string; city: string; created_by?: string }
 ): Promise<OperatorRow> {
   return request<OperatorRow>('/api/v1/admin/operators', {
     method: 'POST',
@@ -588,7 +596,7 @@ export async function createOperator(
 export async function updateOperator(
   auth: AdminAuth,
   id: number,
-  payload: { admin_pubkey?: string; admin_name?: string }
+  payload: { admin_pubkey?: string; admin_name?: string; city?: string }
 ): Promise<OperatorRow> {
   return request<OperatorRow>(`/api/v1/admin/operators/${id}`, {
     method: 'PUT',
@@ -743,10 +751,43 @@ export async function generateMultisigSfid(
   });
 }
 
+// ── 链上余额查询 ──────────────────────────────────────
+
+export type ChainBalanceResult = {
+  account_pubkey: string;
+  /// u128 字符串（避免 JS 数字溢出），单位为"分"
+  balance_min_units: string;
+  /// 已格式化的展示文本，例如 "1234.56"
+  balance_text: string;
+  unit: string;
+};
+
+/// 查询链上账户的 free 余额（最小单位 = 分）。
+/// 仅在密钥管理页用于展示主账户的链上余额。
+export async function getChainBalance(
+  auth: AdminAuth,
+  accountPubkey: string,
+): Promise<ChainBalanceResult> {
+  const q = `?account_pubkey=${encodeURIComponent(accountPubkey)}`;
+  return request<ChainBalanceResult>(`/api/v1/admin/chain/balance${q}`, {
+    method: 'GET',
+    headers: adminHeaders(auth),
+  });
+}
+
 export async function listMultisigSfids(auth: AdminAuth): Promise<MultisigSfidRow[]> {
   const result = await request<{ total: number; limit: number; offset: number; rows: MultisigSfidRow[] }>(
     '/api/v1/admin/multisig-sfids',
     { method: 'GET', headers: adminHeaders(auth) }
   );
   return result.rows ?? [];
+}
+
+/// 删除一条多签注册机构 SFID 记录。
+/// 后端只允许删除 chain_status !== 'REGISTERED' 的记录，已上链的会被拒绝。
+export async function deleteMultisigSfid(auth: AdminAuth, siteSfid: string): Promise<string> {
+  return request<string>(
+    `/api/v1/admin/multisig-sfids/${encodeURIComponent(siteSfid)}`,
+    { method: 'DELETE', headers: adminHeaders(auth) }
+  );
 }

@@ -32,7 +32,6 @@ fn build_test_state() -> AppState {
         "test-chain-signing-secret-at-least-32",
     );
     std::env::set_var("SFID_PUBLIC_SEARCH_TOKEN", "test-public-search-token");
-    std::env::set_var("SFID_RUNTIME_META_KEY", "test-runtime-meta-key");
     let main_seed = hex_seed(0x11);
     let main_key = key_admins::chain_keyring::load_signing_key_from_seed(main_seed.as_str());
     let public_key_hex = format!("0x{}", hex::encode(main_key.public().0));
@@ -157,96 +156,11 @@ fn setup_rotation_test_state() -> (AppState, HeaderMap, String, String) {
     (state, headers, backup_a_seed, new_backup_seed)
 }
 
-fn setup_bind_confirm_test_state(
-    generated_sfid: Option<&str>,
-) -> (AppState, HeaderMap, String, String, String, String) {
-    let state = build_test_state();
-    let account_pubkey = format!("0x{}", "44".repeat(32));
-    let archive_index = "CIV-BIND-9001-19900101".to_string();
-    let qr_id = "qr-bind-test-001".to_string();
-    let site_sfid = "GFR-11001-ZF0X-123456789-20260329".to_string();
-    let key_pubkey = {
-        let store = state.store.read().expect("store read lock poisoned");
-        store
-            .admin_users_by_pubkey
-            .values()
-            .find(|user| user.role == AdminRole::KeyAdmin)
-            .map(|user| user.admin_pubkey.clone())
-            .expect("key admin exists")
-    };
-    {
-        let mut store = state.store.write().expect("store write lock poisoned");
-        store.next_seq += 1;
-        let seq = store.next_seq;
-        store.pending_by_pubkey.insert(
-            account_pubkey.clone(),
-            PendingRequest {
-                seq,
-                account_pubkey: account_pubkey.clone(),
-                admin_province: None,
-                requested_at: Utc::now(),
-                callback_url: None,
-                client_request_id: None,
-            },
-        );
-        store.admin_sessions.insert(
-            "tok-bind".to_string(),
-            AdminSession {
-                token: "tok-bind".to_string(),
-                admin_pubkey: key_pubkey.clone(),
-                role: AdminRole::KeyAdmin,
-                expire_at: Utc::now() + Duration::hours(1),
-                last_active_at: Utc::now(),
-            },
-        );
-        store.cpms_site_keys.insert(
-            site_sfid.clone(),
-            CpmsSiteKeys {
-                site_sfid: site_sfid.clone(),
-                install_token: "test-token".to_string(),
-                install_token_status: InstallTokenStatus::Used,
-                status: CpmsSiteStatus::Active,
-                version: 1,
-                province_code: "ZY".to_string(),
-                admin_province: "中原省".to_string(),
-                created_by: key_pubkey,
-                created_at: Utc::now(),
-                updated_by: None,
-                updated_at: None,
-            },
-        );
-        store.pending_bind_scan_by_qr_id.insert(
-            qr_id.clone(),
-            PendingBindScan {
-                qr_id: qr_id.clone(),
-                archive_no: archive_index.clone(),
-                site_sfid: site_sfid.clone(),
-                status: CitizenStatus::Normal,
-                expire_at: (Utc::now() + Duration::minutes(5)).timestamp(),
-                scanned_at: Utc::now(),
-            },
-        );
-        store
-            .pending_status_by_archive_no
-            .insert(archive_index.clone(), CitizenStatus::Normal);
-        if let Some(sfid_code) = generated_sfid {
-            store
-                .generated_sfid_by_pubkey
-                .insert(account_pubkey.clone(), sfid_code.to_string());
-        }
-    }
-
-    let mut headers = HeaderMap::new();
-    headers.insert("authorization", HeaderValue::from_static("Bearer tok-bind"));
-    (
-        state,
-        headers,
-        account_pubkey,
-        archive_index,
-        qr_id,
-        site_sfid,
-    )
-}
+// 说明：原 `setup_bind_confirm_test_state` 辅助函数及对应的 `bind_confirm_*` 测试
+// 依赖已废弃的 `operate::binding::admin_bind_confirm` + `AdminBindInput` + 基于
+// `archive_index + qr_id` 的旧绑定流程。当前绑定流程已重构为 `citizen_bind`
+// （challenge + signature 模式），整个旧测试路径不再可复用，已整体删除。
+// 新流程的测试请在 `operate::binding::citizen_bind` 的调用侧按新入参重写。
 
 #[tokio::test]
 async fn keyring_rotate_challenge_rejects_main_initiator() {
@@ -282,71 +196,12 @@ async fn keyring_rotate_challenge_rejects_main_initiator() {
     );
 }
 
-#[tokio::test]
-async fn bind_confirm_requires_pre_generated_sfid() {
-    let (state, headers, account_pubkey, archive_index, qr_id, _) =
-        setup_bind_confirm_test_state(None);
-
-    let resp = operate::binding::admin_bind_confirm(
-        State(state.clone()),
-        headers,
-        Json(AdminBindInput {
-            account_pubkey: account_pubkey.clone(),
-            archive_index: archive_index.clone(),
-            qr_id,
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(resp.status(), StatusCode::CONFLICT);
-    let body = parse_json(resp).await;
-    assert_eq!(
-        body["message"].as_str(),
-        Some("sfid must be generated before binding")
-    );
-
-    let store = state.store.read().expect("store read lock poisoned");
-    assert!(store.pending_by_pubkey.contains_key(&account_pubkey));
-    assert!(!store.bindings_by_pubkey.contains_key(&account_pubkey));
-    assert!(!store.pubkey_by_archive_index.contains_key(&archive_index));
-}
-
-#[tokio::test]
-async fn bind_confirm_consumes_pre_generated_sfid_without_fallback() {
-    let expected_sfid = "GMR-11000-ZG1X-123456789-20260329";
-    let (state, headers, account_pubkey, archive_index, qr_id, _) =
-        setup_bind_confirm_test_state(Some(expected_sfid));
-
-    let resp = operate::binding::admin_bind_confirm(
-        State(state.clone()),
-        headers,
-        Json(AdminBindInput {
-            account_pubkey: account_pubkey.clone(),
-            archive_index: archive_index.clone(),
-            qr_id,
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(resp.status(), StatusCode::OK);
-    let body = parse_json(resp).await;
-    assert_eq!(body["data"]["sfid_code"].as_str(), Some(expected_sfid));
-
-    let store = state.store.read().expect("store read lock poisoned");
-    assert!(!store.pending_by_pubkey.contains_key(&account_pubkey));
-    assert_eq!(
-        store
-            .bindings_by_pubkey
-            .get(&account_pubkey)
-            .map(|binding| binding.sfid_code.as_str()),
-        Some(expected_sfid)
-    );
-    assert_eq!(
-        store.pubkey_by_archive_index.get(&archive_index),
-        Some(&account_pubkey)
-    );
-    assert!(!store.generated_sfid_by_pubkey.contains_key(&account_pubkey));
-}
+// 说明：原 `bind_confirm_requires_pre_generated_sfid` 与
+// `bind_confirm_consumes_pre_generated_sfid_without_fallback` 两个测试已整体删除。
+// 原因：对应的 `admin_bind_confirm(AdminBindInput { account_pubkey, archive_index, qr_id })`
+// 接口已被 `citizen_bind(CitizenBindInput { user_address, challenge_id, signature })`
+// 新流程替代，旧测试的业务前提与 API 形态均已不存在，无法简单修补。
+// 新流程的对应测试请在业务路径稳定后按 challenge + signature 模式补回。
 
 #[tokio::test]
 async fn keyring_rotate_commit_requires_prior_verify() {
@@ -681,6 +536,7 @@ async fn qr_login_super_admin_keeps_write_permission() {
                 created_by: "TEST".to_string(),
                 created_at: Utc::now(),
                 updated_at: None,
+                city: String::new(),
             },
         );
     }
@@ -770,6 +626,7 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 created_by: "TEST".to_string(),
                 created_at: Utc::now(),
                 updated_at: None,
+                city: String::new(),
             },
         );
         store.admin_users_by_pubkey.insert(
@@ -784,6 +641,7 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 created_by: "TEST".to_string(),
                 created_at: Utc::now(),
                 updated_at: None,
+                city: String::new(),
             },
         );
     }
@@ -842,6 +700,7 @@ fn require_admin_any_should_allow_all_three_roles() {
                 created_by: institution_pubkey.clone(),
                 created_at: Utc::now(),
                 updated_at: None,
+                city: String::new(),
             },
         );
         store.admin_sessions.insert(
@@ -956,6 +815,10 @@ fn cpms_site_scope_must_match_admin_province() {
         version: 1,
         province_code: "GZ".to_string(),
         admin_province: "贵州省".to_string(),
+        city_name: "贵阳市".to_string(),
+        institution_code: "ZF".to_string(),
+        institution_name: "贵阳市政府".to_string(),
+        qr1_payload: String::new(),
         created_by: "0xSUPER".to_string(),
         created_at: Utc::now(),
         updated_by: None,
@@ -1259,9 +1122,4 @@ fn sensitive_seed_debug_remains_redacted() {
     let raw_seed = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     let seed = SensitiveSeed::from(raw_seed);
     assert_eq!(format!("{seed:?}"), "SensitiveSeed(***)");
-
-    let meta = PersistedRuntimeMeta { version: 2 };
-    let debug_text = format!("{meta:?}");
-    assert!(!debug_text.contains(raw_seed));
-    assert!(debug_text.contains("version"));
 }

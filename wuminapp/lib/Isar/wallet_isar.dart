@@ -173,8 +173,11 @@ class LocalTxEntity {
   /// 链上交易哈希。
   String? txHash;
 
-  /// 链上区块号。
+  /// 链上区块号（仅在状态为 confirmed 后写入真实区块号）。
   int? blockNumber;
+
+  /// 提交交易时使用的 nonce（pending 阶段用于对账）。
+  int? usedNonce;
 
   /// 本地创建时间（毫秒时间戳）。
   @Index()
