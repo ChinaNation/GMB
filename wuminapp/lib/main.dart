@@ -104,6 +104,11 @@ class _AppLockGateState extends State<_AppLockGate>
   /// 周期性 pending 交易对账定时器。
   Timer? _reconcileTimer;
 
+  /// 冷启动首次对账延迟 timer（必须在 dispose 时取消，否则
+  /// flutter test pumpAndSettle 后 widget 已 dispose 但 timer 仍 pending，
+  /// 触发 "A Timer is still pending" 断言失败 → CI 红 → APK 不产出）。
+  Timer? _initialReconcileTimer;
+
   /// 周期性对账间隔。
   static const Duration _reconcileInterval = Duration(seconds: 60);
 
@@ -113,7 +118,10 @@ class _AppLockGateState extends State<_AppLockGate>
     WidgetsBinding.instance.addObserver(this);
     _checkLock();
     // 冷启动延迟 3 秒触发首次对账，等 smoldot 同步上来。
-    Timer(const Duration(seconds: 3), _triggerReconcile);
+    _initialReconcileTimer = Timer(
+      const Duration(seconds: 3),
+      _triggerReconcile,
+    );
     _reconcileTimer = Timer.periodic(
       _reconcileInterval,
       (_) => _triggerReconcile(),
@@ -122,6 +130,7 @@ class _AppLockGateState extends State<_AppLockGate>
 
   @override
   void dispose() {
+    _initialReconcileTimer?.cancel();
     _reconcileTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
