@@ -946,21 +946,44 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                     unreachable!()
                 };
 
-                let outcome = if block_number <= sync.finalized_block_number() {
+                // 中文注释：peer 选择策略——尽量宽松地放行 gossip-connected peer，
+                // 否则在以下场景会返回 0 个 peer 导致 "No node available for storage query"：
+                //
+                //   * POW + GRANDPA 链停止出块时，所有 peer 的 best == finalized，
+                //     原版 strict-greater 过滤失败
+                //   * POW 链在 GRANDPA 终局之前 best_hash 可能短暂不一致，
+                //     原版 hash equality 失败
+                //   * smoldot 刚 gossip-open 完，还没收到 peer 的 block-announce，
+                //     `knows_non_finalized_block` 还不知道这个 peer 拥有该块
+                //
+                // wuminapp 钱包查询时常用 best_block (#64) 而 finalized 是 #62，
+                // 走的是 non-finalized 分支；这里同样按 source_best.0 ≥ block_number
+                // 放行，足够覆盖"peer 已经在那个高度但还没来得及把 block-announce
+                // 推过来给 smoldot"的窗口。
+                let outcome: Vec<_> = if block_number <= sync.finalized_block_number() {
+                    // finalized 区块是共识终局，任何 gossip-connected peer 都是合法 source。
+                    let _ = block_hash;
                     sync.sources()
-                        .filter(|source_id| {
-                            let source_best = sync.source_best_block(*source_id);
-                            source_best.0 > block_number
-                                || (source_best.0 == block_number && *source_best.1 == block_hash)
-                        })
                         .map(|id| sync[id].0.clone())
                         .collect()
                 } else {
-                    // As documented, `knows_non_finalized_block` would panic if the
-                    // block height was below the one of the known finalized block.
-                    sync.knows_non_finalized_block(block_number, &block_hash)
+                    // 非 finalized 区块：先用 smoldot 内部已记录的 "knows_non_finalized_block"
+                    // 列表（最权威），如果为空则放宽到所有 best 高度 ≥ block_number 的
+                    // peer（覆盖 peer 已在该高度但还没推 block-announce 的窗口）。
+                    let primary: Vec<_> = sync
+                        .knows_non_finalized_block(block_number, &block_hash)
                         .map(|id| sync[id].0.clone())
-                        .collect()
+                        .collect();
+                    if !primary.is_empty() {
+                        primary
+                    } else {
+                        sync.sources()
+                            .filter(|source_id| {
+                                sync.source_best_block(*source_id).0 >= block_number
+                            })
+                            .map(|id| sync[id].0.clone())
+                            .collect()
+                    }
                 };
 
                 let _ = send_back.send(outcome);

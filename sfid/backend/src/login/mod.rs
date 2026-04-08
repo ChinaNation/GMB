@@ -63,6 +63,8 @@ pub(crate) struct AdminAuthContext {
     pub(crate) role: AdminRole,
     pub(crate) admin_name: String,
     pub(crate) admin_province: Option<String>,
+    /// 仅 SystemAdmin 有值：该操作员登记的市（用于多签列表按市过滤、生成时强制锁定）
+    pub(crate) admin_city: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -72,6 +74,7 @@ struct AdminAuthOutput {
     role: AdminRole,
     admin_name: String,
     admin_province: Option<String>,
+    admin_city: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -86,6 +89,7 @@ struct AdminIdentifyOutput {
     status: AdminStatus,
     admin_name: String,
     admin_province: Option<String>,
+    admin_city: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -201,6 +205,7 @@ pub(crate) async fn admin_auth_check(
             role: ctx.role,
             admin_name: ctx.admin_name,
             admin_province: ctx.admin_province,
+            admin_city: ctx.admin_city,
         },
     })
     .into_response()
@@ -241,6 +246,7 @@ pub(crate) async fn admin_auth_identify(
                 build_admin_display_name_from_user(admin, province.as_deref())
             },
             admin_province: province_scope_for_role(&store, &admin.admin_pubkey, &admin.role),
+            admin_city: resolve_admin_city(admin),
         },
     })
     .into_response()
@@ -408,6 +414,7 @@ pub(crate) async fn admin_auth_verify(
     let admin_status = admin.status.clone();
     let admin_province = province_scope_for_role(&store, &admin_pubkey, &admin_role);
     let admin_name = build_admin_display_name_from_user(admin, admin_province.as_deref());
+    let admin_city = resolve_admin_city(admin);
 
     let access_token = Uuid::new_v4().to_string();
     let expire_at = now + Duration::hours(8);
@@ -434,6 +441,7 @@ pub(crate) async fn admin_auth_verify(
                 status: admin_status,
                 admin_name,
                 admin_province,
+                admin_city,
             },
         },
     })
@@ -718,6 +726,10 @@ pub(crate) async fn admin_auth_qr_result(
                         &result.admin_pubkey,
                         &result.role,
                     ),
+                    admin_city: store
+                        .admin_users_by_pubkey
+                        .get(&result.admin_pubkey)
+                        .and_then(resolve_admin_city),
                 }),
             },
         })
@@ -804,11 +816,19 @@ fn admin_auth(
         }
         let admin_province =
             province_scope_for_role(&store, &admin_user.admin_pubkey, &admin_user.role);
+        // 只对 SystemAdmin 暴露 city（其他角色底层字段为空字符串）
+        let admin_city = if admin_user.role == AdminRole::SystemAdmin && !admin_user.city.is_empty()
+        {
+            Some(admin_user.city.clone())
+        } else {
+            None
+        };
         return Ok(AdminAuthContext {
             admin_pubkey: admin_user.admin_pubkey.clone(),
             role: admin_user.role.clone(),
             admin_name: build_admin_display_name_from_user(admin_user, admin_province.as_deref()),
             admin_province,
+            admin_city,
         });
     }
 
@@ -1073,4 +1093,13 @@ pub(crate) fn build_admin_display_name_from_user(
         }
     }
     build_admin_display_name(&admin.admin_pubkey, &admin.role, admin_province)
+}
+
+/// 仅 SystemAdmin 暴露 admin_city，其他角色或空字符串一律返回 None。
+pub(crate) fn resolve_admin_city(admin: &AdminUser) -> Option<String> {
+    if admin.role == AdminRole::SystemAdmin && !admin.city.trim().is_empty() {
+        Some(admin.city.clone())
+    } else {
+        None
+    }
 }

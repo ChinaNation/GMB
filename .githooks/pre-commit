@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# 本仓库的 pre-commit hook。启用方法：
+#   git config core.hooksPath .githooks
+set -e
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# chainspec.json 冻结守卫
+if git diff --cached --name-only | grep -qE '^wuminapp/assets/chainspec\.json$'; then
+  cat >&2 <<'EOF'
+╔══════════════════════════════════════════════════════════════════╗
+║  拒绝提交：wuminapp/assets/chainspec.json 是创世冻结文件！      ║
+╚══════════════════════════════════════════════════════════════════╝
+
+chainspec 决定 genesis hash，genesis hash 决定 libp2p 通知协议名。
+一旦修改，所有已部署的节点都会和新轻节点握手失败 (ProtocolNotAvailable)。
+
+runtime 升级请走链上 system.setCode 交易，不要重新 build-spec。
+详见：memory/07-ai/chainspec-frozen.md
+
+如果你是在做硬分叉（极少数情况），请手动：
+  git commit --no-verify
+并同步更新 wuminapp/assets/chainspec.json.sha256。
+EOF
+  exit 1
+fi
+
+# 运行完整性校验（即使没 staged 也检查文件没被替换）
+"$REPO_ROOT/scripts/check-chainspec-frozen.sh"

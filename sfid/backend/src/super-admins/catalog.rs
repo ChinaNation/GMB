@@ -37,7 +37,6 @@ pub(crate) async fn list_super_admins(
                 } else {
                     user.admin_name.clone()
                 },
-                status: user.status.clone(),
                 built_in: user.built_in,
                 created_at: user.created_at,
             })
@@ -118,7 +117,6 @@ pub(crate) async fn replace_super_admin(
                 province: province_name.clone(),
                 admin_pubkey: existing.admin_pubkey.clone(),
                 admin_name: format!("{province_name}机构管理员"),
-                status: existing.status.clone(),
                 built_in: existing.built_in,
                 created_at: existing.created_at,
             },
@@ -164,6 +162,7 @@ pub(crate) async fn replace_super_admin(
             created_by: old_user.created_by,
             created_at: old_user.created_at,
             updated_at: Some(replaced_at),
+            city: String::new(),
         },
     );
     store.super_admin_province_by_pubkey.remove(&old_pubkey);
@@ -195,7 +194,6 @@ pub(crate) async fn replace_super_admin(
         ),
     );
     drop(store);
-    persist_runtime_state(&state);
 
     Json(ApiResponse {
         code: 0,
@@ -205,7 +203,6 @@ pub(crate) async fn replace_super_admin(
             province: province_name.clone(),
             admin_pubkey: new_pubkey,
             admin_name: format!("{province_name}机构管理员"),
-            status: preserved_status,
             built_in: old_user.built_in,
             created_at: old_user.created_at,
         },

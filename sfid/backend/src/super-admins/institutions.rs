@@ -212,7 +212,6 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
             ),
         );
         drop(store);
-        persist_runtime_state(&state);
         return Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
@@ -288,7 +287,6 @@ pub(crate) async fn register_cpms(
             format!("site_sfid={} province_code={}", qr2.sfid, pc),
         );
         drop(store);
-        persist_runtime_state(&state);
         pc
     };
 
@@ -438,7 +436,6 @@ pub(crate) async fn archive_import(
         ),
     );
     drop(store);
-    persist_runtime_state(&state);
 
     Json(ApiResponse {
         code: 0,
@@ -483,7 +480,6 @@ pub(crate) async fn revoke_install_token(
         format!("site_sfid={}", site_sfid),
     );
     drop(store);
-    persist_runtime_state(&state);
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -557,7 +553,6 @@ pub(crate) async fn reissue_install_token(
         format!("site_sfid={}", site_sfid_validated),
     );
     drop(store);
-    persist_runtime_state(&state);
 
     Json(ApiResponse {
         code: 0,
@@ -669,7 +664,6 @@ pub(crate) async fn delete_cpms_keys(
         ),
     );
     drop(store);
-    persist_runtime_state(&state);
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -794,7 +788,6 @@ async fn update_cpms_site_status(
         ),
     );
     drop(store);
-    persist_runtime_state(&state);
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -999,11 +992,28 @@ pub(super) async fn submit_register_sfid_institution_extrinsic(
             .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
     let ws_url = resolve_chain_ws_url()
         .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
-    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url)
+    // 中文注释：
+    // citizenchain 是 PoW 链，GRANDPA finality 显著落后 best block，subxt 0.43 默认行为
+    // (从 finalized 块读 nonce / 取 era birth block / 等 finalize) 在这里全部踩坑。
+    // 必须做三件事：
+    //   ① 用 legacy RPC system_accountNextIndex 取 best+pool 视图的 nonce，避免 Stale
+    //   ② extrinsic 强制 immortal，避免 mortal era 的 birth-block-hash 在 best 视图里查不到
+    //      被链端判定为 AncientBirthBlock
+    //   ③ submit_and_watch 后只等 InBestBlock 而非 wait_for_finalized，避免 120s 超时
+    // 详见 ADR `04-decisions/sfid/2026-04-07-subxt-0.43-pow-chain-quirks.md`。
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.clone())
         .await
         .map_err(|e| {
             format!("register_sfid_institution submit failed: chain websocket connect failed: {e}")
         })?;
+    // ① legacy RPC client，用于显式取 nonce
+    let rpc_client = subxt::backend::rpc::RpcClient::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| {
+            format!("register_sfid_institution submit failed: legacy rpc connect failed: {e}")
+        })?;
+    let legacy_rpc =
+        subxt::backend::legacy::LegacyRpcMethods::<PolkadotConfig>::new(rpc_client);
 
     let (signer_pubkey, signer_seed) = resolve_chain_signer_material(state)
         .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
@@ -1011,6 +1021,12 @@ pub(super) async fn submit_register_sfid_institution_extrinsic(
         parse_account_id32(signer_pubkey.as_str())
             .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?,
     );
+    let chain_nonce = legacy_rpc
+        .system_account_next_index(&signer_account)
+        .await
+        .map_err(|e| {
+            format!("register_sfid_institution submit failed: fetch account nonce failed: {e}")
+        })?;
     let payload = tx(
         "DuoqianManagePow",
         "register_sfid_institution",
@@ -1023,9 +1039,14 @@ pub(super) async fn submit_register_sfid_institution_extrinsic(
             })?),
         ],
     );
+    // ② immortal + 显式 nonce(对应注释 ①/②)
+    let params = subxt::config::DefaultExtrinsicParamsBuilder::<PolkadotConfig>::new()
+        .immortal()
+        .nonce(chain_nonce)
+        .build();
     let mut partial_tx = client
         .tx()
-        .create_partial(&payload, &signer_account, Default::default())
+        .create_partial(&payload, &signer_account, params)
         .await
         .map_err(|e| {
             format!("register_sfid_institution submit failed: build extrinsic failed: {e}")
@@ -1038,20 +1059,35 @@ pub(super) async fn submit_register_sfid_institution_extrinsic(
         .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
     let tx_hash = format!("0x{}", hex::encode(extrinsic.hash().as_ref()));
 
-    let submitted = extrinsic.submit_and_watch().await.map_err(|e| {
+    let mut submitted = extrinsic.submit_and_watch().await.map_err(|e| {
         format!("register_sfid_institution submit failed: submit_and_watch failed: {e}")
     })?;
+    // ③ 只等 InBestBlock（对应上方注释 ③）。dispatch 已发生、事件可读，无需等 finalize。
     let in_block = tokio::time::timeout(
         std::time::Duration::from_secs(120),
-        submitted.wait_for_finalized(),
+        async {
+            use subxt::tx::TxStatus;
+            loop {
+                match submitted.next().await {
+                    Some(Ok(TxStatus::InBestBlock(b))) => return Ok::<_, String>(b),
+                    Some(Ok(TxStatus::InFinalizedBlock(b))) => return Ok(b),
+                    Some(Ok(TxStatus::Error { message }))
+                    | Some(Ok(TxStatus::Invalid { message }))
+                    | Some(Ok(TxStatus::Dropped { message })) => {
+                        return Err(format!("tx pool reported: {message}"));
+                    }
+                    Some(Ok(_)) => continue,
+                    Some(Err(e)) => return Err(format!("tx watch stream error: {e}")),
+                    None => return Err("tx watch stream closed unexpectedly".to_string()),
+                }
+            }
+        },
     )
     .await
     .map_err(|_| {
-        "register_sfid_institution submit failed: timed out waiting for finalization".to_string()
+        "register_sfid_institution submit failed: timed out waiting for in-block inclusion".to_string()
     })?
-    .map_err(|e| {
-        format!("register_sfid_institution submit failed: wait_for_finalized failed: {e}")
-    })?;
+    .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
     in_block
         .wait_for_success()
         .await

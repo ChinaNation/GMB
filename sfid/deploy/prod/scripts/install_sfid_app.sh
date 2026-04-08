@@ -65,7 +65,6 @@ SFID_PUBLIC_SEARCH_TOKEN=
 # 主签名密钥和 key id（必须替换）
 SFID_SIGNING_SEED_HEX=CHANGE_ME_SIGNING_SEED_HEX
 SFID_KEY_ID=sfid-master-v1
-SFID_RUNTIME_META_KEY=CHANGE_ME_RUNTIME_META_KEY
 
 # PII 列加密密钥（兼容保留，基础站点部署可先留空）
 SFID_PII_KEY=
@@ -84,7 +83,6 @@ required_vars=(
   SFID_REDIS_URL
   SFID_SIGNING_SEED_HEX
   SFID_KEY_ID
-  SFID_RUNTIME_META_KEY
 )
 
 for key in "${required_vars[@]}"; do

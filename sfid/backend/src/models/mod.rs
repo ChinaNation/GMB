@@ -104,19 +104,6 @@ pub(crate) struct Store {
     pub(crate) multisig_sfid_records: HashMap<String, MultisigSfidRecord>,
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub(crate) struct PersistedRuntimeMeta {
-    pub(crate) version: u32,
-}
-
-impl fmt::Debug for PersistedRuntimeMeta {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("PersistedRuntimeMeta")
-            .field("version", &self.version)
-            .finish()
-    }
-}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum AdminRole {
@@ -169,6 +156,9 @@ pub(crate) struct AdminUser {
     pub(crate) created_at: DateTime<Utc>,
     #[serde(default)]
     pub(crate) updated_at: Option<DateTime<Utc>>,
+    /// SystemAdmin 所属的市名称（仅 SystemAdmin 必填，其他角色为空字符串）
+    #[serde(default)]
+    pub(crate) city: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -678,6 +668,7 @@ pub(crate) struct OperatorRow {
     pub(crate) created_by: String,
     pub(crate) created_by_name: String,
     pub(crate) created_at: DateTime<Utc>,
+    pub(crate) city: String,
 }
 
 #[derive(Serialize)]
@@ -688,13 +679,17 @@ pub(crate) struct OperatorListOutput {
     pub(crate) rows: Vec<OperatorRow>,
 }
 
+// 机构管理员对外行（API 序列化）。
+//
+// SFID 业务语义：机构是永久存在的（43 个省份固定），机构管理员只是当前
+// 替机构发声的人；不存在"停用"的机构管理员（被替换即彻底失效）。
+// 因此对外暴露的行**不带 status 字段**。
 #[derive(Serialize)]
 pub(crate) struct SuperAdminRow {
     pub(crate) id: u64,
     pub(crate) province: String,
     pub(crate) admin_pubkey: String,
     pub(crate) admin_name: String,
-    pub(crate) status: AdminStatus,
     pub(crate) built_in: bool,
     pub(crate) created_at: DateTime<Utc>,
 }
@@ -703,6 +698,14 @@ pub(crate) struct SuperAdminRow {
 pub(crate) struct CreateOperatorInput {
     pub(crate) admin_pubkey: String,
     pub(crate) admin_name: String,
+    /// SystemAdmin 所属的市，必填，且必须属于 created_by 对应机构管理员的省份（不可为省辖市）
+    pub(crate) city: String,
+    /// 可选：指定该 operator 归属的机构管理员 pubkey。
+    /// 仅 KeyAdmin 可指定，且必须是已存在的 InstitutionAdmin。
+    /// InstitutionAdmin 调用时若指定则必须等于自己 pubkey，否则 403。
+    /// 不指定则默认为调用者自身。
+    #[serde(default)]
+    pub(crate) created_by: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -720,6 +723,9 @@ pub(crate) struct ListQuery {
 pub(crate) struct UpdateOperatorInput {
     pub(crate) admin_pubkey: Option<String>,
     pub(crate) admin_name: Option<String>,
+    /// 可选：修改 SystemAdmin 所属的市，必须属于该 operator 所属机构的省份（不可为省辖市）
+    #[serde(default)]
+    pub(crate) city: Option<String>,
 }
 
 #[derive(Deserialize)]

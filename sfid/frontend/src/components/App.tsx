@@ -109,11 +109,138 @@ import {
   replaceSuperAdmin,
   registerCpms,
   scanCpmsStatusQr,
+  deleteMultisigSfid,
   generateMultisigSfid,
+  getChainBalance,
   listMultisigSfids,
   updateOperator,
   updateOperatorStatus
 } from '../api/client';
+import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
+
+/// 区块链全链统一的"用户协议"二维码 proto 标识。
+/// 详见：wuminapp/lib/qr/qr_protocols.dart
+const WUMIN_USER_PROTOCOL = 'WUMIN_USER_V1.0.0';
+
+/// 通用"扫码识别账户"弹窗。
+/// 调用摄像头扫描 WUMIN_USER_V1.0.0 用户码，从中提取 `address` 字段（SS58）回填。
+/// 用于：密钥管理新备用账户、新增系统管理员账户、更换机构管理员账户等任意需要账户输入的场景。
+function ScanAccountModal(props: {
+  open: boolean;
+  onClose: () => void;
+  onResolved: (ss58Address: string) => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const scannerRef = useRef<QrScanner | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Antd Modal 的 destroyOnClose 会在 open=true 之后异步挂载内容，
+  // 首次 useEffect 执行时 videoRef.current 可能仍为 null，
+  // 所以用回调 ref + videoMounted state 等真实 <video> 元素挂上后再启动 scanner。
+  const [videoMounted, setVideoMounted] = useState(false);
+  const attachVideo = useCallback((el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    setVideoMounted(Boolean(el));
+  }, []);
+
+  // 关闭时重置 videoMounted，确保下次再打开能重新触发 scanner 初始化
+  useEffect(() => {
+    if (!props.open) {
+      setVideoMounted(false);
+      setError(null);
+    }
+  }, [props.open]);
+
+  useEffect(() => {
+    if (!props.open || !videoMounted) return;
+    const video = videoRef.current;
+    if (!video) return;
+    setError(null);
+    let cancelled = false;
+    const scanner = new QrScanner(
+      video,
+      (result) => {
+        if (cancelled) return;
+        try {
+          const decoded = JSON.parse(result.data);
+          if (decoded?.proto !== WUMIN_USER_PROTOCOL) {
+            setError('不是用户协议二维码');
+            return;
+          }
+          const addr = String(decoded.address || '').trim();
+          if (!addr) {
+            setError('用户码未携带 address 字段');
+            return;
+          }
+          // 用 decodeSs58 校验一次格式（prefix + 校验和）
+          try {
+            decodeSs58(addr);
+          } catch (e) {
+            setError(e instanceof Error ? e.message : 'SS58 校验失败');
+            return;
+          }
+          scanner.stop();
+          props.onResolved(addr);
+        } catch {
+          setError('二维码不是有效 JSON');
+        }
+      },
+      { highlightScanRegion: true, highlightCodeOutline: true, returnDetailedScanResult: true },
+    );
+    scannerRef.current = scanner;
+    scanner.start().catch((err) => {
+      if (cancelled) return;
+      setError(err instanceof Error ? err.message : '摄像头初始化失败');
+    });
+    return () => {
+      cancelled = true;
+      const s = scannerRef.current;
+      if (s) {
+        s.stop();
+        s.destroy();
+        scannerRef.current = null;
+      }
+    };
+  }, [props.open, videoMounted]);
+
+  return (
+    <Modal
+      title={<div style={{ textAlign: 'center', width: '100%' }}>扫描用户码</div>}
+      open={props.open}
+      onCancel={props.onClose}
+      footer={[
+        <Button key="cancel" onClick={props.onClose}>
+          取消
+        </Button>,
+      ]}
+      destroyOnClose
+      width={420}
+    >
+      <div
+        style={{
+          width: '100%',
+          aspectRatio: '1 / 1',
+          background: 'linear-gradient(145deg, #0f172a, #1e293b)',
+          borderRadius: 12,
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        <video
+          ref={attachVideo}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          muted
+          playsInline
+        />
+      </div>
+      {error && (
+        <Typography.Paragraph type="danger" style={{ marginTop: 12, marginBottom: 0 }}>
+          {error}
+        </Typography.Paragraph>
+      )}
+    </Modal>
+  );
+}
+
 const loginBg = '/assets/login-bg.png';
 
 const { Header, Content } = Layout;
@@ -168,6 +295,11 @@ function clearStoredAuth() {
 function isSr25519HexPubkey(value: string): boolean {
   const normalized = value.trim().replace(/^0x/i, '');
   return /^[0-9a-fA-F]{64}$/.test(normalized);
+}
+
+function sameHexPubkey(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a.trim().replace(/^0x/i, '').toLowerCase() === b.trim().replace(/^0x/i, '').toLowerCase();
 }
 
 function resolveAdminName(auth: AdminAuth | null): string {
@@ -324,7 +456,9 @@ type RoleCapabilities = {
   canManageKeyring: boolean;
   canStatusScan: boolean;
   canBusinessWrite: boolean;
+  canViewSystemSettings: boolean;
 };
+
 
 function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilities {
   const role = auth?.role;
@@ -344,6 +478,7 @@ function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilities {
     canManageKeyring: isKeyAdmin,
     canStatusScan: isKeyAdmin || isInstitutionAdmin || isSystemAdmin,
     canBusinessWrite: true,
+    canViewSystemSettings: isKeyAdmin || isInstitutionAdmin || isSystemAdmin,
   };
 }
 
@@ -381,7 +516,23 @@ export default function App() {
   const [scannerActive, setScannerActive] = useState(false);
   const [scanSubmitting, setScanSubmitting] = useState(false);
   const [scannerReady, setScannerReady] = useState(false);
-  const [activeView, setActiveView] = useState<'citizens' | 'institutions' | 'multisig' | 'keyring' | 'super-admins' | 'operators'>('citizens');
+  const [activeView, setActiveView] = useState<'citizens' | 'institutions' | 'multisig' | 'system-settings' | 'keyring' | 'super-admins' | 'operators'>('citizens');
+  const [selectedSuperAdmin, setSelectedSuperAdmin] = useState<SuperAdminRow | null>(null);
+  const [operatorCities, setOperatorCities] = useState<SfidCityItem[]>([]);
+  const [operatorCitiesLoading, setOperatorCitiesLoading] = useState(false);
+  // 密钥管理：主账户链上余额（已格式化为 xxx.xx），失败时 mainAccountBalance=null + mainAccountBalanceError
+  const [mainAccountBalance, setMainAccountBalance] = useState<string | null>(null);
+  const [mainAccountBalanceError, setMainAccountBalanceError] = useState<string | null>(null);
+  // 密钥管理：扫码识别"新备用账户"弹窗开关
+  const [keyringScanAccountOpen, setKeyringScanAccountOpen] = useState(false);
+  // 通用扫码识别账户目标（null = 关闭；'operator' = 新增系统管理员账户；'super-admin' = 更换机构管理员账户）
+  const [accountScanTarget, setAccountScanTarget] = useState<null | 'operator' | 'super-admin'>(null);
+  // 多签管理：当前选中的 SFID 详情（null = 显示列表；非空 = 显示详情页）
+  const [selectedMultisigSfid, setSelectedMultisigSfid] = useState<MultisigSfidRow | null>(null);
+  // 机构详情页 sub-tab：'operators'（系统管理员列表，默认）/ 'super-admin'（机构管理员）
+  const [adminDetailTab, setAdminDetailTab] = useState<'operators' | 'super-admin'>('operators');
+  // 系统管理员列表受控分页
+  const [operatorListPage, setOperatorListPage] = useState(1);
   const [operators, setOperators] = useState<OperatorRow[]>([]);
   const [operatorsLoading, setOperatorsLoading] = useState(false);
   const [operatorPage, setOperatorPage] = useState(1);
@@ -420,7 +571,7 @@ export default function App() {
   const [multisigPage, setMultisigPage] = useState(1);
   const [multisigA3, setMultisigA3] = useState('GFR');
   const [multisigForm] = Form.useForm();
-  const [addOperatorForm] = Form.useForm<{ operator_pubkey: string; operator_name: string }>();
+  const [addOperatorForm] = Form.useForm<{ operator_pubkey: string; operator_name: string; operator_city: string }>();
   const [institutionSfidForm] = Form.useForm<{
     province: string;
     city: string;
@@ -442,6 +593,35 @@ export default function App() {
 
   const capabilities = resolveRoleCapabilities(auth);
 
+  // 切换 selectedSuperAdmin 时：
+  //   1. 预加载该机构所属省份的城市列表（独立于 sfidCities，避免和 CPMS / 多签弹窗冲突）
+  //   2. 重置详情页 sub-tab 到默认（系统管理员列表）
+  //   3. 重置系统管理员列表分页到第 1 页
+  useEffect(() => {
+    if (!selectedSuperAdmin || !auth) {
+      setOperatorCities([]);
+      return;
+    }
+    setOperatorCities([]);
+    setAdminDetailTab('operators');
+    setOperatorListPage(1);
+    setOperatorCitiesLoading(true);
+    let cancelled = false;
+    listSfidCities(auth, selectedSuperAdmin.province)
+      .then((rows) => {
+        if (!cancelled) setOperatorCities(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setOperatorCities([]);
+      })
+      .finally(() => {
+        if (!cancelled) setOperatorCitiesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSuperAdmin?.admin_pubkey, auth?.access_token]);
+
   useEffect(() => {
     let cancelled = false;
     const bootstrap = async () => {
@@ -456,7 +636,8 @@ export default function App() {
           admin_pubkey: checked.admin_pubkey,
           role: checked.role,
           admin_name: checked.admin_name,
-          admin_province: checked.admin_province ?? null
+          admin_province: checked.admin_province ?? null,
+          admin_city: checked.admin_city ?? null
         };
         setAuth(refreshedAuth);
         writeStoredAuth(refreshedAuth);
@@ -538,7 +719,8 @@ export default function App() {
           admin_pubkey: status.admin.admin_pubkey,
           role: status.admin.role,
           admin_name: status.admin.admin_name,
-          admin_province: status.admin.admin_province ?? null
+          admin_province: status.admin.admin_province ?? null,
+          admin_city: status.admin.admin_city ?? null
         };
         setAuth(nextAuth);
         writeStoredAuth(nextAuth);
@@ -630,7 +812,8 @@ export default function App() {
             admin_pubkey: status.admin.admin_pubkey,
             role: status.admin.role,
             admin_name: status.admin.admin_name,
-            admin_province: status.admin.admin_province ?? null
+            admin_province: status.admin.admin_province ?? null,
+            admin_city: status.admin.admin_city ?? null
           };
           setAuth(nextAuth);
           writeStoredAuth(nextAuth);
@@ -698,7 +881,17 @@ export default function App() {
 
   const onSearch = async (values: { keyword: string }) => {
     if (!auth) return;
-    await refreshList(auth, values.keyword?.trim());
+    let keyword = values.keyword?.trim() || '';
+    // 用户输入可能是 SS58 账户 / hex 公钥 / 档案号 / SFID 码
+    // 前端先尝试 SS58 解码，成功则转成 hex 公钥提交；失败则原样提交（后端按老规则匹配）
+    if (keyword) {
+      try {
+        keyword = decodeSs58(keyword);
+      } catch {
+        // 非 SS58 格式，保留原值
+      }
+    }
+    await refreshList(auth, keyword);
   };
 
   const refreshOperators = async (currentAuth: AdminAuth) => {
@@ -754,6 +947,42 @@ export default function App() {
     }
   };
 
+  const onDeleteMultisigSfid = (row: MultisigSfidRow) => {
+    if (!auth) return;
+    if (row.chain_status === 'REGISTERED') {
+      message.warning('该 SFID 已在链上注册，不能删除');
+      return;
+    }
+    Modal.confirm({
+      title: '删除注册机构 SFID',
+      content: (
+        <div>
+          <div>确认删除以下记录？该操作不可恢复。</div>
+          <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-all' }}>
+            {row.site_sfid}
+          </div>
+          <div style={{ marginTop: 4, fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>
+            {row.institution_name} · {row.province} {row.city}
+          </div>
+        </div>
+      ),
+      okText: '确认删除',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await deleteMultisigSfid(auth, row.site_sfid);
+          message.success('删除成功');
+          await refreshMultisigSfids(auth);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : '删除失败';
+          message.error(msg);
+          throw err;
+        }
+      },
+    });
+  };
+
   const openMultisigModal = async () => {
     if (!auth) return;
     try {
@@ -762,11 +991,13 @@ export default function App() {
       const defaultA3 = 'GFR';
       setMultisigA3(defaultA3);
       const provinceDefault = auth.admin_province || meta.provinces[0]?.name || '';
+      // SystemAdmin 的市由 session 锁定，默认填入
+      const cityDefault = auth.role === 'SYSTEM_ADMIN' ? (auth.admin_city || '') : '';
       multisigForm.setFieldsValue({
         a3: defaultA3,
         p1: '0',
         province: provinceDefault,
-        city: '',
+        city: cityDefault,
         institution: defaultInstitutionByA3(defaultA3),
         institution_name: '',
       });
@@ -813,11 +1044,61 @@ export default function App() {
     }
   };
 
+  // ── 系统设置（机构管理员列表 / 详情页） ──
+  // KeyAdmin 进入后看列表；InstitutionAdmin 和 SystemAdmin 自动跳到自己（或所属）的详情页。
+  const openSystemSettings = async (currentAuth: AdminAuth) => {
+    if (currentAuth.role === 'KEY_ADMIN') {
+      setSelectedSuperAdmin(null);
+      await refreshSuperAdmins(currentAuth);
+      await refreshOperators(currentAuth);
+      return;
+    }
+    // 拿全量 super-admins，找到自己（InstitutionAdmin）或所属机构（SystemAdmin）
+    let rows: SuperAdminRow[] = [];
+    try {
+      rows = await listSuperAdmins(currentAuth);
+      setSuperAdmins(rows);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '加载机构管理员列表失败';
+      message.error(msg);
+      return;
+    }
+    await refreshOperators(currentAuth);
+
+    let target: SuperAdminRow | null = null;
+    if (currentAuth.role === 'INSTITUTION_ADMIN') {
+      target = rows.find((r) => sameHexPubkey(r.admin_pubkey, currentAuth.admin_pubkey)) || null;
+    } else if (currentAuth.role === 'SYSTEM_ADMIN') {
+      // 通过当前操作员的 created_by 找到所属机构管理员
+      try {
+        const ops = await listOperators(currentAuth);
+        const me = ops.find((o) => sameHexPubkey(o.admin_pubkey, currentAuth.admin_pubkey));
+        if (me) {
+          target = rows.find((r) => sameHexPubkey(r.admin_pubkey, me.created_by)) || null;
+        }
+      } catch {
+        // 静默：无法定位时回退到列表（虽然 SystemAdmin 大概率看不到列表）
+      }
+    }
+    setSelectedSuperAdmin(target);
+  };
+
   const refreshKeyringState = async (currentAuth: AdminAuth) => {
     setKeyringLoading(true);
     try {
       const state = await getAttestorKeyring(currentAuth);
       setKeyringState(state);
+      // 拉到主账户后立即查链上余额（每次进入密钥管理页都查一次，不缓存）
+      if (state?.main_pubkey) {
+        setMainAccountBalance(null);
+        setMainAccountBalanceError(null);
+        try {
+          const bal = await getChainBalance(currentAuth, state.main_pubkey);
+          setMainAccountBalance(bal.balance_text);
+        } catch (err) {
+          setMainAccountBalanceError(err instanceof Error ? err.message : String(err));
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : '加载密钥状态失败';
       message.error(msg);
@@ -865,9 +1146,17 @@ export default function App() {
       message.error('请先生成轮换二维码');
       return;
     }
-    const newBackupPubkey = keyringForm.getFieldValue('new_backup_pubkey')?.trim();
-    if (!newBackupPubkey) {
-      message.error('新备用公钥不能为空');
+    const newBackupAddress = keyringForm.getFieldValue('new_backup_pubkey')?.trim();
+    if (!newBackupAddress) {
+      message.error('新备用账户不能为空');
+      return;
+    }
+    // 用户输入的是 SS58 地址，链上接口仍是 32 字节 hex 公钥，提交前转码
+    let newBackupPubkey: string;
+    try {
+      newBackupPubkey = decodeSs58(newBackupAddress);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '账户格式无效');
       return;
     }
     setKeyringScanSubmitting(true);
@@ -923,21 +1212,34 @@ export default function App() {
     setKeyringScannerActive((v) => !v);
   };
 
-  const onCreateOperator = async (values: { operator_pubkey: string; operator_name: string }) => {
+  const onCreateOperator = async (values: { operator_pubkey: string; operator_name: string; city?: string; created_by?: string }) => {
     if (!auth) return;
-    const admin_pubkey = values.operator_pubkey?.trim();
+    const inputAddr = values.operator_pubkey?.trim();
     const admin_name = values.operator_name?.trim();
-    if (!admin_pubkey) {
-      message.error('请输入管理员公钥');
+    const city = (values.city ?? '').trim();
+    if (!inputAddr) {
+      message.error('请输入管理员账户');
       return;
     }
     if (!admin_name) {
       message.error('请输入管理员姓名');
       return;
     }
+    if (!city) {
+      message.error('请选择市');
+      return;
+    }
+    // 用户输入的是 SS58 地址，后端 API 要求 32 字节 hex 公钥
+    let admin_pubkey: string;
+    try {
+      admin_pubkey = decodeSs58(inputAddr);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '账户格式无效');
+      return;
+    }
     setAddOperatorLoading(true);
     try {
-      const created = await createOperator(auth, { admin_pubkey, admin_name });
+      const created = await createOperator(auth, { admin_pubkey, admin_name, city, created_by: values.created_by });
       message.success('管理员新增成功');
       addOperatorForm.resetFields();
       setAddOperatorOpen(false);
@@ -1063,7 +1365,11 @@ export default function App() {
   const onUpdateOperator = (row: OperatorRow) => {
     if (!auth) return;
     let nextName = row.admin_name;
-    let nextPubkey = row.admin_pubkey;
+    let nextAddr = tryEncodeSs58(row.admin_pubkey);
+    let nextCity = row.city;
+    const cityOptions = operatorCities
+      .filter((c) => c.code !== '000')
+      .map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }));
     Modal.confirm({
       title: '修改系统管理员',
       content: (
@@ -1075,11 +1381,20 @@ export default function App() {
               nextName = event.target.value;
             }}
           />
+          <Select
+            defaultValue={row.city || undefined}
+            placeholder="请选择市"
+            style={{ width: '100%' }}
+            options={cityOptions}
+            onChange={(value: string) => {
+              nextCity = value;
+            }}
+          />
           <Input
-            defaultValue={row.admin_pubkey}
-            placeholder="请输入新的管理员公钥"
+            defaultValue={tryEncodeSs58(row.admin_pubkey)}
+            placeholder="请输入新的管理员账户（SS58）"
             onChange={(event) => {
-              nextPubkey = event.target.value;
+              nextAddr = event.target.value;
             }}
           />
         </Space>
@@ -1088,18 +1403,30 @@ export default function App() {
       cancelText: '取消',
       onOk: async () => {
         const admin_name = nextName.trim();
-        const admin_pubkey = nextPubkey.trim();
+        const inputAddr = nextAddr.trim();
+        const city = (nextCity || '').trim();
         if (!admin_name) {
           message.error('请输入管理员姓名');
           throw new Error('admin_name is required');
         }
-        if (!admin_pubkey) {
-          message.error('请输入新的管理员公钥');
+        if (!inputAddr) {
+          message.error('请输入管理员账户');
           throw new Error('admin_pubkey is required');
+        }
+        if (!city) {
+          message.error('请选择市');
+          throw new Error('city is required');
+        }
+        let admin_pubkey: string;
+        try {
+          admin_pubkey = decodeSs58(inputAddr);
+        } catch (err) {
+          message.error(err instanceof Error ? err.message : '账户格式无效');
+          throw err;
         }
         setOperatorsLoading(true);
         try {
-          await updateOperator(auth, row.id, { admin_name, admin_pubkey });
+          await updateOperator(auth, row.id, { admin_name, admin_pubkey, city });
           message.success('系统管理员信息已更新');
           await refreshOperators(auth);
         } catch (err) {
@@ -1157,9 +1484,18 @@ export default function App() {
 
   const onReplaceSuperAdmin = async (values: { province: string; admin_pubkey: string }) => {
     if (!auth) return;
+    // 用户输入的是 SS58 地址，后端 API 仍接受 32 字节 hex 公钥
+    const inputAddr = values.admin_pubkey.trim();
+    let hexPubkey: string;
+    try {
+      hexPubkey = decodeSs58(inputAddr);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '账户格式无效');
+      return;
+    }
     setReplaceSuperLoading(true);
     try {
-      await replaceSuperAdmin(auth, values.province.trim(), values.admin_pubkey.trim());
+      await replaceSuperAdmin(auth, values.province.trim(), hexPubkey);
       message.success(`已更新 ${values.province} 机构管理员`);
       replaceSuperForm.resetFields();
       await refreshSuperAdmins(auth);
@@ -1350,7 +1686,7 @@ export default function App() {
   const onBindPubkeyNext = async () => {
     if (!auth) return;
     if (!bindNewPubkey.trim()) {
-      message.error('请输入新公钥');
+      message.error('请输入新账户');
       return;
     }
     setBindChallengeLoading(true);
@@ -1523,10 +1859,10 @@ export default function App() {
       render: (_v: unknown, _r: CitizenRow, idx: number) => idx + 1
     },
     {
-      title: '公钥',
+      title: '账户',
       dataIndex: 'account_pubkey',
       align: 'center',
-      render: (v: string | undefined) => v ?? '-'
+      render: (v: string | undefined) => (v ? tryEncodeSs58(v) : '-')
     },
     {
       title: '档案号',
@@ -1979,7 +2315,7 @@ export default function App() {
                 { key: 'citizens' as const, label: '首页', visible: true, onClick: () => setActiveView('citizens') },
                 {
                   key: 'institutions' as const,
-                  label: '机构管理',
+                  label: '公权机构',
                   visible: capabilities.canViewInstitutions,
                   onClick: async () => {
                     setActiveView('institutions');
@@ -1994,6 +2330,7 @@ export default function App() {
                   visible: capabilities.canViewMultisig,
                   onClick: async () => {
                     setActiveView('multisig');
+                    setSelectedMultisigSfid(null);
                     if (auth) {
                       await refreshMultisigSfids(auth);
                     }
@@ -2001,7 +2338,7 @@ export default function App() {
                 },
                 {
                   key: 'keyring' as const,
-                  label: '密钥管理员',
+                  label: '密钥管理',
                   visible: capabilities.canViewKeyring,
                   onClick: async () => {
                     setActiveView('keyring');
@@ -2011,26 +2348,13 @@ export default function App() {
                   }
                 },
                 {
-                  key: 'super-admins' as const,
-                  label: '机构管理员',
-                  visible: capabilities.canViewInstitutionAdmins,
+                  key: 'system-settings' as const,
+                  label: '机构管理',
+                  visible: capabilities.canViewSystemSettings,
                   onClick: async () => {
-                    setActiveView('super-admins');
-                    if (auth) {
-                      await refreshSuperAdmins(auth);
-                    }
-                  }
-                },
-                {
-                  key: 'operators' as const,
-                  label: '系统管理员',
-                  visible: capabilities.canViewSystemAdmins,
-                  onClick: async () => {
-                    setActiveView('operators');
-                    setOperatorPage(1);
-                    if (auth) {
-                      await refreshOperators(auth);
-                    }
+                    setActiveView('system-settings');
+                    if (!auth) return;
+                    await openSystemSettings(auth);
                   }
                 },
               ] as const).filter((tab) => tab.visible).map((tab) => (
@@ -2264,7 +2588,7 @@ export default function App() {
             </Card>
           ) : activeView === 'institutions' && capabilities.canManageInstitutions ? (
             <Card
-              title="机构列表"
+              title="公权机构列表"
               bordered={false}
               style={glassCardStyle}
               headStyle={glassCardHeadStyle}
@@ -2272,7 +2596,7 @@ export default function App() {
                 capabilities.canRegisterInstitutions ? (
                   <Space>
                     <Button type="primary" onClick={openInstitutionSfidModal} loading={institutionSfidLoading}>
-                      生成机构身份识别码
+                      新增公权机构
                     </Button>
                   </Space>
                 ) : null
@@ -2393,65 +2717,143 @@ export default function App() {
               />
             </Card>
           ) : activeView === 'multisig' && capabilities.canViewMultisig ? (
-            <Card
-              title="多签机构 SFID 列表"
-              bordered={false}
-              style={glassCardStyle}
-              headStyle={glassCardHeadStyle}
-              extra={
-                <Button type="primary" onClick={openMultisigModal}>
-                  生成多签机构 SFID
-                </Button>
-              }
-            >
-              <Table<MultisigSfidRow>
-                rowKey={(r) => r.site_sfid}
-                loading={multisigLoading}
-                dataSource={multisigRows}
-                pagination={{
-                  pageSize: 10,
-                  current: multisigPage,
-                  onChange: (page) => setMultisigPage(page)
-                }}
-                columns={[
-                  {
-                    title: '序号',
-                    width: 70,
-                    align: 'center',
-                    render: (_v, _row, index) => (multisigPage - 1) * 10 + index + 1
-                  },
-                  { title: 'SFID 号', dataIndex: 'site_sfid', width: 280 },
-                  { title: 'A3', dataIndex: 'a3', width: 60, align: 'center' },
-                  { title: '机构名称', dataIndex: 'institution_name', width: 160, align: 'center' },
-                  { title: '省', dataIndex: 'province', width: 100, align: 'center' },
-                  { title: '市', dataIndex: 'city', width: 100, align: 'center' },
-                  {
-                    title: '链上状态',
-                    dataIndex: 'chain_status',
-                    width: 110,
-                    align: 'center',
-                    render: (status: string) => {
-                      const colorMap: Record<string, string> = { REGISTERED: 'green', PENDING: 'orange', FAILED: 'red' };
-                      const labelMap: Record<string, string> = { REGISTERED: '已注册', PENDING: '等待中', FAILED: '失败' };
-                      return <Tag color={colorMap[status] || 'default'}>{labelMap[status] || status}</Tag>;
+            selectedMultisigSfid ? (
+              // ── 多签 SFID 详情页 ──
+              (() => {
+                const r = selectedMultisigSfid;
+                const statusColor: Record<string, string> = { REGISTERED: 'green', PENDING: 'orange', FAILED: 'red' };
+                const statusLabel: Record<string, string> = { REGISTERED: '已注册', PENDING: '等待中', FAILED: '失败' };
+                return (
+                  <Card
+                    bordered={false}
+                    style={glassCardStyle}
+                    headStyle={glassCardHeadStyle}
+                    title={
+                      <Space>
+                        <Button type="link" onClick={() => setSelectedMultisigSfid(null)}>
+                          ← 返回列表
+                        </Button>
+                        <span>注册机构 SFID 详情</span>
+                      </Space>
                     }
-                  },
-                  {
-                    title: '交易哈希',
-                    dataIndex: 'chain_tx_hash',
-                    width: 160,
-                    render: (v: string | null) => v ? `${v.slice(0, 10)}...${v.slice(-6)}` : '-'
-                  },
-                  { title: '创建者', dataIndex: 'created_by_name', width: 120, align: 'center' },
-                  {
-                    title: '创建时间',
-                    dataIndex: 'created_at',
-                    width: 180,
-                    render: (v: string) => v ? new Date(v).toLocaleString('zh-CN') : '-'
-                  },
-                ]}
-              />
-            </Card>
+                  >
+                    <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', rowGap: 10, columnGap: 16 }}>
+                      <Typography.Text type="secondary">SFID 号</Typography.Text>
+                      <Typography.Text code style={{ wordBreak: 'break-all' }}>{r.site_sfid}</Typography.Text>
+
+                      <Typography.Text type="secondary">A3 主体属性</Typography.Text>
+                      <Typography.Text>{r.a3}</Typography.Text>
+
+                      <Typography.Text type="secondary">机构类型</Typography.Text>
+                      <Typography.Text>{r.institution_code}</Typography.Text>
+
+                      <Typography.Text type="secondary">机构名称</Typography.Text>
+                      <Typography.Text>{r.institution_name}</Typography.Text>
+
+                      <Typography.Text type="secondary">省</Typography.Text>
+                      <Typography.Text>{r.province}（{r.province_code}）</Typography.Text>
+
+                      <Typography.Text type="secondary">市</Typography.Text>
+                      <Typography.Text>{r.city}</Typography.Text>
+
+                      <Typography.Text type="secondary">链上状态</Typography.Text>
+                      <Typography.Text>
+                        <Tag color={statusColor[r.chain_status] || 'default'}>{statusLabel[r.chain_status] || r.chain_status}</Tag>
+                      </Typography.Text>
+
+                      <Typography.Text type="secondary">交易哈希</Typography.Text>
+                      <Typography.Text code style={{ wordBreak: 'break-all' }}>{r.chain_tx_hash || '-'}</Typography.Text>
+
+                      <Typography.Text type="secondary">区块高度</Typography.Text>
+                      <Typography.Text>{r.chain_block_number ?? '-'}</Typography.Text>
+
+                      <Typography.Text type="secondary">创建者</Typography.Text>
+                      <Typography.Text>{r.created_by_name || r.created_by}</Typography.Text>
+
+                      <Typography.Text type="secondary">创建时间</Typography.Text>
+                      <Typography.Text>{r.created_at ? new Date(r.created_at).toLocaleString('zh-CN') : '-'}</Typography.Text>
+                    </div>
+                  </Card>
+                );
+              })()
+            ) : (
+              <Card
+                title="注册机构列表"
+                bordered={false}
+                style={glassCardStyle}
+                headStyle={glassCardHeadStyle}
+                extra={
+                  <Button type="primary" onClick={openMultisigModal}>
+                    生成机构SFID
+                  </Button>
+                }
+              >
+                <Table<MultisigSfidRow>
+                  rowKey={(r) => r.site_sfid}
+                  loading={multisigLoading}
+                  dataSource={multisigRows}
+                  pagination={{
+                    pageSize: 10,
+                    current: multisigPage,
+                    onChange: (page) => setMultisigPage(page)
+                  }}
+                  onRow={(row) => ({
+                    onClick: (e) => {
+                      // 点击操作列里的按钮时不进入详情
+                      const target = e.target as HTMLElement;
+                      if (target.closest('button')) return;
+                      setSelectedMultisigSfid(row);
+                    },
+                    style: { cursor: 'pointer' },
+                  })}
+                  columns={[
+                    {
+                      title: '序号',
+                      width: 70,
+                      align: 'center',
+                      render: (_v, _row, index) => (multisigPage - 1) * 10 + index + 1
+                    },
+                    { title: 'SFID 号', dataIndex: 'site_sfid', width: 280 },
+                    { title: '机构名称', dataIndex: 'institution_name', width: 160, align: 'center' },
+                    { title: '省', dataIndex: 'province', width: 100, align: 'center' },
+                    { title: '市', dataIndex: 'city', width: 100, align: 'center' },
+                    {
+                      title: '链上状态',
+                      dataIndex: 'chain_status',
+                      width: 110,
+                      align: 'center',
+                      render: (status: string) => {
+                        const colorMap: Record<string, string> = { REGISTERED: 'green', PENDING: 'orange', FAILED: 'red' };
+                        const labelMap: Record<string, string> = { REGISTERED: '已注册', PENDING: '等待中', FAILED: '失败' };
+                        return <Tag color={colorMap[status] || 'default'}>{labelMap[status] || status}</Tag>;
+                      }
+                    },
+                    { title: '创建者', dataIndex: 'created_by_name', width: 120, align: 'center' },
+                    {
+                      title: '操作',
+                      width: 100,
+                      align: 'center',
+                      render: (_v: unknown, row: MultisigSfidRow) => {
+                        const canDelete = row.chain_status !== 'REGISTERED';
+                        return (
+                          <Button
+                            size="small"
+                            danger
+                            disabled={!canDelete}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteMultisigSfid(row);
+                            }}
+                          >
+                            删除
+                          </Button>
+                        );
+                      }
+                    },
+                  ]}
+                />
+              </Card>
+            )
           ) : activeView === 'keyring' && capabilities.canManageKeyring ? (
             <Card
               title="签名密钥管理（一主两备）"
@@ -2472,15 +2874,14 @@ export default function App() {
               }
             >
               {(() => {
-                const isMainKey = keyringState && auth
-                  ? auth.admin_pubkey.replace(/^0x/i, '').toLowerCase() === keyringState.main_pubkey.replace(/^0x/i, '').toLowerCase()
-                  : false;
-                return isMainKey ? (
-                  <Typography.Paragraph type="warning" style={{ marginBottom: 12, padding: '8px 12px', background: '#fffbe6', borderRadius: 8, border: '1px solid #ffe58f' }}>
-                    当前登录的是主密钥，无法发起轮换。请使用备用密钥（备用A 或 备用B）登录后操作。
-                  </Typography.Paragraph>
-                ) : null;
-              })()}
+                // 主密钥登录时，一切轮换相关控件（输入框/按钮/扫码图标）都禁用
+                const isMainKeySigned = Boolean(
+                  keyringState &&
+                    auth &&
+                    auth.admin_pubkey.replace(/^0x/i, '').toLowerCase() ===
+                      keyringState.main_pubkey.replace(/^0x/i, '').toLowerCase()
+                );
+                return (
               <Form
                 form={keyringForm}
                 layout="inline"
@@ -2490,19 +2891,42 @@ export default function App() {
                 <Form.Item
                   name="new_backup_pubkey"
                   rules={[
-                    { required: true, message: '请输入新备用公钥' },
+                    { required: true, message: '请输入新备用账户' },
                     {
                       validator: async (_rule, value) => {
-                        if (!value || isSr25519HexPubkey(String(value))) return;
-                        throw new Error('公钥格式必须为 32 字节十六进制');
+                        if (!value) return;
+                        try {
+                          decodeSs58(String(value));
+                        } catch (err) {
+                          throw new Error(err instanceof Error ? err.message : '账户格式无效');
+                        }
                       }
                     }
                   ]}
                 >
                   <Input
                     style={{ width: 420, maxWidth: '72vw' }}
-                    placeholder="新备用公钥（0x 开头 32 字节十六进制）"
-                    disabled={keyringState != null && auth != null && auth.admin_pubkey.replace(/^0x/i, '').toLowerCase() === keyringState.main_pubkey.replace(/^0x/i, '').toLowerCase()}
+                    placeholder="新备用账户（SS58 地址）"
+                    disabled={isMainKeySigned}
+                    suffix={
+                      <span
+                        title={isMainKeySigned ? '主密钥登录无法轮换' : '扫码识别用户码'}
+                        style={{
+                          cursor: isMainKeySigned ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          color: isMainKeySigned ? 'rgba(148,163,184,0.6)' : '#0d9488'
+                        }}
+                        onClick={() => {
+                          if (isMainKeySigned) return;
+                          setKeyringScanAccountOpen(true);
+                        }}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+                          <rect x="7" y="7" width="10" height="10" rx="1"/>
+                        </svg>
+                      </span>
+                    }
                   />
                 </Form.Item>
                 <Form.Item style={{ marginBottom: 0 }}>
@@ -2510,15 +2934,17 @@ export default function App() {
                     type="primary"
                     htmlType="submit"
                     loading={keyringActionLoading}
-                    disabled={keyringState != null && auth != null && auth.admin_pubkey.replace(/^0x/i, '').toLowerCase() === keyringState.main_pubkey.replace(/^0x/i, '').toLowerCase()}
+                    disabled={isMainKeySigned}
                   >
                     发起轮换
                   </Button>
                 </Form.Item>
               </Form>
+                );
+              })()}
 
               <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-                {'流程：输入新备用公钥 -> 生成轮换二维码 -> 备用私钥钱包扫码签名 -> 本页面扫码验签 -> 自动完成轮换并推链。'}
+                {'流程：输入新备用账户 -> 生成轮换二维码 -> 备用钱包扫码签名 -> 本页面扫码验签 -> 自动完成轮换并推链。'}
               </Typography.Paragraph>
 
               <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 12 }}>
@@ -2529,22 +2955,22 @@ export default function App() {
                       filter: keyringChallenge ? 'none' : 'blur(3px) opacity(0.4)',
                       transition: 'filter 0.3s ease'
                     }}>
-                      <QRCode value={keyringChallenge?.challenge_text || 'SFID_KEYRING_ROTATE_PENDING'} size={260} color="#134e4a" />
+                      <QRCode value={keyringChallenge?.challenge_text || 'SFID_KEYRING_ROTATE_PENDING'} size={260} color="#134e4a" bordered={false} />
                     </div>
                   </div>
                   <Typography.Paragraph type="secondary" style={{ marginTop: 10, marginBottom: 8 }}>
                     {keyringChallenge
                       ? `轮换挑战有效期至：${new Date(keyringChallenge.expire_at * 1000).toLocaleTimeString()}`
-                      : '请输入新备用公钥并点击发起轮换'}
+                      : ''}
                   </Typography.Paragraph>
                 </div>
-                <div style={{ flex: '1 1 320px', minWidth: 300 }}>
+                <div style={{ flex: '1 1 260px', minWidth: 260 }}>
                   <Typography.Text strong style={{ fontSize: 14, color: '#374151', display: 'block', marginBottom: 8 }}>扫码窗口</Typography.Text>
                   <div
                     style={{
-                      width: '100%',
-                      maxWidth: 260,
-                      aspectRatio: '1 / 1',
+                      width: 260,
+                      height: 260,
+                      boxSizing: 'border-box',
                       background: 'linear-gradient(145deg, #0f172a, #1e293b)',
                       borderRadius: 16,
                       overflow: 'hidden',
@@ -2598,30 +3024,306 @@ export default function App() {
                   当前密钥状态
                 </Typography.Text>
                 <Typography.Paragraph style={{ marginBottom: 6 }}>
-                  版本：{keyringState?.version ?? '-'}
+                  主账户：<Typography.Text code>{tryEncodeSs58(keyringState?.main_pubkey)}</Typography.Text>
+                  {mainAccountBalance != null && (
+                    <span style={{ marginLeft: 12, color: '#0d9488', fontWeight: 600 }}>
+                      余额：{mainAccountBalance} 元
+                    </span>
+                  )}
+                  {mainAccountBalanceError && (
+                    <span style={{ marginLeft: 12, color: '#ef4444', fontSize: 12 }}>
+                      余额查询失败：{mainAccountBalanceError}
+                    </span>
+                  )}
                 </Typography.Paragraph>
                 <Typography.Paragraph style={{ marginBottom: 6 }}>
-                  主公钥：<Typography.Text code>{keyringState?.main_pubkey ?? '-'}</Typography.Text>
-                </Typography.Paragraph>
-                <Typography.Paragraph style={{ marginBottom: 6 }}>
-                  备用A：<Typography.Text code>{keyringState?.backup_a_pubkey ?? '-'}</Typography.Text>
+                  备用A 账户：<Typography.Text code>{tryEncodeSs58(keyringState?.backup_a_pubkey)}</Typography.Text>
                 </Typography.Paragraph>
                 <Typography.Paragraph style={{ marginBottom: 0 }}>
-                  备用B：<Typography.Text code>{keyringState?.backup_b_pubkey ?? '-'}</Typography.Text>
+                  备用B 账户：<Typography.Text code>{tryEncodeSs58(keyringState?.backup_b_pubkey)}</Typography.Text>
                 </Typography.Paragraph>
               </Card>
             </Card>
+          ) : activeView === 'system-settings' && capabilities.canViewSystemSettings ? (
+            selectedSuperAdmin ? (
+              // ── 机构详情页（sub-tab：系统管理员列表 / 机构管理员） ──
+              (() => {
+                const isKeyAdmin = auth?.role === 'KEY_ADMIN';
+                const isSelf = auth ? sameHexPubkey(selectedSuperAdmin.admin_pubkey, auth.admin_pubkey) : false;
+                const canEditOperators = isKeyAdmin || (auth?.role === 'INSTITUTION_ADMIN' && isSelf);
+                const canReplaceThisAdmin = isKeyAdmin;
+                const operatorsForThisAdmin = operators.filter((op) =>
+                  sameHexPubkey(op.created_by, selectedSuperAdmin.admin_pubkey)
+                );
+                const subTabs: Array<{ key: 'operators' | 'super-admin'; label: string }> = [
+                  { key: 'operators', label: '系统管理员列表' },
+                  { key: 'super-admin', label: '机构管理员' },
+                ];
+                return (
+                  <Card
+                    bordered={false}
+                    style={glassCardStyle}
+                    headStyle={glassCardHeadStyle}
+                    title={
+                      <Space>
+                        {isKeyAdmin && (
+                          <Button type="link" onClick={() => setSelectedSuperAdmin(null)}>
+                            ← 返回列表
+                          </Button>
+                        )}
+                        <span>机构详情 — {selectedSuperAdmin.province}</span>
+                      </Space>
+                    }
+                  >
+                    {/* sub-tabs：左 系统管理员列表（默认） / 右 机构管理员
+                       外层卡片是白底玻璃质感，未选中按钮需用深色文字 + 浅底边框才能被看见 */}
+                    <div style={{
+                      display: 'flex',
+                      gap: 8,
+                      padding: 6,
+                      background: 'rgba(15,23,42,0.06)',
+                      borderRadius: 10,
+                      border: '1px solid rgba(15,23,42,0.12)',
+                      width: 'fit-content',
+                      marginBottom: 16,
+                    }}>
+                      {subTabs.map((t) => (
+                        <button
+                          key={t.key}
+                          onClick={() => setAdminDetailTab(t.key)}
+                          style={{
+                            padding: '6px 18px',
+                            borderRadius: 8,
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: 13,
+                            fontWeight: 500,
+                            transition: 'all 0.2s ease',
+                            ...(adminDetailTab === t.key
+                              ? {
+                                  background: 'linear-gradient(135deg, #0d9488, #0f766e)',
+                                  color: '#fff',
+                                  boxShadow: '0 2px 6px rgba(13,148,136,0.35)',
+                                }
+                              : {
+                                  background: 'rgba(255,255,255,0.7)',
+                                  color: 'rgba(15,23,42,0.75)',
+                                }),
+                          }}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {adminDetailTab === 'operators' ? (
+                      // ── 系统管理员列表 ──
+                      <Card
+                        type="inner"
+                        title="系统管理员列表"
+                        extra={
+                          canEditOperators ? (
+                            <Button type="primary" onClick={() => setAddOperatorOpen(true)}>
+                              新增系统管理员
+                            </Button>
+                          ) : null
+                        }
+                      >
+                        <Table<OperatorRow>
+                          rowKey={(r) => `${r.id}-${r.admin_pubkey}`}
+                          loading={operatorsLoading}
+                          dataSource={operatorsForThisAdmin}
+                          pagination={{
+                            pageSize: 10,
+                            current: operatorListPage,
+                            onChange: (page) => setOperatorListPage(page),
+                            showSizeChanger: false,
+                            showTotal: (total) => `共 ${total} 条`,
+                          }}
+                          columns={[
+                            {
+                              title: '序号',
+                              width: 70,
+                              align: 'center',
+                              render: (_v, _row, index) => (operatorListPage - 1) * 10 + index + 1,
+                            },
+                            { title: '市', dataIndex: 'city', align: 'center', width: 120 },
+                            { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 160 },
+                            {
+                              title: '账户',
+                              dataIndex: 'admin_pubkey',
+                              align: 'center',
+                              render: (v: string) => tryEncodeSs58(v),
+                            },
+                            { title: '状态', dataIndex: 'status', align: 'center', width: 100 },
+                            ...(canEditOperators
+                              ? [
+                                  {
+                                    title: '操作',
+                                    width: 220,
+                                    align: 'center' as const,
+                                    render: (_v: unknown, row: OperatorRow) => (
+                                      <Space>
+                                        <Button size="small" onClick={() => onUpdateOperator(row)}>
+                                          修改
+                                        </Button>
+                                        <Button size="small" onClick={() => onToggleOperatorStatus(row)}>
+                                          {row.status === 'ACTIVE' ? '停用' : '启用'}
+                                        </Button>
+                                        <Button size="small" danger onClick={() => onDeleteOperator(row)}>
+                                          删除
+                                        </Button>
+                                      </Space>
+                                    ),
+                                  },
+                                ]
+                              : []),
+                          ]}
+                        />
+                      </Card>
+                    ) : (
+                      // ── 机构管理员（基本信息 + 更换） ──
+                      <Card
+                        type="inner"
+                        title="机构管理员"
+                        extra={
+                          canReplaceThisAdmin ? (
+                            <Form
+                              form={replaceSuperForm}
+                              layout="inline"
+                              onFinish={(values: { admin_pubkey: string }) =>
+                                onReplaceSuperAdmin({ province: selectedSuperAdmin.province, admin_pubkey: values.admin_pubkey })
+                              }
+                              style={{ rowGap: 8 }}
+                            >
+                              <Form.Item
+                                name="admin_pubkey"
+                                rules={[
+                                  { required: true, message: '请输入新机构管理员账户' },
+                                  {
+                                    validator: async (_rule, value) => {
+                                      if (!value) return;
+                                      try {
+                                        decodeSs58(String(value));
+                                      } catch (e) {
+                                        throw new Error(e instanceof Error ? e.message : '账户格式无效');
+                                      }
+                                    },
+                                  },
+                                ]}
+                                style={{ marginBottom: 0 }}
+                              >
+                                <Input
+                                  style={{ width: 420, maxWidth: '60vw' }}
+                                  placeholder="新机构管理员账户（SS58）"
+                                  suffix={
+                                    <span
+                                      title="扫码识别用户码"
+                                      style={{ cursor: 'pointer', display: 'inline-flex', color: '#0d9488' }}
+                                      onClick={() => setAccountScanTarget('super-admin')}
+                                    >
+                                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+                                        <rect x="7" y="7" width="10" height="10" rx="1"/>
+                                      </svg>
+                                    </span>
+                                  }
+                                />
+                              </Form.Item>
+                              <Form.Item style={{ marginBottom: 0 }}>
+                                <Button type="primary" htmlType="submit" loading={replaceSuperLoading}>
+                                  更换机构管理员
+                                </Button>
+                              </Form.Item>
+                            </Form>
+                          ) : null
+                        }
+                      >
+                        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', rowGap: 8, columnGap: 12 }}>
+                          <Typography.Text type="secondary">省份</Typography.Text>
+                          <Typography.Text>{selectedSuperAdmin.province}</Typography.Text>
+                          <Typography.Text type="secondary">名称</Typography.Text>
+                          <Typography.Text>{selectedSuperAdmin.admin_name}</Typography.Text>
+                          <Typography.Text type="secondary">账户</Typography.Text>
+                          <Typography.Text code style={{ wordBreak: 'break-all' }}>
+                            {tryEncodeSs58(selectedSuperAdmin.admin_pubkey)}
+                          </Typography.Text>
+                        </div>
+                      </Card>
+                    )}
+                  </Card>
+                );
+              })()
+            ) : (
+              // ── KeyAdmin: 机构管理员卡片列表 ──
+              <Card
+                title="机构列表"
+                bordered={false}
+                style={glassCardStyle}
+                headStyle={glassCardHeadStyle}
+              >
+                {superAdminsLoading ? (
+                  <Typography.Text type="secondary">加载中...</Typography.Text>
+                ) : (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+                    gap: 12
+                  }}>
+                    {superAdmins.map((row) => (
+                      <div
+                        key={`${row.province}-${row.admin_pubkey}`}
+                        onClick={() => setSelectedSuperAdmin(row)}
+                        style={{
+                          padding: 14,
+                          borderRadius: 12,
+                          // 更浅的卡片底色，避免在玻璃质感整体面板上过于显眼
+                          border: '1px solid rgba(15,23,42,0.22)',
+                          background: 'rgba(226,232,240,0.55)',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLDivElement).style.background = 'rgba(13,148,136,0.22)';
+                          (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(13,148,136,0.55)';
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLDivElement).style.background = 'rgba(226,232,240,0.55)';
+                          (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(15,23,42,0.22)';
+                        }}
+                      >
+                        <div style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', marginBottom: 8 }}>
+                          {row.province}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            lineHeight: 1.4,
+                            color: 'rgba(15,23,42,0.7)',
+                            fontFamily: 'monospace',
+                            wordBreak: 'break-all',
+                          }}
+                        >
+                          {tryEncodeSs58(row.admin_pubkey)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            )
           ) : (
             <>
           <Card
-            title={'身份信息'}
+            title={'公民身份列表'}
             bordered={false}
             style={glassCardStyle}
             headStyle={glassCardHeadStyle}
             extra={
               <Form layout="inline" onFinish={onSearch}>
                 <Form.Item name="keyword" style={{ marginBottom: 0 }}>
-                  <Input style={{ width: 420 }} placeholder="请输入公钥、档案号或SFID号" allowClear />
+                  <Input style={{ width: 420 }} placeholder="请输入账户、档案号或SFID号" allowClear />
                 </Form.Item>
                 <Form.Item style={{ marginBottom: 0 }}>
                   <Button htmlType="submit" type="primary" loading={loading}>
@@ -2660,11 +3362,11 @@ export default function App() {
           {/* 步骤指示 */}
           <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
             {bindMode === 'bind_archive'
-              ? '模式：有公钥绑档案（扫描 CPMS 档案二维码 → 签名验证 → 完成绑定）'
-              : '模式：有档案绑公钥（输入新公钥 → 签名验证 → 完成绑定）'}
+              ? '模式：有账户绑档案（扫描 CPMS 档案二维码 → 签名验证 → 完成绑定）'
+              : '模式：有档案绑账户（输入新账户 → 签名验证 → 完成绑定）'}
           </Typography.Paragraph>
 
-          {/* 模式1：有公钥绑档案 - 第一步扫 QR4 */}
+          {/* 模式1：有账户绑档案 - 第一步扫 QR4 */}
           {bindMode === 'bind_archive' && bindStep === 'scan_qr4' && (
             <>
               <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
@@ -2712,11 +3414,11 @@ export default function App() {
             </>
           )}
 
-          {/* 模式2：有档案绑公钥 - 第一步输入公钥 */}
+          {/* 模式2：有档案绑账户 - 第一步输入账户 */}
           {bindMode === 'bind_pubkey' && bindStep === 'input_pubkey' && (
             <>
               <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-                第一步：输入新公钥
+                第一步：输入新账户
               </Typography.Text>
               <Form layout="vertical">
                 <Form.Item label="记录ID">
@@ -2728,11 +3430,11 @@ export default function App() {
                 <Form.Item label="SFID码">
                   <Input value={bindTargetRecord?.sfid_code ?? ''} disabled />
                 </Form.Item>
-                <Form.Item label="新公钥" required>
+                <Form.Item label="新账户" required>
                   <Input
                     value={bindNewPubkey}
                     onChange={(e) => setBindNewPubkey(e.target.value)}
-                    placeholder="请输入新公钥（0x 开头 32 字节十六进制）"
+                    placeholder="请输入新账户（SS58 地址）"
                   />
                 </Form.Item>
                 <Button type="primary" onClick={onBindPubkeyNext} loading={bindChallengeLoading}>
@@ -2835,10 +3537,10 @@ export default function App() {
           <>
             <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fff7ed', borderRadius: 8, border: '1px solid #fed7aa' }}>
               <div style={{ color: '#9a3412', fontWeight: 500, marginBottom: 4 }}>
-                解绑后公钥将被清除，档案号和SFID码保留。
+                解绑后账户将被清除，档案号和SFID码保留。
               </div>
               <div style={{ color: '#78716c', fontSize: 13 }}>
-                公钥：{unbindTarget.account_pubkey || '-'}
+                账户：{unbindTarget.account_pubkey ? tryEncodeSs58(unbindTarget.account_pubkey) : '-'}
               </div>
             </div>
 
@@ -2979,7 +3681,7 @@ export default function App() {
       </Modal>
 
       <Modal
-        title="生成机构身份识别码"
+        title={<div style={{ textAlign: 'center', width: '100%' }}>新增公权机构</div>}
         open={institutionSfidOpen}
         onCancel={() => setInstitutionSfidOpen(false)}
         footer={[
@@ -3092,7 +3794,7 @@ export default function App() {
 
       {/* ── 多签机构 SFID 生成弹窗 ── */}
       <Modal
-        title="生成多签机构 SFID"
+        title={<div style={{ textAlign: 'center', width: '100%' }}>生成机构SFID</div>}
         open={multisigModalOpen}
         onCancel={() => setMultisigModalOpen(false)}
         footer={[
@@ -3158,6 +3860,7 @@ export default function App() {
               loading={sfidCitiesLoading}
               options={sfidCities.filter((c) => c.code !== '000').map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }))}
               placeholder="请选择该省下的市"
+              disabled={auth?.role === 'SYSTEM_ADMIN'}
             />
           </Form.Item>
           <Form.Item label="机构类型" name="institution" rules={[{ required: true, message: '请选择机构类型' }]}>
@@ -3180,6 +3883,127 @@ export default function App() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* ── 新增系统管理员 Modal（在机构详情页触发） ── */}
+      <Modal
+        title={<div style={{ textAlign: 'center', width: '100%' }}>新增系统管理员</div>}
+        open={addOperatorOpen}
+        onCancel={() => {
+          addOperatorForm.resetFields();
+          setAddOperatorOpen(false);
+        }}
+        footer={[
+          <Button
+            key="cancel"
+            onClick={() => {
+              addOperatorForm.resetFields();
+              setAddOperatorOpen(false);
+            }}
+          >
+            取消新增
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            loading={addOperatorLoading}
+            onClick={() => addOperatorForm.submit()}
+          >
+            确认新增
+          </Button>,
+        ]}
+        destroyOnClose
+      >
+        <Form
+          form={addOperatorForm}
+          layout="vertical"
+          onFinish={(values: { operator_name: string; operator_pubkey: string; operator_city: string }) =>
+            onCreateOperator({
+              operator_name: values.operator_name,
+              operator_pubkey: values.operator_pubkey,
+              city: values.operator_city,
+              created_by: selectedSuperAdmin?.admin_pubkey,
+            })
+          }
+        >
+          <Form.Item
+            label="姓名"
+            name="operator_name"
+            rules={[{ required: true, message: '请输入系统管理员姓名' }]}
+          >
+            <Input placeholder="请输入系统管理员姓名" />
+          </Form.Item>
+          <Form.Item
+            label="市"
+            name="operator_city"
+            rules={[{ required: true, message: '请选择市' }]}
+          >
+            <Select
+              placeholder="请选择市"
+              loading={operatorCitiesLoading}
+              options={operatorCities
+                .filter((c) => c.code !== '000')
+                .map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }))}
+            />
+          </Form.Item>
+          <Form.Item
+            label="账户"
+            name="operator_pubkey"
+            rules={[
+              { required: true, message: '请输入系统管理员账户' },
+              {
+                validator: async (_rule, value) => {
+                  if (!value) return;
+                  try {
+                    decodeSs58(String(value));
+                  } catch (err) {
+                    throw new Error(err instanceof Error ? err.message : '账户格式无效');
+                  }
+                },
+              },
+            ]}
+          >
+            <Input
+              placeholder="请输入系统管理员账户（SS58）"
+              suffix={
+                <span
+                  title="扫码识别用户码"
+                  style={{ cursor: 'pointer', display: 'inline-flex', color: '#0d9488' }}
+                  onClick={() => setAccountScanTarget('operator')}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+                    <rect x="7" y="7" width="10" height="10" rx="1"/>
+                  </svg>
+                </span>
+              }
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* ── 密钥管理：扫码识别"新备用账户"弹窗 ── */}
+      <ScanAccountModal
+        open={keyringScanAccountOpen}
+        onClose={() => setKeyringScanAccountOpen(false)}
+        onResolved={(addr) => {
+          keyringForm.setFieldsValue({ new_backup_pubkey: addr });
+          setKeyringScanAccountOpen(false);
+        }}
+      />
+
+      {/* ── 通用扫码识别账户弹窗（新增系统管理员 / 更换机构管理员等） ── */}
+      <ScanAccountModal
+        open={accountScanTarget !== null}
+        onClose={() => setAccountScanTarget(null)}
+        onResolved={(addr) => {
+          if (accountScanTarget === 'operator') {
+            addOperatorForm.setFieldsValue({ operator_pubkey: addr });
+          } else if (accountScanTarget === 'super-admin') {
+            replaceSuperForm.setFieldsValue({ admin_pubkey: addr });
+          }
+          setAccountScanTarget(null);
+        }}
+      />
 
     </Layout>
   );

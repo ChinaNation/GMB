@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
@@ -10,6 +12,7 @@ import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_models.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_service.dart';
 import 'package:wuminapp_mobile/trade/local_tx_store.dart';
+import 'package:wuminapp_mobile/trade/pending_tx_reconciler.dart';
 import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
@@ -70,33 +73,20 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   Future<void> _bootstrap() async {
     await _reloadWallet();
     await _loadLocalRecords();
-    _checkPendingRecords();
+    // 触发全局对账；Reconciler 内部有并发保护，多次触发安全。
+    unawaited(_runReconcileAndReload());
   }
 
-  /// 中文注释：对所有 pending 状态的记录执行链上确认检查。
-  /// 查询链上已确认 nonce，如果 nonce 已推进超过该记录的 nonce，标为 confirmed。
-  Future<void> _checkPendingRecords() async {
-    if (_currentWallet == null) return;
-    final pending = _localTxRecords.where((r) => r.status == 'pending').toList();
-    if (pending.isEmpty) return;
-
-    bool updated = false;
+  /// 触发全局对账并在完成后刷新本地列表。
+  Future<void> _runReconcileAndReload() async {
     try {
-      final confirmedNonce = await ChainRpc().fetchConfirmedNonce(
-        _currentWallet!.pubkeyHex,
-      );
-      for (final record in pending) {
-        // blockNumber 字段存的是 usedNonce
-        final usedNonce = record.blockNumber;
-        if (usedNonce != null && confirmedNonce > usedNonce) {
-          await LocalTxStore.updateStatus(record.txId, 'confirmed');
-          updated = true;
-        }
+      final updated = await PendingTxReconciler.instance.reconcileAll();
+      if (updated > 0 && mounted) {
+        await _loadLocalRecords();
       }
-    } catch (_) {
-      // RPC 查询失败时不处理，下次再检查
+    } catch (e) {
+      debugPrint('[交易记录] 对账失败: $e');
     }
-    if (updated && mounted) await _loadLocalRecords();
   }
 
   /// 中文注释：从本地 Isar 加载链上转账记录。
@@ -393,17 +383,13 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
           ..feeYuan = estimatedFee
           ..status = 'pending'
           ..txHash = result.txHash
-          ..blockNumber = result.usedNonce
+          ..usedNonce = result.usedNonce
           ..createdAtMillis = DateTime.now().millisecondsSinceEpoch;
         await LocalTxStore.insert(entity);
         if (mounted) await _loadLocalRecords();
 
-        // 中文注释：异步等待链上确认，确认后更新本地状态。
-        _waitForConfirmation(
-          txHash: result.txHash,
-          usedNonce: result.usedNonce,
-          pubkeyHex: wallet.pubkeyHex,
-        );
+        // 交由全局 Reconciler 兜底，不再依赖页面生命周期。
+        unawaited(_quickConfirmAfterSubmit(result.txHash));
       } catch (e) {
         debugPrint('[交易记录] 写入本地失败: $e');
       }
@@ -441,37 +427,21 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
     }
   }
 
-  /// 中文注释：异步轮询链上确认状态，确认后更新本地记录。
-  Future<void> _waitForConfirmation({
-    required String txHash,
-    required int usedNonce,
-    required String pubkeyHex,
-  }) async {
-    final onchainRpc = OnchainRpc();
-    final createdAt = DateTime.now();
-    // 每 6 秒检查一次，最多检查 60 次（6 分钟）
-    for (var i = 0; i < 60; i++) {
-      await Future.delayed(const Duration(seconds: 6));
-      if (!mounted) return;
+  /// 提交成功后的快速确认：短轮询 3 次，快速把常见情况推到 confirmed。
+  /// 长尾由全局 Reconciler 在启动/resume/周期调度时兜底。
+  Future<void> _quickConfirmAfterSubmit(String txHash) async {
+    for (var i = 0; i < 3; i++) {
+      await Future.delayed(const Duration(seconds: 2));
       try {
-        final result = await onchainRpc.checkTxStatus(
-          pubkeyHex: pubkeyHex,
-          usedNonce: usedNonce,
-          txHash: txHash,
-          createdAt: createdAt,
-        );
-        if (result == TxConfirmResult.confirmed) {
-          await LocalTxStore.updateStatus(txHash, 'confirmed');
-          if (mounted) await _loadLocalRecords();
-          return;
-        }
-        if (result == TxConfirmResult.lost) {
-          await LocalTxStore.updateStatus(txHash, 'failed');
+        final outcome =
+            await PendingTxReconciler.instance.reconcileSingle(txHash);
+        if (outcome == ReconcileOutcome.confirmed ||
+            outcome == ReconcileOutcome.lost) {
           if (mounted) await _loadLocalRecords();
           return;
         }
       } catch (e) {
-        debugPrint('[交易确认] 检查失败: $e');
+        debugPrint('[交易记录] 快速确认失败: $e');
       }
     }
   }

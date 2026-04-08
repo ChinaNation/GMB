@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
@@ -76,14 +76,38 @@ pub(crate) async fn generate_multisig_sfid(
 
     // ── 校验其余输入 ──
     let a3 = input.a3.trim().to_string();
-    let city = input.city.trim().to_string();
+    let mut city = input.city.trim().to_string();
     let institution = input.institution.trim().to_string();
-    if a3.is_empty() || city.is_empty() || institution.is_empty() {
+    if a3.is_empty() || institution.is_empty() {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "a3, city and institution are required",
+            "a3 and institution are required",
         );
+    }
+    // SystemAdmin 的市由 session 锁定，前端若未传 / 传了不一致，以 session 值为准并拒绝越界
+    if ctx.role == AdminRole::SystemAdmin {
+        let locked = match ctx.admin_city.as_deref() {
+            Some(v) if !v.trim().is_empty() => v.trim().to_string(),
+            _ => {
+                return api_error(
+                    StatusCode::FORBIDDEN,
+                    1003,
+                    "system admin city is not configured",
+                )
+            }
+        };
+        if !city.is_empty() && city != locked {
+            return api_error(
+                StatusCode::FORBIDDEN,
+                1003,
+                "city out of current admin scope",
+            );
+        }
+        city = locked;
+    }
+    if city.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "city is required");
     }
     if city.chars().count() > MAX_CITY_CHARS {
         return api_error(StatusCode::BAD_REQUEST, 1001, "city too long");
@@ -152,7 +176,6 @@ pub(crate) async fn generate_multisig_sfid(
                 ),
             );
         }
-        persist_runtime_state(&state);
 
         // ── 推送到链上 ──
         match submit_register_sfid_institution_extrinsic(
@@ -185,7 +208,6 @@ pub(crate) async fn generate_multisig_sfid(
                     ),
                 );
                 drop(store);
-                persist_runtime_state(&state);
 
                 return Json(ApiResponse {
                     code: 0,
@@ -217,7 +239,6 @@ pub(crate) async fn generate_multisig_sfid(
                     format!("site_sfid={} error={}", site_sfid, err),
                 );
                 drop(store);
-                persist_runtime_state(&state);
 
                 return api_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -251,10 +272,20 @@ pub(crate) async fn list_multisig_sfids(
     };
 
     let scope = ctx.admin_province.as_deref();
+    // SystemAdmin 需要进一步按市收敛：只能看到自己所属市的记录。
+    let city_scope: Option<&str> = if ctx.role == AdminRole::SystemAdmin {
+        ctx.admin_city.as_deref()
+    } else {
+        None
+    };
     let mut rows: Vec<MultisigSfidListRow> = store
         .multisig_sfid_records
         .values()
         .filter(|r| in_scope_multisig(r, scope))
+        .filter(|r| match city_scope {
+            Some(city) => r.city == city,
+            None => true,
+        })
         .map(|r| {
             let created_by_name = store
                 .admin_users_by_pubkey
@@ -295,6 +326,91 @@ pub(crate) async fn list_multisig_sfids(
             offset,
             rows: paged,
         },
+    })
+    .into_response()
+}
+
+/// `DELETE /api/v1/admin/multisig-sfids/:site_sfid`
+///
+/// 删除一条多签注册机构 SFID 记录。
+/// 业务规则：
+/// 1. 仅允许删除**未成功上链**的记录（`chain_status != Registered`）；
+///    `Registered` 的记录代表该 SFID 已在链上被多签账户引用，强删会造成链上/本地状态分裂，直接拒绝。
+/// 2. 省级作用域按 `admin_province` 过滤；SystemAdmin 额外按 `admin_city` 过滤。
+/// 3. 只允许调用者看到的记录被删。
+pub(crate) async fn delete_multisig_sfid(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(site_sfid): Path<String>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+
+    let target_sfid = site_sfid.trim().to_string();
+    if target_sfid.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "site_sfid is required");
+    }
+
+    let mut store = match store_write_or_500(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+
+    let record = match store.multisig_sfid_records.get(&target_sfid) {
+        Some(r) => r.clone(),
+        None => return api_error(StatusCode::NOT_FOUND, 1004, "multisig sfid not found"),
+    };
+
+    // 省级作用域校验
+    if !in_scope_multisig(&record, ctx.admin_province.as_deref()) {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "multisig sfid out of current admin scope",
+        );
+    }
+    // SystemAdmin 额外按市校验
+    if ctx.role == AdminRole::SystemAdmin {
+        let city_scope = ctx.admin_city.as_deref().unwrap_or("");
+        if city_scope.is_empty() || record.city != city_scope {
+            return api_error(
+                StatusCode::FORBIDDEN,
+                1003,
+                "multisig sfid out of current admin city scope",
+            );
+        }
+    }
+
+    // 链上已注册的不能删
+    if record.chain_status == MultisigChainStatus::Registered {
+        return api_error(
+            StatusCode::CONFLICT,
+            1005,
+            "cannot delete a multisig sfid already registered on chain",
+        );
+    }
+
+    store.multisig_sfid_records.remove(&target_sfid);
+    append_audit_log(
+        &mut store,
+        "MULTISIG_SFID_DELETE",
+        &ctx.admin_pubkey,
+        Some(target_sfid.clone()),
+        None,
+        "SUCCESS",
+        format!(
+            "site_sfid={} chain_status={:?}",
+            target_sfid, record.chain_status
+        ),
+    );
+    drop(store);
+
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: target_sfid,
     })
     .into_response()
 }

@@ -665,26 +665,6 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
         }
     }
 
-    let previous_main_pubkey = match state.public_key_hex.read() {
-        Ok(v) => v.clone(),
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "public key unavailable",
-            );
-        }
-    };
-    let previous_main_seed = match state.signing_seed_hex.read() {
-        Ok(v) => v.clone(),
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "signing seed unavailable",
-            );
-        }
-    };
     if let Err(err) = set_active_main_signer(
         &state,
         new_main_pubkey.as_str(),
@@ -724,38 +704,6 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
             "failed to switch active main signer",
         );
     }
-    if let Err(err) = persist_runtime_state_checked(&state) {
-        warn!(error = %err, "failed to persist runtime signer state");
-        if let Err(revert_err) = set_active_main_signer(
-            &state,
-            previous_main_pubkey.as_str(),
-            previous_main_seed.expose_secret(),
-        ) {
-            warn!(error = %revert_err, "failed to rollback active main signer");
-        }
-        let mut store = match store_write_or_500(&state) {
-            Ok(v) => v,
-            Err(resp) => return resp,
-        };
-        append_audit_log(
-            &mut store,
-            "CHAIN_KEYRING_ROTATE_COMMIT",
-            &ctx.admin_pubkey,
-            None,
-            None,
-            "FAILED",
-            format!(
-                "challenge_id={} chain_tx_hash={} chain_submit_ok=true local_persist_error=failed to persist runtime signer state",
-                challenge_id, chain_tx_hash
-            ),
-        );
-        return api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            1004,
-            "failed to persist runtime signer state",
-        );
-    }
-
     {
         let mut store = match store_write_or_500(&state) {
             Ok(v) => v,
@@ -1033,6 +981,7 @@ pub(crate) fn sync_key_admin_users(store: &mut Store) {
                 created_by: "SYSTEM".to_string(),
                 created_at: now,
                 updated_at: Some(now),
+                city: String::new(),
             },
         );
     }
@@ -1098,6 +1047,14 @@ fn resolve_chain_http_rpc_url() -> Result<String, String> {
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
         .ok_or_else(|| "SFID_CHAIN_RPC_URL not configured".to_string())
+}
+
+/// 暴露给其他模块（如 chain::balance）按需调用 state_getStorage。
+pub(crate) async fn call_chain_state_get_storage(
+    storage_key_hex: &str,
+) -> Result<Option<String>, String> {
+    let result = chain_rpc_call("state_getStorage", json!([storage_key_hex])).await?;
+    Ok(result.as_str().map(str::to_string))
 }
 
 async fn chain_rpc_call(
@@ -1211,18 +1168,32 @@ async fn submit_rotate_sfid_keys_extrinsic(
     initiator_seed_hex: &str,
     new_backup_pubkey: &str,
 ) -> Result<ChainRotateReceipt, String> {
+    // 中文注释：与 institutions.rs 中 register_sfid_institution 相同，
+    // PoW 链下 subxt 0.43 默认行为(从 finalized 读 nonce/取 era birth/等 finalize)全部踩坑，
+    // 必须做三件事：① legacy RPC 取 best+pool 视图 nonce ② immortal era ③ 只等 InBestBlock。
+    // 详见 ADR `04-decisions/sfid/2026-04-07-subxt-0.43-pow-chain-quirks.md`。
     let ws_url =
         resolve_chain_ws_url().map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
-    let client = OnlineClient::<PolkadotConfig>::from_url(ws_url)
+    let client = OnlineClient::<PolkadotConfig>::from_url(ws_url.clone())
         .await
         .map_err(|e| {
             format!("rotate_sfid_keys submit failed: chain websocket connect failed: {e}")
         })?;
+    // ① legacy RPC client，用于显式取 nonce
+    let rpc_client = subxt::backend::rpc::RpcClient::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("rotate_sfid_keys submit failed: legacy rpc connect failed: {e}"))?;
+    let legacy_rpc =
+        subxt::backend::legacy::LegacyRpcMethods::<PolkadotConfig>::new(rpc_client);
 
     let signer_account = AccountId32(
         parse_account_id32(initiator_pubkey)
             .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?,
     );
+    let chain_nonce = legacy_rpc
+        .system_account_next_index(&signer_account)
+        .await
+        .map_err(|e| format!("rotate_sfid_keys submit failed: fetch account nonce failed: {e}"))?;
     let new_backup_account = parse_account_id32(new_backup_pubkey)
         .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
     let payload = tx(
@@ -1230,9 +1201,14 @@ async fn submit_rotate_sfid_keys_extrinsic(
         "rotate_sfid_keys",
         vec![Value::from_bytes(new_backup_account)],
     );
+    // ② immortal + 显式 nonce
+    let params = subxt::config::DefaultExtrinsicParamsBuilder::<PolkadotConfig>::new()
+        .immortal()
+        .nonce(chain_nonce)
+        .build();
     let mut partial_tx = client
         .tx()
-        .create_partial(&payload, &signer_account, Default::default())
+        .create_partial(&payload, &signer_account, params)
         .await
         .map_err(|e| format!("rotate_sfid_keys submit failed: build extrinsic failed: {e}"))?;
     let signing_key = try_load_signing_key_from_seed(initiator_seed_hex)
@@ -1242,13 +1218,31 @@ async fn submit_rotate_sfid_keys_extrinsic(
         .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
     let tx_hash = format!("0x{}", hex::encode(tx.hash().as_ref()));
 
-    let in_block = tx
+    let mut submitted = tx
         .submit_and_watch()
         .await
-        .map_err(|e| format!("rotate_sfid_keys submit failed: submit_and_watch failed: {e}"))?
-        .wait_for_finalized()
-        .await
-        .map_err(|e| format!("rotate_sfid_keys submit failed: wait_for_finalized failed: {e}"))?;
+        .map_err(|e| format!("rotate_sfid_keys submit failed: submit_and_watch failed: {e}"))?;
+    // ③ 只等 InBestBlock
+    let in_block = tokio::time::timeout(std::time::Duration::from_secs(120), async {
+        use subxt::tx::TxStatus;
+        loop {
+            match submitted.next().await {
+                Some(Ok(TxStatus::InBestBlock(b))) => return Ok::<_, String>(b),
+                Some(Ok(TxStatus::InFinalizedBlock(b))) => return Ok(b),
+                Some(Ok(TxStatus::Error { message }))
+                | Some(Ok(TxStatus::Invalid { message }))
+                | Some(Ok(TxStatus::Dropped { message })) => {
+                    return Err(format!("tx pool reported: {message}"));
+                }
+                Some(Ok(_)) => continue,
+                Some(Err(e)) => return Err(format!("tx watch stream error: {e}")),
+                None => return Err("tx watch stream closed unexpectedly".to_string()),
+            }
+        }
+    })
+    .await
+    .map_err(|_| "rotate_sfid_keys submit failed: timed out waiting for in-block inclusion".to_string())?
+    .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
     in_block
         .wait_for_success()
         .await
