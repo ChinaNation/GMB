@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -12,6 +14,7 @@ import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
 import 'package:wuminapp_mobile/util/screenshot_guard.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
+import 'package:wuminapp_mobile/trade/pending_tx_reconciler.dart';
 import 'package:wuminapp_mobile/user/user.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
 
@@ -21,6 +24,29 @@ import 'ui/widgets/pressable_card.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 中文注释：诊断 — 把所有 framework / widget 静默吞掉的异常都打到 logcat。
+  // 默认 ErrorWidget 在某些场景下表现为空白方块（白屏），这里换成显眼的红框 + 文字。
+  FlutterError.onError = (details) {
+    FlutterError.dumpErrorToConsole(details);
+    debugPrint('[FlutterError-Diag] library=${details.library} ctx=${details.context} '
+        'exception=${details.exception}');
+  };
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    debugPrint('[ErrorWidget-Diag] exception=${details.exception}\nstack=${details.stack}');
+    return Material(
+      color: const Color(0xFFFFEEEE),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: SingleChildScrollView(
+          child: Text(
+            'WIDGET ERROR:\n${details.exception}\n\n${details.stack}',
+            style: const TextStyle(color: Color(0xFFB00020), fontSize: 12),
+          ),
+        ),
+      ),
+    );
+  };
 
   // 状态栏样式
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -75,17 +101,38 @@ class _AppLockGateState extends State<_AppLockGate>
   static const Duration _sessionTimeout = Duration(minutes: 5);
   DateTime? _pausedAt;
 
+  /// 周期性 pending 交易对账定时器。
+  Timer? _reconcileTimer;
+
+  /// 周期性对账间隔。
+  static const Duration _reconcileInterval = Duration(seconds: 60);
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkLock();
+    // 冷启动延迟 3 秒触发首次对账，等 smoldot 同步上来。
+    Timer(const Duration(seconds: 3), _triggerReconcile);
+    _reconcileTimer = Timer.periodic(
+      _reconcileInterval,
+      (_) => _triggerReconcile(),
+    );
   }
 
   @override
   void dispose() {
+    _reconcileTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _triggerReconcile() {
+    // Reconciler 内部有并发保护，重复触发安全。
+    PendingTxReconciler.instance.reconcileAll().catchError((e) {
+      debugPrint('[main] 对账触发失败: $e');
+      return 0;
+    });
   }
 
   @override
@@ -105,6 +152,8 @@ class _AppLockGateState extends State<_AppLockGate>
         _checkLock();
       }
       _pausedAt = null;
+      // 回到前台时重跑一次对账，处理后台错过的链上确认。
+      _triggerReconcile();
     }
   }
 

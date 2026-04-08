@@ -20,7 +20,6 @@ use std::{
 };
 use tracing::{info, warn};
 use uuid::Uuid;
-use zeroize::Zeroizing;
 
 mod app_core;
 mod business;
@@ -210,7 +209,7 @@ impl StoreBackend {
 
         let admin_rows = conn
             .query(
-                "SELECT admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at
+                "SELECT admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at, city
                  FROM admins",
                 &[],
             )
@@ -225,6 +224,7 @@ impl StoreBackend {
             let created_by: String = row.get(6);
             let created_at: DateTime<Utc> = row.get(7);
             let updated_at: Option<DateTime<Utc>> = row.get(8);
+            let city: String = row.get(9);
             store.admin_users_by_pubkey.insert(
                 admin_pubkey.clone(),
                 AdminUser {
@@ -237,6 +237,7 @@ impl StoreBackend {
                     created_by,
                     created_at,
                     updated_at,
+                    city,
                 },
             );
         }
@@ -347,8 +348,8 @@ impl StoreBackend {
         for admin in store.admin_users_by_pubkey.values() {
             let row = tx
                 .query_one(
-                    "INSERT INTO admins(admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    "INSERT INTO admins(admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at, city)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                      RETURNING admin_id",
                     &[
                         &(admin.id as i64),
@@ -360,6 +361,7 @@ impl StoreBackend {
                         &admin.created_by,
                         &admin.created_at,
                         &admin.updated_at.unwrap_or(admin.created_at),
+                        &admin.city,
                     ],
                 )
                 .map_err(|e| format!("insert admins failed: {e}"))?;
@@ -505,16 +507,12 @@ impl StoreHandle {
                     payload JSONB NOT NULL,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
                  );
-                 CREATE TABLE IF NOT EXISTS runtime_meta (
-                    id INTEGER PRIMARY KEY,
-                    payload JSONB NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                 );
-                 ALTER TABLE runtime_meta ADD COLUMN IF NOT EXISTS payload_enc BYTEA;
                  ALTER TABLE IF EXISTS admins
                    ADD COLUMN IF NOT EXISTS admin_name TEXT NOT NULL DEFAULT '';
                  ALTER TABLE IF EXISTS admins
-                   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;",
+                   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+                 ALTER TABLE IF EXISTS admins
+                   ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';",
                 )
                 .map_err(|e| format!("init runtime tables failed: {e}"))?;
             let mut clients = Vec::with_capacity(pool_size);
@@ -615,7 +613,6 @@ fn main() {
         .init();
     disable_core_dumps();
 
-    let _ = required_env("SFID_RUNTIME_META_KEY");
     let redis_url = required_env("SFID_REDIS_URL");
     let redis_client = RedisClient::open(redis_url.as_str())
         .unwrap_or_else(|e| panic!("invalid SFID_REDIS_URL: {e}"));
@@ -651,18 +648,11 @@ fn main() {
         key_alg: "sr25519".to_string(),
         public_key_hex: Arc::new(RwLock::new(public_key_hex)),
     };
-    if load_runtime_state(&state) {
-        sync_builtin_institution_admins(&state);
-        key_admins::seed_key_admins(&state);
-        persist_runtime_state(&state);
-        info!("loaded persisted runtime state from database");
-    } else {
-        seed_super_admins(&state);
-        key_admins::seed_chain_keyring(&state);
-        key_admins::seed_key_admins(&state);
-        persist_runtime_state(&state);
-        info!("initialized runtime state with defaults");
-    }
+    seed_super_admins(&state);
+    sync_builtin_institution_admins(&state);
+    key_admins::seed_chain_keyring(&state);
+    key_admins::seed_key_admins(&state);
+    info!("initialized runtime state with defaults");
     seed_demo_record(&state);
 
     // ── SFID-CPMS QR v1: 初始化 RSA 匿名证书密钥对 ──
@@ -698,7 +688,6 @@ fn main() {
                     if let Ok(mut store) = state.store.write() {
                         store.anon_rsa_private_key_pem = Some(new_pem);
                     }
-                    persist_runtime_state(&state);
                     info!("generated and persisted new RSA anon cert keypair");
                 }
                 Err(e) => warn!("RSA keypair generation failed: {e}"),
@@ -790,6 +779,11 @@ fn main() {
                 "/api/v1/admin/cpms-keys/:site_sfid/revoke",
                 put(super_admins::revoke_cpms_keys),
             )
+            // ── 链上余额查询 ──
+            .route(
+                "/api/v1/admin/chain/balance",
+                get(chain::balance::admin_query_chain_balance),
+            )
             // ── 多签管理 ──
             .route(
                 "/api/v1/admin/multisig-sfids",
@@ -798,6 +792,10 @@ fn main() {
             .route(
                 "/api/v1/admin/multisig-sfids/generate",
                 post(super_admins::generate_multisig_sfid),
+            )
+            .route(
+                "/api/v1/admin/multisig-sfids/:site_sfid",
+                delete(super_admins::delete_multisig_sfid),
             )
             .route(
                 "/api/v1/admin/cpms-status/scan",
@@ -1283,109 +1281,6 @@ pub(crate) fn store_write_or_500(
             "store write failed",
         )
     })
-}
-
-fn load_runtime_state(state: &AppState) -> bool {
-    let StoreBackend::Postgres {
-        clients,
-        next_client_idx,
-    } = &state.store.backend
-    else {
-        return false;
-    };
-    let cipher_key = runtime_meta_cipher_key();
-    let row = match StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
-        conn.query_opt(
-            "SELECT payload, payload_enc FROM runtime_meta WHERE id=1",
-            &[],
-        )
-        .map_err(|e| format!("failed to load runtime_meta: {e}"))
-    }) {
-        Ok(v) => v,
-        Err(err) => {
-            warn!(error = %err, "failed to load runtime_meta");
-            return false;
-        }
-    };
-    let Some(row) = row else {
-        return false;
-    };
-    let payload: serde_json::Value = row.get(0);
-    let payload_enc: Option<Vec<u8>> = row.get(1);
-    let _snapshot: PersistedRuntimeMeta = match payload_enc {
-        Some(ciphertext) if !ciphertext.is_empty() => {
-            let decrypted_text = Zeroizing::new(
-                match StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
-                    conn.query_one(
-                        "SELECT pgp_sym_decrypt($1::bytea, $2)::text",
-                        &[&ciphertext, &cipher_key],
-                    )
-                    .map(|row| row.get::<usize, String>(0))
-                    .map_err(|e| format!("failed to decrypt runtime_meta payload: {e}"))
-                }) {
-                    Ok(v) => v,
-                    Err(err) => {
-                        warn!(error = %err, "failed to decrypt runtime_meta");
-                        return false;
-                    }
-                },
-            );
-            match serde_json::from_str::<PersistedRuntimeMeta>(decrypted_text.as_str()) {
-                Ok(v) => v,
-                Err(err) => {
-                    warn!(error = %err, "failed to decode decrypted runtime_meta");
-                    return false;
-                }
-            }
-        }
-        _ => match serde_json::from_value(payload) {
-            Ok(v) => v,
-            Err(err) => {
-                warn!(error = %err, "failed to decode runtime_meta");
-                return false;
-            }
-        },
-    };
-
-    // 中文注释：runtime_meta 现在只作为“运行态元信息占位”，
-    // 不再恢复任何主私钥/主公钥状态，避免数据库里的旧签名人覆盖部署环境。
-    true
-}
-
-fn persist_runtime_state_checked(state: &AppState) -> Result<(), String> {
-    let snapshot = PersistedRuntimeMeta { version: 2 };
-    let payload_text = serde_json::to_string(&snapshot)
-        .map_err(|err| format!("failed to encode runtime_meta: {err}"))?;
-    let payload_text = Zeroizing::new(payload_text);
-    let payload = serde_json::json!({"encrypted": true, "version": snapshot.version});
-    let cipher_key = runtime_meta_cipher_key();
-
-    let StoreBackend::Postgres {
-        clients,
-        next_client_idx,
-    } = &state.store.backend
-    else {
-        return Ok(());
-    };
-    StoreBackend::with_postgres_client(clients, next_client_idx, move |conn| {
-        conn.execute(
-            "INSERT INTO runtime_meta(id, payload, payload_enc, updated_at)
-             VALUES (1, $1, pgp_sym_encrypt($2, $3, 'cipher-algo=aes256,compress-algo=1'), now())
-             ON CONFLICT (id) DO UPDATE SET
-               payload=excluded.payload,
-               payload_enc=excluded.payload_enc,
-               updated_at=now()",
-            &[&payload, &*payload_text, &cipher_key],
-        )
-        .map(|_| ())
-        .map_err(|e| format!("failed to persist runtime_meta: {e}"))
-    })
-}
-
-fn persist_runtime_state(state: &AppState) {
-    if let Err(err) = persist_runtime_state_checked(state) {
-        warn!(error = %err, "failed to persist runtime_meta");
-    }
 }
 
 #[cfg(test)]

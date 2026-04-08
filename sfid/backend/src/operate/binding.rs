@@ -245,7 +245,6 @@ pub(crate) async fn citizen_bind(
                     status: record.status(),
                 };
                 drop(store);
-                persist_runtime_state(&state);
                 return Json(ApiResponse { code: 0, message: "ok".to_string(), data: output }).into_response();
             }
             if store.citizen_id_by_archive_no.contains_key(&archive_no) {
@@ -276,7 +275,6 @@ pub(crate) async fn citizen_bind(
             store.citizen_id_by_pubkey.insert(account_pubkey_hex.as_str().to_string(), cid);
             store.citizen_id_by_archive_no.insert(archive_no, cid);
             drop(store);
-            persist_runtime_state(&state);
             Json(ApiResponse { code: 0, message: "ok".to_string(), data: output }).into_response()
         }
         "bind_pubkey" => {
@@ -313,7 +311,6 @@ pub(crate) async fn citizen_bind(
             };
             store.citizen_id_by_pubkey.insert(account_pubkey_hex.as_str().to_string(), citizen_id);
             drop(store);
-            persist_runtime_state(&state);
             Json(ApiResponse { code: 0, message: "ok".to_string(), data: output }).into_response()
         }
         _ => api_error(StatusCode::BAD_REQUEST, 1001, "mode must be bind_archive or bind_pubkey"),
@@ -392,7 +389,6 @@ pub(crate) async fn citizen_unbind(
         status: record.status(),
     };
     drop(store);
-    persist_runtime_state(&state);
     Json(ApiResponse { code: 0, message: "ok".to_string(), data: output }).into_response()
 }
 

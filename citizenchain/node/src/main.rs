@@ -34,6 +34,17 @@ fn main() {
         return;
     }
 
+    // 调试用逃生口：CITIZENCHAIN_HEADLESS=1 强制无头模式（绕过 GUI），
+    // 用来在另一个端口/数据目录跑诊断节点，不影响桌面 GUI 实例。
+    if std::env::var("CITIZENCHAIN_HEADLESS").is_ok() {
+        eprintln!("CITIZENCHAIN_HEADLESS 已设置，以无头模式运行节点...");
+        if let Err(e) = command::run() {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     // 检测是否有显示环境（Linux 看 DISPLAY/WAYLAND_DISPLAY，macOS/Windows 始终有）
     if has_display() {
         // 有显示器 → 桌面窗口 + 内嵌节点

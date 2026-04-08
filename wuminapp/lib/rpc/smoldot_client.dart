@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -69,6 +70,19 @@ class SmoldotClientManager {
         return result;
       } catch (e) {
         final msg = e.toString().toLowerCase();
+
+        // 中文注释：轻节点固有的"老区块体不可得"是预期边界情况，
+        // 不属于"瞬断"也不应降级健康状态。调用方（如 PendingTxReconciler
+        // 的 findTxInRecentBlocks → fetchBlockExtrinsicHashes）已经
+        // catch 并按 null 处理。否则会出现：reconciler 枚举老区块 →
+        // 每块都 retry 2 次 → 每块都打 "失败" + "瞬断" + degraded，
+        // 整个日志被淹没且健康状态闪烁。
+        final isLightClientBlockMiss =
+            msg.contains('failed to download block body');
+        if (isLightClientBlockMiss) {
+          rethrow;
+        }
+
         final isTransient = msg.contains('timeout') ||
             msg.contains('proof') ||
             msg.contains('channel closed') ||
@@ -191,7 +205,19 @@ class SmoldotClientManager {
       await _client!.initialize();
 
       // 2. 从 assets 加载 citizenchain 链规格文件
-      final chainSpec = await rootBundle.loadString('assets/chainspec.json');
+      final chainSpecRaw = await rootBundle.loadString('assets/chainspec.json');
+
+      // 中文注释：开发期 USB 桥接 —— 给 chainspec 内存版临时注入一条 localhost
+      // bootnode，让手机通过 ADB reverse (`adb reverse tcp:30334 tcp:30334`)
+      // 直接 peer 上开发机本地的 citizenchain 诊断节点。
+      //
+      // 这条 bootnode 只存在于内存里 chainspec JSON 字符串中，绝不写回文件，
+      // 不影响 chainspec.json 的 sha256 lock 与冻结规则。
+      // 出门后这条 bootnode 不可达 smoldot 会自动忽略，回退到 dns4 远端 bootnode。
+      // 必须用 plain ws（不是 wss）—— smoldot 的 multiaddr 解析器只支持
+      // `/ip4/.../tcp/.../ws`，不支持 `/ip4/.../tcp/.../wss`。
+      // 详见 wuminapp/smoldot-pow/light-base/src/platform/address_parse.rs
+      final chainSpec = _injectLocalhostBootnode(chainSpecRaw);
 
       // 3. 优先恢复上次导出的 finalized database，避免每次冷启动都从零同步
       final cachedDatabase = await _loadCachedDatabase();
@@ -254,6 +280,47 @@ class SmoldotClientManager {
         databaseContent: databaseContent,
       ),
     );
+  }
+
+  /// 中文注释：开发期 USB 桥接专用。
+  ///
+  /// 在内存里给 chainspec 的 bootNodes 数组**前置**一条 localhost bootnode，
+  /// 让手机端 smoldot 优先尝试 `/ip4/127.0.0.1/tcp/30334/ws/p2p/<peer>`，
+  /// 这条地址通过 `adb reverse tcp:30334 tcp:30334` 转发到开发机本地的
+  /// citizenchain 诊断节点。
+  ///
+  /// 设计要点：
+  /// - 不写回 wuminapp/assets/chainspec.json 文件，保持创世冻结
+  /// - peer_id 与 ws 端口通过 `--dart-define` 传入，没有传就不注入
+  /// - smoldot 多地址解析器不支持 /ip4/.../wss，所以只能用 plain ws
+  /// - 出门后 localhost 不可达，smoldot 自动 fallback 到 dns4 远端 bootnode
+  String _injectLocalhostBootnode(String chainSpecJson) {
+    const localPeerId = String.fromEnvironment(
+      'WUMINAPP_DEV_LOCAL_PEER_ID',
+      defaultValue: '',
+    );
+    const localPort = String.fromEnvironment(
+      'WUMINAPP_DEV_LOCAL_WS_PORT',
+      defaultValue: '30334',
+    );
+    if (localPeerId.isEmpty) {
+      return chainSpecJson;
+    }
+    try {
+      final spec = jsonDecode(chainSpecJson) as Map<String, dynamic>;
+      final List<dynamic> bootNodes =
+          (spec['bootNodes'] as List?)?.cast<dynamic>() ?? <dynamic>[];
+      final localBoot = '/ip4/127.0.0.1/tcp/$localPort/ws/p2p/$localPeerId';
+      // 去重（防止热重载叠加）
+      bootNodes.removeWhere((e) => e == localBoot);
+      bootNodes.insert(0, localBoot);
+      spec['bootNodes'] = bootNodes;
+      debugPrint('[Smoldot] 注入开发期本地 bootnode: $localBoot');
+      return jsonEncode(spec);
+    } catch (e) {
+      debugPrint('[Smoldot] 注入本地 bootnode 失败，回退原始 chainspec: $e');
+      return chainSpecJson;
+    }
   }
 
   /// 从 SharedPreferences 加载缓存的 smoldot 同步数据库。

@@ -7,6 +7,8 @@ use axum::{
 use chrono::Utc;
 
 use crate::business::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
+use crate::business::scope::province_scope_for_role;
+use crate::sfid::province::city_code_by_name;
 use crate::*;
 
 const MAX_ADMIN_NAME_CHARS: usize = 200;
@@ -47,6 +49,7 @@ pub(crate) async fn list_operators(
             created_by: u.created_by.clone(),
             created_by_name: creator_display_name(&store, u.created_by.as_str()),
             created_at: u.created_at,
+            city: u.city.clone(),
         })
         .collect();
     rows.sort_by(|a, b| b.id.cmp(&a.id));
@@ -98,12 +101,106 @@ pub(crate) async fn create_operator(
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    // ── 解析 created_by ──
+    // - InstitutionAdmin 调用：created_by 必须为空或等于自身
+    // - KeyAdmin 调用：created_by 可指定为任意已存在的 InstitutionAdmin pubkey
+    let created_by_pubkey = match input.created_by.as_deref().map(str::trim) {
+        None | Some("") => ctx.admin_pubkey.clone(),
+        Some(raw) => {
+            let normalized = match normalize_admin_pubkey(raw) {
+                Some(v) => v,
+                None => {
+                    return api_error(StatusCode::BAD_REQUEST, 1001, "created_by format invalid")
+                }
+            };
+            match ctx.role {
+                AdminRole::KeyAdmin => {
+                    let creator = store
+                        .admin_users_by_pubkey
+                        .iter()
+                        .find(|(k, _)| same_admin_pubkey(k.as_str(), normalized.as_str()))
+                        .map(|(_, v)| v.clone());
+                    match creator {
+                        Some(u) if u.role == AdminRole::InstitutionAdmin => normalized,
+                        Some(_) => {
+                            return api_error(
+                                StatusCode::BAD_REQUEST,
+                                1001,
+                                "created_by must be an InstitutionAdmin",
+                            )
+                        }
+                        None => {
+                            return api_error(
+                                StatusCode::NOT_FOUND,
+                                1004,
+                                "created_by InstitutionAdmin not found",
+                            )
+                        }
+                    }
+                }
+                AdminRole::InstitutionAdmin => {
+                    if !same_admin_pubkey(normalized.as_str(), ctx.admin_pubkey.as_str()) {
+                        return api_error(
+                            StatusCode::FORBIDDEN,
+                            1003,
+                            "InstitutionAdmin can only create operators under itself",
+                        );
+                    }
+                    normalized
+                }
+                AdminRole::SystemAdmin => {
+                    return api_error(
+                        StatusCode::FORBIDDEN,
+                        1003,
+                        "SystemAdmin cannot create operators",
+                    )
+                }
+            }
+        }
+    };
     if store
         .admin_users_by_pubkey
         .keys()
         .any(|existing| same_admin_pubkey(existing.as_str(), admin_pubkey.as_str()))
     {
         return api_error(StatusCode::CONFLICT, 1005, "operator already exists");
+    }
+    // ── 校验 city：必须属于 created_by 对应机构管理员的省份，且不可为省辖市 ──
+    let city_input = input.city.trim().to_string();
+    if city_input.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "city is required");
+    }
+    let scope_province = province_scope_for_role(
+        &store,
+        created_by_pubkey.as_str(),
+        &AdminRole::InstitutionAdmin,
+    );
+    let province_name = match scope_province {
+        Some(v) => v,
+        None => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "cannot resolve province from created_by",
+            )
+        }
+    };
+    let city_code = match city_code_by_name(province_name.as_str(), city_input.as_str()) {
+        Some(c) => c,
+        None => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "city not found in province",
+            )
+        }
+    };
+    if city_code == "000" {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "province-level city (000) is not allowed",
+        );
     }
     let next_id = allocate_next_admin_user_id(&mut store);
     let created_at = Utc::now();
@@ -114,9 +211,10 @@ pub(crate) async fn create_operator(
         role: AdminRole::SystemAdmin,
         status: AdminStatus::Active,
         built_in: false,
-        created_by: ctx.admin_pubkey.clone(),
+        created_by: created_by_pubkey,
         created_at,
         updated_at: Some(created_at),
+        city: city_input,
     };
     store
         .admin_users_by_pubkey
@@ -130,8 +228,8 @@ pub(crate) async fn create_operator(
         "SUCCESS",
         format!("operator_id={} created_by={}", row.id, row.created_by),
     );
+    let created_by_display = creator_display_name(&store, row.created_by.as_str());
     drop(store);
-    persist_runtime_state(&state);
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -143,8 +241,9 @@ pub(crate) async fn create_operator(
             status: row.status,
             built_in: row.built_in,
             created_by: row.created_by,
-            created_by_name: ctx.admin_name,
+            created_by_name: created_by_display,
             created_at: row.created_at,
+            city: row.city,
         },
     })
     .into_response()
@@ -215,6 +314,15 @@ pub(crate) async fn update_operator(
     } else {
         None
     };
+    let next_city_input = if let Some(next_city) = input.city {
+        let city = next_city.trim();
+        if city.is_empty() {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "city is invalid");
+        }
+        Some(city.to_string())
+    } else {
+        None
+    };
 
     let mut store = match store_write_or_500(&state) {
         Ok(v) => v,
@@ -264,6 +372,44 @@ pub(crate) async fn update_operator(
         name_changed = operator.admin_name != name;
         operator.admin_name = name;
     }
+    let mut city_changed = false;
+    if let Some(city) = next_city_input {
+        // 校验：必须属于该 operator 所属机构管理员的省份，且不可为省辖市
+        let scope_province = province_scope_for_role(
+            &store,
+            operator.created_by.as_str(),
+            &AdminRole::InstitutionAdmin,
+        );
+        let province_name = match scope_province {
+            Some(v) => v,
+            None => {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "cannot resolve province from operator created_by",
+                )
+            }
+        };
+        let city_code = match city_code_by_name(province_name.as_str(), city.as_str()) {
+            Some(c) => c,
+            None => {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "city not found in province",
+                )
+            }
+        };
+        if city_code == "000" {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "province-level city (000) is not allowed",
+            );
+        }
+        city_changed = operator.city != city;
+        operator.city = city;
+    }
     let response_row = OperatorRow {
         id: operator.id,
         admin_pubkey: operator.admin_pubkey.clone(),
@@ -274,8 +420,9 @@ pub(crate) async fn update_operator(
         created_by: operator.created_by.clone(),
         created_by_name: creator_display_name(&store, operator.created_by.as_str()),
         created_at: operator.created_at,
+        city: operator.city.clone(),
     };
-    if !pubkey_changed && !name_changed {
+    if !pubkey_changed && !name_changed && !city_changed {
         return Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
@@ -301,16 +448,16 @@ pub(crate) async fn update_operator(
         None,
         "SUCCESS",
         format!(
-            "operator_id={} old_pubkey={} new_pubkey={} pubkey_changed={} name_changed={}",
+            "operator_id={} old_pubkey={} new_pubkey={} pubkey_changed={} name_changed={} city_changed={}",
             response_row.id,
             current_pubkey,
             response_row.admin_pubkey,
             pubkey_changed,
-            name_changed
+            name_changed,
+            city_changed
         ),
     );
     drop(store);
-    persist_runtime_state(&state);
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -398,7 +545,6 @@ pub(crate) async fn delete_operator(
         ),
     );
     drop(store);
-    persist_runtime_state(&state);
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -468,6 +614,7 @@ pub(crate) async fn update_operator_status(
         created_by: operator.created_by.clone(),
         created_by_name: creator_display_name(&store, operator.created_by.as_str()),
         created_at: operator.created_at,
+        city: operator.city.clone(),
     };
     if !status_changed {
         return Json(ApiResponse {
@@ -493,7 +640,6 @@ pub(crate) async fn update_operator_status(
         format!("operator_id={} status={:?}", response.id, response.status),
     );
     drop(store);
-    persist_runtime_state(&state);
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),

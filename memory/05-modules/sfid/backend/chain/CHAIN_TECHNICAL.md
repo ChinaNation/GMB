@@ -57,6 +57,12 @@
 6. `POST /api/v1/chain/reward/ack`
 7. `GET /api/v1/chain/reward/state`
 8. `GET /api/v1/attestor/public-key`
+9. `GET /api/v1/admin/chain/balance?account_pubkey=<hex>`
+   - 权限：任意已登录管理员（`require_admin_any`）。
+   - 功能：通过 `chain/balance.rs` 直接读取本地全节点 `System.Account` 存储项，截取 `data.free`（u128，单位"分"）并按 `xxx.xx` 元格式化。
+   - 存储键算法：`twox_128("System") || twox_128("Account") || blake2_128(account32) || account32`。
+   - 返回：`{ account_pubkey, balance_min_units(string), balance_text("xxx.xx"), unit("元") }`。
+   - 用途：密钥管理页"主账户"行右侧展示链上余额；前端每次进入 `keyring` 视图都拉一次，不缓存（SFID 服务器与全节点同机部署，无超时降级）。
 
 ## 4. 功能 1/2/3 对齐契约（Runtime 口径）
 

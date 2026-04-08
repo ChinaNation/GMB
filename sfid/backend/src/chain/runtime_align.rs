@@ -10,9 +10,19 @@ use subxt::{OnlineClient, PolkadotConfig};
 
 use crate::*;
 
+// 中文注释（适用于本文件所有 *_DOMAIN 常量）：
+// 必须使用 [u8; N] 数组类型，与链端 verifier 里 `b"..."` 字面量的类型(&[u8; N]) 完全对齐。
+// SCALE 编码下：
+//   [u8; N] / &[u8; N]  →  N 字节，无长度前缀
+//   &[u8] / Vec<u8>     →  Compact(N) ++ N 字节，多 1~4 字节长度前缀
+// 任何一个 domain 写成 &[u8] 都会导致 message 与链端不一致 → blake2_256 不同
+// → sr25519 verify 失败 → 链端返回 InvalidSfidXxxSignature。
+// 历史教训：INSTITUTION_DOMAIN 曾被错误声明为 &[u8]，导致 register_sfid_institution
+// 长期 InvalidSfidInstitutionSignature。修复见 ADR
+// `04-decisions/sfid/2026-04-07-subxt-0.43-pow-chain-quirks.md`。
 const BIND_DOMAIN: [u8; 16] = *b"GMB_SFID_BIND_V3";
 const VOTE_DOMAIN: [u8; 16] = *b"GMB_SFID_VOTE_V3";
-const INSTITUTION_DOMAIN: &[u8] = b"GMB_SFID_INSTITUTION_V2";
+const INSTITUTION_DOMAIN: [u8; 23] = *b"GMB_SFID_INSTITUTION_V2";
 #[allow(dead_code)]
 pub(crate) const POPULATION_DOMAIN_STR: &str = "GMB_SFID_POPULATION_V3";
 const POPULATION_DOMAIN: [u8; 22] = *b"GMB_SFID_POPULATION_V3";
@@ -262,6 +272,11 @@ fn resolve_chain_ws_url() -> Result<String, String> {
         .filter(|v| !v.is_empty())
         .ok_or_else(|| "SFID_CHAIN_WS_URL not configured".to_string())?;
     Ok(normalize_chain_ws_url(ws_url.as_str()))
+}
+
+/// 暴露 ws url 给其他模块使用（如链上余额查询）。
+pub(crate) fn chain_ws_url() -> Result<String, String> {
+    resolve_chain_ws_url()
 }
 
 fn is_production_mode() -> bool {

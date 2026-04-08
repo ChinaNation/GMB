@@ -150,8 +150,8 @@ class OnchainRpc {
     // nonce 已推进，说明该 nonce 位置的交易已被链上消费。
     // 在最近区块中搜索 txHash 进行二次验证。
     try {
-      final found = await _findTxInRecentBlocks(txHash);
-      if (found) {
+      final foundBlock = await findTxInRecentBlocks(txHash);
+      if (foundBlock != null) {
         return TxConfirmResult.confirmed;
       }
       // 未在最近区块中找到 txHash，有两种可能：
@@ -174,20 +174,19 @@ class OnchainRpc {
     return confirmedNonce > usedNonce;
   }
 
-  /// 在最近区块中搜索指定交易哈希。
-  Future<bool> _findTxInRecentBlocks(String txHash) async {
+  /// 在最近区块中搜索指定交易哈希。找到则返回所在区块号，未找到返回 null。
+  Future<int?> findTxInRecentBlocks(String txHash, {int depth = 50}) async {
     final latestBlock = await _rpc.fetchLatestBlock();
-    const searchDepth = 50; // 最多回溯 50 个区块
     final startBlock = latestBlock.blockNumber;
-    final endBlock = (startBlock - searchDepth).clamp(1, startBlock);
+    final endBlock = (startBlock - depth).clamp(1, startBlock);
 
     for (var blockNum = startBlock; blockNum >= endBlock; blockNum--) {
       final blockData = await _rpc.fetchBlockExtrinsicHashes(blockNum);
       if (blockData != null && blockData.contains(txHash)) {
-        return true;
+        return blockNum;
       }
     }
-    return false;
+    return null;
   }
 
   // ──── 手续费估算 ────

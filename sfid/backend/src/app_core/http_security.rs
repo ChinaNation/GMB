@@ -131,10 +131,6 @@ pub(crate) fn optional_env(key: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
-pub(crate) fn runtime_meta_cipher_key() -> String {
-    required_env("SFID_RUNTIME_META_KEY")
-}
-
 pub(crate) fn build_cors_layer() -> CorsLayer {
     let env_mode = optional_env("SFID_ENV")
         .or_else(|| optional_env("ENV"))

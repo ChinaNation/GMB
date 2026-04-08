@@ -733,11 +733,18 @@ pub unsafe extern "C" fn smoldot_get_block_hash(
         )
         .await?;
 
+        // 轻节点正常情况：finalized 之前的旧区块没在 smoldot 缓存里，
+        // chain_getBlockHash 返回 null。把 null 当作"未知"返回空串，
+        // 由 dart 层判定为 None，绝不抛错（否则 PendingTxReconciler 会
+        // 对每个老区块号刷一条 non-string 错误日志，淹没真问题）。
+        if result.is_null() {
+            return Ok(String::new());
+        }
         result
             .as_str()
             .map(|s| s.to_string())
             .ok_or_else(|| format!(
-                "chain_getBlockHash returned non-string for height {block_number}"
+                "chain_getBlockHash returned non-string for height {block_number}: {result}"
             ))
     }) {
         Ok(block_hash) => string_into_raw(block_hash, error_out),
@@ -1320,11 +1327,18 @@ pub unsafe extern "C" fn smoldot_get_block_hash_async(
                 json!([block_number]),
             )
             .await?;
+            // 中文注释：轻节点正常情况——finalized 之前的旧区块没在 smoldot
+            // 缓存里，chain_getBlockHash 返回 null。把 null 当作"未知"返回空串，
+            // 由 dart 层判定为 None，绝不抛错（否则 PendingTxReconciler 会
+            // 对每个老区块号刷一条 non-string 错误日志，淹没真问题）。
+            if result.is_null() {
+                return Ok(String::new());
+            }
             result
                 .as_str()
                 .map(|s| s.to_string())
                 .ok_or_else(|| format!(
-                    "chain_getBlockHash returned non-string for height {block_number}"
+                    "chain_getBlockHash returned non-string for height {block_number}: {result}"
                 ))
         }
     )

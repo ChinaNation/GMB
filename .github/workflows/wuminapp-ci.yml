@@ -30,6 +30,9 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v4
 
+      - name: 校验 chainspec.json 冻结
+        run: bash scripts/check-chainspec-frozen.sh
+
       - name: 安装 Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -80,20 +83,11 @@ jobs:
       - name: 安装 Android SDK Platform 36
         run: sdkmanager "platforms;android-36"
 
-      # 下载最新 chainspec.json（由 Linux CI 导出）
-      - name: 下载最新 chainspec.json
-        run: gh run download --name citizenchain-chainspec --dir chainspec-artifact -R ${{ github.repository }} || echo "未找到 chainspec artifact，使用仓库内现有版本"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: 替换 chainspec.json
-        run: |
-          if [ -f chainspec-artifact/chainspec.json ]; then
-            cp chainspec-artifact/chainspec.json wuminapp/assets/chainspec.json
-            echo "已更新为最新 chainspec.json"
-          else
-            echo "使用仓库内现有 chainspec.json"
-          fi
+      # chainspec.json 已在创世时冻结，绝不从其他地方下载覆盖。
+      # runtime 升级走链上 system.setCode，不要重新 build-spec。
+      # 详见 memory/07-ai/chainspec-frozen.md
+      - name: 再次校验 chainspec.json 冻结
+        run: bash scripts/check-chainspec-frozen.sh
 
       # 编译 smoldot Rust FFI 库（Android arm64）
       - name: 编译 smoldot native library (Android arm64)

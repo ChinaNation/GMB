@@ -56,8 +56,17 @@ class _DuoqianCreateProposalPageState
   @override
   void initState() {
     super.initState();
+    debugPrint('[DuoqianCreate-Diag] initState: adminWallets.length=${widget.adminWallets.length}');
+    if (widget.adminWallets.isNotEmpty) {
+      final w = widget.adminWallets.first;
+      debugPrint('[DuoqianCreate-Diag] first wallet: name=${w.walletName} '
+          'pubkeyHex.len=${w.pubkeyHex.length} address.len=${w.address.length} '
+          'signMode=${w.signMode}');
+    }
     _selectedWallet = widget.adminWallets.first;
     _syncCreatorAdmin(widget.adminWallets.first);
+    debugPrint('[DuoqianCreate-Diag] after sync: _adminPubkeys=${_adminPubkeys.length} '
+        'creator=${_creatorPubkey?.substring(0, 8)}...');
   }
 
   /// 钱包切换时同步更新创建人在管理员列表中的位置。
@@ -328,6 +337,8 @@ class _DuoqianCreateProposalPageState
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('[DuoqianCreate-Diag] build START: _adminPubkeys=${_adminPubkeys.length} '
+        '_registeredAddress=${_registeredAddress != null} _checkingSfid=$_checkingSfid');
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -347,7 +358,13 @@ class _DuoqianCreateProposalPageState
           // SFID ID 输入
           _buildSectionTitle('SFID ID'),
           const SizedBox(height: 8),
+          // 中文注释：ElevatedButton 不能直接放在水平 unbounded 约束下，否则
+          // _RenderInputPadding 会抛 "BoxConstraints forces an infinite width"，
+          // 进而把整个 ListView 拖成 NEEDS-LAYOUT 状态，渲染出空白页（白屏）。
+          // 用 IntrinsicHeight + Row(MainAxisSize.max) + 固定宽度按钮包裹。
           Row(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: TextField(
@@ -364,22 +381,25 @@ class _DuoqianCreateProposalPageState
                 ),
               ),
               const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: _checkingSfid ? null : _checkSfidRegistration,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryDark,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              SizedBox(
+                width: 84,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _checkingSfid ? null : _checkSfidRegistration,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryDark,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: _checkingSfid
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('查询'),
                 ),
-                child: _checkingSfid
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('查询'),
               ),
             ],
           ),

@@ -34,12 +34,16 @@ body {
   background: var(--bg-app);
   border: 1px solid var(--border);
   border-radius: 12px;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   text-align: left;
+  min-width: 0;
 }
 
 .section {
@@ -78,10 +82,11 @@ body {
 
 .bootnode-inline {
   display: grid;
-  grid-template-columns: 1fr 600px max-content;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
   align-items: center;
   gap: 10px;
   min-height: 56px;
+  min-width: 0;
 }
 
 .bootnode-inline h2 {
@@ -95,7 +100,6 @@ body {
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 14px;
-  min-width: 220px;
   height: 40px;
   background: var(--bg-card);
   color: var(--text-primary);
@@ -103,11 +107,13 @@ body {
 
 .bootnode-inline select {
   flex: 0 0 220px;
+  min-width: 0;
 }
 
 .bootnode-inline input {
-  width: 600px;
-  min-width: 600px;
+  width: 100%;
+  min-width: 0;
+  max-width: 600px;
   margin-left: 0;
 }
 
@@ -126,10 +132,11 @@ body {
 
 .wallet-inline {
   display: grid;
-  grid-template-columns: 1fr 600px max-content max-content;
+  grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
   align-items: center;
   gap: 10px;
   min-height: 84px;
+  min-width: 0;
 }
 
 .settings-wallet-section {
@@ -175,11 +182,12 @@ body {
 .settings-nodekey-section .bootnode-inline {
   column-gap: 10px;
   min-height: 84px;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-card);
   padding: 10px 12px;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .settings-wallet-section .wallet-current,
@@ -194,8 +202,9 @@ body {
 
 .settings-wallet-section .wallet-inline input,
 .settings-nodekey-section .bootnode-inline input {
-  width: 600px;
-  min-width: 600px;
+  width: 100%;
+  min-width: 0;
+  max-width: 600px;
   margin-left: 0;
 }
 
@@ -217,8 +226,9 @@ body {
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 14px;
-  min-width: 600px;
-  width: 600px;
+  width: 100%;
+  min-width: 0;
+  max-width: 600px;
   margin-left: 0;
   background: var(--bg-card);
   color: var(--text-primary);
