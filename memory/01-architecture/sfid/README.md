@@ -21,12 +21,12 @@ SFID 是在线身份绑定系统，用于接收线下二维码并服务区块链
 
 ## 管理员体系
 - 密钥管理员（`KEY_ADMIN`）：固定 3 个（一主两备槽位映射）。
-- 机构管理员（`INSTITUTION_ADMIN`）：固定 43 个（每省 1 个）。
-- 系统管理员（`SYSTEM_ADMIN`）：数量不限，由机构管理员增删改查。
+- 省级管理员（`SHENG_ADMIN`）：固定 43 个（每省 1 个）。
+- 市级管理员（`SHI_ADMIN`）：数量不限，由省级管理员增删改查。
 - 权限边界：
-1. 密钥管理员：密钥轮换管理、机构管理员替换、全局管理能力。
-2. 机构管理员：可管理系统管理员，且可执行绑定/解绑/查询。
-3. 系统管理员：仅可执行绑定/解绑/查询，不可管理管理员账号。
+1. 密钥管理员：密钥轮换管理、省级管理员替换、全局管理能力。
+2. 省级管理员：可管理市级管理员，且可执行绑定/解绑/查询。
+3. 市级管理员：仅可执行绑定/解绑/查询，不可管理管理员账号。
 4. 三类管理员使用同一套前端页面与登录流程；菜单按角色显示，权限以后端 RBAC 为准。
 5. 非管理员扫码登录会被拒绝，只有 SFID 管理员可登录。
 
@@ -120,13 +120,13 @@ curl http://127.0.0.1:8899/api/v1/health
 - 管理员与密钥采用结构化分表：
 1. `admins`
 2. `provinces`
-3. `super_admin_scope`
-4. `operator_admin_scope`
+3. `sheng_admin_scope`
+4. `shi_admin_scope`
 5. `key_admin_keyring`
 - 兼容视图：
 1. `v_key_admins`
-2. `v_super_admins`
-3. `v_operator_admins`
+2. `v_sheng_admins`
+3. `v_shi_admins`
 - 链路一致性与防重放表：
 1. `chain_idempotency_requests`
 2. `binding_unique_locks`
@@ -163,22 +163,22 @@ curl http://127.0.0.1:8899/api/v1/health
 - 校验位算法与 SFID `sfid_code` 一致：`BLAKE2b` 摘要字节和 `mod 10`。
 - `issuer_id` 固定为 `cpms`。
 - 签名算法固定 `sr25519`。
-- 机构初始化必须先由 SFID 机构管理员在机构页生成机构身份识别码（`site_sfid`）及 SFID 签名初始化二维码。
+- 机构初始化必须先由 SFID 省级管理员在机构页生成机构身份识别码（`site_sfid`）及 SFID 签名初始化二维码。
 - CPMS 使用该初始化二维码完成首次安装初始化，再生成机构公钥登记二维码（含 `site_sfid + 3把公钥 + init_qr_payload + checksum_or_signature`）。
-- SFID 机构管理员扫码录入公钥登记二维码后，该机构公钥才生效（会校验是否由 SFID 签发二维码初始化得到）。
+- SFID 省级管理员扫码录入公钥登记二维码后，该机构公钥才生效（会校验是否由 SFID 签发二维码初始化得到）。
 - 可信闭环成立条件：`SFID 初始化二维码签发 -> CPMS 初始化 -> SFID 录入机构公钥成功(ACTIVE)`；闭环完成后，该机构后续出具的公民档案二维码与状态二维码才被 SFID 接受。
 - 拒绝语义：若验签失败、机构未登记、机构非 `ACTIVE`、或 `init_qr_payload` 链路不一致，SFID 必须拒绝对应 CPMS 二维码。
 - 公民档案二维码包含 `sign_key_id + signature`，由该机构 `sign_key_id` 对应私钥生成。
 - CPMS 不保存 SFID 公钥（当前版本）。
 - 用户投票资格状态由 CPMS 二维码提供：`NORMAL` 可投票，`ABNORMAL` 不可投票。
-- 机构管理权限仅机构管理员开放，密钥管理员与系统管理员不可使用机构管理功能。
+- 机构管理权限仅省级管理员开放，密钥管理员与市级管理员不可使用机构管理功能。
 
 ## CPMS 联调脚本（开发）
 - 生成公民绑定二维码（含初始状态）：
 ```bash
 ./backend/scripts/gen_cpms_qr_dev.py citizen --site-sfid SITE001 --archive-no ARCHIVE001 --sign-pubkey DEMO_PUBKEY_A --status NORMAL
 ```
-- 生成状态变更二维码（供系统管理员扫码）：
+- 生成状态变更二维码（供市级管理员扫码）：
 ```bash
 ./backend/scripts/gen_cpms_qr_dev.py status --site-sfid SITE001 --archive-no ARCHIVE001 --status ABNORMAL --sign-pubkey DEMO_PUBKEY_A
 ```

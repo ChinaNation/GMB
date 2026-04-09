@@ -1,10 +1,10 @@
 export type TokenAdminAuth = {
   access_token: string;
   admin_pubkey: string;
-  role: 'KEY_ADMIN' | 'INSTITUTION_ADMIN' | 'SYSTEM_ADMIN';
+  role: 'KEY_ADMIN' | 'SHENG_ADMIN' | 'SHI_ADMIN';
   admin_name?: string;
   admin_province?: string | null;
-  /// 仅 SystemAdmin 有值：操作员所属的市（用于多签管理页锁定 / 列表过滤）
+  /// 仅 ShiAdmin 有值：操作员所属的市（用于多签管理页锁定 / 列表过滤）
   admin_city?: string | null;
 };
 
@@ -15,6 +15,22 @@ export function isTokenAuth(auth: AdminAuth): auth is TokenAdminAuth {
 }
 
 /** 所有 API 请求使用相对路径，由 Vite(开发) / Nginx(生产) 统一代理到后端 */
+// 中文注释：任务卡 3 开放 request + adminHeaders 给 api/ 下其他子文件复用,
+// 避免每个新 API 文件都重复一遍 fetch + 错误包装逻辑。
+export async function adminRequest<T>(
+  path: string,
+  auth: AdminAuth,
+  init?: RequestInit
+): Promise<T> {
+  return request<T>(path, {
+    ...init,
+    headers: {
+      ...adminHeaders(auth),
+      ...(init?.headers || {}),
+    },
+  });
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let resp: Response;
   try {
@@ -50,7 +66,7 @@ function adminHeaders(auth: AdminAuth): HeadersInit {
 export type AdminAuthCheck = {
   ok: boolean;
   admin_pubkey: string;
-  role: 'KEY_ADMIN' | 'INSTITUTION_ADMIN' | 'SYSTEM_ADMIN';
+  role: 'KEY_ADMIN' | 'SHENG_ADMIN' | 'SHI_ADMIN';
   admin_name: string;
   admin_province?: string | null;
   admin_city?: string | null;
@@ -58,7 +74,7 @@ export type AdminAuthCheck = {
 
 export type AdminIdentifyResult = {
   admin_pubkey: string;
-  role: 'KEY_ADMIN' | 'INSTITUTION_ADMIN' | 'SYSTEM_ADMIN';
+  role: 'KEY_ADMIN' | 'SHENG_ADMIN' | 'SHI_ADMIN';
   status: 'ACTIVE' | 'DISABLED';
   admin_name: string;
   admin_province?: string | null;
@@ -264,7 +280,7 @@ export type OperatorRow = {
   id: number;
   admin_pubkey: string;
   admin_name: string;
-  role: 'SYSTEM_ADMIN';
+  role: 'SHI_ADMIN';
   status: 'ACTIVE' | 'DISABLED';
   built_in: boolean;
   created_by: string;
@@ -273,11 +289,11 @@ export type OperatorRow = {
   city: string;
 };
 
-// 机构管理员对外行（API 返回结构）。
+// 省级管理员对外行（API 返回结构）。
 //
-// SFID 业务语义：机构永久存在（43 个省份），机构管理员只是当前替机构发声的人，
+// SFID 业务语义：机构永久存在（43 个省份），省级管理员只是当前替机构发声的人，
 // 不存在停用 / 状态切换的概念。被替换即彻底失效。所以**没有 status 字段**。
-export type SuperAdminRow = {
+export type ShengAdminRow = {
   id: number;
   province: string;
   admin_pubkey: string;
@@ -630,19 +646,19 @@ export async function deleteOperator(auth: AdminAuth, id: number): Promise<strin
   });
 }
 
-export async function listSuperAdmins(auth: AdminAuth): Promise<SuperAdminRow[]> {
-  return request<SuperAdminRow[]>('/api/v1/admin/super-admins', {
+export async function listShengAdmins(auth: AdminAuth): Promise<ShengAdminRow[]> {
+  return request<ShengAdminRow[]>('/api/v1/admin/sheng-admins', {
     method: 'GET',
     headers: adminHeaders(auth)
   });
 }
 
-export async function replaceSuperAdmin(
+export async function replaceShengAdmin(
   auth: AdminAuth,
   province: string,
   adminPubkey: string
-): Promise<SuperAdminRow> {
-  return request<SuperAdminRow>(`/api/v1/admin/super-admins/${encodeURIComponent(province)}`, {
+): Promise<ShengAdminRow> {
+  return request<ShengAdminRow>(`/api/v1/admin/sheng-admins/${encodeURIComponent(province)}`, {
     method: 'PUT',
     headers: {
       'content-type': 'application/json',
@@ -705,52 +721,6 @@ export async function commitKeyringRotate(
   });
 }
 
-// ── 多签管理 ──────────────────────────────────────────
-
-export type MultisigSfidRow = {
-  site_sfid: string;
-  a3: string;
-  institution_code: string;
-  institution_name: string;
-  province: string;
-  city: string;
-  province_code: string;
-  chain_status: 'PENDING' | 'REGISTERED' | 'FAILED';
-  chain_tx_hash?: string | null;
-  chain_block_number?: number | null;
-  created_by: string;
-  created_by_name: string;
-  created_at: string;
-};
-
-export type GenerateMultisigSfidResult = {
-  site_sfid: string;
-  chain_status: string;
-  chain_tx_hash?: string | null;
-  chain_block_number?: number | null;
-};
-
-export async function generateMultisigSfid(
-  auth: AdminAuth,
-  payload: {
-    a3: string;
-    p1?: string;
-    province?: string;
-    city: string;
-    institution: string;
-    institution_name: string;
-  }
-): Promise<GenerateMultisigSfidResult> {
-  return request<GenerateMultisigSfidResult>('/api/v1/admin/multisig-sfids/generate', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...adminHeaders(auth)
-    },
-    body: JSON.stringify(payload)
-  });
-}
-
 // ── 链上余额查询 ──────────────────────────────────────
 
 export type ChainBalanceResult = {
@@ -775,19 +745,3 @@ export async function getChainBalance(
   });
 }
 
-export async function listMultisigSfids(auth: AdminAuth): Promise<MultisigSfidRow[]> {
-  const result = await request<{ total: number; limit: number; offset: number; rows: MultisigSfidRow[] }>(
-    '/api/v1/admin/multisig-sfids',
-    { method: 'GET', headers: adminHeaders(auth) }
-  );
-  return result.rows ?? [];
-}
-
-/// 删除一条多签注册机构 SFID 记录。
-/// 后端只允许删除 chain_status !== 'REGISTERED' 的记录，已上链的会被拒绝。
-export async function deleteMultisigSfid(auth: AdminAuth, siteSfid: string): Promise<string> {
-  return request<string>(
-    `/api/v1/admin/multisig-sfids/${encodeURIComponent(siteSfid)}`,
-    { method: 'DELETE', headers: adminHeaders(auth) }
-  );
-}

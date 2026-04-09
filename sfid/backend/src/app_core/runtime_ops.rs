@@ -16,7 +16,7 @@ use crate::sfid::{generate_sfid_code, GenerateSfidInput};
 use crate::*;
 
 /// 首次初始化：从 province.rs 硬编码数据创建 43 个内置机构管理员
-pub(crate) fn seed_super_admins(state: &AppState) {
+pub(crate) fn seed_sheng_admins(state: &AppState) {
     let mut store = match state.store.write() {
         Ok(v) => v,
         Err(_) => return,
@@ -33,7 +33,7 @@ pub(crate) fn seed_super_admins(state: &AppState) {
                 id: (idx as u64) + 1,
                 admin_pubkey: pubkey,
                 admin_name: String::new(),
-                role: AdminRole::InstitutionAdmin,
+                role: AdminRole::ShengAdmin,
                 status: AdminStatus::Active,
                 built_in: true,
                 created_by: "SYSTEM".to_string(),
@@ -43,7 +43,7 @@ pub(crate) fn seed_super_admins(state: &AppState) {
             },
         );
         store
-            .super_admin_province_by_pubkey
+            .sheng_admin_province_by_pubkey
             .insert(item.pubkey.to_string(), item.name.to_string());
     }
 }
@@ -51,8 +51,8 @@ pub(crate) fn seed_super_admins(state: &AppState) {
 /// 从 DB 加载后，补充 province.rs 中新增的省份（DB 中缺失的）
 /// - DB 是唯一真实数据源，已有省份的公钥不会被覆盖
 /// - 只补缺：province.rs 中有但 DB 中没有的省份，用默认公钥创建
-/// - 同时修正 role 字段（旧 DB 可能存的是 SuperAdmin）
-pub(crate) fn sync_builtin_institution_admins(state: &AppState) {
+/// - 同时修正 role 字段（旧 DB 可能存的是 ShengAdmin）
+pub(crate) fn sync_builtin_sheng_admins(state: &AppState) {
     let mut store = match state.store.write() {
         Ok(v) => v,
         Err(_) => return,
@@ -61,21 +61,21 @@ pub(crate) fn sync_builtin_institution_admins(state: &AppState) {
 
     // 修正已有机构管理员的 role（从旧 DB 加载可能是错误的 role）
     let institution_pubkeys: Vec<String> = store
-        .super_admin_province_by_pubkey
+        .sheng_admin_province_by_pubkey
         .keys()
         .cloned()
         .collect();
     for pubkey in &institution_pubkeys {
         if let Some(user) = store.admin_users_by_pubkey.get_mut(pubkey) {
-            if user.role != AdminRole::InstitutionAdmin {
-                user.role = AdminRole::InstitutionAdmin;
+            if user.role != AdminRole::ShengAdmin {
+                user.role = AdminRole::ShengAdmin;
             }
         }
     }
 
     // 补充 DB 中缺失的省份（province.rs 有但 DB 没有的）
     let existing_provinces: std::collections::HashSet<String> = store
-        .super_admin_province_by_pubkey
+        .sheng_admin_province_by_pubkey
         .values()
         .cloned()
         .collect();
@@ -99,7 +99,7 @@ pub(crate) fn sync_builtin_institution_admins(state: &AppState) {
                 id: max_id + 1,
                 admin_pubkey: pubkey.clone(),
                 admin_name: String::new(),
-                role: AdminRole::InstitutionAdmin,
+                role: AdminRole::ShengAdmin,
                 status: AdminStatus::Active,
                 built_in: true,
                 created_by: "SYSTEM".to_string(),
@@ -109,7 +109,7 @@ pub(crate) fn sync_builtin_institution_admins(state: &AppState) {
             },
         );
         store
-            .super_admin_province_by_pubkey
+            .sheng_admin_province_by_pubkey
             .insert(pubkey, province);
     }
 }
@@ -616,4 +616,202 @@ pub(crate) fn make_signature_envelope<T: Serialize>(
         &signing_key,
         payload,
     )
+}
+
+/// 任务卡 2:把 legacy `multisig_sfid_records` 拆成 `multisig_institutions` + `multisig_accounts`。
+///
+/// 中文注释:
+/// - 链端 `(sfid_id, name) → duoqian_address` 是 DoubleMap,一个 sfid 下可挂多个 name。
+/// - 老结构把"机构"和"账户"混在一张表里,`site_sfid` 当主键,`institution_name` 被当作链上 name。
+/// - 新结构按两层拆:sfid_id → Institution(每 sfid 唯一),(sfid_id, account_name) → Account(链上 name)。
+///
+/// 这个迁移**幂等**:每次启动后端都会运行一次,已迁移过的记录会跳过。
+/// 老结构 `multisig_sfid_records` **不删除**,作为只读兜底便于回滚。
+pub(crate) fn migrate_legacy_multisig_to_two_layer(state: &AppState) {
+    use crate::institutions::model::{MultisigAccount, MultisigInstitution};
+    use crate::institutions::store as inst_store;
+    use crate::sfid::{classify, A3, InstitutionCode};
+
+    let mut store = match state.store.write() {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    if store.multisig_sfid_records.is_empty() {
+        return;
+    }
+    let legacy: Vec<_> = store.multisig_sfid_records.values().cloned().collect();
+    let mut migrated = 0usize;
+    for rec in legacy {
+        // 幂等:机构已存在则跳过(避免覆盖任务卡 2 之后新建的机构)
+        if inst_store::contains_institution(&store, &rec.site_sfid) {
+            continue;
+        }
+
+        // 分类:按 a3 + institution_code + institution_name 推导
+        let a3 = match A3::from_str(&rec.a3) {
+            Some(v) => v,
+            None => {
+                warn!(sfid = %rec.site_sfid, a3 = %rec.a3, "migrate: unknown a3, skip");
+                continue;
+            }
+        };
+        let code = match InstitutionCode::from_str(&rec.institution_code) {
+            Some(v) => v,
+            None => {
+                warn!(
+                    sfid = %rec.site_sfid,
+                    code = %rec.institution_code,
+                    "migrate: unknown institution_code, skip"
+                );
+                continue;
+            }
+        };
+        let category = match classify(a3, code, &rec.institution_name) {
+            Some(v) => v,
+            None => {
+                warn!(
+                    sfid = %rec.site_sfid,
+                    "migrate: not a valid institution (citizen a3?), skip"
+                );
+                continue;
+            }
+        };
+
+        // 中文注释:从 sfid_id r5 段后 3 字符解析 city_code(任务卡 6 新增字段)
+        let city_code = rec
+            .site_sfid
+            .split('-')
+            .nth(1)
+            .and_then(|r5| if r5.len() >= 5 { Some(r5[2..5].to_string()) } else { None })
+            .unwrap_or_default();
+        let inst = MultisigInstitution {
+            sfid_id: rec.site_sfid.clone(),
+            // 中文注释:老结构里 institution_name 实际被当作"账户名"发上链,
+            // 这里拆两层后保留为机构展示名 + 同时作为默认账户名。
+            institution_name: rec.institution_name.clone(),
+            category,
+            a3: rec.a3.clone(),
+            p1: rec.p1.clone(),
+            province: rec.province.clone(),
+            city: rec.city.clone(),
+            province_code: rec.province_code.clone(),
+            city_code,
+            institution_code: rec.institution_code.clone(),
+            created_by: rec.created_by.clone(),
+            created_at: rec.created_at,
+        };
+        inst_store::insert_institution(&mut store, inst);
+
+        let account = MultisigAccount {
+            sfid_id: rec.site_sfid.clone(),
+            // 账户名沿用 institution_name(因为链上就是用它派生的 duoqian_address)
+            account_name: rec.institution_name.clone(),
+            duoqian_address: None,
+            chain_status: rec.chain_status.clone(),
+            chain_tx_hash: rec.chain_tx_hash.clone(),
+            chain_block_number: rec.chain_block_number,
+            created_by: rec.created_by.clone(),
+            created_at: rec.created_at,
+        };
+        inst_store::insert_account(&mut store, account);
+        migrated += 1;
+    }
+    if migrated > 0 {
+        tracing::info!(
+            count = migrated,
+            "migrated legacy multisig_sfid_records → multisig_institutions + multisig_accounts"
+        );
+    }
+}
+
+/// 任务卡 6:后端启动时 backfill + 对 43 省全量对账公安局机构。
+///
+/// 中文注释:
+/// 1. 先调 `backfill_public_security_city_codes` 给老公安局记录补 `city_code`
+///    (任务卡 6 新增字段),否则 reconcile 会按 city_code 误删。
+/// 2. 然后按 sfid 工具权威清单 reconcile 每个省:
+///    增加缺失的市公安局、删除已从市清单剔除的、改名同步。
+pub(crate) fn backfill_and_reconcile_public_security(state: &AppState) {
+    use crate::institutions::service::{
+        backfill_public_security_city_codes, reconcile_public_security_for_province,
+    };
+    use crate::sfid::province::PROVINCES;
+
+    let mut store = match state.store.write() {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    let fixed = backfill_public_security_city_codes(&mut store);
+    if fixed > 0 {
+        tracing::info!(count = fixed, "backfilled city_code for legacy public security institutions");
+    }
+
+    let mut total_inserted = 0usize;
+    let mut total_updated = 0usize;
+    let mut total_removed = 0usize;
+    for p in PROVINCES.iter() {
+        let r = reconcile_public_security_for_province(&mut store, p.name, "SYSTEM");
+        total_inserted += r.inserted;
+        total_updated += r.updated;
+        total_removed += r.removed;
+    }
+    tracing::info!(
+        inserted = total_inserted,
+        updated = total_updated,
+        removed = total_removed,
+        "public security reconcile finished for 43 provinces"
+    );
+}
+
+/// 任务卡 `20260408-sfid-public-security-cpms-embed`:
+/// 启动时清理孤儿 CPMS 站点。
+///
+/// 中文注释:`cpms_site_keys` 里的记录通过
+/// `(admin_province, city_name, institution_code)` 元组关联到
+/// `multisig_institutions`。开发期如果某个公安局机构被 reconcile 删掉了,
+/// 对应的 CPMS 站点就成了孤儿——老 UI 能看见,新详情页入口看不见。
+/// 直接硬删,不留数据包袱(`feedback_chain_in_dev.md`)。
+pub(crate) fn cleanup_orphan_cpms_sites(state: &AppState) {
+    let mut store = match state.store.write() {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    // 构建 (province, city, institution_code) 合法三元组集合:取自所有机构
+    // (不限 PUBLIC_SECURITY,因为 CPMS 站点理论上可挂任意机构;目前业务只有公安局用,
+    //  但收紧范围无益)。
+    let valid: std::collections::HashSet<(String, String, String)> = store
+        .multisig_institutions
+        .values()
+        .map(|inst| {
+            (
+                inst.province.clone(),
+                inst.city.clone(),
+                inst.institution_code.clone(),
+            )
+        })
+        .collect();
+    let orphans: Vec<String> = store
+        .cpms_site_keys
+        .values()
+        .filter(|site| {
+            !valid.contains(&(
+                site.admin_province.clone(),
+                site.city_name.clone(),
+                site.institution_code.clone(),
+            ))
+        })
+        .map(|site| site.site_sfid.clone())
+        .collect();
+    if orphans.is_empty() {
+        return;
+    }
+    let sample: Vec<String> = orphans.iter().take(10).cloned().collect();
+    for site_sfid in &orphans {
+        store.cpms_site_keys.remove(site_sfid);
+    }
+    tracing::info!(
+        count = orphans.len(),
+        sample = ?sample,
+        "cleaned up orphan CPMS sites (no matching institution)"
+    );
 }

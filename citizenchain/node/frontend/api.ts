@@ -50,6 +50,7 @@ export const api = {
   getRewardWallet: () => invoke<RewardWallet>('get_reward_wallet'),
   setRewardWallet: (address: string, unlockPassword: string) =>
     invoke<RewardWallet>('set_reward_wallet', { address, unlockPassword }),
+  getLocalMinerAddress: () => invoke<string | null>('get_local_miner_address'),
 
   getBootnodeKey: () => invoke<BootnodeKey>('get_bootnode_key'),
   getGrandpaKey: () => invoke<GrandpaKey>('get_grandpa_key'),

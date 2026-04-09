@@ -76,10 +76,10 @@
 | --- | --- | --- | --- | --- |
 | 决议发行 | `propose_resolution_issuance` | `reason, total_amount, allocations[], eligible_total, snapshot_nonce, signature` | 国储会 + 43 个省储会管理员 | 联合+公民 |
 | Runtime 升级 | `propose_runtime_upgrade` | `reason, code, eligible_total, snapshot_nonce, signature` | 国储会 + 43 个省储会管理员 | 联合+公民 |
-| 管理员更换 | `propose_admin_replacement` | `org, institution, old_admin, new_admin` | 目标机构管理员 | 内部 |
-| 决议销毁 | `propose_destroy` | `org, institution, amount` | 目标机构管理员 | 内部 |
-| GRANDPA 密钥更换 | `propose_replace_grandpa_key` | `institution, new_key(32B)` | NRC/PRC 机构管理员 | 内部 |
-| 省储行业务治理 | `propose_institution_rate / propose_verify_key / propose_sweep_to_main / propose_relay_submitters` | 见 4.4 | PRB 机构管理员 | 内部 |
+| 管理员更换 | `propose_admin_replacement` | `org, institution, old_admin, new_admin` | 目标省级管理员 | 内部 |
+| 决议销毁 | `propose_destroy` | `org, institution, amount` | 目标省级管理员 | 内部 |
+| GRANDPA 密钥更换 | `propose_replace_grandpa_key` | `institution, new_key(32B)` | NRC/PRC 省级管理员 | 内部 |
+| 省储行业务治理 | `propose_institution_rate / propose_verify_key / propose_sweep_to_main / propose_relay_submitters` | 见 4.4 | PRB 省级管理员 | 内部 |
 
 ### 4.1 联合提案额外字段标准（决议发行 / Runtime 升级）
 
@@ -156,7 +156,7 @@ message = blake2_256(SCALE.encode(payload))
 
 权限要求：
 
-- 必须由“当前机构管理员个人钱包”直接提交，不能跨机构代投。
+- 必须由“当前省级管理员个人钱包”直接提交，不能跨机构代投。
 - 同一管理员对同一 `proposal_id + institution` 只能投一次。
 - 链上按机构当前管理员门限自动结算机构结果，不再需要额外 `approvals proof` 或机构多签提交。
 
@@ -194,7 +194,7 @@ message = blake2_256(SCALE.encode(payload))
 ### 6.1 提案发起流程（App 侧）
 
 1. 选择业务类型并收集业务字段。
-2. 校验当前钱包是否具备该机构管理员权限。
+2. 校验当前钱包是否具备该省级管理员权限。
 3. 若为联合提案，先获取 `eligible_total + snapshot_nonce + signature`。
 4. 组装链上调用字段并签名提交。
 5. 记录 `proposal_id` 与业务类型映射，订阅状态事件。
@@ -218,14 +218,14 @@ message = blake2_256(SCALE.encode(payload))
 - 联合投票按钮只在以下条件全部满足时启用：
   - 提案仍处于 `joint` 阶段且状态为 `voting`
   - 当前机构尚未投票
-- 当前用户已导入至少一个仍未投票的本机构管理员钱包
+- 当前用户已导入至少一个仍未投票的本省级管理员钱包
 - App 直接使用所选管理员钱包提交 `joint_vote(proposal_id, institution, approve)`。
 - 页面会读取：
   - `JointInstitutionTallies` 展示本机构当前赞成/反对管理员票数
   - `JointVotesByInstitution` 展示本机构是否已经形成最终机构结果
   - `JointVotesByAdmin` 判断当前导入管理员钱包是否已投票
 - 页面展示的联合投票阈值不再写死 `3`，而是显示链上的联合权重阈值 `105`。
-- 页面还会单独展示“本机构管理员投票进度 / 本机构阈值”，避免把联合权重阈值和机构内部门限混淆。
+- 页面还会单独展示“本省级管理员投票进度 / 本机构阈值”，避免把联合权重阈值和机构内部门限混淆。
 
 ### 6.3 超时与补偿
 
@@ -325,7 +325,7 @@ message = blake2_256(SCALE.encode(payload))
 1. **顶部机构卡片**：左侧机构图标 + 中间机构类型标签与管理员/阈值信息。
    - 管理员用户：卡片可点击，显示右箭头，点击进入提案类型页面。
    - 非管理员用户：卡片不可点击，不显示右箭头。
-2. **管理员身份标识**（仅管理员可见）：绿色提示条"你是本机构管理员，点击上方卡片可发起提案"。
+2. **管理员身份标识**（仅管理员可见）：绿色提示条"你是本省级管理员，点击上方卡片可发起提案"。
 3. **管理员列表入口**：所有用户可见，点击进入管理员列表页。
 4. **投票事件列表**：所有用户可见，显示“本机构内部提案 + 所有机构都可见的联合投票提案”，按 ID 倒序展示。Runtime 升级等联合投票提案必须在所有机构入口可见，不能只挂在国储会单一列表下。
 
@@ -364,7 +364,7 @@ message = blake2_256(SCALE.encode(payload))
 | --- | --- | --- |
 | 管理员投票 | 钱包是 NRC/PRC/PRB 管理员 | ✅ 已实现 |
 | 公民投票 | 钱包绑定了 SFID | ⏭️ 后期 |
-| 机构联合投票 | 钱包是当前机构管理员，且该管理员尚未对本机构投票 | ✅ 已实现 |
+| 机构联合投票 | 钱包是当前省级管理员，且该管理员尚未对本机构投票 | ✅ 已实现 |
 
 关键文件：`lib/governance/all_proposals_view.dart`
 
@@ -393,7 +393,7 @@ message = blake2_256(SCALE.encode(payload))
 
 **通用提案（所有机构类型）：**
 - 转账：从机构多签账户发起转账
-- 换管理员：提议更换本机构管理员
+- 换管理员：提议更换本省级管理员
 - 决议销毁：提议销毁机构持有的资产
 
 **国储会专属提案（仅 NRC）：**
@@ -555,7 +555,7 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
   - 治理机构：`shenfen_id` UTF-8 右补零到 48 字节
   - 注册型机构：`duoqian_address(32) + 16 字节 0`
 - `TransferProposalService` 会统一按这套编码查询活跃提案、过滤机构提案并构造 `propose_transfer` call data。
-- `InstitutionAdminService` 对注册型机构不再查 `AdminsOriginGov.CurrentAdmins`，而是直接读取 `DuoqianManagePow.DuoqianAccounts`，从中解码管理员列表和动态阈值。
+- `ShengAdminService` 对注册型机构不再查 `AdminsOriginGov.CurrentAdmins`，而是直接读取 `DuoqianManagePow.DuoqianAccounts`，从中解码管理员列表和动态阈值。
 - 冷钱包二维码协议未变，只是 `org = 3` 的摘要显示改为“注册多签机构”。
 
 ### 8.8 关键文件

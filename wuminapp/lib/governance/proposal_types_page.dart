@@ -14,8 +14,8 @@ import '../wallet/core/wallet_manager.dart';
 ///
 /// 根据机构类型条件显示可发起的提案类型：
 /// - 所有机构：转账、换管理员、决议销毁
-/// - 国储会 + 省储会（NRC/PRC）：决议发行、状态升级（联合投票提案）
-/// - 仅国储会（NRC）：安全基金转账、验证密钥
+/// - 国储会 + 省储会（NRC/PRC）：决议发行、状态升级、验证密钥
+/// - 仅国储会（NRC）：安全基金转账
 class ProposalTypesPage extends StatelessWidget {
   const ProposalTypesPage({
     super.key,
@@ -231,6 +231,15 @@ class ProposalTypesPage extends StatelessWidget {
                 () => RuntimeUpgradePage(adminWallets: adminWallets),
               ),
             ),
+            const SizedBox(height: 8),
+            _ProposalTypeCard(
+              icon: Icons.vpn_key_outlined,
+              title: '验证密钥',
+              subtitle: '更换 GRANDPA 共识验证密钥（本机构内部投票）',
+              color: const Color(0xFF4527A0),
+              enabled: isActivated,
+              onTap: () => _checkAndOpenProposal(context, null, name: '验证密钥'),
+            ),
           ],
 
           // ──── 国储会专属提案 ────
@@ -245,15 +254,6 @@ class ProposalTypesPage extends StatelessWidget {
               color: AppTheme.info,
               enabled: isActivated,
               onTap: () => _checkAndOpenProposal(context, null, name: '安全基金转账'),
-            ),
-            const SizedBox(height: 8),
-            _ProposalTypeCard(
-              icon: Icons.vpn_key_outlined,
-              title: '验证密钥',
-              subtitle: '更换 GRANDPA 共识验证密钥',
-              color: const Color(0xFF4527A0),
-              enabled: isActivated,
-              onTap: () => _checkAndOpenProposal(context, null, name: '验证密钥'),
             ),
           ],
         ],

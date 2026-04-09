@@ -1,178 +1,48 @@
-use blake2::digest::consts::U32;
-use blake2::{Blake2b, Digest};
-use chrono::Utc;
+// 中文注释:本模块里的 pub use 是给任务卡 2~5 的业务模块预留的对外 API,
+// 任务卡 1 只建基础设施,暂时没调用点,暂时用 allow 抑制"未使用重导出"告警。
+#![allow(unused_imports)]
+
+//! SFID 工具模块 — sfid 系统所有 SFID 相关常量、枚举、生成、校验的**唯一入口**
+//!
+//! 中文注释(铁律):
+//! 任何新增的 SFID 工具逻辑(A3 类型、机构码、省市清单、分类、校验、生成)
+//! 都必须放在本模块下,**不能**散在 `sheng-admins/` / `operate/` / `business/` /
+//! `chain/` / `app_core/` 等业务模块里。
+//!
+//! 参见 `feedback_sfid_module_is_single_entry.md`。
+//!
+//! ## 子模块
+//!
+//! - [`a3`]               — A3 主体属性枚举(GMR/ZRR/ZNR/GFR/SFR/FFR)
+//! - [`institution_code`] — 机构类型枚举(ZG/ZF/LF/SF/JC/JY/CB/CH/TG)
+//! - [`province`]         — 43 省常量表 + 省/市代码查询
+//! - [`cities`]           — 按省查询城市清单(高层 API)
+//! - [`category`]         — 机构分类(公安局/公权/私权),任务卡 2 使用
+//! - [`validator`]        — SFID 号格式校验
+//! - [`generator`]        — SFID 号生成
+//! - [`admin`]            — SFID admin 相关(legacy)
+
+pub mod a3;
 pub(crate) mod admin;
+pub mod category;
+pub mod cities;
+pub mod generator;
+pub mod institution_code;
 pub mod province;
-use province::{city_code_by_name, province_code_by_name};
+pub mod validator;
 
-type Blake2b256 = Blake2b<U32>;
-
-const ALPHABET: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const RESERVED_PROVINCE_CITY_CODE: &str = "000";
-
-pub struct GenerateSfidInput<'a> {
-    pub account_pubkey: &'a str,
-    pub a3: &'a str,
-    pub p1: &'a str,
-    pub province: &'a str,
-    pub city: &'a str,
-    pub institution: &'a str,
-}
-
-fn hash_text(input: &str) -> u32 {
-    let digest = Blake2b256::digest(input.as_bytes());
-    let mut out = [0_u8; 4];
-    out.copy_from_slice(&digest[..4]);
-    u32::from_le_bytes(out)
-}
-
-fn checksum(payload: &str) -> char {
-    let mut total: usize = 0;
-    for (idx, ch) in payload.chars().enumerate() {
-        let pos = ALPHABET.find(ch).unwrap_or(0);
-        total = (total + (idx + 1) * pos) % 36;
-    }
-    ALPHABET.as_bytes()[total] as char
-}
-
-fn resolve_org_type(institution: &str) -> Result<&'static str, &'static str> {
-    let v = institution.trim();
-    match v {
-        "ZG" | "中国" => Ok("ZG"),
-        "ZF" | "政府" => Ok("ZF"),
-        "LF" | "立法院" => Ok("LF"),
-        "SF" | "司法院" => Ok("SF"),
-        "JC" | "监察院" => Ok("JC"),
-        "JY" | "教育委员会" | "公民教育委员会" => Ok("JY"),
-        "CB" | "储备委员会" | "公民储备委员会" => Ok("CB"),
-        "CH" | "储备银行" | "公民储备银行" => Ok("CH"),
-        "TG" | "他国" => Ok("TG"),
-        _ => Err("institution must be one of ZG/ZF/LF/SF/JC/JY/CB/CH/TG"),
-    }
-}
-
-fn resolve_a3(a3: &str) -> Result<&'static str, &'static str> {
-    let v = a3.trim();
-    match v {
-        "GMR" | "公民人" => Ok("GMR"),
-        "ZRR" | "自然人" => Ok("ZRR"),
-        "ZNR" | "智能人" => Ok("ZNR"),
-        "GFR" | "公法人" => Ok("GFR"),
-        "SFR" | "私法人" => Ok("SFR"),
-        "FFR" | "非法人" => Ok("FFR"),
-        _ => Err("a3 must be one of GMR/ZRR/ZNR/GFR/SFR/FFR"),
-    }
-}
-
-fn resolve_p1(p1: &str) -> Result<&'static str, &'static str> {
-    let v = p1.trim();
-    match v {
-        "0" | "非盈利" => Ok("0"),
-        "1" | "盈利" => Ok("1"),
-        _ => Err("p1 must be 0/1"),
-    }
-}
-
-pub fn generate_sfid_code(input: GenerateSfidInput<'_>) -> Result<String, &'static str> {
-    if input.account_pubkey.trim().is_empty()
-        || input.a3.trim().is_empty()
-        || input.province.trim().is_empty()
-        || input.city.trim().is_empty()
-        || input.institution.trim().is_empty()
-    {
-        return Err("account_pubkey, a3, province, city, institution are required");
-    }
-
-    let a3 = resolve_a3(input.a3)?;
-    let t2 = resolve_org_type(input.institution)?;
-    let p1 = match a3 {
-        "GMR" | "ZRR" => "1",
-        "GFR" => "0",
-        "ZNR" | "SFR" | "FFR" => resolve_p1(input.p1)?,
-        _ => return Err("a3 not supported"),
-    };
-    if a3 == "GFR" && !matches!(t2, "ZF" | "LF" | "SF" | "JC" | "JY" | "CB") {
-        return Err("GFR requires institution in ZF/LF/SF/JC/JY/CB");
-    }
-    if matches!(a3, "GMR" | "ZNR") && t2 != "ZG" {
-        return Err("GMR/ZNR requires institution ZG");
-    }
-    if a3 == "ZRR" && t2 != "TG" {
-        return Err("ZRR requires institution TG");
-    }
-    if a3 == "SFR" && !matches!(t2, "ZG" | "CH" | "TG") {
-        return Err("SFR requires institution in ZG/CH/TG");
-    }
-    if a3 == "FFR" && !matches!(t2, "ZG" | "TG") {
-        return Err("FFR requires institution in ZG/TG");
-    }
-    let d = Utc::now().format("%Y%m%d").to_string();
-    let province_code = province_code_by_name(input.province)
-        .ok_or("province not found in code table")?
-        .to_string();
-    // 中文注释：公民人/自然人/智能人的公开编码只精确到省，市级段统一固定为 000。
-    let city_code = if matches!(a3, "GMR" | "ZRR" | "ZNR") {
-        RESERVED_PROVINCE_CITY_CODE.to_string()
-    } else {
-        city_code_by_name(input.province, input.city)
-            .ok_or("city not found in province code table")?
-            .to_string()
-    };
-    let normalized_city_for_hash = if matches!(a3, "GMR" | "ZRR" | "ZNR") {
-        RESERVED_PROVINCE_CITY_CODE
-    } else {
-        input.city
-    };
-    let r5 = format!("{province_code}{city_code}");
-    let n9 = format!(
-        "{:09}",
-        (hash_text(&format!(
-            "{}|{}|{}|{}|{}|{}",
-            input.account_pubkey,
-            a3,
-            input.province,
-            normalized_city_for_hash,
-            input.institution,
-            d
-        )) as usize)
-            % 1_000_000_000
-    );
-    let payload = format!("{a3}{r5}{t2}{p1}{n9}{d}");
-    let c1 = checksum(&payload);
-    Ok(format!("{a3}-{r5}-{t2}{p1}{c1}-{n9}-{d}"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{generate_sfid_code, GenerateSfidInput};
-
-    #[test]
-    fn gmr_uses_reserved_province_city_code() {
-        let code = generate_sfid_code(GenerateSfidInput {
-            account_pubkey: "0x1234",
-            a3: "GMR",
-            p1: "1",
-            province: "广东省",
-            city: "广州市",
-            institution: "ZG",
-        })
-        .expect("gmr sfid should generate");
-
-        assert_eq!(code.split('-').nth(1), Some("GD000"));
-    }
-
-    #[test]
-    fn gfr_keeps_real_city_code() {
-        let code = generate_sfid_code(GenerateSfidInput {
-            account_pubkey: "0x5678",
-            a3: "GFR",
-            p1: "0",
-            province: "广东省",
-            city: "广州市",
-            institution: "ZF",
-        })
-        .expect("gfr sfid should generate");
-
-        assert_eq!(code.split('-').nth(1), Some("GD001"));
-    }
-}
+// 中文注释:对外聚合导出,方便业务模块只写 `use crate::sfid::*` 就能拿到全部工具。
+pub use a3::{all_a3, A3};
+pub use category::{classify, InstitutionCategory, PUBLIC_SECURITY_INSTITUTION_NAME};
+pub use cities::{cities_of, real_cities_of};
+pub use generator::{generate_sfid_code, GenerateSfidInput};
+pub use institution_code::InstitutionCode;
+pub use province::{
+    city_code_by_name, province_code_by_name, province_name_by_code, provinces,
+    sheng_admin_display_name, sheng_admin_province, CityCode, ProvinceCode,
+};
+pub use validator::{
+    validate_sfid_id_format, SFID_ID_MAX_BYTES, SFID_ID_SEGMENT_A3_LEN, SFID_ID_SEGMENT_COUNT,
+    SFID_ID_SEGMENT_D8_LEN, SFID_ID_SEGMENT_N9_LEN, SFID_ID_SEGMENT_R5_LEN,
+    SFID_ID_SEGMENT_T2P1C1_LEN,
+};

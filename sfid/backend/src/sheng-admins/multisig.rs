@@ -8,12 +8,11 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::business::scope::in_scope_multisig;
-use crate::sfid::{generate_sfid_code, GenerateSfidInput};
+use crate::sfid::{generate_sfid_code, validate_sfid_id_format, GenerateSfidInput};
 use crate::*;
 
 use super::institutions::{
     extract_province_code_from_sfid, submit_register_sfid_institution_extrinsic,
-    validate_sfid_id_format,
 };
 
 const MAX_INSTITUTION_NAME_CHARS: usize = 30;
@@ -85,8 +84,8 @@ pub(crate) async fn generate_multisig_sfid(
             "a3 and institution are required",
         );
     }
-    // SystemAdmin 的市由 session 锁定，前端若未传 / 传了不一致，以 session 值为准并拒绝越界
-    if ctx.role == AdminRole::SystemAdmin {
+    // ShiAdmin 的市由 session 锁定，前端若未传 / 传了不一致，以 session 值为准并拒绝越界
+    if ctx.role == AdminRole::ShiAdmin {
         let locked = match ctx.admin_city.as_deref() {
             Some(v) if !v.trim().is_empty() => v.trim().to_string(),
             _ => {
@@ -272,8 +271,8 @@ pub(crate) async fn list_multisig_sfids(
     };
 
     let scope = ctx.admin_province.as_deref();
-    // SystemAdmin 需要进一步按市收敛：只能看到自己所属市的记录。
-    let city_scope: Option<&str> = if ctx.role == AdminRole::SystemAdmin {
+    // ShiAdmin 需要进一步按市收敛：只能看到自己所属市的记录。
+    let city_scope: Option<&str> = if ctx.role == AdminRole::ShiAdmin {
         ctx.admin_city.as_deref()
     } else {
         None
@@ -336,7 +335,7 @@ pub(crate) async fn list_multisig_sfids(
 /// 业务规则：
 /// 1. 仅允许删除**未成功上链**的记录（`chain_status != Registered`）；
 ///    `Registered` 的记录代表该 SFID 已在链上被多签账户引用，强删会造成链上/本地状态分裂，直接拒绝。
-/// 2. 省级作用域按 `admin_province` 过滤；SystemAdmin 额外按 `admin_city` 过滤。
+/// 2. 省级作用域按 `admin_province` 过滤；ShiAdmin 额外按 `admin_city` 过滤。
 /// 3. 只允许调用者看到的记录被删。
 pub(crate) async fn delete_multisig_sfid(
     State(state): State<AppState>,
@@ -371,8 +370,8 @@ pub(crate) async fn delete_multisig_sfid(
             "multisig sfid out of current admin scope",
         );
     }
-    // SystemAdmin 额外按市校验
-    if ctx.role == AdminRole::SystemAdmin {
+    // ShiAdmin 额外按市校验
+    if ctx.role == AdminRole::ShiAdmin {
         let city_scope = ctx.admin_city.as_deref().unwrap_or("");
         if city_scope.is_empty() || record.city != city_scope {
             return api_error(

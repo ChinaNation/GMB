@@ -3,7 +3,7 @@
 ## 1. 模块目标
 `src/login` 负责 SFID 管理员认证链路，统一处理“登录挑战生成、签名验签、会话签发、会话校验”。
 
-该模块只负责认证（Authentication），不负责业务权限动作本身（业务接口由 `key-admins`、`super-admins`、`operator-admins` 接手）。
+该模块只负责认证（Authentication），不负责业务权限动作本身（业务接口由 `key-admins`、`sheng-admins`、`shi-admins` 接手）。
 
 ## 2. 目录与职责
 ```text
@@ -66,7 +66,7 @@ src/login/
 
 ## 7. 与业务模块边界
 - `src/login`：只做认证和会话校验。
-- `src/key-admins` / `src/super-admins` / `src/operator-admins` / `src/business`：
+- `src/key-admins` / `src/sheng-admins` / `src/shi-admins` / `src/business`：
   - 通过 `require_*` 函数拿到认证上下文。
   - 按角色继续执行业务权限与数据范围校验。
 

@@ -9,7 +9,7 @@ use chrono::Utc;
 use crate::business::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
 use crate::*;
 
-pub(crate) async fn list_super_admins(
+pub(crate) async fn list_sheng_admins(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
@@ -20,15 +20,15 @@ pub(crate) async fn list_super_admins(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let mut rows: Vec<SuperAdminRow> = store
-        .super_admin_province_by_pubkey
+    let mut rows: Vec<ShengAdminRow> = store
+        .sheng_admin_province_by_pubkey
         .iter()
         .filter_map(|(pubkey, province)| {
             let user = store.admin_users_by_pubkey.get(pubkey)?;
-            if user.role != AdminRole::InstitutionAdmin {
+            if user.role != AdminRole::ShengAdmin {
                 return None;
             }
-            Some(SuperAdminRow {
+            Some(ShengAdminRow {
                 id: user.id,
                 province: province.clone(),
                 admin_pubkey: user.admin_pubkey.clone(),
@@ -51,11 +51,11 @@ pub(crate) async fn list_super_admins(
     .into_response()
 }
 
-pub(crate) async fn replace_super_admin(
+pub(crate) async fn replace_sheng_admin(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(province): Path<String>,
-    Json(input): Json<ReplaceSuperAdminInput>,
+    Json(input): Json<ReplaceShengAdminInput>,
 ) -> impl IntoResponse {
     let ctx = match require_key_admin(&state, &headers) {
         Ok(v) => v,
@@ -87,14 +87,14 @@ pub(crate) async fn replace_super_admin(
     };
 
     let old_pubkey = store
-        .super_admin_province_by_pubkey
+        .sheng_admin_province_by_pubkey
         .iter()
         .find(|(pubkey, p)| {
             *p == &province_name
                 && store
                     .admin_users_by_pubkey
                     .get(pubkey.as_str())
-                    .map(|user| user.role == AdminRole::InstitutionAdmin)
+                    .map(|user| user.role == AdminRole::ShengAdmin)
                     .unwrap_or(false)
         })
         .map(|(k, _)| k.clone());
@@ -112,7 +112,7 @@ pub(crate) async fn replace_super_admin(
         return Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
-            data: SuperAdminRow {
+            data: ShengAdminRow {
                 id: existing.id,
                 province: province_name.clone(),
                 admin_pubkey: existing.admin_pubkey.clone(),
@@ -139,7 +139,7 @@ pub(crate) async fn replace_super_admin(
     let Some(old_user) = store.admin_users_by_pubkey.get(&old_pubkey).cloned() else {
         return api_error(StatusCode::NOT_FOUND, 1004, "super admin not found");
     };
-    if old_user.role != AdminRole::InstitutionAdmin {
+    if old_user.role != AdminRole::ShengAdmin {
         return api_error(
             StatusCode::CONFLICT,
             1005,
@@ -156,7 +156,7 @@ pub(crate) async fn replace_super_admin(
             id: old_user.id,
             admin_pubkey: new_pubkey.clone(),
             admin_name: old_user.admin_name,
-            role: AdminRole::InstitutionAdmin,
+            role: AdminRole::ShengAdmin,
             status: preserved_status.clone(),
             built_in: old_user.built_in,
             created_by: old_user.created_by,
@@ -165,16 +165,16 @@ pub(crate) async fn replace_super_admin(
             city: String::new(),
         },
     );
-    store.super_admin_province_by_pubkey.remove(&old_pubkey);
+    store.sheng_admin_province_by_pubkey.remove(&old_pubkey);
     store
-        .super_admin_province_by_pubkey
+        .sheng_admin_province_by_pubkey
         .insert(new_pubkey.clone(), province_name.clone());
     store.admin_sessions.retain(|_, session| {
         !same_admin_pubkey(session.admin_pubkey.as_str(), old_pubkey.as_str())
     });
 
     for operator in store.admin_users_by_pubkey.values_mut() {
-        if operator.role == AdminRole::SystemAdmin
+        if operator.role == AdminRole::ShiAdmin
             && same_admin_pubkey(operator.created_by.as_str(), old_pubkey.as_str())
         {
             operator.created_by = new_pubkey.clone();
@@ -198,7 +198,7 @@ pub(crate) async fn replace_super_admin(
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: SuperAdminRow {
+        data: ShengAdminRow {
             id: old_user.id,
             province: province_name.clone(),
             admin_pubkey: new_pubkey,
