@@ -18,7 +18,8 @@ use blake2::{Blake2b, Digest};
 
 use crate::business::pubkey::{normalize_cpms_pubkey, same_cpms_pubkey};
 use crate::chain::runtime_align::build_institution_credential;
-use crate::sfid::{generate_sfid_code, GenerateSfidInput};
+// 中文注释:SFID 工具统一从 crate::sfid 拿,见 feedback_sfid_module_is_single_entry.md
+use crate::sfid::{generate_sfid_code, validate_sfid_id_format, GenerateSfidInput};
 use crate::*;
 
 type Blake2b256 = Blake2b<U32>;
@@ -27,13 +28,6 @@ const MAX_CITY_CHARS: usize = 100;
 const MAX_INSTITUTION_CHARS: usize = 100;
 const MAX_PROVINCE_CHARS: usize = 100;
 const MAX_STATUS_REASON_CHARS: usize = 500;
-const SFID_ID_SEGMENT_COUNT: usize = 5;
-const SFID_ID_SEGMENT_A3_LEN: usize = 3;
-const SFID_ID_SEGMENT_R5_LEN: usize = 5;
-const SFID_ID_SEGMENT_T2P1C1_LEN: usize = 4;
-const SFID_ID_SEGMENT_N9_LEN: usize = 9;
-const SFID_ID_SEGMENT_D8_LEN: usize = 8;
-const SFID_ID_MAX_BYTES: usize = 96;
 
 /// 生成机构 SFID + QR1 安装授权二维码。
 ///
@@ -713,6 +707,61 @@ pub(crate) async fn list_cpms_keys(
     .into_response()
 }
 
+/// 任务卡 `20260408-sfid-public-security-cpms-embed`:
+/// 按市公安局机构 sfid_id 反查其 CPMS 站点(`cpms_site_keys`)。
+///
+/// 中文注释:`multisig_institutions.sfid_id` 和 `cpms_site_keys.site_sfid`
+/// **不是同一个值**(CPMS 站点的 site_sfid 是生成安装二维码时随机派生的),
+/// 所以用 `(admin_province, city_name, institution_code)` 元组匹配——公安局
+/// 每市唯一,元组保证一一对应。返回 `null` 表示该公安局尚未生成过 CPMS 站点。
+pub(crate) async fn get_cpms_site_by_institution(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(sfid_id): Path<String>,
+) -> impl IntoResponse {
+    let ctx = match require_institution_or_key_admin(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let sfid_id = sfid_id.trim().to_string();
+    if sfid_id.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "sfid_id is required");
+    }
+    let store = match store_read_or_500(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let inst = match store.multisig_institutions.get(sfid_id.as_str()) {
+        Some(v) => v.clone(),
+        None => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+    };
+    // 省级管理员只能看本省
+    if let Some(scope_province) = ctx.admin_province.as_deref() {
+        if inst.province != scope_province {
+            return api_error(
+                StatusCode::FORBIDDEN,
+                1003,
+                "cannot view other province institutions",
+            );
+        }
+    }
+    let matched: Option<CpmsSiteKeysListRow> = store
+        .cpms_site_keys
+        .values()
+        .find(|site| {
+            site.admin_province == inst.province
+                && site.city_name == inst.city
+                && site.institution_code == inst.institution_code
+        })
+        .map(|site| cpms_site_keys_to_list_row(site, &store));
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: matched,
+    })
+    .into_response()
+}
+
 async fn update_cpms_site_status(
     state: AppState,
     headers: HeaderMap,
@@ -848,10 +897,10 @@ fn resolve_admin_display_name(store: &Store, pubkey: &str) -> String {
     if let Some(admin) = store.admin_users_by_pubkey.get(pubkey) {
         let role_label = match admin.role {
             AdminRole::KeyAdmin => "密钥管理员",
-            AdminRole::InstitutionAdmin => "机构管理员",
-            AdminRole::SystemAdmin => "系统管理员",
+            AdminRole::ShengAdmin => "机构管理员",
+            AdminRole::ShiAdmin => "系统管理员",
         };
-        if let Some(province) = store.super_admin_province_by_pubkey.get(pubkey) {
+        if let Some(province) = store.sheng_admin_province_by_pubkey.get(pubkey) {
             format!("{}{}", province, role_label)
         } else if !admin.admin_name.is_empty() {
             format!("{} ({})", admin.admin_name, role_label)
@@ -864,67 +913,17 @@ fn resolve_admin_display_name(store: &Store, pubkey: &str) -> String {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct ChainInstitutionRegisterReceipt {
-    pub(super) genesis_hash: String,
-    pub(super) sfid_id: String,
-    pub(super) register_nonce: String,
-    pub(super) signature: String,
-    pub(super) tx_hash: String,
-    pub(super) block_number: u64,
+pub(crate) struct ChainInstitutionRegisterReceipt {
+    pub(crate) genesis_hash: String,
+    pub(crate) sfid_id: String,
+    pub(crate) register_nonce: String,
+    pub(crate) signature: String,
+    pub(crate) tx_hash: String,
+    pub(crate) block_number: u64,
 }
 
-pub(super) fn validate_sfid_id_format(raw: &str) -> Result<String, &'static str> {
-    let normalized = raw.trim();
-    if normalized.is_empty() {
-        return Err("site_sfid is required");
-    }
-    if !normalized.is_ascii() {
-        return Err("site_sfid must be ascii");
-    }
-    if normalized.len() > SFID_ID_MAX_BYTES {
-        return Err("site_sfid length exceeds chain max");
-    }
-    if normalized
-        .bytes()
-        .any(|b| !(b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'-'))
-    {
-        return Err("site_sfid charset invalid");
-    }
-    let segments = normalized.split('-').collect::<Vec<_>>();
-    if segments.len() != SFID_ID_SEGMENT_COUNT {
-        return Err("site_sfid format invalid");
-    }
-    if segments[0].len() != SFID_ID_SEGMENT_A3_LEN
-        || !segments[0].chars().all(|c| c.is_ascii_uppercase())
-    {
-        return Err("site_sfid a3 segment invalid");
-    }
-    if segments[1].len() != SFID_ID_SEGMENT_R5_LEN
-        || !segments[1]
-            .chars()
-            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
-    {
-        return Err("site_sfid r5 segment invalid");
-    }
-    if segments[2].len() != SFID_ID_SEGMENT_T2P1C1_LEN
-        || !segments[2]
-            .chars()
-            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
-    {
-        return Err("site_sfid t2p1c1 segment invalid");
-    }
-    if segments[3].len() != SFID_ID_SEGMENT_N9_LEN
-        || !segments[3].chars().all(|c| c.is_ascii_digit())
-    {
-        return Err("site_sfid n9 segment invalid");
-    }
-    if segments[4].len() != SFID_ID_SEGMENT_D8_LEN
-        || !segments[4].chars().all(|c| c.is_ascii_digit())
-    {
-        return Err("site_sfid date segment invalid");
-    }
-    Ok(normalized.to_string())
-}
+// 中文注释:`validate_sfid_id_format` 和 SFID_ID_* 常量已搬到
+// `crate::sfid::validator`,本文件通过 import 使用。见任务卡 1。
 
 fn normalize_chain_ws_url(input: &str) -> String {
     if let Some(rest) = input.strip_prefix("http://") {
@@ -979,7 +978,7 @@ fn resolve_chain_signer_material(state: &AppState) -> Result<(String, SensitiveS
     Ok((signer_pubkey, signer_seed))
 }
 
-pub(super) async fn submit_register_sfid_institution_extrinsic(
+pub(crate) async fn submit_register_sfid_institution_extrinsic(
     state: &AppState,
     site_sfid: &str,
     institution_name: &str,

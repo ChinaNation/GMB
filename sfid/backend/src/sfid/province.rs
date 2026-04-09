@@ -164,14 +164,14 @@ pub fn provinces() -> &'static [ProvinceCode] {
     &PROVINCES
 }
 
-pub fn super_admin_province(pubkey: &str) -> Option<&'static str> {
+pub fn sheng_admin_province(pubkey: &str) -> Option<&'static str> {
     PROVINCES
         .iter()
         .find(|p| p.pubkey.eq_ignore_ascii_case(pubkey))
         .map(|p| p.name)
 }
 
-pub fn super_admin_display_name(pubkey: &str) -> Option<String> {
-    let province_name = super_admin_province(pubkey)?;
-    Some(format!("{province_name}机构管理员"))
+pub fn sheng_admin_display_name(pubkey: &str) -> Option<String> {
+    let province_name = sheng_admin_province(pubkey)?;
+    Some(format!("{province_name}省级管理员"))
 }

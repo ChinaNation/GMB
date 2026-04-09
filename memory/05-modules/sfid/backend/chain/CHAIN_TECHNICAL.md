@@ -21,7 +21,7 @@
    - 对齐结论：已对齐；对链接口现固定返回 `genesis_hash`、`who`、`eligible_total`、`snapshot_nonce`、`signature`。
 4. 功能 4：机构 `sfid_id` 登记
    - 链上需要：proof 型字段包 `("GMB_SFID_INSTITUTION_V2", genesis_hash, sfid_id, name, register_nonce)`，以及 extrinsic `register_sfid_institution(sfid_id, name, register_nonce, signature)`。V2 新增 `name` 参数（机构名称，BoundedVec<u8, 128>），纳入签名载荷防篡改。创建/注销多签账户时按 0.1%（最低 10 分）收取手续费，走 FeeRouter 分账。
-   - SFID 实际提供：`super-admins` 模块在机构扫码录入成功后，生成 `genesis_hash + sfid_id + name + register_nonce + signature`，并用这组字段调用链上登记入口，同时在响应中回写 proof 字段与 `tx_hash/block_number`。
+   - SFID 实际提供：`sheng-admins` 模块在机构扫码录入成功后，生成 `genesis_hash + sfid_id + name + register_nonce + signature`，并用这组字段调用链上登记入口，同时在响应中回写 proof 字段与 `tx_hash/block_number`。
    - 对齐结论：已对齐（V2 升级待下次 runtime 升级生效）。
 5. 功能 5：SFID 验签主备账户管理
    - 链上需要：创世三账户 `main + backup_1 + backup_2`，以及标准 extrinsic `rotate_sfid_keys(new_backup)`，要求由备用账户发起。
@@ -104,7 +104,7 @@
 ## 5. 功能 4/5 模块边界（SFID 系统内）
 
 ### 5.1 功能 4：机构 `sfid_id` 登记
-1. 归属 `super-admins` 模块：负责机构主数据与审批。
+1. 归属 `sheng-admins` 模块：负责机构主数据与审批。
 2. 标准流程：`SFID 审批完成 -> 授权 Origin 发链上登记交易 -> 回写 tx_hash/block_number`。
 3. `sfid_id` 格式（长度、字符集、大小写）由 SFID 与链侧双端校验。
 
@@ -131,7 +131,7 @@
 4. 文档字段、代码字段、链上 verifier 三者一致。
 
 ## 8. 与其他模块边界
-1. 机构登记能力见：`backend/src/super-admins/SUPER_ADMINS_TECHNICAL.md`。
+1. 机构登记能力见：`backend/src/sheng-admins/SUPER_ADMINS_TECHNICAL.md`。
 2. 密钥轮换能力见：`backend/src/key-admins/KEY_ADMINS_TECHNICAL.md`。
 3. 本模块仅提供链路接口与凭证输出，不负责后台治理审批。
 

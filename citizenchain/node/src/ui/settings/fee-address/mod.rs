@@ -313,6 +313,19 @@ pub fn get_reward_wallet(app: AppHandle) -> Result<RewardWallet, String> {
     })
 }
 
+/// 返回本机矿工账户的 SS58 地址（前缀 2027）。
+/// keystore 中没有 powr 公钥时返回 Ok(None)，由前端显示"未生成"。
+#[tauri::command]
+pub fn get_local_miner_address(app: AppHandle) -> Result<Option<String>, String> {
+    let Some(hex) = local_powr_miner_account_hex(&app)? else {
+        return Ok(None);
+    };
+    let raw = hex.strip_prefix("0x").unwrap_or(&hex);
+    let pubkey = hex::decode(raw).map_err(|e| format!("矿工公钥 hex 解码失败: {e}"))?;
+    let ss58 = crate::ui::governance::signing::pubkey_to_ss58(&pubkey)?;
+    Ok(Some(ss58))
+}
+
 #[tauri::command]
 pub async fn set_reward_wallet(
     app: AppHandle,

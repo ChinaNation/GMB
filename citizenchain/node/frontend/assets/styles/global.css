@@ -190,6 +190,16 @@ body {
   overflow: hidden;
 }
 
+.settings-wallet-section .wallet-inline + .wallet-inline {
+  margin-top: 12px;
+}
+
+.settings-wallet-section .wallet-inline-readonly {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+}
+
 .settings-wallet-section .wallet-current,
 .settings-nodekey-section .bootnode-inline h2 {
   margin: 0;

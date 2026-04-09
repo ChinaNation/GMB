@@ -1,4 +1,4 @@
-use crate::sfid::province::super_admin_province;
+use crate::sfid::province::sheng_admin_province;
 use crate::{AdminRole, BindingRecord, CpmsSiteKeys, MultisigSfidRecord, PendingRequest, Store};
 
 pub(crate) fn province_scope_for_role(
@@ -8,21 +8,21 @@ pub(crate) fn province_scope_for_role(
 ) -> Option<String> {
     match role {
         AdminRole::KeyAdmin => None,
-        AdminRole::InstitutionAdmin => store
-            .super_admin_province_by_pubkey
+        AdminRole::ShengAdmin => store
+            .sheng_admin_province_by_pubkey
             .get(admin_pubkey)
             .cloned()
-            .or_else(|| super_admin_province(admin_pubkey).map(|v| v.to_string())),
-        AdminRole::SystemAdmin => {
+            .or_else(|| sheng_admin_province(admin_pubkey).map(|v| v.to_string())),
+        AdminRole::ShiAdmin => {
             let creator_pubkey = store
                 .admin_users_by_pubkey
                 .get(admin_pubkey)
                 .map(|u| u.created_by.clone())?;
             store
-                .super_admin_province_by_pubkey
+                .sheng_admin_province_by_pubkey
                 .get(&creator_pubkey)
                 .cloned()
-                .or_else(|| super_admin_province(&creator_pubkey).map(|v| v.to_string()))
+                .or_else(|| sheng_admin_province(&creator_pubkey).map(|v| v.to_string()))
         }
     }
 }

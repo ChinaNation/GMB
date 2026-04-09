@@ -122,6 +122,21 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [bindStatus, setBindStatus] = useState<BindStatus>(null);
   const [showAddressScan, setShowAddressScan] = useState(false);
+  const [minerAddress, setMinerAddress] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getLocalMinerAddress()
+      .then((addr) => {
+        if (!cancelled) setMinerAddress(addr);
+      })
+      .catch(() => {
+        if (!cancelled) setMinerAddress(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const hasBoundAddress = Boolean(wallet.address);
   const actionText = hasBoundAddress ? '变更地址' : '绑定地址';
 
@@ -196,6 +211,12 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
 
   return (
     <section className="section settings-wallet-section">
+      <div className="wallet-inline wallet-inline-readonly">
+        <span className="wallet-current">
+          本机矿工账户
+          <span className="wallet-bind-state">{minerAddress ?? '未生成（请先启动节点）'}</span>
+        </span>
+      </div>
       <div className="wallet-inline">
         <span className="wallet-current">
           手续费收款地址

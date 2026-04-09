@@ -2,46 +2,46 @@
 
 ## 1. 文档目的
 - 固化 CPMS 当前代码实现的技术基线，作为开发、联调、测试、验收的唯一参考。
-- 明确模块边界：登录、初始化、权限、机构管理员、系统管理员、档案算法相互解耦。
+- 明确模块边界：登录、初始化、权限、省级管理员、市级管理员、档案算法相互解耦。
 - 统一跨端口径：CPMS 与 wuminapp/SFID 的扫码协议、签名原文、字段顺序保持一致。
 
 ## 2. 系统定位与业务范围
 - CPMS 是离线运行的管理系统，当前实现聚焦“管理员体系 + 档案录入 + 档案二维码签发/打印”。
 - 管理员仅两类角色：
-  - `INSTITUTION_ADMIN`（机构管理员）：管理系统管理员、管理档案状态、生成机构公钥登记二维码。
-  - `SYSTEM_ADMIN`（系统管理员）：录入档案、查询档案、生成并打印档案二维码。
+  - `SHENG_ADMIN`（省级管理员）：管理市级管理员、管理档案状态、生成机构公钥登记二维码。
+  - `SHI_ADMIN`（市级管理员）：录入档案、查询档案、生成并打印档案二维码。
 - 业务主线：
-  - 机构管理员通过初始化绑定产生（最多 3 个，固定映射 `K1/K2/K3`）。
-  - 系统管理员由机构管理员维护。
-  - 系统管理员录入档案后生成二维码，交给外部系统（SFID）使用。
+  - 省级管理员通过初始化绑定产生（最多 3 个，固定映射 `K1/K2/K3`）。
+  - 市级管理员由省级管理员维护。
+  - 市级管理员录入档案后生成二维码，交给外部系统（SFID）使用。
 
 ## 3. 后端模块架构（`cpms/backend/src`）
 
 ### 3.1 模块目录
 - `main.rs`：应用启动、PostgreSQL 连接池与迁移、通用错误响应、审计写入。
-- `initialize/`：安装初始化与机构管理员绑定。
+- `initialize/`：安装初始化与省级管理员绑定。
 - `login/`：管理员登录（普通 challenge + 扫码 challenge）。
 - `authz/`：Bearer token 鉴权与角色校验。
-- `super_admin/`：机构管理员接口（操作员管理、档案状态管理、公钥登记二维码）。
-- `operator_admin/`：系统管理员接口（档案录入、查询、二维码生成与打印）。
+- `super_admin/`：省级管理员接口（操作员管理、档案状态管理、公钥登记二维码）。
+- `operator_admin/`：市级管理员接口（档案录入、查询、二维码生成与打印）。
 - `dangan/`：档案号与二维码算法（含 `province_codes.rs` 省市代码数据）。
 
 ### 3.2 模块边界
 - `login` 只负责登录流程，不承担业务授权和业务操作。
 - `authz` 只负责“是否登录 + 角色匹配”判定。
-- `super_admin`（机构管理员）与 `operator_admin`（系统管理员）承担业务入口与权限分层。
+- `super_admin`（省级管理员）与 `operator_admin`（市级管理员）承担业务入口与权限分层。
 - `dangan` 只提供算法和载荷构建能力，被业务模块调用。
 - `initialize` 统一承载安装引导与初始化安全链路。
 
 ## 4. 角色与权限模型
 
 ### 4.1 角色定义
-- `INSTITUTION_ADMIN`（机构管理员）
+- `SHENG_ADMIN`（省级管理员）
   - 来源：安装后通过 `wuminapp` 绑定。
   - 上限：固定 3 个，对应 `K1/K2/K3`。
   - 关键能力：操作员管理、档案状态更新、机构公钥登记二维码生成。
-- `SYSTEM_ADMIN`（系统管理员）
-  - 来源：由机构管理员创建。
+- `SHI_ADMIN`（市级管理员）
+  - 来源：由省级管理员创建。
   - 关键能力：档案创建/查询、档案二维码生成与打印。
 
 ### 4.2 权限校验实现
@@ -105,9 +105,9 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 - 登录会话默认有效期 30 分钟。
 - 管理员状态必须是 `ACTIVE`。
 
-## 7. 机构管理员模块（`super_admin/`）
+## 7. 省级管理员模块（`super_admin/`）
 
-### 7.1 路由（均要求 `INSTITUTION_ADMIN`）
+### 7.1 路由（均要求 `SHENG_ADMIN`）
 - `GET /api/v1/admin/operators`
 - `POST /api/v1/admin/operators`
 - `PUT /api/v1/admin/operators/:id`
@@ -118,14 +118,14 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 - `POST /api/v1/admin/anon-cert`（扫描 QR3 完成匿名证书注册，需认证）
 
 ### 7.2 关键行为
-- 系统管理员增删改查与状态更新。
+- 市级管理员增删改查与状态更新。
 - 生成 QR2 注册二维码（`SFID_CPMS_V1` 协议 `REGISTER` 类型）。
 - 扫描 QR3 完成匿名证书盲化解密。
 - 更新档案 `citizen_status`（`NORMAL/ABNORMAL`），并派生 `voting_eligible`。
 
-## 8. 系统管理员模块（`operator_admin/`）
+## 8. 市级管理员模块（`operator_admin/`）
 
-### 8.1 路由（均要求 `SYSTEM_ADMIN`）
+### 8.1 路由（均要求 `SHI_ADMIN`）
 - `POST /api/v1/archives`
 - `GET /api/v1/archives`
 - `GET /api/v1/archives/:archive_id`
@@ -204,7 +204,7 @@ cpms-qr-v1|site_sfid|sign_key_id|archive_no|citizen_status|voting_eligible|issue
 - `GET /api/v1/admin/auth/qr/result`
 - `POST /api/v1/admin/auth/logout`
 
-### 11.4 机构管理员
+### 11.4 省级管理员
 - `GET /api/v1/admin/operators`
 - `POST /api/v1/admin/operators`
 - `PUT /api/v1/admin/operators/:id`
@@ -214,7 +214,7 @@ cpms-qr-v1|site_sfid|sign_key_id|archive_no|citizen_status|voting_eligible|issue
 - `POST /api/v1/admin/anon-cert`
 - `PUT /api/v1/archives/:archive_id/citizen-status`
 
-### 11.5 系统管理员
+### 11.5 市级管理员
 - `POST /api/v1/archives`
 - `GET /api/v1/archives`
 - `GET /api/v1/archives/:archive_id`

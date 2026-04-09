@@ -25,16 +25,18 @@ mod app_core;
 mod business;
 mod chain;
 mod indexer;
+mod institutions;
 #[path = "key-admins/mod.rs"]
 mod key_admins;
 mod login;
 mod models;
 mod operate;
-#[path = "operator-admins/mod.rs"]
-mod operator_admins;
+mod scope;
+#[path = "shi-admins/mod.rs"]
+mod shi_admins;
 mod sfid;
-#[path = "super-admins/mod.rs"]
-mod super_admins;
+#[path = "sheng-admins/mod.rs"]
+mod sheng_admins;
 use business::scope::{in_scope, in_scope_cpms_site, in_scope_multisig, in_scope_pending};
 use key_admins::chain_keyring::ChainKeyringState;
 
@@ -145,11 +147,12 @@ impl StoreBackend {
     }
 
     fn parse_admin_role(role: &str) -> AdminRole {
+        // 中文注释：统一到 key/sheng/shi 三角色(见 feedback_sfid_three_roles_naming.md)。
         match role {
             "KEY_ADMIN" => AdminRole::KeyAdmin,
-            "INSTITUTION_ADMIN" | "SUPER_ADMIN" => AdminRole::InstitutionAdmin,
-            "SYSTEM_ADMIN" | "OPERATOR_ADMIN" => AdminRole::SystemAdmin,
-            _ => AdminRole::SystemAdmin,
+            "SHENG_ADMIN" => AdminRole::ShengAdmin,
+            "SHI_ADMIN" => AdminRole::ShiAdmin,
+            _ => AdminRole::ShiAdmin,
         }
     }
 
@@ -163,8 +166,8 @@ impl StoreBackend {
     fn admin_role_text(role: &AdminRole) -> &'static str {
         match role {
             AdminRole::KeyAdmin => "KEY_ADMIN",
-            AdminRole::InstitutionAdmin => "INSTITUTION_ADMIN",
-            AdminRole::SystemAdmin => "SYSTEM_ADMIN",
+            AdminRole::ShengAdmin => "SHENG_ADMIN",
+            AdminRole::ShiAdmin => "SHI_ADMIN",
         }
     }
 
@@ -204,7 +207,7 @@ impl StoreBackend {
         };
 
         store.admin_users_by_pubkey.clear();
-        store.super_admin_province_by_pubkey.clear();
+        store.sheng_admin_province_by_pubkey.clear();
         store.chain_keyring_state = None;
 
         let admin_rows = conn
@@ -245,16 +248,16 @@ impl StoreBackend {
         let super_rows = conn
             .query(
                 "SELECT a.admin_pubkey, s.province_name
-                 FROM super_admin_scope s
+                 FROM sheng_admin_scope s
                  JOIN admins a ON a.admin_id=s.admin_id",
                 &[],
             )
-            .map_err(|e| format!("load super_admin_scope failed: {e}"))?;
+            .map_err(|e| format!("load sheng_admin_scope failed: {e}"))?;
         for row in super_rows {
             let pubkey: String = row.get(0);
             let province: String = row.get(1);
             store
-                .super_admin_province_by_pubkey
+                .sheng_admin_province_by_pubkey
                 .insert(pubkey, province);
         }
 
@@ -303,7 +306,7 @@ impl StoreBackend {
     fn save_store_postgres(conn: &mut postgres::Client, store: &Store) -> Result<(), String> {
         let mut misc = store.clone();
         misc.admin_users_by_pubkey.clear();
-        misc.super_admin_province_by_pubkey.clear();
+        misc.sheng_admin_province_by_pubkey.clear();
         misc.chain_keyring_state = None;
         let payload =
             serde_json::to_value(&misc).map_err(|e| format!("encode runtime cache failed: {e}"))?;
@@ -337,10 +340,10 @@ impl StoreBackend {
             .map_err(|e| format!("begin admin sync transaction failed: {e}"))?;
         tx.execute("DELETE FROM key_admin_keyring", &[])
             .map_err(|e| format!("clear key_admin_keyring failed: {e}"))?;
-        tx.execute("DELETE FROM operator_admin_scope", &[])
-            .map_err(|e| format!("clear operator_admin_scope failed: {e}"))?;
-        tx.execute("DELETE FROM super_admin_scope", &[])
-            .map_err(|e| format!("clear super_admin_scope failed: {e}"))?;
+        tx.execute("DELETE FROM shi_admin_scope", &[])
+            .map_err(|e| format!("clear shi_admin_scope failed: {e}"))?;
+        tx.execute("DELETE FROM sheng_admin_scope", &[])
+            .map_err(|e| format!("clear sheng_admin_scope failed: {e}"))?;
         tx.execute("DELETE FROM admins", &[])
             .map_err(|e| format!("clear admins failed: {e}"))?;
 
@@ -369,7 +372,7 @@ impl StoreBackend {
             admin_id_by_pubkey.insert(admin.admin_pubkey.clone(), admin_id);
         }
 
-        for province in store.super_admin_province_by_pubkey.values() {
+        for province in store.sheng_admin_province_by_pubkey.values() {
             tx.execute(
                 "INSERT INTO provinces(province_name) VALUES ($1)
                  ON CONFLICT (province_name) DO NOTHING",
@@ -378,37 +381,37 @@ impl StoreBackend {
             .map_err(|e| format!("upsert provinces failed: {e}"))?;
         }
 
-        for (pubkey, province) in &store.super_admin_province_by_pubkey {
+        for (pubkey, province) in &store.sheng_admin_province_by_pubkey {
             let Some(admin_id) = admin_id_by_pubkey.get(pubkey) else {
                 continue;
             };
             tx.execute(
-                "INSERT INTO super_admin_scope(admin_id, province_name) VALUES ($1, $2)",
+                "INSERT INTO sheng_admin_scope(admin_id, province_name) VALUES ($1, $2)",
                 &[admin_id, province],
             )
-            .map_err(|e| format!("insert super_admin_scope failed: {e}"))?;
+            .map_err(|e| format!("insert sheng_admin_scope failed: {e}"))?;
         }
 
         for admin in store.admin_users_by_pubkey.values() {
-            if admin.role != AdminRole::SystemAdmin {
+            if admin.role != AdminRole::ShiAdmin {
                 continue;
             }
             let Some(admin_id) = admin_id_by_pubkey.get(&admin.admin_pubkey) else {
                 continue;
             };
-            let Some(super_admin_id) = admin_id_by_pubkey.get(&admin.created_by) else {
+            let Some(sheng_admin_id) = admin_id_by_pubkey.get(&admin.created_by) else {
                 continue;
             };
             let province = store
-                .super_admin_province_by_pubkey
+                .sheng_admin_province_by_pubkey
                 .get(&admin.created_by)
                 .cloned();
             tx.execute(
-                "INSERT INTO operator_admin_scope(admin_id, super_admin_id, province_name)
+                "INSERT INTO shi_admin_scope(admin_id, sheng_admin_id, province_name)
                  VALUES ($1, $2, $3)",
-                &[admin_id, super_admin_id, &province],
+                &[admin_id, sheng_admin_id, &province],
             )
-            .map_err(|e| format!("insert operator_admin_scope failed: {e}"))?;
+            .map_err(|e| format!("insert shi_admin_scope failed: {e}"))?;
         }
 
         if let Some(kr) = &store.chain_keyring_state {
@@ -648,11 +651,19 @@ fn main() {
         key_alg: "sr25519".to_string(),
         public_key_hex: Arc::new(RwLock::new(public_key_hex)),
     };
-    seed_super_admins(&state);
-    sync_builtin_institution_admins(&state);
+    seed_sheng_admins(&state);
+    sync_builtin_sheng_admins(&state);
     key_admins::seed_chain_keyring(&state);
     key_admins::seed_key_admins(&state);
     info!("initialized runtime state with defaults");
+    // 中文注释:任务卡 2 幂等迁移:把 legacy multisig_sfid_records 拆成
+    // multisig_institutions + multisig_accounts 两层。老结构不删除,作为兜底。
+    app_core::runtime_ops::migrate_legacy_multisig_to_two_layer(&state);
+    // 中文注释:任务卡 6 启动对账:按 sfid 工具市清单对齐全部公安局机构。
+    app_core::runtime_ops::backfill_and_reconcile_public_security(&state);
+    // 中文注释:任务卡 `20260408-sfid-public-security-cpms-embed` 启动清理:
+    // reconcile 后会有被删除的市公安局遗留 CPMS 站点,这里直接硬删孤儿。
+    app_core::runtime_ops::cleanup_orphan_cpms_sites(&state);
     seed_demo_record(&state);
 
     // ── SFID-CPMS QR v1: 初始化 RSA 匿名证书密钥对 ──
@@ -724,60 +735,64 @@ fn main() {
         let admin_routes = Router::new()
             .route(
                 "/api/v1/admin/operators",
-                get(super_admins::list_operators).post(super_admins::create_operator),
+                get(sheng_admins::list_operators).post(sheng_admins::create_operator),
             )
             .route(
                 "/api/v1/admin/operators/:id",
-                put(super_admins::update_operator).delete(super_admins::delete_operator),
+                put(sheng_admins::update_operator).delete(sheng_admins::delete_operator),
             )
             .route(
                 "/api/v1/admin/operators/:id/status",
-                put(super_admins::update_operator_status),
+                put(sheng_admins::update_operator_status),
             )
             .route(
-                "/api/v1/admin/super-admins",
-                get(super_admins::list_super_admins),
+                "/api/v1/admin/sheng-admins",
+                get(sheng_admins::list_sheng_admins),
             )
             .route(
-                "/api/v1/admin/super-admins/:province",
-                put(super_admins::replace_super_admin),
+                "/api/v1/admin/sheng-admins/:province",
+                put(sheng_admins::replace_sheng_admin),
             )
-            .route("/api/v1/admin/cpms-keys", get(super_admins::list_cpms_keys))
+            .route("/api/v1/admin/cpms-keys", get(sheng_admins::list_cpms_keys))
+            .route(
+                "/api/v1/admin/cpms-keys/by-institution/:sfid_id",
+                get(sheng_admins::get_cpms_site_by_institution),
+            )
             .route(
                 "/api/v1/admin/cpms-keys/sfid/generate",
-                post(super_admins::generate_cpms_institution_sfid_qr),
+                post(sheng_admins::generate_cpms_institution_sfid_qr),
             )
             .route(
                 "/api/v1/admin/cpms/register",
-                post(super_admins::register_cpms),
+                post(sheng_admins::register_cpms),
             )
             .route(
                 "/api/v1/admin/cpms/archive/import",
-                post(super_admins::archive_import),
+                post(sheng_admins::archive_import),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid",
-                delete(super_admins::delete_cpms_keys),
+                delete(sheng_admins::delete_cpms_keys),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/revoke-token",
-                post(super_admins::revoke_install_token),
+                post(sheng_admins::revoke_install_token),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/reissue",
-                post(super_admins::reissue_install_token),
+                post(sheng_admins::reissue_install_token),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/disable",
-                put(super_admins::disable_cpms_keys),
+                put(sheng_admins::disable_cpms_keys),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/enable",
-                put(super_admins::enable_cpms_keys),
+                put(sheng_admins::enable_cpms_keys),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/revoke",
-                put(super_admins::revoke_cpms_keys),
+                put(sheng_admins::revoke_cpms_keys),
             )
             // ── 链上余额查询 ──
             .route(
@@ -787,19 +802,55 @@ fn main() {
             // ── 多签管理 ──
             .route(
                 "/api/v1/admin/multisig-sfids",
-                get(super_admins::list_multisig_sfids),
+                get(sheng_admins::list_multisig_sfids),
             )
             .route(
                 "/api/v1/admin/multisig-sfids/generate",
-                post(super_admins::generate_multisig_sfid),
+                post(sheng_admins::generate_multisig_sfid),
             )
             .route(
                 "/api/v1/admin/multisig-sfids/:site_sfid",
-                delete(super_admins::delete_multisig_sfid),
+                delete(sheng_admins::delete_multisig_sfid),
+            )
+            // 中文注释:任务卡 2 新增机构/账户两层模型的 API
+            // - POST /api/v1/institution/create                          — 生成机构(不上链)
+            // - POST /api/v1/institution/:sfid_id/account/create         — 创建账户并上链
+            // - GET  /api/v1/institution/list                            — 按 scope 过滤的机构列表
+            // - GET  /api/v1/institution/:sfid_id                        — 机构详情
+            // - GET  /api/v1/institution/:sfid_id/accounts               — 账户列表
+            // - DELETE /api/v1/institution/:sfid_id/account/:account_name — 删除账户(软删)
+            .route(
+                "/api/v1/institution/create",
+                post(institutions::handler::create_institution),
+            )
+            .route(
+                "/api/v1/institution/:sfid_id/account/create",
+                post(institutions::handler::create_account),
+            )
+            .route(
+                "/api/v1/institution/list",
+                get(institutions::handler::list_institutions),
+            )
+            .route(
+                "/api/v1/institution/:sfid_id",
+                get(institutions::handler::get_institution),
+            )
+            .route(
+                "/api/v1/institution/:sfid_id/accounts",
+                get(institutions::handler::list_accounts),
+            )
+            .route(
+                "/api/v1/institution/:sfid_id/account/:account_name",
+                delete(institutions::handler::delete_account),
+            )
+            // 任务卡 6:公安局跟 sfid 工具市清单对账
+            .route(
+                "/api/v1/public-security/reconcile",
+                post(institutions::handler::reconcile_public_security),
             )
             .route(
                 "/api/v1/admin/cpms-status/scan",
-                post(operator_admins::admin_cpms_status_scan),
+                post(shi_admins::admin_cpms_status_scan),
             )
             .route(
                 "/api/v1/admin/audit-logs",

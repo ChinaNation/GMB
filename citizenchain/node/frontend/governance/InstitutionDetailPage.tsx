@@ -246,12 +246,14 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
             >手续费划转</button>
           )}
           {detail.orgType === 0 && (
+            <button
+              className="proposal-type-button"
+              disabled={!isAdmin}
+              onClick={() => isAdmin && onCreateSafetyFund?.(adminWallets)}
+            >安全基金转账</button>
+          )}
+          {(detail.orgType === 0 || detail.orgType === 1) && (
             <>
-              <button
-                className="proposal-type-button"
-                disabled={!isAdmin}
-                onClick={() => isAdmin && onCreateSafetyFund?.(adminWallets)}
-              >安全基金转账</button>
               <button className="proposal-type-button" disabled title="即将上线">决议发行</button>
               <button className="proposal-type-button" disabled title="即将上线">验证密钥</button>
               <button

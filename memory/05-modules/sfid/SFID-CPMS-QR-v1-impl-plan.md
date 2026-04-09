@@ -72,7 +72,7 @@ struct ImportedArchive {
 
 ### 1.3 API 端点变更
 
-**文件：** `sfid/backend/src/super-admins/institutions.rs` + `sfid/backend/src/main.rs`
+**文件：** `sfid/backend/src/sheng-admins/institutions.rs` + `sfid/backend/src/main.rs`
 
 #### 去掉的端点
 
@@ -375,7 +375,7 @@ ALTER TABLE system_install ADD COLUMN blinding_factor BYTEA;
 |------|------|
 | `sfid/backend/src/key-admins/rsa_blind.rs` | 新建 — RSA 盲签名模块 |
 | `sfid/backend/src/models/mod.rs` | 改造 — 去掉 pubkey，加 install_token，新增 ImportedArchive |
-| `sfid/backend/src/super-admins/institutions.rs` | 改造 — generate 改为 QR1，去掉旧 register/update，新增 register + archive/import + revoke + reissue |
+| `sfid/backend/src/sheng-admins/institutions.rs` | 改造 — generate 改为 QR1，去掉旧 register/update，新增 register + archive/import + revoke + reissue |
 | `sfid/backend/src/main.rs` | 改造 — 新增路由 |
 | `sfid/backend/Cargo.toml` | 改造 — 新增 rsa / blind-rsa-signatures 依赖 |
 

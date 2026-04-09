@@ -49,7 +49,7 @@
   - `chain`（区块链业务）
   - `business`（查询/审计/作用域）
   - `login`（认证）
-  - `key-admins` / `super-admins` / `operator-admins`（角色业务）
+  - `key-admins` / `sheng-admins` / `shi-admins`（角色业务）
 
 ## 5. 链路字段同步（2026-03）
 

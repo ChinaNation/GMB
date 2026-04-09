@@ -53,7 +53,7 @@ fn build_test_state() -> AppState {
         key_alg: "sr25519".to_string(),
         public_key_hex: Arc::new(RwLock::new(public_key_hex)),
     };
-    seed_super_admins(&state);
+    seed_sheng_admins(&state);
     key_admins::seed_chain_keyring(&state);
     key_admins::seed_key_admins(&state);
     seed_demo_record(&state);
@@ -493,7 +493,7 @@ async fn qr_login_non_admin_should_be_rejected() {
 }
 
 #[tokio::test]
-async fn qr_login_super_admin_keeps_write_permission() {
+async fn qr_login_sheng_admin_keeps_write_permission() {
     let state = build_test_state();
 
     let challenge_resp = login::admin_auth_qr_challenge(
@@ -530,7 +530,7 @@ async fn qr_login_super_admin_keeps_write_permission() {
                 id: 999,
                 admin_pubkey: admin_pubkey.clone(),
                 admin_name: String::new(),
-                role: AdminRole::InstitutionAdmin,
+                role: AdminRole::ShengAdmin,
                 status: AdminStatus::Active,
                 built_in: false,
                 created_by: "TEST".to_string(),
@@ -570,7 +570,7 @@ async fn qr_login_super_admin_keeps_write_permission() {
         .expect("access token");
     assert_eq!(
         result_json["data"]["admin"]["role"].as_str(),
-        Some("INSTITUTION_ADMIN")
+        Some("SHENG_ADMIN")
     );
 
     let mut headers = HeaderMap::new();
@@ -620,7 +620,7 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 id: 2001,
                 admin_pubkey: login_pubkey.clone(),
                 admin_name: String::new(),
-                role: AdminRole::InstitutionAdmin,
+                role: AdminRole::ShengAdmin,
                 status: AdminStatus::Active,
                 built_in: false,
                 created_by: "TEST".to_string(),
@@ -635,7 +635,7 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 id: 2002,
                 admin_pubkey: signer_pubkey.clone(),
                 admin_name: String::new(),
-                role: AdminRole::SystemAdmin,
+                role: AdminRole::ShiAdmin,
                 status: AdminStatus::Active,
                 built_in: false,
                 created_by: "TEST".to_string(),
@@ -674,7 +674,7 @@ fn require_admin_any_should_allow_all_three_roles() {
         let institution_pubkey = store
             .admin_users_by_pubkey
             .values()
-            .find(|u| u.role == AdminRole::InstitutionAdmin)
+            .find(|u| u.role == AdminRole::ShengAdmin)
             .map(|u| u.admin_pubkey.clone())
             .expect("institution admin exists");
         let key_pubkey = store
@@ -685,7 +685,7 @@ fn require_admin_any_should_allow_all_three_roles() {
             .expect("key admin exists");
         (institution_pubkey, key_pubkey)
     };
-    let system_pubkey = "0xTEST_SYSTEM_ADMIN".to_string();
+    let system_pubkey = "0xTEST_SHI_ADMIN".to_string();
     {
         let mut store = state.store.write().expect("store write lock poisoned");
         store.admin_users_by_pubkey.insert(
@@ -694,7 +694,7 @@ fn require_admin_any_should_allow_all_three_roles() {
                 id: 9_999,
                 admin_pubkey: system_pubkey.clone(),
                 admin_name: "测试系统管理员".to_string(),
-                role: AdminRole::SystemAdmin,
+                role: AdminRole::ShiAdmin,
                 status: AdminStatus::Active,
                 built_in: false,
                 created_by: institution_pubkey.clone(),
@@ -708,7 +708,7 @@ fn require_admin_any_should_allow_all_three_roles() {
             AdminSession {
                 token: "tok-institution".to_string(),
                 admin_pubkey: institution_pubkey.clone(),
-                role: AdminRole::InstitutionAdmin,
+                role: AdminRole::ShengAdmin,
                 expire_at: Utc::now() + Duration::hours(1),
                 last_active_at: Utc::now(),
             },
@@ -718,7 +718,7 @@ fn require_admin_any_should_allow_all_three_roles() {
             AdminSession {
                 token: "tok-system".to_string(),
                 admin_pubkey: system_pubkey.clone(),
-                role: AdminRole::SystemAdmin,
+                role: AdminRole::ShiAdmin,
                 expire_at: Utc::now() + Duration::hours(1),
                 last_active_at: Utc::now(),
             },

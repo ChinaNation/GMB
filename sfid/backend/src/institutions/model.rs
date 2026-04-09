@@ -1,0 +1,149 @@
+//! 机构/账户两层数据模型
+//!
+//! 中文注释:链端 `SfidRegisteredAddress::<T>(sfid_id, name) → duoqian_address`
+//! 是 DoubleMap,一个 sfid_id 下可挂多个 name,每个 name 派生独立多签地址。
+//! sfid 系统这里对应拆两层:
+//!
+//! - `MultisigInstitution`:每个 sfid_id 唯一,存机构展示信息(institution_name 等),
+//!   **不**进链。
+//! - `MultisigAccount`:以 `(sfid_id, account_name)` 为复合 key,account_name 是
+//!   **进链的 name**,一个机构下可挂多个。
+//!
+//! 详见 `feedback_institutions_two_layer.md`。
+
+#![allow(dead_code)]
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+use crate::models::MultisigChainStatus;
+use crate::scope::HasProvinceCity;
+use crate::sfid::InstitutionCategory;
+
+/// 机构(每个 sfid_id 唯一)。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MultisigInstitution {
+    /// SFID 号,参与链上派生。
+    pub sfid_id: String,
+    /// 机构展示名称(如"广州市公安局"),**不进链**,只在 sfid 系统内部显示。
+    pub institution_name: String,
+    /// 机构分类(公安局/公权机构/私权机构)。
+    pub category: InstitutionCategory,
+    /// 主体属性(GFR/SFR/FFR)。
+    pub a3: String,
+    /// 盈利属性("0"/"1")。
+    pub p1: String,
+    /// 所属省(名称,如"安徽省")。
+    pub province: String,
+    /// 所属市(名称,如"合肥市")。
+    pub city: String,
+    /// 所属省代码(r5 前 2 字符)。
+    pub province_code: String,
+    /// 所属市代码(r5 后 3 字符)。任务卡 6 新增:
+    /// 作为公安局对账的稳定主键,市名改动时保持不变。
+    /// 老记录在后端启动时由 `backfill_and_reconcile_public_security` 补齐。
+    #[serde(default)]
+    pub city_code: String,
+    /// 机构类型代码(ZF/LF/SF/...)。
+    pub institution_code: String,
+    /// 创建人 pubkey。
+    pub created_by: String,
+    pub created_at: DateTime<Utc>,
+}
+
+impl HasProvinceCity for MultisigInstitution {
+    fn province(&self) -> &str {
+        &self.province
+    }
+    fn city(&self) -> &str {
+        &self.city
+    }
+}
+
+/// 机构下的多签账户(复合 key = (sfid_id, account_name))。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MultisigAccount {
+    /// 所属机构的 sfid_id。
+    pub sfid_id: String,
+    /// 账户名称,**进链的 name 字段**。同 sfid_id 下必须唯一。
+    pub account_name: String,
+    /// 链上派生的多签地址(hex, 不含 0x 前缀)。上链成功后填入。
+    pub duoqian_address: Option<String>,
+    /// 链上状态。
+    #[serde(default)]
+    pub chain_status: MultisigChainStatus,
+    pub chain_tx_hash: Option<String>,
+    pub chain_block_number: Option<u64>,
+    pub created_by: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// 复合 key:`(sfid_id, account_name)`。
+pub type AccountKey = (String, String);
+
+/// 把复合 key 序列化为 "sfid_id|account_name" 字符串(用作 HashMap 的 String key)。
+pub fn account_key_to_string(sfid_id: &str, account_name: &str) -> String {
+    format!("{sfid_id}|{account_name}")
+}
+
+/// 从 "sfid_id|account_name" 字符串解析回元组。
+pub fn account_key_from_string(s: &str) -> Option<AccountKey> {
+    let mut parts = s.splitn(2, '|');
+    let sfid_id = parts.next()?.to_string();
+    let account_name = parts.next()?.to_string();
+    Some((sfid_id, account_name))
+}
+
+// ─── 请求/响应 DTO ──────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct CreateInstitutionInput {
+    pub a3: String,
+    pub p1: Option<String>,
+    pub province: Option<String>,
+    pub city: String,
+    pub institution: String,
+    pub institution_name: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateInstitutionOutput {
+    pub sfid_id: String,
+    pub institution_name: String,
+    pub category: InstitutionCategory,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateAccountInput {
+    pub account_name: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateAccountOutput {
+    pub sfid_id: String,
+    pub account_name: String,
+    pub chain_status: MultisigChainStatus,
+    pub chain_tx_hash: Option<String>,
+    pub chain_block_number: Option<u64>,
+    pub duoqian_address: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct InstitutionListRow {
+    pub sfid_id: String,
+    pub institution_name: String,
+    pub category: InstitutionCategory,
+    pub a3: String,
+    pub p1: String,
+    pub province: String,
+    pub city: String,
+    pub institution_code: String,
+    pub account_count: usize,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct InstitutionDetailOutput {
+    pub institution: MultisigInstitution,
+    pub accounts: Vec<MultisigAccount>,
+}

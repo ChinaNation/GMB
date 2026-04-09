@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::business::pubkey::same_admin_pubkey;
 use crate::business::scope::province_scope_for_role;
-use crate::sfid::province::super_admin_display_name;
+use crate::sfid::province::sheng_admin_display_name;
 use crate::*;
 
 const LOGIN_CHALLENGE_TTL_SECONDS: i64 = 90;
@@ -63,7 +63,7 @@ pub(crate) struct AdminAuthContext {
     pub(crate) role: AdminRole,
     pub(crate) admin_name: String,
     pub(crate) admin_province: Option<String>,
-    /// 仅 SystemAdmin 有值：该操作员登记的市（用于多签列表按市过滤、生成时强制锁定）
+    /// 仅 ShiAdmin 有值：该操作员登记的市（用于多签列表按市过滤、生成时强制锁定）
     pub(crate) admin_city: Option<String>,
 }
 
@@ -816,8 +816,8 @@ fn admin_auth(
         }
         let admin_province =
             province_scope_for_role(&store, &admin_user.admin_pubkey, &admin_user.role);
-        // 只对 SystemAdmin 暴露 city（其他角色底层字段为空字符串）
-        let admin_city = if admin_user.role == AdminRole::SystemAdmin && !admin_user.city.is_empty()
+        // 只对 ShiAdmin 暴露 city（其他角色底层字段为空字符串）
+        let admin_city = if admin_user.role == AdminRole::ShiAdmin && !admin_user.city.is_empty()
         {
             Some(admin_user.city.clone())
         } else {
@@ -858,14 +858,14 @@ pub(crate) fn require_institution_or_key_admin(
     headers: &HeaderMap,
 ) -> Result<AdminAuthContext, axum::response::Response> {
     let ctx = admin_auth(state, headers)?;
-    if !matches!(ctx.role, AdminRole::InstitutionAdmin | AdminRole::KeyAdmin) {
+    if !matches!(ctx.role, AdminRole::ShengAdmin | AdminRole::KeyAdmin) {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
             "institution admin or key admin required",
         ));
     }
-    if ctx.role == AdminRole::InstitutionAdmin && ctx.admin_province.is_none() {
+    if ctx.role == AdminRole::ShengAdmin && ctx.admin_province.is_none() {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
@@ -1067,18 +1067,18 @@ pub(crate) fn build_admin_display_name(
     role: &AdminRole,
     admin_province: Option<&str>,
 ) -> String {
-    if *role == AdminRole::InstitutionAdmin {
+    if *role == AdminRole::ShengAdmin {
         if let Some(province) = admin_province {
             return format!("{province}机构管理员");
         }
     }
-    if let Some(name) = super_admin_display_name(admin_pubkey) {
+    if let Some(name) = sheng_admin_display_name(admin_pubkey) {
         return name;
     }
     match role {
         AdminRole::KeyAdmin => "密钥管理员".to_string(),
-        AdminRole::SystemAdmin => "系统管理员".to_string(),
-        AdminRole::InstitutionAdmin => "机构管理员".to_string(),
+        AdminRole::ShiAdmin => "系统管理员".to_string(),
+        AdminRole::ShengAdmin => "机构管理员".to_string(),
     }
 }
 
@@ -1086,7 +1086,7 @@ pub(crate) fn build_admin_display_name_from_user(
     admin: &AdminUser,
     admin_province: Option<&str>,
 ) -> String {
-    if admin.role == AdminRole::SystemAdmin {
+    if admin.role == AdminRole::ShiAdmin {
         let name = admin.admin_name.trim();
         if !name.is_empty() {
             return name.to_string();
@@ -1095,9 +1095,9 @@ pub(crate) fn build_admin_display_name_from_user(
     build_admin_display_name(&admin.admin_pubkey, &admin.role, admin_province)
 }
 
-/// 仅 SystemAdmin 暴露 admin_city，其他角色或空字符串一律返回 None。
+/// 仅 ShiAdmin 暴露 admin_city，其他角色或空字符串一律返回 None。
 pub(crate) fn resolve_admin_city(admin: &AdminUser) -> Option<String> {
-    if admin.role == AdminRole::SystemAdmin && !admin.city.trim().is_empty() {
+    if admin.role == AdminRole::ShiAdmin && !admin.city.trim().is_empty() {
         Some(admin.city.clone())
     } else {
         None

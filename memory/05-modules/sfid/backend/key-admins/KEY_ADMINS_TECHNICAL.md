@@ -24,8 +24,8 @@
 
 ## 3. 权限定义（最终口径）
 - 三个密钥管理员共同拥有系统全部权限：
-1. 更换机构管理员（43 省）。
-2. 全局管理系统管理员（跨省查看、增删改查、启停用）。
+1. 更换省级管理员（43 省）。
+2. 全局管理市级管理员（跨省查看、增删改查、启停用）。
 3. 全局业务操作与查询（不受省隔离限制，按接口细分）。
 4. 机构管理（生成、扫码登记、更新、禁用、撤销、删除、查询）。
 
@@ -148,10 +148,10 @@
 - `rotate_sfid_keys included failed`
 
 ## 10. 当前已实现功能清单（2026-03，含 Runtime 对齐改造项）
-1. 机构管理员治理：
-   - 查询省级机构管理员：`GET /api/v1/admin/super-admins`
-   - 更换省级机构管理员：`PUT /api/v1/admin/super-admins/:province`
-2. 系统管理员治理（全局）：
+1. 省级管理员治理：
+   - 查询省级省级管理员：`GET /api/v1/admin/sheng-admins`
+   - 更换省级省级管理员：`PUT /api/v1/admin/sheng-admins/:province`
+2. 市级管理员治理（全局）：
    - 列表/新增/删除/启停：`/api/v1/admin/operators*`
 3. 密钥管理（一主两备）：
    - 查询 keyring：`GET /api/v1/admin/attestor/keyring`
