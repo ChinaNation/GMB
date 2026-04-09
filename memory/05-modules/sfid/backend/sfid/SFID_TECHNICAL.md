@@ -6,24 +6,40 @@
 - 职责：统一提供 SFID 生成能力与行政区代码表能力。
 - 产物：标准化 SFID 编码字符串（含结构段与校验位）。
 
-## 2. 模块结构
+## 2. 模块结构(任务卡 1 重组后)
+
+铁律:`feedback_sfid_module_is_single_entry.md` — sfid 系统所有 SFID 相关常量、枚举、生成、校验
+**必须**归位本模块,不能散在 sheng-admins / shi-admins / operate / business / chain 等业务模块里。
 
 - `mod.rs`
-  - `generate_sfid_code`：SFID 生成主入口。
-  - `GenerateSfidInput`：输入参数结构。
-  - `resolve_a3/resolve_p1/resolve_org_type`：业务规则约束。
-  - `checksum/hash_text`：摘要与校验位计算。
-- `admin.rs`
-  - 管理端 SFID 业务接口实现：
-  - `admin_generate_sfid`
-  - `admin_sfid_meta`
-  - `admin_sfid_cities`
+  - 纯 `pub mod` + `pub use` 聚合,不放实现。
+- `generator.rs`
+  - `generate_sfid_code`:SFID 生成主入口(任务卡 1 从老 mod.rs 拆出)
+  - `GenerateSfidInput`:输入参数结构
+  - `checksum/hash_text/resolve_p1`:私有辅助
+- `validator.rs`
+  - `validate_sfid_id_format`:格式校验 + 标准化
+  - `SFID_ID_MAX_BYTES` / `SFID_ID_SEGMENT_*` 常量(任务卡 1 从 sheng-admins/institutions.rs 搬回)
+- `a3.rs`
+  - `A3` 枚举(GMR/ZRR/ZNR/GFR/SFR/FFR)+ `from_str` / `as_code` / `label_zh` / `all_a3`
+  - 兼容 legacy `resolve_a3(&str) -> Result<&'static str>`
+- `institution_code.rs`
+  - `InstitutionCode` 枚举(ZG/ZF/LF/SF/JC/JY/CB/CH/TG)
+  - 兼容 legacy `resolve_org_type`
+- `category.rs`
+  - `InstitutionCategory` 枚举(PublicSecurity / GovInstitution / PrivateInstitution)
+  - `classify(a3, code, name)`:机构分类函数(任务卡 2 使用)
+  - `PUBLIC_SECURITY_INSTITUTION_NAME` 常量("公民安全局")
+- `cities.rs`
+  - `cities_of(province)` / `real_cities_of(province)`:城市清单高层 API
 - `province.rs`
-  - 省级/市级代码数据源。
-  - 省份公钥映射（用于超管归属推断）。
-  - `provinces/super_admin_province/super_admin_display_name` 等查询函数。
+  - 43 省 `PROVINCES` 常量表
+  - `province_code_by_name` / `city_code_by_name` / `province_name_by_code`
+  - `sheng_admin_province` / `sheng_admin_display_name`:省份公钥映射(超管归属推断)
+- `admin.rs`
+  - 管理端 SFID 业务接口实现(legacy,`admin_generate_sfid` / `admin_sfid_meta` / `admin_sfid_cities`)
 - `city_codes/*.rs`
-  - 43 个省份城市代码表。
+  - 43 个省份城市代码表(数据)
 
 ## 3. 生成规则摘要
 
@@ -43,7 +59,7 @@
 
 - `main.rs` 路由将 `admin/sfid/*` 接口接入 `sfid::admin`。
 - `app_core/runtime_ops.rs` 的 `seed_demo_record` 也复用同一套生成工具，不再生成旧格式演示 `sfid`。
-- `super-admins/institutions.rs`：机构管理员生成机构 `site_sfid`。
+- `sheng-admins/institutions.rs`：省级管理员生成机构 `site_sfid`。
 - `business/scope.rs` 与 `login/mod.rs`：使用省份公钥映射能力做角色展示和归属推断。
 
 ## 5. 命名与引用
@@ -51,3 +67,8 @@
 - 当前统一模块名为 `sfid`。
 - 代码统一通过 `crate::sfid::*` 引用。
 - 模块目录为 `backend/src/sfid`。
+
+## 6. 历史
+
+- 2026-04-08 任务卡 1(`08-tasks/done/20260408-sfid-模块补全-任务卡1.md`):补全 a3/institution_code/cities/category/validator/generator 子文件,所有 SFID 工具归位此模块
+- 2026-04-08 任务卡 0.5:`super_admin_*` → `sheng_admin_*` 相关函数重命名

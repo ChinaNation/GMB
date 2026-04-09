@@ -73,7 +73,7 @@ pub(crate) struct Store {
     #[serde(default)]
     pub(crate) citizen_bind_challenges: HashMap<String, CitizenBindChallenge>,
     pub(crate) admin_users_by_pubkey: HashMap<String, AdminUser>,
-    pub(crate) super_admin_province_by_pubkey: HashMap<String, String>,
+    pub(crate) sheng_admin_province_by_pubkey: HashMap<String, String>,
     pub(crate) login_challenges: HashMap<String, LoginChallenge>,
     pub(crate) qr_login_results: HashMap<String, QrLoginResultRecord>,
     pub(crate) admin_sessions: HashMap<String, AdminSession>,
@@ -100,16 +100,29 @@ pub(crate) struct Store {
     pub(crate) vote_verify_cache: HashMap<String, VoteVerifyCacheEntry>,
     pub(crate) metrics: ServiceMetrics,
     /// 多签机构 SFID 注册记录，key = site_sfid
+    /// 中文注释:任务卡 2 起被 multisig_institutions + multisig_accounts 替代,
+    /// 但保留作为只读兜底,便于回滚。新代码不应再写入此字段。
     #[serde(default)]
     pub(crate) multisig_sfid_records: HashMap<String, MultisigSfidRecord>,
+    /// 机构层(每 sfid_id 唯一),任务卡 2 引入。
+    #[serde(default)]
+    pub(crate) multisig_institutions: HashMap<String, crate::institutions::MultisigInstitution>,
+    /// 账户层(key = "sfid_id|account_name"),任务卡 2 引入。account_name 就是链上 name。
+    #[serde(default)]
+    pub(crate) multisig_accounts: HashMap<String, crate::institutions::MultisigAccount>,
 }
 
+// 中文注释:三种管理员角色(命名铁律,见任务卡 0.5 / feedback_sfid_three_roles_naming.md)
+//   - KeyAdmin  → 密钥管理员(全国 3 人)      目录 key-admins/
+//   - ShengAdmin → 省级管理员(每省 1 人)      目录 sheng-admins/
+//   - ShiAdmin   → 市级管理员(每市 N 人)      目录 shi-admins/
+// 序列化为 KEY_ADMIN / SHENG_ADMIN / SHI_ADMIN,数据库字段值同。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum AdminRole {
     KeyAdmin,
-    InstitutionAdmin,
-    SystemAdmin,
+    ShengAdmin,
+    ShiAdmin,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -156,7 +169,7 @@ pub(crate) struct AdminUser {
     pub(crate) created_at: DateTime<Utc>,
     #[serde(default)]
     pub(crate) updated_at: Option<DateTime<Utc>>,
-    /// SystemAdmin 所属的市名称（仅 SystemAdmin 必填，其他角色为空字符串）
+    /// ShiAdmin 所属的市名称（仅 ShiAdmin 必填，其他角色为空字符串）
     #[serde(default)]
     pub(crate) city: String,
 }
@@ -685,7 +698,7 @@ pub(crate) struct OperatorListOutput {
 // 替机构发声的人；不存在"停用"的机构管理员（被替换即彻底失效）。
 // 因此对外暴露的行**不带 status 字段**。
 #[derive(Serialize)]
-pub(crate) struct SuperAdminRow {
+pub(crate) struct ShengAdminRow {
     pub(crate) id: u64,
     pub(crate) province: String,
     pub(crate) admin_pubkey: String,
@@ -698,18 +711,18 @@ pub(crate) struct SuperAdminRow {
 pub(crate) struct CreateOperatorInput {
     pub(crate) admin_pubkey: String,
     pub(crate) admin_name: String,
-    /// SystemAdmin 所属的市，必填，且必须属于 created_by 对应机构管理员的省份（不可为省辖市）
+    /// ShiAdmin 所属的市，必填，且必须属于 created_by 对应机构管理员的省份（不可为省辖市）
     pub(crate) city: String,
     /// 可选：指定该 operator 归属的机构管理员 pubkey。
-    /// 仅 KeyAdmin 可指定，且必须是已存在的 InstitutionAdmin。
-    /// InstitutionAdmin 调用时若指定则必须等于自己 pubkey，否则 403。
+    /// 仅 KeyAdmin 可指定，且必须是已存在的 ShengAdmin。
+    /// ShengAdmin 调用时若指定则必须等于自己 pubkey，否则 403。
     /// 不指定则默认为调用者自身。
     #[serde(default)]
     pub(crate) created_by: Option<String>,
 }
 
 #[derive(Deserialize)]
-pub(crate) struct ReplaceSuperAdminInput {
+pub(crate) struct ReplaceShengAdminInput {
     pub(crate) admin_pubkey: String,
 }
 
@@ -723,7 +736,7 @@ pub(crate) struct ListQuery {
 pub(crate) struct UpdateOperatorInput {
     pub(crate) admin_pubkey: Option<String>,
     pub(crate) admin_name: Option<String>,
-    /// 可选：修改 SystemAdmin 所属的市，必须属于该 operator 所属机构的省份（不可为省辖市）
+    /// 可选：修改 ShiAdmin 所属的市，必须属于该 operator 所属机构的省份（不可为省辖市）
     #[serde(default)]
     pub(crate) city: Option<String>,
 }

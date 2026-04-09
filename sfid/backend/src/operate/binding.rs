@@ -193,7 +193,7 @@ pub(crate) async fn citizen_bind(
                 Ok(v) => v,
                 Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "archive_sig hex decode failed"),
             };
-            if !crate::super_admins::institutions::verify_sr25519_signature(&anon_pk, &archive_sign_source, &archive_sig) {
+            if !crate::sheng_admins::institutions::verify_sr25519_signature(&anon_pk, &archive_sign_source, &archive_sig) {
                 return api_error(StatusCode::UNAUTHORIZED, 2004, "archive_sig invalid");
             }
 

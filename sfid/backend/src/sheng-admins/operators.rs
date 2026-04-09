@@ -29,7 +29,7 @@ pub(crate) async fn list_operators(
     let mut rows: Vec<OperatorRow> = store
         .admin_users_by_pubkey
         .values()
-        .filter(|u| u.role == AdminRole::SystemAdmin)
+        .filter(|u| u.role == AdminRole::ShiAdmin)
         .filter(|u| {
             can_manage_operator(
                 &store,
@@ -102,8 +102,8 @@ pub(crate) async fn create_operator(
         Err(resp) => return resp,
     };
     // ── 解析 created_by ──
-    // - InstitutionAdmin 调用：created_by 必须为空或等于自身
-    // - KeyAdmin 调用：created_by 可指定为任意已存在的 InstitutionAdmin pubkey
+    // - ShengAdmin 调用：created_by 必须为空或等于自身
+    // - KeyAdmin 调用：created_by 可指定为任意已存在的 ShengAdmin pubkey
     let created_by_pubkey = match input.created_by.as_deref().map(str::trim) {
         None | Some("") => ctx.admin_pubkey.clone(),
         Some(raw) => {
@@ -121,38 +121,38 @@ pub(crate) async fn create_operator(
                         .find(|(k, _)| same_admin_pubkey(k.as_str(), normalized.as_str()))
                         .map(|(_, v)| v.clone());
                     match creator {
-                        Some(u) if u.role == AdminRole::InstitutionAdmin => normalized,
+                        Some(u) if u.role == AdminRole::ShengAdmin => normalized,
                         Some(_) => {
                             return api_error(
                                 StatusCode::BAD_REQUEST,
                                 1001,
-                                "created_by must be an InstitutionAdmin",
+                                "created_by must be an ShengAdmin",
                             )
                         }
                         None => {
                             return api_error(
                                 StatusCode::NOT_FOUND,
                                 1004,
-                                "created_by InstitutionAdmin not found",
+                                "created_by ShengAdmin not found",
                             )
                         }
                     }
                 }
-                AdminRole::InstitutionAdmin => {
+                AdminRole::ShengAdmin => {
                     if !same_admin_pubkey(normalized.as_str(), ctx.admin_pubkey.as_str()) {
                         return api_error(
                             StatusCode::FORBIDDEN,
                             1003,
-                            "InstitutionAdmin can only create operators under itself",
+                            "ShengAdmin can only create operators under itself",
                         );
                     }
                     normalized
                 }
-                AdminRole::SystemAdmin => {
+                AdminRole::ShiAdmin => {
                     return api_error(
                         StatusCode::FORBIDDEN,
                         1003,
-                        "SystemAdmin cannot create operators",
+                        "ShiAdmin cannot create operators",
                     )
                 }
             }
@@ -173,7 +173,7 @@ pub(crate) async fn create_operator(
     let scope_province = province_scope_for_role(
         &store,
         created_by_pubkey.as_str(),
-        &AdminRole::InstitutionAdmin,
+        &AdminRole::ShengAdmin,
     );
     let province_name = match scope_province {
         Some(v) => v,
@@ -208,7 +208,7 @@ pub(crate) async fn create_operator(
         id: next_id,
         admin_pubkey: admin_pubkey.clone(),
         admin_name: admin_name.clone(),
-        role: AdminRole::SystemAdmin,
+        role: AdminRole::ShiAdmin,
         status: AdminStatus::Active,
         built_in: false,
         created_by: created_by_pubkey,
@@ -267,7 +267,7 @@ pub(crate) async fn update_operator(
         let current_pubkey = store
             .admin_users_by_pubkey
             .values()
-            .find(|u| u.id == id && u.role == AdminRole::SystemAdmin)
+            .find(|u| u.id == id && u.role == AdminRole::ShiAdmin)
             .map(|u| u.admin_pubkey.clone());
         let Some(current_pubkey) = current_pubkey else {
             return api_error(StatusCode::NOT_FOUND, 1004, "operator not found");
@@ -331,7 +331,7 @@ pub(crate) async fn update_operator(
     let current_pubkey = store
         .admin_users_by_pubkey
         .values()
-        .find(|u| u.id == id && u.role == AdminRole::SystemAdmin)
+        .find(|u| u.id == id && u.role == AdminRole::ShiAdmin)
         .map(|u| u.admin_pubkey.clone());
     let Some(current_pubkey) = current_pubkey else {
         return api_error(StatusCode::NOT_FOUND, 1004, "operator not found");
@@ -378,7 +378,7 @@ pub(crate) async fn update_operator(
         let scope_province = province_scope_for_role(
             &store,
             operator.created_by.as_str(),
-            &AdminRole::InstitutionAdmin,
+            &AdminRole::ShengAdmin,
         );
         let province_name = match scope_province {
             Some(v) => v,
@@ -483,7 +483,7 @@ pub(crate) async fn delete_operator(
         let operator = store
             .admin_users_by_pubkey
             .values()
-            .find(|u| u.id == id && u.role == AdminRole::SystemAdmin)
+            .find(|u| u.id == id && u.role == AdminRole::ShiAdmin)
             .cloned();
         let Some(operator) = operator else {
             return api_error(StatusCode::NOT_FOUND, 1004, "operator not found");
@@ -509,7 +509,7 @@ pub(crate) async fn delete_operator(
     let operator = store
         .admin_users_by_pubkey
         .values()
-        .find(|u| u.id == id && u.role == AdminRole::SystemAdmin)
+        .find(|u| u.id == id && u.role == AdminRole::ShiAdmin)
         .cloned();
     let Some(operator) = operator else {
         return api_error(StatusCode::NOT_FOUND, 1004, "operator not found");
@@ -570,7 +570,7 @@ pub(crate) async fn update_operator_status(
     let pubkey = store
         .admin_users_by_pubkey
         .values()
-        .find(|u| u.id == id && u.role == AdminRole::SystemAdmin)
+        .find(|u| u.id == id && u.role == AdminRole::ShiAdmin)
         .map(|u| u.admin_pubkey.clone());
     let Some(pubkey) = pubkey else {
         return api_error(StatusCode::NOT_FOUND, 1004, "operator not found");
@@ -688,9 +688,9 @@ fn creator_display_name(store: &Store, creator_pubkey: &str) -> String {
     let Some(creator) = store.admin_users_by_pubkey.get(creator_pubkey) else {
         return creator_pubkey.to_string();
     };
-    let province = if creator.role == AdminRole::InstitutionAdmin {
+    let province = if creator.role == AdminRole::ShengAdmin {
         store
-            .super_admin_province_by_pubkey
+            .sheng_admin_province_by_pubkey
             .get(creator_pubkey)
             .map(String::as_str)
     } else {

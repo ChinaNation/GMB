@@ -28,6 +28,7 @@ pub fn run_desktop() {
             home::process::stop_node,
             settings::fee_address::get_reward_wallet,
             settings::fee_address::set_reward_wallet,
+            settings::fee_address::get_local_miner_address,
             settings::bootnodes_address::get_bootnode_key,
             settings::grandpa_address::get_grandpa_key,
             settings::bootnodes_address::set_bootnode_key,
