@@ -81,7 +81,6 @@ fn build_test_state() -> AppState {
     seed_sheng_admins(&state);
     key_admins::seed_chain_keyring(&state);
     key_admins::seed_key_admins(&state);
-    seed_demo_record(&state);
     state
 }
 
@@ -262,6 +261,7 @@ async fn keyring_rotate_commit_requires_prior_verify() {
             new_backup_pubkey: key_admins::chain_keyring::derive_pubkey_hex_from_seed(
                 new_backup_seed.as_str(),
             ),
+            new_backup_name: None,
         }),
     )
     .await
@@ -327,6 +327,7 @@ async fn keyring_rotate_commit_reports_chain_submit_failure_and_keeps_local_stat
             challenge_id,
             signature: commit_signature,
             new_backup_pubkey: new_backup_pubkey.clone(),
+            new_backup_name: None,
         }),
     )
     .await
@@ -458,6 +459,7 @@ async fn keyring_rotate_commit_rejects_reused_verify_signature() {
             new_backup_pubkey: key_admins::chain_keyring::derive_pubkey_hex_from_seed(
                 new_backup_seed.as_str(),
             ),
+            new_backup_name: None,
         }),
     )
     .await

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -57,6 +58,22 @@ class QrSigner {
         QrSignErrorCode.invalidFormat,
         '扫码数据格式错误:内容为空或超出长度限制',
       );
+    }
+    // 预检 kind:在完整 body 解析之前拦截非 sign_request,
+    // 避免 body 结构不匹配导致的 FormatException 掩盖真实错误。
+    try {
+      final preview = jsonDecode(raw);
+      if (preview is Map<String, dynamic>) {
+        final kindWire = preview['kind'];
+        if (kindWire is String && kindWire != QrKind.signRequest.wire) {
+          throw const QrSignException(
+              QrSignErrorCode.invalidField, '二维码类型不是签名请求');
+        }
+      }
+    } on QrSignException {
+      rethrow;
+    } catch (_) {
+      // JSON 解析失败等情况交给下面的 QrEnvelope.parse 统一报错
     }
     QrEnvelope<QrBody> env;
     try {
