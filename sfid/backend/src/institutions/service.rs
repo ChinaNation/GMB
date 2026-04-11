@@ -88,6 +88,22 @@ pub fn derive_category(
     classify(a3, code, institution_name)
 }
 
+/// 检查机构名称是否已被全国任意机构占用(私权机构使用)。
+pub fn institution_name_exists(store: &Store, name: &str) -> bool {
+    store
+        .multisig_institutions
+        .values()
+        .any(|i| i.institution_name == name)
+}
+
+/// 检查同城是否存在同名机构(公权机构使用:不同市允许重名)。
+pub fn institution_name_exists_in_city(store: &Store, name: &str, city: &str) -> bool {
+    store
+        .multisig_institutions
+        .values()
+        .any(|i| i.institution_name == name && i.city == city)
+}
+
 /// 校验机构主键 sfid_id 未被占用。
 pub fn ensure_institution_not_exists(store: &Store, sfid_id: &str) -> Result<(), ServiceError> {
     if store::contains_institution(store, sfid_id) {
@@ -225,6 +241,7 @@ pub fn reconcile_public_security_for_province(
                 province_code: province_entry.code.to_string(),
                 city_code: city_code.clone(),
                 institution_code: "ZF".to_string(),
+                sub_type: None,
                 created_by: actor.to_string(),
                 created_at: Utc::now(),
             };

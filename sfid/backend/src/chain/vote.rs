@@ -45,15 +45,17 @@ impl VoteDecision {
         }
     }
 
-    fn from_binding(binding: BindingRecord) -> Self {
-        let eligible = binding.citizen_status == CitizenStatus::Normal;
+    fn from_citizen(record: &CitizenRecord) -> Self {
+        // citizen_records 中有 archive_no 表示已绑定
+        let is_bound = record.archive_no.is_some();
+        // 投票资格:暂沿用已绑定即有权,citizen_records 无 citizen_status 字段
         Self {
             source: VoteDecisionSource::BindingState,
-            is_bound: true,
-            has_vote_eligibility: eligible,
-            sfid_code: Some(binding.sfid_code),
-            archive_index: Some(binding.archive_index),
-            citizen_status: Some(binding.citizen_status),
+            is_bound,
+            has_vote_eligibility: is_bound,
+            sfid_code: record.sfid_code.clone(),
+            archive_index: record.archive_no.clone(),
+            citizen_status: if is_bound { Some(CitizenStatus::Normal) } else { None },
         }
     }
 
@@ -130,8 +132,10 @@ fn load_vote_decision(store: &Store, cache_key: &str, account_pubkey: &str) -> V
 }
 
 fn load_vote_decision_live(store: &Store, account_pubkey: &str) -> VoteDecision {
-    if let Some(binding) = store.bindings_by_pubkey.get(account_pubkey).cloned() {
-        return VoteDecision::from_binding(binding);
+    if let Some(cid) = store.citizen_id_by_pubkey.get(account_pubkey) {
+        if let Some(record) = store.citizen_records.get(cid) {
+            return VoteDecision::from_citizen(record);
+        }
     }
     VoteDecision::unbound()
 }

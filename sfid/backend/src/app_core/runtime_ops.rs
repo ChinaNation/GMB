@@ -1,6 +1,5 @@
 use chrono::{DateTime, Duration, Utc};
 use reqwest::Url;
-use serde::Serialize;
 use std::{
     collections::HashMap,
     hash::Hash,
@@ -9,17 +8,17 @@ use std::{
 };
 use tracing::warn;
 
-use crate::key_admins;
-use crate::key_admins::chain_proof::SignatureEnvelope;
 use crate::sfid::province::provinces;
-use crate::sfid::{generate_sfid_code, GenerateSfidInput};
 use crate::*;
 
 /// 首次初始化：从 province.rs 硬编码数据创建 43 个内置机构管理员
 pub(crate) fn seed_sheng_admins(state: &AppState) {
     let mut store = match state.store.write() {
         Ok(v) => v,
-        Err(_) => return,
+        Err(e) => {
+            tracing::error!(error = %e, "seed_sheng_admins: store RwLock poisoned — initialization skipped");
+            return;
+        }
     };
     if !store.admin_users_by_pubkey.is_empty() {
         return;
@@ -40,6 +39,8 @@ pub(crate) fn seed_sheng_admins(state: &AppState) {
                 created_at: now,
                 updated_at: Some(now),
                 city: String::new(),
+                encrypted_signing_privkey: None,
+                signing_pubkey: None,
             },
         );
         store
@@ -55,7 +56,10 @@ pub(crate) fn seed_sheng_admins(state: &AppState) {
 pub(crate) fn sync_builtin_sheng_admins(state: &AppState) {
     let mut store = match state.store.write() {
         Ok(v) => v,
-        Err(_) => return,
+        Err(e) => {
+            tracing::error!(error = %e, "sync_builtin_sheng_admins: store RwLock poisoned — sync skipped");
+            return;
+        }
     };
     let now = Utc::now();
 
@@ -106,6 +110,8 @@ pub(crate) fn sync_builtin_sheng_admins(state: &AppState) {
                 created_at: now,
                 updated_at: Some(now),
                 city: String::new(),
+                encrypted_signing_privkey: None,
+                signing_pubkey: None,
             },
         );
         store
@@ -120,6 +126,7 @@ pub(crate) fn cleanup_consumed_qr_ids(store: &mut Store, now: DateTime<Utc>) {
         .retain(|_, consumed_at| *consumed_at > now - Duration::hours(24));
 }
 
+#[allow(dead_code)]
 pub(crate) fn cleanup_pending_bind_scans(store: &mut Store, now: DateTime<Utc>) {
     let now_ts = now.timestamp();
     store.pending_bind_scan_by_qr_id.retain(|_, pending| {
@@ -127,31 +134,6 @@ pub(crate) fn cleanup_pending_bind_scans(store: &mut Store, now: DateTime<Utc>) 
     });
 }
 
-pub(crate) fn cleanup_pending_bind_requests(store: &mut Store, now: DateTime<Utc>) {
-    store
-        .pending_by_pubkey
-        .retain(|_, pending| pending.requested_at > now - Duration::hours(24));
-}
-
-fn pending_bind_cleanup_interval_seconds() -> i64 {
-    std::env::var("SFID_PENDING_BIND_CLEANUP_INTERVAL_SECONDS")
-        .ok()
-        .and_then(|v| v.trim().parse::<i64>().ok())
-        .filter(|v| *v > 0)
-        .unwrap_or(60)
-}
-
-pub(crate) fn maybe_cleanup_pending_bind_requests(store: &mut Store, now: DateTime<Utc>) {
-    let interval = Duration::seconds(pending_bind_cleanup_interval_seconds());
-    let should_cleanup = store
-        .pending_bind_last_cleanup_at
-        .map(|last| now - last >= interval)
-        .unwrap_or(true);
-    if should_cleanup {
-        cleanup_pending_bind_requests(store, now);
-        store.pending_bind_last_cleanup_at = Some(now);
-    }
-}
 
 pub(crate) fn vote_cache_key(account_pubkey: &str, proposal_id: Option<u64>) -> String {
     match proposal_id {
@@ -229,14 +211,12 @@ where
     map.insert(key, value);
 }
 
-pub(crate) fn default_bind_callback_url() -> Option<String> {
-    normalize_optional(std::env::var("SFID_BIND_CALLBACK_URL").ok())
-}
 
 pub(crate) fn default_bind_callback_auth_token() -> Option<String> {
     normalize_optional(std::env::var("SFID_BIND_CALLBACK_AUTH_TOKEN").ok())
 }
 
+#[allow(dead_code)]
 pub(crate) fn enqueue_bind_callback_job(
     store: &mut Store,
     callback_url: Option<String>,
@@ -506,223 +486,6 @@ pub(crate) fn append_audit_log_with_meta(
     });
 }
 
-pub(crate) fn seed_demo_record(state: &AppState) {
-    let mut store = match state.store.write() {
-        Ok(v) => v,
-        Err(_) => return,
-    };
-    if !store.bindings_by_pubkey.is_empty() || !store.pending_by_pubkey.is_empty() {
-        return;
-    }
-    let total = 50_u64;
-    let bound_total = 30_u64;
-    let now = Utc::now();
-    let demo_province = provinces()
-        .first()
-        .map(|item| item.name)
-        .unwrap_or("中原省");
-    let demo_city = "省辖市";
-
-    for seq in 1..=total {
-        let pubkey = format!("0xDEMO_PUBKEY_{seq:04}");
-        if seq <= bound_total {
-            let archive = format!("CIV-DEMO-{seq:04}");
-            // 中文注释：演示数据也统一走正式 SFID 生成工具，避免启动时再产出旧格式 SFID 演示码。
-            let sfid = match generate_sfid_code(GenerateSfidInput {
-                account_pubkey: &pubkey,
-                a3: "GMR",
-                p1: "",
-                province: demo_province,
-                city: demo_city,
-                institution: "ZG",
-            }) {
-                Ok(v) => v,
-                Err(err) => {
-                    warn!(error = %err, "failed to generate demo sfid");
-                    return;
-                }
-            };
-            let binding_payload = BindingPayload {
-                kind: "bind",
-                version: "v1",
-                account_pubkey: pubkey.clone(),
-                archive_index: archive.clone(),
-                sfid_code: sfid.clone(),
-                issued_at: now.timestamp(),
-            };
-            let proof = match make_signature_envelope(state, &binding_payload) {
-                Ok(v) => v,
-                Err(err) => {
-                    warn!(error = %err, "failed to sign demo binding payload");
-                    return;
-                }
-            };
-            store.bindings_by_pubkey.insert(
-                pubkey.clone(),
-                BindingRecord {
-                    seq,
-                    account_pubkey: pubkey.clone(),
-                    archive_index: archive.clone(),
-                    birth_date: parse_birth_date_from_archive_no(&archive),
-                    citizen_status: CitizenStatus::Normal,
-                    sfid_code: sfid,
-                    sfid_signature: proof.signature_hex,
-                    runtime_bind_binding_id: None,
-                    runtime_bind_bind_nonce: None,
-                    runtime_bind_signature: None,
-                    runtime_bind_key_id: None,
-                    runtime_bind_key_version: None,
-                    runtime_bind_alg: None,
-                    runtime_bind_signer_pubkey: None,
-                    bound_at: now,
-                    bound_by: "system-seed".to_string(),
-                    admin_province: None,
-                    client_request_id: None,
-                },
-            );
-            store.pubkey_by_archive_index.insert(archive, pubkey);
-        } else {
-            store.pending_by_pubkey.insert(
-                pubkey.clone(),
-                PendingRequest {
-                    seq,
-                    account_pubkey: pubkey,
-                    admin_province: None,
-                    requested_at: now,
-                    callback_url: None,
-                    client_request_id: None,
-                },
-            );
-        }
-    }
-    store.next_seq = total;
-}
-
-pub(crate) fn make_signature_envelope<T: Serialize>(
-    state: &AppState,
-    payload: &T,
-) -> Result<SignatureEnvelope, String> {
-    let seed = state
-        .signing_seed_hex
-        .read()
-        .map(|v| v.clone())
-        .map_err(|_| "signing seed read lock poisoned".to_string())?;
-    let signing_key =
-        key_admins::chain_keyring::try_load_signing_key_from_seed(seed.expose_secret())?;
-    key_admins::chain_proof::make_signature_envelope(
-        &state.key_id,
-        &state.key_version,
-        &state.key_alg,
-        &signing_key,
-        payload,
-    )
-}
-
-/// 任务卡 2:把 legacy `multisig_sfid_records` 拆成 `multisig_institutions` + `multisig_accounts`。
-///
-/// 中文注释:
-/// - 链端 `(sfid_id, name) → duoqian_address` 是 DoubleMap,一个 sfid 下可挂多个 name。
-/// - 老结构把"机构"和"账户"混在一张表里,`site_sfid` 当主键,`institution_name` 被当作链上 name。
-/// - 新结构按两层拆:sfid_id → Institution(每 sfid 唯一),(sfid_id, account_name) → Account(链上 name)。
-///
-/// 这个迁移**幂等**:每次启动后端都会运行一次,已迁移过的记录会跳过。
-/// 老结构 `multisig_sfid_records` **不删除**,作为只读兜底便于回滚。
-pub(crate) fn migrate_legacy_multisig_to_two_layer(state: &AppState) {
-    use crate::institutions::model::{MultisigAccount, MultisigInstitution};
-    use crate::institutions::store as inst_store;
-    use crate::sfid::{classify, A3, InstitutionCode};
-
-    let mut store = match state.store.write() {
-        Ok(v) => v,
-        Err(_) => return,
-    };
-    if store.multisig_sfid_records.is_empty() {
-        return;
-    }
-    let legacy: Vec<_> = store.multisig_sfid_records.values().cloned().collect();
-    let mut migrated = 0usize;
-    for rec in legacy {
-        // 幂等:机构已存在则跳过(避免覆盖任务卡 2 之后新建的机构)
-        if inst_store::contains_institution(&store, &rec.site_sfid) {
-            continue;
-        }
-
-        // 分类:按 a3 + institution_code + institution_name 推导
-        let a3 = match A3::from_str(&rec.a3) {
-            Some(v) => v,
-            None => {
-                warn!(sfid = %rec.site_sfid, a3 = %rec.a3, "migrate: unknown a3, skip");
-                continue;
-            }
-        };
-        let code = match InstitutionCode::from_str(&rec.institution_code) {
-            Some(v) => v,
-            None => {
-                warn!(
-                    sfid = %rec.site_sfid,
-                    code = %rec.institution_code,
-                    "migrate: unknown institution_code, skip"
-                );
-                continue;
-            }
-        };
-        let category = match classify(a3, code, &rec.institution_name) {
-            Some(v) => v,
-            None => {
-                warn!(
-                    sfid = %rec.site_sfid,
-                    "migrate: not a valid institution (citizen a3?), skip"
-                );
-                continue;
-            }
-        };
-
-        // 中文注释:从 sfid_id r5 段后 3 字符解析 city_code(任务卡 6 新增字段)
-        let city_code = rec
-            .site_sfid
-            .split('-')
-            .nth(1)
-            .and_then(|r5| if r5.len() >= 5 { Some(r5[2..5].to_string()) } else { None })
-            .unwrap_or_default();
-        let inst = MultisigInstitution {
-            sfid_id: rec.site_sfid.clone(),
-            // 中文注释:老结构里 institution_name 实际被当作"账户名"发上链,
-            // 这里拆两层后保留为机构展示名 + 同时作为默认账户名。
-            institution_name: rec.institution_name.clone(),
-            category,
-            a3: rec.a3.clone(),
-            p1: rec.p1.clone(),
-            province: rec.province.clone(),
-            city: rec.city.clone(),
-            province_code: rec.province_code.clone(),
-            city_code,
-            institution_code: rec.institution_code.clone(),
-            created_by: rec.created_by.clone(),
-            created_at: rec.created_at,
-        };
-        inst_store::insert_institution(&mut store, inst);
-
-        let account = MultisigAccount {
-            sfid_id: rec.site_sfid.clone(),
-            // 账户名沿用 institution_name(因为链上就是用它派生的 duoqian_address)
-            account_name: rec.institution_name.clone(),
-            duoqian_address: None,
-            chain_status: rec.chain_status.clone(),
-            chain_tx_hash: rec.chain_tx_hash.clone(),
-            chain_block_number: rec.chain_block_number,
-            created_by: rec.created_by.clone(),
-            created_at: rec.created_at,
-        };
-        inst_store::insert_account(&mut store, account);
-        migrated += 1;
-    }
-    if migrated > 0 {
-        tracing::info!(
-            count = migrated,
-            "migrated legacy multisig_sfid_records → multisig_institutions + multisig_accounts"
-        );
-    }
-}
 
 /// 任务卡 6:后端启动时 backfill + 对 43 省全量对账公安局机构。
 ///
@@ -739,7 +502,7 @@ pub(crate) fn backfill_and_reconcile_public_security(state: &AppState) {
 
     let mut store = match state.store.write() {
         Ok(v) => v,
-        Err(_) => return,
+        Err(e) => { tracing::error!(error = %e, "store RwLock poisoned"); return; },
     };
     let fixed = backfill_public_security_city_codes(&mut store);
     if fixed > 0 {
@@ -766,51 +529,96 @@ pub(crate) fn backfill_and_reconcile_public_security(state: &AppState) {
 /// 任务卡 `20260408-sfid-public-security-cpms-embed`:
 /// 启动时清理孤儿 CPMS 站点。
 ///
+/// Phase 2 Day 3：cpms_site_keys 迁移到 sharded_store
+///
 /// 中文注释:`cpms_site_keys` 里的记录通过
 /// `(admin_province, city_name, institution_code)` 元组关联到
 /// `multisig_institutions`。开发期如果某个公安局机构被 reconcile 删掉了,
 /// 对应的 CPMS 站点就成了孤儿——老 UI 能看见,新详情页入口看不见。
 /// 直接硬删,不留数据包袱(`feedback_chain_in_dev.md`)。
-pub(crate) fn cleanup_orphan_cpms_sites(state: &AppState) {
-    let mut store = match state.store.write() {
-        Ok(v) => v,
-        Err(_) => return,
+pub(crate) async fn cleanup_orphan_cpms_sites(state: &AppState) {
+    // 构建 (province, city, institution_code) 合法三元组集合:取自所有机构(legacy store)
+    let valid: std::collections::HashSet<(String, String, String)> = match state.store.read() {
+        Ok(store) => store
+            .multisig_institutions
+            .values()
+            .map(|inst| {
+                (
+                    inst.province.clone(),
+                    inst.city.clone(),
+                    inst.institution_code.clone(),
+                )
+            })
+            .collect(),
+        Err(e) => { tracing::error!(error = %e, "store RwLock poisoned"); return; },
     };
-    // 构建 (province, city, institution_code) 合法三元组集合:取自所有机构
-    // (不限 PUBLIC_SECURITY,因为 CPMS 站点理论上可挂任意机构;目前业务只有公安局用,
-    //  但收紧范围无益)。
-    let valid: std::collections::HashSet<(String, String, String)> = store
-        .multisig_institutions
-        .values()
-        .map(|inst| {
-            (
-                inst.province.clone(),
-                inst.city.clone(),
-                inst.institution_code.clone(),
-            )
+    // 遍历所有省分片，收集孤儿 site_sfid 及其所在省
+    let mut orphans_by_province: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    let scan_result = state
+        .sharded_store
+        .for_each_province(|province, shard| {
+            for site in shard.cpms_site_keys.values() {
+                if !valid.contains(&(
+                    site.admin_province.clone(),
+                    site.city_name.clone(),
+                    site.institution_code.clone(),
+                )) {
+                    orphans_by_province
+                        .entry(province.to_string())
+                        .or_default()
+                        .push(site.site_sfid.clone());
+                }
+            }
         })
-        .collect();
-    let orphans: Vec<String> = store
-        .cpms_site_keys
-        .values()
-        .filter(|site| {
-            !valid.contains(&(
-                site.admin_province.clone(),
-                site.city_name.clone(),
-                site.institution_code.clone(),
-            ))
-        })
-        .map(|site| site.site_sfid.clone())
-        .collect();
-    if orphans.is_empty() {
+        .await;
+    if let Err(e) = scan_result {
+        tracing::warn!(error = %e, "cleanup_orphan_cpms_sites: shard scan failed");
         return;
     }
-    let sample: Vec<String> = orphans.iter().take(10).cloned().collect();
-    for site_sfid in &orphans {
-        store.cpms_site_keys.remove(site_sfid);
+    if orphans_by_province.is_empty() {
+        return;
     }
+    let total: usize = orphans_by_province.values().map(|v| v.len()).sum();
+    let sample: Vec<String> = orphans_by_province
+        .values()
+        .flatten()
+        .take(10)
+        .cloned()
+        .collect();
+    for (province, sfids) in &orphans_by_province {
+        let sfids_owned = sfids.clone();
+        if let Err(e) = state
+            .sharded_store
+            .write_province(province, move |shard| {
+                for sfid in &sfids_owned {
+                    shard.cpms_site_keys.remove(sfid);
+                }
+            })
+            .await
+        {
+            tracing::warn!(province, error = %e, "cleanup_orphan_cpms_sites: write_province failed");
+        }
+    }
+
+    // 双写过渡期:sharded_store + legacy store 同步写(清理孤儿 cpms)
+    {
+        match state.store.write() {
+            Ok(mut store) => {
+                for sfids in orphans_by_province.values() {
+                    for sfid in sfids {
+                        store.cpms_site_keys.remove(sfid);
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "dual-write legacy store failed (cleanup orphan cpms, shard already committed)");
+            }
+        }
+    }
+
     tracing::info!(
-        count = orphans.len(),
+        count = total,
         sample = ?sample,
         "cleaned up orphan CPMS sites (no matching institution)"
     );

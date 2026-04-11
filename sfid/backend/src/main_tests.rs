@@ -52,6 +52,31 @@ fn build_test_state() -> AppState {
         key_version: "v1".to_string(),
         key_alg: "sr25519".to_string(),
         public_key_hex: Arc::new(RwLock::new(public_key_hex)),
+        sheng_signer_cache: {
+            let seed_bytes = hex::decode(hex_seed(0x11)).expect("test hex seed");
+            let mut seed_arr = [0u8; 32];
+            seed_arr.copy_from_slice(&seed_bytes);
+            Arc::new(
+                key_admins::sheng_signer_cache::ShengSignerCache::new_from_seed(&mut seed_arr)
+                    .expect("test sheng signer cache init"),
+            )
+        },
+        // 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
+        // 测试态使用 mock backend,避免依赖真实 Postgres。
+        sharded_store: {
+            #[cfg(test)]
+            {
+                Arc::new(store_shards::ShardedStore::new(
+                    Arc::new(store_shards::backend::MockShardBackend::new())
+                        as Arc<dyn store_shards::backend::ShardBackend>,
+                    false,
+                ))
+            }
+            #[cfg(not(test))]
+            {
+                unreachable!("main_tests.rs only compiles in test cfg")
+            }
+        },
     };
     seed_sheng_admins(&state);
     key_admins::seed_chain_keyring(&state);
@@ -537,6 +562,8 @@ async fn qr_login_sheng_admin_keeps_write_permission() {
                 created_at: Utc::now(),
                 updated_at: None,
                 city: String::new(),
+                encrypted_signing_privkey: None,
+                signing_pubkey: None,
             },
         );
     }
@@ -627,6 +654,8 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 created_at: Utc::now(),
                 updated_at: None,
                 city: String::new(),
+                encrypted_signing_privkey: None,
+                signing_pubkey: None,
             },
         );
         store.admin_users_by_pubkey.insert(
@@ -642,6 +671,8 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 created_at: Utc::now(),
                 updated_at: None,
                 city: String::new(),
+                encrypted_signing_privkey: None,
+                signing_pubkey: None,
             },
         );
     }
@@ -701,6 +732,8 @@ fn require_admin_any_should_allow_all_three_roles() {
                 created_at: Utc::now(),
                 updated_at: None,
                 city: String::new(),
+                encrypted_signing_privkey: None,
+                signing_pubkey: None,
             },
         );
         store.admin_sessions.insert(
@@ -751,7 +784,7 @@ fn parse_sr25519_pubkey_accepts_0x_prefix() {
     let parsed = login::parse_sr25519_pubkey(key).expect("parse pubkey");
     assert_eq!(
         parsed,
-        "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+        "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
     );
 }
 
@@ -783,26 +816,6 @@ fn normalize_account_pubkey_requires_32_byte_hex() {
     );
     assert!(normalize_account_pubkey("5D4Y9fP2U8NDDw7X9W7N6wA6ZwZP3oYfgho2dQ4q8W35bLoA").is_none());
     assert!(normalize_account_pubkey("hello_world").is_none());
-}
-
-#[test]
-fn pending_scope_requires_province_when_admin_is_scoped() {
-    let pending = PendingRequest {
-        seq: 1,
-        account_pubkey: "0xP".to_string(),
-        admin_province: None,
-        requested_at: Utc::now(),
-        callback_url: None,
-        client_request_id: None,
-    };
-    assert!(!in_scope_pending(&pending, Some("中枢省")));
-
-    let claimed = PendingRequest {
-        admin_province: Some("中枢省".to_string()),
-        ..pending
-    };
-    assert!(in_scope_pending(&claimed, Some("中枢省")));
-    assert!(!in_scope_pending(&claimed, Some("岭南省")));
 }
 
 #[test]
@@ -907,163 +920,12 @@ fn chain_request_rejects_duplicate_nonce() {
     assert!(require_chain_request(&mut store, &second_headers, "vote_verify", "fp-2").is_err());
 }
 
-#[tokio::test]
-async fn chain_bind_result_reuses_persisted_runtime_credential() {
-    std::env::set_var("SFID_CHAIN_GENESIS_HASH", format!("0x{}", "11".repeat(32)));
-    let state = build_test_state();
-    let seed = hex_seed(0x41);
-    let account_pubkey = key_admins::chain_keyring::derive_pubkey_hex_from_seed(seed.as_str());
-    {
-        let mut store = state.store.write().expect("store write lock poisoned");
-        store.bindings_by_pubkey.insert(
-            account_pubkey.clone(),
-            BindingRecord {
-                seq: 1,
-                account_pubkey: account_pubkey.clone(),
-                archive_index: "520102199001011234".to_string(),
-                birth_date: None,
-                citizen_status: CitizenStatus::Normal,
-                sfid_code: "SFID-TEST-0001".to_string(),
-                sfid_signature: "legacy-signature".to_string(),
-                runtime_bind_binding_id: None,
-                runtime_bind_bind_nonce: None,
-                runtime_bind_signature: None,
-                runtime_bind_key_id: None,
-                runtime_bind_key_version: None,
-                runtime_bind_alg: None,
-                runtime_bind_signer_pubkey: None,
-                bound_at: Utc::now(),
-                bound_by: "test".to_string(),
-                admin_province: None,
-                client_request_id: None,
-            },
-        );
-    }
+// 中文注释:legacy chain_bind_result_reuses_persisted_runtime_credential 测试已删除
+// (依赖 bindings_by_pubkey + get_bind_result,均已清除)。
 
-    let query = BindResultQuery {
-        account_pubkey: account_pubkey.clone(),
-    };
-    let fingerprint = request_fingerprint(&query).expect("fingerprint should not fail in tests");
-    let ts = Utc::now().timestamp();
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "x-chain-token",
-        HeaderValue::from_static("test-chain-token"),
-    );
-    headers.insert("x-chain-request-id", HeaderValue::from_static("req-bind-1"));
-    headers.insert("x-chain-nonce", HeaderValue::from_static("nonce-bind-1"));
-    headers.insert(
-        "x-chain-timestamp",
-        HeaderValue::from_str(ts.to_string().as_str()).expect("header value"),
-    );
-    let payload = chain_signature_payload(
-        "bind_result",
-        "req-bind-1",
-        "nonce-bind-1",
-        ts,
-        &fingerprint,
-    );
-    let signature = chain_signature_hex("test-chain-signing-secret-at-least-32", payload.as_str());
-    headers.insert(
-        "x-chain-signature",
-        HeaderValue::from_str(signature.as_str()).expect("header value"),
-    );
-    let resp1 = chain::binding::get_bind_result(
-        State(state.clone()),
-        headers,
-        Query(BindResultQuery {
-            account_pubkey: account_pubkey.clone(),
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(resp1.status(), StatusCode::OK);
-    let body1 = parse_json(resp1).await;
-    let nonce_1 = body1["data"]["bind_nonce"]
-        .as_str()
-        .expect("bind_nonce")
-        .to_string();
-    let binding_id_1 = body1["data"]["binding_id"]
-        .as_str()
-        .expect("binding_id")
-        .to_string();
-    let signature_1 = body1["data"]["signature"]
-        .as_str()
-        .expect("signature")
-        .to_string();
-
-    let ts2 = Utc::now().timestamp();
-    let mut headers2 = HeaderMap::new();
-    headers2.insert(
-        "x-chain-token",
-        HeaderValue::from_static("test-chain-token"),
-    );
-    headers2.insert("x-chain-request-id", HeaderValue::from_static("req-bind-2"));
-    headers2.insert("x-chain-nonce", HeaderValue::from_static("nonce-bind-2"));
-    headers2.insert(
-        "x-chain-timestamp",
-        HeaderValue::from_str(ts2.to_string().as_str()).expect("header value"),
-    );
+#[test]
+fn sync_key_admin_users_keeps_monotonic_ids() {
     let payload2 = chain_signature_payload(
-        "bind_result",
-        "req-bind-2",
-        "nonce-bind-2",
-        ts2,
-        &fingerprint,
-    );
-    let signature2 =
-        chain_signature_hex("test-chain-signing-secret-at-least-32", payload2.as_str());
-    headers2.insert(
-        "x-chain-signature",
-        HeaderValue::from_str(signature2.as_str()).expect("header value"),
-    );
-    let resp2 = chain::binding::get_bind_result(
-        State(state.clone()),
-        headers2,
-        Query(BindResultQuery {
-            account_pubkey: account_pubkey.clone(),
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(resp2.status(), StatusCode::OK);
-    let body2 = parse_json(resp2).await;
-    let nonce_2 = body2["data"]["bind_nonce"]
-        .as_str()
-        .expect("bind_nonce")
-        .to_string();
-    let binding_id_2 = body2["data"]["binding_id"]
-        .as_str()
-        .expect("binding_id")
-        .to_string();
-    let signature_2 = body2["data"]["signature"]
-        .as_str()
-        .expect("signature")
-        .to_string();
-
-    assert_eq!(nonce_1, nonce_2);
-    assert_eq!(binding_id_1, binding_id_2);
-    assert_eq!(signature_1, signature_2);
-
-    let store = state.store.read().expect("store read lock poisoned");
-    let binding = store
-        .bindings_by_pubkey
-        .get(&account_pubkey)
-        .expect("binding exists");
-    assert_eq!(
-        binding.runtime_bind_bind_nonce.as_deref(),
-        Some(nonce_1.as_str())
-    );
-    assert_eq!(
-        binding.runtime_bind_binding_id.as_deref(),
-        Some(binding_id_1.as_str())
-    );
-    assert_eq!(
-        binding.runtime_bind_signature.as_deref(),
-        Some(signature_1.as_str())
-    );
-}
-
 #[test]
 fn sync_key_admin_users_keeps_monotonic_ids() {
     let state = build_test_state();

@@ -1,0 +1,15 @@
+{
+  "proto": "WUMIN_QR_V1",
+  "kind": "user_transfer",
+  "id": "tx_01HXYZ4VQK8NRPM2G7FJD9TBC3",
+  "issued_at": 1712650000,
+  "expires_at": 1712650600,
+  "body": {
+    "address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "name": "张三",
+    "amount": "100.50",
+    "symbol": "GMB",
+    "memo": "房租",
+    "bank": ""
+  }
+}

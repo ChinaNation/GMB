@@ -12,6 +12,8 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
 pub use pallet::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
@@ -112,6 +114,7 @@ pub mod pallet {
     use frame_support::{pallet_prelude::*, Blake2_128Concat};
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::Hash;
+    use alloc::vec::Vec;
 
     pub type NonceOf<T> = BoundedVec<u8, <T as Config>::MaxCredentialNonceLength>;
     pub type SignatureOf<T> = BoundedVec<u8, <T as Config>::MaxCredentialSignatureLength>;
@@ -205,6 +208,29 @@ pub mod pallet {
     #[pallet::getter(fn sfid_backup_account_2)]
     pub type SfidBackupAccount2<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
+    /// 中文注释：按省存储的省级签名密钥公钥（sr25519），由 KEY_ADMIN 主账户授权写入。
+    /// 用于机构登记（`register_sfid_institution`）按省分流验签。
+    #[pallet::storage]
+    #[pallet::getter(fn sheng_signing_pubkey_storage)]
+    pub type ShengSigningPubkey<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        BoundedVec<u8, ConstU32<64>>,
+        [u8; 32],
+        OptionQuery,
+    >;
+
+    /// 中文注释：反向索引（公钥 → 省名），用于 O(1) 冲突检测和快速查省。
+    #[pallet::storage]
+    #[pallet::getter(fn province_by_signing_pubkey)]
+    pub type ProvinceBySigningPubkey<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        [u8; 32],
+        BoundedVec<u8, ConstU32<64>>,
+        OptionQuery,
+    >;
+
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub sfid_main_account: Option<T::AccountId>,
@@ -277,6 +303,11 @@ pub mod pallet {
             backup_1: T::AccountId,
             backup_2: T::AccountId,
         },
+        /// 中文注释：省级签名密钥公钥被写入或清除。
+        ShengSigningPubkeyUpdated {
+            province: BoundedVec<u8, ConstU32<64>>,
+            new_pubkey: Option<[u8; 32]>,
+        },
     }
 
     /// 中文注释：本模块无需 on_initialize / on_finalize 钩子，所有逻辑由 extrinsic 或内部接口驱动。
@@ -301,6 +332,10 @@ pub mod pallet {
         UnauthorizedSfidOperator,
         /// 中文注释：新备用账户与现有三把账户之一重复。
         DuplicateSfidKey,
+        /// 中文注释：省名长度超限（上限 64 字节 UTF-8）。
+        ProvinceTooLong,
+        /// 中文注释：新公钥已被其他省占用。
+        PubkeyAlreadyUsed,
     }
 
     #[pallet::call]
@@ -410,6 +445,56 @@ pub mod pallet {
             });
             Ok(())
         }
+
+        /// 中文注释：由 SFID 主账户写入/更新/清除某省的省级签名密钥公钥。
+        /// `new_pubkey = Some` 写入或覆盖；`None` 清除。
+        /// 冲突规则：同一公钥不得同时绑定到两个省。
+        #[pallet::call_index(3)]
+        #[pallet::weight(
+            T::DbWeight::get().reads_writes(3, 3)
+                .saturating_add(Weight::from_parts(10_000, 0))
+        )]
+        pub fn set_sheng_signing_pubkey(
+            origin: OriginFor<T>,
+            province: Vec<u8>,
+            new_pubkey: Option<[u8; 32]>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            // 中文注释：只允许当前 SfidMainAccount 调用（KEY_ADMIN 主密钥）。
+            let main = SfidMainAccount::<T>::get().ok_or(Error::<T>::UnauthorizedSfidOperator)?;
+            ensure!(who == main, Error::<T>::UnauthorizedSfidOperator);
+
+            // 中文注释：省名长度限制 64 字节 UTF-8。
+            let bounded: BoundedVec<u8, ConstU32<64>> = province
+                .try_into()
+                .map_err(|_| Error::<T>::ProvinceTooLong)?;
+
+            // 中文注释：清理旧反向索引。
+            if let Some(old_pub) = ShengSigningPubkey::<T>::get(&bounded) {
+                ProvinceBySigningPubkey::<T>::remove(&old_pub);
+            }
+
+            match new_pubkey {
+                Some(pub_key) => {
+                    // 中文注释：新 pubkey 不得已被其他省占用。
+                    ensure!(
+                        !ProvinceBySigningPubkey::<T>::contains_key(&pub_key),
+                        Error::<T>::PubkeyAlreadyUsed
+                    );
+                    ShengSigningPubkey::<T>::insert(&bounded, pub_key);
+                    ProvinceBySigningPubkey::<T>::insert(&pub_key, &bounded);
+                }
+                None => {
+                    ShengSigningPubkey::<T>::remove(&bounded);
+                }
+            }
+
+            Self::deposit_event(Event::<T>::ShengSigningPubkeyUpdated {
+                province: bounded,
+                new_pubkey,
+            });
+            Ok(())
+        }
     }
 
     impl<T: Config> Pallet<T> {
@@ -423,6 +508,12 @@ pub mod pallet {
             BindingIdToAccount::<T>::get(binding_id)
                 .map(|owner| owner == *who)
                 .unwrap_or(false)
+        }
+
+        /// 中文注释：读某省当前的省级签名密钥公钥；runtime verifier 用于按省分流验签。
+        pub fn sheng_signing_pubkey(province: &[u8]) -> Option<[u8; 32]> {
+            let bounded: BoundedVec<u8, ConstU32<64>> = province.to_vec().try_into().ok()?;
+            ShengSigningPubkey::<T>::get(&bounded)
         }
 
         /// 中文注释：当前 SFID 主账户即验签公钥来源；仅当 AccountId 可还原为 32 字节原始公钥时返回。
@@ -501,7 +592,8 @@ pub mod pallet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types};
+    use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types, BoundedVec};
+    use frame_support::pallet_prelude::ConstU32;
     use frame_system as system;
     use sp_runtime::traits::Hash;
     use sp_runtime::{traits::IdentityLookup, BuildStorage};
@@ -897,6 +989,137 @@ mod tests {
             assert_noop!(
                 SfidCodeAuth::rotate_sfid_keys(RuntimeOrigin::signed(11), 12),
                 Error::<Test>::DuplicateSfidKey
+            );
+        });
+    }
+
+    // ========================================================================
+    // 省级签名密钥（ShengSigningPubkey）相关测试
+    // ========================================================================
+
+    #[test]
+    fn set_sheng_signing_pubkey_works() {
+        new_test_ext().execute_with(|| {
+            // 主账户 = 10
+            let pubkey = [7u8; 32];
+            assert_ok!(SfidCodeAuth::set_sheng_signing_pubkey(
+                RuntimeOrigin::signed(10),
+                b"\xe8\xbe\xbd\xe5\xae\x81".to_vec(), // 辽宁
+                Some(pubkey),
+            ));
+            let province: BoundedVec<u8, ConstU32<64>> =
+                b"\xe8\xbe\xbd\xe5\xae\x81".to_vec().try_into().unwrap();
+            assert_eq!(
+                ShengSigningPubkey::<Test>::get(&province),
+                Some(pubkey)
+            );
+            assert_eq!(
+                ProvinceBySigningPubkey::<Test>::get(&pubkey),
+                Some(province.clone())
+            );
+            // 同时可以用 helper 查
+            assert_eq!(
+                SfidCodeAuth::sheng_signing_pubkey(b"\xe8\xbe\xbd\xe5\xae\x81"),
+                Some(pubkey)
+            );
+        });
+    }
+
+    #[test]
+    fn set_sheng_signing_pubkey_rejects_non_main() {
+        new_test_ext().execute_with(|| {
+            // backup_1 = 11，不是 main，拒绝
+            assert_noop!(
+                SfidCodeAuth::set_sheng_signing_pubkey(
+                    RuntimeOrigin::signed(11),
+                    b"liaoning".to_vec(),
+                    Some([1u8; 32]),
+                ),
+                Error::<Test>::UnauthorizedSfidOperator
+            );
+        });
+    }
+
+    #[test]
+    fn set_sheng_signing_pubkey_rejects_duplicate_pubkey() {
+        new_test_ext().execute_with(|| {
+            let shared = [3u8; 32];
+            assert_ok!(SfidCodeAuth::set_sheng_signing_pubkey(
+                RuntimeOrigin::signed(10),
+                b"liaoning".to_vec(),
+                Some(shared),
+            ));
+            // 同一 pubkey 再写给另一个省 → 冲突
+            assert_noop!(
+                SfidCodeAuth::set_sheng_signing_pubkey(
+                    RuntimeOrigin::signed(10),
+                    b"jilin".to_vec(),
+                    Some(shared),
+                ),
+                Error::<Test>::PubkeyAlreadyUsed
+            );
+        });
+    }
+
+    #[test]
+    fn set_sheng_signing_pubkey_none_clears() {
+        new_test_ext().execute_with(|| {
+            let pubkey = [5u8; 32];
+            assert_ok!(SfidCodeAuth::set_sheng_signing_pubkey(
+                RuntimeOrigin::signed(10),
+                b"liaoning".to_vec(),
+                Some(pubkey),
+            ));
+            assert_ok!(SfidCodeAuth::set_sheng_signing_pubkey(
+                RuntimeOrigin::signed(10),
+                b"liaoning".to_vec(),
+                None,
+            ));
+            let province: BoundedVec<u8, ConstU32<64>> =
+                b"liaoning".to_vec().try_into().unwrap();
+            assert!(ShengSigningPubkey::<Test>::get(&province).is_none());
+            assert!(ProvinceBySigningPubkey::<Test>::get(&pubkey).is_none());
+        });
+    }
+
+    #[test]
+    fn set_sheng_signing_pubkey_overwrite_cleans_old_reverse_index() {
+        new_test_ext().execute_with(|| {
+            let old = [8u8; 32];
+            let new = [9u8; 32];
+            assert_ok!(SfidCodeAuth::set_sheng_signing_pubkey(
+                RuntimeOrigin::signed(10),
+                b"liaoning".to_vec(),
+                Some(old),
+            ));
+            assert_ok!(SfidCodeAuth::set_sheng_signing_pubkey(
+                RuntimeOrigin::signed(10),
+                b"liaoning".to_vec(),
+                Some(new),
+            ));
+            // 旧 pubkey 的反向索引已清
+            assert!(ProvinceBySigningPubkey::<Test>::get(&old).is_none());
+            // 新 pubkey 的反向索引已写
+            let province: BoundedVec<u8, ConstU32<64>> =
+                b"liaoning".to_vec().try_into().unwrap();
+            assert_eq!(
+                ProvinceBySigningPubkey::<Test>::get(&new),
+                Some(province)
+            );
+        });
+    }
+
+    #[test]
+    fn set_sheng_signing_pubkey_rejects_too_long_province() {
+        new_test_ext().execute_with(|| {
+            let too_long = vec![0x41u8; 65];
+            assert_noop!(
+                SfidCodeAuth::set_sheng_signing_pubkey(
+                    RuntimeOrigin::signed(10),
+                    too_long,
+                    Some([1u8; 32]),
+                ),
+                Error::<Test>::ProvinceTooLong
             );
         });
     }

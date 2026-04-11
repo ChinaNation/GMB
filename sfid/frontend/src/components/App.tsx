@@ -25,7 +25,7 @@ import { AuthProvider } from '../contexts/AuthContext';
 import { useAuth } from '../hooks/useAuth';
 import { writeStoredAuth, clearStoredAuth } from '../utils/storedAuth';
 import type { AdminAuth, SfidMetaResult } from '../api/client';
-import { checkAdminAuth, getSfidMeta } from '../api/client';
+import { adminLogout, checkAdminAuth, getSfidMeta } from '../api/client';
 import { LoginView } from '../views/auth/LoginView';
 import { InstitutionsView } from '../views/institutions/InstitutionsView';
 import { OperatorsView } from '../views/operators/OperatorsView';
@@ -116,6 +116,8 @@ function AppInner() {
   }, []);
 
   const onLogout = () => {
+    // best-effort 通知后端销毁 session,不阻塞前端退出
+    if (auth) adminLogout(auth);
     setAuth(null);
     clearStoredAuth();
     setActiveView('citizens');

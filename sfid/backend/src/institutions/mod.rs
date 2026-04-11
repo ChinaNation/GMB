@@ -28,5 +28,6 @@ pub mod store;
 pub use model::{
     account_key_from_string, account_key_to_string, AccountKey, CreateAccountInput,
     CreateAccountOutput, CreateInstitutionInput, CreateInstitutionOutput, InstitutionDetailOutput,
-    InstitutionListRow, MultisigAccount, MultisigInstitution,
+    InstitutionDocument, InstitutionListRow, MultisigAccount, MultisigInstitution,
+    VALID_DOC_TYPES,
 };

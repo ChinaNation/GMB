@@ -1132,6 +1132,7 @@ mod tests {
             _name: &duoqian_manage_pow::pallet::SfidNameOf<Test>,
             nonce: &duoqian_manage_pow::pallet::RegisterNonceOf<Test>,
             signature: &duoqian_manage_pow::pallet::RegisterSignatureOf<Test>,
+            _signing_province: Option<&[u8]>,
         ) -> bool {
             !nonce.is_empty() && signature.as_slice() == b"register-ok"
         }

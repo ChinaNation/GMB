@@ -39,6 +39,8 @@ pub(crate) async fn list_sheng_admins(
                 },
                 built_in: user.built_in,
                 created_at: user.created_at,
+                updated_at: user.updated_at,
+                signing_pubkey: user.signing_pubkey.clone(),
             })
         })
         .collect();
@@ -116,9 +118,15 @@ pub(crate) async fn replace_sheng_admin(
                 id: existing.id,
                 province: province_name.clone(),
                 admin_pubkey: existing.admin_pubkey.clone(),
-                admin_name: format!("{province_name}机构管理员"),
+                admin_name: if existing.admin_name.is_empty() {
+                    format!("{province_name}机构管理员")
+                } else {
+                    existing.admin_name.clone()
+                },
                 built_in: existing.built_in,
                 created_at: existing.created_at,
+                updated_at: existing.updated_at,
+                signing_pubkey: existing.signing_pubkey.clone(),
             },
         })
         .into_response();
@@ -150,12 +158,19 @@ pub(crate) async fn replace_sheng_admin(
     let preserved_status = old_user.status.clone();
     let replaced_at = Utc::now();
     store.admin_users_by_pubkey.remove(&old_pubkey);
+    // 新管理员姓名：优先使用请求体中的 admin_name，否则保留旧值
+    let resolved_name = input
+        .admin_name
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().to_string())
+        .unwrap_or(old_user.admin_name.clone());
     store.admin_users_by_pubkey.insert(
         new_pubkey.clone(),
         AdminUser {
             id: old_user.id,
             admin_pubkey: new_pubkey.clone(),
-            admin_name: old_user.admin_name,
+            admin_name: resolved_name.clone(),
             role: AdminRole::ShengAdmin,
             status: preserved_status.clone(),
             built_in: old_user.built_in,
@@ -163,6 +178,8 @@ pub(crate) async fn replace_sheng_admin(
             created_at: old_user.created_at,
             updated_at: Some(replaced_at),
             city: String::new(),
+            encrypted_signing_privkey: None,
+            signing_pubkey: None,
         },
     );
     store.sheng_admin_province_by_pubkey.remove(&old_pubkey);
@@ -195,6 +212,68 @@ pub(crate) async fn replace_sheng_admin(
     );
     drop(store);
 
+    // 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 9：
+    // KEY_ADMIN 更换省登录管理员时，级联清理链上 signing pubkey + 内存 cache。
+    // 新管理员首次登录时会重新 bootstrap 新的密钥对并再次推链。
+    {
+        use subxt::backend::legacy::LegacyRpcMethods;
+        use subxt::{OnlineClient, PolkadotConfig};
+        let ws_url_res = (|| -> Result<String, String> {
+            std::env::var("SFID_CHAIN_WS_URL")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+                .ok_or_else(|| "SFID_CHAIN_WS_URL not configured".to_string())
+        })();
+        match ws_url_res {
+            Ok(ws) => {
+                match OnlineClient::<PolkadotConfig>::from_insecure_url(ws.clone()).await {
+                    Ok(client) => {
+                        match subxt::backend::rpc::RpcClient::from_insecure_url(ws.as_str()).await
+                        {
+                            Ok(rpc) => {
+                                let legacy = LegacyRpcMethods::<PolkadotConfig>::new(rpc);
+                                let main_pair = state.sheng_signer_cache.sfid_main_signer();
+                                if let Err(e) = crate::key_admins::chain_sheng_signing::submit_set_sheng_signing_pubkey_with_client(
+                                    &client,
+                                    &legacy,
+                                    &main_pair,
+                                    province_name.as_str(),
+                                    None,
+                                )
+                                .await
+                                {
+                                    tracing::warn!(province = %province_name, error = %e, "clear sheng signing pubkey on chain failed");
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(province = %province_name, error = %e, "legacy rpc connect failed");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(province = %province_name, error = %e, "chain connect failed");
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!(province = %province_name, error = %e, "resolve ws url failed");
+            }
+        }
+    }
+    // 清理新管理员残留的密文（一般是 None）+ 驱逐本省 cache。
+    {
+        if let Ok(mut store) = state.store.write() {
+            if let Some(user) = store.admin_users_by_pubkey.get_mut(&new_pubkey) {
+                user.encrypted_signing_privkey = None;
+                user.signing_pubkey = None;
+            }
+        }
+    }
+    state
+        .sheng_signer_cache
+        .unload_province(province_name.as_str());
+
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -202,9 +281,12 @@ pub(crate) async fn replace_sheng_admin(
             id: old_user.id,
             province: province_name.clone(),
             admin_pubkey: new_pubkey,
-            admin_name: format!("{province_name}机构管理员"),
+            admin_name: resolved_name,
             built_in: old_user.built_in,
             created_at: old_user.created_at,
+            updated_at: Some(replaced_at),
+            // 更换后 signing pubkey 已清理，新管理员登录前为 None
+            signing_pubkey: None,
         },
     })
     .into_response()

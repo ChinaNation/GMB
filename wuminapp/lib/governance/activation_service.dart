@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../qr/bodies/sign_request_body.dart';
 import '../signer/qr_signer.dart';
 import 'institution_admin_service.dart';
 
@@ -113,18 +114,16 @@ class ActivationService {
 
   /// 构建激活签名请求（用于展示 QR 码）。
   ///
-  /// 返回 (QrSignRequest, requestJson)，直接传给 QrSignSessionPage。
-  ({QrSignRequest request, String json}) buildActivationRequest({
+  /// 返回 (SignRequestEnvelope, requestJson),直接传给 QrSignSessionPage。
+  ({SignRequestEnvelope request, String json}) buildActivationRequest({
     required String pubkeyHex,
     required String shenfenId,
   }) {
     final pk = _normalize(pubkeyHex);
 
-    // SS58 地址用于 QR 请求的 account 字段
     final pkBytes = _hexToBytes(pk);
     final account = Keyring().encodeAddress(pkBytes, 2027);
 
-    // 构建 84 字节 payload
     final payload = _buildActivatePayload(shenfenId);
     final payloadHex = _bytesToHex(payload);
 
@@ -132,17 +131,18 @@ class ActivationService {
     final requestId = QrSigner.generateRequestId(prefix: 'act-');
     final request = signer.buildRequest(
       requestId: requestId,
-      account: account,
+      address: account,
       pubkey: pk,
       payloadHex: payloadHex,
-      display: {
-        'action': 'activate_admin',
-        'summary': '激活机构管理员',
-        'fields': {
-          'institution': shenfenId,
-          'admin_pubkey': pk,
-        },
-      },
+      specVersion: 0,
+      display: SignDisplay(
+        action: 'activate_admin',
+        summary: '激活机构管理员',
+        fields: [
+          SignDisplayField(label: '机构', value: shenfenId),
+          SignDisplayField(label: '管理员公钥', value: pk),
+        ],
+      ),
     );
     final json = signer.encodeRequest(request);
 
@@ -157,12 +157,12 @@ class ActivationService {
   Future<ActivatedAdmin> activateViaQr({
     required String pubkeyHex,
     required String shenfenId,
-    required QrSignResponse response,
+    required SignResponseEnvelope response,
   }) async {
     final pk = _normalize(pubkeyHex);
 
     // 验证签名者与目标管理员一致
-    final responsePk = _normalize(response.pubkey);
+    final responsePk = _normalize(response.body.pubkey);
     if (responsePk != pk) {
       throw Exception('签名公钥与管理员公钥不一致');
     }

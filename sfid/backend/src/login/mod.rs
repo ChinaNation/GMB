@@ -9,12 +9,14 @@ use chrono::{DateTime, Duration, Utc};
 use hex::FromHex;
 use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicI64, Ordering};
 use tracing::warn;
 use uuid::Uuid;
 
 use crate::business::pubkey::same_admin_pubkey;
 use crate::business::scope::province_scope_for_role;
 use crate::sfid::province::sheng_admin_display_name;
+use crate::sfid::province::sheng_admin_province;
 use crate::*;
 
 const LOGIN_CHALLENGE_TTL_SECONDS: i64 = 90;
@@ -207,6 +209,29 @@ pub(crate) async fn admin_auth_check(
             admin_province: ctx.admin_province,
             admin_city: ctx.admin_city,
         },
+    })
+    .into_response()
+}
+
+/// 主动登出:从 GlobalShard 删除当前 session。
+pub(crate) async fn admin_logout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let token = match bearer_token(&headers) {
+        Some(t) => t,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "missing token"),
+    };
+    let _ = state
+        .sharded_store
+        .write_global(|g| {
+            g.admin_sessions.remove(&token);
+        })
+        .await;
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: "logged out",
     })
     .into_response()
 }
@@ -418,16 +443,48 @@ pub(crate) async fn admin_auth_verify(
 
     let access_token = Uuid::new_v4().to_string();
     let expire_at = now + Duration::hours(8);
-    store.admin_sessions.insert(
-        access_token.clone(),
-        AdminSession {
-            token: access_token.clone(),
-            admin_pubkey: admin_pubkey.clone(),
-            role: admin_role.clone(),
-            expire_at,
-            last_active_at: now,
-        },
-    );
+    let new_session = AdminSession {
+        token: access_token.clone(),
+        admin_pubkey: admin_pubkey.clone(),
+        role: admin_role.clone(),
+        expire_at,
+        last_active_at: now,
+    };
+    store.admin_sessions.insert(access_token.clone(), new_session.clone());
+    // 中文注释：先释放写锁，再执行 bootstrap_sheng_signer（含链上推送），避免
+    // 跨 await 持有 StoreWriteGuard。
+    drop(store);
+
+    // Phase 2 admin_auth 迁移:登录成功后同步写 GlobalShard session
+    {
+        let ss = state.sharded_store.clone();
+        let token_for_shard = access_token.clone();
+        tokio::task::spawn(async move {
+            let _ = ss
+                .write_global(|g| {
+                    g.admin_sessions.insert(token_for_shard, new_session);
+                })
+                .await;
+        });
+    }
+
+    // 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 7：
+    // 省登录管理员验签成功后确保本省签名密钥就绪。
+    if admin_role == AdminRole::ShengAdmin {
+        if let Some(province) = admin_province.as_deref() {
+            if let Err(e) = crate::key_admins::bootstrap_sheng_signer(
+                &state,
+                admin_pubkey.as_str(),
+                province,
+            )
+            .await
+            {
+                warn!(province, error = %e, "bootstrap sheng signer failed");
+            } else {
+                tracing::info!(province, "sheng signer ready for province");
+            }
+        }
+    }
 
     Json(ApiResponse {
         code: 0,
@@ -470,10 +527,17 @@ pub(crate) async fn admin_auth_qr_challenge(
     let now = Utc::now();
     let expire_at = now + Duration::seconds(LOGIN_CHALLENGE_TTL_SECONDS);
     let challenge_id = Uuid::new_v4().to_string();
+    // challenge_text:客户端签 login_receipt 时的原文(与 wumin 端的
+    // buildSignatureMessage(kind=login_receipt, ...) 拼接规则保持一致)。
+    // 注意 <principal> 位置由客户端签名时填入自己的 pubkey,后端验证时同样
+    // 以客户端 pubkey 为 principal 重新拼接。这里保存的 challenge_text 仅作
+    // 回放保护用的唯一 token,实际验证在 admin_auth_qr_complete 中重建。
     let challenge_text = format!(
-        "WUMIN_LOGIN_V1.0.0|{}|{}|{}",
-        "sfid",
+        "{}|{}|{}|{}|{}|",
+        crate::qr::WUMIN_QR_V1,
+        crate::qr::QrKind::LoginReceipt.wire(),
         challenge_id,
+        "sfid",
         expire_at.timestamp()
     );
     let (sys_pubkey, sys_sig) = match build_login_qr_system_signature(
@@ -493,17 +557,17 @@ pub(crate) async fn admin_auth_qr_challenge(
             );
         }
     };
-    let login_qr_payload = serde_json::json!({
-        "proto": "WUMIN_LOGIN_V1.0.0",
-        "type": "challenge",
-        "system": "sfid",
-        "challenge": challenge_id,
-        "issued_at": now.timestamp(),
-        "expires_at": expire_at.timestamp(),
-        "sys_pubkey": sys_pubkey,
-        "sys_sig": sys_sig
-    })
-    .to_string();
+    let login_qr_payload = serde_json::to_string(&crate::qr::LoginChallengeEnvelope::new(
+        challenge_id.clone(),
+        now.timestamp(),
+        expire_at.timestamp(),
+        crate::qr::LoginChallengeBody {
+            system: "sfid".to_string(),
+            sys_pubkey: sys_pubkey.clone(),
+            sys_sig: sys_sig.clone(),
+        },
+    ))
+    .unwrap_or_default();
 
     let mut store = match store_write_or_500(&state) {
         Ok(v) => v,
@@ -569,7 +633,7 @@ pub(crate) async fn admin_auth_qr_complete(
     };
     cleanup_expired_challenges(&mut store, now);
 
-    let (challenge_text, session_id) = {
+    let (challenge_text, session_id, challenge_expire_at) = {
         let Some(challenge) = store.login_challenges.get_mut(&input.challenge_id) else {
             return api_error(StatusCode::NOT_FOUND, 1004, "challenge not found");
         };
@@ -587,6 +651,7 @@ pub(crate) async fn admin_auth_qr_complete(
         (
             challenge.challenge_text.clone(),
             challenge.session_id.clone(),
+            challenge.expire_at.timestamp(),
         )
     };
 
@@ -613,7 +678,18 @@ pub(crate) async fn admin_auth_qr_complete(
             "signer_pubkey must match admin_pubkey",
         );
     }
-    if !verify_admin_signature(&verify_pubkey, &challenge_text, input.signature.trim()) {
+    // 重建完整签名原文(包含签名者公钥作为 principal),与 wumin 端
+    // buildSignatureMessage(kind=login_receipt, principal=pubkey) 一致。
+    // challenge_text 仅用于回放保护,不直接用于签名验证。
+    let verify_message = crate::qr::build_signature_message(
+        crate::qr::QrKind::LoginReceipt,
+        &input.challenge_id,
+        Some("sfid"),
+        Some(challenge_expire_at),
+        &verify_pubkey,
+    );
+    let _ = challenge_text; // 不再用于签名验证
+    if !verify_admin_signature(&verify_pubkey, &verify_message, input.signature.trim()) {
         warn!(
             challenge = %input.challenge_id,
             admin_pubkey = %login_pubkey_raw,
@@ -638,16 +714,34 @@ pub(crate) async fn admin_auth_qr_complete(
 
     let access_token = Uuid::new_v4().to_string();
     let expire_at = now + Duration::hours(8);
-    store.admin_sessions.insert(
-        access_token.clone(),
-        AdminSession {
-            token: access_token.clone(),
-            admin_pubkey: login_pubkey.clone(),
-            role: login_role.clone(),
-            expire_at,
-            last_active_at: now,
-        },
-    );
+    let new_session_qr = AdminSession {
+        token: access_token.clone(),
+        admin_pubkey: login_pubkey.clone(),
+        role: login_role.clone(),
+        expire_at,
+        last_active_at: now,
+    };
+    store.admin_sessions.insert(access_token.clone(), new_session_qr.clone());
+
+    // Phase 2 admin_auth 迁移:QR 登录成功后同步写 GlobalShard session
+    {
+        let ss = state.sharded_store.clone();
+        let token_for_shard = access_token.clone();
+        tokio::task::spawn(async move {
+            let _ = ss
+                .write_global(|g| {
+                    g.admin_sessions.insert(token_for_shard, new_session_qr);
+                })
+                .await;
+        });
+    }
+
+    // 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 7：
+    // 为省登录管理员 bootstrap 本省签名密钥（需要 provinces 映射）。
+    let bootstrap_pubkey = login_pubkey.clone();
+    let bootstrap_role = login_role.clone();
+    let bootstrap_province =
+        province_scope_for_role(&store, &login_pubkey, &login_role);
     store.qr_login_results.insert(
         input.challenge_id.clone(),
         QrLoginResultRecord {
@@ -660,6 +754,23 @@ pub(crate) async fn admin_auth_qr_complete(
             created_at: now,
         },
     );
+    drop(store);
+
+    if bootstrap_role == AdminRole::ShengAdmin {
+        if let Some(province) = bootstrap_province.as_deref() {
+            if let Err(e) = crate::key_admins::bootstrap_sheng_signer(
+                &state,
+                bootstrap_pubkey.as_str(),
+                province,
+            )
+            .await
+            {
+                warn!(province, error = %e, "bootstrap sheng signer failed (qr)");
+            } else {
+                tracing::info!(province, "sheng signer ready for province (qr)");
+            }
+        }
+    }
 
     Json(ApiResponse {
         code: 0,
@@ -771,62 +882,197 @@ pub(crate) async fn admin_auth_qr_result(
     .into_response()
 }
 
+/// Phase 2 admin_auth 迁移到 GlobalShard：
+/// session 验证 + 用户查找全部从 sharded_store.read_global 同步读取,
+/// 不再 lock legacy store 的写锁。write_global(async) 用 tokio::task::spawn
+/// 后台执行,不阻塞 auth 返回。
 fn admin_auth(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<AdminAuthContext, axum::response::Response> {
     if let Some(token) = bearer_token(headers) {
-        let mut store = match store_write_or_500(state) {
-            Ok(v) => v,
-            Err(resp) => return Err(resp),
-        };
         let now = Utc::now();
-        let idle_timeout_minutes = std::env::var("SFID_ADMIN_IDLE_TIMEOUT_MINUTES")
+        // ShiAdmin idle 超时(分钟),KeyAdmin/ShengAdmin 无 idle 限制
+        let shi_idle_timeout_minutes = std::env::var("SFID_ADMIN_IDLE_TIMEOUT_MINUTES")
             .ok()
             .and_then(|v| v.parse::<i64>().ok())
             .filter(|v| *v > 0)
             .unwrap_or(10);
-        cleanup_admin_sessions(&mut store, now, idle_timeout_minutes);
-        let (session_pubkey, _session_role) = {
-            let Some(session) = store.admin_sessions.get_mut(&token) else {
-                return Err(api_error(
-                    StatusCode::UNAUTHORIZED,
-                    1002,
-                    "invalid access token",
-                ));
+
+        // ── Phase 2:后台节流清理(每 60 秒一次,不阻塞请求) ──
+        static LAST_CLEANUP: AtomicI64 = AtomicI64::new(0);
+        let last = LAST_CLEANUP.load(Ordering::Relaxed);
+        let now_ts = now.timestamp();
+        if now_ts - last > 60 {
+            LAST_CLEANUP.store(now_ts, Ordering::Relaxed);
+            let ss = state.sharded_store.clone();
+            let cache = state.sheng_signer_cache.clone();
+            tokio::task::spawn(async move {
+                if let Ok(evicted) =
+                    cleanup_sessions_from_global(&ss, Utc::now(), shi_idle_timeout_minutes).await
+                {
+                    for province in evicted {
+                        cache.unload_province(province.as_str());
+                    }
+                }
+            });
+        }
+
+        // ── 1. 从 GlobalShard 同步读 session ──
+        let session = state
+            .sharded_store
+            .read_global(|g| g.admin_sessions.get(&token).cloned())
+            .map_err(|e| {
+                warn!(error = %e, "read_global failed in admin_auth");
+                api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e)
+            })?;
+
+        let Some(session) = session else {
+            return Err(api_error(
+                StatusCode::UNAUTHORIZED,
+                1002,
+                "invalid access token",
+            ));
+        };
+
+        // ── 2. 验证过期 / idle 超时 ──
+        // KeyAdmin/ShengAdmin 无 idle 限制,仅检查 expire_at(8h);
+        // ShiAdmin 额外检查 idle 超时(默认 10 分钟)。
+        let idle_expired = session.role == AdminRole::ShiAdmin
+            && now > session.last_active_at + Duration::minutes(shi_idle_timeout_minutes);
+        if now > session.expire_at || idle_expired {
+            // 过期:后台异步删除 session(write_global 是 async)
+            let ss = state.sharded_store.clone();
+            let token_clone = token.clone();
+            tokio::task::spawn(async move {
+                let _ = ss
+                    .write_global(|g| {
+                        g.admin_sessions.remove(&token_clone);
+                    })
+                    .await;
+            });
+            return Err(api_error(
+                StatusCode::UNAUTHORIZED,
+                1002,
+                "access token expired",
+            ));
+        }
+
+        // ── 3. 后台更新 last_active_at(不阻塞返回) ──
+        {
+            let ss = state.sharded_store.clone();
+            let token_clone = token.clone();
+            tokio::task::spawn(async move {
+                let _ = ss
+                    .write_global(|g| {
+                        if let Some(s) = g.admin_sessions.get_mut(&token_clone) {
+                            s.last_active_at = Utc::now();
+                        }
+                    })
+                    .await;
+            });
+        }
+
+        let session_pubkey = session.admin_pubkey.clone();
+
+        // ── 4. 查用户信息:优先 GlobalShard,fallback legacy store ──
+        // GlobalShard.global_admins 包含 KeyAdmin + ShengAdmin;
+        // ShiAdmin 可能还未同步到 GlobalShard,fallback legacy。
+        let user_info = state
+            .sharded_store
+            .read_global(|g| {
+                if let Some(user) = g.global_admins.get(&session_pubkey) {
+                    let province = match &user.role {
+                        AdminRole::KeyAdmin => None,
+                        AdminRole::ShengAdmin => g
+                            .sheng_admin_province_by_pubkey
+                            .get(&session_pubkey)
+                            .cloned()
+                            .or_else(|| {
+                                sheng_admin_province(&session_pubkey).map(|v| v.to_string())
+                            }),
+                        AdminRole::ShiAdmin => {
+                            let creator = &user.created_by;
+                            g.sheng_admin_province_by_pubkey
+                                .get(creator)
+                                .cloned()
+                                .or_else(|| {
+                                    sheng_admin_province(creator).map(|v| v.to_string())
+                                })
+                        }
+                    };
+                    let city = if user.role == AdminRole::ShiAdmin && !user.city.is_empty() {
+                        Some(user.city.clone())
+                    } else {
+                        None
+                    };
+                    return Some((
+                        user.admin_pubkey.clone(),
+                        user.role.clone(),
+                        user.status.clone(),
+                        user.admin_name.clone(),
+                        user.city.clone(),
+                        user.created_by.clone(),
+                        province,
+                        city,
+                    ));
+                }
+                None
+            })
+            .map_err(|e| {
+                warn!(error = %e, "read_global failed for admin user lookup");
+                api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e)
+            })?;
+
+        // GlobalShard 命中:KeyAdmin / ShengAdmin(或已同步的 ShiAdmin)
+        // 未命中:fallback legacy store(ShiAdmin 可能尚未同步到 GlobalShard)
+        let (admin_pubkey, role, status, admin_name, _city_raw, _created_by, admin_province, admin_city) =
+            if let Some(info) = user_info {
+                info
+            } else {
+                // fallback:从 legacy store 读(只拿读锁)
+                let store = store_read_or_500(state)?;
+                let Some(user) = store.admin_users_by_pubkey.get(&session_pubkey) else {
+                    return Err(api_error(StatusCode::FORBIDDEN, 2002, "admin not found"));
+                };
+                let province =
+                    province_scope_for_role(&store, &user.admin_pubkey, &user.role);
+                let city = if user.role == AdminRole::ShiAdmin && !user.city.is_empty() {
+                    Some(user.city.clone())
+                } else {
+                    None
+                };
+                (
+                    user.admin_pubkey.clone(),
+                    user.role.clone(),
+                    user.status.clone(),
+                    user.admin_name.clone(),
+                    user.city.clone(),
+                    user.created_by.clone(),
+                    province,
+                    city,
+                )
             };
-            if now > session.expire_at
-                || now > session.last_active_at + Duration::minutes(idle_timeout_minutes)
-            {
-                store.admin_sessions.remove(&token);
-                return Err(api_error(
-                    StatusCode::UNAUTHORIZED,
-                    1002,
-                    "access token expired",
-                ));
-            }
-            session.last_active_at = now;
-            (session.admin_pubkey.clone(), session.role.clone())
-        };
-        let Some(admin_user) = store.admin_users_by_pubkey.get(&session_pubkey) else {
-            return Err(api_error(StatusCode::FORBIDDEN, 2002, "admin not found"));
-        };
-        if admin_user.status != AdminStatus::Active {
+
+        if status != AdminStatus::Active {
             return Err(api_error(StatusCode::FORBIDDEN, 2003, "admin disabled"));
         }
-        let admin_province =
-            province_scope_for_role(&store, &admin_user.admin_pubkey, &admin_user.role);
-        // 只对 ShiAdmin 暴露 city（其他角色底层字段为空字符串）
-        let admin_city = if admin_user.role == AdminRole::ShiAdmin && !admin_user.city.is_empty()
-        {
-            Some(admin_user.city.clone())
+
+        let display_name = if role == AdminRole::ShiAdmin {
+            let name = admin_name.trim();
+            if !name.is_empty() {
+                name.to_string()
+            } else {
+                build_admin_display_name(&admin_pubkey, &role, admin_province.as_deref())
+            }
         } else {
-            None
+            build_admin_display_name(&admin_pubkey, &role, admin_province.as_deref())
         };
+
         return Ok(AdminAuthContext {
-            admin_pubkey: admin_user.admin_pubkey.clone(),
-            role: admin_user.role.clone(),
-            admin_name: build_admin_display_name_from_user(admin_user, admin_province.as_deref()),
+            admin_pubkey,
+            role,
+            admin_name: display_name,
             admin_province,
             admin_city,
         });
@@ -837,6 +1083,84 @@ fn admin_auth(
         1002,
         "admin auth required",
     ))
+}
+
+/// Phase 2:异步清理 GlobalShard 中的过期 session。
+/// 由 admin_auth 里的 60 秒节流触发,后台 tokio::task::spawn 执行。
+/// KeyAdmin/ShengAdmin 无 idle 限制(仅 expire_at),ShiAdmin 额外检查 idle。
+async fn cleanup_sessions_from_global(
+    store: &std::sync::Arc<crate::store_shards::ShardedStore>,
+    now: DateTime<Utc>,
+    shi_idle_timeout_minutes: i64,
+) -> Result<Vec<String>, String> {
+    let mut evicted_provinces: Vec<String> = Vec::new();
+    store
+        .write_global(|g| {
+            let mut evicted_sheng_pubkeys: Vec<String> = Vec::new();
+            let mut remaining_sheng_pubkeys: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+
+            g.admin_sessions.retain(|_, session| {
+                // expire_at 硬上限对所有角色生效
+                if now > session.expire_at {
+                    if session.role == AdminRole::ShengAdmin {
+                        evicted_sheng_pubkeys.push(session.admin_pubkey.clone());
+                    }
+                    return false;
+                }
+                // idle 超时仅 ShiAdmin
+                if session.role == AdminRole::ShiAdmin
+                    && now > session.last_active_at + Duration::minutes(shi_idle_timeout_minutes)
+                {
+                    return false;
+                }
+                if session.role == AdminRole::ShengAdmin {
+                    remaining_sheng_pubkeys.insert(session.admin_pubkey.clone());
+                }
+                true
+            });
+
+            let max_sessions = bounded_cache_limit("SFID_ADMIN_SESSION_MAX", 50_000);
+            if g.admin_sessions.len() > max_sessions {
+                let mut entries = g
+                    .admin_sessions
+                    .iter()
+                    .map(|(token, session)| {
+                        (
+                            token.clone(),
+                            session.last_active_at,
+                            session.role.clone(),
+                            session.admin_pubkey.clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                entries.sort_by_key(|(_, last_active, _, _)| *last_active);
+                let overflow = g.admin_sessions.len() - max_sessions;
+                for (token, _, role, pubkey) in entries.into_iter().take(overflow) {
+                    g.admin_sessions.remove(&token);
+                    if role == AdminRole::ShengAdmin {
+                        evicted_sheng_pubkeys.push(pubkey);
+                    }
+                }
+                remaining_sheng_pubkeys.clear();
+                for (_, s) in g.admin_sessions.iter() {
+                    if s.role == AdminRole::ShengAdmin {
+                        remaining_sheng_pubkeys.insert(s.admin_pubkey.clone());
+                    }
+                }
+            }
+
+            for pubkey in evicted_sheng_pubkeys {
+                if remaining_sheng_pubkeys.contains(&pubkey) {
+                    continue;
+                }
+                if let Some(province) = g.sheng_admin_province_by_pubkey.get(&pubkey) {
+                    evicted_provinces.push(province.clone());
+                }
+            }
+        })
+        .await?;
+    Ok(evicted_provinces)
 }
 
 pub(crate) fn require_admin_any(
@@ -903,8 +1227,8 @@ pub(crate) fn verify_admin_signature(
     let Some(pubkey_bytes) = parse_sr25519_pubkey_bytes(admin_pubkey) else {
         return false;
     };
-    let normalized_sig = normalize_hex(signature_text);
-    let sig_bytes = match Vec::from_hex(&normalized_sig) {
+    let normalized_sig = strip_0x_prefix(signature_text);
+    let sig_bytes = match Vec::from_hex(normalized_sig) {
         Ok(v) if v.len() == 64 => v,
         _ => return false,
     };
@@ -950,40 +1274,50 @@ fn build_login_qr_system_signature(
         .read()
         .map_err(|_| "signing seed read lock poisoned".to_string())?
         .clone();
-    let message = format!(
-        "WUMIN_LOGIN_V1.0.0|{}|{}|{}|{}|{}",
-        system, challenge, issued_at, expires_at, sys_pubkey
+    let message = crate::qr::build_signature_message(
+        crate::qr::QrKind::LoginChallenge,
+        challenge,
+        Some(system),
+        Some(expires_at),
+        &sys_pubkey,
     );
+    let _ = issued_at; // 统一签名原文不再包含 issued_at
     let signer =
         crate::key_admins::chain_keyring::try_load_signing_key_from_seed(seed.expose_secret())?;
     let signature = signer.sign(message.as_bytes());
     Ok((sys_pubkey, format!("0x{}", hex::encode(signature.0))))
 }
 
+/// 解析 Sr25519 公钥，返回统一格式 `0x` + 64 位小写 hex。
 pub(crate) fn parse_sr25519_pubkey(admin_pubkey: &str) -> Option<String> {
-    let normalized = normalize_hex(admin_pubkey);
-    if normalized.len() == 64 && normalized.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Some(normalized);
+    let raw = admin_pubkey
+        .trim()
+        .strip_prefix("0x")
+        .or_else(|| admin_pubkey.trim().strip_prefix("0X"))
+        .unwrap_or(admin_pubkey.trim());
+    if raw.len() == 64 && raw.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Some(format!("0x{}", raw.to_ascii_lowercase()));
     }
     None
 }
 
 pub(crate) fn parse_sr25519_pubkey_bytes(admin_pubkey: &str) -> Option<[u8; 32]> {
     if let Some(hex_pubkey) = parse_sr25519_pubkey(admin_pubkey) {
-        let bytes = Vec::from_hex(&hex_pubkey).ok()?;
+        // hex::decode 不接受 0x 前缀，去掉后解码
+        let bytes = Vec::from_hex(strip_0x_prefix(&hex_pubkey)).ok()?;
         let arr: [u8; 32] = bytes.as_slice().try_into().ok()?;
         return Some(arr);
     }
     None
 }
 
-fn normalize_hex(value: &str) -> String {
+/// 去掉 0x/0X 前缀，仅用于 hex::decode 前的临时处理，不用于存储。
+fn strip_0x_prefix(value: &str) -> &str {
     value
         .trim()
         .strip_prefix("0x")
         .or_else(|| value.trim().strip_prefix("0X"))
         .unwrap_or(value.trim())
-        .to_string()
 }
 
 fn resolve_admin_pubkey_key(store: &Store, candidate: &str) -> Option<String> {
@@ -1042,24 +1376,71 @@ fn cleanup_expired_challenges(store: &mut Store, now: DateTime<Utc>) {
     });
 }
 
-fn cleanup_admin_sessions(store: &mut Store, now: DateTime<Utc>, idle_timeout_minutes: i64) {
+/// 中文注释：清理过期/空闲超时的 admin session。
+///
+/// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 8：
+/// 返回本次被驱逐的 ShengAdmin session 所属 province 列表，供外层调用
+/// `state.sheng_signer_cache.unload_province` 释放内存 Pair。
+#[allow(dead_code)]
+fn cleanup_admin_sessions(
+    store: &mut Store,
+    now: DateTime<Utc>,
+    idle_timeout_minutes: i64,
+) -> Vec<String> {
+    let mut evicted_sheng_provinces: Vec<String> = Vec::new();
+    let mut remaining_sheng_pubkeys: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+
+    // 先收集"被驱逐"的 sheng admin pubkey。
+    let mut evicted_sheng_pubkeys: Vec<String> = Vec::new();
     store.admin_sessions.retain(|_, session| {
-        now <= session.expire_at
-            && now <= session.last_active_at + Duration::minutes(idle_timeout_minutes)
+        let keep = now <= session.expire_at
+            && now <= session.last_active_at + Duration::minutes(idle_timeout_minutes);
+        if !keep && session.role == AdminRole::ShengAdmin {
+            evicted_sheng_pubkeys.push(session.admin_pubkey.clone());
+        }
+        if keep && session.role == AdminRole::ShengAdmin {
+            remaining_sheng_pubkeys.insert(session.admin_pubkey.clone());
+        }
+        keep
     });
+
     let max_sessions = bounded_cache_limit("SFID_ADMIN_SESSION_MAX", 50_000);
     if store.admin_sessions.len() > max_sessions {
         let mut entries = store
             .admin_sessions
             .iter()
-            .map(|(token, session)| (token.clone(), session.last_active_at))
+            .map(|(token, session)| {
+                (token.clone(), session.last_active_at, session.role.clone(), session.admin_pubkey.clone())
+            })
             .collect::<Vec<_>>();
-        entries.sort_by_key(|(_, last_active)| *last_active);
+        entries.sort_by_key(|(_, last_active, _, _)| *last_active);
         let overflow = store.admin_sessions.len() - max_sessions;
-        for (token, _) in entries.into_iter().take(overflow) {
+        for (token, _, role, pubkey) in entries.into_iter().take(overflow) {
             store.admin_sessions.remove(&token);
+            if role == AdminRole::ShengAdmin {
+                evicted_sheng_pubkeys.push(pubkey);
+            }
+        }
+        // 重新计算 remaining_sheng_pubkeys
+        remaining_sheng_pubkeys.clear();
+        for (_, s) in store.admin_sessions.iter() {
+            if s.role == AdminRole::ShengAdmin {
+                remaining_sheng_pubkeys.insert(s.admin_pubkey.clone());
+            }
         }
     }
+
+    // 只有当该 sheng admin 所有 session 都被清掉时，才驱逐本省 cache。
+    for pubkey in evicted_sheng_pubkeys {
+        if remaining_sheng_pubkeys.contains(&pubkey) {
+            continue;
+        }
+        if let Some(province) = store.sheng_admin_province_by_pubkey.get(&pubkey) {
+            evicted_sheng_provinces.push(province.clone());
+        }
+    }
+    evicted_sheng_provinces
 }
 
 pub(crate) fn build_admin_display_name(

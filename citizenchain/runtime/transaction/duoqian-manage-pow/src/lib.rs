@@ -59,13 +59,16 @@ impl<AccountId> ProtectedSourceChecker<AccountId> for () {
     }
 }
 
-/// SFID 机构登记验签抽象：链上只信任 SFID 对 `sfid_id + name + register_nonce` 的主公钥签名。
+/// SFID 机构登记验签抽象：链上按省分流验签。
+/// - `signing_province = Some(p)`：runtime 查该省的省级签名公钥（`ShengSigningPubkey[p]`）验签；
+/// - `signing_province = None`：fallback 用 `SfidMainAccount` 当前主公钥验签（兼容旧调用）。
 pub trait SfidInstitutionVerifier<Name, Nonce, Signature> {
     fn verify_institution_registration(
         sfid_id: &[u8],
         name: &Name,
         nonce: &Nonce,
         signature: &Signature,
+        signing_province: Option<&[u8]>,
     ) -> bool;
 }
 
@@ -75,6 +78,7 @@ impl<Name, Nonce, Signature> SfidInstitutionVerifier<Name, Nonce, Signature> for
         _name: &Name,
         _nonce: &Nonce,
         _signature: &Signature,
+        _signing_province: Option<&[u8]>,
     ) -> bool {
         false
     }
@@ -710,6 +714,8 @@ pub mod pallet {
             name: SfidNameOf<T>,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
+            // 中文注释：可选的省名（UTF-8 字节），传入即按省签名密钥验签；不传走 SfidMainAccount 兼容路径。
+            signing_province: Option<Vec<u8>>,
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
@@ -725,6 +731,7 @@ pub mod pallet {
                     &name,
                     &register_nonce,
                     &signature,
+                    signing_province.as_deref(),
                 ),
                 Error::<T>::InvalidSfidInstitutionSignature
             );
@@ -1395,6 +1402,7 @@ mod tests {
             _name: &SfidNameOf<Test>,
             nonce: &RegisterNonceOf<Test>,
             signature: &RegisterSignatureOf<Test>,
+            _signing_province: Option<&[u8]>,
         ) -> bool {
             !nonce.is_empty() && signature.as_slice() == b"register-ok"
         }
@@ -1603,6 +1611,7 @@ mod tests {
             name.clone(),
             register_nonce,
             signature,
+            None,
         ));
         let duoqian_address = SfidRegisteredAddress::<Test>::get(&sfid, &name)
             .expect("sfid should be registered");
@@ -1684,6 +1693,7 @@ mod tests {
                     name,
                     register_nonce,
                     bad_signature,
+                    None,
                 ),
                 Error::<Test>::InvalidSfidInstitutionSignature
             );

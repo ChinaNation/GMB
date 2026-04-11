@@ -78,6 +78,8 @@ class PalletRegistry {
 
   // ---- OffchainTransactionPos ----
   static const int offchainTransactionPosPallet = 21;
+  static const int proposeInstitutionRateCall = 1;
+  static const int voteInstitutionRateCall = 2;
   static const int bindClearingInstitutionCall = 9;
   /// 链下支付授权（虚拟 call_index，非链上 extrinsic）。
   static const int offchainPayCall = 99;

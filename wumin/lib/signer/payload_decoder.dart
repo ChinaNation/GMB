@@ -143,6 +143,18 @@ class PayloadDecoder {
         return _decodeOffchainPay(bytes);
       }
 
+      // OffchainTransactionPos / propose_institution_rate
+      if (palletIndex == PalletRegistry.offchainTransactionPosPallet &&
+          callIndex == PalletRegistry.proposeInstitutionRateCall) {
+        return _decodeProposeInstitutionRate(bytes);
+      }
+
+      // OffchainTransactionPos / vote_institution_rate
+      if (palletIndex == PalletRegistry.offchainTransactionPosPallet &&
+          callIndex == PalletRegistry.voteInstitutionRateCall) {
+        return _decodeVoteProposal(bytes, 'vote_institution_rate', '费率提案');
+      }
+
       // ── DuoqianManagePow(17) ──
       if (palletIndex == PalletRegistry.duoqianManagePowPallet) {
         if (callIndex == PalletRegistry.proposeCreateCall) return _decodeProposeCreate(bytes);
@@ -155,9 +167,9 @@ class PayloadDecoder {
       // ── DuoqianTransferPow(19) 补充 ──
       if (palletIndex == PalletRegistry.duoqianTransferPowPallet) {
         if (callIndex == PalletRegistry.proposeSafetyFundCall) return _decodeProposeSafetyFund(bytes);
-        if (callIndex == PalletRegistry.voteSafetyFundCall) return _decodeVoteProposal(bytes, 'vote_safety_fund', '安全基金提案');
+        if (callIndex == PalletRegistry.voteSafetyFundCall) return _decodeVoteProposal(bytes, 'vote_safety_fund_transfer', '安全基金提案');
         if (callIndex == PalletRegistry.proposeSweepCall) return _decodeProposeSweep(bytes);
-        if (callIndex == PalletRegistry.voteSweepCall) return _decodeVoteProposal(bytes, 'vote_sweep', '手续费划转提案');
+        if (callIndex == PalletRegistry.voteSweepCall) return _decodeVoteProposal(bytes, 'vote_sweep_to_main', '手续费划转提案');
       }
 
       // ── ResolutionDestroGov(14) ──
@@ -410,7 +422,7 @@ class PayloadDecoder {
     final sizeDisplay = wasmLen > 1024 * 1024 ? '$sizeMb MB' : '$sizeKb KB';
 
     return DecodedPayload(
-      action: 'developer_upgrade',
+      action: 'developer_direct_upgrade',
       summary: '开发者直升 Runtime（WASM $sizeDisplay）',
       fields: {
         'wasm_size': sizeDisplay,
@@ -518,6 +530,40 @@ class PayloadDecoder {
       summary: '激活管理员 - $shenfenId',
       fields: {
         'shenfen_id': shenfenId,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // OffchainTransactionPos(21) / propose_institution_rate(1)
+  // 格式：[21][1][institution:48][new_rate_bp:u32_LE]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeInstitutionRate(Uint8List bytes) {
+    // 2 (pallet+call) + 48 (institution) + 4 (u32) = 54
+    if (bytes.length < 54) return null;
+
+    // institution: [u8; 48] — shenfen_id 补零到 48 字节
+    final institutionBytes = bytes.sublist(2, 50);
+    var endIndex = 48;
+    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) {
+      endIndex--;
+    }
+    if (endIndex == 0) return null;
+    final shenfenId = String.fromCharCodes(institutionBytes.sublist(0, endIndex));
+
+    // new_rate_bp: u32 LE
+    final rateBp = bytes[50] |
+        (bytes[51] << 8) |
+        (bytes[52] << 16) |
+        (bytes[53] << 24);
+    final ratePercent = (rateBp / 100.0).toStringAsFixed(2);
+
+    return DecodedPayload(
+      action: 'propose_institution_rate',
+      summary: '$shenfenId 提案设置链下交易费率为 $ratePercent%',
+      fields: {
+        'institution': shenfenId,
+        'new_rate_bp': '$rateBp bp ($ratePercent%)',
       },
     );
   }
@@ -874,11 +920,15 @@ class PayloadDecoder {
     }
   }
 
-  /// 分 → 元字符串。
+  /// 分 → 元字符串（带千分位）。
   static String _fenToYuan(BigInt fen) {
     final yuan = fen ~/ BigInt.from(100);
     final remainder = (fen % BigInt.from(100)).toInt().abs();
-    return '$yuan.${remainder.toString().padLeft(2, '0')}';
+    final intStr = yuan.toString().replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+    return '$intStr.${remainder.toString().padLeft(2, '0')}';
   }
 
   /// 截断地址显示。

@@ -1,0 +1,33 @@
+/// 交易 action 英文标识 → 中文显示名映射。
+///
+/// 冷钱包 UI 显示时查此表翻译，未命中则原样显示英文。
+const Map<String, String> actionLabels = {
+  'transfer': '转账',
+  'propose_transfer': '发起转账提案',
+  'vote_transfer': '转账提案投票',
+  'joint_vote': '联合投票',
+  'citizen_vote': '公民投票',
+  'propose_safety_fund_transfer': '安全基金转账提案',
+  'vote_safety_fund_transfer': '安全基金投票',
+  'propose_sweep_to_main': '手续费划转提案',
+  'vote_sweep_to_main': '手续费划转投票',
+  'propose_institution_rate': '设置费率提案',
+  'vote_institution_rate': '费率投票',
+  'developer_direct_upgrade': '开发期直升 Runtime',
+  'propose_runtime_upgrade': 'Runtime 升级提案',
+  'activate_admin': '管理员激活',
+  'offchain_pay': '链下支付',
+  'bind_clearing': '绑定清算机构',
+  'propose_create': '创建多签账户',
+  'propose_create_personal': '创建个人多签',
+  'vote_create': '多签创建投票',
+  'propose_close': '关闭多签提案',
+  'vote_close': '多签关闭投票',
+  'propose_destroy': '销毁决议提案',
+  'vote_destroy': '销毁决议投票',
+  'propose_admin_replacement': '管理员替换提案',
+  'vote_admin_replacement': '管理员替换投票',
+  'propose_replace_grandpa_key': 'GRANDPA 密钥提案',
+  'vote_key_change': 'GRANDPA 密钥投票',
+  'propose_resolution_issuance': '决议发行提案',
+};

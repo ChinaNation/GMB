@@ -1,0 +1,8 @@
+{
+  "proto": "WUMIN_QR_V1",
+  "kind": "user_contact",
+  "body": {
+    "address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "name": "张三"
+  }
+}

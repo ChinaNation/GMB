@@ -10,6 +10,7 @@ import 'institution_data.dart';
 import '../qr/pages/qr_scan_page.dart' show QrScanPage, QrScanMode;
 import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
+import '../qr/bodies/sign_request_body.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 
@@ -120,29 +121,23 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
         final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'close-dq-'),
-          account: wallet.address,
+          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
           specVersion: rv.specVersion,
-          display: {
-            'action': 'propose_close',
-            'action_label': '关闭多签提案',
-            'summary': '发起关闭多签账户提案',
-            'fields': [
-              {'key': 'duoqian_address', 'label': '多签地址', 'value': _duoqianSs58},
-              {'key': 'beneficiary', 'label': '受益人', 'value': beneficiary},
+          display: SignDisplay(
+            action: 'propose_close',
+            summary: '发起关闭多签账户提案',
+            fields: [
+              SignDisplayField(label: '多签地址', value: _duoqianSs58),
+              SignDisplayField(label: '受益人', value: beneficiary),
               if (_availableBalance != null)
-                {
-                  'key': 'balance',
-                  'label': '当前余额',
-                  'value': AmountFormat.format(_availableBalance!, symbol: ''),
-                  'format': 'currency',
-                },
+                SignDisplayField(label: '当前余额', value: AmountFormat.format(_availableBalance!, symbol: '')),
             ],
-          },
+          ),
         );
         final requestJson = qrSigner.encodeRequest(request);
-        final response = await Navigator.push<QrSignResponse>(
+        final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
             builder: (_) => QrSignSessionPage(
@@ -152,7 +147,7 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexDecode(response.signature));
+        return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
       final result = await _manageService.submitProposeClose(

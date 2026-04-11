@@ -32,6 +32,7 @@ pub fn build_public_key_output(
     }
 }
 
+#[allow(dead_code)]
 pub fn make_signature_envelope<T: Serialize>(
     key_id: &str,
     key_version: &str,

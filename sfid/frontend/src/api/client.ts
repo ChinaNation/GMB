@@ -14,6 +14,16 @@ export function isTokenAuth(auth: AdminAuth): auth is TokenAdminAuth {
   return 'access_token' in auth;
 }
 
+// ── 401 拦截：token 失效时统一回调 ──────────────────────
+let _onUnauthorized: (() => void) | null = null;
+let _unauthorizedFired = false;
+
+/** AuthProvider 启动时注册回调；卸载时传 null 清除 */
+export function setOnUnauthorized(cb: (() => void) | null) {
+  _onUnauthorized = cb;
+  _unauthorizedFired = false;
+}
+
 /** 所有 API 请求使用相对路径，由 Vite(开发) / Nginx(生产) 统一代理到后端 */
 // 中文注释：任务卡 3 开放 request + adminHeaders 给 api/ 下其他子文件复用,
 // 避免每个新 API 文件都重复一遍 fetch + 错误包装逻辑。
@@ -51,13 +61,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
 
+  // ── 401 统一拦截：token 失效 → 触发登出，防抖只触发一次 ──
+  if (resp.status === 401 && _onUnauthorized && !_unauthorizedFired) {
+    _unauthorizedFired = true;
+    _onUnauthorized();
+  }
+
   if (!resp.ok || !body || body.code !== 0) {
     throw new Error(body?.message ?? `request failed (${resp.status})`);
   }
   return body.data as T;
 }
 
-function adminHeaders(auth: AdminAuth): HeadersInit {
+export function adminHeaders(auth: AdminAuth): HeadersInit {
   return {
     authorization: `Bearer ${auth.access_token}`
   };
@@ -262,7 +278,7 @@ export type CitizenRow = {
 export type CitizenBindChallengeResult = {
   challenge_id: string;
   challenge_text: string;
-  /** WUMIN_SIGN_V1.0.0 签名请求 JSON，前端直接展示为二维码 */
+  /** WUMIN_QR_V1 签名请求 JSON，前端直接展示为二维码 */
   sign_request: string;
   expire_at: number;
 };
@@ -300,6 +316,10 @@ export type ShengAdminRow = {
   admin_name: string;
   built_in: boolean;
   created_at: string;
+  // 最近一次更新时间（含签名密钥 bootstrap），null 表示从未更新
+  updated_at?: string | null;
+  // 链上签名 pubkey：未首次登录 bootstrap 时为 null/undefined
+  signing_pubkey?: string | null;
 };
 
 export async function identifyAdmin(identityQr: string): Promise<AdminIdentifyResult> {
@@ -393,6 +413,18 @@ export async function demoSignChallenge(input: {
     },
     body: JSON.stringify(input)
   });
+}
+
+/** 主动登出:通知后端销毁 session。best-effort,不阻塞前端退出流程。 */
+export async function adminLogout(auth: AdminAuth): Promise<void> {
+  try {
+    await request<string>('/api/v1/admin/auth/logout', {
+      method: 'POST',
+      headers: adminHeaders(auth),
+    });
+  } catch {
+    // 静默:即使后端不可达也不影响前端退出
+  }
 }
 
 export async function checkAdminAuth(auth: AdminAuth): Promise<AdminAuthCheck> {
@@ -656,15 +688,20 @@ export async function listShengAdmins(auth: AdminAuth): Promise<ShengAdminRow[]>
 export async function replaceShengAdmin(
   auth: AdminAuth,
   province: string,
-  adminPubkey: string
+  adminPubkey: string,
+  adminName?: string,
 ): Promise<ShengAdminRow> {
+  const payload: Record<string, string> = { admin_pubkey: adminPubkey };
+  if (adminName && adminName.trim()) {
+    payload.admin_name = adminName.trim();
+  }
   return request<ShengAdminRow>(`/api/v1/admin/sheng-admins/${encodeURIComponent(province)}`, {
     method: 'PUT',
     headers: {
       'content-type': 'application/json',
       ...adminHeaders(auth)
     },
-    body: JSON.stringify({ admin_pubkey: adminPubkey })
+    body: JSON.stringify(payload)
   });
 }
 

@@ -5,7 +5,7 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Utc};
 use postgres::config::Host;
 use redis::Client as RedisClient;
 use sp_core::Pair;
@@ -18,7 +18,7 @@ use std::{
     },
     thread,
 };
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 mod app_core;
@@ -31,13 +31,16 @@ mod key_admins;
 mod login;
 mod models;
 mod operate;
+#[allow(dead_code)]
+mod qr;
 mod scope;
+mod store_shards;
 #[path = "shi-admins/mod.rs"]
 mod shi_admins;
 mod sfid;
 #[path = "sheng-admins/mod.rs"]
 mod sheng_admins;
-use business::scope::{in_scope, in_scope_cpms_site, in_scope_multisig, in_scope_pending};
+use business::scope::in_scope_cpms_site;
 use key_admins::chain_keyring::ChainKeyringState;
 
 pub(crate) use app_core::http_security::*;
@@ -55,11 +58,19 @@ struct AppState {
     signing_seed_hex: Arc<RwLock<SensitiveSeed>>,
     known_key_seeds: Arc<RwLock<HashMap<String, SensitiveSeed>>>,
     rate_limit_redis: Arc<RedisClient>,
+    #[allow(dead_code)]
     cpms_register_inflight: Arc<Mutex<HashMap<String, std::time::Instant>>>,
     key_id: String,
     key_version: String,
     key_alg: String,
     public_key_hex: Arc<RwLock<String>>,
+    /// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B：
+    /// 省级签名密钥内存缓存 + SFID MAIN 派生的 wrap key。
+    pub(crate) sheng_signer_cache: Arc<key_admins::sheng_signer_cache::ShengSignerCache>,
+    /// 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
+    /// 按省分片的新 Store。此轮只构造 + 迁移,handler 仍走 legacy `store`。
+    #[allow(dead_code)]
+    pub(crate) sharded_store: Arc<store_shards::ShardedStore>,
 }
 
 #[derive(Clone)]
@@ -113,7 +124,9 @@ impl std::ops::DerefMut for StoreWriteGuard {
 impl Drop for StoreWriteGuard {
     fn drop(&mut self) {
         if let Err(err) = self.backend.save_store(&self.store) {
-            warn!(error = %err, "failed to persist store to database");
+            // 持久化失败是严重事件:数据可能丢失。升级为 error! 并计入 metrics。
+            error!(error = %err, "CRITICAL: failed to persist store to database — data may be lost on restart");
+            self.store.metrics.store_persist_failures += 1;
         }
     }
 }
@@ -212,7 +225,7 @@ impl StoreBackend {
 
         let admin_rows = conn
             .query(
-                "SELECT admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at, city
+                "SELECT admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at, city, encrypted_signing_privkey, signing_pubkey
                  FROM admins",
                 &[],
             )
@@ -228,6 +241,8 @@ impl StoreBackend {
             let created_at: DateTime<Utc> = row.get(7);
             let updated_at: Option<DateTime<Utc>> = row.get(8);
             let city: String = row.get(9);
+            let encrypted_signing_privkey: Option<String> = row.get(10);
+            let signing_pubkey: Option<String> = row.get(11);
             store.admin_users_by_pubkey.insert(
                 admin_pubkey.clone(),
                 AdminUser {
@@ -241,6 +256,8 @@ impl StoreBackend {
                     created_at,
                     updated_at,
                     city,
+                    encrypted_signing_privkey,
+                    signing_pubkey,
                 },
             );
         }
@@ -351,8 +368,8 @@ impl StoreBackend {
         for admin in store.admin_users_by_pubkey.values() {
             let row = tx
                 .query_one(
-                    "INSERT INTO admins(admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at, city)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    "INSERT INTO admins(admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at, city, encrypted_signing_privkey, signing_pubkey)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                      RETURNING admin_id",
                     &[
                         &(admin.id as i64),
@@ -365,6 +382,8 @@ impl StoreBackend {
                         &admin.created_at,
                         &admin.updated_at.unwrap_or(admin.created_at),
                         &admin.city,
+                        &admin.encrypted_signing_privkey,
+                        &admin.signing_pubkey,
                     ],
                 )
                 .map_err(|e| format!("insert admins failed: {e}"))?;
@@ -515,7 +534,18 @@ impl StoreHandle {
                  ALTER TABLE IF EXISTS admins
                    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
                  ALTER TABLE IF EXISTS admins
-                   ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';",
+                   ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';
+                 ALTER TABLE IF EXISTS admins
+                   ADD COLUMN IF NOT EXISTS encrypted_signing_privkey TEXT;
+                 ALTER TABLE IF EXISTS admins
+                   ADD COLUMN IF NOT EXISTS signing_pubkey TEXT;
+                 CREATE TABLE IF NOT EXISTS store_shards (
+                    shard_key TEXT PRIMARY KEY,
+                    payload JSONB NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    version BIGINT NOT NULL DEFAULT 0
+                 );
+                 CREATE INDEX IF NOT EXISTS idx_store_shards_updated_at ON store_shards(updated_at);",
                 )
                 .map_err(|e| format!("init runtime tables failed: {e}"))?;
             let mut clients = Vec::with_capacity(pool_size);
@@ -544,6 +574,24 @@ impl StoreHandle {
         Ok(StoreReadGuard {
             store: self.backend.load_store()?,
         })
+    }
+
+    /// 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
+    /// 把内部 Postgres 连接池暴露给 store_shards::pg_backend / migration,
+    /// 避免新开连接池、也避免把 Phase 1 的 StoreBackend 改成 pub 字段。
+    fn postgres_pool(
+        &self,
+    ) -> Option<(
+        Arc<Vec<Mutex<postgres::Client>>>,
+        Arc<AtomicUsize>,
+    )> {
+        match &self.backend {
+            StoreBackend::Postgres {
+                clients,
+                next_client_idx,
+            } => Some((clients.clone(), next_client_idx.clone())),
+            StoreBackend::Memory(_) => None,
+        }
     }
 
     fn write(&self) -> Result<StoreWriteGuard, String> {
@@ -640,6 +688,36 @@ fn main() {
         );
     }
     let store = StoreHandle::from_database_url(database_url.as_str()).expect("init store handle");
+    // 中文注释：任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B：
+    // 从 SFID MAIN seed 构造省级签名密钥缓存。seed 字节在构造后立即被 zeroize。
+    let sheng_signer_cache = {
+        let seed_hex_str = main_seed.expose_secret().to_string();
+        let seed_bytes = hex::decode(seed_hex_str.trim_start_matches("0x"))
+            .unwrap_or_else(|e| panic!("SFID_SIGNING_SEED_HEX invalid hex: {e}"));
+        if seed_bytes.len() != 32 {
+            panic!("SFID_SIGNING_SEED_HEX must decode to 32 bytes");
+        }
+        let mut seed_arr = [0u8; 32];
+        seed_arr.copy_from_slice(&seed_bytes);
+        let cache = key_admins::sheng_signer_cache::ShengSignerCache::new_from_seed(&mut seed_arr)
+            .expect("init sheng signer cache failed");
+        Arc::new(cache)
+    };
+    // 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
+    // 基于现有 Postgres 连接池构造 ShardBackend 和 ShardedStore。
+    // 此时只构造空壳,迁移 / bootstrap / preload 等到 tokio runtime 起来后再做。
+    let sharded_store: Arc<store_shards::ShardedStore> = {
+        let (pool, next_idx) = store
+            .postgres_pool()
+            .expect("store backend must be Postgres for sharded store");
+        let backend: Arc<dyn store_shards::backend::ShardBackend> = Arc::new(
+            store_shards::pg_backend::PostgresShardBackend::new(pool, next_idx),
+        );
+        let double_write = std::env::var("SFID_SHARD_SINGLE_WRITE")
+            .map(|v| v != "true")
+            .unwrap_or(true);
+        Arc::new(store_shards::ShardedStore::new(backend, double_write))
+    };
     let state = AppState {
         store,
         signing_seed_hex: Arc::new(RwLock::new(main_seed)),
@@ -650,21 +728,16 @@ fn main() {
         key_version: "v1".to_string(),
         key_alg: "sr25519".to_string(),
         public_key_hex: Arc::new(RwLock::new(public_key_hex)),
+        sheng_signer_cache,
+        sharded_store,
     };
     seed_sheng_admins(&state);
     sync_builtin_sheng_admins(&state);
     key_admins::seed_chain_keyring(&state);
     key_admins::seed_key_admins(&state);
     info!("initialized runtime state with defaults");
-    // 中文注释:任务卡 2 幂等迁移:把 legacy multisig_sfid_records 拆成
-    // multisig_institutions + multisig_accounts 两层。老结构不删除,作为兜底。
-    app_core::runtime_ops::migrate_legacy_multisig_to_two_layer(&state);
     // 中文注释:任务卡 6 启动对账:按 sfid 工具市清单对齐全部公安局机构。
     app_core::runtime_ops::backfill_and_reconcile_public_security(&state);
-    // 中文注释:任务卡 `20260408-sfid-public-security-cpms-embed` 启动清理:
-    // reconcile 后会有被删除的市公安局遗留 CPMS 站点,这里直接硬删孤儿。
-    app_core::runtime_ops::cleanup_orphan_cpms_sites(&state);
-    seed_demo_record(&state);
 
     // ── SFID-CPMS QR v1: 初始化 RSA 匿名证书密钥对 ──
     // 注意：store.write() 需要 tokio runtime，因此仅在此处做 read + init，
@@ -705,11 +778,52 @@ fn main() {
             }
         }
 
+        // 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
+        // 1) 从 legacy store 快照执行一次幂等迁移(空库首次启动才真正写入)
+        // 2) 加载 GlobalShard
+        // 3) 可选预加载所有省分片
+        {
+            let legacy_snapshot = match state.store.read() {
+                Ok(guard) => (*guard).clone(),
+                Err(e) => {
+                    warn!(error = %e, "load legacy store snapshot for migration failed");
+                    Store::default()
+                }
+            };
+            if let Some((pool, next_idx)) = state.store.postgres_pool() {
+                if let Err(e) = store_shards::migration::migrate_legacy_store_if_needed(
+                    pool,
+                    next_idx,
+                    &legacy_snapshot,
+                )
+                .await
+                {
+                    warn!(error = %e, "legacy → sharded migration failed");
+                }
+            }
+            if let Err(e) = state.sharded_store.bootstrap_global().await {
+                warn!(error = %e, "sharded store bootstrap_global failed");
+            }
+            let preload = std::env::var("SFID_SHARD_PRELOAD_ALL")
+                .map(|v| v != "false")
+                .unwrap_or(true);
+            if preload {
+                match state.sharded_store.preload_all_shards().await {
+                    Ok(n) => info!(provinces_loaded = n, "sharded store preloaded"),
+                    Err(e) => warn!(error = %e, "sharded store preload failed"),
+                }
+            }
+        }
+
+        // Phase 2 Day 3：cpms_site_keys 迁移到 sharded_store 后，清理孤儿需要 async
+        app_core::runtime_ops::cleanup_orphan_cpms_sites(&state).await;
+
         tokio::spawn(bind_callback_worker(state.clone()));
         tokio::spawn(indexer::indexer_worker(state.store.backend.clone()));
 
         let auth_routes = Router::new()
             .route("/api/v1/admin/auth/check", get(login::admin_auth_check))
+            .route("/api/v1/admin/auth/logout", post(login::admin_logout))
             .route(
                 "/api/v1/admin/auth/identify",
                 post(login::admin_auth_identify),
@@ -799,26 +913,18 @@ fn main() {
                 "/api/v1/admin/chain/balance",
                 get(chain::balance::admin_query_chain_balance),
             )
-            // ── 多签管理 ──
-            .route(
-                "/api/v1/admin/multisig-sfids",
-                get(sheng_admins::list_multisig_sfids),
-            )
-            .route(
-                "/api/v1/admin/multisig-sfids/generate",
-                post(sheng_admins::generate_multisig_sfid),
-            )
-            .route(
-                "/api/v1/admin/multisig-sfids/:site_sfid",
-                delete(sheng_admins::delete_multisig_sfid),
-            )
             // 中文注释:任务卡 2 新增机构/账户两层模型的 API
+            // - GET  /api/v1/institution/check-name                      — 机构名称全国查重
             // - POST /api/v1/institution/create                          — 生成机构(不上链)
             // - POST /api/v1/institution/:sfid_id/account/create         — 创建账户并上链
             // - GET  /api/v1/institution/list                            — 按 scope 过滤的机构列表
             // - GET  /api/v1/institution/:sfid_id                        — 机构详情
             // - GET  /api/v1/institution/:sfid_id/accounts               — 账户列表
             // - DELETE /api/v1/institution/:sfid_id/account/:account_name — 删除账户(软删)
+            .route(
+                "/api/v1/institution/check-name",
+                get(institutions::handler::check_institution_name),
+            )
             .route(
                 "/api/v1/institution/create",
                 post(institutions::handler::create_institution),
@@ -842,6 +948,20 @@ fn main() {
             .route(
                 "/api/v1/institution/:sfid_id/account/:account_name",
                 delete(institutions::handler::delete_account),
+            )
+            // 机构资料库文档 CRUD
+            .route(
+                "/api/v1/institution/:sfid_id/documents",
+                get(institutions::handler::list_documents)
+                    .post(institutions::handler::upload_document),
+            )
+            .route(
+                "/api/v1/institution/:sfid_id/documents/:doc_id/download",
+                get(institutions::handler::download_document),
+            )
+            .route(
+                "/api/v1/institution/:sfid_id/documents/:doc_id",
+                delete(institutions::handler::delete_document),
             )
             // 任务卡 6:公安局跟 sfid 工具市清单对账
             .route(
@@ -879,10 +999,6 @@ fn main() {
                 get(sfid::admin::admin_sfid_cities),
             )
             .route(
-                "/api/v1/admin/sfid/generate",
-                post(sfid::admin::admin_generate_sfid),
-            )
-            .route(
                 "/api/v1/admin/attestor/keyring",
                 get(key_admins::admin_get_chain_keyring),
             )
@@ -904,11 +1020,6 @@ fn main() {
             ));
 
         let chain_routes = Router::new()
-            .route(
-                "/api/v1/bind/request",
-                post(chain::binding::create_bind_request),
-            )
-            .route("/api/v1/bind/result", get(chain::binding::get_bind_result))
             .route(
                 "/api/v1/vote/verify",
                 post(chain::vote::verify_vote_eligibility),
@@ -948,10 +1059,6 @@ fn main() {
             .route(
                 "/api/v1/app/vote/credential",
                 post(chain::app_api::app_vote_credential),
-            )
-            .route(
-                "/api/v1/app/bind/request",
-                post(chain::app_api::app_bind_request),
             )
             .route(
                 "/api/v1/app/wallet/:address/transactions",
@@ -1103,6 +1210,7 @@ pub(crate) fn prepare_chain_request(
     Ok(chain_auth)
 }
 
+#[allow(dead_code)]
 fn ensure_binding_lock_db(
     state: &AppState,
     account_pubkey: &str,
@@ -1174,6 +1282,7 @@ fn ensure_binding_lock_db(
     }
 }
 
+#[allow(dead_code)]
 fn release_binding_lock_db(state: &AppState, account_pubkey: &str) {
     let StoreBackend::Postgres {
         clients,
@@ -1273,6 +1382,7 @@ fn persist_reward_state_db(
     })
 }
 
+#[allow(dead_code)]
 fn remove_reward_state_db(state: &AppState, account_pubkey: &str) {
     let StoreBackend::Postgres {
         clients,
@@ -1289,15 +1399,6 @@ fn remove_reward_state_db(state: &AppState, account_pubkey: &str) {
         .map_err(|e| e.to_string())?;
         Ok(())
     });
-}
-
-fn parse_birth_date_from_archive_no(archive_no: &str) -> Option<NaiveDate> {
-    let trimmed = archive_no.trim();
-    if trimmed.len() < 8 {
-        return None;
-    }
-    let birth_text = &trimmed[trimmed.len() - 8..];
-    NaiveDate::parse_from_str(birth_text, "%Y%m%d").ok()
 }
 
 fn api_error(status: StatusCode, code: u32, message: &str) -> axum::response::Response {
