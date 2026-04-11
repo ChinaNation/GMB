@@ -456,7 +456,7 @@ class _LocalTxRecordDetailPage extends StatelessWidget {
                 value: _formatMillisFull(record.confirmedAtMillis!)),
           if (record.feeYuan != null)
             _buildRow(context,
-                label: '手续费', value: '${record.feeYuan} GMB'),
+                label: '手续费', value: AmountFormat.format(record.feeYuan!, symbol: 'GMB')),
           if (record.txHash != null)
             _buildRow(context,
                 label: '交易哈希', value: record.txHash!, copyable: true),

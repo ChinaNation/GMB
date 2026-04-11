@@ -16,6 +16,7 @@ import 'package:wuminapp_mobile/trade/pending_tx_reconciler.dart';
 import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
+import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/user/user.dart' show ContactBookPage;
 import 'package:wuminapp_mobile/user/user_service.dart' show UserContact;
@@ -264,9 +265,9 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('转账金额：$amount $_selectedSymbol'),
+            Text('转账金额：${AmountFormat.format(amount, symbol: _selectedSymbol)}'),
             const SizedBox(height: 4),
-            Text('预估手续费：$estimatedFee $_selectedSymbol'),
+            Text('预估手续费：${AmountFormat.format(estimatedFee, symbol: _selectedSymbol)}'),
             const Divider(height: 16),
             Text(
               '合计：${AmountFormat.format(amount + estimatedFee, symbol: _selectedSymbol)}',
@@ -316,23 +317,24 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
           final rv = await ChainRpc().fetchRuntimeVersion();
           final request = qrSigner.buildRequest(
             requestId: requestId,
-            account: wallet.address,
+            address: wallet.address,
             pubkey: '0x${wallet.pubkeyHex}',
             payloadHex: '0x${_toHex(payload)}',
             specVersion: rv.specVersion,
-            display: {
-              'action': 'transfer',
-              'action_label': '转账',
-              'summary': '转账 $amountFormatted $_selectedSymbol 给 $toAddr',
-              'fields': [
-                {'key': 'to', 'label': '收款账户', 'value': toAddr},
-                {'key': 'amount_yuan', 'label': '金额', 'value': '$amountFormatted $_selectedSymbol', 'format': 'currency'},
+            display: SignDisplay(
+              action: 'transfer',
+              summary: '转账 $amountFormatted $_selectedSymbol 给 $toAddr',
+              fields: [
+                SignDisplayField(label: '收款账户', value: toAddr),
+                SignDisplayField(
+                    label: '金额',
+                    value: '$amountFormatted $_selectedSymbol'),
               ],
-            },
+            ),
           );
           final requestJson = qrSigner.encodeRequest(request);
 
-          final response = await Navigator.push<QrSignResponse>(
+          final response = await Navigator.push<SignResponseEnvelope>(
             context,
             MaterialPageRoute(
               builder: (_) => QrSignSessionPage(
@@ -347,7 +349,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             throw Exception('签名已取消');
           }
 
-          return Uint8List.fromList(_hexToBytes(response.signature));
+          return Uint8List.fromList(_hexToBytes(response.body.signature));
         };
       }
 

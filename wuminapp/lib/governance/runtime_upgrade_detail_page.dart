@@ -13,6 +13,7 @@ import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
 import '../rpc/onchain.dart';
 import '../rpc/smoldot_client.dart';
+import '../qr/bodies/sign_request_body.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'proposal_vote_widgets.dart';
@@ -273,21 +274,21 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     required WalletProfile wallet,
     required Uint8List payload,
     required String requestPrefix,
-    required Map<String, dynamic> display,
+    required SignDisplay display,
   }) async {
     // 管理员投票统一通过 QR 码签名（wumin 冷钱包）
     final qrSigner = QrSigner();
     final rv = await ChainRpc().fetchRuntimeVersion();
     final request = qrSigner.buildRequest(
       requestId: QrSigner.generateRequestId(prefix: '$requestPrefix-'),
-      account: wallet.address,
+      address: wallet.address,
       pubkey: '0x${wallet.pubkeyHex}',
       payloadHex: '0x${_toHex(payload)}',
       specVersion: rv.specVersion,
       display: display,
     );
     final requestJson = qrSigner.encodeRequest(request);
-    final response = await Navigator.push<QrSignResponse>(
+    final response = await Navigator.push<SignResponseEnvelope>(
       context,
       MaterialPageRoute(
         builder: (_) => QrSignSessionPage(
@@ -300,7 +301,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     if (response == null) {
       throw Exception('签名已取消');
     }
-    return _hexDecode(response.signature);
+    return _hexDecode(response.body.signature);
   }
 
   Future<void> _submitJointVote(bool approve) async {
@@ -324,36 +325,19 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             wallet: voteWallet,
             payload: payload,
             requestPrefix: approve ? 'runtime-joint-yes' : 'runtime-joint-no',
-            display: {
-              'action': 'joint_vote',
-              'action_label': '联合投票',
-              'summary': '联合投票 提案 #${widget.proposalId}：$voteText',
-              'fields': [
-                {
-                  'key': 'proposal_id',
-                  'label': '提案编号',
-                  'value': widget.proposalId.toString()
-                },
-                {'key': 'approve', 'label': '投票', 'value': approve.toString()},
-                if (_proposalInfo != null) ...{
-                  {
-                    'key': 'proposer',
-                    'label': '提案人',
-                    'value': _proposalInfo!.proposer
-                  },
-                  {
-                    'key': 'reason',
-                    'label': '提案理由',
-                    'value': _proposalInfo!.reason
-                  },
-                  {
-                    'key': 'code_hash',
-                    'label': '代码哈希',
-                    'value': _proposalInfo!.codeHashHex
-                  },
-                },
+            display: SignDisplay(
+              action: 'joint_vote',
+              summary: '联合投票 提案 #${widget.proposalId}：$voteText',
+              fields: [
+                SignDisplayField(label: '提案编号', value: widget.proposalId.toString()),
+                SignDisplayField(label: '投票', value: approve.toString()),
+                if (_proposalInfo != null) ...[
+                  SignDisplayField(label: '提案人', value: _proposalInfo!.proposer),
+                  SignDisplayField(label: '提案理由', value: _proposalInfo!.reason),
+                  SignDisplayField(label: '代码哈希', value: _proposalInfo!.codeHashHex),
+                ],
               ],
-            },
+            ),
           );
         },
       );

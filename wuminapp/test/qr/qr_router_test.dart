@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 import 'package:wuminapp_mobile/qr/qr_router.dart';
 
 void main() {
@@ -10,71 +11,94 @@ void main() {
     router = QrRouter();
   });
 
-  group('QrRouter', () {
-    test('should route login challenge', () {
+  group('QrRouter WUMIN_QR_V1', () {
+    test('should route login_challenge', () {
       final raw = jsonEncode({
-        'proto': 'WUMIN_LOGIN_V1.0.0',
-        'system': 'sfid',
-        'challenge': 'abc123',
+        'proto': QrProtocols.v1,
+        'kind': 'login_challenge',
+        'id': 'ch_01',
         'issued_at': 1000,
         'expires_at': 1090,
-        'sys_pubkey': '0xaabb',
-        'sys_sig': '0xccdd',
+        'body': {
+          'system': 'sfid',
+          'sys_pubkey': '0xaabb',
+          'sys_sig': '0xccdd',
+        },
       });
       final result = router.route(raw);
-      expect(result.type, QrRouteType.login);
-      expect(result.jsonData, isNotNull);
+      expect(result.type, QrRouteType.loginChallenge);
+      expect(result.envelope, isNotNull);
     });
 
-    test('should route user QR with purpose=transfer', () {
+    test('should route user_transfer', () {
       final raw = jsonEncode({
-        'proto': 'WUMIN_USER_V1.0.0',
-        'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-        'name': '张三',
-        'purpose': 'transfer',
-        'amount': '100.50',
-        'symbol': 'GMB',
-        'memo': '房租',
+        'proto': QrProtocols.v1,
+        'kind': 'user_transfer',
+        'id': 'tx_01',
+        'issued_at': 1000,
+        'expires_at': 1600,
+        'body': {
+          'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+          'name': '张三',
+          'amount': '100.50',
+          'symbol': 'GMB',
+          'memo': '房租',
+          'bank': '',
+        },
       });
       final result = router.route(raw);
-      expect(result.type, QrRouteType.transfer);
+      expect(result.type, QrRouteType.userTransfer);
     });
 
-    test('should route user QR with purpose=contact', () {
+    test('should route user_contact (fixed, no id/issued_at/expires_at)', () {
       final raw = jsonEncode({
-        'proto': 'WUMIN_USER_V1.0.0',
-        'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-        'name': '张三',
-        'purpose': 'contact',
+        'proto': QrProtocols.v1,
+        'kind': 'user_contact',
+        'body': {
+          'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+          'name': '张三',
+        },
       });
       final result = router.route(raw);
-      expect(result.type, QrRouteType.contact);
+      expect(result.type, QrRouteType.userContact);
     });
 
-    test('should route user QR without purpose as contact', () {
+    test('should route user_duoqian (fixed)', () {
       final raw = jsonEncode({
-        'proto': 'WUMIN_USER_V1.0.0',
-        'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-        'name': '张三',
+        'proto': QrProtocols.v1,
+        'kind': 'user_duoqian',
+        'body': {
+          'address': '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty',
+          'name': '多签账户',
+          'proposal_id': 0,
+        },
       });
       final result = router.route(raw);
-      expect(result.type, QrRouteType.contact);
+      expect(result.type, QrRouteType.userDuoqian);
     });
 
-    test('should route qr sign request', () {
+    test('should route sign_request', () {
       final raw = jsonEncode({
-        'proto': 'WUMIN_SIGN_V1.0.0',
-        'type': 'sign_request',
-        'request_id': 'req-1',
-        'account': '5Grw...',
-        'pubkey': '0xaabb',
-        'sig_alg': 'sr25519',
-        'payload_hex': '0xccdd',
+        'proto': QrProtocols.v1,
+        'kind': 'sign_request',
+        'id': 'req_01',
         'issued_at': 1000,
         'expires_at': 1090,
+        'body': {
+          'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+          'pubkey': '0xaabb',
+          'sig_alg': 'sr25519',
+          'payload_hex': '0xccdd',
+          'spec_version': 100,
+          'display': {
+            'action': 'transfer',
+            'summary': '转账',
+            'fields': [],
+          },
+        },
       });
       final result = router.route(raw);
-      expect(result.type, QrRouteType.sign);
+      expect(result.type, QrRouteType.signRequest);
     });
 
     test('should route gmb:// address', () {

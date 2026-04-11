@@ -375,6 +375,7 @@ pub(crate) fn parse_csv_env_set(key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+#[allow(dead_code)]
 pub(crate) fn callback_allowed_hosts() -> Vec<String> {
     parse_csv_env_set("SFID_CALLBACK_ALLOWED_HOSTS")
 }
@@ -409,6 +410,7 @@ fn actor_ip_from_request(request: &Request) -> Option<String> {
     actor_ip_from_headers(request.headers())
 }
 
+#[allow(dead_code)]
 pub(crate) fn host_matches_rule(host: &str, rule: &str) -> bool {
     if let Some(suffix) = rule.strip_prefix("*.") {
         return host.ends_with(&format!(".{suffix}"));
@@ -440,6 +442,7 @@ pub(crate) fn is_blocked_callback_ip(ip: IpAddr) -> bool {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn validate_bind_callback_url(url: &str) -> Result<(), String> {
     let parsed = Url::parse(url).map_err(|_| "callback_url is not a valid URL".to_string())?;
     let insecure_http_allowed = env_flag_enabled("SFID_ALLOW_INSECURE_CALLBACK_HTTP");

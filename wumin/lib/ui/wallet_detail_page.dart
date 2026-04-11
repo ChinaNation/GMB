@@ -7,6 +7,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../isar/wallet_isar.dart';
 import '../qr/qr_protocols.dart';
+import '../qr/envelope.dart';
+import '../qr/bodies/user_contact_body.dart';
 import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 import 'app_theme.dart';
@@ -179,13 +181,16 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   }
 
   void _showUserQrCode(WalletProfile wallet) {
-    final qrData = jsonEncode({
-      'proto': QrProtocols.user,
-      'purpose': 'transfer',
-      'address': wallet.address,
-      'pubkey': '0x${wallet.pubkeyHex}',
-      'name': wallet.walletName,
-    });
+    final qrData = QrEnvelope<UserContactBody>(
+      kind: QrKind.userContact,
+      id: null,
+      issuedAt: null,
+      expiresAt: null,
+      body: UserContactBody(
+        address: wallet.address,
+        name: wallet.walletName,
+      ),
+    ).toRawJson();
     showDialog(
       context: context,
       builder: (context) => Dialog(

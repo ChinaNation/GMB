@@ -1,31 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 
 void main() {
   group('QrSignSessionPage', () {
     late QrSigner signer;
-    late QrSignRequest request;
+    late SignRequestEnvelope request;
     late String requestJson;
 
-    final display = {
-      'action': 'transfer',
-      'action_label': '转账',
-      'summary': '转账 1.00 GMB',
-      'fields': [
-        {'key': 'amount_yuan', 'label': '金额', 'value': '1.00 GMB', 'format': 'currency'},
+    final display = SignDisplay(
+      action: 'transfer',
+      summary: '转账 1.00 GMB',
+      fields: [
+        const SignDisplayField(label: '金额', value: '1.00 GMB'),
       ],
-    };
+    );
 
     setUp(() {
       signer = QrSigner();
       request = signer.buildRequest(
-        requestId: 'tx-test-1234',
-        account: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+        requestId: 'tx-test-12345678901234',
+        address: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
+        specVersion: 100,
         display: display,
       );
       requestJson = signer.encodeRequest(request);
@@ -37,7 +38,7 @@ void main() {
           home: QrSignSessionPage(
             request: request,
             requestJson: requestJson,
-            expectedPubkey: request.pubkey,
+            expectedPubkey: request.body.pubkey,
           ),
         ),
       );
@@ -50,28 +51,20 @@ void main() {
     });
 
     testWidgets('cancel should pop with null', (tester) async {
-      QrSignResponse? result = QrSignResponse(
-        proto: 'sentinel',
-        requestId: 'sentinel',
-        pubkey: 'sentinel',
-        sigAlg: 'sentinel',
-        signature: 'sentinel',
-        payloadHash: 'sentinel',
-        signedAt: 0,
-      );
+      SignResponseEnvelope? result;
 
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
             builder: (context) => FilledButton(
               onPressed: () async {
-                result = await Navigator.push<QrSignResponse>(
+                result = await Navigator.push<SignResponseEnvelope>(
                   context,
                   MaterialPageRoute(
                     builder: (_) => QrSignSessionPage(
                       request: request,
                       requestJson: requestJson,
-                      expectedPubkey: request.pubkey,
+                      expectedPubkey: request.body.pubkey,
                     ),
                   ),
                 );
@@ -94,11 +87,12 @@ void main() {
     testWidgets('should show expired state when request expires',
         (tester) async {
       final expiredRequest = signer.buildRequest(
-        requestId: 'tx-expired-1',
-        account: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+        requestId: 'tx-expired-12345678901',
+        address: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
+        specVersion: 100,
         display: display,
         nowEpochSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 200,
       );
@@ -109,7 +103,7 @@ void main() {
           home: QrSignSessionPage(
             request: expiredRequest,
             requestJson: expiredJson,
-            expectedPubkey: expiredRequest.pubkey,
+            expectedPubkey: expiredRequest.body.pubkey,
           ),
         ),
       );

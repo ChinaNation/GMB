@@ -1,8 +1,10 @@
-// 中文注释:从 App.tsx 迁移(任务卡 20260408-sfid-frontend-app-tsx-split 步 4)
-// 统一的签名二维码 payload 解析工具,供 citizens (绑定/解绑) 和 keyring (密钥轮换) 共享。
-// 原 App.tsx / KeyringView.tsx 各有一份本地副本,本步骤抽到此处并统一 import。
+// 统一的签名二维码 payload 解析工具。
+// 唯一事实源:memory/05-architecture/qr-protocol-spec.md
+// 使用 WUMIN_QR_V1 envelope,不再有任何字段别名兼容。
 
-// 中文注释:登录签名 payload(任务卡 20260408-sfid-frontend-app-tsx-split 步 5 迁入)
+import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
+import type { LoginReceiptBody } from '../qr/wuminQr';
+
 export type SignedLoginPayload = {
   challenge_id: string;
   session_id?: string;
@@ -15,31 +17,29 @@ export function parseSignedLoginPayload(
   raw: string,
   fallbackChallengeId: string,
 ): SignedLoginPayload {
-  const payload = JSON.parse(raw) as Record<string, unknown>;
-  const challenge_id =
-    (typeof payload.request_id === 'string' && payload.request_id.trim()) ||
-    (typeof payload.challenge_id === 'string' && payload.challenge_id.trim()) ||
-    (typeof payload.challenge === 'string' && payload.challenge.trim()) ||
-    fallbackChallengeId;
-  const admin_pubkey =
-    (typeof payload.account === 'string' && payload.account.trim()) ||
-    (typeof payload.admin_pubkey === 'string' && payload.admin_pubkey.trim()) ||
-    (typeof payload.public_key === 'string' && payload.public_key.trim()) ||
-    (typeof payload.pubkey === 'string' && payload.pubkey.trim()) ||
-    '';
-  const signer_pubkey =
-    (typeof payload.pubkey === 'string' && payload.pubkey.trim()) ||
-    (typeof payload.public_key === 'string' && payload.public_key.trim()) ||
-    undefined;
-  const signature =
-    (typeof payload.signature === 'string' && payload.signature.trim()) ||
-    (typeof payload.sig === 'string' && payload.sig.trim()) ||
-    '';
-  const session_id = typeof payload.session_id === 'string' ? payload.session_id.trim() : undefined;
-  if (!challenge_id || !admin_pubkey || !signature) {
-    throw new Error('签名二维码缺少必要字段(request_id/admin_pubkey/signature)');
+  let env;
+  try {
+    env = parseQrEnvelope(raw);
+  } catch (e) {
+    if (e instanceof QrParseError) {
+      throw new Error(`签名二维码解析失败: ${e.message}`);
+    }
+    throw e;
   }
-  return { challenge_id, session_id, admin_pubkey, signer_pubkey, signature };
+  if (env.kind !== 'login_receipt') {
+    throw new Error(`期望 login_receipt,实际: ${env.kind}`);
+  }
+  const body = env.body as LoginReceiptBody;
+  const challenge_id = env.id || fallbackChallengeId;
+  if (!challenge_id || !body.pubkey || !body.signature) {
+    throw new Error('签名二维码缺少必要字段(id/pubkey/signature)');
+  }
+  return {
+    challenge_id,
+    admin_pubkey: body.pubkey,
+    signer_pubkey: body.pubkey,
+    signature: body.signature,
+  };
 }
 
 export type KeyringSignedPayload = {
@@ -56,19 +56,24 @@ export function parseKeyringSignedPayload(
     throw new Error('签名二维码内容为空');
   }
   if (trimmed.startsWith('{')) {
-    const payload = JSON.parse(trimmed) as Record<string, unknown>;
-    const challenge_id =
-      (typeof payload.request_id === 'string' && payload.request_id.trim()) ||
-      (typeof payload.challenge_id === 'string' && payload.challenge_id.trim()) ||
-      fallbackChallengeId;
-    const signature =
-      (typeof payload.signature === 'string' && payload.signature.trim()) ||
-      (typeof payload.sig === 'string' && payload.sig.trim()) ||
-      '';
-    if (!challenge_id || !signature) {
-      throw new Error('签名二维码缺少必要字段(challenge_id/signature)');
+    let env;
+    try {
+      env = parseQrEnvelope(trimmed);
+    } catch (e) {
+      if (e instanceof QrParseError) {
+        throw new Error(`签名二维码解析失败: ${e.message}`);
+      }
+      throw e;
     }
-    return { challenge_id, signature };
+    if (env.kind !== 'login_receipt') {
+      throw new Error(`期望 login_receipt,实际: ${env.kind}`);
+    }
+    const body = env.body as LoginReceiptBody;
+    const challenge_id = env.id || fallbackChallengeId;
+    if (!challenge_id || !body.signature) {
+      throw new Error('签名二维码缺少必要字段(id/signature)');
+    }
+    return { challenge_id, signature: body.signature };
   }
   return {
     challenge_id: fallbackChallengeId,

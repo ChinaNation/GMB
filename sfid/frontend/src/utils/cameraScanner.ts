@@ -1,9 +1,6 @@
-// 中文注释:摄像头 QR 扫码通用工具。
-//
-// 基于浏览器原生 `BarcodeDetector` API,不依赖 qr-scanner 库。
-// App.tsx 里已有一份同名本地函数,后续 App.tsx 拆分任务卡
-// (`20260408-sfid-frontend-app-tsx-split`)会把 App.tsx 里那份替换为
-// 从本文件 import。
+// 摄像头 QR 扫码通用工具。
+// 基于浏览器原生 BarcodeDetector API(Chrome 83+)。
+// SFID / CPMS 均运行在 Chrome 浏览器环境,直接使用此 API。
 
 type BarcodeDetectorLike = {
   detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;

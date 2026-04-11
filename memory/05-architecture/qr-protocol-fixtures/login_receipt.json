@@ -1,0 +1,15 @@
+{
+  "proto": "WUMIN_QR_V1",
+  "kind": "login_receipt",
+  "id": "ch_01HXYZ4VQK8NRPM2G7FJD9TBC3",
+  "issued_at": 1712650000,
+  "expires_at": 1712650090,
+  "body": {
+    "system": "sfid",
+    "pubkey": "0xddccbbaaffeeddccbbaaffeeddccbbaaffeeddccbbaaffeeddccbbaaffeedd00",
+    "sig_alg": "sr25519",
+    "signature": "0x9988776655443322119988776655443322119988776655443322119988776655443322119988776655443322119988776655443322119988776655443322",
+    "payload_hash": "0xdeadbeefcafebabe00112233445566778899aabbccddeeff0011223344556677",
+    "signed_at": 1712650010
+  }
+}

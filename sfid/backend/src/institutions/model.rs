@@ -46,6 +46,10 @@ pub struct MultisigInstitution {
     pub city_code: String,
     /// 机构类型代码(ZF/LF/SF/...)。
     pub institution_code: String,
+    /// 私法人子类型(仅 A3=SFR 时有值)。
+    /// 取值:SOLE_PROPRIETORSHIP / PARTNERSHIP / LIMITED_LIABILITY / JOINT_STOCK
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sub_type: Option<String>,
     /// 创建人 pubkey。
     pub created_by: String,
     pub created_at: DateTime<Utc>,
@@ -94,6 +98,35 @@ pub fn account_key_from_string(s: &str) -> Option<AccountKey> {
     Some((sfid_id, account_name))
 }
 
+/// 机构资料库文档(注册文件/许可证/章程等)。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstitutionDocument {
+    /// 自增文档 ID。
+    pub id: u64,
+    /// 所属机构 sfid_id。
+    pub sfid_id: String,
+    /// 原始文件名。
+    pub file_name: String,
+    /// 文档类型(公司章程/营业许可证/股东会决议/法人授权书/其他)。
+    pub doc_type: String,
+    /// 文件大小(字节)。
+    pub file_size: u64,
+    /// 服务端存储路径(相对于 data/documents/)。
+    pub file_path: String,
+    /// 上传人 pubkey。
+    pub uploaded_by: String,
+    pub uploaded_at: DateTime<Utc>,
+}
+
+/// 文档类型枚举值。
+pub const VALID_DOC_TYPES: &[&str] = &[
+    "公司章程",
+    "营业许可证",
+    "股东会决议",
+    "法人授权书",
+    "其他",
+];
+
 // ─── 请求/响应 DTO ──────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
@@ -104,6 +137,8 @@ pub struct CreateInstitutionInput {
     pub city: String,
     pub institution: String,
     pub institution_name: String,
+    /// 私法人子类型(仅 A3=SFR 时必填)
+    pub sub_type: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -138,6 +173,8 @@ pub struct InstitutionListRow {
     pub province: String,
     pub city: String,
     pub institution_code: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sub_type: Option<String>,
     pub account_count: usize,
     pub created_at: DateTime<Utc>,
 }

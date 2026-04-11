@@ -62,7 +62,15 @@ export const CreateAccountModal: React.FC<Props> = ({
       message.success(`账户已创建并上链:${name}`);
       onCreated();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '创建账户失败');
+      // 任务卡 20260409 Phase 1.C：识别后端针对省签名密钥缺失的 503 错误，给出友好提示
+      const raw = err instanceof Error ? err.message : '创建账户失败';
+      if (raw.includes('本省') && raw.includes('未在线')) {
+        message.error('本省登录管理员未在线,请联系省管理员登录后重试');
+      } else if (raw.includes('密钥管理员不能直接推送')) {
+        message.error('请以省或市管理员身份操作');
+      } else {
+        message.error(raw);
+      }
     } finally {
       setSubmitting(false);
     }

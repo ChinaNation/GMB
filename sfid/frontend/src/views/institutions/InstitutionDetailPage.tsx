@@ -1,9 +1,8 @@
-// 中文注释:机构详情页。从市详情页的机构列表点一行进入。
-// 展示:机构头信息(含公安局 CPMS 站点管理)+ 账户列表 + "+ 新建账户"按钮。
-//
-// 任务卡 `20260408-sfid-public-security-cpms-embed`:
-// 公安局机构的 CPMS state/handler 由本组件持有,`CpmsSitePanel` 只做展示。
-// "生成 CPMS 安装二维码"按钮挂在机构信息 Card 的 `extra` 右侧,仅当无站点时显示。
+// 中文注释:机构详情页(调度器)。
+// 按 category 分派给不同布局模块:
+//   - PRIVATE_INSTITUTION → PrivateInstitutionLayout(三板块:机构信息+账户列表+资料库)
+//   - PUBLIC_SECURITY / GOV_INSTITUTION → 默认布局(机构信息+CPMS+账户列表)
+// 修改某类机构的布局只需改对应模块,不影响其他类型。
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Col, Descriptions, message, Row, Typography } from 'antd';
@@ -22,6 +21,7 @@ import { AccountList } from './AccountList';
 import { CpmsRegisterModal } from './CpmsRegisterModal';
 import { CpmsSitePanel } from './CpmsSitePanel';
 import { CreateAccountModal } from './CreateAccountModal';
+import { PrivateInstitutionLayout } from './PrivateInstitutionLayout';
 
 interface Props {
   auth: AdminAuth;
@@ -55,15 +55,16 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
   const inst = detail?.institution;
   const accounts = detail?.accounts || [];
 
-  // 中文注释:公安局机构加载后再拉 CPMS 站点。404/空站点静默降级,
-  // 不弹 toast,用户看到空右侧 + 标题右边的"生成"按钮即可。
   const loadCpms = useCallback(
     (instSfidId: string) => {
       getCpmsSiteByInstitution(auth, instSfidId)
         .then((row) => setCpmsSite(row))
         .catch((err) => {
-          // eslint-disable-next-line no-console
-          console.warn('getCpmsSiteByInstitution failed:', err);
+          // CPMS 站点不存在是正常情况(尚未生成),404 静默降级;其他错误提示用户
+          const msg = err instanceof Error ? err.message : String(err);
+          if (!msg.includes('404') && !msg.includes('not found')) {
+            message.warning('CPMS 站点加载失败');
+          }
           setCpmsSite(null);
         });
     },
@@ -98,8 +99,6 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
         institution: inst.institution_code,
         institution_name: inst.institution_name,
       });
-      // 中文注释:用生成响应里的 qr1_payload 直接本地构造 CpmsSiteRow,
-      // 立即展示二维码,不依赖 by-institution 端点(后端可能还没重启)。
       setCpmsSite({
         site_sfid: result.site_sfid,
         install_token_status: 'PENDING',
@@ -114,7 +113,6 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
         created_at: new Date().toISOString(),
       });
       message.success('CPMS 安装二维码已生成');
-      // 后台刷新拿完整字段(若后端 by-institution 可用)
       loadCpms(inst.sfid_id);
     } catch (err) {
       message.error(err instanceof Error ? err.message : '生成失败');
@@ -133,112 +131,119 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
 
       {loading && !inst && <Typography.Text type="secondary">加载中...</Typography.Text>}
 
-      {inst && (
+      {inst && detail && (
         <>
-          {/* 任务卡 `20260408-sfid-public-security-cpms-embed`:
-              机构信息 Card 采用左右分栏:左 = 机构字段 Descriptions,
-              右 = CPMS 站点管理(仅公安局且已有站点)。
-              "生成 CPMS 安装二维码"按钮挂在 Card.extra,仅公安局+无站点+可写时显示。 */}
-          <Card
-            title={
-              <span style={{ fontSize: 18, fontWeight: 600 }}>{inst.institution_name}</span>
-            }
-            extra={(() => {
-              // 中文注释:Card.extra 按状态渲染唯一主操作按钮:
-              //   - 无站点 → 生成 CPMS 安装二维码
-              //   - 有站点且 PENDING + 令牌未吊销 → 扫描 QR2 注册
-              //   - 其他状态 → 不显示(操作按钮在右侧 Panel 下半部分)
-              if (inst.category !== 'PUBLIC_SECURITY' || !canWrite) return null;
-              if (!cpmsSite) {
-                return (
-                  <Button type="primary" onClick={onGenerateCpms} loading={cpmsBusy}>
-                    生成 CPMS 安装二维码
-                  </Button>
-                );
-              }
-              const tokenOk = cpmsSite.install_token_status !== 'REVOKED';
-              if (cpmsSite.status === 'PENDING' && tokenOk) {
-                return (
-                  <Button type="primary" onClick={() => setCpmsRegisterOpen(true)}>
-                    扫描 QR2 注册
-                  </Button>
-                );
-              }
-              return null;
-            })()}
-            style={{ marginBottom: 16 }}
-          >
-            <Row gutter={24}>
-              <Col xs={24} md={cpmsSite ? 12 : 24}>
-                <Descriptions column={1} size="small">
-                  <Descriptions.Item label="机构 SFID">
-                    <Typography.Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>
-                      {inst.sfid_id}
-                    </Typography.Text>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="省份">{inst.province}</Descriptions.Item>
-                  <Descriptions.Item label="城市">{inst.city}</Descriptions.Item>
-                  <Descriptions.Item label="A3 类型">{inst.a3}</Descriptions.Item>
-                  <Descriptions.Item label="机构代码">{inst.institution_code}</Descriptions.Item>
-                  <Descriptions.Item label="创建时间">
-                    {new Date(inst.created_at).toLocaleString()}
-                  </Descriptions.Item>
-                </Descriptions>
-              </Col>
-              {inst.category === 'PUBLIC_SECURITY' && cpmsSite && (
-                <Col xs={24} md={12}>
-                  <CpmsSitePanel
-                    auth={auth}
-                    site={cpmsSite}
-                    canWrite={canWrite}
-                    onChanged={() => loadCpms(inst.sfid_id)}
-                  />
-                </Col>
-              )}
-            </Row>
-          </Card>
-
-          <Card
-            type="inner"
-            title={`账户列表(${accounts.length})`}
-            extra={
-              canWrite && (
-                <Button type="primary" onClick={() => setCreateAccountOpen(true)}>
-                  + 新建账户
-                </Button>
-              )
-            }
-          >
-            <AccountList
-              accounts={accounts}
+          {/* ── 私权机构:三板块布局(独立模块) ── */}
+          {inst.category === 'PRIVATE_INSTITUTION' ? (
+            <PrivateInstitutionLayout
+              auth={auth}
+              detail={detail}
+              canWrite={canWrite}
               loading={loading}
-              canDelete={canWrite}
-              onDelete={onDeleteAccount}
+              onReload={load}
+              onDeleteAccount={onDeleteAccount}
             />
-          </Card>
+          ) : (
+            <>
+              {/* ── 公安局 / 公权机构:默认布局 ── */}
+              <Card
+                title={
+                  <span style={{ fontSize: 18, fontWeight: 600 }}>{inst.institution_name}</span>
+                }
+                extra={(() => {
+                  if (inst.category !== 'PUBLIC_SECURITY' || !canWrite) return null;
+                  if (!cpmsSite) {
+                    return (
+                      <Button type="primary" onClick={onGenerateCpms} loading={cpmsBusy}>
+                        生成 CPMS 安装二维码
+                      </Button>
+                    );
+                  }
+                  const tokenOk = cpmsSite.install_token_status !== 'REVOKED';
+                  if (cpmsSite.status === 'PENDING' && tokenOk) {
+                    return (
+                      <Button type="primary" onClick={() => setCpmsRegisterOpen(true)}>
+                        扫描 QR2 注册
+                      </Button>
+                    );
+                  }
+                  return null;
+                })()}
+                style={{ marginBottom: 16 }}
+              >
+                <Row gutter={24}>
+                  <Col xs={24} md={cpmsSite ? 12 : 24}>
+                    <Descriptions column={1} size="small">
+                      <Descriptions.Item label="机构 SFID">
+                        <Typography.Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>
+                          {inst.sfid_id}
+                        </Typography.Text>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="省份">{inst.province}</Descriptions.Item>
+                      <Descriptions.Item label="城市">{inst.city}</Descriptions.Item>
+                      <Descriptions.Item label="A3 类型">{inst.a3}</Descriptions.Item>
+                      <Descriptions.Item label="机构代码">{inst.institution_code}</Descriptions.Item>
+                      <Descriptions.Item label="创建时间">
+                        {new Date(inst.created_at).toLocaleString('zh-CN')}
+                      </Descriptions.Item>
+                    </Descriptions>
+                  </Col>
+                  {inst.category === 'PUBLIC_SECURITY' && cpmsSite && (
+                    <Col xs={24} md={12}>
+                      <CpmsSitePanel
+                        auth={auth}
+                        site={cpmsSite}
+                        canWrite={canWrite}
+                        onChanged={() => loadCpms(inst.sfid_id)}
+                      />
+                    </Col>
+                  )}
+                </Row>
+              </Card>
 
-          <CreateAccountModal
-            auth={auth}
-            sfidId={inst.sfid_id}
-            institutionName={inst.institution_name}
-            existingAccounts={accounts}
-            open={createAccountOpen}
-            onCancel={() => setCreateAccountOpen(false)}
-            onCreated={() => {
-              setCreateAccountOpen(false);
-              load();
-            }}
-          />
+              <Card
+                type="inner"
+                title={`账户列表(${accounts.length})`}
+                extra={
+                  canWrite && (
+                    <Button type="primary" onClick={() => setCreateAccountOpen(true)}>
+                      + 新建账户
+                    </Button>
+                  )
+                }
+              >
+                <AccountList
+                  accounts={accounts}
+                  loading={loading}
+                  canDelete={canWrite}
+                  onDelete={onDeleteAccount}
+                />
+              </Card>
 
-          <CpmsRegisterModal
-            auth={auth}
-            open={cpmsRegisterOpen}
-            onClose={() => setCpmsRegisterOpen(false)}
-            onRegistered={() => {
-              setCpmsRegisterOpen(false);
-              loadCpms(inst.sfid_id);
-            }}
-          />
+              <CreateAccountModal
+                auth={auth}
+                sfidId={inst.sfid_id}
+                institutionName={inst.institution_name}
+                existingAccounts={accounts}
+                open={createAccountOpen}
+                onCancel={() => setCreateAccountOpen(false)}
+                onCreated={() => {
+                  setCreateAccountOpen(false);
+                  load();
+                }}
+              />
+
+              <CpmsRegisterModal
+                auth={auth}
+                open={cpmsRegisterOpen}
+                onClose={() => setCpmsRegisterOpen(false)}
+                onRegistered={() => {
+                  setCpmsRegisterOpen(false);
+                  loadCpms(inst.sfid_id);
+                }}
+              />
+            </>
+          )}
         </>
       )}
     </div>

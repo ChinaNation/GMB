@@ -143,7 +143,7 @@ fn build_activate_payload(shenfen_id: &str, timestamp: u64) -> Vec<u8> {
 /// 构建管理员激活签名请求 QR JSON（需要节点运行）。
 ///
 /// 验证公钥确实在该机构的链上管理员列表中，
-/// 然后生成 WUMIN_SIGN_V1.0.0 格式的签名请求。
+/// 然后生成 WUMIN_QR_V1 格式的签名请求。
 #[tauri::command]
 pub async fn build_activate_admin_request(
     app: AppHandle,
@@ -218,17 +218,19 @@ pub async fn build_activate_admin_request(
 
     let now = now_secs();
     let request = signing::QrSignRequest {
-        proto: "WUMIN_SIGN_V1.0.0".to_string(),
-        msg_type: "sign_request".to_string(),
-        request_id: request_id.clone(),
-        account: account_ss58,
-        pubkey: format!("0x{pubkey_clean}"),
-        sig_alg: "sr25519".to_string(),
-        payload_hex: payload_hex.clone(),
+        proto: "WUMIN_QR_V1".to_string(),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
         issued_at: now,
         expires_at: now + 90,
-        display,
-        spec_version: None, // 非链上交易，不需要 spec_version
+        body: signing::SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_clean}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: payload_hex.clone(),
+            spec_version: 0,
+            display,
+        },
     };
 
     let request_json = serde_json::to_string(&request)
@@ -269,19 +271,19 @@ pub async fn verify_activate_admin(
         .map_err(|e| format!("解析签名响应失败: {e}"))?;
 
     // 验证协议版本
-    if response.proto != "WUMIN_SIGN_V1.0.0" {
-        return Err(format!("协议版本不匹配：期望 WUMIN_SIGN_V1.0.0，实际 {}", response.proto));
+    if response.proto != "WUMIN_QR_V1" {
+        return Err(format!("协议版本不匹配：期望 WUMIN_QR_V1，实际 {}", response.proto));
     }
 
     // 验证请求 ID
-    if response.request_id != request_id {
+    if response.id != request_id {
         return Err("请求 ID 不匹配".to_string());
     }
 
     // 验证公钥
-    let response_pubkey = response.pubkey
+    let response_pubkey = response.body.pubkey
         .strip_prefix("0x")
-        .unwrap_or(&response.pubkey)
+        .unwrap_or(&response.body.pubkey)
         .to_ascii_lowercase();
     if response_pubkey != pubkey_clean {
         return Err("公钥不匹配".to_string());
@@ -292,18 +294,18 @@ pub async fn verify_activate_admin(
         .strip_prefix("0x")
         .unwrap_or(&expected_payload_hash)
         .to_ascii_lowercase();
-    let response_hash = response.payload_hash
+    let response_hash = response.body.payload_hash
         .strip_prefix("0x")
-        .unwrap_or(&response.payload_hash)
+        .unwrap_or(&response.body.payload_hash)
         .to_ascii_lowercase();
     if response_hash != expected_hash {
-        return Err("payload hash 不匹配，签名数据可能被篡改".to_string());
+        return Err("payload hash 不匹配,签名数据可能被篡改".to_string());
     }
 
-    // 验证 sr25519 签名（本地验证，不需要提交链上）
-    let sig_hex = response.signature
+    // 验证 sr25519 签名(本地验证,不需要提交链上)
+    let sig_hex = response.body.signature
         .strip_prefix("0x")
-        .unwrap_or(&response.signature);
+        .unwrap_or(&response.body.signature);
     if sig_hex.len() != 128 {
         return Err(format!("签名长度无效：期望 128 hex，实际 {}", sig_hex.len()));
     }

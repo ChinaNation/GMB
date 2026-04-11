@@ -6,12 +6,14 @@ import 'package:flutter/rendering.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 
-import '../qr/contact/contact_qr_models.dart';
+import '../qr/qr_protocols.dart';
+import '../qr/envelope.dart';
+import '../qr/bodies/user_duoqian_body.dart';
 import '../ui/app_theme.dart';
 
 /// 多签账户二维码底部弹窗。
 ///
-/// 展示多签账户 QR 码（WUMIN_USER_V1.0.0, purpose=duoqian），支持保存到相册。
+/// 展示多签账户 QR 码(WUMIN_QR_V1, kind=user_duoqian),支持保存到相册。
 class DuoqianQrSheet extends StatefulWidget {
   const DuoqianQrSheet({
     super.key,
@@ -38,13 +40,17 @@ class _DuoqianQrSheetState extends State<DuoqianQrSheet> {
   bool _saving = false;
 
   String _buildQrData() {
-    final payload = UserQrPayload(
-      address: widget.address,
-      name: widget.name,
-      purpose: 'duoqian',
-      proposalId: widget.proposalId,
-    );
-    return payload.toRawJson();
+    return QrEnvelope<UserDuoqianBody>(
+      kind: QrKind.userDuoqian,
+      id: null,
+      issuedAt: null,
+      expiresAt: null,
+      body: UserDuoqianBody(
+        address: widget.address,
+        name: widget.name,
+        proposalId: widget.proposalId ?? 0,
+      ),
+    ).toRawJson();
   }
 
   Future<void> _saveToGallery() async {

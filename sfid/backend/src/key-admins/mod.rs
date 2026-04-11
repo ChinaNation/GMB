@@ -1,6 +1,9 @@
 pub(crate) mod chain_keyring;
 pub(crate) mod chain_proof;
 pub(crate) mod rsa_blind;
+pub(crate) mod sheng_signer_cache;
+pub(crate) mod chain_sheng_signing;
+pub(crate) mod signer_router;
 
 use self::chain_keyring::{
     try_derive_pubkey_hex_from_seed, try_load_signing_key_from_seed, verify_rotation_signature,
@@ -982,6 +985,8 @@ pub(crate) fn sync_key_admin_users(store: &mut Store) {
                 created_at: now,
                 updated_at: Some(now),
                 city: String::new(),
+                encrypted_signing_privkey: None,
+                signing_pubkey: None,
             },
         );
     }
@@ -1022,7 +1027,81 @@ fn set_active_main_signer(
     main_pubkey: &str,
     main_seed_hex: &str,
 ) -> Result<(), String> {
+    use zeroize::Zeroize;
     let normalized_main_pubkey = normalize_pubkey_for_signing(main_pubkey);
+
+    // 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 10：
+    // SFID MAIN 轮换时，级联用新 wrap key 重新加密所有 sheng admin 的私钥种子，
+    // 然后同步更新进程内 cache 的 sfid_main_signer + wrap_key。
+    let hex_trim = main_seed_hex
+        .trim()
+        .trim_start_matches("0x")
+        .trim_start_matches("0X");
+    let new_seed_bytes = hex::decode(hex_trim)
+        .map_err(|e| format!("new main seed hex decode failed: {e}"))?;
+    if new_seed_bytes.len() != 32 {
+        return Err("new main seed must decode to 32 bytes".to_string());
+    }
+    let mut new_seed_arr = [0u8; 32];
+    new_seed_arr.copy_from_slice(&new_seed_bytes);
+
+    let new_wrap = sheng_signer_cache::derive_wrap_key(&new_seed_arr)
+        .map_err(|e| format!("derive new wrap key failed: {e}"))?;
+    let old_wrap = state
+        .sheng_signer_cache
+        .current_wrap_key()
+        .map_err(|e| format!("read old wrap key failed: {e}"))?;
+
+    // 读所有 sheng admin 的密文，在内存中完成批量重加密，然后一次性写回。
+    let mut re_encrypted: Vec<(String, String)> = Vec::new();
+    {
+        let store = state
+            .store
+            .read()
+            .map_err(|_| "store read lock poisoned".to_string())?;
+        for (pubkey, user) in store.admin_users_by_pubkey.iter() {
+            if user.role != AdminRole::ShengAdmin {
+                continue;
+            }
+            let Some(enc) = user.encrypted_signing_privkey.as_deref() else {
+                continue;
+            };
+            let mut plain = match sheng_signer_cache::decrypt_with_wrap(&old_wrap, enc) {
+                Ok(v) => v,
+                Err(e) => {
+                    new_seed_arr.zeroize();
+                    return Err(format!(
+                        "decrypt sheng signer for {pubkey} failed: {e}"
+                    ));
+                }
+            };
+            let new_ct = match sheng_signer_cache::encrypt_with_wrap(&new_wrap, &plain) {
+                Ok(v) => v,
+                Err(e) => {
+                    plain.zeroize();
+                    new_seed_arr.zeroize();
+                    return Err(format!(
+                        "re-encrypt sheng signer for {pubkey} failed: {e}"
+                    ));
+                }
+            };
+            plain.zeroize();
+            re_encrypted.push((pubkey.clone(), new_ct));
+        }
+    }
+
+    {
+        let mut store = state
+            .store
+            .write()
+            .map_err(|_| "store write lock poisoned".to_string())?;
+        for (pubkey, new_ct) in re_encrypted {
+            if let Some(user) = store.admin_users_by_pubkey.get_mut(&pubkey) {
+                user.encrypted_signing_privkey = Some(new_ct);
+            }
+        }
+    }
+
     {
         let mut seed_guard = state
             .signing_seed_hex
@@ -1038,6 +1117,14 @@ fn set_active_main_signer(
         *pubkey_guard = normalized_main_pubkey.clone();
     }
     replace_active_main_seed(state, normalized_main_pubkey.as_str(), main_seed_hex)?;
+
+    // 同步进程内 cache（sfid_main_signer Pair + wrap key）。rotate_main_seed 会
+    // zeroize 传入的 seed array。
+    if let Err(e) = state.sheng_signer_cache.rotate_main_seed(&mut new_seed_arr) {
+        new_seed_arr.zeroize();
+        return Err(format!("rotate sheng signer cache main seed failed: {e}"));
+    }
+    new_seed_arr.zeroize();
     Ok(())
 }
 
@@ -1262,4 +1349,139 @@ async fn submit_rotate_sfid_keys_extrinsic(
         tx_hash,
         block_number,
     })
+}
+
+/// 中文注释：省登录管理员登录成功后，确保本省签名私钥在进程内缓存就绪。
+///
+/// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 7。
+///
+/// 行为：
+/// 1. 若数据库里该管理员已有 `encrypted_signing_privkey` → 解密 → 构造 Pair → 载入
+///    cache。
+/// 2. 否则（首次登录）→ 随机生成 32 字节 seed → 派生 Pair → 加密持久化 → 推链
+///    `SfidCodeAuth::set_sheng_signing_pubkey(province, Some(pubkey))` → 载入 cache。
+///
+/// 失败时返回 Err，登录流程应记录 warn 但继续颁发 access_token（等下次登录重试
+/// bootstrap，或由运维手工处理）。
+pub(crate) async fn bootstrap_sheng_signer(
+    state: &AppState,
+    admin_pubkey: &str,
+    province: &str,
+) -> Result<(), String> {
+    use self::chain_sheng_signing::submit_set_sheng_signing_pubkey_with_client;
+    use sp_core::sr25519;
+    use subxt::backend::legacy::LegacyRpcMethods;
+    use subxt::{OnlineClient, PolkadotConfig};
+    use zeroize::Zeroizing;
+
+    // 1. 先尝试读取现有密文,顺便校验 admin 存在。
+    // 中文注释:pre-check admin_users_by_pubkey 是为了 Issue 1 幂等性修复:
+    // 如果 admin 已经不存在(比如 session token 过期瞬间刚好被 replace_sheng_admin
+    // 清掉),在推链消耗 nonce 之前就退出,避免"链上已写新 pubkey 但本地 Store
+    // 找不到 admin 落盘"的不可恢复窗口。
+    let existing_encrypted: Option<String> = {
+        let store = state
+            .store
+            .read()
+            .map_err(|e| format!("store read: {e}"))?;
+        let user = store
+            .admin_users_by_pubkey
+            .get(admin_pubkey)
+            .ok_or_else(|| "admin user not found (bootstrap pre-check)".to_string())?;
+        user.encrypted_signing_privkey.clone()
+    };
+
+    if let Some(enc) = existing_encrypted {
+        // 中文注释:Issue 2 修复 —— seed 用 Zeroizing 包装,离开作用域自动 zeroize,
+        // 即使 panic 或 task 被取消也不会残留明文种子。
+        let seed_arr = Zeroizing::new(
+            state
+                .sheng_signer_cache
+                .decrypt_seed(enc.as_str())
+                .map_err(|e| format!("decrypt existing sheng signer failed: {e}"))?,
+        );
+        let pair = sr25519::Pair::from_seed(&*seed_arr);
+        state
+            .sheng_signer_cache
+            .load_province(province.to_string(), pair);
+        tracing::info!(
+            province,
+            "sheng signer cache populated from existing ciphertext"
+        );
+        return Ok(());
+    }
+
+    // 2. 首次登录：生成新 keypair。
+    // 中文注释:Issue 2 修复 —— 用 Zeroizing 包装,所有路径(包括 .await 期间被
+    // cancel、panic 展开、提前 return)都自动 zeroize 明文种子。
+    let mut seed_arr: Zeroizing<[u8; 32]> = Zeroizing::new([0u8; 32]);
+    getrandom::getrandom(seed_arr.as_mut_slice()).map_err(|e| format!("rng: {e}"))?;
+    let pair = sr25519::Pair::from_seed(&*seed_arr);
+    let new_pubkey: [u8; 32] = pair.public().0;
+    let encrypted = state
+        .sheng_signer_cache
+        .encrypt_seed(&*seed_arr)
+        .map_err(|e| format!("encrypt new sheng signer failed: {e}"))?;
+
+    // 3. 推链 set_sheng_signing_pubkey(province, Some(new_pubkey))。
+    let ws_url = resolve_chain_ws_url()
+        .map_err(|e| format!("resolve ws url failed: {e}"))?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.clone())
+        .await
+        .map_err(|e| format!("chain connect failed: {e}"))?;
+    let rpc_client = subxt::backend::rpc::RpcClient::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("legacy rpc connect failed: {e}"))?;
+    let legacy_rpc = LegacyRpcMethods::<PolkadotConfig>::new(rpc_client);
+    let main_pair = state.sheng_signer_cache.sfid_main_signer();
+    let tx_hash = submit_set_sheng_signing_pubkey_with_client(
+        &client,
+        &legacy_rpc,
+        &main_pair,
+        province,
+        Some(new_pubkey),
+    )
+    .await
+    .map_err(|e| format!("submit set_sheng_signing_pubkey failed: {e}"))?;
+
+    // 4. 写 Store（drop guard 触发持久化）。
+    // 中文注释:Issue 1 幂等性修复 —— 步骤 1 已经 pre-check admin 存在;正常情况下
+    // 这里 get_mut 不会 None。若真的 None(极端 race:pre-check 后到这里的几毫秒
+    // 内 admin 被删),我们记一条 ERROR 日志但不 panic,上游交易已成功,下次 admin
+    // 恢复后会走 "already encrypted" 分支处理。
+    {
+        let mut store = state
+            .store
+            .write()
+            .map_err(|e| format!("store write: {e}"))?;
+        match store.admin_users_by_pubkey.get_mut(admin_pubkey) {
+            Some(user) => {
+                user.encrypted_signing_privkey = Some(encrypted);
+                user.signing_pubkey = Some(hex::encode(new_pubkey));
+            }
+            None => {
+                tracing::error!(
+                    province,
+                    admin_pubkey,
+                    tx_hash = %tx_hash,
+                    "admin user disappeared between pre-check and store write; chain already committed new signing pubkey, manual reconciliation required"
+                );
+                return Err(
+                    "admin user removed during bootstrap; chain tx committed but store write failed"
+                        .to_string(),
+                );
+            }
+        }
+    }
+
+    // 5. 载入 cache。
+    state
+        .sheng_signer_cache
+        .load_province(province.to_string(), pair);
+    tracing::info!(
+        province,
+        tx_hash = %tx_hash,
+        "new sheng signer generated, persisted and on-chain registered"
+    );
+    Ok(())
 }

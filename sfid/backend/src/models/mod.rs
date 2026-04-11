@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -55,9 +55,6 @@ pub(crate) struct Store {
     pub(crate) next_seq: u64,
     pub(crate) next_audit_seq: u64,
     pub(crate) next_admin_user_id: u64,
-    pub(crate) pending_by_pubkey: HashMap<String, PendingRequest>,
-    pub(crate) bindings_by_pubkey: HashMap<String, BindingRecord>,
-    pub(crate) pubkey_by_archive_index: HashMap<String, String>,
     // ── 公民身份记录（新模型）──
     #[serde(default)]
     pub(crate) next_citizen_id: u64,
@@ -99,17 +96,18 @@ pub(crate) struct Store {
     pub(crate) reward_state_by_pubkey: HashMap<String, RewardStateRecord>,
     pub(crate) vote_verify_cache: HashMap<String, VoteVerifyCacheEntry>,
     pub(crate) metrics: ServiceMetrics,
-    /// 多签机构 SFID 注册记录，key = site_sfid
-    /// 中文注释:任务卡 2 起被 multisig_institutions + multisig_accounts 替代,
-    /// 但保留作为只读兜底,便于回滚。新代码不应再写入此字段。
-    #[serde(default)]
-    pub(crate) multisig_sfid_records: HashMap<String, MultisigSfidRecord>,
     /// 机构层(每 sfid_id 唯一),任务卡 2 引入。
     #[serde(default)]
     pub(crate) multisig_institutions: HashMap<String, crate::institutions::MultisigInstitution>,
     /// 账户层(key = "sfid_id|account_name"),任务卡 2 引入。account_name 就是链上 name。
     #[serde(default)]
     pub(crate) multisig_accounts: HashMap<String, crate::institutions::MultisigAccount>,
+    /// 机构资料库文档,key = document id(字符串化)。
+    #[serde(default)]
+    pub(crate) institution_documents: HashMap<String, crate::institutions::InstitutionDocument>,
+    /// 文档自增 ID。
+    #[serde(default)]
+    pub(crate) next_document_id: u64,
 }
 
 // 中文注释:三种管理员角色(命名铁律,见任务卡 0.5 / feedback_sfid_three_roles_naming.md)
@@ -172,6 +170,15 @@ pub(crate) struct AdminUser {
     /// ShiAdmin 所属的市名称（仅 ShiAdmin 必填，其他角色为空字符串）
     #[serde(default)]
     pub(crate) city: String,
+    /// 中文注释:仅 ShengAdmin 使用。AES-256-GCM 加密的省签名私钥种子(32 字节明文)。
+    /// 格式:base64(nonce_12B || ciphertext || tag_16B)
+    /// Wrap key:HKDF-SHA256(SfidMainSeed, salt, info),见 key_admins::sheng_signer_cache。
+    /// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 引入。
+    #[serde(default)]
+    pub(crate) encrypted_signing_privkey: Option<String>,
+    /// 中文注释:仅 ShengAdmin 使用。对应签名公钥 hex(便于对账/UI 显示)。
+    #[serde(default)]
+    pub(crate) signing_pubkey: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -238,16 +245,6 @@ pub(crate) enum ArchiveImportStatus {
 
 fn default_archive_import_status() -> ArchiveImportStatus {
     ArchiveImportStatus::Active
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct PendingRequest {
-    pub(crate) seq: u64,
-    pub(crate) account_pubkey: String,
-    pub(crate) admin_province: Option<String>,
-    pub(crate) requested_at: DateTime<Utc>,
-    pub(crate) callback_url: Option<String>,
-    pub(crate) client_request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -327,34 +324,6 @@ pub(crate) struct KeyringRotateChallenge {
     pub(crate) created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct BindingRecord {
-    pub(crate) seq: u64,
-    pub(crate) account_pubkey: String,
-    pub(crate) archive_index: String,
-    pub(crate) birth_date: Option<NaiveDate>,
-    pub(crate) citizen_status: CitizenStatus,
-    pub(crate) sfid_code: String,
-    pub(crate) sfid_signature: String,
-    #[serde(default)]
-    pub(crate) runtime_bind_binding_id: Option<String>,
-    #[serde(default)]
-    pub(crate) runtime_bind_bind_nonce: Option<String>,
-    #[serde(default)]
-    pub(crate) runtime_bind_signature: Option<String>,
-    #[serde(default)]
-    pub(crate) runtime_bind_key_id: Option<String>,
-    #[serde(default)]
-    pub(crate) runtime_bind_key_version: Option<String>,
-    #[serde(default)]
-    pub(crate) runtime_bind_alg: Option<String>,
-    #[serde(default)]
-    pub(crate) runtime_bind_signer_pubkey: Option<String>,
-    pub(crate) bound_at: DateTime<Utc>,
-    pub(crate) bound_by: String,
-    pub(crate) admin_province: Option<String>,
-    pub(crate) client_request_id: Option<String>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AuditLogEntry {
@@ -388,6 +357,9 @@ pub(crate) struct ServiceMetrics {
     pub(crate) chain_request_total: u64,
     pub(crate) chain_request_failed_total: u64,
     pub(crate) chain_latency_samples: Vec<u32>,
+    /// Store 持久化失败次数(严重:数据可能丢失)
+    #[serde(default)]
+    pub(crate) store_persist_failures: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -481,46 +453,6 @@ pub(crate) struct HealthData {
     pub(crate) checked_at: i64,
 }
 
-#[derive(Serialize, Deserialize)]
-pub(crate) struct BindRequestInput {
-    pub(crate) account_pubkey: String,
-    pub(crate) callback_url: Option<String>,
-    pub(crate) client_request_id: Option<String>,
-}
-
-#[derive(Serialize)]
-pub(crate) struct BindRequestOutput {
-    pub(crate) account_pubkey: String,
-    pub(crate) chain_request_id: String,
-    pub(crate) status: &'static str,
-    pub(crate) message: &'static str,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct AdminQueryInput {
-    pub(crate) account_pubkey: String,
-}
-
-#[derive(Serialize)]
-pub(crate) struct AdminQueryOutput {
-    pub(crate) account_pubkey: String,
-    pub(crate) found_pending: bool,
-    pub(crate) found_binding: bool,
-    pub(crate) archive_index: Option<String>,
-    pub(crate) sfid_code: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct AdminBindInput {
-    pub(crate) account_pubkey: String,
-    pub(crate) archive_index: String,
-    pub(crate) qr_id: String,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct AdminUnbindInput {
-    pub(crate) account_pubkey: String,
-}
 
 // ── 公民身份绑定接口类型 ──
 
@@ -529,7 +461,7 @@ pub(crate) struct AdminUnbindInput {
 pub(crate) struct CitizenBindChallengeOutput {
     pub(crate) challenge_id: String,
     pub(crate) challenge_text: String,
-    /// WUMIN_SIGN_V1.0.0 签名请求 JSON（前端直接展示为二维码）。
+    /// WUMIN_QR_V1 签名请求 JSON（前端直接展示为二维码）。
     pub(crate) sign_request: String,
     pub(crate) expire_at: i64,
 }
@@ -539,7 +471,7 @@ pub(crate) struct CitizenBindChallengeOutput {
 pub(crate) struct CitizenBindInput {
     /// "bind_archive"（全新绑定）或 "bind_pubkey"（重新绑定公钥）
     pub(crate) mode: String,
-    /// 用户 SS58 地址（从 WUMIN_USER_V1.0.0 二维码获取）
+    /// 用户 SS58 地址（从 WUMIN_QR_V1 二维码获取）
     pub(crate) user_address: String,
     /// QR4 二维码内容（mode=bind_archive 时必填）
     pub(crate) qr4_payload: Option<String>,
@@ -547,7 +479,7 @@ pub(crate) struct CitizenBindInput {
     pub(crate) citizen_id: Option<u64>,
     /// challenge ID
     pub(crate) challenge_id: String,
-    /// WUMIN_SIGN_V1.0.0 签名结果（hex）
+    /// WUMIN_QR_V1 签名结果（hex）
     pub(crate) signature: String,
 }
 
@@ -602,42 +534,7 @@ pub(crate) struct CitizenRow {
     pub(crate) status: CitizenBindStatus,
 }
 
-// 保留旧版 CitizenRow 用于兼容旧查询
-#[derive(Serialize)]
-pub(crate) struct CitizenRowLegacy {
-    pub(crate) seq: u64,
-    pub(crate) account_pubkey: String,
-    pub(crate) archive_index: Option<String>,
-    pub(crate) sfid_code: Option<String>,
-    pub(crate) citizen_status: Option<CitizenStatus>,
-    pub(crate) is_bound: bool,
-}
-
-#[derive(Serialize)]
-pub(crate) struct AdminBindOutput {
-    pub(crate) account_pubkey: String,
-    pub(crate) archive_index: String,
-    pub(crate) sfid_code: String,
-    pub(crate) proof: SignatureEnvelope,
-    pub(crate) status: &'static str,
-    pub(crate) message: &'static str,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct AdminGenerateSfidInput {
-    pub(crate) account_pubkey: String,
-    pub(crate) a3: String,
-    pub(crate) p1: Option<String>,
-    pub(crate) province: String,
-    pub(crate) city: String,
-    pub(crate) institution: String,
-}
-
-#[derive(Serialize)]
-pub(crate) struct AdminGenerateSfidOutput {
-    pub(crate) account_pubkey: String,
-    pub(crate) sfid_code: String,
-}
+// (legacy CitizenRowLegacy 已删除)
 
 #[derive(Serialize)]
 pub(crate) struct SfidOptionItem {
@@ -705,6 +602,12 @@ pub(crate) struct ShengAdminRow {
     pub(crate) admin_name: String,
     pub(crate) built_in: bool,
     pub(crate) created_at: DateTime<Utc>,
+    /// 最近一次更新时间（含签名密钥 bootstrap），None 表示从未更新
+    #[serde(default)]
+    pub(crate) updated_at: Option<DateTime<Utc>>,
+    // 链上签名 pubkey：None 表示该省登录管理员尚未首次 bootstrap
+    #[serde(default)]
+    pub(crate) signing_pubkey: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -724,6 +627,9 @@ pub(crate) struct CreateOperatorInput {
 #[derive(Deserialize)]
 pub(crate) struct ReplaceShengAdminInput {
     pub(crate) admin_pubkey: String,
+    /// 新省级管理员姓名，可选；未提供时保留原值
+    #[serde(default)]
+    pub(crate) admin_name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -747,6 +653,7 @@ pub(crate) struct UpdateOperatorStatusInput {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct CpmsRegisterScanInput {
     pub(crate) qr_payload: String,
 }
@@ -805,11 +712,13 @@ pub(crate) struct CpmsSiteKeysListRow {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct BindScanInput {
     pub(crate) qr_payload: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct CitizenQrPayload {
     pub(crate) ver: String,
     pub(crate) issuer_id: String,
@@ -824,6 +733,7 @@ pub(crate) struct CitizenQrPayload {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct CitizenStatusQrPayload {
     pub(crate) ver: String,
     pub(crate) issuer_id: String,
@@ -839,6 +749,7 @@ pub(crate) struct CitizenStatusQrPayload {
 
 /// QR2 解析后的注册请求（SFID_CPMS_V1）。
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct CpmsRegisterReqPayload {
     #[serde(default)]
     pub(crate) proto: String,
@@ -851,6 +762,7 @@ pub(crate) struct CpmsRegisterReqPayload {
 
 /// QR4 解析后的档案业务载荷（SFID_CPMS_V1）。
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct CpmsArchiveQrPayload {
     #[serde(default)]
     pub(crate) proto: String,
@@ -896,6 +808,7 @@ pub(crate) struct CpmsArchiveImportOutput {
 }
 
 #[derive(Serialize)]
+#[allow(dead_code)]
 pub(crate) struct BindScanOutput {
     pub(crate) site_sfid: String,
     pub(crate) archive_no: String,
@@ -903,20 +816,6 @@ pub(crate) struct BindScanOutput {
     pub(crate) status: CitizenStatus,
     pub(crate) issued_at: i64,
     pub(crate) expire_at: i64,
-}
-
-#[derive(Serialize, Deserialize)]
-pub(crate) struct BindResultQuery {
-    pub(crate) account_pubkey: String,
-}
-
-#[derive(Serialize)]
-pub(crate) struct BindResultOutput {
-    pub(crate) genesis_hash: String,
-    pub(crate) who: String,
-    pub(crate) binding_id: String,
-    pub(crate) bind_nonce: String,
-    pub(crate) signature: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1082,16 +981,6 @@ pub(crate) struct KeyringRotateCommitOutput {
     pub(crate) message: String,
 }
 
-#[derive(Serialize)]
-pub(crate) struct BindingPayload {
-    pub(crate) kind: &'static str,
-    pub(crate) version: &'static str,
-    pub(crate) account_pubkey: String,
-    pub(crate) archive_index: String,
-    pub(crate) sfid_code: String,
-    pub(crate) issued_at: i64,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct BindCallbackPayload {
     pub(crate) callback_id: String,
@@ -1104,19 +993,6 @@ pub(crate) struct BindCallbackPayload {
     pub(crate) proof: SignatureEnvelope,
     pub(crate) client_request_id: Option<String>,
     pub(crate) callback_attestation: SignatureEnvelope,
-}
-
-#[derive(Serialize)]
-pub(crate) struct BindCallbackSignablePayload {
-    pub(crate) callback_id: String,
-    pub(crate) event: String,
-    pub(crate) account_pubkey: String,
-    pub(crate) archive_index: String,
-    pub(crate) sfid_code: String,
-    pub(crate) status: String,
-    pub(crate) bound_at: i64,
-    pub(crate) proof: SignatureEnvelope,
-    pub(crate) client_request_id: Option<String>,
 }
 
 // ── 多签管理 ──────────────────────────────────────────
@@ -1135,63 +1011,3 @@ impl Default for MultisigChainStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct MultisigSfidRecord {
-    pub(crate) site_sfid: String,
-    pub(crate) a3: String,
-    pub(crate) p1: String,
-    pub(crate) province: String,
-    pub(crate) city: String,
-    pub(crate) institution_code: String,
-    pub(crate) institution_name: String,
-    pub(crate) province_code: String,
-    pub(crate) chain_tx_hash: Option<String>,
-    pub(crate) chain_block_number: Option<u64>,
-    #[serde(default)]
-    pub(crate) chain_status: MultisigChainStatus,
-    pub(crate) created_by: String,
-    pub(crate) created_at: DateTime<Utc>,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct GenerateMultisigSfidInput {
-    pub(crate) a3: String,
-    pub(crate) p1: Option<String>,
-    pub(crate) province: Option<String>,
-    pub(crate) city: String,
-    pub(crate) institution: String,
-    pub(crate) institution_name: String,
-}
-
-#[derive(Serialize)]
-pub(crate) struct GenerateMultisigSfidOutput {
-    pub(crate) site_sfid: String,
-    pub(crate) chain_status: MultisigChainStatus,
-    pub(crate) chain_tx_hash: Option<String>,
-    pub(crate) chain_block_number: Option<u64>,
-}
-
-#[derive(Serialize)]
-pub(crate) struct MultisigSfidListRow {
-    pub(crate) site_sfid: String,
-    pub(crate) a3: String,
-    pub(crate) institution_code: String,
-    pub(crate) institution_name: String,
-    pub(crate) province: String,
-    pub(crate) city: String,
-    pub(crate) province_code: String,
-    pub(crate) chain_status: MultisigChainStatus,
-    pub(crate) chain_tx_hash: Option<String>,
-    pub(crate) chain_block_number: Option<u64>,
-    pub(crate) created_by: String,
-    pub(crate) created_by_name: String,
-    pub(crate) created_at: String,
-}
-
-#[derive(Serialize)]
-pub(crate) struct MultisigSfidListOutput {
-    pub(crate) total: usize,
-    pub(crate) limit: usize,
-    pub(crate) offset: usize,
-    pub(crate) rows: Vec<MultisigSfidListRow>,
-}

@@ -14,7 +14,6 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -60,9 +59,9 @@ pub(crate) async fn app_voters_count(
             Err(resp) => return resp,
         };
         let total = store
-            .bindings_by_pubkey
+            .citizen_records
             .values()
-            .filter(|b| b.citizen_status == CitizenStatus::Normal)
+            .filter(|r| r.archive_no.is_some())
             .count() as u64;
         total
     };
@@ -151,9 +150,13 @@ pub(crate) async fn app_vote_credential(
             Ok(v) => v,
             Err(resp) => return resp,
         };
-        if let Some(binding) = store.bindings_by_pubkey.get(account_pubkey.as_str()) {
-            let eligible = binding.citizen_status == CitizenStatus::Normal;
-            (true, eligible, Some(binding.archive_index.clone()))
+        if let Some(cid) = store.citizen_id_by_pubkey.get(account_pubkey.as_str()) {
+            if let Some(record) = store.citizen_records.get(cid) {
+                let bound = record.archive_no.is_some();
+                (bound, bound, record.archive_no.clone())
+            } else {
+                (false, false, None)
+            }
         } else {
             (false, false, None)
         }
@@ -215,101 +218,5 @@ pub(crate) async fn app_vote_credential(
     .into_response()
 }
 
-// ─── 身份绑定请求 ─────────────────────────────────────────
-
-#[derive(Deserialize)]
-pub(crate) struct AppBindRequestInput {
-    pub(crate) account_pubkey: String,
-    pub(crate) callback_url: Option<String>,
-    pub(crate) client_request_id: Option<String>,
-}
-
-#[derive(Serialize)]
-struct AppBindRequestOutput {
-    account_pubkey: String,
-    status: &'static str,
-    message: &'static str,
-}
-
-/// POST /api/v1/app/bind/request
-pub(crate) async fn app_bind_request(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(input): Json<AppBindRequestInput>,
-) -> impl IntoResponse {
-    // App 接口无需 token 认证：
-    // 1. 返回的数据是 SFID 签名后的凭证，仅对请求者的账户有效
-    // 2. 链上会验签，伪造无用
-    // 3. 全局 rate limiter 已防滥用
-
-    let Some(account_pubkey) = normalize_account_pubkey(input.account_pubkey.as_str()) else {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "account_pubkey is invalid");
-    };
-    let callback_url = normalize_optional(input.callback_url).or_else(default_bind_callback_url);
-    if let Some(url) = callback_url.as_ref() {
-        if let Err(message) = validate_bind_callback_url(url) {
-            return api_error(StatusCode::BAD_REQUEST, 1001, message.as_str());
-        }
-    }
-
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    store.metrics.bind_requests_total += 1;
-    maybe_cleanup_pending_bind_requests(&mut store, Utc::now());
-
-    let seq = if let Some(existing) = store.pending_by_pubkey.get(&account_pubkey) {
-        existing.seq
-    } else if let Some(existing) = store.bindings_by_pubkey.get(&account_pubkey) {
-        existing.seq
-    } else {
-        store.next_seq += 1;
-        store.next_seq
-    };
-    let admin_province = store
-        .pending_by_pubkey
-        .get(&account_pubkey)
-        .and_then(|p| p.admin_province.clone())
-        .or_else(|| {
-            store
-                .bindings_by_pubkey
-                .get(&account_pubkey)
-                .and_then(|b| b.admin_province.clone())
-        });
-    insert_bounded_map(
-        &mut store.pending_by_pubkey,
-        account_pubkey.clone(),
-        PendingRequest {
-            seq,
-            account_pubkey: account_pubkey.clone(),
-            admin_province,
-            requested_at: Utc::now(),
-            callback_url,
-            client_request_id: normalize_optional(input.client_request_id),
-        },
-        bounded_cache_limit("SFID_PENDING_BIND_REQUEST_CACHE_MAX", 50_000),
-    );
-    append_audit_log_with_meta(
-        &mut store,
-        "APP_BIND_REQUEST",
-        "app",
-        Some(account_pubkey.clone()),
-        None,
-        None,
-        actor_ip_from_headers(&headers),
-        "SUCCESS",
-        "app bind request accepted".to_string(),
-    );
-
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data: AppBindRequestOutput {
-            account_pubkey,
-            status: "WAITING_ADMIN",
-            message: "binding request received",
-        },
-    })
-    .into_response()
-}
+// 中文注释:legacy app_bind_request 已删除(依赖 pending_by_pubkey)。
+// 绑定流程走 citizen_bind_challenges 新模型。

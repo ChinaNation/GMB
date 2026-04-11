@@ -1,0 +1,9 @@
+{
+  "proto": "WUMIN_QR_V1",
+  "kind": "user_duoqian",
+  "body": {
+    "address": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+    "name": "河北省多签账户",
+    "proposal_id": 0
+  }
+}

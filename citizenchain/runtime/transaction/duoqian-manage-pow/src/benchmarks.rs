@@ -76,6 +76,7 @@ fn register_institution<T: Config>(
         name,
         register_nonce,
         signature,
+        None,
     )?;
     SfidRegisteredAddress::<T>::get(sfid_id)
         .ok_or(BenchmarkError::Stop("benchmark sfid should be registered"))
@@ -135,6 +136,7 @@ mod benchmarks {
             name,
             register_nonce,
             signature,
+            None,
         );
 
         assert_eq!(
