@@ -91,6 +91,16 @@ async fn parse_json(resp: Response) -> serde_json::Value {
     serde_json::from_slice(&bytes).expect("json response")
 }
 
+/// 构造 QR 登录完整签名消息：challenge_payload 末尾补 principal(pubkey hex 去 0x 小写)。
+fn qr_login_sign_message(challenge_payload: &str, pubkey_hex: &str) -> String {
+    let pp = pubkey_hex
+        .strip_prefix("0x")
+        .or_else(|| pubkey_hex.strip_prefix("0X"))
+        .unwrap_or(pubkey_hex)
+        .to_lowercase();
+    format!("{challenge_payload}{pp}")
+}
+
 fn sign_with_test_sr25519(seed_byte: u8, message: &str) -> (String, String) {
     let seed = hex_seed(seed_byte);
     let keypair = key_admins::chain_keyring::load_signing_key_from_seed(seed.as_str());
@@ -160,16 +170,24 @@ fn setup_rotation_test_state() -> (AppState, HeaderMap, String, String) {
             backup_b_pubkey,
         ));
         key_admins::sync_key_admin_users(&mut store);
-        store.admin_sessions.insert(
-            "tok-rotate".to_string(),
-            AdminSession {
-                token: "tok-rotate".to_string(),
-                admin_pubkey: backup_a_pubkey.clone(),
-                role: AdminRole::KeyAdmin,
-                expire_at: Utc::now() + Duration::hours(1),
-                last_active_at: Utc::now(),
-            },
-        );
+        let session = AdminSession {
+            token: "tok-rotate".to_string(),
+            admin_pubkey: backup_a_pubkey.clone(),
+            role: AdminRole::KeyAdmin,
+            expire_at: Utc::now() + Duration::hours(1),
+            last_active_at: Utc::now(),
+        };
+        store
+            .admin_sessions
+            .insert("tok-rotate".to_string(), session.clone());
+        // Phase 2: admin_auth 从 sharded_store 读 session,测试必须同步写入。
+        state
+            .sharded_store
+            .write_global_sync(|g| {
+                g.admin_sessions
+                    .insert("tok-rotate".to_string(), session);
+            })
+            .expect("write_global_sync");
     }
 
     let mut headers = HeaderMap::new();
@@ -201,6 +219,14 @@ async fn keyring_rotate_challenge_rejects_main_initiator() {
             .get_mut("tok-rotate")
             .expect("rotation session should exist");
         session.admin_pubkey = main_pubkey.clone();
+        let updated = session.clone();
+        state
+            .sharded_store
+            .write_global_sync(|g| {
+                g.admin_sessions
+                    .insert("tok-rotate".to_string(), updated);
+            })
+            .expect("write_global_sync");
     }
 
     let challenge_resp = key_admins::admin_chain_keyring_rotate_challenge(
@@ -501,7 +527,9 @@ async fn qr_login_non_admin_should_be_rejected() {
         .expect("challenge_payload")
         .to_string();
 
-    let (query_pubkey, signature) = sign_with_test_sr25519(11, &challenge_payload);
+    let (query_pubkey, _) = sign_with_test_sr25519(11, "dummy");
+    let login_msg = qr_login_sign_message(&challenge_payload, &query_pubkey);
+    let (_, signature) = sign_with_test_sr25519(11, &login_msg);
     let complete_resp = login::admin_auth_qr_complete(
         State(state.clone()),
         Json(login::AdminQrCompleteInput {
@@ -548,7 +576,9 @@ async fn qr_login_sheng_admin_keeps_write_permission() {
         .expect("challenge_payload")
         .to_string();
 
-    let (admin_pubkey, signature) = sign_with_test_sr25519(22, &challenge_payload);
+    let (admin_pubkey, _) = sign_with_test_sr25519(22, "dummy");
+    let login_msg = qr_login_sign_message(&challenge_payload, &admin_pubkey);
+    let (_, signature) = sign_with_test_sr25519(22, &login_msg);
     {
         let mut store = state.store.write().expect("store write lock poisoned");
         store.admin_users_by_pubkey.insert(
@@ -602,6 +632,22 @@ async fn qr_login_sheng_admin_keeps_write_permission() {
         result_json["data"]["admin"]["role"].as_str(),
         Some("SHENG_ADMIN")
     );
+
+    // admin_auth_qr_complete 用 tokio::task::spawn 异步写 sharded_store,
+    // 测试里 spawn 可能尚未执行,需手动同步写入以避免竞态 401。
+    {
+        let store = state.store.read().expect("store read lock poisoned");
+        if let Some(session) = store.admin_sessions.get(token) {
+            let s = session.clone();
+            let t = token.to_string();
+            state
+                .sharded_store
+                .write_global_sync(|g| {
+                    g.admin_sessions.insert(t, s);
+                })
+                .expect("write_global_sync");
+        }
+    }
 
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -702,8 +748,8 @@ async fn qr_login_rejects_signer_admin_mismatch() {
     );
 }
 
-#[test]
-fn require_admin_any_should_allow_all_three_roles() {
+#[tokio::test]
+async fn require_admin_any_should_allow_all_three_roles() {
     let state = build_test_state();
     let (institution_pubkey, key_pubkey) = {
         let store = state.store.read().expect("store read lock poisoned");
@@ -742,36 +788,27 @@ fn require_admin_any_should_allow_all_three_roles() {
                 signing_created_at: None,
             },
         );
-        store.admin_sessions.insert(
-            "tok-institution".to_string(),
-            AdminSession {
-                token: "tok-institution".to_string(),
-                admin_pubkey: institution_pubkey.clone(),
-                role: AdminRole::ShengAdmin,
+        let sessions = [
+            ("tok-institution", institution_pubkey.clone(), AdminRole::ShengAdmin),
+            ("tok-system", system_pubkey.clone(), AdminRole::ShiAdmin),
+            ("tok-key", key_pubkey.clone(), AdminRole::KeyAdmin),
+        ];
+        for (tok, pubkey, role) in &sessions {
+            let session = AdminSession {
+                token: tok.to_string(),
+                admin_pubkey: pubkey.clone(),
+                role: role.clone(),
                 expire_at: Utc::now() + Duration::hours(1),
                 last_active_at: Utc::now(),
-            },
-        );
-        store.admin_sessions.insert(
-            "tok-system".to_string(),
-            AdminSession {
-                token: "tok-system".to_string(),
-                admin_pubkey: system_pubkey.clone(),
-                role: AdminRole::ShiAdmin,
-                expire_at: Utc::now() + Duration::hours(1),
-                last_active_at: Utc::now(),
-            },
-        );
-        store.admin_sessions.insert(
-            "tok-key".to_string(),
-            AdminSession {
-                token: "tok-key".to_string(),
-                admin_pubkey: key_pubkey.clone(),
-                role: AdminRole::KeyAdmin,
-                expire_at: Utc::now() + Duration::hours(1),
-                last_active_at: Utc::now(),
-            },
-        );
+            };
+            store.admin_sessions.insert(tok.to_string(), session.clone());
+            state
+                .sharded_store
+                .write_global_sync(|g| {
+                    g.admin_sessions.insert(tok.to_string(), session);
+                })
+                .expect("write_global_sync");
+        }
     }
 
     for token in ["tok-institution", "tok-system", "tok-key"] {

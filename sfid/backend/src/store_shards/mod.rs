@@ -116,6 +116,20 @@ impl ShardedStore {
         Ok(f(&*guard))
     }
 
+    /// 同步写全局状态(仅测试用,跳过持久化)。
+    #[cfg(test)]
+    pub(crate) fn write_global_sync<F, R>(&self, f: F) -> Result<R, String>
+    where
+        F: FnOnce(&mut GlobalShard) -> R,
+    {
+        let mut guard = self
+            .global
+            .write()
+            .map_err(|_| "global poisoned".to_string())?;
+        guard.version += 1;
+        Ok(f(&mut *guard))
+    }
+
     /// 写全局状态 + 写穿透。
     pub(crate) async fn write_global<F, R>(&self, f: F) -> Result<R, String>
     where
