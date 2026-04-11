@@ -23,8 +23,8 @@ class LoginSignPage extends StatefulWidget {
 }
 
 class _LoginSignPageState extends State<LoginSignPage> {
-  LoginChallenge? _challenge;
-  LoginReceipt? _receipt;
+  LoginChallengeEnvelope? _challenge;
+  LoginReceiptEnvelope? _receipt;
   String? _error;
   bool _signing = false;
   Timer? _timer;
@@ -46,17 +46,17 @@ class _LoginSignPageState extends State<LoginSignPage> {
     try {
       final challenge = parseLoginChallenge(widget.challengeRaw);
       if (!verifySystemSignature(challenge)) {
-        setState(() => _error = '系统签名验证失败，二维码可能被篡改');
+        setState(() => _error = '系统签名验证失败,二维码可能被篡改');
         return;
       }
-      if (challenge.isExpired) {
+      if (isLoginChallengeExpired(challenge)) {
         setState(() => _error = '登录二维码已过期');
         return;
       }
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       setState(() {
         _challenge = challenge;
-        _remainingSeconds = challenge.expiresAt - now;
+        _remainingSeconds = (challenge.expiresAt ?? 0) - now;
       });
       _startCountdown();
     } on LoginQrException catch (e) {
@@ -88,8 +88,9 @@ class _LoginSignPageState extends State<LoginSignPage> {
     setState(() => _signing = true);
 
     try {
-      final signMessage = buildSignMessage(challenge);
       final walletManager = WalletManager();
+      // 以当前钱包公钥为 principal 构造签名原文
+      final signMessage = buildSignMessage(challenge, widget.wallet.pubkeyHex);
       final result = await walletManager.signUtf8WithWallet(
         widget.wallet.walletIndex,
         signMessage,
@@ -185,7 +186,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _infoRow('系统', c.systemDisplayName),
+                  _infoRow('系统', loginSystemDisplayName(c)),
                   _infoRow('钱包', _shortenAddress(widget.wallet.address)),
                   _infoRow(
                     '剩余时间',
@@ -199,7 +200,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            '确认后将使用当前钱包签名登录 ${c.systemDisplayName}',
+            '确认后将使用当前钱包签名登录 ${loginSystemDisplayName(c)}',
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             textAlign: TextAlign.center,
           ),
@@ -229,7 +230,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
   }
 
   Widget _buildReceipt() {
-    final json = _receipt!.toJsonString();
+    final json = _receipt!.toRawJson();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
@@ -245,7 +246,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            _challenge!.systemDisplayName,
+            loginSystemDisplayName(_challenge!),
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
           ),
           const SizedBox(height: 24),

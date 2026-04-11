@@ -5,10 +5,8 @@ use axum::{
     Json,
 };
 use chrono::Utc;
-use tracing::warn;
 use uuid::Uuid;
 
-use crate::chain::runtime_align::build_bind_credential;
 use crate::*;
 
 // ── 公民身份绑定新接口 ────────────────────────────────────────────────
@@ -17,7 +15,7 @@ const BIND_CHALLENGE_TTL_SECONDS: i64 = 300; // 5 分钟
 
 /// 生成绑定/解绑 challenge。
 ///
-/// 返回 challenge_text 和 WUMIN_SIGN_V1.0.0 格式的签名请求 JSON，
+/// 返回 challenge_text 和 WUMIN_QR_V1 格式的签名请求 JSON，
 /// 前端直接将 sign_request 展示为二维码供用户扫码签名。
 pub(crate) async fn citizen_bind_challenge(
     State(state): State<AppState>,
@@ -36,22 +34,24 @@ pub(crate) async fn citizen_bind_challenge(
     );
     let expire_at = now + chrono::Duration::seconds(BIND_CHALLENGE_TTL_SECONDS);
 
-    // 构造 WUMIN_SIGN_V1.0.0 签名请求
+    // 构造 WUMIN_QR_V1 kind=sign_request envelope
     let sign_request = serde_json::json!({
-        "proto": "WUMIN_SIGN_V1.0.0",
-        "type": "sign_request",
-        "request_id": format!("bind-{}", challenge_id),
-        "account": "",
-        "pubkey": "",
-        "sig_alg": "sr25519",
-        "payload_hex": format!("0x{}", hex::encode(challenge_text.as_bytes())),
+        "proto": crate::qr::WUMIN_QR_V1,
+        "kind": "sign_request",
+        "id": format!("bind-{}", challenge_id),
         "issued_at": now.timestamp(),
         "expires_at": expire_at.timestamp(),
-        "display": {
-            "action": "citizen_bind",
-            "action_label": "公民身份绑定",
-            "summary": "确认将您的公钥绑定到公民身份记录",
-            "fields": []
+        "body": {
+            "address": "",
+            "pubkey": "",
+            "sig_alg": "sr25519",
+            "payload_hex": format!("0x{}", hex::encode(challenge_text.as_bytes())),
+            "spec_version": 0,
+            "display": {
+                "action": "citizen_bind",
+                "summary": "确认将您的公钥绑定到公民身份记录",
+                "fields": []
+            }
         }
     });
     let sign_request_str = serde_json::to_string(&sign_request).unwrap_or_default();
@@ -127,7 +127,7 @@ pub(crate) async fn citizen_bind(
         challenge
     };
 
-    // 验证公钥签名（WUMIN_SIGN_V1.0.0 签名结果）
+    // 验证公钥签名（WUMIN_QR_V1 签名结果）
     let pubkey_bytes = match crate::login::parse_sr25519_pubkey_bytes(&account_pubkey_hex) {
         Some(v) => v,
         None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid account_pubkey derived from address"),

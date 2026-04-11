@@ -38,7 +38,7 @@ mod benchmarks {
 
         let genesis_block = BlockNumberFor::<T>::zero();
         let payload = (
-            b"GMB_SFID_BIND_V3",
+            b"GMB_SFID_V1",
             frame_system::Pallet::<T>::block_hash(genesis_block),
             &caller,
             binding_id,

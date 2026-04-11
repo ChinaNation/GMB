@@ -1,12 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import QrScanner from 'qr-scanner';
 import * as api from '../api';
 import type { InstallStatus } from '../types';
-
-type BarcodeDetectorLike = {
-  detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
-};
-type BarcodeDetectorCtor = new (opts: { formats: string[] }) => BarcodeDetectorLike;
+import { startCameraScanner, scanImageQr } from '../utils/cameraScanner';
 
 export default function InstallPage() {
   const [status, setStatus] = useState<InstallStatus | null>(null);
@@ -43,52 +38,24 @@ export default function InstallPage() {
     setScannerReady(false);
   };
 
-  // 摄像头扫码用 BarcodeDetector
+  // 步骤1：摄像头扫码 QR1
   useEffect(() => {
     if (!scannerActive || !videoRef.current) {
       stopScanner();
       return;
     }
-    let stopped = false;
-    let stream: MediaStream | null = null;
-    let timer: number | undefined;
-    const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
-    if (!win.BarcodeDetector) {
-      setError('当前浏览器不支持摄像头扫码，请使用 Chrome');
-      setScannerActive(false);
-      return;
-    }
-    const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
     const video = videoRef.current;
-    (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-        if (stopped) { stream.getTracks().forEach(t => t.stop()); return; }
-        video.srcObject = stream;
-        await video.play();
-        setScannerReady(true);
-        timer = window.setInterval(async () => {
-          if (stopped || loading) return;
-          try {
-            const codes = await detector.detect(video);
-            const raw = codes[0]?.rawValue?.trim();
-            if (raw) { window.clearInterval(timer); await handleQr1Scanned(raw); }
-          } catch { /* ignore */ }
-        }, 500);
-      } catch {
-        setError('无法打开摄像头，请检查权限');
-        setScannerActive(false);
-      }
-    })();
-    scanCleanupRef.current = () => {
-      stopped = true;
-      if (timer !== undefined) window.clearInterval(timer);
-      if (stream) stream.getTracks().forEach(t => t.stop());
-    };
+    const cleanup = startCameraScanner(
+      video,
+      (raw) => { handleQr1Scanned(raw); },
+      () => { setScannerReady(true); },
+      (msg) => { setError(msg); setScannerActive(false); },
+    );
+    scanCleanupRef.current = cleanup;
     return () => stopScanner();
-  }, [scannerActive, loading]);
+  }, [scannerActive]);
 
-  // 步骤2：摄像头扫码绑定管理员（扫 WUMIN_USER_V1.0.0 名片二维码）
+  // 步骤2：摄像头扫码绑定管理员
   const stopBindScanner = () => {
     if (bindScanCleanupRef.current) {
       bindScanCleanupRef.current();
@@ -102,44 +69,16 @@ export default function InstallPage() {
       stopBindScanner();
       return;
     }
-    let stopped = false;
-    let stream: MediaStream | null = null;
-    let timer: number | undefined;
-    const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
-    if (!win.BarcodeDetector) {
-      setError('当前浏览器不支持摄像头扫码');
-      setBindScannerActive(false);
-      return;
-    }
-    const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
     const video = bindVideoRef.current;
-    (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-        if (stopped) { stream.getTracks().forEach(t => t.stop()); return; }
-        video.srcObject = stream;
-        await video.play();
-        setBindScannerReady(true);
-        timer = window.setInterval(async () => {
-          if (stopped || bindLoading) return;
-          try {
-            const codes = await detector.detect(video);
-            const raw = codes[0]?.rawValue?.trim();
-            if (raw) { window.clearInterval(timer); await handleBindScanned(raw); }
-          } catch { /* ignore */ }
-        }, 500);
-      } catch {
-        setError('无法打开摄像头，请检查权限');
-        setBindScannerActive(false);
-      }
-    })();
-    bindScanCleanupRef.current = () => {
-      stopped = true;
-      if (timer !== undefined) window.clearInterval(timer);
-      if (stream) stream.getTracks().forEach(t => t.stop());
-    };
+    const cleanup = startCameraScanner(
+      video,
+      (raw) => { handleBindScanned(raw); },
+      () => { setBindScannerReady(true); },
+      (msg) => { setError(msg); setBindScannerActive(false); },
+    );
+    bindScanCleanupRef.current = cleanup;
     return () => stopBindScanner();
-  }, [bindScannerActive, bindLoading]);
+  }, [bindScannerActive]);
 
   const handleBindScanned = async (raw: string) => {
     setError('');
@@ -148,7 +87,6 @@ export default function InstallPage() {
     setBindScannerActive(false);
     stopBindScanner();
     try {
-      // 解析 WUMIN_USER_V1.0.0 名片，优先用 hex 公钥
       let pubkey = raw;
       try {
         const parsed = JSON.parse(raw);
@@ -165,19 +103,14 @@ export default function InstallPage() {
     setBindLoading(false);
   };
 
-  // 图片上传用 qr-scanner
+  // 图片上传识别 QR
   const onUploadQrImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (!file) return;
     try {
-      const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true });
-      const raw = result.data?.trim();
-      if (raw) {
-        await handleQr1Scanned(raw);
-      } else {
-        setError('未识别到二维码，请确认图片中包含有效的二维码');
-      }
+      const raw = await scanImageQr(file);
+      await handleQr1Scanned(raw);
     } catch {
       setError('未识别到二维码，请确认图片中包含有效的二维码');
     }

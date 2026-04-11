@@ -1,4 +1,4 @@
-// 登录页：WUMIN_LOGIN_V1.0.0 双向扫码登录
+// 登录页:WUMIN_QR_V1 双向扫码登录
 // 左侧展示 challenge 二维码 → 手机扫码签名
 // 右侧摄像头扫码 → 扫描手机签名回执 → 完成登录
 
@@ -7,11 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../auth';
 import * as api from '../api';
-
-type BarcodeDetectorLike = {
-  detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
-};
-type BarcodeDetectorCtor = new (opts: { formats: string[] }) => BarcodeDetectorLike;
+import { startCameraScanner } from '../utils/cameraScanner';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -71,7 +67,6 @@ export default function LoginPage() {
       const res = await api.authQrChallenge();
       if (res.data) {
         setQrChallenge(res.data);
-        // 同时启动轮询（手机能联网时直接提交，轮询拿到结果）
         const { challenge_id, session_id } = res.data;
         pollingRef.current = window.setInterval(async () => {
           try {
@@ -93,81 +88,56 @@ export default function LoginPage() {
     }
   };
 
-  // 摄像头扫码（BarcodeDetector）
+  // 摄像头扫码
   useEffect(() => {
     if (!scannerActive || !qrChallenge || !videoRef.current) {
       stopScanner();
       return;
     }
-    let stopped = false;
-    let stream: MediaStream | null = null;
-    let timer: number | undefined;
-    const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
-    if (!win.BarcodeDetector) {
-      setError('当前浏览器不支持摄像头扫码');
-      setScannerActive(false);
-      return;
-    }
-    const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
     const video = videoRef.current;
-    (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-        if (stopped) { stream.getTracks().forEach(t => t.stop()); return; }
-        video.srcObject = stream;
-        await video.play();
-        setScannerReady(true);
-        timer = window.setInterval(async () => {
-          if (stopped || scanSubmitting) return;
-          try {
-            const codes = await detector.detect(video);
-            const raw = codes[0]?.rawValue?.trim();
-            if (raw) { window.clearInterval(timer); await handleReceiptScanned(raw); }
-          } catch { /* ignore */ }
-        }, 500);
-      } catch {
-        setError('无法打开摄像头，请检查权限');
-        setScannerActive(false);
-      }
-    })();
-    scanCleanupRef.current = () => {
-      stopped = true;
-      if (timer !== undefined) window.clearInterval(timer);
-      if (stream) stream.getTracks().forEach(t => t.stop());
-    };
+    const cleanup = startCameraScanner(
+      video,
+      (raw) => { handleReceiptScanned(raw); },
+      () => { setScannerReady(true); },
+      (msg) => { setError(msg); setScannerActive(false); },
+    );
+    scanCleanupRef.current = cleanup;
     return () => stopScanner();
-  }, [scannerActive, scanSubmitting, qrChallenge]);
+  }, [scannerActive, qrChallenge]);
 
   const handleReceiptScanned = async (raw: string) => {
     if (!qrChallenge) return;
     setScanSubmitting(true);
     try {
-      // 解析签名回执
-      const receipt = JSON.parse(raw);
-      const admin_pubkey =
-        (typeof receipt.pubkey === 'string' && receipt.pubkey.trim()) ||
-        (typeof receipt.admin_pubkey === 'string' && receipt.admin_pubkey.trim()) ||
-        (typeof receipt.account === 'string' && receipt.account.trim()) ||
-        '';
-      const signature =
-        (typeof receipt.signature === 'string' && receipt.signature.trim()) ||
-        (typeof receipt.sig === 'string' && receipt.sig.trim()) ||
-        '';
-      if (!admin_pubkey || !signature) {
-        setError('签名二维码缺少必要字段');
+      const { parseQrEnvelope, QrParseError } = await import('../qr/wuminQr');
+      let env;
+      try {
+        env = parseQrEnvelope(raw);
+      } catch (e) {
+        const msg = e instanceof QrParseError ? e.message : '签名二维码格式无效';
+        setError(msg);
+        setScanSubmitting(false);
+        return;
+      }
+      if (env.kind !== 'login_receipt') {
+        setError(`期望 login_receipt,实际: ${env.kind}`);
+        setScanSubmitting(false);
+        return;
+      }
+      const body = env.body as { pubkey: string; signature: string };
+      if (!body.pubkey || !body.signature) {
+        setError('签名二维码缺少 pubkey/signature');
         setScanSubmitting(false);
         return;
       }
 
-      // 提交签名到后端
       await api.authQrComplete({
-        challenge_id: receipt.challenge || receipt.challenge_id || qrChallenge.challenge_id,
-        session_id: receipt.session_id || qrChallenge.session_id,
-        admin_pubkey,
-        signature,
+        challenge_id: env.id || qrChallenge.challenge_id,
+        session_id: qrChallenge.session_id,
+        admin_pubkey: body.pubkey,
+        signature: body.signature,
       });
 
-      // 查询登录结果
       const result = await api.authQrResult(qrChallenge.challenge_id, qrChallenge.session_id);
       if (result.data?.status === 'SUCCESS' && result.data.access_token && result.data.user) {
         doLogin(result.data.access_token, result.data.user);

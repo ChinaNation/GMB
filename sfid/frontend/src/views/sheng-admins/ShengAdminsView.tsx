@@ -1,15 +1,13 @@
 // 中文注释:从 App.tsx 迁移(任务卡 20260408-sfid-frontend-app-tsx-split 步 2)
-// 省级管理员视图 —— 同时接管 activeView === 'sheng-admins'(顶层列表)
-// 以及 activeView === 'system-settings'(注册局)两个分支。
+// 省级管理员视图 —— 调度器:持有所有状态和副作用,
+// 按 mode 分派到 ShengAdminListView / ProvinceDetailView。
 // system-settings 内部又分:
 //   - KeyAdmin: 省份网格(点击进入机构详情)
 //   - 机构详情页:sub-tab = '市级管理员列表' / '省级管理员'
 //     + 新增市级管理员 Modal
-// 共用:shengAdmins 列表 / selectedShengAdmin / replaceSuperForm /
-//      operators 列表 / addOperatorForm / operatorCities。
 
 import { useEffect, useState } from 'react';
-import { Button, Card, Form, Input, Modal, Select, Space, Table, Typography, message } from 'antd';
+import { Form, Input, Modal, Select, Space, message } from 'antd';
 import { useAuth } from '../../hooks/useAuth';
 import type { OperatorRow, ShengAdminRow, SfidCityItem } from '../../api/client';
 import {
@@ -23,18 +21,10 @@ import {
   updateOperatorStatus,
 } from '../../api/client';
 import { decodeSs58, tryEncodeSs58 } from '../../utils/ss58';
-import { glassCardStyle, glassCardHeadStyle } from '../../components/App';
-import { ScanAccountModal } from '../../components/ScanAccountModal';
-
-function isSr25519HexPubkey(value: string): boolean {
-  const normalized = value.trim().replace(/^0x/i, '');
-  return /^[0-9a-fA-F]{64}$/.test(normalized);
-}
-
-function sameHexPubkey(a: string | null | undefined, b: string | null | undefined): boolean {
-  if (!a || !b) return false;
-  return a.trim().replace(/^0x/i, '').toLowerCase() === b.trim().replace(/^0x/i, '').toLowerCase();
-}
+import { sameHexPubkey } from './shengAdminUtils';
+import type { AccountScanTarget, ShengAdminSharedState } from './shengAdminUtils';
+import { ShengAdminListView } from './ShengAdminListView';
+import { ProvinceDetailView } from './ProvinceDetailView';
 
 export interface ShengAdminsViewProps {
   /// 'list' = 顶层 sheng-admins 列表分支;
@@ -61,10 +51,12 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const [addOperatorOpen, setAddOperatorOpen] = useState(false);
   const [addOperatorLoading, setAddOperatorLoading] = useState(false);
 
-  const [accountScanTarget, setAccountScanTarget] = useState<null | 'operator' | 'super-admin'>(null);
+  const [accountScanTarget, setAccountScanTarget] = useState<AccountScanTarget>(null);
 
   const [addOperatorForm] = Form.useForm<{ operator_pubkey: string; operator_name: string; operator_city: string }>();
-  const [replaceSuperForm] = Form.useForm<{ province: string; admin_pubkey: string }>();
+  const [replaceSuperForm] = Form.useForm<{ province: string; admin_name: string; admin_pubkey: string }>();
+
+  // ── 数据加载 ──
 
   const refreshShengAdmins = async (): Promise<ShengAdminRow[]> => {
     if (!auth) return [];
@@ -115,12 +107,10 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       // system-settings
       if (auth.role === 'KEY_ADMIN') {
         setSelectedShengAdmin(null);
-        await refreshShengAdmins();
-        await refreshOperators();
+        await Promise.all([refreshShengAdmins(), refreshOperators()]);
         return;
       }
-      const rows = await refreshShengAdmins();
-      const ops = await refreshOperators();
+      const [rows, ops] = await Promise.all([refreshShengAdmins(), refreshOperators()]);
       if (cancelled) return;
       let target: ShengAdminRow | null = null;
       if (auth.role === 'SHENG_ADMIN') {
@@ -170,7 +160,9 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedShengAdmin?.admin_pubkey, auth?.access_token]);
 
-  const onReplaceShengAdmin = async (values: { province: string; admin_pubkey: string }) => {
+  // ── 事件处理 ──
+
+  const onReplaceShengAdmin = async (values: { province: string; admin_name?: string; admin_pubkey: string }) => {
     if (!auth) return;
     const inputAddr = values.admin_pubkey.trim();
     let hexPubkey: string;
@@ -182,7 +174,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     }
     setReplaceSuperLoading(true);
     try {
-      await replaceShengAdmin(auth, values.province.trim(), hexPubkey);
+      await replaceShengAdmin(auth, values.province.trim(), hexPubkey, values.admin_name);
       message.success(`已更新 ${values.province} 省级管理员`);
       replaceSuperForm.resetFields();
       await refreshShengAdmins();
@@ -355,460 +347,40 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     });
   };
 
-  // ────────────────────────────────────────────────────────────
-  // 渲染
-  // ────────────────────────────────────────────────────────────
+  // ── 组装共享状态 ──
+
+  const shared: ShengAdminSharedState = {
+    shengAdmins,
+    shengAdminsLoading,
+    selectedShengAdmin,
+    setSelectedShengAdmin,
+    adminDetailTab,
+    setAdminDetailTab,
+    replaceSuperLoading,
+    operators,
+    operatorsLoading,
+    operatorListPage,
+    setOperatorListPage,
+    operatorCities,
+    operatorCitiesLoading,
+    addOperatorOpen,
+    setAddOperatorOpen,
+    addOperatorLoading,
+    accountScanTarget,
+    setAccountScanTarget,
+    addOperatorForm,
+    replaceSuperForm,
+    onReplaceShengAdmin,
+    onCreateOperator,
+    onToggleOperatorStatus,
+    onUpdateOperator,
+    onDeleteOperator,
+  };
+
+  // ── 渲染:按 mode 分派 ──
+
   if (mode === 'list') {
-    return (
-      <Card
-        title="省级管理员列表"
-        bordered={false}
-        style={glassCardStyle}
-        headStyle={glassCardHeadStyle}
-        extra={
-          <Form
-            form={replaceSuperForm}
-            layout="inline"
-            onFinish={onReplaceShengAdmin}
-            style={{ rowGap: 8 }}
-          >
-            <Form.Item
-              name="province"
-              rules={[{ required: true, message: '请选择省份' }]}
-              style={{ marginBottom: 0 }}
-            >
-              <Select
-                style={{ width: 160 }}
-                placeholder="选择省份"
-                options={shengAdmins.map((item) => ({ value: item.province, label: item.province }))}
-              />
-            </Form.Item>
-            <Form.Item
-              name="admin_pubkey"
-              rules={[
-                { required: true, message: '请输入新省级管理员公钥' },
-                {
-                  validator: async (_rule, value) => {
-                    if (!value || isSr25519HexPubkey(String(value))) return;
-                    throw new Error('公钥格式必须为 32 字节十六进制');
-                  },
-                },
-              ]}
-              style={{ marginBottom: 0 }}
-            >
-              <Input style={{ width: 420, maxWidth: '60vw' }} placeholder="新省级管理员公钥" />
-            </Form.Item>
-            <Form.Item style={{ marginBottom: 0 }}>
-              <Button type="primary" htmlType="submit" loading={replaceSuperLoading}>
-                更换省级管理员
-              </Button>
-            </Form.Item>
-          </Form>
-        }
-      >
-        <Table<ShengAdminRow>
-          rowKey={(r) => `${r.province}-${r.admin_pubkey}`}
-          loading={shengAdminsLoading}
-          dataSource={shengAdmins}
-          pagination={{ pageSize: 10 }}
-          columns={[
-            {
-              title: '序号',
-              width: 80,
-              align: 'center',
-              render: (_v: unknown, _row: ShengAdminRow, index: number) => index + 1,
-            },
-            { title: '省份', dataIndex: 'province', align: 'center', width: 140 },
-            { title: '名称', dataIndex: 'admin_name', align: 'center', width: 180 },
-            { title: '公钥', dataIndex: 'admin_pubkey', align: 'center' },
-            { title: '状态', dataIndex: 'status', align: 'center', width: 100 },
-            {
-              title: '类型',
-              width: 100,
-              align: 'center',
-              render: (_v: unknown, row: ShengAdminRow) => (row.built_in ? '内置' : '自定义'),
-            },
-          ]}
-        />
-      </Card>
-    );
+    return <ShengAdminListView state={shared} />;
   }
-
-  // mode === 'system-settings'
-  return (
-    <>
-      {selectedShengAdmin ? (
-        // ── 机构详情页(sub-tab:市级管理员列表 / 省级管理员) ──
-        (() => {
-          const isKeyAdmin = auth?.role === 'KEY_ADMIN';
-          const isSelf = auth ? sameHexPubkey(selectedShengAdmin.admin_pubkey, auth.admin_pubkey) : false;
-          const canEditOperators = isKeyAdmin || (auth?.role === 'SHENG_ADMIN' && isSelf);
-          const canReplaceThisAdmin = isKeyAdmin;
-          const operatorsForThisAdmin = operators.filter((op) =>
-            sameHexPubkey(op.created_by, selectedShengAdmin.admin_pubkey),
-          );
-          const subTabs: Array<{ key: 'operators' | 'super-admin'; label: string }> = [
-            { key: 'operators', label: '市级管理员列表' },
-            { key: 'super-admin', label: '省级管理员' },
-          ];
-          return (
-            <Card
-              bordered={false}
-              style={glassCardStyle}
-              headStyle={glassCardHeadStyle}
-              title={
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', minHeight: 32 }}>
-                  {isKeyAdmin && (
-                    <Button type="link" style={{ paddingLeft: 0 }} onClick={() => setSelectedShengAdmin(null)}>
-                      ← 返回省列表
-                    </Button>
-                  )}
-                  <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
-                    {selectedShengAdmin.province}
-                  </span>
-                </div>
-              }
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 8,
-                  padding: 6,
-                  background: 'rgba(15,23,42,0.06)',
-                  borderRadius: 10,
-                  border: '1px solid rgba(15,23,42,0.12)',
-                  width: 'fit-content',
-                  marginBottom: 16,
-                }}
-              >
-                {subTabs.map((t) => (
-                  <button
-                    key={t.key}
-                    onClick={() => setAdminDetailTab(t.key)}
-                    style={{
-                      padding: '6px 18px',
-                      borderRadius: 8,
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      fontWeight: 500,
-                      transition: 'all 0.2s ease',
-                      ...(adminDetailTab === t.key
-                        ? {
-                            background: 'linear-gradient(135deg, #0d9488, #0f766e)',
-                            color: '#fff',
-                            boxShadow: '0 2px 6px rgba(13,148,136,0.35)',
-                          }
-                        : {
-                            background: 'rgba(255,255,255,0.7)',
-                            color: 'rgba(15,23,42,0.75)',
-                          }),
-                    }}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              {adminDetailTab === 'operators' ? (
-                <Card
-                  type="inner"
-                  title="市级管理员列表"
-                  extra={
-                    canEditOperators ? (
-                      <Button type="primary" onClick={() => setAddOperatorOpen(true)}>
-                        新增市级管理员
-                      </Button>
-                    ) : null
-                  }
-                >
-                  <Table<OperatorRow>
-                    rowKey={(r) => `${r.id}-${r.admin_pubkey}`}
-                    loading={operatorsLoading}
-                    dataSource={operatorsForThisAdmin}
-                    pagination={{
-                      pageSize: 10,
-                      current: operatorListPage,
-                      onChange: (page) => setOperatorListPage(page),
-                      showSizeChanger: false,
-                      showTotal: (total) => `共 ${total} 条`,
-                    }}
-                    columns={[
-                      {
-                        title: '序号',
-                        width: 70,
-                        align: 'center',
-                        render: (_v, _row, index) => (operatorListPage - 1) * 10 + index + 1,
-                      },
-                      { title: '市', dataIndex: 'city', align: 'center', width: 120 },
-                      { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 160 },
-                      {
-                        title: '账户',
-                        dataIndex: 'admin_pubkey',
-                        align: 'center',
-                        render: (v: string) => tryEncodeSs58(v),
-                      },
-                      { title: '状态', dataIndex: 'status', align: 'center', width: 100 },
-                      ...(canEditOperators
-                        ? [
-                            {
-                              title: '操作',
-                              width: 220,
-                              align: 'center' as const,
-                              render: (_v: unknown, row: OperatorRow) => (
-                                <Space>
-                                  <Button size="small" onClick={() => onUpdateOperator(row)}>
-                                    修改
-                                  </Button>
-                                  <Button size="small" onClick={() => onToggleOperatorStatus(row)}>
-                                    {row.status === 'ACTIVE' ? '停用' : '启用'}
-                                  </Button>
-                                  <Button size="small" danger onClick={() => onDeleteOperator(row)}>
-                                    删除
-                                  </Button>
-                                </Space>
-                              ),
-                            },
-                          ]
-                        : []),
-                    ]}
-                  />
-                </Card>
-              ) : (
-                // ── 省级管理员(基本信息 + 更换) ──
-                <Card
-                  type="inner"
-                  title="省级管理员"
-                  extra={
-                    canReplaceThisAdmin ? (
-                      <Form
-                        form={replaceSuperForm}
-                        layout="inline"
-                        onFinish={(values: { admin_pubkey: string }) =>
-                          onReplaceShengAdmin({ province: selectedShengAdmin.province, admin_pubkey: values.admin_pubkey })
-                        }
-                        style={{ rowGap: 8 }}
-                      >
-                        <Form.Item
-                          name="admin_pubkey"
-                          rules={[
-                            { required: true, message: '请输入新省级管理员账户' },
-                            {
-                              validator: async (_rule, value) => {
-                                if (!value) return;
-                                try {
-                                  decodeSs58(String(value));
-                                } catch (e) {
-                                  throw new Error(e instanceof Error ? e.message : '账户格式无效');
-                                }
-                              },
-                            },
-                          ]}
-                          style={{ marginBottom: 0 }}
-                        >
-                          <Input
-                            style={{ width: 420, maxWidth: '60vw' }}
-                            placeholder="新省级管理员账户(SS58)"
-                            suffix={
-                              <span
-                                title="扫码识别用户码"
-                                style={{ cursor: 'pointer', display: 'inline-flex', color: '#0d9488' }}
-                                onClick={() => setAccountScanTarget('super-admin')}
-                              >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M3 7V5a2 2 0 0 1 2-2h2" />
-                                  <path d="M17 3h2a2 2 0 0 1 2 2v2" />
-                                  <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-                                  <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-                                  <rect x="7" y="7" width="10" height="10" rx="1" />
-                                </svg>
-                              </span>
-                            }
-                          />
-                        </Form.Item>
-                        <Form.Item style={{ marginBottom: 0 }}>
-                          <Button type="primary" htmlType="submit" loading={replaceSuperLoading}>
-                            更换省级管理员
-                          </Button>
-                        </Form.Item>
-                      </Form>
-                    ) : null
-                  }
-                >
-                  <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', rowGap: 8, columnGap: 12 }}>
-                    <Typography.Text type="secondary">省份</Typography.Text>
-                    <Typography.Text>{selectedShengAdmin.province}</Typography.Text>
-                    <Typography.Text type="secondary">名称</Typography.Text>
-                    <Typography.Text>{selectedShengAdmin.admin_name}</Typography.Text>
-                    <Typography.Text type="secondary">账户</Typography.Text>
-                    <Typography.Text code style={{ wordBreak: 'break-all' }}>
-                      {tryEncodeSs58(selectedShengAdmin.admin_pubkey)}
-                    </Typography.Text>
-                  </div>
-                </Card>
-              )}
-            </Card>
-          );
-        })()
-      ) : (
-        // ── KeyAdmin:注册局省份列表 ──
-        <Card title="省份列表" bordered={false} style={glassCardStyle} headStyle={glassCardHeadStyle}>
-          {shengAdminsLoading ? (
-            <Typography.Text type="secondary">加载中...</Typography.Text>
-          ) : (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-                gap: 12,
-              }}
-            >
-              {shengAdmins.map((row) => (
-                <div
-                  key={`${row.province}-${row.admin_pubkey}`}
-                  onClick={() => setSelectedShengAdmin(row)}
-                  style={{
-                    padding: 18,
-                    borderRadius: 12,
-                    border: '1px solid rgba(15,23,42,0.22)',
-                    background: 'rgba(226,232,240,0.55)',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    textAlign: 'center' as const,
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLDivElement).style.background = 'rgba(13,148,136,0.22)';
-                    (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(13,148,136,0.55)';
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLDivElement).style.background = 'rgba(226,232,240,0.55)';
-                    (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(15,23,42,0.22)';
-                  }}
-                >
-                  <div style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', textAlign: 'center' }}>
-                    {row.province}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* ── 新增市级管理员 Modal(在机构详情页触发) ── */}
-      <Modal
-        title={<div style={{ textAlign: 'center', width: '100%' }}>新增市级管理员</div>}
-        open={addOperatorOpen}
-        onCancel={() => {
-          addOperatorForm.resetFields();
-          setAddOperatorOpen(false);
-        }}
-        footer={[
-          <Button
-            key="cancel"
-            onClick={() => {
-              addOperatorForm.resetFields();
-              setAddOperatorOpen(false);
-            }}
-          >
-            取消新增
-          </Button>,
-          <Button
-            key="submit"
-            type="primary"
-            loading={addOperatorLoading}
-            onClick={() => addOperatorForm.submit()}
-          >
-            确认新增
-          </Button>,
-        ]}
-        destroyOnClose
-      >
-        <Form
-          form={addOperatorForm}
-          layout="vertical"
-          onFinish={(values: { operator_name: string; operator_pubkey: string; operator_city: string }) =>
-            onCreateOperator({
-              operator_name: values.operator_name,
-              operator_pubkey: values.operator_pubkey,
-              city: values.operator_city,
-              created_by: selectedShengAdmin?.admin_pubkey,
-            })
-          }
-        >
-          <Form.Item
-            label="姓名"
-            name="operator_name"
-            rules={[{ required: true, message: '请输入市级管理员姓名' }]}
-          >
-            <Input placeholder="请输入市级管理员姓名" />
-          </Form.Item>
-          <Form.Item
-            label="市"
-            name="operator_city"
-            rules={[{ required: true, message: '请选择市' }]}
-          >
-            <Select
-              placeholder="请选择市"
-              loading={operatorCitiesLoading}
-              options={operatorCities
-                .filter((c) => c.code !== '000')
-                .map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }))}
-            />
-          </Form.Item>
-          <Form.Item
-            label="账户"
-            name="operator_pubkey"
-            rules={[
-              { required: true, message: '请输入市级管理员账户' },
-              {
-                validator: async (_rule, value) => {
-                  if (!value) return;
-                  try {
-                    decodeSs58(String(value));
-                  } catch (err) {
-                    throw new Error(err instanceof Error ? err.message : '账户格式无效');
-                  }
-                },
-              },
-            ]}
-          >
-            <Input
-              placeholder="请输入市级管理员账户(SS58)"
-              suffix={
-                <span
-                  title="扫码识别用户码"
-                  style={{ cursor: 'pointer', display: 'inline-flex', color: '#0d9488' }}
-                  onClick={() => setAccountScanTarget('operator')}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 7V5a2 2 0 0 1 2-2h2" />
-                    <path d="M17 3h2a2 2 0 0 1 2 2v2" />
-                    <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-                    <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-                    <rect x="7" y="7" width="10" height="10" rx="1" />
-                  </svg>
-                </span>
-              }
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* ── 通用扫码识别账户弹窗(新增市级管理员 / 更换省级管理员) ── */}
-      <ScanAccountModal
-        open={accountScanTarget !== null}
-        onClose={() => setAccountScanTarget(null)}
-        onResolved={(addr) => {
-          if (accountScanTarget === 'operator') {
-            addOperatorForm.setFieldsValue({ operator_pubkey: addr });
-          } else if (accountScanTarget === 'super-admin') {
-            replaceSuperForm.setFieldsValue({ admin_pubkey: addr });
-          }
-          setAccountScanTarget(null);
-        }}
-      />
-    </>
-  );
+  return <ProvinceDetailView state={shared} />;
 }

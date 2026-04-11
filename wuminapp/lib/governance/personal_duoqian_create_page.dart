@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../qr/envelope.dart';
+import '../qr/qr_protocols.dart';
 import '../ui/app_theme.dart';
 import 'package:isar/isar.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
@@ -13,6 +15,7 @@ import 'duoqian_manage_service.dart';
 import '../qr/pages/qr_scan_page.dart' show QrScanPage, QrScanMode;
 import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
+import '../qr/bodies/sign_request_body.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 
@@ -119,14 +122,12 @@ class _PersonalDuoqianCreatePageState
     );
     if (result == null || !mounted) return;
 
-    // 解析 WUMIN_USER_V1.0.0 协议
+    // 解析 WUMIN_QR_V1 user_contact 或 user_duoqian
     try {
-      final json = jsonDecode(result.trim());
-      if (json is Map && json['proto'] == 'WUMIN_USER_V1.0.0') {
-        final address = json['address']?.toString();
-        if (address == null || address.isEmpty) {
-          throw FormatException('缺少 address 字段');
-        }
+      final env = QrEnvelope.parse(result.trim());
+      if (env.kind == QrKind.userContact || env.kind == QrKind.userDuoqian) {
+        final address = (env.body as dynamic).address?.toString() ?? '';
+        if (address.isEmpty) throw FormatException('缺少 address 字段');
         final pubkey = Keyring().decodeAddress(address);
         _addAdminPubkey(_toHex(pubkey));
         return;
@@ -236,24 +237,23 @@ class _PersonalDuoqianCreatePageState
         final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'personal-dq-'),
-          account: wallet.address,
+          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
           specVersion: rv.specVersion,
-          display: {
-            'action': 'propose_create_personal',
-            'action_label': '创建个人多签',
-            'summary': '发起创建个人多签账户提案',
-            'fields': [
-              {'key': 'name', 'label': '名称', 'value': nameText},
-              {'key': 'admin_count', 'label': '管理员数量', 'value': _adminPubkeys.length.toString()},
-              {'key': 'threshold', 'label': '阈值', 'value': '$threshold/${_adminPubkeys.length}'},
-              {'key': 'amount_yuan', 'label': '初始资金', 'value': AmountFormat.format(amountYuan, symbol: ''), 'format': 'currency'},
+          display: SignDisplay(
+            action: 'propose_create_personal',
+            summary: '发起创建个人多签账户提案',
+            fields: [
+              SignDisplayField(label: '名称', value: nameText),
+              SignDisplayField(label: '管理员数量', value: _adminPubkeys.length.toString()),
+              SignDisplayField(label: '阈值', value: '$threshold/${_adminPubkeys.length}'),
+              SignDisplayField(label: '初始资金', value: AmountFormat.format(amountYuan, symbol: '')),
             ],
-          },
+          ),
         );
         final requestJson = qrSigner.encodeRequest(request);
-        final response = await Navigator.push<QrSignResponse>(
+        final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
             builder: (_) => QrSignSessionPage(
@@ -263,7 +263,7 @@ class _PersonalDuoqianCreatePageState
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexDecode(response.signature));
+        return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
       final result = await _manageService.submitProposeCreatePersonal(

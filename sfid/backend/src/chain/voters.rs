@@ -56,10 +56,11 @@ pub(crate) async fn chain_voters_count(
             Err(resp) => return resp,
         };
         store.metrics.voters_count_total += 1;
+        // 中文注释:从 citizen_records 统计已绑定(有 archive_no)的记录数。
         let total = store
-            .bindings_by_pubkey
+            .citizen_records
             .values()
-            .filter(|b| b.citizen_status == CitizenStatus::Normal)
+            .filter(|r| r.archive_no.is_some())
             .count() as u64;
         total
     };

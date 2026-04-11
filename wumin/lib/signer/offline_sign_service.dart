@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../qr/bodies/sign_request_body.dart';
 import '../wallet/wallet_manager.dart';
 import 'payload_decoder.dart';
 import 'qr_signer.dart';
@@ -51,14 +52,15 @@ class OfflineSignService {
   final WalletManager _walletManager;
   final QrSigner _signer;
 
-  QrSignRequest parseRequest(String raw) {
+  SignRequestEnvelope parseRequest(String raw) {
     return _signer.parseRequest(raw);
   }
 
-  OfflineSignVerification verifyPayload(QrSignRequest request) {
+  OfflineSignVerification verifyPayload(SignRequestEnvelope request) {
+    final body = request.body;
     final decoded = PayloadDecoder.decode(
-      request.payloadHex,
-      specVersion: request.specVersion,
+      body.payloadHex,
+      specVersion: body.specVersion,
     );
 
     if (decoded == null) {
@@ -68,24 +70,20 @@ class OfflineSignService {
       );
     }
 
-    final displayAction = request.display['action']?.toString();
-    if (displayAction != decoded.action) {
+    if (body.display.action != decoded.action) {
       return OfflineSignVerification(
         decoded: decoded,
         displayMatch: DisplayMatchStatus.mismatched,
       );
     }
 
-    final displayFields = request.display['fields'];
-    if (displayFields is List) {
-      for (final entry in decoded.fields.entries) {
-        final displayValue = _findFieldValue(displayFields, entry.key);
-        if (displayValue != null && displayValue != entry.value) {
-          return OfflineSignVerification(
-            decoded: decoded,
-            displayMatch: DisplayMatchStatus.mismatched,
-          );
-        }
+    for (final entry in decoded.fields.entries) {
+      final displayValue = _findFieldValue(body.display.fields, entry.key);
+      if (displayValue != null && displayValue != entry.value) {
+        return OfflineSignVerification(
+          decoded: decoded,
+          displayMatch: DisplayMatchStatus.mismatched,
+        );
       }
     }
 
@@ -95,7 +93,7 @@ class OfflineSignService {
     );
   }
 
-  Future<QrSignResponse> signRequestRaw({
+  Future<SignResponseEnvelope> signRequestRaw({
     required int walletIndex,
     required String raw,
   }) async {
@@ -103,16 +101,17 @@ class OfflineSignService {
     return signParsedRequest(walletIndex: walletIndex, request: request);
   }
 
-  Future<QrSignResponse> signParsedRequest({
+  Future<SignResponseEnvelope> signParsedRequest({
     required int walletIndex,
-    required QrSignRequest request,
+    required SignRequestEnvelope request,
   }) async {
-    // 签名时再次校验过期，防止用户在 UI 上停留太久后点击签名。
+    final body = request.body;
+    // 签名时再次校验过期
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    if (request.expiresAt < now) {
+    if ((request.expiresAt ?? 0) < now) {
       throw const OfflineSignException(
         OfflineSignErrorCode.expired,
-        '签名请求已过期，请重新扫描',
+        '签名请求已过期,请重新扫描',
       );
     }
 
@@ -126,17 +125,17 @@ class OfflineSignService {
     if (wallet.isColdWallet) {
       throw const OfflineSignException(
         OfflineSignErrorCode.coldWalletUnsupported,
-        '当前钱包为冷钱包，无法作为离线签名设备',
+        '当前钱包为冷钱包,无法作为离线签名设备',
       );
     }
 
-    if (_normalizeHex(wallet.pubkeyHex) != _normalizeHex(request.pubkey)) {
+    if (_normalizeHex(wallet.pubkeyHex) != _normalizeHex(body.pubkey)) {
       throw const OfflineSignException(
         OfflineSignErrorCode.walletMismatch,
         '签名请求中的公钥与当前钱包不一致',
       );
     }
-    if (wallet.address.trim() != request.account.trim()) {
+    if (wallet.address.trim() != body.address.trim()) {
       throw const OfflineSignException(
         OfflineSignErrorCode.walletMismatch,
         '签名请求中的地址与当前钱包不一致',
@@ -147,15 +146,12 @@ class OfflineSignService {
     if (verification.displayMatch == DisplayMatchStatus.mismatched) {
       throw const OfflineSignException(
         OfflineSignErrorCode.displayMismatch,
-        '交易内容与摘要不符，拒绝签名',
+        '交易内容与摘要不符,拒绝签名',
       );
     }
     if (verification.displayMatch == DisplayMatchStatus.decodeFailed) {
-      // 中文注释：大 payload 交易（如 runtime 升级）的 payload_hex 是哈希后的 32 字节，
-      // 无法从哈希中解码出原始交易内容。对于这类已知安全的操作，信任 display 字段。
-      final displayAction = request.display['action']?.toString() ?? '';
+      final displayAction = body.display.action;
       const allowedHashedActions = {
-        'developer_upgrade',
         'developer_direct_upgrade',
         'propose_runtime_upgrade',
         'activate_admin',
@@ -167,22 +163,23 @@ class OfflineSignService {
         'vote_sweep_to_main',
         'propose_create',
         'propose_create_personal',
-        'propose_resolution_issuance',
+        'propose_transfer',
+        'vote_transfer',
+        'joint_vote',
       };
       if (!allowedHashedActions.contains(displayAction)) {
         throw const OfflineSignException(
           OfflineSignErrorCode.displayMismatch,
-          '无法独立验证交易内容，禁止签名。请升级冷钱包。',
+          '无法独立验证交易内容,禁止签名。请升级冷钱包。',
         );
       }
-      // 大 payload 交易允许签名，信任 display 中的摘要
     }
 
-    final payloadBytes = _hexToBytes(request.payloadHex);
+    final payloadBytes = _hexToBytes(body.payloadHex);
     if (payloadBytes.isEmpty) {
       throw const OfflineSignException(
         OfflineSignErrorCode.invalidPayload,
-        '签名负载为空，无法签名',
+        '签名负载为空,无法签名',
       );
     }
 
@@ -191,25 +188,17 @@ class OfflineSignService {
       Uint8List.fromList(payloadBytes),
     );
 
-    final payloadHash = QrSigner.computePayloadHash(request.payloadHex);
-
-    return QrSignResponse(
-      proto: QrSigner.protocol,
-      requestId: request.requestId,
-      pubkey: '0x${wallet.pubkeyHex}',
-      sigAlg: request.sigAlg,
-      signature: '0x${_toHex(signature)}',
-      payloadHash: payloadHash,
-      signedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    return _signer.buildResponse(
+      request: request,
+      signatureHex: '0x${_toHex(signature)}',
     );
   }
 
-  /// 从 display.fields（List 格式）中按 key 查找 value。
-  static String? _findFieldValue(List<dynamic> fields, String key) {
+  /// 从 display.fields 中按 key 查找 value（用于与解码结果交叉比对）。
+  static String? _findFieldValue(
+      List<SignDisplayField> fields, String key) {
     for (final field in fields) {
-      if (field is Map && field['key']?.toString() == key) {
-        return field['value']?.toString();
-      }
+      if (field.key == key) return field.value;
     }
     return null;
   }

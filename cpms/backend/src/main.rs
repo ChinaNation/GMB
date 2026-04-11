@@ -14,6 +14,7 @@ mod dangan;
 mod initialize;
 mod login;
 mod operator_admin;
+mod qr;
 mod rsa_blind_client;
 mod super_admin;
 

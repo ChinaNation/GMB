@@ -1,0 +1,14 @@
+{
+  "proto": "WUMIN_QR_V1",
+  "kind": "sign_response",
+  "id": "req_01HXYZ4VQK8NRPM2G7FJD9TBC3",
+  "issued_at": 1712650000,
+  "expires_at": 1712650090,
+  "body": {
+    "pubkey": "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d",
+    "sig_alg": "sr25519",
+    "signature": "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+    "payload_hash": "0xfeedfacecafebeef00112233445566778899aabbccddeeff0011223344556677",
+    "signed_at": 1712650015
+  }
+}

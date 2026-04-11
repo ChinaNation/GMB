@@ -366,9 +366,15 @@ async fn auth_qr_challenge(
     let challenge_id = format!("chl_{}", Uuid::new_v4().simple());
     let issued_at = Utc::now().timestamp();
     let expire_at = (Utc::now() + Duration::seconds(CHALLENGE_EXPIRES_SECONDS)).timestamp();
+    // challenge_payload:保留为回放保护用的唯一 token(DB 列名沿用历史 schema)。
+    // 实际客户端签名原文在验证时通过 qr::build_signature_message 重建。
     let challenge_payload = format!(
-        "WUMIN_LOGIN_V1.0.0|{}|{}|{}",
-        "cpms", challenge_id, expire_at
+        "{}|{}|{}|{}|{}|",
+        crate::qr::WUMIN_QR_V1,
+        crate::qr::QrKind::LoginReceipt.wire(),
+        challenge_id,
+        "cpms",
+        expire_at
     );
     let (sys_pubkey, sys_sig) = build_login_qr_system_signature(
         &state,
@@ -392,17 +398,17 @@ async fn auth_qr_challenge(
     .await
     .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save challenge failed"))?;
 
-    let login_qr_payload = serde_json::json!({
-        "proto": "WUMIN_LOGIN_V1.0.0",
-        "type": "challenge",
-        "system": "cpms",
-        "challenge": challenge_id,
-        "issued_at": issued_at,
-        "expires_at": expire_at,
-        "sys_pubkey": sys_pubkey,
-        "sys_sig": sys_sig
-    })
-    .to_string();
+    let login_qr_payload = serde_json::to_string(&crate::qr::LoginChallengeEnvelope::new(
+        challenge_id.clone(),
+        issued_at,
+        expire_at,
+        crate::qr::LoginChallengeBody {
+            system: "cpms".to_string(),
+            sys_pubkey: sys_pubkey.clone(),
+            sys_sig: sys_sig.clone(),
+        },
+    ))
+    .unwrap_or_default();
 
     Ok(Json(ok(QrChallengeData {
         challenge_id,
@@ -486,9 +492,19 @@ async fn auth_qr_complete(
     if admin.status != "ACTIVE" {
         return Err(err(StatusCode::UNAUTHORIZED, 2002, "admin is not active"));
     }
+    // 重建完整签名原文(包含签名者公钥),与 wumin 端
+    // buildSignatureMessage(kind=login_receipt, principal=pubkey) 一致。
+    let verify_message = crate::qr::build_signature_message(
+        crate::qr::QrKind::LoginReceipt,
+        req.challenge_id.trim(),
+        Some("cpms"),
+        Some(expire_at),
+        req.admin_pubkey.trim(),
+    );
+    let _ = &challenge_payload; // 仅用于回放保护,不用于签名验证
     if verify_wumin_login_signature(
         req.admin_pubkey.trim(),
-        &challenge_payload,
+        &verify_message,
         req.signature.trim(),
     )
     .is_err()
@@ -790,9 +806,13 @@ pub(crate) async fn build_login_qr_system_signature(
         )
     })?;
     let keypair = mini.expand_to_keypair(schnorrkel::ExpansionMode::Ed25519);
-    let message = format!(
-        "WUMIN_LOGIN_V1.0.0|{}|{}|{}|{}|{}",
-        system, challenge, issued_at, expires_at, active.pubkey
+    let _ = issued_at; // 统一签名原文不再包含 issued_at
+    let message = crate::qr::build_signature_message(
+        crate::qr::QrKind::LoginChallenge,
+        challenge,
+        Some(system),
+        Some(expires_at),
+        &active.pubkey,
     );
     let signature = keypair.sign(signing_context(b"substrate").bytes(message.as_bytes()));
     Ok((

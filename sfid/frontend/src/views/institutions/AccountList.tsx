@@ -34,18 +34,24 @@ export const AccountList: React.FC<Props> = ({ accounts, loading, canDelete, onD
       columns={[
         { title: '账户名称', dataIndex: 'account_name', width: 200 },
         {
+          title: '账户地址',
+          dataIndex: 'duoqian_address',
+          render: (v: string | null) =>
+            v ? (
+              <span style={{ fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                {v.slice(0, 10)}...{v.slice(-8)}
+              </span>
+            ) : (
+              '-'
+            ),
+        },
+        {
           title: '链上状态',
           dataIndex: 'chain_status',
           width: 120,
           render: (v: MultisigChainStatus) => (
             <Tag color={STATUS_COLOR[v] || 'default'}>{STATUS_LABEL[v] || v}</Tag>
           ),
-        },
-        {
-          title: '区块高度',
-          dataIndex: 'chain_block_number',
-          width: 110,
-          render: (v: number | null) => (v !== null && v !== undefined ? `#${v}` : '-'),
         },
         {
           title: '交易哈希',
@@ -63,7 +69,7 @@ export const AccountList: React.FC<Props> = ({ accounts, loading, canDelete, onD
           title: '创建时间',
           dataIndex: 'created_at',
           width: 170,
-          render: (v: string) => new Date(v).toLocaleString(),
+          render: (v: string) => new Date(v).toLocaleString('zh-CN'),
         },
         canDelete
           ? {

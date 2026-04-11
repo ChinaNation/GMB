@@ -9,6 +9,7 @@ import 'package:wuminapp_mobile/trade/offchain/clearing_banks.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
+import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/trade/local_tx_store.dart';
 import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
@@ -153,9 +154,9 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
             const SizedBox(height: 4),
             Text('清算行：$bankName'),
             const SizedBox(height: 4),
-            Text('支付金额：$amount GMB'),
+            Text('支付金额：${AmountFormat.format(amount, symbol: 'GMB')}'),
             const SizedBox(height: 4),
-            Text('预估手续费：$fee GMB'),
+            Text('预估手续费：${AmountFormat.format(fee, symbol: 'GMB')}'),
             const Divider(height: 16),
             Text(
               '合计：${AmountFormat.format(amount + fee, symbol: 'GMB')}',
@@ -197,7 +198,7 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
         signCallback = (payload) =>
             walletManager.signWithWalletNoAuth(wallet.walletIndex, payload);
       } else {
-        // 冷钱包：使用签名协议 WUMIN_SIGN_V1.0.0
+        // 冷钱包:使用统一协议 WUMIN_QR_V1 kind=sign_request
         signCallback = (Uint8List payload) async {
           final qrSigner = QrSigner();
           final requestId = QrSigner.generateRequestId(prefix: 'offpay-');
@@ -207,37 +208,24 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
           final rv = await ChainRpc().fetchRuntimeVersion();
           final request = qrSigner.buildRequest(
             requestId: requestId,
-            account: wallet.address,
+            address: wallet.address,
             pubkey: '0x${wallet.pubkeyHex}',
             payloadHex: '0x${_toHex(payload)}',
             specVersion: rv.specVersion,
-            display: {
-              'action': 'offchain_pay',
-              'action_label': '扫码支付',
-              'summary': '扫码支付 $amountFormatted GMB 给 ${widget.toAddress}',
-              'fields': [
-                {
-                  'key': 'to',
-                  'label': '收款方',
-                  'value': widget.toAddress,
-                },
-                {
-                  'key': 'amount_yuan',
-                  'label': '金额',
-                  'value': '$amountFormatted GMB',
-                  'format': 'currency',
-                },
-                {
-                  'key': 'bank',
-                  'label': '清算行',
-                  'value': bankName,
-                },
+            display: SignDisplay(
+              action: 'offchain_pay',
+              summary: '扫码支付 $amountFormatted GMB 给 ${widget.toAddress}',
+              fields: [
+                SignDisplayField(label: '收款方', value: widget.toAddress),
+                SignDisplayField(
+                    label: '金额', value: '$amountFormatted GMB'),
+                SignDisplayField(label: '清算行', value: bankName),
               ],
-            },
+            ),
           );
           final requestJson = qrSigner.encodeRequest(request);
 
-          final response = await Navigator.push<QrSignResponse>(
+          final response = await Navigator.push<SignResponseEnvelope>(
             context,
             MaterialPageRoute(
               builder: (_) => QrSignSessionPage(
@@ -252,7 +240,7 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
             throw Exception('签名已取消');
           }
 
-          return Uint8List.fromList(_hexToBytes(response.signature));
+          return Uint8List.fromList(_hexToBytes(response.body.signature));
         };
       }
 

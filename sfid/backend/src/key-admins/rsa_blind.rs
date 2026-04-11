@@ -9,7 +9,7 @@
 //! CPMS 无法篡改。
 
 use blind_rsa_signatures::{
-    BlindMessage, BlindSignature, KeyPair, Signature, DefaultRng,
+    BlindMessage, KeyPair, Signature, DefaultRng,
     PSS, Randomized, Sha384,
 };
 use std::sync::RwLock;
@@ -17,7 +17,6 @@ use std::sync::RwLock;
 /// 标准盲签名密钥对类型
 type BssaKeyPair = KeyPair<Sha384, PSS, Randomized>;
 type BssaSecretKey = blind_rsa_signatures::SecretKey<Sha384, PSS, Randomized>;
-type BssaPublicKey = blind_rsa_signatures::PublicKey<Sha384, PSS, Randomized>;
 
 const RSA_KEY_BITS: usize = 2048;
 
@@ -56,6 +55,7 @@ pub fn generate_keypair_pem() -> Result<String, String> {
 }
 
 /// 启动时自动初始化。已有 PEM 则加载，否则返回 `Some(new_pem)` 表示需要持久化。
+#[allow(dead_code)]
 pub fn init_or_generate(existing_pem: Option<&str>) -> Result<Option<String>, String> {
     if let Some(pem) = existing_pem {
         if !pem.trim().is_empty() {

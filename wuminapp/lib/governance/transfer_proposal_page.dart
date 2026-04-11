@@ -13,6 +13,7 @@ import '../qr/pages/qr_scan_page.dart';
 import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
 import '../rpc/onchain.dart' show OnchainRpc;
+import '../qr/bodies/sign_request_body.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 
@@ -195,24 +196,23 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
         final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'propose-'),
-          account: wallet.address,
+          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
           specVersion: rv.specVersion,
-          display: {
-            'action': 'propose_transfer',
-            'action_label': '提案转账',
-            'summary': '${OrgType.label(widget.institution.orgType)} 提案转账 $amountFormatted GMB 给 $beneficiary',
-            'fields': [
-              {'key': 'org', 'label': '付款机构', 'value': OrgType.label(widget.institution.orgType)},
-              {'key': 'beneficiary', 'label': '收款账户', 'value': beneficiary},
-              {'key': 'amount_yuan', 'label': '金额', 'value': '$amountFormatted GMB', 'format': 'currency'},
-              {'key': 'remark', 'label': '备注', 'value': remarkText},
+          display: SignDisplay(
+            action: 'propose_transfer',
+            summary: '${OrgType.label(widget.institution.orgType)} 提案转账 $amountFormatted GMB 给 $beneficiary',
+            fields: [
+              SignDisplayField(label: '付款机构', value: OrgType.label(widget.institution.orgType)),
+              SignDisplayField(label: '收款账户', value: beneficiary),
+              SignDisplayField(label: '金额', value: '$amountFormatted GMB'),
+              SignDisplayField(label: '备注', value: remarkText),
             ],
-          },
+          ),
         );
         final requestJson = qrSigner.encodeRequest(request);
-        final response = await Navigator.push<QrSignResponse>(
+        final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
             builder: (_) => QrSignSessionPage(
@@ -222,7 +222,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexToBytes(response.signature));
+        return Uint8List.fromList(_hexToBytes(response.body.signature));
       }
 
       final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));

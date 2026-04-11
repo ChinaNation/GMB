@@ -20,12 +20,17 @@ use crate::*;
 // 历史教训：INSTITUTION_DOMAIN 曾被错误声明为 &[u8]，导致 register_sfid_institution
 // 长期 InvalidSfidInstitutionSignature。修复见 ADR
 // `04-decisions/sfid/2026-04-07-subxt-0.43-pow-chain-quirks.md`。
-const BIND_DOMAIN: [u8; 16] = *b"GMB_SFID_BIND_V3";
-const VOTE_DOMAIN: [u8; 16] = *b"GMB_SFID_VOTE_V3";
-const INSTITUTION_DOMAIN: [u8; 23] = *b"GMB_SFID_INSTITUTION_V2";
+// 中文注释：Phase 1.B 起统一所有业务 domain tag 为 11 字节 "GMB_SFID_V1"，
+// 原先 4 个分离的 domain 常量（BIND/VOTE/INSTITUTION/POPULATION）合并为同一个值，
+// 由 payload 其他字段（who/binding_id/proposal_id 等）区分用途。
+// 必须与 citizenchain 链端 verifier 中的 DOMAIN 字面量保持 [u8; 11] 类型严格一致。
 #[allow(dead_code)]
-pub(crate) const POPULATION_DOMAIN_STR: &str = "GMB_SFID_POPULATION_V3";
-const POPULATION_DOMAIN: [u8; 22] = *b"GMB_SFID_POPULATION_V3";
+const BIND_DOMAIN: [u8; 11] = *b"GMB_SFID_V1";
+const VOTE_DOMAIN: [u8; 11] = *b"GMB_SFID_V1";
+const INSTITUTION_DOMAIN: [u8; 11] = *b"GMB_SFID_V1";
+#[allow(dead_code)]
+pub(crate) const POPULATION_DOMAIN_STR: &str = "GMB_SFID_V1";
+const POPULATION_DOMAIN: [u8; 11] = *b"GMB_SFID_V1";
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
 static SIGNING_KEY_CACHE: OnceLock<RwLock<Option<CachedSigningKey>>> = OnceLock::new();
 const TRUSTED_PRODUCTION_CHAINS: &[TrustedProductionChain] = &[
@@ -45,6 +50,7 @@ struct TrustedProductionChain {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct RuntimeSignatureMeta {
     pub(crate) key_id: String,
     pub(crate) key_version: String,
@@ -97,6 +103,7 @@ pub(crate) struct RuntimeInstitutionCredential {
     pub(crate) meta: RuntimeSignatureMeta,
 }
 
+#[allow(dead_code)]
 pub(crate) fn build_bind_credential(
     state: &AppState,
     account_pubkey: &str,
@@ -199,6 +206,57 @@ pub(crate) fn build_population_snapshot_credential(
     })
 }
 
+/// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 11：
+/// 用本省 sr25519 Pair 构造业务 payload 并签名，payload 末尾追加 `signing_province`
+/// 以与链端 Phase 1.A 的 RuntimeSfidInstitutionVerifier 对齐。
+///
+/// 返回的 credential 结构复用 `RuntimeInstitutionCredential`，其中 `meta` 字段
+/// 表示的是 SFID MAIN 的 key_id/version/alg（仅用于审计展示），实际推链签名来自
+/// 传入的 `province_pair`。
+pub(crate) fn build_institution_credential_with_province(
+    state: &AppState,
+    sfid_id: &str,
+    name: &str,
+    register_nonce: String,
+    province: &str,
+    province_pair: &sp_core::sr25519::Pair,
+) -> Result<RuntimeInstitutionCredential, String> {
+    if sfid_id.trim().is_empty() {
+        return Err("sfid_id is required".to_string());
+    }
+    if name.trim().is_empty() {
+        return Err("institution name is required".to_string());
+    }
+    if register_nonce.trim().is_empty() {
+        return Err("register_nonce is required".to_string());
+    }
+    if province.trim().is_empty() {
+        return Err("signing_province is required".to_string());
+    }
+    let genesis_hash = resolve_chain_genesis_hash()?;
+    // 中文注释：链端 verifier（citizenchain/runtime/src/configs/mod.rs 约 770 行）
+    // 在 signing_province 为 Some 时 payload 末尾追加省份字节。必须 6 元组完全一致。
+    let payload = (
+        INSTITUTION_DOMAIN,
+        genesis_hash,
+        sfid_id.as_bytes(),
+        name.as_bytes(),
+        register_nonce.as_bytes(),
+        province.as_bytes(),
+    );
+    let payload_digest = blake2_256(&payload.encode());
+    let signature = province_pair.sign(&payload_digest).0;
+    Ok(RuntimeInstitutionCredential {
+        genesis_hash: hex::encode(genesis_hash),
+        sfid_id: sfid_id.to_string(),
+        name: name.to_string(),
+        register_nonce,
+        signature: hex::encode(signature),
+        meta: runtime_signature_meta(state),
+    })
+}
+
+#[allow(dead_code)]
 pub(crate) fn build_institution_credential(
     state: &AppState,
     sfid_id: &str,
@@ -235,6 +293,7 @@ pub(crate) fn build_institution_credential(
     })
 }
 
+#[allow(dead_code)]
 pub(crate) fn current_chain_genesis_hash_hex() -> Result<String, String> {
     resolve_chain_genesis_hash().map(hex::encode)
 }
@@ -275,6 +334,7 @@ fn resolve_chain_ws_url() -> Result<String, String> {
 }
 
 /// 暴露 ws url 给其他模块使用（如链上余额查询）。
+#[allow(dead_code)]
 pub(crate) fn chain_ws_url() -> Result<String, String> {
     resolve_chain_ws_url()
 }

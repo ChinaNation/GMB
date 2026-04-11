@@ -3,8 +3,10 @@
 // 能力标志暂时对齐 App.tsx 原来的 resolveRoleCapabilities(也就是 RoleCapabilities 形状),
 // 避免步 0 同时改动 2000+ 行 capabilities 调用点。
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { message } from 'antd';
 import type { AdminAuth } from '../api/client';
+import { setOnUnauthorized } from '../api/client';
 import { clearStoredAuth, readStoredAuth, writeStoredAuth } from '../utils/storedAuth';
 
 export type RoleCapabilities = {
@@ -76,6 +78,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = useCallback(() => {
     setAuthState(null);
+  }, []);
+
+  // ── 401 拦截：token 失效时自动登出 + 提示 ──
+  const logoutRef = useRef(logout);
+  logoutRef.current = logout;
+  useEffect(() => {
+    setOnUnauthorized(() => {
+      message.warning('登录已过期，请重新登录');
+      logoutRef.current();
+    });
+    return () => setOnUnauthorized(null);
   }, []);
 
   const capabilities = useMemo(() => resolveRoleCapabilities(auth), [auth]);

@@ -11,6 +11,7 @@ import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
 import '../rpc/onchain.dart';
 import '../rpc/smoldot_client.dart';
+import '../qr/bodies/sign_request_body.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'proposal_vote_widgets.dart';
@@ -219,45 +220,27 @@ class _TransferProposalDetailPageState
         final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'vote-'),
-          account: wallet.address,
+          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
           specVersion: rv.specVersion,
-          display: {
-            'action': 'vote_transfer',
-            'action_label': '转账投票',
-            'summary': '转账提案 #${widget.proposalId} 投票：$voteText',
-            'fields': [
-              {
-                'key': 'proposal_id',
-                'label': '提案编号',
-                'value': widget.proposalId.toString()
-              },
-              {'key': 'approve', 'label': '投票', 'value': approve.toString()},
-              if (_proposalInfo != null) ...{
-                {
-                  'key': 'beneficiary',
-                  'label': '收款账户',
-                  'value': _proposalInfo!.beneficiary
-                },
-                {
-                  'key': 'amount_yuan',
-                  'label': '金额',
-                  'value': AmountFormat.format(_proposalInfo!.amountYuan),
-                  'format': 'currency'
-                },
+          display: SignDisplay(
+            action: 'vote_transfer',
+            summary: '转账提案 #${widget.proposalId} 投票：$voteText',
+            fields: [
+              SignDisplayField(label: '提案编号', value: widget.proposalId.toString()),
+              SignDisplayField(label: '投票', value: approve.toString()),
+              if (_proposalInfo != null) ...[
+                SignDisplayField(label: '收款账户', value: _proposalInfo!.beneficiary),
+                SignDisplayField(label: '金额', value: AmountFormat.format(_proposalInfo!.amountYuan)),
                 if (_proposalInfo!.remark.isNotEmpty)
-                  {
-                    'key': 'remark',
-                    'label': '备注',
-                    'value': _proposalInfo!.remark
-                  },
-              },
+                  SignDisplayField(label: '备注', value: _proposalInfo!.remark),
+              ],
             ],
-          },
+          ),
         );
         final requestJson = qrSigner.encodeRequest(request);
-        final response = await Navigator.push<QrSignResponse>(
+        final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
             builder: (_) => QrSignSessionPage(
@@ -267,7 +250,7 @@ class _TransferProposalDetailPageState
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexDecode(response.signature));
+        return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
       final result = await _proposalService.submitVoteTransfer(

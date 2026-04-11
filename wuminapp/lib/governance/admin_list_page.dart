@@ -231,7 +231,7 @@ class _AdminTile extends StatelessWidget {
     if (!context.mounted) return;
 
     // 跳转 QR 签名会话页
-    final response = await Navigator.of(context).push<QrSignResponse>(
+    final response = await Navigator.of(context).push<SignResponseEnvelope>(
       MaterialPageRoute(
         builder: (_) => QrSignSessionPage(
           request: request,

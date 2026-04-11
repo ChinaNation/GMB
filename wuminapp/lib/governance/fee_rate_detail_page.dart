@@ -13,6 +13,7 @@ import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
 import '../rpc/onchain.dart';
 import '../rpc/smoldot_client.dart';
+import '../qr/bodies/sign_request_body.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 
@@ -200,22 +201,21 @@ class _FeeRateDetailPageState extends State<FeeRateDetailPage> {
         final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'vote-'),
-          account: wallet.address,
+          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
           specVersion: rv.specVersion,
-          display: {
-            'action': 'vote_institution_rate',
-            'action_label': '费率投票',
-            'summary': '费率提案 #${widget.proposalId} 投票：$voteText',
-            'fields': [
-              {'key': 'proposal_id', 'label': '提案编号', 'value': widget.proposalId.toString()},
-              {'key': 'approve', 'label': '投票', 'value': voteText},
+          display: SignDisplay(
+            action: 'vote_institution_rate',
+            summary: '费率提案 #${widget.proposalId} 投票：$voteText',
+            fields: [
+              SignDisplayField(label: '提案编号', value: widget.proposalId.toString()),
+              SignDisplayField(label: '投票', value: voteText),
             ],
-          },
+          ),
         );
         final requestJson = qrSigner.encodeRequest(request);
-        final response = await Navigator.push<QrSignResponse>(
+        final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
             builder: (_) => QrSignSessionPage(
@@ -226,7 +226,7 @@ class _FeeRateDetailPageState extends State<FeeRateDetailPage> {
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexDecode(response.signature));
+        return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
       final result = await _proposalService.submitVoteRate(

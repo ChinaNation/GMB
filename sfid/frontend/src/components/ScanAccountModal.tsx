@@ -1,15 +1,12 @@
-// 中文注释:从 App.tsx 迁移(任务卡 20260408-sfid-frontend-app-tsx-split 步 2)
-// 通用"扫码识别账户"弹窗。调用摄像头扫描 WUMIN_USER_V1.0.0 用户码,
-// 从中提取 `address` 字段(SS58)回填。供 密钥管理 / 新增市级管理员 / 更换省级管理员 等场景复用。
+// 通用"扫码识别账户"弹窗。调用摄像头扫描 WUMIN_QR_V1 用户码,
+// 从中提取 body.address(SS58)回填。供 密钥管理 / 新增市级管理员 / 更换省级管理员 等场景复用。
+// 使用统一的 BarcodeDetector 方案(cameraScanner.ts),与登录/绑定/CPMS 等场景一致。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Modal, Typography } from 'antd';
-import QrScanner from 'qr-scanner';
 import { decodeSs58 } from '../utils/ss58';
-
-/// 区块链全链统一的"用户协议"二维码 proto 标识。
-/// 详见:wuminapp/lib/qr/qr_protocols.dart
-const WUMIN_USER_PROTOCOL = 'WUMIN_USER_V1.0.0';
+import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
+import { startCameraScanner } from '../utils/cameraScanner';
 
 export function ScanAccountModal(props: {
   open: boolean;
@@ -17,11 +14,8 @@ export function ScanAccountModal(props: {
   onResolved: (ss58Address: string) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const scannerRef = useRef<QrScanner | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Antd Modal 的 destroyOnClose 会在 open=true 之后异步挂载内容,
-  // 首次 useEffect 执行时 videoRef.current 可能仍为 null,
-  // 所以用回调 ref + videoMounted state 等真实 <video> 元素挂上后再启动 scanner。
   const [videoMounted, setVideoMounted] = useState(false);
   const attachVideo = useCallback((el: HTMLVideoElement | null) => {
     videoRef.current = el;
@@ -40,18 +34,17 @@ export function ScanAccountModal(props: {
     const video = videoRef.current;
     if (!video) return;
     setError(null);
-    let cancelled = false;
-    const scanner = new QrScanner(
+
+    const cleanup = startCameraScanner(
       video,
-      (result) => {
-        if (cancelled) return;
+      (raw) => {
         try {
-          const decoded = JSON.parse(result.data);
-          if (decoded?.proto !== WUMIN_USER_PROTOCOL) {
-            setError('不是用户协议二维码');
+          const env = parseQrEnvelope(raw);
+          if (env.kind !== 'user_contact' && env.kind !== 'user_transfer' && env.kind !== 'user_duoqian') {
+            setError('不是用户码二维码');
             return;
           }
-          const addr = String(decoded.address || '').trim();
+          const addr = String((env.body as { address?: string }).address || '').trim();
           if (!addr) {
             setError('用户码未携带 address 字段');
             return;
@@ -62,26 +55,33 @@ export function ScanAccountModal(props: {
             setError(e instanceof Error ? e.message : 'SS58 校验失败');
             return;
           }
-          scanner.stop();
+          // 识别成功,停止扫描
+          if (cleanupRef.current) {
+            cleanupRef.current();
+            cleanupRef.current = null;
+          }
           props.onResolved(addr);
-        } catch {
-          setError('二维码不是有效 JSON');
+        } catch (e) {
+          if (e instanceof QrParseError) {
+            setError(e.message);
+          } else {
+            setError('二维码不是有效 WUMIN_QR_V1 格式');
+          }
         }
       },
-      { highlightScanRegion: true, highlightCodeOutline: true, returnDetailedScanResult: true },
+      () => {
+        // camera ready — 无需额外操作
+      },
+      (msg) => {
+        setError(msg);
+      },
     );
-    scannerRef.current = scanner;
-    scanner.start().catch((err) => {
-      if (cancelled) return;
-      setError(err instanceof Error ? err.message : '摄像头初始化失败');
-    });
+    cleanupRef.current = cleanup;
+
     return () => {
-      cancelled = true;
-      const s = scannerRef.current;
-      if (s) {
-        s.stop();
-        s.destroy();
-        scannerRef.current = null;
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
       }
     };
   }, [props.open, videoMounted]);

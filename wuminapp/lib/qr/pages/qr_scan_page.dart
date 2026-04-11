@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
-import 'package:wuminapp_mobile/qr/contact/contact_qr_models.dart';
-import 'package:wuminapp_mobile/qr/login/pages/login_scan_result_page.dart';
+import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
+import 'package:wuminapp_mobile/qr/bodies/user_transfer_body.dart';
+import 'package:wuminapp_mobile/qr/bodies/user_duoqian_body.dart';
 import 'package:wuminapp_mobile/qr/qr_router.dart';
-import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
 import 'package:wuminapp_mobile/user/user_service.dart';
 
 /// 扫码结果：收款码预填数据。
@@ -126,34 +126,38 @@ class _QrScanPageState extends State<QrScanPage> {
     try {
       final result = _router.route(raw);
 
-      // 登录 QR 在任何扫码模式下都优先处理（跳转登录流程）。
-      if (result.type == QrRouteType.login) {
-        await _handleLogin(raw);
+      // 登录 QR(login_challenge / login_receipt)是冷钱包 wumin 的专属职责。
+      if (result.type == QrRouteType.loginChallenge ||
+          result.type == QrRouteType.loginReceipt) {
+        await _showLoginNotSupported();
         return;
       }
 
       switch (widget.mode) {
         case QrScanMode.transfer:
-          // 扫码支付：仅处理收款码 / 裸地址
-          if (result.type == QrRouteType.transfer) {
+          // 扫码支付:接受 user_transfer / user_contact / user_duoqian / 裸地址
+          if (result.type == QrRouteType.userTransfer) {
             _handleTransfer(result);
+          } else if (result.type == QrRouteType.userContact) {
+            _handleContactAsRecipient(result);
+          } else if (result.type == QrRouteType.userDuoqian) {
+            _handleDuoqianAsRecipient(result);
           } else if (result.type == QrRouteType.legacyAddress) {
             _handleLegacyAddress(result.extractedAddress!);
           } else {
             await _showUnrecognized();
           }
         case QrScanMode.contact:
-          // 扫码添加好友：扫描收款码读取 name + to
-          if (result.type == QrRouteType.transfer) {
+          // 扫码添加好友:接受 user_transfer(带 name)/ user_contact
+          if (result.type == QrRouteType.userTransfer) {
             await _handleContactFromTransfer(result);
-          } else if (result.type == QrRouteType.contact) {
-            // 兼容旧版用户码
-            await _handleContact(raw);
+          } else if (result.type == QrRouteType.userContact) {
+            await _handleContact(result);
           } else {
             await _showUnrecognized();
           }
         case QrScanMode.raw:
-          // 通用扫码：直接返回原始字符串
+          // 通用扫码:直接返回原始字符串
           if (!mounted) return;
           Navigator.of(context).pop(raw);
       }
@@ -190,30 +194,26 @@ class _QrScanPageState extends State<QrScanPage> {
     if (!mounted) {
       return;
     }
-    try {
-      final payload = TransferQrPayload.fromJson(result.jsonData!);
-      Navigator.of(context).pop(QrScanTransferResult(
-        toAddress: payload.to,
-        amount: payload.amount,
-        symbol: payload.symbol,
-        memo: payload.memo,
-        bank: payload.bank,
-      ));
-    } catch (e) {
-      showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('收款码解析失败'),
-          content: Text('$e'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('确定'),
-            ),
-          ],
-        ),
-      );
-    }
+    final body = result.envelope!.body as UserTransferBody;
+    Navigator.of(context).pop(QrScanTransferResult(
+      toAddress: body.address,
+      amount: body.amount.isEmpty ? null : body.amount,
+      symbol: body.symbol.isEmpty ? null : body.symbol,
+      memo: body.memo.isEmpty ? null : body.memo,
+      bank: body.bank.isEmpty ? null : body.bank,
+    ));
+  }
+
+  void _handleContactAsRecipient(QrRouteResult result) {
+    if (!mounted) return;
+    final body = result.envelope!.body as UserContactBody;
+    Navigator.of(context).pop(QrScanTransferResult(toAddress: body.address));
+  }
+
+  void _handleDuoqianAsRecipient(QrRouteResult result) {
+    if (!mounted) return;
+    final body = result.envelope!.body as UserDuoqianBody;
+    Navigator.of(context).pop(QrScanTransferResult(toAddress: body.address));
   }
 
   // ---------------------------------------------------------------------------
@@ -234,8 +234,8 @@ class _QrScanPageState extends State<QrScanPage> {
   Future<void> _handleContactFromTransfer(QrRouteResult result) async {
     if (!mounted) return;
     try {
-      final payload = TransferQrPayload.fromJson(result.jsonData!);
-      final name = payload.name?.trim() ?? '';
+      final body = result.envelope!.body as UserTransferBody;
+      final name = body.name.trim();
       if (name.isEmpty) {
         await showDialog<void>(
           context: context,
@@ -253,7 +253,7 @@ class _QrScanPageState extends State<QrScanPage> {
         return;
       }
       final contactResult = await _contactService.addContact(
-        address: payload.to,
+        address: body.address,
         name: name,
         selfAddress: widget.selfAccountPubkeyHex,
       );
@@ -290,22 +290,22 @@ class _QrScanPageState extends State<QrScanPage> {
   // 用户码（兼容旧版）
   // ---------------------------------------------------------------------------
 
-  Future<void> _handleContact(String raw) async {
+  Future<void> _handleContact(QrRouteResult result) async {
     if (!mounted) return;
     try {
-      final payload = UserQrPayload.parse(raw);
-      final result = await _contactService.addContact(
-        address: payload.address,
-        name: payload.name,
+      final body = result.envelope!.body as UserContactBody;
+      final addResult = await _contactService.addContact(
+        address: body.address,
+        name: body.name,
         selfAddress: widget.selfAccountPubkeyHex,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            result.created
-                ? '已加入通讯录：${result.contact.displayNickname}'
-                : '已更新通讯录：${result.contact.displayNickname}',
+            addResult.created
+                ? '已加入通讯录：${addResult.contact.displayNickname}'
+                : '已更新通讯录：${addResult.contact.displayNickname}',
           ),
         ),
       );
@@ -344,14 +344,21 @@ class _QrScanPageState extends State<QrScanPage> {
         QrScanMode.raw => '扫描二维码',
       };
 
-  Future<void> _handleLogin(String raw) async {
+  Future<void> _showLoginNotSupported() async {
     if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => LoginScanResultPage(challengeRaw: raw),
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('无法处理'),
+        content: const Text('登录二维码请用冷钱包 wumin 扫描'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
       ),
     );
-    if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _showUnrecognized() async {

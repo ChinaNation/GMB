@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.7"
+axum = { version = "0.7", features = ["multipart"] }
 chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }
@@ -29,5 +29,11 @@ subxt = { version = "0.43.1", default-features = false, features = ["jsonrpsee",
 redis = { version = "0.27", features = ["aio", "tokio-comp"] }
 twox-hash = "1"
 sp-core = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix", default-features = true }
+aes-gcm = "0.10"
+hkdf = "0.12"
+base64 = "0.22"
+getrandom = "0.2"
+dashmap = "6.1"
+async-trait = "0.1"
 
 [workspace]

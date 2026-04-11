@@ -1,0 +1,12 @@
+{
+  "proto": "WUMIN_QR_V1",
+  "kind": "login_challenge",
+  "id": "ch_01HXYZ4VQK8NRPM2G7FJD9TBC3",
+  "issued_at": 1712650000,
+  "expires_at": 1712650090,
+  "body": {
+    "system": "sfid",
+    "sys_pubkey": "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+    "sys_sig": "0x1122334455667788991122334455667788991122334455667788991122334455667788991122334455667788991122334455667788991122334455667788"
+  }
+}

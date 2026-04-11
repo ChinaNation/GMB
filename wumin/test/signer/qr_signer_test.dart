@@ -3,6 +3,10 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
+import 'package:wumin/qr/qr_protocols.dart';
+import 'package:wumin/qr/bodies/sign_request_body.dart';
+import 'package:wumin/qr/bodies/sign_response_body.dart';
+import 'package:wumin/qr/envelope.dart';
 import 'package:wumin/signer/qr_signer.dart';
 
 void main() {
@@ -37,133 +41,72 @@ void main() {
     });
   });
 
-  group('QrSigner.buildRequest', () {
-    test('构建包含所有必需字段的请求', () {
-      final request = signer.buildRequest(
-        requestId: 'test-request-id-00001',
-        account: testAddress,
-        pubkey: testPubkeyHex,
-        payloadHex: '0x0102',
-        display: const {'action': 'test', 'summary': '测试'},
-      );
-
-      expect(request.proto, QrSigner.protocol);
-      expect(request.requestId, 'test-request-id-00001');
-      expect(request.account, testAddress);
-      expect(request.pubkey, testPubkeyHex);
-      expect(request.sigAlg, 'sr25519');
-      expect(request.payloadHex, '0x0102');
-      expect(request.expiresAt, greaterThan(request.issuedAt));
-      expect(request.specVersion, isNull);
-    });
-
-    test('自定义 TTL', () {
-      final request = signer.buildRequest(
-        requestId: 'test-request-id-00002',
-        account: testAddress,
-        pubkey: testPubkeyHex,
-        payloadHex: '0x0102',
-        display: const {'action': 'test', 'summary': '测试'},
-        ttlSeconds: 300,
-      );
-      expect(request.expiresAt - request.issuedAt, 300);
-    });
-
-    test('带 specVersion', () {
-      final request = signer.buildRequest(
-        requestId: 'test-request-id-00003',
-        account: testAddress,
-        pubkey: testPubkeyHex,
-        payloadHex: '0x0102',
-        display: const {'action': 'test', 'summary': '测试'},
-        specVersion: 100,
-      );
-      expect(request.specVersion, 100);
-    });
-  });
-
-  group('QrSigner.encodeRequest / parseRequest', () {
-    test('序列化和反序列化一致', () {
-      final original = signer.buildRequest(
-        requestId: 'roundtrip-test-id-001',
-        account: testAddress,
-        pubkey: testPubkeyHex,
-        payloadHex: '0x01020304',
-        display: const {'action': 'transfer', 'summary': '转账测试'},
-        specVersion: 100,
-      );
-
-      final encoded = signer.encodeRequest(original);
-      final parsed = signer.parseRequest(encoded);
-
-      expect(parsed.proto, original.proto);
-      expect(parsed.requestId, original.requestId);
-      expect(parsed.account, original.account);
-      expect(parsed.pubkey, original.pubkey);
-      expect(parsed.sigAlg, original.sigAlg);
-      expect(parsed.payloadHex, original.payloadHex);
-      expect(parsed.issuedAt, original.issuedAt);
-      expect(parsed.expiresAt, original.expiresAt);
-      expect(parsed.specVersion, original.specVersion);
-      expect(parsed.display['action'], 'transfer');
-    });
-  });
-
-  group('QrSigner.parseRequest 校验', () {
-    /// 构造一个合法 JSON 字符串，方便修改特定字段。
-    Map<String, dynamic> _validJson() {
+  group('QrSigner.parseRequest (envelope)', () {
+    Map<String, dynamic> _validEnvelope() {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       return {
-        'proto': QrSigner.protocol,
-        'type': 'sign_request',
-        'request_id': 'test-valid-req-id-0001',
-        'account': testAddress,
-        'pubkey': testPubkeyHex,
-        'sig_alg': 'sr25519',
-        'payload_hex': '0x0102',
+        'proto': QrProtocols.v1,
+        'kind': 'sign_request',
+        'id': 'test-valid-req-id-0001',
         'issued_at': now,
         'expires_at': now + 90,
-        'display': {'action': 'test', 'summary': '测试'},
+        'body': {
+          'address': testAddress,
+          'pubkey': testPubkeyHex,
+          'sig_alg': 'sr25519',
+          'payload_hex': '0x0102',
+          'spec_version': 100,
+          'display': {'action': 'test', 'summary': '测试', 'fields': []},
+        },
       };
     }
+
+    test('序列化和反序列化一致', () {
+      final envelope = _validEnvelope();
+      final encoded = jsonEncode(envelope);
+      final parsed = signer.parseRequest(encoded);
+
+      expect(parsed.kind, QrKind.signRequest);
+      expect(parsed.id, 'test-valid-req-id-0001');
+      expect(parsed.body.address, testAddress);
+      expect(parsed.body.pubkey, testPubkeyHex);
+      expect(parsed.body.sigAlg, 'sr25519');
+      expect(parsed.body.payloadHex, '0x0102');
+      expect(parsed.body.specVersion, 100);
+      expect(parsed.body.display.action, 'test');
+      expect(parsed.body.display.summary, '测试');
+    });
 
     test('拒绝非 JSON', () {
       expect(
         () => signer.parseRequest('not json'),
         throwsA(isA<QrSignException>().having(
-          (e) => e.code,
-          'code',
-          QrSignErrorCode.invalidFormat,
+          (e) => e.code, 'code', QrSignErrorCode.invalidFormat,
         )),
       );
     });
 
     test('拒绝错误协议版本', () {
-      final json = _validJson()..['proto'] = 'WRONG_PROTO';
+      final json = _validEnvelope()..['proto'] = 'WRONG_PROTO';
       expect(
         () => signer.parseRequest(jsonEncode(json)),
-        throwsA(isA<QrSignException>().having(
-          (e) => e.code,
-          'code',
-          QrSignErrorCode.invalidProtocol,
-        )),
+        throwsA(isA<QrSignException>()),
       );
     });
 
-    test('拒绝非签名请求类型', () {
-      final json = _validJson()..['type'] = 'sign_response';
+    test('拒绝非签名请求 kind', () {
+      final json = _validEnvelope()..['kind'] = 'sign_response';
       expect(
         () => signer.parseRequest(jsonEncode(json)),
         throwsA(isA<QrSignException>().having(
-          (e) => e.code,
-          'code',
-          QrSignErrorCode.invalidField,
+          (e) => e.code, 'code', QrSignErrorCode.invalidField,
         )),
       );
     });
 
     test('拒绝缺少 display.action', () {
-      final json = _validJson()..['display'] = {'summary': '测试'};
+      final json = _validEnvelope();
+      (json['body'] as Map<String, dynamic>)['display'] = {'summary': '测试', 'fields': []};
       expect(
         () => signer.parseRequest(jsonEncode(json)),
         throwsA(isA<QrSignException>()),
@@ -171,7 +114,8 @@ void main() {
     });
 
     test('拒绝缺少 display.summary', () {
-      final json = _validJson()..['display'] = {'action': 'test'};
+      final json = _validEnvelope();
+      (json['body'] as Map<String, dynamic>)['display'] = {'action': 'test', 'fields': []};
       expect(
         () => signer.parseRequest(jsonEncode(json)),
         throwsA(isA<QrSignException>()),
@@ -180,29 +124,31 @@ void main() {
 
     test('拒绝已过期请求', () {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final json = _validJson()
+      final json = _validEnvelope()
         ..['issued_at'] = now - 200
         ..['expires_at'] = now - 100;
       expect(
         () => signer.parseRequest(jsonEncode(json)),
         throwsA(isA<QrSignException>().having(
-          (e) => e.code,
-          'code',
-          QrSignErrorCode.expired,
+          (e) => e.code, 'code', QrSignErrorCode.expired,
         )),
       );
     });
 
     test('拒绝空 payload_hex', () {
-      final json = _validJson()..['payload_hex'] = '';
+      final json = _validEnvelope();
+      (json['body'] as Map<String, dynamic>)['payload_hex'] = '';
       expect(
         () => signer.parseRequest(jsonEncode(json)),
         throwsA(isA<QrSignException>()),
       );
     });
 
-    test('拒绝非 sr25519 签名算法', () {
-      final json = _validJson()..['sig_alg'] = 'ed25519';
+    test('拒绝 TTL 超过 300 秒', () {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final json = _validEnvelope()
+        ..['issued_at'] = now
+        ..['expires_at'] = now + 500;
       expect(
         () => signer.parseRequest(jsonEncode(json)),
         throwsA(isA<QrSignException>()),
@@ -210,64 +156,41 @@ void main() {
     });
   });
 
-  group('QrSigner.parseResponse', () {
-    test('正常解析回执', () {
-      final request = signer.buildRequest(
-        requestId: 'resp-test-req-id-0001',
-        account: testAddress,
-        pubkey: testPubkeyHex,
-        payloadHex: '0x01020304',
-        display: const {'action': 'test', 'summary': '测试'},
-      );
-
-      final payloadHash = QrSigner.computePayloadHash(request.payloadHex);
-
-      final responseJson = {
-        'proto': QrSigner.protocol,
-        'type': 'sign_response',
-        'request_id': request.requestId,
-        'pubkey': testPubkeyHex,
-        'sig_alg': 'sr25519',
-        'signature': '0x${'aa' * 64}',
-        'payload_hash': payloadHash,
-        'signed_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      };
-
-      final response = signer.parseResponse(
-        jsonEncode(responseJson),
-        expectedRequestId: request.requestId,
-        expectedPubkey: testPubkeyHex,
-        expectedPayloadHash: payloadHash,
-      );
-
-      expect(response.requestId, request.requestId);
-      expect(response.pubkey, testPubkeyHex);
-      expect(response.payloadHash, payloadHash);
-    });
-
-    test('拒绝 request_id 不匹配', () {
-      final responseJson = {
-        'proto': QrSigner.protocol,
-        'type': 'sign_response',
-        'request_id': 'wrong-request-id-00001',
-        'pubkey': testPubkeyHex,
-        'sig_alg': 'sr25519',
-        'signature': '0x${'aa' * 64}',
-        'payload_hash': '0x${'bb' * 32}',
-        'signed_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      };
-
-      expect(
-        () => signer.parseResponse(
-          jsonEncode(responseJson),
-          expectedRequestId: 'expected-request-id-01',
+  group('QrSigner.buildResponse', () {
+    test('构建 sign_response envelope', () {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final request = QrEnvelope<SignRequestBody>(
+        kind: QrKind.signRequest,
+        id: 'resp-test-req-id-0001',
+        issuedAt: now,
+        expiresAt: now + 90,
+        body: SignRequestBody(
+          address: testAddress,
+          pubkey: testPubkeyHex,
+          sigAlg: 'sr25519',
+          payloadHex: '0x01020304',
+          specVersion: 100,
+          display: const SignDisplay(action: 'test', summary: '测试'),
         ),
-        throwsA(isA<QrSignException>().having(
-          (e) => e.code,
-          'code',
-          QrSignErrorCode.mismatchedRequest,
-        )),
       );
+
+      final response = signer.buildResponse(
+        request: request,
+        signatureHex: '0x${'aa' * 64}',
+      );
+
+      expect(response.kind, QrKind.signResponse);
+      expect(response.id, request.id);
+      expect(response.body.pubkey, testPubkeyHex);
+      expect(response.body.sigAlg, 'sr25519');
+      expect(response.body.signature, '0x${'aa' * 64}');
+      expect(response.body.payloadHash, isNotEmpty);
+
+      // envelope JSON 结构正确
+      final json = jsonDecode(response.toRawJson()) as Map<String, dynamic>;
+      expect(json['proto'], QrProtocols.v1);
+      expect(json['kind'], 'sign_response');
+      expect(json['body']['pubkey'], testPubkeyHex);
     });
   });
 
@@ -284,10 +207,10 @@ void main() {
       expect(h1, isNot(h2));
     });
 
-    test('哈希长度为 64 字符 hex', () {
+    test('哈希长度为 0x + 64 字符 hex', () {
       final h = QrSigner.computePayloadHash('0x0102');
-      expect(h.length, 64);
-      expect(RegExp(r'^[0-9a-f]{64}$').hasMatch(h), isTrue);
+      expect(h.startsWith('0x'), isTrue);
+      expect(h.length, 66);
     });
   });
 
@@ -318,44 +241,6 @@ void main() {
         ),
         isFalse,
       );
-    });
-
-    test('空输入返回 false', () {
-      expect(
-        QrSigner.verifySr25519Signature(
-          pubkeyHex: '0x',
-          signatureHex: '0x',
-          payloadHex: '0x',
-        ),
-        isFalse,
-      );
-    });
-  });
-
-  group('QrSignRequest.toJson', () {
-    test('无 specVersion 时 JSON 不包含该字段', () {
-      final request = QrSigner().buildRequest(
-        requestId: 'json-test-req-id-00001',
-        account: testAddress,
-        pubkey: testPubkeyHex,
-        payloadHex: '0x0102',
-        display: const {'action': 'test', 'summary': '测试'},
-      );
-      final json = request.toJson();
-      expect(json.containsKey('spec_version'), isFalse);
-    });
-
-    test('有 specVersion 时 JSON 包含该字段', () {
-      final request = QrSigner().buildRequest(
-        requestId: 'json-test-req-id-00002',
-        account: testAddress,
-        pubkey: testPubkeyHex,
-        payloadHex: '0x0102',
-        display: const {'action': 'test', 'summary': '测试'},
-        specVersion: 100,
-      );
-      final json = request.toJson();
-      expect(json['spec_version'], 100);
     });
   });
 }

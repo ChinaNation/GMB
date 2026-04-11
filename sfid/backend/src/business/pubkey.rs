@@ -4,6 +4,7 @@ pub(crate) fn normalize_admin_pubkey(input: &str) -> Option<String> {
     normalize_sr25519_pubkey(input)
 }
 
+#[allow(dead_code)]
 pub(crate) fn normalize_cpms_pubkey(input: &str) -> Option<String> {
     normalize_sr25519_pubkey(input)
 }
@@ -12,6 +13,7 @@ pub(crate) fn same_admin_pubkey(left: &str, right: &str) -> bool {
     same_sr25519_pubkey(left, right)
 }
 
+#[allow(dead_code)]
 pub(crate) fn same_cpms_pubkey(left: &str, right: &str) -> bool {
     same_sr25519_pubkey(left, right)
 }

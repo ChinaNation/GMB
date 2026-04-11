@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import 'runtime_upgrade_service.dart';
 import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
+import '../qr/bodies/sign_request_body.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 import '../wallet/capabilities/api_client.dart';
@@ -160,19 +161,17 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
         final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'upgrade-'),
-          account: wallet.address,
+          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
           specVersion: rv.specVersion,
-          display: {
-            'action': 'propose_upgrade',
-            'action_label': '升级提案',
-            'summary': '提交运行时升级提案',
-            'fields': [],
-          },
+          display: const SignDisplay(
+            action: 'propose_runtime_upgrade',
+            summary: '提交运行时升级提案',
+          ),
         );
         final requestJson = qrSigner.encodeRequest(request);
-        final response = await Navigator.push<QrSignResponse>(
+        final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
             builder: (_) => QrSignSessionPage(
@@ -182,7 +181,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexToBytes(response.signature));
+        return Uint8List.fromList(_hexToBytes(response.body.signature));
       }
 
       final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));

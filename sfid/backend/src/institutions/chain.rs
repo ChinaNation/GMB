@@ -9,6 +9,7 @@
 
 #![allow(dead_code)]
 
+use crate::login::AdminAuthContext;
 use crate::sheng_admins::institutions::{
     submit_register_sfid_institution_extrinsic, ChainInstitutionRegisterReceipt,
 };
@@ -18,11 +19,15 @@ use crate::AppState;
 ///
 /// 成功返回链上回执(tx_hash + block_number + 派生的 duoqian_address 需要调用方补算)。
 /// 失败返回错误字符串,由 handler 包装成 HTTP 500。
+///
+/// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 11：
+/// 新增 `ctx` 参数，用于在下游解析本省签名 Pair（`resolve_business_signer`）。
 pub async fn submit_register_account(
     state: &AppState,
+    ctx: &AdminAuthContext,
     sfid_id: &str,
     account_name: &str,
 ) -> Result<ChainInstitutionRegisterReceipt, String> {
     // 中文注释:链端的 `name` 字段 = sfid 系统的 account_name(见任务卡 2 背景)。
-    submit_register_sfid_institution_extrinsic(state, sfid_id, account_name).await
+    submit_register_sfid_institution_extrinsic(state, ctx, sfid_id, account_name).await
 }

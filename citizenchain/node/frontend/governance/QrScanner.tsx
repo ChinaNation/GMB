@@ -1,7 +1,7 @@
-// 摄像头 QR 扫描组件：使用 jsQR 做纯 JS 解码，兼容 Tauri WebView。
-// 通过 getUserMedia 获取摄像头流，用 canvas 逐帧解码。
-import { useEffect, useRef, useCallback } from 'react';
-import jsQR from 'jsqr';
+// 摄像头 QR 扫描组件。底层由 cameraScanner.ts 统一封装:
+// Chromium WebView 用 BarcodeDetector,WebKit 用 jsqr + canvas。
+import { useEffect, useRef, useCallback, useState } from 'react';
+import { startCameraScanner } from '../utils/cameraScanner';
 
 type Props = {
   onScan: (data: string) => void;
@@ -10,90 +10,37 @@ type Props = {
 
 export function QrScanner({ onScan, onError }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animFrameRef = useRef<number>(0);
-  const streamRef = useRef<MediaStream | null>(null);
-  const scannedRef = useRef(false);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  const [ready, setReady] = useState(false);
 
-  const stopCamera = useCallback(() => {
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = 0;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+  const stop = useCallback(() => {
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
     }
   }, []);
 
   useEffect(() => {
-    let mounted = true;
+    const video = videoRef.current;
+    if (!video) return;
 
-    async function start() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 } },
-        });
-        if (!mounted) { stream.getTracks().forEach((t) => t.stop()); return; }
-        streamRef.current = stream;
-        const video = videoRef.current;
-        if (!video) return;
-        video.srcObject = stream;
-        video.setAttribute('playsinline', 'true');
-        await video.play();
-        requestScan();
-      } catch (e) {
-        if (mounted) onError(`摄像头启动失败: ${e}`);
-      }
-    }
+    const cleanup = startCameraScanner(
+      video,
+      (raw) => {
+        stop();
+        onScan(raw);
+      },
+      () => { setReady(true); },
+      (msg) => { onError(msg); },
+    );
+    cleanupRef.current = cleanup;
 
-    function requestScan() {
-      animFrameRef.current = requestAnimationFrame(scan);
-    }
-
-    function scan() {
-      if (!mounted || scannedRef.current) return;
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
-        requestScan();
-        return;
-      }
-
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) { requestScan(); return; }
-
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert',
-      });
-
-      if (code && code.data) {
-        scannedRef.current = true;
-        stopCamera();
-        onScan(code.data);
-        return;
-      }
-
-      requestScan();
-    }
-
-    start();
-
-    return () => {
-      mounted = false;
-      stopCamera();
-    };
-  }, [onScan, onError, stopCamera]);
+    return () => stop();
+  }, [onScan, onError, stop]);
 
   return (
     <div className="qr-scanner-wrapper">
       <video ref={videoRef} className="qr-scanner-video" muted playsInline />
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
       <div className="qr-scanner-overlay">
         <div className="qr-scanner-frame" />
       </div>

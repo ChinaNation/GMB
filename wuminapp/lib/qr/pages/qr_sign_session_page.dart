@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
+import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 
 /// 冷钱包扫码签名会话页面。
@@ -13,7 +14,7 @@ import 'package:wuminapp_mobile/signer/qr_signer.dart';
 /// 1. 展示签名请求二维码，等待离线设备扫描。
 /// 2. 用户点击"扫描回执"，打开相机扫描离线设备生成的签名回执二维码。
 ///
-/// 返回 [QrSignResponse]（成功）或 `null`（取消/超时）。
+/// 返回 [SignResponseEnvelope](成功)或 `null`(取消/超时)。
 class QrSignSessionPage extends StatefulWidget {
   const QrSignSessionPage({
     super.key,
@@ -22,10 +23,10 @@ class QrSignSessionPage extends StatefulWidget {
     required this.expectedPubkey,
   });
 
-  /// 已构建的签名请求。
-  final QrSignRequest request;
+  /// 已构建的签名请求 envelope。
+  final SignRequestEnvelope request;
 
-  /// 编码后的 JSON 字符串，直接用于二维码展示。
+  /// 编码后的 JSON 字符串,直接用于二维码展示。
   final String requestJson;
   final String expectedPubkey;
 
@@ -57,7 +58,7 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
 
   int _secondsLeft() {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final left = widget.request.expiresAt - now;
+    final left = (widget.request.expiresAt ?? 0) - now;
     return left > 0 ? left : 0;
   }
 
@@ -69,13 +70,13 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
 
     try {
       final expectedHash =
-          QrSigner.computePayloadHash(widget.request.payloadHex);
+          QrSigner.computePayloadHash(widget.request.body.payloadHex);
       final response = QrSigner().parseResponse(
         raw,
-        expectedRequestId: widget.request.requestId,
+        expectedRequestId: widget.request.id!,
         expectedPubkey: widget.expectedPubkey,
         expectedPayloadHash: expectedHash,
-        expectedPayloadHex: widget.request.payloadHex,
+        expectedPayloadHex: widget.request.body.payloadHex,
       );
       if (!mounted) return;
       Navigator.of(context).pop(response);

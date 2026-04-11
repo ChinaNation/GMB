@@ -19,6 +19,7 @@ import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
 import '../rpc/onchain.dart';
 import '../rpc/smoldot_client.dart';
+import '../qr/bodies/sign_request_body.dart';
 import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 
@@ -237,51 +238,30 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         final qrSigner = QrSigner();
         final voteText = approve ? '赞成' : '反对';
         final rv = await ChainRpc().fetchRuntimeVersion();
-        final actionLabel = _isCreateProposal ? '创建多签投票' : '关闭多签投票';
         final summaryType = _isCreateProposal ? '创建多签' : '关闭多签';
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'vote-'),
-          account: wallet.address,
+          address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
           specVersion: rv.specVersion,
-          display: {
-            'action': _isCreateProposal ? 'vote_create' : 'vote_close',
-            'action_label': actionLabel,
-            'summary': '$summaryType提案 #${widget.proposalId} 投票：$voteText',
-            'fields': [
-              {
-                'key': 'proposal_id',
-                'label': '提案编号',
-                'value': widget.proposalId.toString(),
-              },
-              {'key': 'approve', 'label': '投票', 'value': approve.toString()},
+          display: SignDisplay(
+            action: _isCreateProposal ? 'vote_create' : 'vote_close',
+            summary: '$summaryType提案 #${widget.proposalId} 投票：$voteText',
+            fields: [
+              SignDisplayField(label: '提案编号', value: widget.proposalId.toString()),
+              SignDisplayField(label: '投票', value: approve.toString()),
               if (_createInfo != null) ...[
-                {
-                  'key': 'amount_yuan',
-                  'label': '初始资金',
-                  'value':
-                      AmountFormat.format(_createInfo!.amountYuan, symbol: ''),
-                  'format': 'currency',
-                },
-                {
-                  'key': 'threshold',
-                  'label': '阈值',
-                  'value':
-                      '${_createInfo!.threshold}/${_createInfo!.adminCount}',
-                },
+                SignDisplayField(label: '初始资金', value: AmountFormat.format(_createInfo!.amountYuan, symbol: '')),
+                SignDisplayField(label: '阈值', value: '${_createInfo!.threshold}/${_createInfo!.adminCount}'),
               ],
               if (_closeInfo != null)
-                {
-                  'key': 'beneficiary',
-                  'label': '受益人',
-                  'value': _closeInfo!.beneficiary,
-                },
+                SignDisplayField(label: '受益人', value: _closeInfo!.beneficiary),
             ],
-          },
+          ),
         );
         final requestJson = qrSigner.encodeRequest(request);
-        final response = await Navigator.push<QrSignResponse>(
+        final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
             builder: (_) => QrSignSessionPage(
@@ -291,7 +271,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return Uint8List.fromList(_hexDecode(response.signature));
+        return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
       final ({String txHash, int usedNonce}) result;

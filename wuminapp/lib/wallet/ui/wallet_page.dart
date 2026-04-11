@@ -11,7 +11,9 @@ import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/trade/local_tx_store.dart';
 import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
-import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
+import 'package:wuminapp_mobile/qr/qr_protocols.dart';
+import 'package:wuminapp_mobile/qr/envelope.dart';
+import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
 import 'package:wuminapp_mobile/user/user_service.dart' show UserProfileService;
 import 'package:wuminapp_mobile/ui/widgets/bip39_input.dart';
 import 'package:wuminapp_mobile/ui/widgets/shimmer_loading.dart';
@@ -1077,10 +1079,15 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                       child: CustomPaint(
                         size: const Size(240, 240),
                         painter: _HollowQrPainter(
-                          data: TransferQrPayload(
-                            to: widget.wallet.address,
-                            name: _walletName,
-                            bank: _boundClearingBankId,
+                          data: QrEnvelope<UserContactBody>(
+                            kind: QrKind.userContact,
+                            id: null,
+                            issuedAt: null,
+                            expiresAt: null,
+                            body: UserContactBody(
+                              address: widget.wallet.address,
+                              name: _walletName,
+                            ),
                           ).toRawJson(),
                           hollowSize: 48,
                         ),

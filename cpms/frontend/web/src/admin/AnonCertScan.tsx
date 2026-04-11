@@ -1,11 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import QrScanner from 'qr-scanner';
 import * as api from '../api';
-
-type BarcodeDetectorLike = {
-  detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
-};
-type BarcodeDetectorCtor = new (opts: { formats: string[] }) => BarcodeDetectorLike;
+import { startCameraScanner, scanImageQr } from '../utils/cameraScanner';
 
 export default function AnonCertScan() {
   const [scannerActive, setScannerActive] = useState(false);
@@ -48,64 +43,31 @@ export default function AnonCertScan() {
     setSubmitting(false);
   };
 
-  // 摄像头扫码用 BarcodeDetector
+  // 摄像头扫码
   useEffect(() => {
     if (!scannerActive || !videoRef.current) {
       stopScanner();
       return;
     }
-    let stopped = false;
-    let stream: MediaStream | null = null;
-    let timer: number | undefined;
-    const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
-    if (!win.BarcodeDetector) {
-      setError('当前浏览器不支持摄像头扫码');
-      setScannerActive(false);
-      return;
-    }
-    const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
     const video = videoRef.current;
-    (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-        if (stopped) { stream.getTracks().forEach(t => t.stop()); return; }
-        video.srcObject = stream;
-        await video.play();
-        setScannerReady(true);
-        timer = window.setInterval(async () => {
-          if (stopped || submitting) return;
-          try {
-            const codes = await detector.detect(video);
-            const raw = codes[0]?.rawValue?.trim();
-            if (raw) { window.clearInterval(timer); await handleQr3Scanned(raw); }
-          } catch { /* ignore */ }
-        }, 500);
-      } catch {
-        setError('无法打开摄像头，请检查权限');
-        setScannerActive(false);
-      }
-    })();
-    scanCleanupRef.current = () => {
-      stopped = true;
-      if (timer !== undefined) window.clearInterval(timer);
-      if (stream) stream.getTracks().forEach(t => t.stop());
-    };
+    const cleanup = startCameraScanner(
+      video,
+      (raw) => { handleQr3Scanned(raw); },
+      () => { setScannerReady(true); },
+      (msg) => { setError(msg); setScannerActive(false); },
+    );
+    scanCleanupRef.current = cleanup;
     return () => stopScanner();
-  }, [scannerActive, submitting]);
+  }, [scannerActive]);
 
-  // 图片上传用 qr-scanner
+  // 图片上传识别 QR
   const onUploadQrImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (!file) return;
     try {
-      const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true });
-      const raw = result.data?.trim();
-      if (raw) {
-        await handleQr3Scanned(raw);
-      } else {
-        setError('未识别到二维码，请确认图片中包含有效的二维码');
-      }
+      const raw = await scanImageQr(file);
+      await handleQr3Scanned(raw);
     } catch {
       setError('未识别到二维码，请确认图片中包含有效的二维码');
     }

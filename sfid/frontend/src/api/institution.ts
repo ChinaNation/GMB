@@ -26,6 +26,8 @@ export interface MultisigInstitution {
   /** 任务卡 6 新增:2 位数字市代码(r5 段后 3 字符),作为公安局对账稳定主键 */
   city_code?: string;
   institution_code: string;
+  /** 私法人子类型(仅 A3=SFR 时有值) */
+  sub_type?: string;
   created_by: string;
   created_at: string;
 }
@@ -58,6 +60,7 @@ export interface InstitutionListRow {
   province: string;
   city: string;
   institution_code: string;
+  sub_type?: string;
   account_count: number;
   created_at: string;
 }
@@ -66,6 +69,26 @@ export interface InstitutionDetail {
   institution: MultisigInstitution;
   accounts: MultisigAccount[];
 }
+
+/** 机构资料库文档 */
+export interface InstitutionDocument {
+  id: number;
+  sfid_id: string;
+  file_name: string;
+  doc_type: string;
+  file_size: number;
+  uploaded_by: string;
+  uploaded_at: string;
+}
+
+/** 文档类型枚举 */
+export const DOC_TYPE_OPTIONS = [
+  '公司章程',
+  '营业许可证',
+  '股东会决议',
+  '法人授权书',
+  '其他',
+] as const;
 
 // ─── 请求 DTO ─────────────────────────────────────────────────
 
@@ -76,6 +99,8 @@ export interface CreateInstitutionInput {
   city: string;
   institution: string;
   institution_name: string;
+  /** 私法人子类型(仅 A3=SFR 时必填) */
+  sub_type?: string;
 }
 
 export interface CreateInstitutionOutput {
@@ -100,6 +125,23 @@ export interface ListInstitutionsQuery {
 }
 
 // ─── API 调用 ─────────────────────────────────────────────────
+
+/**
+ * 机构名称查重。
+ * - 私权机构(SFR/FFR):全国唯一
+ * - 公权机构(GFR):同城唯一,需传 a3='GFR' + city
+ */
+export async function checkInstitutionName(
+  auth: AdminAuth,
+  name: string,
+  a3?: string,
+  city?: string,
+): Promise<{ exists: boolean }> {
+  const params = new URLSearchParams({ name });
+  if (a3) params.set('a3', a3);
+  if (city) params.set('city', city);
+  return adminRequest<{ exists: boolean }>(`/api/v1/institution/check-name?${params.toString()}`, auth);
+}
 
 /**
  * 生成机构(**不上链**)。成功后拿到 sfid_id,再调 `createAccount` 实际上链。
@@ -221,5 +263,74 @@ export async function deleteAccount(
     `/api/v1/institution/${encodeURIComponent(sfidId)}/account/${encodeURIComponent(accountName)}`,
     auth,
     { method: 'DELETE' }
+  );
+}
+
+// ─── 机构资料库文档 API ──────────────────────────────────────────
+
+/** 列出机构的所有文档 */
+export async function listDocuments(
+  auth: AdminAuth,
+  sfidId: string,
+): Promise<InstitutionDocument[]> {
+  return adminRequest<InstitutionDocument[]>(
+    `/api/v1/institution/${encodeURIComponent(sfidId)}/documents`,
+    auth,
+  );
+}
+
+/** 上传文档(multipart) */
+export async function uploadDocument(
+  auth: AdminAuth,
+  sfidId: string,
+  file: File,
+  docType: string,
+): Promise<InstitutionDocument> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('doc_type', docType);
+  return adminRequest<InstitutionDocument>(
+    `/api/v1/institution/${encodeURIComponent(sfidId)}/documents`,
+    auth,
+    {
+      method: 'POST',
+      body: formData,
+      // 不设 content-type,让浏览器自动设置 multipart boundary
+    },
+  );
+}
+
+/** 下载文档(返回 Blob) */
+export async function downloadDocument(
+  auth: AdminAuth,
+  sfidId: string,
+  docId: number,
+  fileName: string,
+): Promise<void> {
+  const { adminHeaders } = await import('./client');
+  const resp = await fetch(
+    `/api/v1/institution/${encodeURIComponent(sfidId)}/documents/${docId}/download`,
+    { headers: adminHeaders(auth) },
+  );
+  if (!resp.ok) throw new Error(`下载失败 (${resp.status})`);
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** 删除文档 */
+export async function deleteDocument(
+  auth: AdminAuth,
+  sfidId: string,
+  docId: number,
+): Promise<void> {
+  await adminRequest<string>(
+    `/api/v1/institution/${encodeURIComponent(sfidId)}/documents/${docId}`,
+    auth,
+    { method: 'DELETE' },
   );
 }

@@ -1,0 +1,22 @@
+{
+  "proto": "WUMIN_QR_V1",
+  "kind": "sign_request",
+  "id": "req_01HXYZ4VQK8NRPM2G7FJD9TBC3",
+  "issued_at": 1712650000,
+  "expires_at": 1712650090,
+  "body": {
+    "address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "pubkey": "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d",
+    "sig_alg": "sr25519",
+    "payload_hex": "0x0400aabbccddeeff00112233445566778899aabbccddeeff001122334455667788990b00a0724e1809",
+    "spec_version": 100,
+    "display": {
+      "action": "transfer",
+      "summary": "转账 100 GMB 给 5Grw...kutQY",
+      "fields": [
+        { "label": "收款方", "value": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY" },
+        { "label": "金额", "value": "100 GMB" }
+      ]
+    }
+  }
+}

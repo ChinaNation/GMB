@@ -7,6 +7,7 @@ import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/trade/offchain/clearing_banks.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
+import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 
 /// 绑定清算省储行选择页面。
@@ -176,33 +177,28 @@ class _BindClearingPageState extends State<BindClearingPage> {
         signCallback = (payload) =>
             walletManager.signWithWalletNoAuth(wallet.walletIndex, payload);
       } else {
-        // 冷钱包：使用签名协议 WUMIN_SIGN_V1.0.0
+        // 冷钱包:使用统一协议 WUMIN_QR_V1 kind=sign_request
         signCallback = (Uint8List payload) async {
           final qrSigner = QrSigner();
           final requestId = QrSigner.generateRequestId(prefix: 'bind-');
           final rv = await ChainRpc().fetchRuntimeVersion();
           final request = qrSigner.buildRequest(
             requestId: requestId,
-            account: wallet.address,
+            address: wallet.address,
             pubkey: '0x${wallet.pubkeyHex}',
             payloadHex: '0x${_toHex(payload)}',
             specVersion: rv.specVersion,
-            display: {
-              'action': 'bind_clearing',
-              'action_label': '绑定清算行',
-              'summary': '绑定清算行：${bank.shenfenName}',
-              'fields': [
-                {
-                  'key': 'institution',
-                  'label': '清算省储行',
-                  'value': bank.shenfenName,
-                },
+            display: SignDisplay(
+              action: 'bind_clearing',
+              summary: '绑定清算行:${bank.shenfenName}',
+              fields: [
+                SignDisplayField(label: '清算省储行', value: bank.shenfenName),
               ],
-            },
+            ),
           );
           final requestJson = qrSigner.encodeRequest(request);
 
-          final response = await Navigator.push<QrSignResponse>(
+          final response = await Navigator.push<SignResponseEnvelope>(
             context,
             MaterialPageRoute(
               builder: (navContext) => QrSignSessionPage(
@@ -216,7 +212,7 @@ class _BindClearingPageState extends State<BindClearingPage> {
           if (response == null) {
             throw Exception('签名已取消');
           }
-          return Uint8List.fromList(_hexToBytes(response.signature));
+          return Uint8List.fromList(_hexToBytes(response.body.signature));
         };
       }
 

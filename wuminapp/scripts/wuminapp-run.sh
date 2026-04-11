@@ -97,7 +97,7 @@ DEV_NODE_PEER_ID="$(curl -sS --max-time 2 -H 'Content-Type: application/json' \
 try:
     print(json.load(sys.stdin)['result'])
 except Exception:
-    pass" 2>/dev/null)"
+    pass" 2>/dev/null || true)"
 if [[ -n "$DEV_NODE_PEER_ID" ]]; then
   echo "==> 检测到本地诊断节点 peer_id=$DEV_NODE_PEER_ID (port=$DEV_NODE_PORT)"
   ADB_BIN="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"

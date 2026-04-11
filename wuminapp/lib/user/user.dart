@@ -17,7 +17,9 @@ import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
-import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
+import 'package:wuminapp_mobile/qr/qr_protocols.dart';
+import 'package:wuminapp_mobile/qr/envelope.dart';
+import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
 import 'package:wuminapp_mobile/user/user_service.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
@@ -423,9 +425,15 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   }
 
   String get _qrPayload {
-    return TransferQrPayload(
-      to: _profile.communicationAddress?.trim() ?? '',
-      name: _profile.nickname,
+    return QrEnvelope<UserContactBody>(
+      kind: QrKind.userContact,
+      id: null,
+      issuedAt: null,
+      expiresAt: null,
+      body: UserContactBody(
+        address: _profile.communicationAddress?.trim() ?? '',
+        name: _profile.nickname,
+      ),
     ).toRawJson();
   }
 
@@ -1039,9 +1047,15 @@ class _MyQrCodePageState extends State<_MyQrCodePage> {
   final GlobalKey _qrKey = GlobalKey();
   bool _saving = false;
 
-  String get _qrData => TransferQrPayload(
-        to: widget.address,
-        name: widget.nickname,
+  String get _qrData => QrEnvelope<UserContactBody>(
+        kind: QrKind.userContact,
+        id: null,
+        issuedAt: null,
+        expiresAt: null,
+        body: UserContactBody(
+          address: widget.address,
+          name: widget.nickname,
+        ),
       ).toRawJson();
 
   Future<void> _saveQr() async {
@@ -1172,9 +1186,15 @@ class _ContactDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final qrData = TransferQrPayload(
-      to: contact.accountPubkeyHex,
-      name: contact.displayNickname,
+    final qrData = QrEnvelope<UserContactBody>(
+      kind: QrKind.userContact,
+      id: null,
+      issuedAt: null,
+      expiresAt: null,
+      body: UserContactBody(
+        address: contact.accountPubkeyHex,
+        name: contact.displayNickname,
+      ),
     ).toRawJson();
 
     return Scaffold(

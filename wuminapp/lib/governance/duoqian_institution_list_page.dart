@@ -7,7 +7,9 @@ import 'package:isar/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../Isar/wallet_isar.dart';
-import '../qr/contact/contact_qr_models.dart';
+import '../qr/envelope.dart';
+import '../qr/qr_protocols.dart';
+import '../qr/bodies/user_duoqian_body.dart';
 import '../qr/pages/qr_scan_page.dart' show QrScanPage, QrScanMode;
 import 'duoqian_create_proposal_page.dart';
 import 'duoqian_institution_info_page.dart';
@@ -200,13 +202,13 @@ class _DuoqianInstitutionListPageState
     if (result == null || !mounted) return;
 
     // 解析二维码
-    UserQrPayload qrPayload;
+    UserDuoqianBody qrBody;
     try {
-      final json = jsonDecode(result.trim());
-      if (json is! Map<String, dynamic>) throw const FormatException('格式错误');
-      if (json['proto'] != UserQrPayload.protocol) throw const FormatException('不是用户码');
-      qrPayload = UserQrPayload.fromJson(json);
-      if (qrPayload.purpose != 'duoqian') throw const FormatException('不是多签账户码');
+      final env = QrEnvelope.parse(result.trim());
+      if (env.kind != QrKind.userDuoqian) {
+        throw const FormatException('不是多签账户码');
+      }
+      qrBody = env.body as UserDuoqianBody;
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -218,7 +220,7 @@ class _DuoqianInstitutionListPageState
     // SS58 → hex
     String hexAddress;
     try {
-      final pubkey = Keyring().decodeAddress(qrPayload.address);
+      final pubkey = Keyring().decodeAddress(qrBody.address);
       hexAddress = pubkey.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     } catch (_) {
       if (!mounted) return;
@@ -278,21 +280,21 @@ class _DuoqianInstitutionListPageState
 
     // Active → 直接保存
     if (accountInfo.status == DuoqianStatus.active) {
-      await _saveDuoqianToLocal(hexAddress, qrPayload.name);
+      await _saveDuoqianToLocal(hexAddress, qrBody.name);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已加入多签账户「${qrPayload.name}」'), backgroundColor: AppTheme.success),
+        SnackBar(content: Text('已加入多签账户「${qrBody.name}」'), backgroundColor: AppTheme.success),
       );
       await _load();
       return;
     }
 
     // Pending → 保存并提示用户去投票
-    await _saveDuoqianToLocal(hexAddress, qrPayload.name);
+    await _saveDuoqianToLocal(hexAddress, qrBody.name);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('已加入「${qrPayload.name}」，该账户待投票激活'),
+        content: Text('已加入「${qrBody.name}」，该账户待投票激活'),
         backgroundColor: AppTheme.warning,
       ),
     );

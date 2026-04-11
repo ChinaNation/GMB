@@ -215,6 +215,8 @@ pub(crate) async fn create_operator(
         created_at,
         updated_at: Some(created_at),
         city: city_input,
+        encrypted_signing_privkey: None,
+        signing_pubkey: None,
     };
     store
         .admin_users_by_pubkey

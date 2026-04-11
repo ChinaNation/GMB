@@ -1,4 +1,4 @@
-// 治理投票 QR 签名：构建 WUMIN_SIGN_V1.0.0 签名请求、验证响应、提交 extrinsic。
+// 治理投票 QR 签名：构建 WUMIN_QR_V1 签名请求、验证响应、提交 extrinsic。
 //
 // 协议流程：
 // 1. 后端构建未签名 signing payload + QR 请求 JSON
@@ -12,7 +12,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const PROTOCOL_VERSION: &str = "WUMIN_SIGN_V1.0.0";
+const PROTOCOL_VERSION: &str = "WUMIN_QR_V1";
 const DEFAULT_TTL_SECS: u64 = 90;
 const MORTAL_ERA_PERIOD: u64 = 64;
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -20,42 +20,74 @@ use crate::ui::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 /// SS58 前缀 2027。
 const SS58_PREFIX: u16 = 2027;
 
+/// 金额格式化：带千分位逗号，保留 2 位小数。
+fn format_amount(yuan: f64) -> String {
+    let fixed = format!("{:.2}", yuan);
+    let parts: Vec<&str> = fixed.split('.').collect();
+    let int_part = parts[0];
+    let dec_part = parts.get(1).unwrap_or(&"00");
+    let negative = int_part.starts_with('-');
+    let digits: &str = if negative { &int_part[1..] } else { int_part };
+    let mut result = String::new();
+    for (i, ch) in digits.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            result.push(',');
+        }
+        result.push(ch);
+    }
+    let formatted: String = result.chars().rev().collect();
+    if negative {
+        format!("-{}.{}", formatted, dec_part)
+    } else {
+        format!("{}.{}", formatted, dec_part)
+    }
+}
+
 // ──── QR 协议数据结构 ────
 
-/// 签名请求（nodeui → 离线设备）。
-/// 字段名使用 snake_case，与 WUMIN_SIGN_V1.0.0 协议一致。
+/// 签名请求 body(nodeui → 离线设备)。
 #[derive(Debug, Serialize)]
-pub struct QrSignRequest {
-    pub proto: String,
-    #[serde(rename = "type")]
-    pub msg_type: String,
-    pub request_id: String,
-    pub account: String,
+pub struct SignRequestBody {
+    pub address: String,
     pub pubkey: String,
     pub sig_alg: String,
     pub payload_hex: String,
-    pub issued_at: u64,
-    pub expires_at: u64,
+    pub spec_version: u32,
     pub display: serde_json::Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub spec_version: Option<u32>,
 }
 
-/// 签名响应（离线设备 → nodeui）。
-/// 字段名使用 snake_case，与 WUMIN_SIGN_V1.0.0 协议一致。
-/// 保留全部协议字段以保持反序列化兼容性。
+/// WUMIN_QR_V1 sign_request envelope。
+#[derive(Debug, Serialize)]
+pub struct QrSignRequest {
+    pub proto: String,
+    pub kind: String,
+    pub id: String,
+    pub issued_at: u64,
+    pub expires_at: u64,
+    pub body: SignRequestBody,
+}
+
+/// 签名响应 body(离线设备 → nodeui)。
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct QrSignResponse {
-    pub proto: String,
-    #[serde(rename = "type")]
-    pub msg_type: String,
-    pub request_id: String,
+pub struct SignResponseBody {
     pub pubkey: String,
     pub sig_alg: String,
     pub signature: String,
     pub payload_hash: String,
     pub signed_at: u64,
+}
+
+/// WUMIN_QR_V1 sign_response envelope。
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct QrSignResponse {
+    pub proto: String,
+    pub kind: String,
+    pub id: String,
+    pub issued_at: u64,
+    pub expires_at: u64,
+    pub body: SignResponseBody,
 }
 
 /// 构建投票签名请求的结果。
@@ -134,7 +166,6 @@ pub fn build_vote_sign_request(
     // wumin 解码 vote_transfer 返回: proposal_id=数字字符串, approve="true"/"false"
     let display = serde_json::json!({
         "action": "vote_transfer",
-        "action_label": "转账提案投票",
         "summary": format!("转账提案 #{proposal_id} 投票：{}", if approve { "赞成" } else { "反对" }),
         "fields": [
             { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
@@ -145,16 +176,18 @@ pub fn build_vote_sign_request(
     let now = now_secs();
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        msg_type: "sign_request".to_string(),
-        request_id: request_id.clone(),
-        account: account_ss58,
-        pubkey: format!("0x{pubkey_clean}"),
-        sig_alg: "sr25519".to_string(),
-        payload_hex: format!("0x{}", hex::encode(&payload)),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
         issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
-        display,
-        spec_version: Some(spec_version),
+        body: SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_clean}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: format!("0x{}", hex::encode(&payload)),
+            spec_version: spec_version,
+            display,
+        },
     };
 
     let request_json = serde_json::to_string(&request)
@@ -215,7 +248,6 @@ pub fn build_joint_vote_sign_request(
     // wumin 解码 joint_vote 返回: proposal_id=数字字符串, approve="true"/"false"
     let display = serde_json::json!({
         "action": "joint_vote",
-        "action_label": "联合投票",
         "summary": format!("联合投票 提案 #{proposal_id}：{}", if approve { "赞成" } else { "反对" }),
         "fields": [
             { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
@@ -226,16 +258,18 @@ pub fn build_joint_vote_sign_request(
     let now = now_secs();
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        msg_type: "sign_request".to_string(),
-        request_id: request_id.clone(),
-        account: account_ss58,
-        pubkey: format!("0x{pubkey_clean}"),
-        sig_alg: "sr25519".to_string(),
-        payload_hex: format!("0x{}", hex::encode(&payload)),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
         issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
-        display,
-        spec_version: Some(spec_version),
+        body: SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_clean}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: format!("0x{}", hex::encode(&payload)),
+            spec_version: spec_version,
+            display,
+        },
     };
 
     let request_json = serde_json::to_string(&request)
@@ -334,12 +368,11 @@ pub fn build_propose_transfer_sign_request(
     };
     let display = serde_json::json!({
         "action": "propose_transfer",
-        "action_label": "发起转账提案",
-        "summary": format!("{org_name} 提案转账 {:.2} GMB 给 {beneficiary_address}", amount_yuan),
+        "summary": format!("{org_name} 提案转账 {} GMB 给 {beneficiary_address}", format_amount(amount_yuan)),
         "fields": [
             { "key": "org", "label": "机构类型", "value": org_name },
             { "key": "beneficiary", "label": "收款地址", "value": beneficiary_address },
-            { "key": "amount_yuan", "label": "金额", "value": format!("{:.2} GMB", amount_yuan) },
+            { "key": "amount_yuan", "label": "金额", "value": format!("{} GMB", format_amount(amount_yuan)) },
             { "key": "remark", "label": "备注", "value": remark }
         ]
     });
@@ -347,16 +380,18 @@ pub fn build_propose_transfer_sign_request(
     let now = now_secs();
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        msg_type: "sign_request".to_string(),
-        request_id: request_id.clone(),
-        account: account_ss58,
-        pubkey: format!("0x{pubkey_clean}"),
-        sig_alg: "sr25519".to_string(),
-        payload_hex: format!("0x{}", hex::encode(&payload)),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
         issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
-        display,
-        spec_version: Some(spec_version),
+        body: SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_clean}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: format!("0x{}", hex::encode(&payload)),
+            spec_version: spec_version,
+            display,
+        },
     };
 
     let request_json = serde_json::to_string(&request)
@@ -425,11 +460,10 @@ pub fn build_propose_safety_fund_sign_request(
 
     let display = serde_json::json!({
         "action": "propose_safety_fund_transfer",
-        "action_label": "安全基金转账提案",
-        "summary": format!("安全基金转账 {:.2} GMB 给 {beneficiary_address}", amount_yuan),
+        "summary": format!("安全基金转账 {} GMB 给 {beneficiary_address}", format_amount(amount_yuan)),
         "fields": [
             { "key": "beneficiary", "label": "收款地址", "value": beneficiary_address },
-            { "key": "amount_yuan", "label": "金额", "value": format!("{:.2} GMB", amount_yuan) },
+            { "key": "amount_yuan", "label": "金额", "value": format!("{} GMB", format_amount(amount_yuan)) },
             { "key": "remark", "label": "备注", "value": remark }
         ]
     });
@@ -437,16 +471,18 @@ pub fn build_propose_safety_fund_sign_request(
     let now = now_secs();
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        msg_type: "sign_request".to_string(),
-        request_id: request_id.clone(),
-        account: account_ss58,
-        pubkey: format!("0x{pubkey_clean}"),
-        sig_alg: "sr25519".to_string(),
-        payload_hex: format!("0x{}", hex::encode(&payload)),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
         issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
-        display,
-        spec_version: Some(spec_version),
+        body: SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_clean}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: format!("0x{}", hex::encode(&payload)),
+            spec_version: spec_version,
+            display,
+        },
     };
 
     let request_json = serde_json::to_string(&request)
@@ -499,7 +535,6 @@ pub fn build_safety_fund_vote_sign_request(
 
     let display = serde_json::json!({
         "action": "vote_safety_fund_transfer",
-        "action_label": "安全基金投票",
         "summary": format!("安全基金提案 #{proposal_id} 投票：{}", if approve { "赞成" } else { "反对" }),
         "fields": [
             { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
@@ -510,16 +545,18 @@ pub fn build_safety_fund_vote_sign_request(
     let now = now_secs();
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        msg_type: "sign_request".to_string(),
-        request_id: request_id.clone(),
-        account: account_ss58,
-        pubkey: format!("0x{pubkey_clean}"),
-        sig_alg: "sr25519".to_string(),
-        payload_hex: format!("0x{}", hex::encode(&payload)),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
         issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
-        display,
-        spec_version: Some(spec_version),
+        body: SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_clean}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: format!("0x{}", hex::encode(&payload)),
+            spec_version: spec_version,
+            display,
+        },
     };
 
     let request_json = serde_json::to_string(&request)
@@ -571,27 +608,28 @@ pub fn build_propose_sweep_sign_request(
 
     let display = serde_json::json!({
         "action": "propose_sweep_to_main",
-        "action_label": "手续费划转提案",
-        "summary": format!("{inst_name} 手续费划转 {:.2} 元", amount_yuan),
+        "summary": format!("{inst_name} 手续费划转 {} 元", format_amount(amount_yuan)),
         "fields": [
             { "key": "institution", "label": "机构", "value": inst_name },
-            { "key": "amount_yuan", "label": "金额", "value": format!("{:.2} GMB", amount_yuan) }
+            { "key": "amount_yuan", "label": "金额", "value": format!("{} GMB", format_amount(amount_yuan)) }
         ]
     });
 
     let now = now_secs();
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        msg_type: "sign_request".to_string(),
-        request_id: request_id.clone(),
-        account: account_ss58,
-        pubkey: format!("0x{pubkey_clean}"),
-        sig_alg: "sr25519".to_string(),
-        payload_hex: format!("0x{}", hex::encode(&payload)),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
         issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
-        display,
-        spec_version: Some(spec_version),
+        body: SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_clean}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: format!("0x{}", hex::encode(&payload)),
+            spec_version: spec_version,
+            display,
+        },
     };
 
     let request_json = serde_json::to_string(&request).map_err(|e| format!("序列化失败: {e}"))?;
@@ -632,7 +670,6 @@ pub fn build_sweep_vote_sign_request(
 
     let display = serde_json::json!({
         "action": "vote_sweep_to_main",
-        "action_label": "手续费划转投票",
         "summary": format!("手续费划转提案 #{proposal_id} 投票：{}", if approve { "赞成" } else { "反对" }),
         "fields": [
             { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
@@ -643,16 +680,18 @@ pub fn build_sweep_vote_sign_request(
     let now = now_secs();
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        msg_type: "sign_request".to_string(),
-        request_id: request_id.clone(),
-        account: account_ss58,
-        pubkey: format!("0x{pubkey_clean}"),
-        sig_alg: "sr25519".to_string(),
-        payload_hex: format!("0x{}", hex::encode(&payload)),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
         issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
-        display,
-        spec_version: Some(spec_version),
+        body: SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_clean}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: format!("0x{}", hex::encode(&payload)),
+            spec_version: spec_version,
+            display,
+        },
     };
 
     let request_json = serde_json::to_string(&request).map_err(|e| format!("序列化失败: {e}"))?;
@@ -701,7 +740,6 @@ pub fn build_rate_vote_sign_request(
 
     let display = serde_json::json!({
         "action": "vote_institution_rate",
-        "action_label": "费率投票",
         "summary": format!("费率提案 #{proposal_id} 投票：{}", if approve { "赞成" } else { "反对" }),
         "fields": [
             { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
@@ -712,16 +750,18 @@ pub fn build_rate_vote_sign_request(
     let now = now_secs();
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        msg_type: "sign_request".to_string(),
-        request_id: request_id.clone(),
-        account: account_ss58,
-        pubkey: format!("0x{pubkey_clean}"),
-        sig_alg: "sr25519".to_string(),
-        payload_hex: format!("0x{}", hex::encode(&payload)),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
         issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
-        display,
-        spec_version: Some(spec_version),
+        body: SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_clean}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: format!("0x{}", hex::encode(&payload)),
+            spec_version: spec_version,
+            display,
+        },
     };
 
     let request_json = serde_json::to_string(&request)
@@ -787,7 +827,6 @@ pub fn build_propose_rate_sign_request(
 
     let display = serde_json::json!({
         "action": "propose_institution_rate",
-        "action_label": "设置费率提案",
         "summary": format!("{inst_name} 提案设置链下交易费率为 {rate_percent}"),
         "fields": [
             { "key": "institution", "label": "省储行", "value": inst_name },
@@ -798,16 +837,18 @@ pub fn build_propose_rate_sign_request(
     let now = now_secs();
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        msg_type: "sign_request".to_string(),
-        request_id: request_id.clone(),
-        account: account_ss58,
-        pubkey: format!("0x{pubkey_clean}"),
-        sig_alg: "sr25519".to_string(),
-        payload_hex: format!("0x{}", hex::encode(&payload)),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
         issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
-        display,
-        spec_version: Some(spec_version),
+        body: SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_clean}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: format!("0x{}", hex::encode(&payload)),
+            spec_version: spec_version,
+            display,
+        },
     };
 
     let request_json = serde_json::to_string(&request)
@@ -884,7 +925,6 @@ pub fn build_developer_upgrade_sign_request(
 
     let display = serde_json::json!({
         "action": "developer_direct_upgrade",
-        "action_label": "开发期 runtime 直接升级",
         "summary": format!("直接升级 runtime（{wasm_size_mb:.2} MB）"),
         "fields": [
             { "key": "wasm_size", "label": "WASM 大小", "value": format!("{wasm_size_mb:.2} MB") },
@@ -895,16 +935,18 @@ pub fn build_developer_upgrade_sign_request(
     let now = now_secs();
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        msg_type: "sign_request".to_string(),
-        request_id: request_id.clone(),
-        account: account_ss58,
-        pubkey: format!("0x{pubkey_clean}"),
-        sig_alg: "sr25519".to_string(),
-        payload_hex: format!("0x{}", hex::encode(payload_for_qr.as_bytes())),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
         issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
-        display,
-        spec_version: Some(spec_version),
+        body: SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_clean}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: format!("0x{}", hex::encode(payload_for_qr.as_bytes())),
+            spec_version: spec_version,
+            display,
+        },
     };
 
     let request_json = serde_json::to_string(&request)
@@ -993,7 +1035,6 @@ pub fn build_propose_runtime_upgrade_sign_request(
 
     let display = serde_json::json!({
         "action": "propose_runtime_upgrade",
-        "action_label": "Runtime 升级提案",
         "summary": format!("提交运行时升级提案（{wasm_size_mb:.2} MB）"),
         "fields": [
             { "key": "reason", "label": "升级理由", "value": reason },
@@ -1006,16 +1047,18 @@ pub fn build_propose_runtime_upgrade_sign_request(
     let now = now_secs();
     let request = QrSignRequest {
         proto: PROTOCOL_VERSION.to_string(),
-        msg_type: "sign_request".to_string(),
-        request_id: request_id.clone(),
-        account: account_ss58,
-        pubkey: format!("0x{pubkey_clean}"),
-        sig_alg: "sr25519".to_string(),
-        payload_hex: format!("0x{}", hex::encode(payload_for_qr.as_bytes())),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
         issued_at: now,
         expires_at: now + DEFAULT_TTL_SECS,
-        display,
-        spec_version: Some(spec_version),
+        body: SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_clean}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: format!("0x{}", hex::encode(payload_for_qr.as_bytes())),
+            spec_version: spec_version,
+            display,
+        },
     };
 
     let request_json = serde_json::to_string(&request)
@@ -1183,8 +1226,8 @@ pub fn verify_and_submit(
     }
 
     // 验证请求 ID 匹配
-    if response.request_id != request_id {
-        return Err("请求 ID 不匹配，可能扫描了其他交易的签名".to_string());
+    if response.id != request_id {
+        return Err("请求 ID 不匹配,可能扫描了其他交易的签名".to_string());
     }
 
     // 验证公钥匹配
@@ -1193,34 +1236,33 @@ pub fn verify_and_submit(
         .unwrap_or(expected_pubkey_hex)
         .to_ascii_lowercase();
     let response_pubkey = response
-        .pubkey
+        .body.pubkey
         .strip_prefix("0x")
-        .unwrap_or(&response.pubkey)
+        .unwrap_or(&response.body.pubkey)
         .to_ascii_lowercase();
     if response_pubkey != expected_pubkey {
         return Err("公钥不匹配".to_string());
     }
 
     // 验证 payload hash
-    // wumin 返回的 payload_hash 不含 0x 前缀，统一去掉前缀再比较
     let expected_hash = expected_payload_hash
         .strip_prefix("0x")
         .unwrap_or(expected_payload_hash)
         .to_ascii_lowercase();
     let response_hash = response
-        .payload_hash
+        .body.payload_hash
         .strip_prefix("0x")
-        .unwrap_or(&response.payload_hash)
+        .unwrap_or(&response.body.payload_hash)
         .to_ascii_lowercase();
     if response_hash != expected_hash {
-        return Err("payload hash 不匹配，签名数据可能被篡改".to_string());
+        return Err("payload hash 不匹配,签名数据可能被篡改".to_string());
     }
 
     // 提取签名
     let sig_hex = response
-        .signature
+        .body.signature
         .strip_prefix("0x")
-        .unwrap_or(&response.signature);
+        .unwrap_or(&response.body.signature);
     if sig_hex.len() != 128 {
         return Err(format!("签名长度无效：期望 128 hex，实际 {}", sig_hex.len()));
     }

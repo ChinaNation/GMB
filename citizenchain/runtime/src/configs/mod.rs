@@ -732,18 +732,31 @@ impl
         name: &duoqian_manage_pow::pallet::SfidNameOf<Runtime>,
         nonce: &duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
         signature: &duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
+        signing_province: Option<&[u8]>,
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
+            let _ = signing_province;
             return !sfid_id.is_empty() && !name.is_empty() && !nonce.is_empty() && !signature.is_empty();
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            let public = match current_sfid_verify_public() {
-                Some(v) => v,
-                None => return false,
+            // 中文注释：按 signing_province 分流：
+            //   Some(p) → 查 ShengSigningPubkey[p]，省签名公钥验签；
+            //   None    → fallback 用 SfidMainAccount 当前主公钥验签。
+            let public_bytes: [u8; 32] = match signing_province {
+                Some(p) => match sfid_code_auth::Pallet::<Runtime>::sheng_signing_pubkey(p) {
+                    Some(k) => k,
+                    None => return false,
+                },
+                None => match current_sfid_verify_public() {
+                    Some(k) => k.0,
+                    None => return false,
+                },
             };
+            let public = sr25519::Public::from_raw(public_bytes);
+
             let sig_bytes = signature.as_slice();
             if sig_bytes.len() != 64 {
                 return false;
@@ -753,14 +766,30 @@ impl
             sig_raw.copy_from_slice(sig_bytes);
             let signature = sr25519::Signature::from_raw(sig_raw);
 
-            let payload = (
-                b"GMB_SFID_INSTITUTION_V2",
-                frame_system::Pallet::<Runtime>::block_hash(0),
-                sfid_id,
-                name.as_slice(),
-                nonce.as_slice(),
-            );
-            let msg = blake2_256(&payload.encode());
+            // 中文注释：payload tag 统一为 GMB_SFID_V1；signing_province 存在时追加到末尾防跨省 replay。
+            let msg = match signing_province {
+                Some(p) => {
+                    let payload = (
+                        b"GMB_SFID_V1",
+                        frame_system::Pallet::<Runtime>::block_hash(0),
+                        sfid_id,
+                        name.as_slice(),
+                        nonce.as_slice(),
+                        p,
+                    );
+                    blake2_256(&payload.encode())
+                }
+                None => {
+                    let payload = (
+                        b"GMB_SFID_V1",
+                        frame_system::Pallet::<Runtime>::block_hash(0),
+                        sfid_id,
+                        name.as_slice(),
+                        nonce.as_slice(),
+                    );
+                    blake2_256(&payload.encode())
+                }
+            };
 
             sr25519_verify(&signature, &msg, &public)
         }
@@ -820,7 +849,7 @@ impl
         let signature = sr25519::Signature::from_raw(sig_raw);
 
         let payload = (
-            b"GMB_SFID_BIND_V3",
+            b"GMB_SFID_V1",
             frame_system::Pallet::<Runtime>::block_hash(0),
             account,
             credential.binding_id,
@@ -871,7 +900,7 @@ impl
             let signature = sr25519::Signature::from_raw(sig_raw);
 
             let payload = (
-                b"GMB_SFID_VOTE_V3",
+                b"GMB_SFID_V1",
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 account,
                 binding_id,
@@ -933,7 +962,7 @@ impl
             let signature = sr25519::Signature::from_raw(sig_raw);
 
             let payload = (
-                b"GMB_SFID_POPULATION_V3",
+                b"GMB_SFID_V1",
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 who,
                 eligible_total,
@@ -1682,7 +1711,7 @@ mod tests {
             let bind_nonce: sfid_code_auth::pallet::NonceOf<Runtime> =
                 b"bind-nonce".to_vec().try_into().expect("nonce should fit");
             let bind_payload = (
-                b"GMB_SFID_BIND_V3",
+                b"GMB_SFID_V1",
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 &account,
                 binding_id,
@@ -1716,7 +1745,7 @@ mod tests {
             let vote_signature: sfid_code_auth::pallet::SignatureOf<Runtime> = pair
                 .sign(&blake2_256(
                     &(
-                        b"GMB_SFID_VOTE_V3",
+                        b"GMB_SFID_V1",
                         frame_system::Pallet::<Runtime>::block_hash(0),
                         &account,
                         binding_id,
@@ -1742,7 +1771,7 @@ mod tests {
             let pop_signature: voting_engine_system::pallet::VoteSignatureOf<Runtime> = pair
                 .sign(&blake2_256(
                     &(
-                        b"GMB_SFID_POPULATION_V3",
+                        b"GMB_SFID_V1",
                         frame_system::Pallet::<Runtime>::block_hash(0),
                         &account,
                         123u64,
@@ -1786,7 +1815,7 @@ mod tests {
             let nonce = b"wrap-nonce";
             let vote_msg = blake2_256(
                 &(
-                    b"GMB_SFID_VOTE_V3",
+                    b"GMB_SFID_V1",
                     frame_system::Pallet::<Runtime>::block_hash(0),
                     &who,
                     binding_id,
@@ -1869,7 +1898,7 @@ mod tests {
             let register_signature: duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime> = pair
                 .sign(&blake2_256(
                     &(
-                        b"GMB_SFID_INSTITUTION_V2",
+                        b"GMB_SFID_V1",
                         frame_system::Pallet::<Runtime>::block_hash(0),
                         sfid_id.as_slice(),
                         register_name.as_slice(),

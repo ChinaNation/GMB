@@ -9,13 +9,15 @@ import 'package:qr/qr.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
-import 'package:wuminapp_mobile/qr/transfer/transfer_qr_models.dart';
+import 'package:wuminapp_mobile/qr/qr_protocols.dart';
+import 'package:wuminapp_mobile/qr/envelope.dart';
+import 'package:wuminapp_mobile/qr/bodies/user_transfer_body.dart';
 import 'package:wuminapp_mobile/trade/offchain/clearing_banks.dart';
 
 /// 临时收款码页面。
 ///
 /// 商户输入收款金额后生成带 amount 的二维码，顾客扫码后直接支付。
-/// 使用用户协议 WUMIN_USER_V1.0.0 transfer 变体。
+/// 使用统一协议 WUMIN_QR_V1 kind=user_transfer。
 class ReceiveQrPage extends StatefulWidget {
   const ReceiveQrPage({
     super.key,
@@ -50,11 +52,21 @@ class _ReceiveQrPageState extends State<ReceiveQrPage> {
 
   String _buildQrData() {
     final amountText = _amountController.text.trim();
-    return TransferQrPayload(
-      to: widget.address,
-      name: widget.walletName,
-      amount: amountText.isNotEmpty ? amountText : null,
-      bank: widget.bankShenfenId,
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final id = 'rcv_${DateTime.now().microsecondsSinceEpoch}';
+    return QrEnvelope<UserTransferBody>(
+      kind: QrKind.userTransfer,
+      id: id,
+      issuedAt: now,
+      expiresAt: now + 600,
+      body: UserTransferBody(
+        address: widget.address,
+        name: widget.walletName,
+        amount: amountText,
+        symbol: 'GMB',
+        memo: '',
+        bank: widget.bankShenfenId ?? '',
+      ),
     ).toRawJson();
   }
 

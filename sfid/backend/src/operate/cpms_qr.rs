@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub(crate) fn canonical_citizen_qr_text(
     ver: &str,
     issuer_id: &str,
@@ -30,6 +31,7 @@ pub(crate) fn canonical_status_qr_text(
     )
 }
 
+#[allow(dead_code)]
 pub(crate) fn verify_cpms_qr_signature(pubkeys: &[&str], message: &str, signature: &str) -> bool {
     pubkeys
         .iter()

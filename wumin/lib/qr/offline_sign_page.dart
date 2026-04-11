@@ -7,6 +7,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../ui/app_theme.dart';
 import '../util/amount_format.dart';
+import '../qr/bodies/sign_request_body.dart';
+import '../signer/action_labels.dart';
 import '../signer/offline_sign_service.dart';
 import '../signer/qr_signer.dart';
 import '../util/screenshot_guard.dart';
@@ -42,8 +44,8 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   bool _handled = false;
   bool _signing = false;
   bool _torchOn = false;
-  QrSignRequest? _request;
-  QrSignResponse? _response;
+  SignRequestEnvelope? _request;
+  SignResponseEnvelope? _response;
   OfflineSignVerification? _verification;
   int _remainingSeconds = 0;
 
@@ -95,13 +97,13 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     super.dispose();
   }
 
-  int _secondsLeft(QrSignRequest request) {
+  int _secondsLeft(SignRequestEnvelope request) {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final left = request.expiresAt - now;
+    final left = (request.expiresAt ?? 0) - now;
     return left > 0 ? left : 0;
   }
 
-  void _startCountdown(QrSignRequest request) {
+  void _startCountdown(SignRequestEnvelope request) {
     _timer?.cancel();
     _remainingSeconds = _secondsLeft(request);
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -349,18 +351,8 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     return value;
   }
 
-  /// 从 display.fields（List 格式）中按 key 查找 label。
-  static String? _findFieldLabel(List<dynamic> fields, String key) {
-    for (final field in fields) {
-      if (field is Map && field['key']?.toString() == key) {
-        return field['label']?.toString();
-      }
-    }
-    return null;
-  }
-
   Widget _buildTransactionDetails(
-      QrSignRequest request, OfflineSignVerification verification) {
+      SignRequestEnvelope request, OfflineSignVerification verification) {
     final decoded = verification.decoded;
     final match = verification.displayMatch;
 
@@ -370,61 +362,46 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         statusBanner = _buildBanner(
           color: AppTheme.success,
           icon: Icons.verified_rounded,
-          text: '交易内容已独立验证，与摘要一致',
+          text: '交易内容已独立验证,与摘要一致',
         );
       case DisplayMatchStatus.mismatched:
         statusBanner = _buildBanner(
           color: AppTheme.danger,
           icon: Icons.dangerous_rounded,
-          text: '警告：交易内容与摘要不符，禁止签名',
+          text: '警告:交易内容与摘要不符,禁止签名',
         );
       case DisplayMatchStatus.decodeFailed:
         statusBanner = _buildBanner(
           color: AppTheme.warning,
           icon: Icons.warning_amber_rounded,
-          text: '无法独立验证交易内容，以下信息来自请求方',
+          text: '无法独立验证交易内容,以下信息来自请求方',
         );
     }
 
-    final display = request.display;
-    final actionLabel = display['action_label']?.toString() ??
-        display['action']?.toString() ??
-        '未知';
+    final display = request.body.display;
+    final actionLabel = actionLabels[display.action] ?? display.action;
 
     final List<Widget> detailRows;
     if (decoded != null) {
-      final displayFields = display['fields'];
       detailRows = [
         _detailRow('交易类型', actionLabel),
         ...decoded.fields.entries.map((e) {
-          final label = (displayFields is List)
-              ? _findFieldLabel(displayFields, e.key) ?? e.key
-              : e.key;
-          return _detailRow(label, _fieldValue(e.key, e.value));
+          // 优先从 display.fields 中找中文标签
+          final displayLabel = display.fields
+              .where((f) => f.key == e.key)
+              .map((f) => f.label)
+              .firstOrNull;
+          return _detailRow(
+              displayLabel ?? e.key, _fieldValue(e.key, e.value));
         }),
       ];
     } else {
       detailRows = [
         _detailRow('交易类型', actionLabel),
+        ...display.fields.map(
+          (f) => _detailRow(f.label, _fieldValue(f.label, f.value)),
+        ),
       ];
-      final fields = display['fields'];
-      if (fields is List) {
-        detailRows.addAll(
-          fields.whereType<Map>().map((field) {
-            final key = field['key']?.toString() ?? '';
-            final label = field['label']?.toString() ?? key;
-            final value = field['value']?.toString() ?? '';
-            final format = field['format']?.toString();
-            final displayValue = _fieldValue(key, value);
-            return _detailRow(
-              label,
-              format == 'currency'
-                  ? AmountFormat.formatString(displayValue)
-                  : displayValue,
-            );
-          }),
-        );
-      }
     }
 
     return Column(
@@ -504,16 +481,13 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     );
   }
 
-  Widget _buildRequestSummary(QrSignRequest request) {
+  Widget _buildRequestSummary(SignRequestEnvelope request) {
     final expired = _remainingSeconds <= 0;
     final verification = _verification;
     final isMismatched =
         verification?.displayMatch == DisplayMatchStatus.mismatched;
-    // 中文注释：大 payload 交易（runtime 升级）的 payload_hex 是哈希后的 32 字节，
-    // 无法解码但属于已知安全操作，允许签名。
-    final displayAction = request.display['action']?.toString() ?? '';
+    final displayAction = request.body.display.action;
     const allowedHashedActions = {
-      'developer_upgrade',
       'developer_direct_upgrade',
       'propose_runtime_upgrade',
       'activate_admin',
@@ -525,7 +499,9 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       'vote_sweep_to_main',
       'propose_create',
       'propose_create_personal',
-      'propose_resolution_issuance',
+      'propose_transfer',
+      'vote_transfer',
+      'joint_vote',
     };
     final isDecodeFailed =
         verification?.displayMatch == DisplayMatchStatus.decodeFailed &&
@@ -568,8 +544,8 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _detailRow('请求 ID', request.requestId),
-              _detailRow('签名账户', request.account),
+              _detailRow('请求 ID', request.id ?? ''),
+              _detailRow('签名账户', request.body.address),
             ],
           ),
         ),
@@ -626,7 +602,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     );
   }
 
-  Widget _buildResponseView(QrSignResponse response) {
+  Widget _buildResponseView(SignResponseEnvelope response) {
     final responseJson = _qrSigner.encodeResponse(response);
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -675,8 +651,8 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
           decoration: AppTheme.cardDecoration(),
           child: Column(
             children: [
-              _detailRow('请求 ID', response.requestId),
-              _detailRow('签名公钥', _truncate(response.pubkey)),
+              _detailRow('请求 ID', response.id ?? ''),
+              _detailRow('签名公钥', _truncate(response.body.pubkey)),
             ],
           ),
         ),
