@@ -33,11 +33,11 @@ jobs:
       - name: 安装系统依赖
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev
 
-      - name: 缓存 Rust 依赖
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "citizenchain-wasm"
-          workspaces: citizenchain -> target
+      - name: 删除全部旧编译产物
+        working-directory: citizenchain
+        run: |
+          rm -rf target
+          echo "已删除全部 target 目录，从零开始编译"
 
       - name: 编译 WASM
         working-directory: citizenchain
