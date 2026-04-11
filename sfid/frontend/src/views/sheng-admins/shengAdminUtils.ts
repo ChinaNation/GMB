@@ -24,6 +24,9 @@ export interface ShengAdminSharedState {
   shengAdminsLoading: boolean;
   selectedShengAdmin: ShengAdminRow | null;
   setSelectedShengAdmin: (v: ShengAdminRow | null) => void;
+  /** 当前选中的市(三层导航:省→市→市级管理员列表) */
+  selectedCity: string | null;
+  setSelectedCity: (v: string | null) => void;
   adminDetailTab: 'operators' | 'super-admin';
   setAdminDetailTab: (v: 'operators' | 'super-admin') => void;
   replaceSuperLoading: boolean;

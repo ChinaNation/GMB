@@ -56,7 +56,9 @@ class _MyWalletPageState extends State<MyWalletPage> {
     super.initState();
     _walletsFuture = _walletService.getWallets();
     _loadActiveWallet();
-    _refreshBalancesFromChain();
+    if (!_isSelectionMode) {
+      _refreshBalancesFromChain();
+    }
   }
 
   void _reload() {
