@@ -135,14 +135,27 @@ pub(crate) async fn admin_get_chain_keyring(
             "chain keyring not initialized",
         );
     };
+    // 从 admin_users_by_pubkey 反查三个密钥管理员的名字
+    let lookup_name = |pubkey: &str| -> String {
+        store
+            .admin_users_by_pubkey
+            .iter()
+            .find(|(k, _)| crate::business::pubkey::same_admin_pubkey(k.as_str(), pubkey))
+            .map(|(_, u)| u.admin_name.clone())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| "密钥管理员".to_string())
+    };
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: KeyringStateOutput {
             version: kr.version,
             main_pubkey: kr.main_pubkey.clone(),
+            main_name: lookup_name(&kr.main_pubkey),
             backup_a_pubkey: kr.backup_a_pubkey.clone(),
+            backup_a_name: lookup_name(&kr.backup_a_pubkey),
             backup_b_pubkey: kr.backup_b_pubkey.clone(),
+            backup_b_name: lookup_name(&kr.backup_b_pubkey),
             updated_at: kr.updated_at,
         },
     })
@@ -720,6 +733,16 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
         }
         store.chain_keyring_state = Some(rotate_result.state.clone());
         sync_key_admin_users(&mut store);
+        // 设置新备用管理员的姓名
+        if let Some(name) = input.new_backup_name.as_deref().filter(|s| !s.trim().is_empty()) {
+            let normalized_backup = normalize_pubkey_for_signing(input.new_backup_pubkey.as_str());
+            if let Some(user) = store.admin_users_by_pubkey.iter_mut()
+                .find(|(k, _)| k.eq_ignore_ascii_case(normalized_backup.as_str()))
+                .map(|(_, v)| v)
+            {
+                user.admin_name = name.trim().to_string();
+            }
+        }
         append_audit_log(
             &mut store,
             "CHAIN_KEYRING_ROTATE_COMMIT",
@@ -987,6 +1010,7 @@ pub(crate) fn sync_key_admin_users(store: &mut Store) {
                 city: String::new(),
                 encrypted_signing_privkey: None,
                 signing_pubkey: None,
+                signing_created_at: None,
             },
         );
     }
@@ -1128,13 +1152,6 @@ fn set_active_main_signer(
     Ok(())
 }
 
-fn resolve_chain_http_rpc_url() -> Result<String, String> {
-    std::env::var("SFID_CHAIN_RPC_URL")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| "SFID_CHAIN_RPC_URL not configured".to_string())
-}
 
 /// 暴露给其他模块（如 chain::balance）按需调用 state_getStorage。
 pub(crate) async fn call_chain_state_get_storage(
@@ -1149,7 +1166,7 @@ async fn chain_rpc_call(
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     let client = HttpClient::new();
-    let url = resolve_chain_http_rpc_url()?;
+    let url = crate::chain::url::chain_http_url()?;
     let response = client
         .post(url)
         .json(&json!({
@@ -1221,30 +1238,6 @@ struct ChainRotateReceipt {
     block_number: u64,
 }
 
-fn normalize_chain_ws_url(input: &str) -> String {
-    if let Some(rest) = input.strip_prefix("http://") {
-        return format!("ws://{rest}");
-    }
-    if let Some(rest) = input.strip_prefix("https://") {
-        return format!("wss://{rest}");
-    }
-    input.to_string()
-}
-
-fn resolve_chain_ws_url() -> Result<String, String> {
-    let ws_url = std::env::var("SFID_CHAIN_WS_URL")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .or_else(|| {
-            std::env::var("SFID_CHAIN_RPC_URL")
-                .ok()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty())
-        })
-        .ok_or_else(|| "SFID_CHAIN_RPC_URL or SFID_CHAIN_WS_URL not configured".to_string())?;
-    Ok(normalize_chain_ws_url(ws_url.as_str()))
-}
 
 fn parse_account_id32(pubkey: &str) -> Result<[u8; 32], String> {
     parse_sr25519_pubkey_bytes(pubkey).ok_or_else(|| "invalid sr25519 account pubkey".to_string())
@@ -1260,7 +1253,7 @@ async fn submit_rotate_sfid_keys_extrinsic(
     // 必须做三件事：① legacy RPC 取 best+pool 视图 nonce ② immortal era ③ 只等 InBestBlock。
     // 详见 ADR `04-decisions/sfid/2026-04-07-subxt-0.43-pow-chain-quirks.md`。
     let ws_url =
-        resolve_chain_ws_url().map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
+        crate::chain::url::chain_ws_url().map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
     let client = OnlineClient::<PolkadotConfig>::from_url(ws_url.clone())
         .await
         .map_err(|e| {
@@ -1424,7 +1417,7 @@ pub(crate) async fn bootstrap_sheng_signer(
         .map_err(|e| format!("encrypt new sheng signer failed: {e}"))?;
 
     // 3. 推链 set_sheng_signing_pubkey(province, Some(new_pubkey))。
-    let ws_url = resolve_chain_ws_url()
+    let ws_url = crate::chain::url::chain_ws_url()
         .map_err(|e| format!("resolve ws url failed: {e}"))?;
     let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.clone())
         .await
@@ -1458,6 +1451,7 @@ pub(crate) async fn bootstrap_sheng_signer(
             Some(user) => {
                 user.encrypted_signing_privkey = Some(encrypted);
                 user.signing_pubkey = Some(hex::encode(new_pubkey));
+                user.signing_created_at = Some(chrono::Utc::now());
             }
             None => {
                 tracing::error!(

@@ -1,19 +1,19 @@
 // 中文注释:从 App.tsx 迁移(任务卡 20260408-sfid-frontend-app-tsx-split 步 4)
 // 注册局顶层视图 —— activeView === 'citizens' 分支。
-// 包含:citizen 列表 + 搜索栏 + 表格 + 绑定/解绑按钮 + BindModal/UnbindModal/操作扫码 Modal。
+// 包含:citizen 列表 + 搜索栏 + 表格 + 绑定/推链绑定/推链解绑按钮 + BindModal/操作扫码 Modal。
 
 import { useEffect, useRef, useState } from 'react';
 import { Button, Card, Form, Input, Modal, Space, Table, Typography, message } from 'antd';
 import { QrcodeOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { CitizenRow } from '../../api/client';
-import { listCitizens, scanCpmsStatusQr } from '../../api/client';
-import { decodeSs58, tryEncodeSs58 } from '../../utils/ss58';
+import { listCitizens, scanCpmsStatusQr, citizenPushChainBind, citizenPushChainUnbind } from '../../api/client';
+import { decodeSs58 } from '../../utils/ss58';
 import { startCameraScanner } from '../../utils/cameraScanner';
 import { useAuth } from '../../hooks/useAuth';
 import { glassCardStyle, glassCardHeadStyle } from '../../components/App';
 import { BindModal } from './BindModal';
-import { UnbindModal } from './UnbindModal';
+
 
 export function CitizensView() {
   const { auth, capabilities } = useAuth();
@@ -23,8 +23,6 @@ export function CitizensView() {
   // 绑定/解绑弹窗控制(state 仅持有 open + 当前 record,其它细节在 Modal 组件内)
   const [bindModalOpen, setBindModalOpen] = useState(false);
   const [bindTargetRecord, setBindTargetRecord] = useState<CitizenRow | null>(null);
-  const [unbindModalOpen, setUnbindModalOpen] = useState(false);
-  const [unbindTarget, setUnbindTarget] = useState<CitizenRow | null>(null);
 
   // 操作扫码(QR4 citizen 状态扫描)—— 原 opScan 系列
   const [opScanOpen, setOpScanOpen] = useState(false);
@@ -61,7 +59,6 @@ export function CitizensView() {
     if (!auth) {
       setRows([]);
       setBindModalOpen(false);
-      setUnbindModalOpen(false);
       setOpScanOpen(false);
       stopOpScanner();
       return;
@@ -123,14 +120,46 @@ export function CitizensView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opScanOpen, auth]);
 
+  const onPushChainBind = async (record: CitizenRow) => {
+    if (!auth) return;
+    try {
+      setLoading(true);
+      await citizenPushChainBind(auth, { citizen_id: record.id });
+      message.success('推链绑定成功');
+      await refreshList(undefined, true);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '推链绑定失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onPushChainUnbind = async (record: CitizenRow) => {
+    if (!auth) return;
+    Modal.confirm({
+      title: '确认推链解绑',
+      content: `确定要解绑账户 ${record.account_address ?? record.account_pubkey ?? ''} 吗？解绑后链上绑定关系将被移除。`,
+      okText: '确认解绑',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          setLoading(true);
+          await citizenPushChainUnbind(auth, { citizen_id: record.id });
+          message.success('推链解绑成功');
+          await refreshList(undefined, true);
+        } catch (err) {
+          message.error(err instanceof Error ? err.message : '推链解绑失败');
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
+  };
+
   const openBindModal = (record: CitizenRow) => {
     setBindTargetRecord(record);
     setBindModalOpen(true);
-  };
-
-  const openUnbindModal = (record: CitizenRow) => {
-    setUnbindTarget(record);
-    setUnbindModalOpen(true);
   };
 
   const citizenColumns: ColumnsType<CitizenRow> = [
@@ -141,10 +170,10 @@ export function CitizensView() {
       render: (_v: unknown, _r: CitizenRow, idx: number) => idx + 1,
     },
     {
-      title: '账户',
-      dataIndex: 'account_pubkey',
+      title: '账户地址',
+      dataIndex: 'account_address',
       align: 'center',
-      render: (v: string | undefined) => (v ? tryEncodeSs58(v) : '-'),
+      render: (v: string | undefined) => v ?? '-',
     },
     {
       title: '档案号',
@@ -164,24 +193,32 @@ export function CitizensView() {
       width: 100,
       align: 'center',
       render: (v: string) => {
+        if (v === 'PENDING') return '待绑定';
+        if (v === 'BINDABLE') return '待推链';
         if (v === 'BOUND') return '已绑定';
         if (v === 'UNLINKED') return '已解绑';
-        return '未绑定';
+        return v;
       },
     },
   ];
   if (capabilities.canBusinessWrite) {
     citizenColumns.push({
       title: '操作',
-      width: 200,
+      width: 280,
       align: 'center',
       render: (_v: unknown, row: CitizenRow) => (
         <Space size={8}>
-          {row.status === 'BOUND' ? (
-            <Button danger onClick={() => openUnbindModal(row)}>
-              解绑
+          {row.status === 'BOUND' && (
+            <Button danger onClick={() => onPushChainUnbind(row)}>
+              推链解绑
             </Button>
-          ) : (
+          )}
+          {row.status === 'BINDABLE' && (
+            <Button type="primary" onClick={() => onPushChainBind(row)}>
+              推链绑定
+            </Button>
+          )}
+          {(row.status === 'UNLINKED' || row.status === 'PENDING') && (
             <Button type="primary" onClick={() => openBindModal(row)}>
               绑定
             </Button>
@@ -229,14 +266,6 @@ export function CitizensView() {
           onBound={() => refreshList(undefined, true)}
         />
       )}
-
-      <UnbindModal
-        auth={auth}
-        open={unbindModalOpen}
-        target={unbindTarget}
-        onClose={() => setUnbindModalOpen(false)}
-        onUnbound={() => refreshList(undefined, true)}
-      />
 
       <Modal
         title="状态变更扫码"

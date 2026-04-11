@@ -92,7 +92,7 @@ void main() {
     });
 
     test('returns null for unknown pallet', () {
-      final hex = '0xff01';
+      const hex = '0xff01';
       expect(PayloadDecoder.decode(hex, specVersion: PalletRegistry.supportedSpecVersions.first), isNull);
     });
 

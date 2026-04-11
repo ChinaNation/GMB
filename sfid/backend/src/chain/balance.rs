@@ -88,7 +88,7 @@ fn build_system_account_storage_key(account: &[u8; 32]) -> String {
 
 /// 查询账户的链上 free 余额（最小单位：分）。
 ///
-/// 通过 SFID 后端配置的 RPC 节点（`SFID_CHAIN_RPC_URL` / `SFID_CHAIN_WS_URL`）
+/// 通过 SFID 后端配置的链节点（`SFID_CHAIN_WS_URL`）
 /// 调用 `state_getStorage` 拉取 `System.Account`，截取 AccountInfo 中的 `data.free`。
 ///
 /// 返回 0 当账户在链上不存在（未上链）。

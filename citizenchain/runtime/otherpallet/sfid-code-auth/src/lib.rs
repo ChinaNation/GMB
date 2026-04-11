@@ -291,8 +291,9 @@ pub mod pallet {
             binding_id: T::Hash,
             bind_nonce_hash: T::Hash,
         },
-        /// 中文注释：账户主动解绑 SFID。
+        /// 中文注释：管理员代为解绑用户 SFID，记录管理员、被解绑用户和 binding_id。
         SfidUnbound {
+            admin: T::AccountId,
             who: T::AccountId,
             binding_id: T::Hash,
         },
@@ -393,18 +394,38 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 中文注释：主动解绑当前账户的 SFID 绑定关系，释放双向映射并减少计数。
+        /// 中文注释：管理员代为解绑指定用户的 SFID 绑定关系。
+        /// 仅 SFID 主账户或已注册的省级签名账户可调用，用户不允许自行解绑。
         #[pallet::call_index(1)]
         #[pallet::weight(T::WeightInfo::unbind_sfid())]
-        pub fn unbind_sfid(origin: OriginFor<T>) -> DispatchResult {
+        pub fn unbind_sfid(origin: OriginFor<T>, target: T::AccountId) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            let binding_id = AccountToBindingId::<T>::get(&who).ok_or(Error::<T>::NotBound)?;
 
-            AccountToBindingId::<T>::remove(&who);
+            // 权限验证：仅 SFID 主账户或省级签名账户可调用
+            let main = SfidMainAccount::<T>::get()
+                .ok_or(Error::<T>::UnauthorizedSfidOperator)?;
+            if who != main {
+                let who_bytes: [u8; 32] = who.encode()
+                    .try_into()
+                    .map_err(|_| Error::<T>::UnauthorizedSfidOperator)?;
+                ensure!(
+                    ProvinceBySigningPubkey::<T>::contains_key(&who_bytes),
+                    Error::<T>::UnauthorizedSfidOperator
+                );
+            }
+
+            // 移除 target 的绑定映射
+            let binding_id = AccountToBindingId::<T>::get(&target)
+                .ok_or(Error::<T>::NotBound)?;
+            AccountToBindingId::<T>::remove(&target);
             BindingIdToAccount::<T>::remove(binding_id);
             BoundCount::<T>::mutate(|v| *v = v.saturating_sub(1));
 
-            Self::deposit_event(Event::<T>::SfidUnbound { who, binding_id });
+            Self::deposit_event(Event::<T>::SfidUnbound {
+                admin: who,
+                who: target,
+                binding_id,
+            });
             Ok(())
         }
 
@@ -938,10 +959,49 @@ mod tests {
     }
 
     #[test]
-    fn unbind_rejects_unbound_account() {
+    fn unbind_by_main_account_succeeds() {
         new_test_ext().execute_with(|| {
+            let credential = bind_credential(b"binding-unbind", "nonce-unbind", "bind-ok");
+            let bid = credential.binding_id;
+            assert_ok!(SfidCodeAuth::bind_sfid(RuntimeOrigin::signed(1), credential));
+            assert_eq!(BoundCount::<Test>::get(), 1);
+
+            // 主账户（10）代为解绑用户 1
+            assert_ok!(SfidCodeAuth::unbind_sfid(RuntimeOrigin::signed(10), 1));
+            assert!(AccountToBindingId::<Test>::get(1).is_none());
+            assert!(BindingIdToAccount::<Test>::get(bid).is_none());
+            assert_eq!(BoundCount::<Test>::get(), 0);
+        });
+    }
+
+    // 注意：省级签名账户权限检查依赖 AccountId 编码为 32 字节（生产环境 AccountId32 满足）。
+    // 测试环境 AccountId = u64（8 字节），无法直接测试省级账户路径。
+    // 省级账户权限检查的正确性由 runtime 集成测试覆盖。
+
+    #[test]
+    fn unbind_rejects_non_admin() {
+        new_test_ext().execute_with(|| {
+            let credential = bind_credential(b"binding-reject", "nonce-reject", "bind-ok");
+            assert_ok!(SfidCodeAuth::bind_sfid(RuntimeOrigin::signed(1), credential));
+
+            // 普通用户（包括被绑定用户本人）不允许解绑
             assert_noop!(
-                SfidCodeAuth::unbind_sfid(RuntimeOrigin::signed(99)),
+                SfidCodeAuth::unbind_sfid(RuntimeOrigin::signed(1), 1),
+                Error::<Test>::UnauthorizedSfidOperator
+            );
+            assert_noop!(
+                SfidCodeAuth::unbind_sfid(RuntimeOrigin::signed(99), 1),
+                Error::<Test>::UnauthorizedSfidOperator
+            );
+        });
+    }
+
+    #[test]
+    fn unbind_rejects_unbound_target() {
+        new_test_ext().execute_with(|| {
+            // 主账户解绑一个未绑定的用户 → NotBound
+            assert_noop!(
+                SfidCodeAuth::unbind_sfid(RuntimeOrigin::signed(10), 99),
                 Error::<Test>::NotBound
             );
         });

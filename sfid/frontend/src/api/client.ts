@@ -232,8 +232,11 @@ export type CpmsStatusScanResult = {
 export type KeyringStateResult = {
   version: number;
   main_pubkey: string;
+  main_name: string;
   backup_a_pubkey: string;
+  backup_a_name: string;
   backup_b_pubkey: string;
+  backup_b_name: string;
   updated_at: number;
 };
 
@@ -269,10 +272,11 @@ export type KeyringRotateVerifyResult = {
 export type CitizenRow = {
   id: number;
   account_pubkey?: string;
+  account_address?: string;
   archive_no?: string;
   sfid_code?: string;
   province_code?: string;
-  status: 'UNBOUND' | 'BOUND' | 'UNLINKED';
+  status: 'PENDING' | 'BINDABLE' | 'BOUND' | 'UNLINKED';
 };
 
 export type CitizenBindChallengeResult = {
@@ -286,10 +290,11 @@ export type CitizenBindChallengeResult = {
 export type CitizenBindResult = {
   id: number;
   account_pubkey?: string;
+  account_address?: string;
   archive_no?: string;
   sfid_code?: string;
   province_code?: string;
-  status: 'UNBOUND' | 'BOUND' | 'UNLINKED';
+  status: 'PENDING' | 'BINDABLE' | 'BOUND' | 'UNLINKED';
 };
 
 export type OperatorRow = {
@@ -320,6 +325,8 @@ export type ShengAdminRow = {
   updated_at?: string | null;
   // 链上签名 pubkey：未首次登录 bootstrap 时为 null/undefined
   signing_pubkey?: string | null;
+  // 签名密钥生成时间
+  signing_created_at?: string | null;
 };
 
 export async function identifyAdmin(identityQr: string): Promise<AdminIdentifyResult> {
@@ -481,6 +488,39 @@ export async function citizenUnbind(
       ...adminHeaders(auth)
     },
     body: JSON.stringify(payload)
+  });
+}
+
+export type CitizenPushChainResult = {
+  citizen_id: number;
+  tx_hash: string;
+};
+
+export async function citizenPushChainBind(
+  auth: AdminAuth,
+  payload: { citizen_id: number }
+): Promise<CitizenPushChainResult> {
+  return request<CitizenPushChainResult>('/api/v1/admin/citizen/bind/push-chain', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...adminHeaders(auth),
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function citizenPushChainUnbind(
+  auth: AdminAuth,
+  payload: { citizen_id: number }
+): Promise<CitizenPushChainResult> {
+  return request<CitizenPushChainResult>('/api/v1/admin/citizen/unbind/push-chain', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...adminHeaders(auth),
+    },
+    body: JSON.stringify(payload),
   });
 }
 
@@ -746,6 +786,7 @@ export async function commitKeyringRotate(
     challenge_id: string;
     signature: string;
     new_backup_pubkey: string;
+    new_backup_name?: string;
   }
 ): Promise<KeyringRotateCommitResult> {
   return request<KeyringRotateCommitResult>('/api/v1/admin/attestor/rotate/commit', {

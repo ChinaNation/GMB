@@ -49,6 +49,16 @@ export function KeyringRotatePanel({ state }: { state: KeyringSharedState }) {
           style={{ marginBottom: 12, rowGap: 8 }}
         >
           <Form.Item
+            name="new_backup_name"
+            rules={[{ required: true, message: '请输入姓名' }]}
+          >
+            <Input
+              style={{ width: 200 }}
+              placeholder="新备用管理员姓名"
+              disabled={isMainKeySigned}
+            />
+          </Form.Item>
+          <Form.Item
             name="new_backup_pubkey"
             rules={[
               { required: true, message: '请输入新备用账户' },
@@ -262,23 +272,16 @@ export function KeyringRotatePanel({ state }: { state: KeyringSharedState }) {
             当前密钥状态
           </Typography.Text>
           <Typography.Paragraph style={{ marginBottom: 6 }}>
-            主账户:<Typography.Text code>{tryEncodeSs58(keyringState?.main_pubkey)}</Typography.Text>
-            {mainAccountBalance != null && (
-              <span style={{ marginLeft: 12, color: '#0d9488', fontWeight: 600 }}>
-                余额:{mainAccountBalance} 元
-              </span>
-            )}
-            {mainAccountBalanceError && (
-              <span style={{ marginLeft: 12, color: '#ef4444', fontSize: 12 }}>
-                余额查询失败:{mainAccountBalanceError}
-              </span>
-            )}
+            主密钥:<Typography.Text code>{tryEncodeSs58(keyringState?.main_pubkey)}</Typography.Text>
+            <span style={{ marginLeft: 8, color: '#334155' }}>{keyringState?.main_name || '密钥管理员'}</span>
           </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 6 }}>
-            备用A 账户:<Typography.Text code>{tryEncodeSs58(keyringState?.backup_a_pubkey)}</Typography.Text>
+            备用A:<Typography.Text code>{tryEncodeSs58(keyringState?.backup_a_pubkey)}</Typography.Text>
+            <span style={{ marginLeft: 8, color: '#334155' }}>{keyringState?.backup_a_name || '密钥管理员'}</span>
           </Typography.Paragraph>
           <Typography.Paragraph style={{ marginBottom: 0 }}>
-            备用B 账户:<Typography.Text code>{tryEncodeSs58(keyringState?.backup_b_pubkey)}</Typography.Text>
+            备用B:<Typography.Text code>{tryEncodeSs58(keyringState?.backup_b_pubkey)}</Typography.Text>
+            <span style={{ marginLeft: 8, color: '#334155' }}>{keyringState?.backup_b_name || '密钥管理员'}</span>
           </Typography.Paragraph>
         </Card>
       </Card>

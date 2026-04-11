@@ -227,14 +227,14 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
         ],
       ),
       body: _groups.isEmpty
-          ? Center(
+          ? const Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.folder_outlined,
                       size: 48, color: AppTheme.textTertiary),
-                  const SizedBox(height: 12),
-                  const Text(
+                  SizedBox(height: 12),
+                  Text(
                     '暂无分组',
                     style: TextStyle(color: AppTheme.textTertiary),
                   ),

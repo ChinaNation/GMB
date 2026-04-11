@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:wumin/qr/qr_protocols.dart';
 import 'package:wumin/qr/bodies/sign_request_body.dart';
-import 'package:wumin/qr/bodies/sign_response_body.dart';
 import 'package:wumin/qr/envelope.dart';
 import 'package:wumin/signer/qr_signer.dart';
 
@@ -42,7 +41,7 @@ void main() {
   });
 
   group('QrSigner.parseRequest (envelope)', () {
-    Map<String, dynamic> _validEnvelope() {
+    Map<String, dynamic> validEnvelope() {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       return {
         'proto': QrProtocols.v1,
@@ -62,7 +61,7 @@ void main() {
     }
 
     test('序列化和反序列化一致', () {
-      final envelope = _validEnvelope();
+      final envelope = validEnvelope();
       final encoded = jsonEncode(envelope);
       final parsed = signer.parseRequest(encoded);
 
@@ -87,7 +86,7 @@ void main() {
     });
 
     test('拒绝错误协议版本', () {
-      final json = _validEnvelope()..['proto'] = 'WRONG_PROTO';
+      final json = validEnvelope()..['proto'] = 'WRONG_PROTO';
       expect(
         () => signer.parseRequest(jsonEncode(json)),
         throwsA(isA<QrSignException>()),
@@ -95,7 +94,7 @@ void main() {
     });
 
     test('拒绝非签名请求 kind', () {
-      final json = _validEnvelope()..['kind'] = 'sign_response';
+      final json = validEnvelope()..['kind'] = 'sign_response';
       expect(
         () => signer.parseRequest(jsonEncode(json)),
         throwsA(isA<QrSignException>().having(
@@ -105,7 +104,7 @@ void main() {
     });
 
     test('拒绝缺少 display.action', () {
-      final json = _validEnvelope();
+      final json = validEnvelope();
       (json['body'] as Map<String, dynamic>)['display'] = {'summary': '测试', 'fields': []};
       expect(
         () => signer.parseRequest(jsonEncode(json)),
@@ -114,7 +113,7 @@ void main() {
     });
 
     test('拒绝缺少 display.summary', () {
-      final json = _validEnvelope();
+      final json = validEnvelope();
       (json['body'] as Map<String, dynamic>)['display'] = {'action': 'test', 'fields': []};
       expect(
         () => signer.parseRequest(jsonEncode(json)),
@@ -124,7 +123,7 @@ void main() {
 
     test('拒绝已过期请求', () {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final json = _validEnvelope()
+      final json = validEnvelope()
         ..['issued_at'] = now - 200
         ..['expires_at'] = now - 100;
       expect(
@@ -136,7 +135,7 @@ void main() {
     });
 
     test('拒绝空 payload_hex', () {
-      final json = _validEnvelope();
+      final json = validEnvelope();
       (json['body'] as Map<String, dynamic>)['payload_hex'] = '';
       expect(
         () => signer.parseRequest(jsonEncode(json)),
@@ -146,7 +145,7 @@ void main() {
 
     test('拒绝 TTL 超过 300 秒', () {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final json = _validEnvelope()
+      final json = validEnvelope()
         ..['issued_at'] = now
         ..['expires_at'] = now + 500;
       expect(

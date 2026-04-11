@@ -177,7 +177,12 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       await replaceShengAdmin(auth, values.province.trim(), hexPubkey, values.admin_name);
       message.success(`已更新 ${values.province} 省级管理员`);
       replaceSuperForm.resetFields();
-      await refreshShengAdmins();
+      const updatedList = await refreshShengAdmins();
+      // 同步更新当前选中省的详情(否则页面显示旧数据)
+      if (selectedShengAdmin) {
+        const updated = updatedList.find((r) => r.province === selectedShengAdmin.province);
+        if (updated) setSelectedShengAdmin(updated);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : '更换省级管理员失败';
       message.error(msg);
