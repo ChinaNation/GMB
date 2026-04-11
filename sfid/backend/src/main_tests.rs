@@ -929,9 +929,6 @@ fn chain_request_rejects_duplicate_nonce() {
 
 #[test]
 fn sync_key_admin_users_keeps_monotonic_ids() {
-    let payload2 = chain_signature_payload(
-#[test]
-fn sync_key_admin_users_keeps_monotonic_ids() {
     let state = build_test_state();
     let replacement_seed = hex_seed(0x77);
     let replacement_pubkey =
