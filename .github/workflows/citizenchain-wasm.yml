@@ -33,17 +33,13 @@ jobs:
       - name: 安装系统依赖
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev
 
-      - name: 删除全部旧编译产物
-        working-directory: citizenchain
+      - name: spec_version 自增
         run: |
-          rm -rf target
-          echo "已删除全部 target 目录，从零开始编译"
-
-      - name: 编译 WASM
-        working-directory: citizenchain
-        env:
-          WASM_BUILD_FROM_SOURCE: "1"
-        run: cargo build --release -p citizenchain
+          FILE=citizenchain/runtime/src/lib.rs
+          OLD=$(grep -oP 'spec_version:\s*\K[0-9]+' "$FILE")
+          NEW=$((OLD + 1))
+          sed -i "s/spec_version: $OLD/spec_version: $NEW/" "$FILE"
+          echo "spec_version: $OLD → $NEW"
 
       - name: 清理旧版 WASM artifact
         env:
@@ -56,6 +52,18 @@ jobs:
               gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
             done
 
+      - name: 删除全部旧编译产物
+        working-directory: citizenchain
+        run: |
+          rm -rf target
+          echo "已删除全部 target 目录，从零开始编译"
+
+      - name: 编译 WASM
+        working-directory: citizenchain
+        env:
+          WASM_BUILD_FROM_SOURCE: "1"
+        run: cargo build --release -p citizenchain
+
       - name: 上传 WASM
         uses: actions/upload-artifact@v4
         with:
@@ -65,3 +73,12 @@ jobs:
             citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.wasm
             citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
           retention-days: 30
+
+      - name: 提交 spec_version 自增
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add citizenchain/runtime/src/lib.rs
+          NEW=$(grep -oP 'spec_version:\s*\K[0-9]+' citizenchain/runtime/src/lib.rs)
+          git commit -m "runtime: spec_version → $NEW [skip ci]"
+          git push
