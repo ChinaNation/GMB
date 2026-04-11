@@ -225,7 +225,7 @@ impl StoreBackend {
 
         let admin_rows = conn
             .query(
-                "SELECT admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at, city, encrypted_signing_privkey, signing_pubkey
+                "SELECT admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at, city, encrypted_signing_privkey, signing_pubkey, signing_created_at
                  FROM admins",
                 &[],
             )
@@ -243,6 +243,7 @@ impl StoreBackend {
             let city: String = row.get(9);
             let encrypted_signing_privkey: Option<String> = row.get(10);
             let signing_pubkey: Option<String> = row.get(11);
+            let signing_created_at: Option<DateTime<Utc>> = row.get(12);
             store.admin_users_by_pubkey.insert(
                 admin_pubkey.clone(),
                 AdminUser {
@@ -258,6 +259,7 @@ impl StoreBackend {
                     city,
                     encrypted_signing_privkey,
                     signing_pubkey,
+                    signing_created_at,
                 },
             );
         }
@@ -368,8 +370,8 @@ impl StoreBackend {
         for admin in store.admin_users_by_pubkey.values() {
             let row = tx
                 .query_one(
-                    "INSERT INTO admins(admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at, city, encrypted_signing_privkey, signing_pubkey)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                    "INSERT INTO admins(admin_id, admin_pubkey, admin_name, role, status, built_in, created_by, created_at, updated_at, city, encrypted_signing_privkey, signing_pubkey, signing_created_at)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                      RETURNING admin_id",
                     &[
                         &(admin.id as i64),
@@ -384,6 +386,7 @@ impl StoreBackend {
                         &admin.city,
                         &admin.encrypted_signing_privkey,
                         &admin.signing_pubkey,
+                        &admin.signing_created_at,
                     ],
                 )
                 .map_err(|e| format!("insert admins failed: {e}"))?;
@@ -539,6 +542,8 @@ impl StoreHandle {
                    ADD COLUMN IF NOT EXISTS encrypted_signing_privkey TEXT;
                  ALTER TABLE IF EXISTS admins
                    ADD COLUMN IF NOT EXISTS signing_pubkey TEXT;
+                 ALTER TABLE IF EXISTS admins
+                   ADD COLUMN IF NOT EXISTS signing_created_at TIMESTAMPTZ;
                  CREATE TABLE IF NOT EXISTS store_shards (
                     shard_key TEXT PRIMARY KEY,
                     payload JSONB NOT NULL,
@@ -963,6 +968,11 @@ fn main() {
                 "/api/v1/institution/:sfid_id/documents/:doc_id",
                 delete(institutions::handler::delete_document),
             )
+            // 临时诊断:手动触发 bootstrap sheng signer
+            .route(
+                "/api/v1/admin/debug/bootstrap-signer",
+                post(debug_bootstrap_signer),
+            )
             // 任务卡 6:公安局跟 sfid 工具市清单对账
             .route(
                 "/api/v1/public-security/reconcile",
@@ -992,6 +1002,15 @@ fn main() {
             .route(
                 "/api/v1/admin/citizen/unbind",
                 post(operate::binding::citizen_unbind),
+            )
+            // ── 投票账户推链 ──
+            .route(
+                "/api/v1/admin/citizen/bind/push-chain",
+                post(operate::binding::citizen_push_chain_bind),
+            )
+            .route(
+                "/api/v1/admin/citizen/unbind/push-chain",
+                post(operate::binding::citizen_push_chain_unbind),
             )
             .route("/api/v1/admin/sfid/meta", get(sfid::admin::admin_sfid_meta))
             .route(
@@ -1063,6 +1082,15 @@ fn main() {
             .route(
                 "/api/v1/app/wallet/:address/transactions",
                 get(indexer::api::wallet_transactions),
+            )
+            // ── wuminapp 投票账户注册/查询 ──
+            .route(
+                "/api/v1/app/vote-account/register",
+                post(operate::binding::app_vote_account_register),
+            )
+            .route(
+                "/api/v1/app/vote-account/status",
+                get(operate::binding::app_vote_account_status),
             );
 
         let app_state = state.clone();
@@ -1437,3 +1465,29 @@ pub(crate) fn store_write_or_500(
 
 #[cfg(test)]
 mod main_tests;
+
+/// 临时诊断端点:手动触发 bootstrap sheng signer，返回具体错误信息。
+async fn debug_bootstrap_signer(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> impl axum::response::IntoResponse {
+    let ctx = match login::require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    if ctx.role != models::AdminRole::ShengAdmin {
+        return api_error(axum::http::StatusCode::FORBIDDEN, 1003, "only sheng admin");
+    }
+    let province = match ctx.admin_province.as_deref() {
+        Some(v) => v.to_string(),
+        None => return api_error(axum::http::StatusCode::BAD_REQUEST, 1001, "no province"),
+    };
+    match key_admins::bootstrap_sheng_signer(&state, &ctx.admin_pubkey, &province).await {
+        Ok(()) => axum::Json(ApiResponse {
+            code: 0,
+            message: "ok".to_string(),
+            data: format!("bootstrap success for {province}"),
+        }).into_response(),
+        Err(e) => api_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
+    }
+}

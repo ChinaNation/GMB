@@ -15,7 +15,7 @@
 - 同一账户允许换绑，但旧映射必须原子释放。
 - 绑定凭证 nonce 必须防重放（按 `hash(bind_nonce)` 永久记账，无过期回收）。
 - 绑定成功后，模块必须能够向上游模块发出“已绑定”回调，但回调模块不得破坏本模块的一对一绑定不变量。
-- 用户主动解绑时，只影响“当前绑定关系”，不应隐式清理历史领奖、历史投票或外部业务审计记录。
+- 解绑仅限管理员（SFID 主账户或省级签名账户）执行，用户不允许自行解绑。解绑只影响”当前绑定关系”，不应隐式清理历史领奖、历史投票或外部业务审计记录。
 
 ### 0.3 投票资格需求
 - 投票资格校验必须以链上绑定关系为真值。
@@ -138,15 +138,18 @@ weight：
 - `src/weights.rs` 当前仍是旧代码路径生成的产物，proof 注释仍引用已删除的旧存储名（如 `UsedCredentialNonce`、`SfidToAccount`、`AccountToSfid`、`CredentialNoncesByExpiry`）。
 - 当前文件只能视为待重生的历史 benchmark 结果，不能当作完全贴合现状的存储访问说明。
 
-### 5.2 `unbind_sfid(origin)`（call index = 1）
+### 5.2 `unbind_sfid(origin, target)`（call index = 1）— 管理员代解绑
 校验：
 1. `origin` 必须是签名账户。
-2. 账户必须当前已绑定（`NotBound`）。
+2. 调用者必须是 SFID 主账户（`SfidMainAccount`）或已注册的省级签名账户（`ProvinceBySigningPubkey` 中存在对应公钥）。
+3. `target` 必须当前已绑定（`NotBound`）。
 
 状态变更：
-1. 删除 `AccountToBindingId` 与 `BindingIdToAccount`。
+1. 删除 `target` 的 `AccountToBindingId` 与 `BindingIdToAccount`。
 2. `BoundCount -= 1`（`saturating_sub`）。
-3. 发事件 `SfidUnbound`。
+3. 发事件 `SfidUnbound { admin, who, binding_id }`。
+
+权限说明：用户不允许自行解绑，必须由 SFID 管理员发起。
 
 ### 5.3 `rotate_sfid_keys(origin, new_backup)`（call index = 2）
 校验：

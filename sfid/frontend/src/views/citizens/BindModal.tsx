@@ -39,7 +39,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
   // 当 record 变化时,重置表单状态(等价于原 openBindModal 初始化)
   useEffect(() => {
     if (!open || !record) return;
-    const mode: BindMode = record.status === 'UNLINKED' ? 'bind_pubkey' : 'bind_archive';
+    const mode: BindMode = (record.status === 'UNLINKED' || record.status === 'PENDING') ? 'bind_pubkey' : 'bind_archive';
     setBindTargetPubkey(record.account_pubkey || '');
     setBindMode(mode);
     setBindChallenge(null);

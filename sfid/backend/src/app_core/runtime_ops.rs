@@ -41,6 +41,7 @@ pub(crate) fn seed_sheng_admins(state: &AppState) {
                 city: String::new(),
                 encrypted_signing_privkey: None,
                 signing_pubkey: None,
+                signing_created_at: None,
             },
         );
         store
@@ -112,6 +113,7 @@ pub(crate) fn sync_builtin_sheng_admins(state: &AppState) {
                 city: String::new(),
                 encrypted_signing_privkey: None,
                 signing_pubkey: None,
+                signing_created_at: None,
             },
         );
         store

@@ -217,6 +217,7 @@ pub(crate) async fn create_operator(
         city: city_input,
         encrypted_signing_privkey: None,
         signing_pubkey: None,
+        signing_created_at: None,
     };
     store
         .admin_users_by_pubkey

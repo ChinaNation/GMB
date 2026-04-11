@@ -479,7 +479,7 @@ pub(crate) async fn admin_auth_verify(
             )
             .await
             {
-                warn!(province, error = %e, "bootstrap sheng signer failed");
+                tracing::error!(province, error = %e, "BOOTSTRAP FAILED: {}", e);
             } else {
                 tracing::info!(province, "sheng signer ready for province");
             }
@@ -765,7 +765,7 @@ pub(crate) async fn admin_auth_qr_complete(
             )
             .await
             {
-                warn!(province, error = %e, "bootstrap sheng signer failed (qr)");
+                tracing::error!(province, error = %e, "BOOTSTRAP FAILED (qr): {}", e);
             } else {
                 tracing::info!(province, "sheng signer ready for province (qr)");
             }
@@ -1058,15 +1058,14 @@ fn admin_auth(
             return Err(api_error(StatusCode::FORBIDDEN, 2003, "admin disabled"));
         }
 
-        let display_name = if role == AdminRole::ShiAdmin {
+        // 三角色统一:优先使用 admin_name(真实姓名),空则 fallback 到角色默认名
+        let display_name = {
             let name = admin_name.trim();
             if !name.is_empty() {
                 name.to_string()
             } else {
                 build_admin_display_name(&admin_pubkey, &role, admin_province.as_deref())
             }
-        } else {
-            build_admin_display_name(&admin_pubkey, &role, admin_province.as_deref())
         };
 
         return Ok(AdminAuthContext {
@@ -1467,11 +1466,10 @@ pub(crate) fn build_admin_display_name_from_user(
     admin: &AdminUser,
     admin_province: Option<&str>,
 ) -> String {
-    if admin.role == AdminRole::ShiAdmin {
-        let name = admin.admin_name.trim();
-        if !name.is_empty() {
-            return name.to_string();
-        }
+    // 三角色统一:优先使用 admin_name(真实姓名),空则 fallback 到角色默认名
+    let name = admin.admin_name.trim();
+    if !name.is_empty() {
+        return name.to_string();
     }
     build_admin_display_name(&admin.admin_pubkey, &admin.role, admin_province)
 }

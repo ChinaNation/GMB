@@ -29,10 +29,10 @@ export interface KeyringSharedState {
   /** 主密钥登录时禁用轮换控件 */
   isMainKeySigned: boolean;
 
-  keyringForm: FormInstance<{ new_backup_pubkey: string }>;
+  keyringForm: FormInstance<{ new_backup_name: string; new_backup_pubkey: string }>;
   keyringVideoRef: React.MutableRefObject<HTMLVideoElement | null>;
 
   onRefresh: () => void;
-  onCreateRotateChallenge: (values: { new_backup_pubkey: string }) => void;
+  onCreateRotateChallenge: (values: { new_backup_name: string; new_backup_pubkey: string }) => void;
   onToggleScanner: () => void;
 }
