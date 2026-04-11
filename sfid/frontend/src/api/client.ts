@@ -661,10 +661,11 @@ export async function deleteCpmsKeys(auth: AdminAuth, siteSfid: string): Promise
 }
 
 export async function listOperators(auth: AdminAuth): Promise<OperatorRow[]> {
-  return request<OperatorRow[]>('/api/v1/admin/operators', {
+  const data = await request<{ total: number; rows: OperatorRow[] }>('/api/v1/admin/operators', {
     method: 'GET',
     headers: adminHeaders(auth)
   });
+  return data.rows;
 }
 
 export async function createOperator(

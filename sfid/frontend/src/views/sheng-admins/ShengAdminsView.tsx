@@ -1,10 +1,9 @@
-// 中文注释:从 App.tsx 迁移(任务卡 20260408-sfid-frontend-app-tsx-split 步 2)
 // 省级管理员视图 —— 调度器:持有所有状态和副作用,
 // 按 mode 分派到 ShengAdminListView / ProvinceDetailView。
-// system-settings 内部又分:
-//   - KeyAdmin: 省份网格(点击进入机构详情)
-//   - 机构详情页:sub-tab = '市级管理员列表' / '省级管理员'
-//     + 新增市级管理员 Modal
+// system-settings 三层导航:
+//   - 密钥管理员: 省列表 → 市列表 → 市详情(该市管理员列表)
+//   - 省管理员: 市列表 → 市详情(该市管理员列表)
+//   - 市管理员: 直接进入自己所在市的管理员列表(不显示省列表和市列表)
 
 import { useEffect, useState } from 'react';
 import { Form, Input, Modal, Select, Space, message } from 'antd';
@@ -38,6 +37,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const [shengAdmins, setShengAdmins] = useState<ShengAdminRow[]>([]);
   const [shengAdminsLoading, setShengAdminsLoading] = useState(false);
   const [selectedShengAdmin, setSelectedShengAdmin] = useState<ShengAdminRow | null>(null);
+  const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [adminDetailTab, setAdminDetailTab] = useState<'operators' | 'super-admin'>('operators');
   const [replaceSuperLoading, setReplaceSuperLoading] = useState(false);
 
@@ -92,10 +92,9 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     }
   };
 
-  // 首次挂载 / auth 变化时:
-  //   - list 模式:只加载 shengAdmins
-  //   - system-settings 模式:加载 shengAdmins + operators,
-  //     并自动为 ShengAdmin/ShiAdmin 跳到自己的机构详情页(原 openSystemSettings 行为)
+  // 首次挂载 / auth 变化时加载数据。
+  // 角色分流由 ProvinceDetailView + useScope 自动处理,这里只负责加载数据
+  // 和为非 KEY_ADMIN 设置 selectedShengAdmin。
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
@@ -105,28 +104,24 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
         return;
       }
       // system-settings
-      if (auth.role === 'KEY_ADMIN') {
-        setSelectedShengAdmin(null);
-        await Promise.all([refreshShengAdmins(), refreshOperators()]);
-        return;
-      }
       const [rows, ops] = await Promise.all([refreshShengAdmins(), refreshOperators()]);
       if (cancelled) return;
-      let target: ShengAdminRow | null = null;
-      if (auth.role === 'SHENG_ADMIN') {
-        target = rows.find((r) => sameHexPubkey(r.admin_pubkey, auth.admin_pubkey)) || null;
-      } else if (auth.role === 'SHI_ADMIN') {
-        const me = ops.find((o) => sameHexPubkey(o.admin_pubkey, auth.admin_pubkey));
-        if (me) {
-          target = rows.find((r) => sameHexPubkey(r.admin_pubkey, me.created_by)) || null;
+      // 非 KEY_ADMIN 自动定位到自己所属省的 ShengAdmin
+      if (!selectedShengAdmin) {
+        let target: ShengAdminRow | null = null;
+        if (auth.role === 'SHENG_ADMIN') {
+          target = rows.find((r) => sameHexPubkey(r.admin_pubkey, auth.admin_pubkey)) || null;
+        } else if (auth.role === 'SHI_ADMIN') {
+          const me = ops.find((o) => sameHexPubkey(o.admin_pubkey, auth.admin_pubkey));
+          if (me) {
+            target = rows.find((r) => sameHexPubkey(r.admin_pubkey, me.created_by)) || null;
+          }
         }
+        if (!cancelled && target) setSelectedShengAdmin(target);
       }
-      if (!cancelled) setSelectedShengAdmin(target);
     };
     void init();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.access_token, mode]);
 
@@ -359,6 +354,8 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     shengAdminsLoading,
     selectedShengAdmin,
     setSelectedShengAdmin,
+    selectedCity,
+    setSelectedCity,
     adminDetailTab,
     setAdminDetailTab,
     replaceSuperLoading,

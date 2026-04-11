@@ -1,5 +1,7 @@
-// 新增市级管理员 Modal(从 ShengAdminsView.tsx 拆分)
+// 新增市级管理员 Modal
+// 当 selectedCity 有值时，城市字段预填并锁定（已在某市详情页内新增）
 
+import { useEffect } from 'react';
 import { Button, Form, Input, Modal, Select } from 'antd';
 import { decodeSs58 } from '../../utils/ss58';
 import { ScanAccountModal } from '../../components/ScanAccountModal';
@@ -18,15 +20,22 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
     operatorCities,
     operatorCitiesLoading,
     selectedShengAdmin,
+    selectedCity,
     onCreateOperator,
     accountScanTarget,
     setAccountScanTarget,
     replaceSuperForm,
   } = state;
 
+  // selectedCity 有值时预填城市字段
+  useEffect(() => {
+    if (addOperatorOpen && selectedCity) {
+      addOperatorForm.setFieldsValue({ operator_city: selectedCity });
+    }
+  }, [addOperatorOpen, selectedCity, addOperatorForm]);
+
   return (
     <>
-      {/* ── 新增市级管理员 Modal(在机构详情页触发) ── */}
       <Modal
         title={<div style={{ textAlign: 'center', width: '100%' }}>新增市级管理员</div>}
         open={addOperatorOpen}
@@ -82,6 +91,7 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
             <Select
               placeholder="请选择市"
               loading={operatorCitiesLoading}
+              disabled={selectedCity !== null}
               options={operatorCities
                 .filter((c) => c.code !== '000')
                 .map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }))}
@@ -126,7 +136,6 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
         </Form>
       </Modal>
 
-      {/* ── 通用扫码识别账户弹窗(新增市级管理员 / 更换省级管理员) ── */}
       <ScanAccountModal
         open={accountScanTarget !== null}
         onClose={() => setAccountScanTarget(null)}

@@ -56,10 +56,10 @@ export const glassCardHeadStyle: React.CSSProperties = {
 function resolveHeaderAdminName(auth: AdminAuth | null): string {
   if (!auth) return '';
   const name = typeof auth.admin_name === 'string' ? auth.admin_name.trim() : '';
-  if (auth.role === 'SHI_ADMIN') return name ? `市级管理员:${name}` : '市级管理员';
   if (name) return name;
   if (auth.role === 'KEY_ADMIN') return '密钥管理员';
   if (auth.role === 'SHENG_ADMIN') return '省级管理员';
+  if (auth.role === 'SHI_ADMIN') return '市级管理员';
   return '';
 }
 

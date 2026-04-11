@@ -18,7 +18,7 @@ pub(crate) async fn list_operators(
     headers: HeaderMap,
     Query(query): Query<ListQuery>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
