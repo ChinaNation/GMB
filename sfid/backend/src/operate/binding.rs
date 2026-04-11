@@ -424,11 +424,12 @@ fn verify_citizen_bind_signature(pubkey_bytes: &[u8; 32], message: &str, signatu
 /// 从 SS58 地址解出 hex 格式公钥。
 fn ss58_to_pubkey_hex(address: &str) -> Option<String> {
     let decoded = bs58::decode(address.trim()).into_vec().ok()?;
-    // SS58 格式：1 byte prefix + 32 bytes pubkey + 2 bytes checksum (最少 35 字节)
-    if decoded.len() < 35 {
+    // SS58 prefix < 64 → 1 字节前缀；prefix >= 64 → 2 字节前缀
+    let prefix_len = if decoded.first().copied().unwrap_or(0) < 64 { 1 } else { 2 };
+    if decoded.len() < prefix_len + 32 + 2 {
         return None;
     }
-    let pubkey = &decoded[1..33];
+    let pubkey = &decoded[prefix_len..prefix_len + 32];
     Some(format!("0x{}", hex::encode(pubkey)))
 }
 
