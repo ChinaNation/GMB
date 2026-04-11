@@ -13,36 +13,10 @@ use crate::StoreBackend;
 use super::db;
 use super::event_parser;
 
-/// 解析 WebSocket URL：优先 SFID_CHAIN_WS_URL，回退 SFID_CHAIN_RPC_URL 并自动转换协议。
-fn resolve_indexer_ws_url() -> Result<String, String> {
-    if let Ok(ws) = std::env::var("SFID_CHAIN_WS_URL") {
-        let ws = ws.trim().to_string();
-        if !ws.is_empty() {
-            return Ok(normalize_ws_url(&ws));
-        }
-    }
-    if let Ok(rpc) = std::env::var("SFID_CHAIN_RPC_URL") {
-        let rpc = rpc.trim().to_string();
-        if !rpc.is_empty() {
-            return Ok(normalize_ws_url(&rpc));
-        }
-    }
-    Err("SFID_CHAIN_WS_URL or SFID_CHAIN_RPC_URL not configured".to_string())
-}
-
-fn normalize_ws_url(input: &str) -> String {
-    if let Some(rest) = input.strip_prefix("http://") {
-        return format!("ws://{rest}");
-    }
-    if let Some(rest) = input.strip_prefix("https://") {
-        return format!("wss://{rest}");
-    }
-    input.to_string()
-}
 
 /// Indexer 后台任务入口。在 main.rs 中通过 `tokio::spawn` 启动。
 pub(crate) async fn indexer_worker(backend: StoreBackend) {
-    let ws_url = match resolve_indexer_ws_url() {
+    let ws_url = match crate::chain::url::chain_ws_url() {
         Ok(url) => url,
         Err(err) => {
             warn!("indexer disabled: {err}");

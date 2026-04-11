@@ -138,6 +138,44 @@ pub(crate) fn build_bind_credential(
     })
 }
 
+/// 用省级签名密钥构建 bind_sfid 链上凭证（推链绑定用）。
+///
+/// 与 `build_bind_credential` 的区别：签名用省级 Pair 而非 SFID MAIN。
+pub(crate) fn build_bind_credential_with_province(
+    state: &AppState,
+    account_pubkey: &str,
+    binding_seed: &str,
+    bind_nonce: String,
+    province_pair: &sp_core::sr25519::Pair,
+) -> Result<RuntimeBindCredential, String> {
+    if bind_nonce.trim().is_empty() {
+        return Err("bind nonce is required".to_string());
+    }
+    if binding_seed.trim().is_empty() {
+        return Err("binding seed is required".to_string());
+    }
+    let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
+    let genesis_hash = resolve_chain_genesis_hash()?;
+    let binding_id = blake2_256(binding_seed.as_bytes());
+    let payload = (
+        BIND_DOMAIN,
+        genesis_hash,
+        who,
+        binding_id,
+        bind_nonce.as_bytes(),
+    );
+    let payload_digest = blake2_256(&payload.encode());
+    let signature = province_pair.sign(&payload_digest).0;
+    Ok(RuntimeBindCredential {
+        genesis_hash: hex::encode(genesis_hash),
+        who: normalized_who,
+        binding_id: hex::encode(binding_id),
+        bind_nonce,
+        signature: hex::encode(signature),
+        meta: runtime_signature_meta(state),
+    })
+}
+
 pub(crate) fn build_vote_credential(
     state: &AppState,
     account_pubkey: &str,
@@ -306,38 +344,6 @@ fn runtime_signature_meta(state: &AppState) -> RuntimeSignatureMeta {
     }
 }
 
-fn normalize_chain_ws_url(input: &str) -> String {
-    if let Some(rest) = input.strip_prefix("http://") {
-        return format!("ws://{rest}");
-    }
-    if let Some(rest) = input.strip_prefix("https://") {
-        return format!("wss://{rest}");
-    }
-    input.to_string()
-}
-
-fn resolve_chain_http_rpc_url() -> Result<String, String> {
-    std::env::var("SFID_CHAIN_RPC_URL")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| "SFID_CHAIN_RPC_URL not configured".to_string())
-}
-
-fn resolve_chain_ws_url() -> Result<String, String> {
-    let ws_url = std::env::var("SFID_CHAIN_WS_URL")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| "SFID_CHAIN_WS_URL not configured".to_string())?;
-    Ok(normalize_chain_ws_url(ws_url.as_str()))
-}
-
-/// 暴露 ws url 给其他模块使用（如链上余额查询）。
-#[allow(dead_code)]
-pub(crate) fn chain_ws_url() -> Result<String, String> {
-    resolve_chain_ws_url()
-}
 
 fn is_production_mode() -> bool {
     std::env::var("SFID_ENV")
@@ -395,10 +401,10 @@ fn trusted_production_chain_by_hash(
 }
 
 async fn fetch_chain_genesis_hash_from_rpc() -> Result<[u8; 32], String> {
-    if let Ok(http_url) = resolve_chain_http_rpc_url() {
+    if let Ok(http_url) = super::url::chain_http_url() {
         return fetch_chain_genesis_hash_via_http(http_url.as_str()).await;
     }
-    let ws_url = resolve_chain_ws_url()?;
+    let ws_url = super::url::chain_ws_url()?;
     fetch_chain_genesis_hash_via_ws(ws_url.as_str()).await
 }
 

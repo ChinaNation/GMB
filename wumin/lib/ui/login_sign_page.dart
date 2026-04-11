@@ -177,7 +177,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     '扫码登录',
                     style: TextStyle(
                       fontSize: 20,
@@ -191,7 +191,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
                   _infoRow(
                     '剩余时间',
                     _remainingSeconds > 0
-                        ? '${_remainingSeconds}秒'
+                        ? '$_remainingSeconds秒'
                         : '已过期',
                   ),
                 ],
@@ -201,7 +201,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
           const SizedBox(height: 12),
           Text(
             '确认后将使用当前钱包签名登录 ${loginSystemDisplayName(c)}',
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             textAlign: TextAlign.center,
           ),
           const Spacer(),
@@ -236,7 +236,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
       child: Column(
         children: [
           const SizedBox(height: 16),
-          Text(
+          const Text(
             '请用登录页面扫描此二维码',
             style: TextStyle(
               fontSize: 18,
@@ -247,16 +247,16 @@ class _LoginSignPageState extends State<LoginSignPage> {
           const SizedBox(height: 8),
           Text(
             loginSystemDisplayName(_challenge!),
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
           ),
           const SizedBox(height: 24),
           Expanded(
             child: Center(
               child: Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
                 ),
                 child: QrImageView(
                   data: json,
@@ -287,13 +287,13 @@ class _LoginSignPageState extends State<LoginSignPage> {
             width: 80,
             child: Text(
               label,
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
             ),
           ),
         ],

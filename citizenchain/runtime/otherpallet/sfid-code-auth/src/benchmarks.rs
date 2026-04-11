@@ -64,15 +64,18 @@ mod benchmarks {
 
     #[benchmark]
     fn unbind_sfid() {
-        let caller: T::AccountId = frame_benchmarking::account("caller", 0, 0);
+        // 管理员（SFID 主账户）代为解绑 target
+        let admin: T::AccountId = frame_benchmarking::account("admin", 0, 0);
+        let target: T::AccountId = frame_benchmarking::account("target", 1, 0);
         let binding_id = T::Hashing::hash(b"bench-binding");
 
-        BindingIdToAccount::<T>::insert(binding_id, &caller);
-        AccountToBindingId::<T>::insert(&caller, binding_id);
+        SfidMainAccount::<T>::put(&admin);
+        BindingIdToAccount::<T>::insert(binding_id, &target);
+        AccountToBindingId::<T>::insert(&target, binding_id);
         BoundCount::<T>::put(1u64);
 
         #[extrinsic_call]
-        unbind_sfid(RawOrigin::Signed(caller));
+        unbind_sfid(RawOrigin::Signed(admin), target);
     }
 
     #[benchmark]

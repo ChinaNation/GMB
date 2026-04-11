@@ -1,8 +1,5 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:isar/isar.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../isar/wallet_isar.dart';
@@ -544,7 +541,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.visibility_off_rounded,
+                      const Icon(Icons.visibility_off_rounded,
                           color: AppTheme.textTertiary, size: 18),
                       const SizedBox(width: 8),
                       Text(

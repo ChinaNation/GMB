@@ -114,13 +114,13 @@ export function SuperAdminSubTab({
           </div>
           <Typography.Text type="secondary">生成时间</Typography.Text>
           <Typography.Text>
-            {selectedShengAdmin.signing_pubkey && selectedShengAdmin.updated_at
-              ? new Date(selectedShengAdmin.updated_at).toLocaleString('zh-CN')
+            {selectedShengAdmin.signing_created_at
+              ? new Date(selectedShengAdmin.signing_created_at).toLocaleString('zh-CN')
               : '-'}
           </Typography.Text>
           <Typography.Text type="secondary">账户</Typography.Text>
           <Typography.Text code style={{ wordBreak: 'break-all' }}>
-            {selectedShengAdmin.signing_pubkey || '-'}
+            {selectedShengAdmin.signing_pubkey ? tryEncodeSs58(selectedShengAdmin.signing_pubkey) : '-'}
           </Typography.Text>
         </div>
       </Card>

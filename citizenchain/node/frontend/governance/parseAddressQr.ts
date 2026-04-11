@@ -5,7 +5,7 @@
 // 其他 kind(login_*、sign_*)不是收款码,直接报错。
 // 裸 SS58 地址和 gmb://account/<addr> 仍然支持(非二维码协议的本地输入兜底)。
 
-import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
+import { parseQrEnvelope, QrParseError, type UserContactBody, type UserTransferBody, type UserDuoqianBody } from '../qr/wuminQr';
 
 export type AddressScanResult = {
   address: string;
@@ -40,24 +40,24 @@ export function parseAddressQr(raw: string): AddressScanResult {
       switch (env.kind) {
         case 'user_contact':
         case 'user_duoqian': {
-          const addr = env.body.address;
-          if (!SS58_RE.test(addr)) {
+          const body = env.body as UserContactBody | UserDuoqianBody;
+          if (!SS58_RE.test(body.address)) {
             throw new Error('用户码中地址格式无效');
           }
-          return { address: addr };
+          return { address: body.address };
         }
         case 'user_transfer': {
-          const addr = env.body.address;
-          if (!SS58_RE.test(addr)) {
+          const body = env.body as UserTransferBody;
+          if (!SS58_RE.test(body.address)) {
             throw new Error('收款码中地址格式无效');
           }
-          const result: AddressScanResult = { address: addr };
-          if (env.body.amount) {
-            const amt = Number(env.body.amount);
+          const result: AddressScanResult = { address: body.address };
+          if (body.amount) {
+            const amt = Number(body.amount);
             if (!isNaN(amt) && amt > 0) result.amount = amt;
           }
-          if (env.body.memo) {
-            result.memo = env.body.memo;
+          if (body.memo) {
+            result.memo = body.memo;
           }
           return result;
         }

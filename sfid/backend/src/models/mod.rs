@@ -66,6 +66,9 @@ pub(crate) struct Store {
     /// 反向索引：archive_no → citizen_id
     #[serde(default)]
     pub(crate) citizen_id_by_archive_no: HashMap<String, u64>,
+    /// 反向索引：sfid_code → citizen_id
+    #[serde(default)]
+    pub(crate) citizen_id_by_sfid_code: HashMap<String, u64>,
     /// 绑定 challenge 池
     #[serde(default)]
     pub(crate) citizen_bind_challenges: HashMap<String, CitizenBindChallenge>,
@@ -179,6 +182,9 @@ pub(crate) struct AdminUser {
     /// 中文注释:仅 ShengAdmin 使用。对应签名公钥 hex(便于对账/UI 显示)。
     #[serde(default)]
     pub(crate) signing_pubkey: Option<String>,
+    /// 签名密钥生成时间(仅 ShengAdmin,bootstrap 时写入)。
+    #[serde(default)]
+    pub(crate) signing_created_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -262,18 +268,25 @@ pub(crate) struct PendingBindScan {
 /// 公民身份记录。
 ///
 /// 以自增 ID 为主键，account_pubkey / archive_no / sfid_code 各自唯一（非空时）。
-/// 三种状态：
-/// - Unbound：只有 pubkey（区块链传入，未绑定档案）
-/// - Bound：pubkey + archive_no + sfid_code 三者都有
-/// - Unlinked：只有 archive_no + sfid_code（解绑后公钥清除）
+/// 四种状态：
+/// - Pending：只有 pubkey（用户推送了钱包，未到现场）
+/// - Bindable：pubkey + archive_no + 签名通过，待管理员推链
+/// - Bound：chain_confirmed = true，链上已确认
+/// - Unlinked：解绑后，archive_no + sfid_code 保留，pubkey 已清除
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CitizenRecord {
     pub(crate) id: u64,
     pub(crate) account_pubkey: Option<String>,
+    /// SS58 地址（prefix=2027），方便展示和搜索。
+    #[serde(default)]
+    pub(crate) account_address: Option<String>,
     pub(crate) archive_no: Option<String>,
     pub(crate) sfid_code: Option<String>,
     pub(crate) sfid_signature: Option<String>,
     pub(crate) province_code: Option<String>,
+    /// 链上绑定是否已确认（bind_sfid extrinsic InBestBlock）。
+    #[serde(default)]
+    pub(crate) chain_confirmed: bool,
     pub(crate) bound_at: Option<DateTime<Utc>>,
     pub(crate) bound_by: Option<String>,
     pub(crate) created_at: DateTime<Utc>,
@@ -281,11 +294,12 @@ pub(crate) struct CitizenRecord {
 
 impl CitizenRecord {
     pub(crate) fn status(&self) -> CitizenBindStatus {
-        match (&self.account_pubkey, &self.archive_no) {
-            (Some(_), Some(_)) => CitizenBindStatus::Bound,
-            (Some(_), None) => CitizenBindStatus::Unbound,
-            (None, Some(_)) => CitizenBindStatus::Unlinked,
-            (None, None) => CitizenBindStatus::Unbound,
+        match (&self.account_pubkey, &self.archive_no, self.chain_confirmed) {
+            (Some(_), Some(_), true) => CitizenBindStatus::Bound,
+            (Some(_), Some(_), false) => CitizenBindStatus::Bindable,
+            (Some(_), None, _) => CitizenBindStatus::Pending,
+            (None, Some(_), _) => CitizenBindStatus::Unlinked,
+            (None, None, _) => CitizenBindStatus::Pending,
         }
     }
 }
@@ -293,11 +307,13 @@ impl CitizenRecord {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum CitizenBindStatus {
-    /// 只有公钥，未绑定档案。
-    Unbound,
-    /// 三者都有，已绑定。
+    /// 有 pubkey，无 archive_no（用户推送了钱包，未到现场）。
+    Pending,
+    /// 有 pubkey + archive_no + 签名通过，待管理员推链。
+    Bindable,
+    /// chain_confirmed = true，链上已确认。
     Bound,
-    /// 解绑后，只有档案号+SFID码，公钥已清除。
+    /// 解绑后：有 archive_no + sfid_code，无 pubkey。
     Unlinked,
 }
 
@@ -488,6 +504,7 @@ pub(crate) struct CitizenBindInput {
 pub(crate) struct CitizenBindOutput {
     pub(crate) id: u64,
     pub(crate) account_pubkey: Option<String>,
+    pub(crate) account_address: Option<String>,
     pub(crate) archive_no: Option<String>,
     pub(crate) sfid_code: Option<String>,
     pub(crate) province_code: Option<String>,
@@ -528,13 +545,47 @@ pub(crate) struct PublicIdentitySearchOutput {
 pub(crate) struct CitizenRow {
     pub(crate) id: u64,
     pub(crate) account_pubkey: Option<String>,
+    pub(crate) account_address: Option<String>,
     pub(crate) archive_no: Option<String>,
     pub(crate) sfid_code: Option<String>,
     pub(crate) province_code: Option<String>,
     pub(crate) status: CitizenBindStatus,
 }
 
-// (legacy CitizenRowLegacy 已删除)
+// ── wuminapp 投票账户接口类型 ──
+
+/// wuminapp 推送投票账户请求。
+#[derive(Deserialize)]
+pub(crate) struct VoteAccountRegisterInput {
+    pub(crate) address: String,
+    pub(crate) pubkey: String,
+    pub(crate) signature: String,
+    pub(crate) sign_message: String,
+}
+
+/// wuminapp 查询投票账户状态。
+#[derive(Deserialize)]
+pub(crate) struct VoteAccountStatusQuery {
+    pub(crate) address: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct VoteAccountStatusOutput {
+    pub(crate) status: String,
+    pub(crate) address: Option<String>,
+    pub(crate) sfid_code: Option<String>,
+}
+
+/// 管理员推链请求（绑定/解绑共用）。
+#[derive(Deserialize)]
+pub(crate) struct CitizenPushChainInput {
+    pub(crate) citizen_id: u64,
+}
+
+#[derive(Serialize)]
+pub(crate) struct CitizenPushChainOutput {
+    pub(crate) tx_hash: String,
+}
 
 #[derive(Serialize)]
 pub(crate) struct SfidOptionItem {
@@ -608,6 +659,9 @@ pub(crate) struct ShengAdminRow {
     // 链上签名 pubkey：None 表示该省登录管理员尚未首次 bootstrap
     #[serde(default)]
     pub(crate) signing_pubkey: Option<String>,
+    /// 签名密钥生成时间
+    #[serde(default)]
+    pub(crate) signing_created_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Deserialize)]
@@ -925,8 +979,11 @@ pub(crate) struct CpmsStatusScanOutput {
 pub(crate) struct KeyringStateOutput {
     pub(crate) version: u64,
     pub(crate) main_pubkey: String,
+    pub(crate) main_name: String,
     pub(crate) backup_a_pubkey: String,
+    pub(crate) backup_a_name: String,
     pub(crate) backup_b_pubkey: String,
+    pub(crate) backup_b_name: String,
     pub(crate) updated_at: i64,
 }
 
@@ -948,6 +1005,9 @@ pub(crate) struct KeyringRotateCommitInput {
     pub(crate) challenge_id: String,
     pub(crate) signature: String,
     pub(crate) new_backup_pubkey: String,
+    /// 新备用管理员姓名(必填)
+    #[serde(default)]
+    pub(crate) new_backup_name: Option<String>,
 }
 
 #[derive(Deserialize)]

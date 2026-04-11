@@ -29,7 +29,9 @@
   - 在选择通信账户/投票账户时提供钱包选择
   - 钱包改名时同步更新用户资料中的通信钱包名称
 - `lib/wallet/capabilities/sfid_binding_service.dart`
-  - 保存投票账户绑定状态、地址、公钥，并负责向后端发起绑定请求
+  - 保存投票账户绑定状态、地址、公钥，并负责向后端发起注册请求 + 同步后端状态
+- `lib/user/vote_sign_page.dart`
+  - 热钱包用户到 SFID 现场时：扫 sign_request → 本机签名 → 展示 sign_response QR
 
 ## 3. 数据模型
 
@@ -78,7 +80,17 @@
 
 ### 3.4 投票账户绑定状态 `SfidBindState`
 
-状态：`unbound` → `pending` → `bound`
+状态：`unset` → `pending` → `bound`
+
+- `unset`：未设置，用户未选择投票账户
+- `pending`：已注册（带签名），等待 SFID 现场绑定 + 推链
+- `bound`：链上已确认
+
+新增字段：
+- `isColdWallet`：标记冷/热钱包（热钱包显示【签名】按钮）
+
+注册接口：`POST /api/v1/app/vote-account/register`（带 sr25519 签名 `CITIZEN_VOTE_REGISTER|{address}|{timestamp}`）
+状态查询：`GET /api/v1/app/vote-account/status?pubkey=0x...`（initState 时同步后端状态）
 
 ## 4. 持久化方案
 

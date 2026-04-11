@@ -1263,30 +1263,6 @@ pub(crate) struct ChainInstitutionRegisterReceipt {
 // 中文注释:`validate_sfid_id_format` 和 SFID_ID_* 常量已搬到
 // `crate::sfid::validator`,本文件通过 import 使用。见任务卡 1。
 
-fn normalize_chain_ws_url(input: &str) -> String {
-    if let Some(rest) = input.strip_prefix("http://") {
-        return format!("ws://{rest}");
-    }
-    if let Some(rest) = input.strip_prefix("https://") {
-        return format!("wss://{rest}");
-    }
-    input.to_string()
-}
-
-fn resolve_chain_ws_url() -> Result<String, String> {
-    let ws_url = std::env::var("SFID_CHAIN_WS_URL")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .or_else(|| {
-            std::env::var("SFID_CHAIN_RPC_URL")
-                .ok()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty())
-        })
-        .ok_or_else(|| "SFID_CHAIN_RPC_URL or SFID_CHAIN_WS_URL not configured".to_string())?;
-    Ok(normalize_chain_ws_url(ws_url.as_str()))
-}
 
 pub(crate) async fn submit_register_sfid_institution_extrinsic(
     state: &AppState,
@@ -1312,7 +1288,7 @@ pub(crate) async fn submit_register_sfid_institution_extrinsic(
         &province_pair,
     )
     .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
-    let ws_url = resolve_chain_ws_url()
+    let ws_url = crate::chain::url::chain_ws_url()
         .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
     // 中文注释：
     // citizenchain 是 PoW 链，GRANDPA finality 显著落后 best block，subxt 0.43 默认行为

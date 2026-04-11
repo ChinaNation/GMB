@@ -231,14 +231,17 @@ pub(crate) async fn citizen_bind(
                     record.archive_no = Some(archive_no.clone());
                     record.sfid_code = Some(sfid_result.clone());
                     record.province_code = Some(province_code.clone());
+                    record.chain_confirmed = false;
                     record.bound_at = Some(Utc::now());
                     record.bound_by = Some(ctx.admin_pubkey.clone());
                 }
                 store.citizen_id_by_archive_no.insert(archive_no, cid);
+                store.citizen_id_by_sfid_code.insert(sfid_result.clone(), cid);
                 let record = &store.citizen_records[&cid];
                 let output = CitizenBindOutput {
                     id: cid,
                     account_pubkey: record.account_pubkey.clone(),
+                    account_address: record.account_address.clone(),
                     archive_no: record.archive_no.clone(),
                     sfid_code: record.sfid_code.clone(),
                     province_code: record.province_code.clone(),
@@ -252,13 +255,16 @@ pub(crate) async fn citizen_bind(
             }
             let cid = store.next_citizen_id;
             store.next_citizen_id += 1;
+            let account_address = pubkey_hex_to_ss58(&account_pubkey_hex);
             let record = CitizenRecord {
                 id: cid,
                 account_pubkey: Some(account_pubkey_hex.as_str().to_string()),
+                account_address: account_address.clone(),
                 archive_no: Some(archive_no.clone()),
                 sfid_code: Some(sfid_result.clone()),
                 sfid_signature: None,
                 province_code: Some(province_code.clone()),
+                chain_confirmed: false,
                 bound_at: Some(Utc::now()),
                 bound_by: Some(ctx.admin_pubkey.clone()),
                 created_at: Utc::now(),
@@ -266,6 +272,7 @@ pub(crate) async fn citizen_bind(
             let output = CitizenBindOutput {
                 id: cid,
                 account_pubkey: record.account_pubkey.clone(),
+                account_address: record.account_address.clone(),
                 archive_no: record.archive_no.clone(),
                 sfid_code: record.sfid_code.clone(),
                 province_code: record.province_code.clone(),
@@ -273,7 +280,8 @@ pub(crate) async fn citizen_bind(
             };
             store.citizen_records.insert(cid, record);
             store.citizen_id_by_pubkey.insert(account_pubkey_hex.as_str().to_string(), cid);
-            store.citizen_id_by_archive_no.insert(archive_no, cid);
+            store.citizen_id_by_archive_no.insert(archive_no.clone(), cid);
+            store.citizen_id_by_sfid_code.insert(sfid_result, cid);
             drop(store);
             Json(ApiResponse { code: 0, message: "ok".to_string(), data: output }).into_response()
         }
@@ -299,11 +307,14 @@ pub(crate) async fn citizen_bind(
                 return api_error(StatusCode::CONFLICT, 1005, "record already has a pubkey, unbind first");
             }
             record.account_pubkey = Some(account_pubkey_hex.as_str().to_string());
+            record.account_address = pubkey_hex_to_ss58(&account_pubkey_hex);
+            record.chain_confirmed = false;
             record.bound_at = Some(Utc::now());
             record.bound_by = Some(ctx.admin_pubkey.clone());
             let output = CitizenBindOutput {
                 id: citizen_id,
                 account_pubkey: record.account_pubkey.clone(),
+                account_address: record.account_address.clone(),
                 archive_no: record.archive_no.clone(),
                 sfid_code: record.sfid_code.clone(),
                 province_code: record.province_code.clone(),
@@ -374,15 +385,18 @@ pub(crate) async fn citizen_unbind(
         return api_error(StatusCode::UNAUTHORIZED, 2004, "unbind signature verify failed");
     }
 
-    // 清除公钥
+    // 清除公钥和链上确认状态（保留 archive_no + sfid_code）
     store.citizen_id_by_pubkey.remove(&old_pubkey);
     if let Some(record) = store.citizen_records.get_mut(&input.citizen_id) {
         record.account_pubkey = None;
+        record.account_address = None;
+        record.chain_confirmed = false;
     }
     let record = &store.citizen_records[&input.citizen_id];
     let output = CitizenBindOutput {
         id: input.citizen_id,
         account_pubkey: record.account_pubkey.clone(),
+        account_address: record.account_address.clone(),
         archive_no: record.archive_no.clone(),
         sfid_code: record.sfid_code.clone(),
         province_code: record.province_code.clone(),
@@ -416,4 +430,476 @@ fn ss58_to_pubkey_hex(address: &str) -> Option<String> {
     }
     let pubkey = &decoded[1..33];
     Some(format!("0x{}", hex::encode(pubkey)))
+}
+
+/// 0x hex 公钥 → SS58 地址（prefix=2027）。
+fn pubkey_hex_to_ss58(pubkey_hex: &str) -> Option<String> {
+    let pubkey_bytes = hex::decode(pubkey_hex.trim_start_matches("0x")).ok()?;
+    if pubkey_bytes.len() != 32 {
+        return None;
+    }
+    // SS58 prefix 2027: 编码为 2 bytes (0x40 | (2027>>2), (2027&3)<<6 | checksum_prefix)
+    // 参考 ss58-registry：prefix >= 64 使用 2 字节编码
+    // Simple Account format: [prefix_bytes...] ++ pubkey ++ blake2(prefix ++ pubkey)[..2]
+    use blake2::{digest::VariableOutput, Blake2bVar};
+    let prefix: u16 = 2027;
+    let first = ((prefix & 0b0000_0000_1111_1100) as u8) >> 2 | 0b01000000;
+    let second = (prefix >> 8) as u8 | ((prefix & 0b0000_0000_0000_0011) as u8) << 6;
+    let mut payload = vec![first, second];
+    payload.extend_from_slice(&pubkey_bytes);
+    // checksum
+    let mut hasher = Blake2bVar::new(64).ok()?;
+    use blake2::digest::Update;
+    hasher.update(b"SS58PRE");
+    hasher.update(&payload);
+    let mut hash = vec![0u8; 64];
+    hasher.finalize_variable(&mut hash).ok()?;
+    payload.extend_from_slice(&hash[..2]);
+    Some(bs58::encode(payload).into_string())
+}
+
+// ── wuminapp 投票账户接口 ──────────────────────────────────────
+
+/// wuminapp 推送投票账户（公共接口，无 admin 认证）。
+///
+/// 用户在 wuminapp 选择钱包后，签名证明私钥所有权，推送 pubkey 到 SFID。
+pub(crate) async fn app_vote_account_register(
+    State(state): State<AppState>,
+    Json(input): Json<VoteAccountRegisterInput>,
+) -> impl IntoResponse {
+    if input.address.trim().is_empty()
+        || input.pubkey.trim().is_empty()
+        || input.signature.trim().is_empty()
+        || input.sign_message.trim().is_empty()
+    {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "address, pubkey, signature, sign_message are required");
+    }
+
+    // 验证 SS58 地址与 pubkey 一致
+    let derived_pubkey = match ss58_to_pubkey_hex(input.address.trim()) {
+        Some(v) => v,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid SS58 address"),
+    };
+    let input_pubkey = input.pubkey.trim().to_lowercase();
+    if derived_pubkey.to_lowercase() != input_pubkey {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "address and pubkey mismatch");
+    }
+
+    // 验证 sign_message 格式：CITIZEN_VOTE_REGISTER|{address}|{timestamp}
+    let parts: Vec<&str> = input.sign_message.trim().split('|').collect();
+    if parts.len() != 3 || parts[0] != "CITIZEN_VOTE_REGISTER" {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "invalid sign_message format");
+    }
+    if parts[1] != input.address.trim() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "sign_message address mismatch");
+    }
+    let timestamp: i64 = match parts[2].parse() {
+        Ok(v) => v,
+        Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid timestamp in sign_message"),
+    };
+    let now = Utc::now().timestamp();
+    if (now - timestamp).abs() > 300 {
+        return api_error(StatusCode::UNAUTHORIZED, 1007, "sign_message expired (>5 min)");
+    }
+
+    // sr25519 验签
+    let pubkey_bytes = match crate::login::parse_sr25519_pubkey_bytes(&input_pubkey) {
+        Some(v) => v,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid pubkey format"),
+    };
+    let sig_bytes = match hex::decode(input.signature.trim().trim_start_matches("0x")) {
+        Ok(v) => v,
+        Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid signature hex"),
+    };
+    if !verify_citizen_bind_signature(&pubkey_bytes, input.sign_message.trim(), &sig_bytes) {
+        return api_error(StatusCode::UNAUTHORIZED, 2004, "signature verify failed");
+    }
+
+    // 检查是否已存在
+    let mut store = match store_write_or_500(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    if store.citizen_id_by_pubkey.contains_key(&input_pubkey) {
+        // 幂等：已存在直接返回成功
+        drop(store);
+        return Json(ApiResponse { code: 0, message: "ok".to_string(), data: serde_json::json!({}) }).into_response();
+    }
+
+    // 创建新记录（只有 pubkey，状态 Pending）
+    let cid = store.next_citizen_id;
+    store.next_citizen_id += 1;
+    let account_address = pubkey_hex_to_ss58(&input_pubkey);
+    let record = CitizenRecord {
+        id: cid,
+        account_pubkey: Some(input_pubkey.clone()),
+        account_address,
+        archive_no: None,
+        sfid_code: None,
+        sfid_signature: None,
+        province_code: None,
+        chain_confirmed: false,
+        bound_at: None,
+        bound_by: None,
+        created_at: Utc::now(),
+    };
+    store.citizen_records.insert(cid, record);
+    store.citizen_id_by_pubkey.insert(input_pubkey, cid);
+    drop(store);
+
+    Json(ApiResponse { code: 0, message: "ok".to_string(), data: serde_json::json!({}) }).into_response()
+}
+
+/// wuminapp 查询投票账户绑定状态（公共接口）。
+pub(crate) async fn app_vote_account_status(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<VoteAccountStatusQuery>,
+) -> impl IntoResponse {
+    if params.address.trim().is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "address is required");
+    }
+    let pubkey_hex = match ss58_to_pubkey_hex(params.address.trim()) {
+        Some(v) => v,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid SS58 address"),
+    };
+
+    let store = match store_read_or_500(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let result = match store.citizen_id_by_pubkey.get(&pubkey_hex).and_then(|cid| store.citizen_records.get(cid)) {
+        Some(record) => {
+            let status_str = match record.status() {
+                CitizenBindStatus::Bound => "bound",
+                CitizenBindStatus::Pending | CitizenBindStatus::Bindable => "pending",
+                CitizenBindStatus::Unlinked => "unset",
+            };
+            VoteAccountStatusOutput {
+                status: status_str.to_string(),
+                address: record.account_address.clone(),
+                sfid_code: record.sfid_code.clone(),
+            }
+        }
+        None => VoteAccountStatusOutput {
+            status: "unset".to_string(),
+            address: None,
+            sfid_code: None,
+        },
+    };
+    drop(store);
+    Json(ApiResponse { code: 0, message: "ok".to_string(), data: result }).into_response()
+}
+
+// ── 管理员推链接口 ──────────────────────────────────────
+
+/// 管理员推链绑定：构造 bind_sfid extrinsic 提交区块链。
+pub(crate) async fn citizen_push_chain_bind(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<CitizenPushChainInput>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_write(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+
+    // 读取记录，确认状态为 Bindable
+    let (account_pubkey, archive_no) = {
+        let store = match store_read_or_500(&state) {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
+        let record = match store.citizen_records.get(&input.citizen_id) {
+            Some(v) => v,
+            None => return api_error(StatusCode::NOT_FOUND, 1004, "citizen record not found"),
+        };
+        if record.status() != CitizenBindStatus::Bindable {
+            return api_error(StatusCode::CONFLICT, 1005, "record is not in Bindable state");
+        }
+        (
+            record.account_pubkey.clone().unwrap(),
+            record.archive_no.clone().unwrap(),
+        )
+    };
+
+    // 获取省级签名密钥
+    let (province_pair, _province) = match crate::key_admins::signer_router::resolve_business_signer(&state, &ctx) {
+        Ok(v) => v,
+        Err((status, msg)) => return api_error(status, 5001, &msg),
+    };
+
+    // 构建链上凭证
+    let bind_nonce = Uuid::new_v4().to_string();
+    let credential = match crate::chain::runtime_align::build_bind_credential_with_province(
+        &state,
+        &account_pubkey,
+        &archive_no,
+        bind_nonce,
+        &province_pair,
+    ) {
+        Ok(v) => v,
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5002, &format!("build credential failed: {e}")),
+    };
+
+    // 提交 bind_sfid extrinsic（PoW 链三件套）
+    let tx_hash = match submit_bind_sfid_extrinsic(&credential, &province_pair).await {
+        Ok(v) => v,
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5003, &format!("push chain failed: {e}")),
+    };
+
+    // 更新本地状态
+    let mut store = match store_write_or_500(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    if let Some(record) = store.citizen_records.get_mut(&input.citizen_id) {
+        record.chain_confirmed = true;
+    }
+    drop(store);
+
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: CitizenPushChainOutput { tx_hash },
+    })
+    .into_response()
+}
+
+/// 管理员推链解绑：构造 unbind_sfid(target) extrinsic 提交区块链。
+pub(crate) async fn citizen_push_chain_unbind(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<CitizenPushChainInput>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_write(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+
+    // 读取记录，确认状态为 Bound
+    let account_pubkey = {
+        let store = match store_read_or_500(&state) {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
+        let record = match store.citizen_records.get(&input.citizen_id) {
+            Some(v) => v,
+            None => return api_error(StatusCode::NOT_FOUND, 1004, "citizen record not found"),
+        };
+        if record.status() != CitizenBindStatus::Bound {
+            return api_error(StatusCode::CONFLICT, 1005, "record is not in Bound state");
+        }
+        record.account_pubkey.clone().unwrap()
+    };
+
+    // 获取省级签名密钥
+    let (province_pair, _province) = match crate::key_admins::signer_router::resolve_business_signer(&state, &ctx) {
+        Ok(v) => v,
+        Err((status, msg)) => return api_error(status, 5001, &msg),
+    };
+
+    // 提交 unbind_sfid(target) extrinsic
+    let tx_hash = match submit_unbind_sfid_extrinsic(&account_pubkey, &province_pair).await {
+        Ok(v) => v,
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5003, &format!("push chain unbind failed: {e}")),
+    };
+
+    // 更新本地状态：清除公钥，保留 archive_no + sfid_code
+    let mut store = match store_write_or_500(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    store.citizen_id_by_pubkey.remove(&account_pubkey);
+    if let Some(record) = store.citizen_records.get_mut(&input.citizen_id) {
+        record.account_pubkey = None;
+        record.account_address = None;
+        record.chain_confirmed = false;
+    }
+    drop(store);
+
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: CitizenPushChainOutput { tx_hash },
+    })
+    .into_response()
+}
+
+// ── 链上提交辅助函数 ──────────────────────────────────────
+
+
+/// 提交 bind_sfid extrinsic（PoW 链三件套：显式 nonce + immortal + 等 InBestBlock）。
+async fn submit_bind_sfid_extrinsic(
+    credential: &crate::chain::runtime_align::RuntimeBindCredential,
+    province_pair: &sp_core::sr25519::Pair,
+) -> Result<String, String> {
+    use subxt::{
+        config::substrate::{AccountId32, MultiSignature},
+        dynamic::{tx, Value},
+        OnlineClient, PolkadotConfig,
+    };
+
+    let ws_url = crate::chain::url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(&ws_url)
+        .await
+        .map_err(|e| format!("chain ws connect failed: {e}"))?;
+    let rpc_client = subxt::backend::rpc::RpcClient::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("legacy rpc connect failed: {e}"))?;
+    let legacy_rpc = subxt::backend::legacy::LegacyRpcMethods::<PolkadotConfig>::new(rpc_client);
+
+    let signer_account = AccountId32(province_pair.public().0);
+    let chain_nonce = legacy_rpc
+        .system_account_next_index(&signer_account)
+        .await
+        .map_err(|e| format!("fetch nonce failed: {e}"))?;
+
+    let binding_id_bytes = hex::decode(&credential.binding_id)
+        .map_err(|e| format!("binding_id hex decode: {e}"))?;
+    let nonce_bytes = credential.bind_nonce.as_bytes().to_vec();
+    let sig_bytes = hex::decode(&credential.signature)
+        .map_err(|e| format!("signature hex decode: {e}"))?;
+
+    let payload = tx(
+        "SfidCodeAuth",
+        "bind_sfid",
+        vec![Value::named_composite([
+            ("binding_id", Value::from_bytes(binding_id_bytes)),
+            ("bind_nonce", Value::from_bytes(nonce_bytes)),
+            ("signature", Value::from_bytes(sig_bytes)),
+        ])],
+    );
+
+    let params = subxt::config::DefaultExtrinsicParamsBuilder::<PolkadotConfig>::new()
+        .immortal()
+        .nonce(chain_nonce)
+        .build();
+    let mut partial_tx = client
+        .tx()
+        .create_partial(&payload, &signer_account, params)
+        .await
+        .map_err(|e| format!("build extrinsic failed: {e}"))?;
+    let signature = province_pair.sign(&partial_tx.signer_payload()).0;
+    let extrinsic = partial_tx
+        .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
+    let tx_hash = format!("0x{}", hex::encode(extrinsic.hash().as_ref()));
+
+    let mut submitted = extrinsic.submit_and_watch().await
+        .map_err(|e| format!("submit_and_watch failed: {e}"))?;
+    // 只等 InBestBlock（PoW 链不等 finalize）
+    tokio::time::timeout(std::time::Duration::from_secs(120), async {
+        use subxt::tx::TxStatus;
+        loop {
+            match submitted.next().await {
+                Some(Ok(TxStatus::InBestBlock(b))) => {
+                    b.wait_for_success().await.map_err(|e| format!("dispatch failed: {e}"))?;
+                    return Ok::<_, String>(());
+                }
+                Some(Ok(TxStatus::InFinalizedBlock(b))) => {
+                    b.wait_for_success().await.map_err(|e| format!("dispatch failed: {e}"))?;
+                    return Ok(());
+                }
+                Some(Ok(TxStatus::Error { message }))
+                | Some(Ok(TxStatus::Invalid { message }))
+                | Some(Ok(TxStatus::Dropped { message })) => {
+                    return Err(format!("tx pool: {message}"));
+                }
+                Some(Ok(_)) => continue,
+                Some(Err(e)) => return Err(format!("tx watch error: {e}")),
+                None => return Err("tx watch stream closed".to_string()),
+            }
+        }
+    })
+    .await
+    .map_err(|_| "timed out waiting for in-block inclusion".to_string())?
+    .map_err(|e| e)?;
+
+    Ok(tx_hash)
+}
+
+/// 提交 unbind_sfid(target) extrinsic。
+async fn submit_unbind_sfid_extrinsic(
+    target_pubkey_hex: &str,
+    province_pair: &sp_core::sr25519::Pair,
+) -> Result<String, String> {
+    use subxt::{
+        config::substrate::{AccountId32, MultiSignature},
+        dynamic::{tx, Value},
+        OnlineClient, PolkadotConfig,
+    };
+
+    let target_bytes = hex::decode(target_pubkey_hex.trim_start_matches("0x"))
+        .map_err(|e| format!("target pubkey hex decode: {e}"))?;
+    if target_bytes.len() != 32 {
+        return Err("target pubkey must be 32 bytes".to_string());
+    }
+    let mut target_arr = [0u8; 32];
+    target_arr.copy_from_slice(&target_bytes);
+
+    let ws_url = crate::chain::url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(&ws_url)
+        .await
+        .map_err(|e| format!("chain ws connect failed: {e}"))?;
+    let rpc_client = subxt::backend::rpc::RpcClient::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("legacy rpc connect failed: {e}"))?;
+    let legacy_rpc = subxt::backend::legacy::LegacyRpcMethods::<PolkadotConfig>::new(rpc_client);
+
+    let signer_account = AccountId32(province_pair.public().0);
+    let chain_nonce = legacy_rpc
+        .system_account_next_index(&signer_account)
+        .await
+        .map_err(|e| format!("fetch nonce failed: {e}"))?;
+
+    // unbind_sfid(target: AccountId) — call_index 1
+    let payload = tx(
+        "SfidCodeAuth",
+        "unbind_sfid",
+        vec![Value::from_bytes(target_arr.to_vec())],
+    );
+
+    let params = subxt::config::DefaultExtrinsicParamsBuilder::<PolkadotConfig>::new()
+        .immortal()
+        .nonce(chain_nonce)
+        .build();
+    let mut partial_tx = client
+        .tx()
+        .create_partial(&payload, &signer_account, params)
+        .await
+        .map_err(|e| format!("build extrinsic failed: {e}"))?;
+    let signature = province_pair.sign(&partial_tx.signer_payload()).0;
+    let extrinsic = partial_tx
+        .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
+    let tx_hash = format!("0x{}", hex::encode(extrinsic.hash().as_ref()));
+
+    let mut submitted = extrinsic.submit_and_watch().await
+        .map_err(|e| format!("submit_and_watch failed: {e}"))?;
+    tokio::time::timeout(std::time::Duration::from_secs(120), async {
+        use subxt::tx::TxStatus;
+        loop {
+            match submitted.next().await {
+                Some(Ok(TxStatus::InBestBlock(b))) => {
+                    b.wait_for_success().await.map_err(|e| format!("dispatch failed: {e}"))?;
+                    return Ok::<_, String>(());
+                }
+                Some(Ok(TxStatus::InFinalizedBlock(b))) => {
+                    b.wait_for_success().await.map_err(|e| format!("dispatch failed: {e}"))?;
+                    return Ok(());
+                }
+                Some(Ok(TxStatus::Error { message }))
+                | Some(Ok(TxStatus::Invalid { message }))
+                | Some(Ok(TxStatus::Dropped { message })) => {
+                    return Err(format!("tx pool: {message}"));
+                }
+                Some(Ok(_)) => continue,
+                Some(Err(e)) => return Err(format!("tx watch error: {e}")),
+                None => return Err("tx watch stream closed".to_string()),
+            }
+        }
+    })
+    .await
+    .map_err(|_| "timed out waiting for in-block inclusion".to_string())?
+    .map_err(|e| e)?;
+
+    Ok(tx_hash)
 }

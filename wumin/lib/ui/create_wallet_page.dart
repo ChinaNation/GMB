@@ -150,12 +150,12 @@ class _CreateWalletPageState extends State<CreateWalletPage>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: AppTheme.bannerDecoration(AppTheme.warning),
-          child: Row(
+          child: const Row(
             children: [
               Icon(Icons.warning_amber_rounded,
                   color: AppTheme.warning, size: 20),
-              const SizedBox(width: 10),
-              const Expanded(
+              SizedBox(width: 10),
+              Expanded(
                 child: Text(
                   '请安全保存助记词，这是恢复钱包的唯一凭证',
                   style: TextStyle(
@@ -176,12 +176,12 @@ class _CreateWalletPageState extends State<CreateWalletPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              const Row(
                 children: [
                   Icon(Icons.key_rounded,
                       color: AppTheme.primaryLight, size: 18),
-                  const SizedBox(width: 8),
-                  const Text(
+                  SizedBox(width: 8),
+                  Text(
                     '助记词（请手抄备份，不支持复制）',
                     style: TextStyle(
                       fontSize: 14,

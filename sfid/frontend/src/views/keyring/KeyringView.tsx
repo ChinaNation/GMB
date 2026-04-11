@@ -53,7 +53,7 @@ export function KeyringView() {
   const [mainAccountBalance, setMainAccountBalance] = useState<string | null>(null);
   const [mainAccountBalanceError, setMainAccountBalanceError] = useState<string | null>(null);
   const [keyringScanAccountOpen, setKeyringScanAccountOpen] = useState(false);
-  const [keyringForm] = Form.useForm<{ new_backup_pubkey: string }>();
+  const [keyringForm] = Form.useForm<{ new_backup_name: string; new_backup_pubkey: string }>();
   const keyringVideoRef = useRef<HTMLVideoElement | null>(null);
   const keyringScanCleanupRef = useRef<(() => void) | null>(null);
 
@@ -89,7 +89,7 @@ export function KeyringView() {
     }
   };
 
-  const onCreateKeyringRotateChallenge = async (values: { new_backup_pubkey: string }) => {
+  const onCreateKeyringRotateChallenge = async (values: { new_backup_name: string; new_backup_pubkey: string }) => {
     if (!auth) return;
     void values;
     // 主公钥不能发起轮换
@@ -150,10 +150,12 @@ export function KeyringView() {
       message.success('签名校验通过,正在提交轮换...');
       setKeyringCommitLoading(true);
       try {
+        const newBackupName = keyringForm.getFieldValue('new_backup_name')?.trim();
         const result = await commitKeyringRotate(auth, {
           challenge_id: payload.challenge_id,
           signature: payload.signature,
           new_backup_pubkey: newBackupPubkey,
+          new_backup_name: newBackupName || undefined,
         });
         if (result.chain_submit_ok) {
           message.success(`主密钥轮换成功,新版本:${result.version}`);

@@ -6,8 +6,6 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../ui/app_theme.dart';
-import '../util/amount_format.dart';
-import '../qr/bodies/sign_request_body.dart';
 import '../signer/action_labels.dart';
 import '../signer/offline_sign_service.dart';
 import '../signer/qr_signer.dart';
@@ -558,7 +556,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: AppTheme.bannerDecoration(AppTheme.danger),
-            child: Text(
+            child: const Text(
               '无法独立验证交易内容，禁止签名。请升级冷钱包后重试。',
               style: TextStyle(
                 color: AppTheme.danger,

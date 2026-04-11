@@ -573,22 +573,55 @@ class _VotingPageState extends State<VotingPage> {
 
     switch (_selectedTab) {
       case 0:
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.ballot_outlined,
-                  size: 48, color: AppTheme.textTertiary),
-              const SizedBox(height: 12),
-              Text(
-                '正在开发中',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppTheme.textSecondary,
+        return Stack(
+          children: [
+            // 背景层：宪法引言，投票功能上线后保留
+            Positioned.fill(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '一个国家/社会是由每个公民组成的，'
+                        '每个公民都应该有投票权，'
+                        '"公民"App致力于让所有公权力在阳光下产生、'
+                        '让所有公权力接受公民的监督、'
+                        '让所有公权力由公民票选产生！',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.8,
+                          color: AppTheme.textSecondary,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: 160,
+                        child: Divider(
+                          color: AppTheme.textTertiary,
+                          thickness: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        '《公民宪法》撰写人 \u00B7 程伟',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppTheme.textTertiary,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
+            ),
+            // 前景层：投票功能上线后在此添加内容
+          ],
         );
       case 1:
         return AllProposalsView(

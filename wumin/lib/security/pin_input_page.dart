@@ -317,7 +317,7 @@ class _PinInputPageState extends State<PinInputPage> {
             margin: const EdgeInsets.symmetric(horizontal: 48),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: AppTheme.bannerDecoration(AppTheme.warning),
-            child: Text(
+            child: const Text(
               '请牢记密码。忘记密码将清空所有数据。',
               textAlign: TextAlign.center,
               style: TextStyle(

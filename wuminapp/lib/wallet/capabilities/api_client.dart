@@ -109,15 +109,28 @@ class ApiClient {
     );
   }
 
-  Future<void> requestChainBindByPubkey(String pubkeyHex) async {
+  /// 注册投票账户（带 sr25519 签名证明私钥所有权）。
+  Future<void> registerVoteAccount({
+    required String address,
+    required String pubkeyHex,
+    required String signatureHex,
+    required String signMessage,
+  }) async {
     final normalized = _normalizePubkeyHex(pubkeyHex);
-    final uri = Uri.parse('$_baseUrl/api/v1/app/bind/request');
+    final uri = Uri.parse('$_baseUrl/api/v1/app/vote-account/register');
     http.Response response;
     try {
       response = await http.post(
         uri,
         headers: _headers(includeContentType: true),
-        body: jsonEncode({'account_pubkey': normalized}),
+        body: jsonEncode({
+          'address': address,
+          'pubkey': normalized,
+          'signature': signatureHex.startsWith('0x')
+              ? signatureHex
+              : '0x$signatureHex',
+          'sign_message': signMessage,
+        }),
       );
     } on SocketException catch (_) {
       if ((Platform.isAndroid || Platform.isIOS) &&
@@ -129,7 +142,7 @@ class ApiClient {
       rethrow;
     }
     if (response.statusCode != 200) {
-      throw Exception('chain bind request failed: ${response.statusCode}');
+      throw Exception('vote account register failed: ${response.statusCode}');
     }
 
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
@@ -137,9 +150,53 @@ class ApiClient {
     final message = payload['message']?.toString() ?? 'unknown';
     if (code != 0) {
       throw Exception(
-        'chain bind request rejected: code=$code message=$message',
+        'vote account register rejected: code=$code message=$message',
       );
     }
+  }
+
+  /// 查询投票账户绑定状态。
+  Future<VoteAccountStatusResponse> queryVoteAccountStatus(
+      String pubkeyHex) async {
+    final normalized = _normalizePubkeyHex(pubkeyHex);
+    final uri = Uri.parse(
+        '$_baseUrl/api/v1/app/vote-account/status?pubkey=$normalized');
+    http.Response response;
+    try {
+      response = await http.get(uri, headers: _headers());
+    } on SocketException catch (_) {
+      if ((Platform.isAndroid || Platform.isIOS) &&
+          _baseUrl.contains('127.0.0.1')) {
+        throw Exception(
+          '当前使用$_baseUrl，手机真机无法访问本机回环地址。请用 --dart-define=WUMINAPP_API_BASE_URL=http://<电脑局域网IP>:8787',
+        );
+      }
+      rethrow;
+    }
+    if (response.statusCode != 200) {
+      throw Exception(
+          'vote account status query failed: ${response.statusCode}');
+    }
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final code = payload['code'] as int? ?? -1;
+    final message = payload['message']?.toString() ?? 'unknown';
+    if (code != 0) {
+      throw Exception(
+        'vote account status rejected: code=$code message=$message',
+      );
+    }
+
+    final data = payload['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('vote account status invalid response: missing data');
+    }
+
+    return VoteAccountStatusResponse(
+      status: (data['status']?.toString() ?? 'unset').trim(),
+      address: data['address']?.toString(),
+      sfidCode: data['sfid_code']?.toString(),
+    );
   }
 
   String _normalizePubkeyHex(String value) {
@@ -333,4 +390,17 @@ class VoteCredentialResponse {
     required this.voteNonce,
     required this.signature,
   });
+}
+
+class VoteAccountStatusResponse {
+  const VoteAccountStatusResponse({
+    required this.status,
+    this.address,
+    this.sfidCode,
+  });
+
+  /// "pending" | "bound" | "unset"
+  final String status;
+  final String? address;
+  final String? sfidCode;
 }

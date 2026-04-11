@@ -31,6 +31,7 @@ pub(crate) async fn admin_list_citizens(
         rows.push(CitizenRow {
             id: record.id,
             account_pubkey: record.account_pubkey.clone(),
+            account_address: record.account_address.clone(),
             archive_no: record.archive_no.clone(),
             sfid_code: record.sfid_code.clone(),
             province_code: record.province_code.clone(),
@@ -42,7 +43,7 @@ pub(crate) async fn admin_list_citizens(
 
     if !keyword.is_empty() {
         rows.retain(|r| {
-            r.account_pubkey
+            r.account_address
                 .as_ref()
                 .map(|v| v.to_lowercase().contains(&keyword))
                 .unwrap_or(false)

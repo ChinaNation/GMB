@@ -114,14 +114,14 @@ class _SettingsPageState extends State<SettingsPage> {
               padding: const EdgeInsets.all(16),
               children: [
                 // 安全区标题
-                Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 12),
+                const Padding(
+                  padding: EdgeInsets.only(left: 4, bottom: 12),
                   child: Row(
                     children: [
                       Icon(Icons.security_rounded,
                           size: 16, color: AppTheme.primaryLight),
-                      const SizedBox(width: 8),
-                      const Text(
+                      SizedBox(width: 8),
+                      Text(
                         '安全',
                         style: TextStyle(
                           fontSize: 13,
@@ -165,14 +165,14 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 32),
                 // 关于区
-                Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 12),
+                const Padding(
+                  padding: EdgeInsets.only(left: 4, bottom: 12),
                   child: Row(
                     children: [
                       Icon(Icons.info_outline_rounded,
                           size: 16, color: AppTheme.primaryLight),
-                      const SizedBox(width: 8),
-                      const Text(
+                      SizedBox(width: 8),
+                      Text(
                         '关于',
                         style: TextStyle(
                           fontSize: 13,

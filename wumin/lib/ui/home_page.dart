@@ -360,12 +360,12 @@ class _HomePageState extends State<HomePage> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 10),
                     decoration: AppTheme.bannerDecoration(AppTheme.danger),
-                    child: Row(
+                    child: const Row(
                       children: [
                         Icon(Icons.warning_rounded,
                             color: AppTheme.danger, size: 18),
-                        const SizedBox(width: 8),
-                        const Expanded(
+                        SizedBox(width: 8),
+                        Expanded(
                           child: Text(
                             '检测到设备已 root/越狱，密钥安全无法保障',
                             style: TextStyle(
@@ -511,7 +511,7 @@ class _HomePageState extends State<HomePage> {
         _buildGroupRow(),
         Expanded(
           child: wallets.isEmpty
-              ? Center(
+              ? const Center(
                   child: Text(
                     '该分组下没有钱包',
                     style: TextStyle(color: AppTheme.textTertiary),
@@ -721,13 +721,13 @@ class _HomePageState extends State<HomePage> {
                         ],
                       ),
                     ),
-                    PopupMenuItem(
+                    const PopupMenuItem(
                       value: 'delete',
                       child: Row(
                         children: [
                           Icon(Icons.delete_outline,
                               size: 18, color: AppTheme.danger),
-                          const SizedBox(width: 10),
+                          SizedBox(width: 10),
                           Text('删除钱包',
                               style: TextStyle(color: AppTheme.danger)),
                         ],

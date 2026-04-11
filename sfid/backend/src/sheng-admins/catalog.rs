@@ -7,23 +7,37 @@ use axum::{
 use chrono::Utc;
 
 use crate::business::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
+use crate::business::scope::province_scope_for_role;
 use crate::*;
 
+/// 三角色均可访问,按 scope 过滤:
+/// - KEY_ADMIN:返回全部 43 省
+/// - SHENG_ADMIN:仅返回自己所属省
+/// - SHI_ADMIN:仅返回自己上级省管理员所属省
 pub(crate) async fn list_sheng_admins(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if let Err(resp) = require_key_admin(&state, &headers) {
-        return resp;
-    }
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     let store = match store_read_or_500(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    // scope:KEY_ADMIN → None(全局), SHENG/SHI → Some(province)
+    let scope_province = province_scope_for_role(&store, &ctx.admin_pubkey, &ctx.role);
     let mut rows: Vec<ShengAdminRow> = store
         .sheng_admin_province_by_pubkey
         .iter()
         .filter_map(|(pubkey, province)| {
+            // scope 过滤:非 KEY_ADMIN 只能看自己所属省
+            if let Some(ref scope) = scope_province {
+                if province != scope {
+                    return None;
+                }
+            }
             let user = store.admin_users_by_pubkey.get(pubkey)?;
             if user.role != AdminRole::ShengAdmin {
                 return None;
@@ -41,6 +55,7 @@ pub(crate) async fn list_sheng_admins(
                 created_at: user.created_at,
                 updated_at: user.updated_at,
                 signing_pubkey: user.signing_pubkey.clone(),
+                signing_created_at: user.signing_created_at,
             })
         })
         .collect();
@@ -127,6 +142,7 @@ pub(crate) async fn replace_sheng_admin(
                 created_at: existing.created_at,
                 updated_at: existing.updated_at,
                 signing_pubkey: existing.signing_pubkey.clone(),
+                signing_created_at: existing.signing_created_at,
             },
         })
         .into_response();
@@ -180,6 +196,7 @@ pub(crate) async fn replace_sheng_admin(
             city: String::new(),
             encrypted_signing_privkey: None,
             signing_pubkey: None,
+            signing_created_at: None,
         },
     );
     store.sheng_admin_province_by_pubkey.remove(&old_pubkey);
@@ -218,13 +235,7 @@ pub(crate) async fn replace_sheng_admin(
     {
         use subxt::backend::legacy::LegacyRpcMethods;
         use subxt::{OnlineClient, PolkadotConfig};
-        let ws_url_res = (|| -> Result<String, String> {
-            std::env::var("SFID_CHAIN_WS_URL")
-                .ok()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty())
-                .ok_or_else(|| "SFID_CHAIN_WS_URL not configured".to_string())
-        })();
+        let ws_url_res = crate::chain::url::chain_ws_url();
         match ws_url_res {
             Ok(ws) => {
                 match OnlineClient::<PolkadotConfig>::from_insecure_url(ws.clone()).await {
@@ -287,6 +298,7 @@ pub(crate) async fn replace_sheng_admin(
             updated_at: Some(replaced_at),
             // 更换后 signing pubkey 已清理，新管理员登录前为 None
             signing_pubkey: None,
+            signing_created_at: None,
         },
     })
     .into_response()

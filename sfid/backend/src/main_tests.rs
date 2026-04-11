@@ -276,8 +276,8 @@ async fn keyring_rotate_commit_requires_prior_verify() {
 
 #[tokio::test]
 async fn keyring_rotate_commit_reports_chain_submit_failure_and_keeps_local_state_unchanged() {
-    let previous_rpc_url = std::env::var("SFID_CHAIN_RPC_URL").ok();
-    std::env::remove_var("SFID_CHAIN_RPC_URL");
+    let previous_ws_url = std::env::var("SFID_CHAIN_WS_URL").ok();
+    std::env::remove_var("SFID_CHAIN_WS_URL");
     let (state, headers, backup_a_seed, new_backup_seed) = setup_rotation_test_state();
     let challenge_resp = key_admins::admin_chain_keyring_rotate_challenge(
         State(state.clone()),
@@ -332,8 +332,8 @@ async fn keyring_rotate_commit_reports_chain_submit_failure_and_keeps_local_stat
     .await
     .into_response();
 
-    if let Some(value) = previous_rpc_url {
-        std::env::set_var("SFID_CHAIN_RPC_URL", value);
+    if let Some(value) = previous_ws_url {
+        std::env::set_var("SFID_CHAIN_WS_URL", value);
     }
 
     assert_eq!(commit_resp.status(), StatusCode::OK);
@@ -564,6 +564,7 @@ async fn qr_login_sheng_admin_keeps_write_permission() {
                 city: String::new(),
                 encrypted_signing_privkey: None,
                 signing_pubkey: None,
+                signing_created_at: None,
             },
         );
     }
@@ -656,6 +657,7 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 city: String::new(),
                 encrypted_signing_privkey: None,
                 signing_pubkey: None,
+                signing_created_at: None,
             },
         );
         store.admin_users_by_pubkey.insert(
@@ -673,6 +675,7 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 city: String::new(),
                 encrypted_signing_privkey: None,
                 signing_pubkey: None,
+                signing_created_at: None,
             },
         );
     }
@@ -734,6 +737,7 @@ fn require_admin_any_should_allow_all_three_roles() {
                 city: String::new(),
                 encrypted_signing_privkey: None,
                 signing_pubkey: None,
+                signing_created_at: None,
             },
         );
         store.admin_sessions.insert(

@@ -88,20 +88,21 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(11))
 			.saturating_add(T::DbWeight::get().writes(9))
 	}
-	/// Storage: `SfidCodeAuth::AccountToSfid` (r:1 w:1)
-	/// Proof: `SfidCodeAuth::AccountToSfid` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
+	/// Storage: `SfidCodeAuth::SfidMainAccount` (r:1 w:0)
+	/// Proof: `SfidCodeAuth::SfidMainAccount` (`max_values`: Some(1), `max_size`: Some(32), added: 527, mode: `MaxEncodedLen`)
+	/// Storage: `SfidCodeAuth::ProvinceBySigningPubkey` (r:1 w:0)
+	/// Proof: `SfidCodeAuth::ProvinceBySigningPubkey` (`max_values`: None, `max_size`: Some(97), added: 2572, mode: `MaxEncodedLen`)
+	/// Storage: `SfidCodeAuth::AccountToBindingId` (r:1 w:1)
+	/// Proof: `SfidCodeAuth::AccountToBindingId` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
 	/// Storage: `SfidCodeAuth::BoundCount` (r:1 w:1)
 	/// Proof: `SfidCodeAuth::BoundCount` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `SfidCodeAuth::SfidToAccount` (r:0 w:1)
-	/// Proof: `SfidCodeAuth::SfidToAccount` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
+	/// Storage: `SfidCodeAuth::BindingIdToAccount` (r:0 w:1)
+	/// Proof: `SfidCodeAuth::BindingIdToAccount` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
 	fn unbind_sfid() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `308`
-		//  Estimated: `3545`
-		// Minimum execution time: 23_714_000 picoseconds.
-		Weight::from_parts(24_376_000, 0)
-			.saturating_add(Weight::from_parts(0, 3545))
-			.saturating_add(T::DbWeight::get().reads(2))
+		// 管理员代为解绑：4 reads（主账户 + 省级公钥 + 账户映射 + 计数）+ 3 writes
+		Weight::from_parts(28_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 3562))
+			.saturating_add(T::DbWeight::get().reads(4))
 			.saturating_add(T::DbWeight::get().writes(3))
 	}
 	/// Storage: `SfidCodeAuth::SfidMainAccount` (r:1 w:1)
@@ -155,20 +156,21 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(11))
 			.saturating_add(RocksDbWeight::get().writes(9))
 	}
-	/// Storage: `SfidCodeAuth::AccountToSfid` (r:1 w:1)
-	/// Proof: `SfidCodeAuth::AccountToSfid` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
+	/// Storage: `SfidCodeAuth::SfidMainAccount` (r:1 w:0)
+	/// Proof: `SfidCodeAuth::SfidMainAccount` (`max_values`: Some(1), `max_size`: Some(32), added: 527, mode: `MaxEncodedLen`)
+	/// Storage: `SfidCodeAuth::ProvinceBySigningPubkey` (r:1 w:0)
+	/// Proof: `SfidCodeAuth::ProvinceBySigningPubkey` (`max_values`: None, `max_size`: Some(97), added: 2572, mode: `MaxEncodedLen`)
+	/// Storage: `SfidCodeAuth::AccountToBindingId` (r:1 w:1)
+	/// Proof: `SfidCodeAuth::AccountToBindingId` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
 	/// Storage: `SfidCodeAuth::BoundCount` (r:1 w:1)
 	/// Proof: `SfidCodeAuth::BoundCount` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `SfidCodeAuth::SfidToAccount` (r:0 w:1)
-	/// Proof: `SfidCodeAuth::SfidToAccount` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
+	/// Storage: `SfidCodeAuth::BindingIdToAccount` (r:0 w:1)
+	/// Proof: `SfidCodeAuth::BindingIdToAccount` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
 	fn unbind_sfid() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `308`
-		//  Estimated: `3545`
-		// Minimum execution time: 23_714_000 picoseconds.
-		Weight::from_parts(24_376_000, 0)
-			.saturating_add(Weight::from_parts(0, 3545))
-			.saturating_add(RocksDbWeight::get().reads(2))
+		// 管理员代为解绑：4 reads（主账户 + 省级公钥 + 账户映射 + 计数）+ 3 writes
+		Weight::from_parts(28_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 3562))
+			.saturating_add(RocksDbWeight::get().reads(4))
 			.saturating_add(RocksDbWeight::get().writes(3))
 	}
 	/// Storage: `SfidCodeAuth::SfidMainAccount` (r:1 w:1)
