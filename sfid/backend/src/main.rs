@@ -1482,12 +1482,31 @@ async fn debug_bootstrap_signer(
         Some(v) => v.to_string(),
         None => return api_error(axum::http::StatusCode::BAD_REQUEST, 1001, "no province"),
     };
+    // 先诊断 subxt metadata
+    let ws_url = match chain::url::chain_ws_url() {
+        Ok(v) => v,
+        Err(e) => return api_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, 1004, &format!("chain_ws_url: {e}")),
+    };
+    let diag = match subxt::OnlineClient::<subxt::PolkadotConfig>::from_insecure_url(&ws_url).await {
+        Ok(client) => {
+            let metadata = client.metadata();
+            let pallets: Vec<String> = metadata.pallets().map(|p| p.name().to_string()).collect();
+            let sfid_calls: Vec<String> = metadata.pallets()
+                .find(|p| p.name() == "SfidCodeAuth")
+                .and_then(|p| p.call_variants())
+                .map(|calls| calls.iter().map(|c| c.name.clone()).collect())
+                .unwrap_or_default();
+            format!("ws_url={} pallets={} sfid_calls={:?}", ws_url, pallets.len(), sfid_calls)
+        }
+        Err(e) => format!("ws_url={} connect_error={}", ws_url, e),
+    };
+
     match key_admins::bootstrap_sheng_signer(&state, &ctx.admin_pubkey, &province).await {
         Ok(()) => axum::Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
-            data: format!("bootstrap success for {province}"),
+            data: format!("bootstrap success for {province} | diag: {diag}"),
         }).into_response(),
-        Err(e) => api_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
+        Err(e) => api_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, 1004, &format!("{e} | diag: {diag}")),
     }
 }
