@@ -79,13 +79,13 @@ class SfidBindingService {
   /// 在 initState / onResume 时调用，静默更新本地缓存。
   Future<SfidBindState> syncFromBackend() async {
     final localState = await getState();
-    if (localState.walletPubkeyHex == null ||
-        localState.walletPubkeyHex!.isEmpty) {
+    if (localState.walletAddress == null ||
+        localState.walletAddress!.isEmpty) {
       return localState;
     }
     try {
       final remote = await _apiClient.queryVoteAccountStatus(
-        localState.walletPubkeyHex!,
+        localState.walletAddress!,
       );
       final prefs = await SharedPreferences.getInstance();
       final now = DateTime.now().millisecondsSinceEpoch;
