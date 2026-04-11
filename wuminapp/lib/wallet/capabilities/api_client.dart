@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -131,7 +132,9 @@ class ApiClient {
               : '0x$signatureHex',
           'sign_message': signMessage,
         }),
-      );
+      ).timeout(const Duration(seconds: 15));
+    } on TimeoutException catch (_) {
+      throw Exception('注册请求超时，请检查网络连接');
     } on SocketException catch (_) {
       if ((Platform.isAndroid || Platform.isIOS) &&
           _baseUrl.contains('127.0.0.1')) {
@@ -156,14 +159,22 @@ class ApiClient {
   }
 
   /// 查询投票账户绑定状态。
+  ///
+  /// [walletAddress] 必须是 SS58 格式地址（后端按 address 参数接收并解析）。
   Future<VoteAccountStatusResponse> queryVoteAccountStatus(
-      String pubkeyHex) async {
-    final normalized = _normalizePubkeyHex(pubkeyHex);
+      String walletAddress) async {
+    final addr = walletAddress.trim();
+    if (addr.isEmpty) {
+      throw Exception('walletAddress is empty');
+    }
     final uri = Uri.parse(
-        '$_baseUrl/api/v1/app/vote-account/status?pubkey=$normalized');
+        '$_baseUrl/api/v1/app/vote-account/status?address=$addr');
     http.Response response;
     try {
-      response = await http.get(uri, headers: _headers());
+      response = await http.get(uri, headers: _headers())
+          .timeout(const Duration(seconds: 15));
+    } on TimeoutException catch (_) {
+      throw Exception('状态查询超时，请检查网络连接');
     } on SocketException catch (_) {
       if ((Platform.isAndroid || Platform.isIOS) &&
           _baseUrl.contains('127.0.0.1')) {
