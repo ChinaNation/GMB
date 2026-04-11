@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:isar/isar.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../isar/wallet_isar.dart';
