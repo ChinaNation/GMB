@@ -397,7 +397,12 @@ class _AppShellState extends State<AppShell> {
                 ),
               ),
             ),
-          Expanded(child: _pages[_currentIndex]),
+          Expanded(
+            child: IndexedStack(
+              index: _currentIndex,
+              children: _pages,
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: Container(
