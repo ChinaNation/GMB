@@ -1092,6 +1092,11 @@ fn main() {
             .route(
                 "/api/v1/app/vote-account/status",
                 get(operate::binding::app_vote_account_status),
+            )
+            // ── wuminapp 机构/账户公开查询 ──
+            .route(
+                "/api/v1/app/institution/:sfid_id/accounts",
+                get(institutions::handler::app_list_accounts),
             );
 
         let app_state = state.clone();

@@ -4,6 +4,7 @@
 import React from 'react';
 import { Button, Popconfirm, Table, Tag } from 'antd';
 import type { MultisigAccount, MultisigChainStatus } from '../../api/institution';
+import { tryEncodeSs58 } from '../../utils/ss58';
 
 interface Props {
   accounts: MultisigAccount[];
@@ -36,14 +37,15 @@ export const AccountList: React.FC<Props> = ({ accounts, loading, canDelete, onD
         {
           title: '账户地址',
           dataIndex: 'duoqian_address',
-          render: (v: string | null) =>
-            v ? (
+          render: (v: string | null) => {
+            if (!v) return '-';
+            const ss58 = tryEncodeSs58(v);
+            return (
               <span style={{ fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                {v.slice(0, 10)}...{v.slice(-8)}
+                {ss58.slice(0, 12)}...{ss58.slice(-8)}
               </span>
-            ) : (
-              '-'
-            ),
+            );
+          },
         },
         {
           title: '链上状态',

@@ -10,6 +10,7 @@
 //! - GET    /api/v1/institution/:sfid_id                  → get_institution
 //! - GET    /api/v1/institution/:sfid_id/accounts         → list_accounts
 //! - DELETE /api/v1/institution/:sfid_id/account/:account_name → delete_account
+//! - GET    /api/v1/app/institution/:sfid_id/accounts     → app_list_accounts (公开,无需鉴权)
 //! - GET    /api/v1/institution/:sfid_id/documents        → list_documents
 //! - POST   /api/v1/institution/:sfid_id/documents        → upload_document
 //! - GET    /api/v1/institution/:sfid_id/documents/:doc_id/download → download_document
@@ -879,6 +880,78 @@ pub(crate) async fn list_accounts(
         data: accounts,
     })
     .into_response()
+}
+
+// ─── 5b. wuminapp 公开查询：按 sfid_id 返回账户列表（无需 admin 鉴权）──
+
+/// wuminapp 公开接口：根据 sfid_id 查询机构下所有账户。
+///
+/// 只返回机构名、账户名、多签地址、链上状态，不暴露管理员/创建人等敏感字段。
+/// 路由：GET /api/v1/app/institution/:sfid_id/accounts
+pub(crate) async fn app_list_accounts(
+    State(state): State<AppState>,
+    Path(sfid_id): Path<String>,
+) -> impl IntoResponse {
+    let sfid_id = sfid_id.trim().to_string();
+    if sfid_id.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "sfid_id is required");
+    }
+    let province = match resolve_province_from_sfid_id(&sfid_id) {
+        Some(p) => p,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "cannot resolve province from sfid_id"),
+    };
+    let sfid_id_r = sfid_id.clone();
+    let read_result = state
+        .sharded_store
+        .read_province(&province, move |shard| {
+            let inst = shard.multisig_institutions.get(&sfid_id_r).cloned();
+            let accounts: Vec<AppAccountEntry> = shard
+                .multisig_accounts
+                .values()
+                .filter(|a| a.sfid_id == sfid_id_r)
+                .map(|a| AppAccountEntry {
+                    account_name: a.account_name.clone(),
+                    duoqian_address: a.duoqian_address.clone(),
+                    chain_status: a.chain_status.clone(),
+                })
+                .collect();
+            (inst, accounts)
+        })
+        .await;
+    let (inst_opt, accounts) = match read_result {
+        Ok(v) => v,
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &format!("shard read: {e}")),
+    };
+    let inst = match inst_opt {
+        Some(i) => i,
+        None => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+    };
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: AppInstitutionAccounts {
+            sfid_id,
+            institution_name: inst.institution_name,
+            accounts,
+        },
+    })
+    .into_response()
+}
+
+/// wuminapp 公开接口返回的账户条目（脱敏）。
+#[derive(Serialize)]
+struct AppAccountEntry {
+    account_name: String,
+    duoqian_address: Option<String>,
+    chain_status: MultisigChainStatus,
+}
+
+/// wuminapp 公开接口返回的机构+账户汇总。
+#[derive(Serialize)]
+struct AppInstitutionAccounts {
+    sfid_id: String,
+    institution_name: String,
+    accounts: Vec<AppAccountEntry>,
 }
 
 // ─── 6. 删除账户(软删,不触链)──────────────────────────────────
