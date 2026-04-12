@@ -327,6 +327,73 @@ class ApiClient {
     );
   }
 
+  /// 查询机构下所有多签账户。
+  ///
+  /// 调用 SFID 后端 `GET /api/v1/app/institution/:sfid_id/accounts`，
+  /// 返回机构名称 + 账户列表（account_name / duoqian_address / chain_status）。
+  Future<InstitutionAccountsResponse> fetchInstitutionAccounts(
+      String sfidId) async {
+    final trimmed = sfidId.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('SFID ID 不能为空');
+    }
+    final uri = Uri.parse(
+        '$_baseUrl/api/v1/app/institution/${Uri.encodeComponent(trimmed)}/accounts');
+    http.Response response;
+    try {
+      response = await http.get(uri, headers: _headers())
+          .timeout(const Duration(seconds: 15));
+    } on TimeoutException catch (_) {
+      throw Exception('查询超时，请检查网络连接');
+    } on SocketException catch (_) {
+      if ((Platform.isAndroid || Platform.isIOS) &&
+          _baseUrl.contains('127.0.0.1')) {
+        throw Exception(
+          '当前使用$_baseUrl，手机真机无法访问本机回环地址。请用 --dart-define=WUMINAPP_API_BASE_URL=http://<电脑局域网IP>:8787',
+        );
+      }
+      rethrow;
+    }
+    if (response.statusCode == 404) {
+      throw Exception('未找到该 SFID 机构');
+    }
+    if (response.statusCode != 200) {
+      throw Exception('查询机构账户失败: ${response.statusCode}');
+    }
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final code = payload['code'] as int? ?? -1;
+    final message = payload['message']?.toString() ?? 'unknown';
+    if (code != 0) {
+      throw Exception('查询机构账户被拒: code=$code message=$message');
+    }
+
+    final data = payload['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('查询机构账户: 响应缺少 data 字段');
+    }
+
+    final rawAccounts = data['accounts'];
+    final accounts = <InstitutionAccountEntry>[];
+    if (rawAccounts is List) {
+      for (final item in rawAccounts) {
+        if (item is! Map) continue;
+        final m = item.map((k, v) => MapEntry(k.toString(), v));
+        accounts.add(InstitutionAccountEntry(
+          accountName: (m['account_name']?.toString() ?? '').trim(),
+          duoqianAddress: m['duoqian_address']?.toString(),
+          chainStatus: (m['chain_status']?.toString() ?? 'Pending').trim(),
+        ));
+      }
+    }
+
+    return InstitutionAccountsResponse(
+      sfidId: (data['sfid_id']?.toString() ?? trimmed).trim(),
+      institutionName: (data['institution_name']?.toString() ?? '').trim(),
+      accounts: accounts,
+    );
+  }
+
   /// 从 SFID 获取公民投票凭证。
   ///
   /// 公民投票时，App 先从 SFID 获取投票资格证明（binding_id + vote_nonce + signature），
@@ -414,4 +481,35 @@ class VoteAccountStatusResponse {
   final String status;
   final String? address;
   final String? sfidCode;
+}
+
+/// 机构下单个多签账户条目。
+class InstitutionAccountEntry {
+  const InstitutionAccountEntry({
+    required this.accountName,
+    this.duoqianAddress,
+    required this.chainStatus,
+  });
+
+  /// 账户名称（链上 name 字段）。
+  final String accountName;
+
+  /// 链上派生的多签地址（hex，上链成功后才有值）。
+  final String? duoqianAddress;
+
+  /// 链上状态：Pending / Confirmed / Failed。
+  final String chainStatus;
+}
+
+/// 机构账户列表响应。
+class InstitutionAccountsResponse {
+  const InstitutionAccountsResponse({
+    required this.sfidId,
+    required this.institutionName,
+    required this.accounts,
+  });
+
+  final String sfidId;
+  final String institutionName;
+  final List<InstitutionAccountEntry> accounts;
 }

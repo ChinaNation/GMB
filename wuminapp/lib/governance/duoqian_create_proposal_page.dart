@@ -8,6 +8,7 @@ import '../ui/app_theme.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../util/amount_format.dart';
+import '../wallet/capabilities/api_client.dart';
 import 'duoqian_manage_service.dart';
 import 'institution_data.dart';
 import '../qr/pages/qr_scan_page.dart' show QrScanPage, QrScanMode;
@@ -39,16 +40,22 @@ class _DuoqianCreateProposalPageState
     extends State<DuoqianCreateProposalPage> {
 
   final _sfidIdController = TextEditingController();
-  final _nameController = TextEditingController();
   final _amountController = TextEditingController();
   final _thresholdController = TextEditingController();
 
   final _manageService = DuoqianManageService();
+  final _apiClient = ApiClient();
 
   bool _submitting = false;
   String? _sfidError;
   String? _registeredAddress; // 查链获得的派生多签地址 hex
   bool _checkingSfid = false;
+
+  // ── 机构账户列表（从 SFID 后端查询） ──
+  String? _institutionName;                     // 查到的机构名称
+  List<InstitutionAccountEntry> _accounts = []; // 机构下所有账户
+  InstitutionAccountEntry? _selectedAccount;    // 用户选中的账户
+  bool _verifyingChain = false;                 // 选中账户后链上验证中
 
   // 管理员列表（公钥 hex，不含 0x）
   final List<String> _adminPubkeys = [];
@@ -87,23 +94,18 @@ class _DuoqianCreateProposalPageState
   @override
   void dispose() {
     _sfidIdController.dispose();
-    _nameController.dispose();
     _amountController.dispose();
     _thresholdController.dispose();
     super.dispose();
   }
 
-  // ──── SFID 查询 ────
+  // ──── SFID 查询（通过 SFID 后端 API） ────
 
+  /// 输入 SFID ID 后点击"查询"：从 SFID 后端获取机构名称 + 账户列表。
   Future<void> _checkSfidRegistration() async {
     final sfidText = _sfidIdController.text.trim();
     if (sfidText.isEmpty) {
       setState(() => _sfidError = 'SFID ID 不能为空');
-      return;
-    }
-    final nameText = _nameController.text.trim();
-    if (nameText.isEmpty) {
-      setState(() => _sfidError = '请输入账户名称');
       return;
     }
 
@@ -112,26 +114,29 @@ class _DuoqianCreateProposalPageState
       setState(() => _sfidError = 'SFID ID 超过最大长度（96 字节）');
       return;
     }
-    final nameBytes = Uint8List.fromList(utf8.encode(nameText));
 
     setState(() {
       _checkingSfid = true;
       _sfidError = null;
       _registeredAddress = null;
+      _institutionName = null;
+      _accounts = [];
+      _selectedAccount = null;
     });
 
     try {
-      final address = await _manageService.fetchSfidRegisteredAddress(sfidBytes, nameBytes);
+      final resp = await _apiClient.fetchInstitutionAccounts(sfidText);
       if (!mounted) return;
 
-      if (address == null) {
+      if (resp.accounts.isEmpty) {
         setState(() {
-          _sfidError = '此 SFID ID 尚未在链上注册';
+          _sfidError = '该机构尚未创建任何账户';
           _checkingSfid = false;
         });
       } else {
         setState(() {
-          _registeredAddress = address;
+          _institutionName = resp.institutionName;
+          _accounts = resp.accounts;
           _checkingSfid = false;
         });
       }
@@ -140,6 +145,55 @@ class _DuoqianCreateProposalPageState
       setState(() {
         _sfidError = '查询失败：$e';
         _checkingSfid = false;
+      });
+    }
+  }
+
+  /// 用户在下拉框选中账户后，自动到链上验证注册状态并获取派生地址。
+  Future<void> _onAccountSelected(InstitutionAccountEntry account) async {
+    setState(() {
+      _selectedAccount = account;
+      _registeredAddress = null;
+      _verifyingChain = true;
+      _sfidError = null;
+    });
+
+    // 如果后端已返回 duoqian_address 且状态 Confirmed，直接使用
+    if (account.duoqianAddress != null &&
+        account.duoqianAddress!.isNotEmpty &&
+        account.chainStatus == 'Confirmed') {
+      setState(() {
+        _registeredAddress = account.duoqianAddress;
+        _verifyingChain = false;
+      });
+      return;
+    }
+
+    // 否则到链上查询 DoubleMap(sfid_id, account_name) 做二次确认
+    try {
+      final sfidText = _sfidIdController.text.trim();
+      final sfidBytes = Uint8List.fromList(utf8.encode(sfidText));
+      final nameBytes = Uint8List.fromList(utf8.encode(account.accountName));
+      final address = await _manageService.fetchSfidRegisteredAddress(
+          sfidBytes, nameBytes);
+      if (!mounted) return;
+
+      if (address == null) {
+        setState(() {
+          _sfidError = '该账户尚未在链上完成注册';
+          _verifyingChain = false;
+        });
+      } else {
+        setState(() {
+          _registeredAddress = address;
+          _verifyingChain = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _sfidError = '链上验证失败：$e';
+        _verifyingChain = false;
       });
     }
   }
@@ -207,7 +261,8 @@ class _DuoqianCreateProposalPageState
   // ──── 提交 ────
 
   String? _validate() {
-    if (_registeredAddress == null) return '请先查询 SFID 注册状态';
+    if (_selectedAccount == null) return '请先选择多签账户';
+    if (_registeredAddress == null) return '所选账户尚未通过链上验证';
     if (_adminPubkeys.length < 2) return '管理员至少 2 人';
 
     final thresholdText = _thresholdController.text.trim();
@@ -283,6 +338,8 @@ class _DuoqianCreateProposalPageState
               SignDisplayField(
                   label: 'SFID ID', value: _sfidIdController.text.trim()),
               SignDisplayField(
+                  label: '账户名称', value: _selectedAccount!.accountName),
+              SignDisplayField(
                   label: '管理员数量',
                   value: _adminPubkeys.length.toString()),
               SignDisplayField(
@@ -308,7 +365,7 @@ class _DuoqianCreateProposalPageState
       }
 
       final nameBytes =
-          Uint8List.fromList(utf8.encode(_nameController.text.trim()));
+          Uint8List.fromList(utf8.encode(_selectedAccount!.accountName));
       final result = await _manageService.submitProposeCreate(
         sfidId: sfidBytes,
         name: nameBytes,
@@ -409,6 +466,62 @@ class _DuoqianCreateProposalPageState
               ),
             ],
           ),
+          // 机构信息 + 账户下拉
+          if (_institutionName != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryDark.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.primaryDark.withValues(alpha: 0.2)),
+              ),
+              child: Text(
+                '机构名称：$_institutionName',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildSectionTitle('选择账户'),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<InstitutionAccountEntry>(
+              value: _selectedAccount,
+              hint: const Text('请选择多签账户', style: TextStyle(fontSize: 13)),
+              items: _accounts.map((a) {
+                return DropdownMenuItem(
+                  value: a,
+                  child: Text(
+                    '${a.accountName}（${a.chainStatus}）',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                );
+              }).toList(),
+              onChanged: (a) {
+                if (a != null) _onAccountSelected(a);
+              },
+              decoration: InputDecoration(
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+          ],
+
+          // 链上验证进度
+          if (_verifyingChain) ...[
+            const SizedBox(height: 8),
+            const Row(
+              children: [
+                SizedBox(
+                  width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text('链上验证中...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+          ],
+
+          // 链上注册地址展示
           if (_registeredAddress != null) ...[
             const SizedBox(height: 8),
             Container(
@@ -434,18 +547,6 @@ class _DuoqianCreateProposalPageState
               ),
             ),
           ],
-
-          const SizedBox(height: 20),
-          _buildSectionTitle('账户名称'),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              hintText: '输入多签账户名称（如：运营账户）',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
-          ),
 
           const SizedBox(height: 20),
 

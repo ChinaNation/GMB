@@ -3,10 +3,11 @@
 // 提交调 createAccount → 上链 register_sfid_institution。
 // 铁律:feedback_institutions_two_layer.md
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Form, Input, message, Modal, Typography } from 'antd';
 import { createAccount, type MultisigAccount } from '../../api/institution';
 import type { AdminAuth } from '../../api/client';
+import { deriveDuoqianAddress } from '../../utils/deriveDuoqianAddress';
 
 interface Props {
   auth: AdminAuth;
@@ -34,10 +35,17 @@ export const CreateAccountModal: React.FC<Props> = ({
 }) => {
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
+  const [inputName, setInputName] = useState('');
+
+  const previewAddress = useMemo(
+    () => deriveDuoqianAddress(sfidId, inputName),
+    [sfidId, inputName],
+  );
 
   useEffect(() => {
     if (open) {
       form.resetFields();
+      setInputName('');
     }
   }, [open]);
 
@@ -108,8 +116,20 @@ export const CreateAccountModal: React.FC<Props> = ({
           ]}
           extra="同一机构下账户名称不能重复。账户名称将作为链上派生多签地址的 name 参数。"
         >
-          <Input placeholder="如:办案账户、工资账户、采购账户..." maxLength={30} />
+          <Input
+            placeholder="如:办案账户、工资账户、采购账户..."
+            maxLength={30}
+            onChange={(e) => setInputName(e.target.value.trim())}
+          />
         </Form.Item>
+        {previewAddress && (
+          <div style={{ marginTop: -8, marginBottom: 16 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>派生地址：</Typography.Text>
+            <Typography.Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>
+              {previewAddress}
+            </Typography.Text>
+          </div>
+        )}
       </Form>
     </Modal>
   );
