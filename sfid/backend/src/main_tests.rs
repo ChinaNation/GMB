@@ -875,6 +875,7 @@ fn cpms_site_scope_must_match_admin_province() {
         institution_code: "ZF".to_string(),
         institution_name: "贵阳市政府".to_string(),
         qr1_payload: String::new(),
+        qr3_payload: None,
         created_by: "0xSUPER".to_string(),
         created_at: Utc::now(),
         updated_by: None,
