@@ -209,6 +209,9 @@ pub(crate) struct CpmsSiteKeys {
     pub(crate) institution_name: String,
     #[serde(default)]
     pub(crate) qr1_payload: String,
+    /// QR3 匿名证书载荷(QR2 注册成功后持久化,吊销/重发时清除)
+    #[serde(default)]
+    pub(crate) qr3_payload: Option<String>,
     pub(crate) created_by: String,
     pub(crate) created_at: DateTime<Utc>,
     #[serde(default)]
@@ -758,6 +761,8 @@ pub(crate) struct CpmsSiteKeysListRow {
     pub(crate) institution_code: String,
     pub(crate) institution_name: String,
     pub(crate) qr1_payload: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) qr3_payload: Option<String>,
     pub(crate) created_by: String,
     pub(crate) created_by_name: String,
     pub(crate) created_at: DateTime<Utc>,

@@ -39,15 +39,16 @@ pub(crate) struct QrPayload {
 }
 
 
+/// 档案号 V4 格式：{省代码2}{校验位1}{随机8}{年份4} = 15 位
+/// 市代码统一用 000（省辖市），不编码具体城市，保护地理隐私。
 pub(crate) async fn generate_archive_no_with_retry(
     state: &AppState,
     province_code: &str,
-    city_code: &str,
-    created_date_yyyymmdd: &str,
     terminal_id: &str,
     admin_pubkey: &str,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
-    let seq_key = format!("{}|{}|{}", province_code, city_code, created_date_yyyymmdd);
+    let year = Utc::now().format("%Y").to_string();
+    let seq_key = format!("{}|{}", province_code, year);
 
     let mut nonce: i64 = sqlx::query_scalar(
         "INSERT INTO sequence_counters (seq_key, next_seq)
@@ -67,13 +68,9 @@ pub(crate) async fn generate_archive_no_with_retry(
     })?;
 
     for _ in 0..ARCHIVE_NO_MAX_RETRY {
-        let random9 = generate_random9(terminal_id, admin_pubkey, nonce as u32);
-        let check_digit =
-            archive_checksum_digit(province_code, city_code, &random9, created_date_yyyymmdd);
-        let archive_no = format!(
-            "{}{}{}{}{}",
-            province_code, city_code, check_digit, random9, created_date_yyyymmdd
-        );
+        let random8 = generate_random8(terminal_id, admin_pubkey, nonce as u32);
+        let check_digit = archive_checksum_digit_v4(province_code, &random8, &year);
+        let archive_no = format!("{}{}{}{}", province_code, check_digit, random8, year);
 
         let exists: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM archives WHERE archive_no = $1)")
@@ -101,81 +98,13 @@ pub(crate) async fn generate_archive_no_with_retry(
     ))
 }
 
-fn generate_random9(terminal_id: &str, admin_pubkey: &str, nonce: u32) -> String {
+fn generate_random8(terminal_id: &str, admin_pubkey: &str, nonce: u32) -> String {
     let ts = Utc::now().timestamp_millis();
     let source = format!("{}|{}|{}|{}", ts, terminal_id, admin_pubkey, nonce);
     let mut hasher = DefaultHasher::new();
     source.hash(&mut hasher);
-    let n = hasher.finish() % 1_000_000_000;
-    format!("{:09}", n)
-}
-
-// ── SFID-CPMS QR v1: AR4 不透明档案号 ─────────────────────────────────
-
-const AR4_RANDOM_LEN: usize = 26;
-const AR4_CHECK_LEN: usize = 2;
-const AR4_MAX_RETRY: u32 = 20;
-/// Base32 字母表（RFC 4648 无 padding）
-const BASE32_ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-
-/// 生成 AR4 格式不透明档案号：`AR4-<26位Base32随机>-<2位校验>`
-///
-/// 随机体用安全随机数，不编码省、市、站点、日期。
-pub(crate) async fn generate_ar4_archive_no(
-    state: &AppState,
-) -> Result<String, (StatusCode, Json<ApiError>)> {
-    use rand::RngCore;
-
-    for _ in 0..AR4_MAX_RETRY {
-        // 生成 26 位 Base32 随机体
-        let mut random_bytes = [0u8; 26];
-        OsRng.fill_bytes(&mut random_bytes);
-        let random_body: String = random_bytes
-            .iter()
-            .map(|b| BASE32_ALPHABET[(*b as usize) % BASE32_ALPHABET.len()] as char)
-            .collect();
-
-        // 计算 2 位校验
-        let check = ar4_checksum(&random_body);
-        let archive_no = format!("AR4-{}-{}", random_body, check);
-
-        // 碰撞检测
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM archives WHERE archive_no = $1)")
-                .bind(&archive_no)
-                .fetch_one(&state.db)
-                .await
-                .map_err(|_| {
-                    err(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        5001,
-                        "archive lookup failed",
-                    )
-                })?;
-
-        if !exists {
-            return Ok(archive_no);
-        }
-    }
-
-    Err(err(
-        StatusCode::CONFLICT,
-        3005,
-        "ar4 archive_no conflict, retry exhausted",
-    ))
-}
-
-/// AR4 档案号 2 位校验码。
-fn ar4_checksum(random_body: &str) -> String {
-    use blake2::digest::consts::U32;
-    use blake2::{Blake2b, Digest};
-    type Blake2b256 = Blake2b<U32>;
-    let payload = format!("cpms-ar4-checksum-v1|{}", random_body);
-    let digest = Blake2b256::digest(payload.as_bytes());
-    // 取前两字节映射到 Base32
-    let c1 = BASE32_ALPHABET[(digest[0] as usize) % BASE32_ALPHABET.len()] as char;
-    let c2 = BASE32_ALPHABET[(digest[1] as usize) % BASE32_ALPHABET.len()] as char;
-    format!("{}{}", c1, c2)
+    let n = hasher.finish() % 100_000_000;
+    format!("{:08}", n)
 }
 
 // ── SFID-CPMS QR v1: QR4 档案业务二维码构造 ──────────────────────────
@@ -247,16 +176,13 @@ pub(crate) async fn build_qr4_payload(
     })
 }
 
-pub(crate) fn archive_checksum_digit(
+/// V4 校验位：blake2b_256("cpms-archive-v4|{省代码}{随机8}{年份4}") 字节之和 mod 10
+pub(crate) fn archive_checksum_digit_v4(
     province_code: &str,
-    city_code: &str,
-    random9: &str,
-    created_date_yyyymmdd: &str,
+    random8: &str,
+    year: &str,
 ) -> char {
-    let payload = format!(
-        "cpms-archive-v3|{}{}{}{}",
-        province_code, city_code, random9, created_date_yyyymmdd
-    );
+    let payload = format!("cpms-archive-v4|{}{}{}", province_code, random8, year);
     use blake2::digest::consts::U32;
     use blake2::{Blake2b, Digest};
     type Blake2b256 = Blake2b<U32>;

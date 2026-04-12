@@ -164,7 +164,7 @@ export default function OperatorList() {
 
       <table className="table">
         <thead>
-          <tr><th>姓名</th><th>用户ID</th><th>公钥</th><th>角色</th><th>状态</th><th>操作</th></tr>
+          <tr><th>姓名</th><th>用户ID</th><th>账户</th><th>角色</th><th>状态</th><th>操作</th></tr>
         </thead>
         <tbody>
           {operators.length === 0 ? (
