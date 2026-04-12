@@ -151,9 +151,40 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
     if institution_name.chars().count() > 30 {
         return api_error(StatusCode::BAD_REQUEST, 1001, "institution_name too long (max 30)");
     }
-    for _ in 0..5 {
+    // ── 查找已有机构,确定 site_sfid ──
+    // 公安局由 reconcile 预创建,sfid_finalized=false 表示尚未固化;
+    // 首次生成 QR1 时重新生成 sfid_id 并固化,此后永久复用。
+    let (old_sfid_id, already_finalized) = match state.store.read() {
+        Ok(store) => {
+            let found = store.multisig_institutions.values().find(|i| {
+                i.province == province
+                    && i.city == city
+                    && i.institution_code == institution
+            });
+            match found {
+                Some(inst) => (inst.sfid_id.clone(), inst.sfid_finalized),
+                None => {
+                    return api_error(
+                        StatusCode::NOT_FOUND,
+                        1004,
+                        "institution not found, reconcile may not have run",
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "store read failed");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed");
+        }
+    };
+
+    let site_sfid = if already_finalized {
+        // sfid 已固化,直接复用
+        old_sfid_id.clone()
+    } else {
+        // 首次生成 QR1:生成新 sfid_id 并替换
         let random_account = Uuid::new_v4().to_string();
-        let site_sfid = match generate_sfid_code(GenerateSfidInput {
+        let new_sfid = match generate_sfid_code(GenerateSfidInput {
             account_pubkey: random_account.as_str(),
             a3: "GFR",
             p1: "0",
@@ -164,148 +195,195 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
             Ok(v) => v,
             Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
         };
-        let site_sfid = match validate_sfid_id_format(site_sfid.as_str()) {
+        let new_sfid = match validate_sfid_id_format(new_sfid.as_str()) {
             Ok(v) => v,
             Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
         };
 
-        // 从 site_sfid 的 r5 段提取省代码（前两位字母）
-        let province_code = extract_province_code_from_sfid(&site_sfid);
-
-        // 生成一次性安装令牌
-        let install_token = Uuid::new_v4().to_string().replace('-', "");
-
-        // 用 SFID 主密钥签名 QR1
-        let sign_source = format!(
-            "sfid-cpms-v1|install|{}|{}",
-            site_sfid, install_token
-        );
-        let signature = match sign_with_main_key(&state, &sign_source) {
-            Ok(v) => v,
-            Err(_) => {
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    "sign QR1 failed",
-                )
+        // 替换 legacy store: remove 旧 key → insert 新 key,设 sfid_finalized=true
+        match state.store.write() {
+            Ok(mut store) => {
+                if let Some(mut inst) = store.multisig_institutions.remove(&old_sfid_id) {
+                    inst.sfid_id = new_sfid.clone();
+                    inst.sfid_finalized = true;
+                    store.multisig_institutions.insert(new_sfid.clone(), inst);
+                }
             }
-        };
-
-        // 获取 RSA 公钥 PEM
-        let rsa_pubkey_pem = match key_admins::rsa_blind::get_public_key_pem() {
-            Ok(v) => v,
-            Err(_) => {
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    "RSA public key not available",
-                )
+            Err(e) => {
+                tracing::error!(error = %e, "store write failed for sfid finalize");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store write failed");
             }
-        };
+        }
 
-        // 构造 QR1 payload
-        let rsa_raw = strip_pem_envelope(&rsa_pubkey_pem);
-        let qr1 = serde_json::json!({
-            "proto": "SFID_CPMS_V1",
-            "type": "INSTALL",
-            "sfid": site_sfid,
-            "token": install_token,
-            "rsa": rsa_raw,
-            "sig": signature,
-        });
-        let qr1_payload = match serde_json::to_string(&qr1) {
-            Ok(v) => v,
-            Err(_) => {
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    "serialize QR1 failed",
-                )
-            }
-        };
-
-        let created_at = Utc::now();
-        // Phase 2 Day 3 Round 2 迁移 cpms_site_keys 到 sharded_store:写本省分片
-        let site_sfid_key = site_sfid.clone();
-        let new_site = CpmsSiteKeys {
-            site_sfid: site_sfid.clone(),
-            install_token: install_token.clone(),
-            install_token_status: InstallTokenStatus::Pending,
-            status: CpmsSiteStatus::Pending,
-            version: 1,
-            province_code: province_code.clone(),
-            admin_province: province.clone(),
-            city_name: city.clone(),
-            institution_code: institution.clone(),
-            institution_name: institution_name.clone(),
-            qr1_payload: qr1_payload.clone(),
-            created_by: ctx.admin_pubkey.clone(),
-            created_at,
-            updated_by: Some(ctx.admin_pubkey.clone()),
-            updated_at: Some(created_at),
-        };
-        let new_site_for_legacy = new_site.clone();
-        let insert_result = state
+        // 替换 sharded_store 分片
+        let old_key = old_sfid_id.clone();
+        let new_key = new_sfid.clone();
+        let replace_result = state
             .sharded_store
             .write_province(&province, move |shard| {
-                if shard.cpms_site_keys.contains_key(&site_sfid_key) {
-                    return Err(());
+                if let Some(mut inst) = shard.multisig_institutions.remove(&old_key) {
+                    inst.sfid_id = new_key.clone();
+                    inst.sfid_finalized = true;
+                    shard.multisig_institutions.insert(new_key, inst);
                 }
-                shard.cpms_site_keys.insert(site_sfid_key.clone(), new_site);
-                Ok(())
+                Ok::<(), &str>(())
             })
             .await;
-        match insert_result {
-            Ok(Ok(())) => {}
-            Ok(Err(())) => continue,
-            Err(_) => {
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    "shard write failed",
-                )
-            }
+        if let Err(e) = replace_result {
+            tracing::warn!(error = %e, "shard write failed for sfid finalize (legacy already committed)");
         }
 
-        // 双写过渡期:sharded_store + legacy store 同步写
-        {
-            match state.store.write() {
-                Ok(mut store) => {
-                    store.cpms_site_keys.insert(site_sfid.clone(), new_site_for_legacy);
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "dual-write legacy store failed (cpms generate, shard already committed)");
-                }
-            }
-        }
-
-        append_cpms_audit_log_best_effort(
-            &state,
-            "CPMS_SFID_GENERATE",
-            &ctx.admin_pubkey,
-            Some(site_sfid.clone()),
-            None,
-            "SUCCESS",
-            format!(
-                "site_sfid={} province={} city={} institution={} province_code={}",
-                site_sfid, province, city, institution, province_code,
-            ),
+        tracing::info!(
+            old_sfid = %old_sfid_id,
+            new_sfid = %new_sfid,
+            province = %province,
+            city = %city,
+            "sfid_id finalized on first QR1 generation"
         );
-        return Json(ApiResponse {
-            code: 0,
-            message: "ok".to_string(),
-            data: GenerateCpmsInstallOutput {
-                site_sfid,
-                qr1_payload,
-            },
+        new_sfid
+    };
+
+    let site_sfid = match validate_sfid_id_format(site_sfid.as_str()) {
+        Ok(v) => v,
+        Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
+    };
+    let province_code = extract_province_code_from_sfid(&site_sfid);
+
+    // 生成一次性安装令牌
+    let install_token = Uuid::new_v4().to_string().replace('-', "");
+
+    // 用 SFID 主密钥签名 QR1
+    let sign_source = format!(
+        "sfid-cpms-v1|install|{}|{}",
+        site_sfid, install_token
+    );
+    let signature = match sign_with_main_key(&state, &sign_source) {
+        Ok(v) => v,
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "sign QR1 failed",
+            )
+        }
+    };
+
+    // 获取 RSA 公钥 PEM
+    let rsa_pubkey_pem = match key_admins::rsa_blind::get_public_key_pem() {
+        Ok(v) => v,
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "RSA public key not available",
+            )
+        }
+    };
+
+    // 构造 QR1 payload
+    let rsa_raw = strip_pem_envelope(&rsa_pubkey_pem);
+    let qr1 = serde_json::json!({
+        "proto": "SFID_CPMS_V1",
+        "type": "INSTALL",
+        "sfid": site_sfid,
+        "token": install_token,
+        "rsa": rsa_raw,
+        "sig": signature,
+        "province_name": province,
+        "city_name": city,
+        "institution_name": institution_name,
+    });
+    let qr1_payload = match serde_json::to_string(&qr1) {
+        Ok(v) => v,
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "serialize QR1 failed",
+            )
+        }
+    };
+
+    let created_at = Utc::now();
+    // 写 cpms_site_keys 到 sharded_store
+    let site_sfid_key = site_sfid.clone();
+    let new_site = CpmsSiteKeys {
+        site_sfid: site_sfid.clone(),
+        install_token: install_token.clone(),
+        install_token_status: InstallTokenStatus::Pending,
+        status: CpmsSiteStatus::Pending,
+        version: 1,
+        province_code: province_code.clone(),
+        admin_province: province.clone(),
+        city_name: city.clone(),
+        institution_code: institution.clone(),
+        institution_name: institution_name.clone(),
+        qr1_payload: qr1_payload.clone(),
+        created_by: ctx.admin_pubkey.clone(),
+        created_at,
+        updated_by: Some(ctx.admin_pubkey.clone()),
+        updated_at: Some(created_at),
+    };
+    let new_site_for_legacy = new_site.clone();
+    let insert_result = state
+        .sharded_store
+        .write_province(&province, move |shard| {
+            // 已有同 sfid 的站点记录时覆盖(多次生成 QR1 场景)
+            shard.cpms_site_keys.insert(site_sfid_key.clone(), new_site);
+            Ok(())
         })
-        .into_response();
+        .await;
+    match insert_result {
+        Ok(Ok(())) => {}
+        Ok(Err(())) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "shard write failed",
+            )
+        }
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "shard write failed",
+            )
+        }
     }
-    api_error(
-        StatusCode::CONFLICT,
-        1005,
-        "site_sfid collision retry exhausted",
-    )
+
+    // 双写过渡期:sharded_store + legacy store 同步写
+    {
+        match state.store.write() {
+            Ok(mut store) => {
+                store.cpms_site_keys.insert(site_sfid.clone(), new_site_for_legacy);
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "dual-write legacy store failed (cpms generate, shard already committed)");
+            }
+        }
+    }
+
+    append_cpms_audit_log_best_effort(
+        &state,
+        "CPMS_SFID_GENERATE",
+        &ctx.admin_pubkey,
+        Some(site_sfid.clone()),
+        None,
+        "SUCCESS",
+        format!(
+            "site_sfid={} province={} city={} institution={} province_code={} finalized={}",
+            site_sfid, province, city, institution, province_code, !already_finalized,
+        ),
+    );
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: GenerateCpmsInstallOutput {
+            site_sfid,
+            qr1_payload,
+        },
+    })
+    .into_response()
 }
 
 /// 处理 QR2 注册请求，返回 QR3 匿名证书。
@@ -669,20 +747,8 @@ pub(crate) async fn reissue_install_token(
         Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "RSA public key not available"),
     };
     let rsa_raw = strip_pem_envelope(&rsa_pubkey_pem);
-    let qr1 = serde_json::json!({
-        "proto": "SFID_CPMS_V1",
-        "type": "INSTALL",
-        "sfid": site_sfid_validated,
-        "token": new_token,
-        "rsa": rsa_raw,
-        "sig": signature,
-    });
-    let qr1_payload = match serde_json::to_string(&qr1) {
-        Ok(v) => v,
-        Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "serialize QR1 failed"),
-    };
 
-    // Phase 2 Day 3:cpms_site_keys 迁移到 sharded_store
+    // 先定位省份，再读站点元数据用于 QR1 名称字段
     let province = match resolve_site_province_via_shard(
         &state,
         &site_sfid_validated,
@@ -693,9 +759,40 @@ pub(crate) async fn reissue_install_token(
         Ok(v) => v,
         Err((code, msg)) => return api_error(code, 1004, msg),
     };
+    let sfid_for_read = site_sfid_validated.clone();
+    let site_meta = state
+        .sharded_store
+        .read_province(&province, move |shard| {
+            shard.cpms_site_keys.get(&sfid_for_read).map(|s| {
+                (s.admin_province.clone(), s.city_name.clone(), s.institution_name.clone())
+            })
+        })
+        .await
+        .ok()
+        .flatten();
+    let (prov_name, city_name, inst_name) = site_meta.unwrap_or_else(|| {
+        (province.clone(), String::new(), String::new())
+    });
+
+    let qr1 = serde_json::json!({
+        "proto": "SFID_CPMS_V1",
+        "type": "INSTALL",
+        "sfid": site_sfid_validated,
+        "token": new_token,
+        "rsa": rsa_raw,
+        "sig": signature,
+        "province_name": prov_name,
+        "city_name": city_name,
+        "institution_name": inst_name,
+    });
+    let qr1_payload = match serde_json::to_string(&qr1) {
+        Ok(v) => v,
+        Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "serialize QR1 failed"),
+    };
     let actor_pubkey = ctx.admin_pubkey.clone();
     let sfid_for_closure = site_sfid_validated.clone();
     let new_token_clone = new_token.clone();
+    let qr1_payload_clone = qr1_payload.clone();
     let write_result = state
         .sharded_store
         .write_province(&province, move |shard| {
@@ -703,12 +800,10 @@ pub(crate) async fn reissue_install_token(
                 Some(v) => v,
                 None => return Err("site_sfid not found"),
             };
-            if site.install_token_status == InstallTokenStatus::Pending {
-                return Err("install_token is still pending, cannot reissue");
-            }
             site.install_token = new_token_clone;
             site.install_token_status = InstallTokenStatus::Pending;
             site.status = CpmsSiteStatus::Pending;
+            site.qr1_payload = qr1_payload_clone;
             site.version += 1;
             site.updated_by = Some(actor_pubkey.clone());
             site.updated_at = Some(Utc::now());
@@ -736,6 +831,7 @@ pub(crate) async fn reissue_install_token(
                     site.install_token = new_token.clone();
                     site.install_token_status = InstallTokenStatus::Pending;
                     site.status = CpmsSiteStatus::Pending;
+                    site.qr1_payload = qr1_payload.clone();
                     site.version += 1;
                     site.updated_by = Some(ctx.admin_pubkey.clone());
                     site.updated_at = Some(Utc::now());

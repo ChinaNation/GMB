@@ -10,8 +10,22 @@ CPMS_HEALTHCHECK_URL="http://127.0.0.1:${CPMS_PORT}/api/v1/health"
 CPMS_FRONTEND_PORT=5174
 DB_ADMIN_URL="${CPMS_DATABASE_URL%/*}/postgres"
 
-# ── 每次运行等于全新初始化：重建数据库 ──
+# ── 杀掉所有残留的 CPMS 进程（后端 + 前端 + 占用端口的） ──
+echo "=== 清理残留 CPMS 进程 ==="
+STALE_PIDS="$(pgrep -f 'cpms-back|target/debug/cpms|cpms/backend' || true)"
+PORT_PIDS="$(lsof -ti "tcp:${CPMS_PORT}" 2>/dev/null || true)"
+FRONT_PIDS="$(lsof -ti "tcp:${CPMS_FRONTEND_PORT}" 2>/dev/null || true)"
+ALL_PIDS="$(echo -e "${STALE_PIDS}\n${PORT_PIDS}\n${FRONT_PIDS}" | sort -u)"
+for pid in $ALL_PIDS; do
+  [[ -z "$pid" ]] && continue
+  kill "$pid" 2>/dev/null || true
+done
+[[ -n "$ALL_PIDS" ]] && sleep 1
+echo "残留进程已清理"
+
+# ── 全新初始化：重建数据库 ──
 echo "=== CPMS 全新初始化：重建数据库 ==="
+psql "$DB_ADMIN_URL" -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'cpms' AND pid != pg_backend_pid();" >/dev/null 2>&1 || true
 psql "$DB_ADMIN_URL" -c "DROP DATABASE IF EXISTS cpms;"
 psql "$DB_ADMIN_URL" -c "CREATE DATABASE cpms OWNER cpms;"
 echo "数据库已重建"
@@ -22,16 +36,6 @@ fi
 
 BACKEND_PID=""
 FRONTEND_PID=""
-
-EXISTING_BACKEND_PIDS="$(lsof -ti "tcp:${CPMS_PORT}" || true)"
-if [[ -n "$EXISTING_BACKEND_PIDS" ]]; then
-  echo "Stopping existing backend on tcp:${CPMS_PORT}..."
-  while IFS= read -r pid; do
-    [[ -z "$pid" ]] && continue
-    kill "$pid" >/dev/null 2>&1 || true
-  done <<< "$EXISTING_BACKEND_PIDS"
-  sleep 1
-fi
 
 echo "=== 启动后端（自动运行 migrations）==="
 (cd "$ROOT_DIR" && cargo run --manifest-path backend/Cargo.toml) &

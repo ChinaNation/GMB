@@ -10,7 +10,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, message, Modal, QRCode, Space, Typography } from 'antd';
-import { QrcodeOutlined } from '@ant-design/icons';
 import { registerCpms, type AdminAuth } from '../../api/client';
 import { startCameraScanner } from '../../utils/cameraScanner';
 
@@ -141,7 +140,7 @@ export const CpmsRegisterModal: React.FC<Props> = ({ auth, open, onClose, onRegi
                   gap: 8,
                 }}
               >
-                <QrcodeOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.25)' }} />
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
                 <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
                   摄像头初始化中...
                 </Typography.Text>

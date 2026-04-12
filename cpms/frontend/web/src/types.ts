@@ -20,6 +20,7 @@ export interface SessionUser {
 export interface AdminUser {
   user_id: string;
   admin_pubkey: string;
+  admin_name: string;
   role: string;
   status: string;
 }
@@ -67,6 +68,9 @@ export interface QrPrintRecord {
 export interface InstallStatus {
   initialized: boolean;
   site_sfid: string | null;
+  province_name: string | null;
+  city_name: string | null;
+  institution_name: string | null;
   super_admin_bound_count: number;
   qr2_ready: boolean;
   qr2_payload: string | null;
