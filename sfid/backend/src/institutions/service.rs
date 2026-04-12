@@ -242,6 +242,7 @@ pub fn reconcile_public_security_for_province(
                 city_code: city_code.clone(),
                 institution_code: "ZF".to_string(),
                 sub_type: None,
+                sfid_finalized: false,
                 created_by: actor.to_string(),
                 created_at: Utc::now(),
             };

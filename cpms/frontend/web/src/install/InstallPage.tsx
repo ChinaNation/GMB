@@ -2,6 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import * as api from '../api';
 import type { InstallStatus } from '../types';
 import { startCameraScanner, scanImageQr } from '../utils/cameraScanner';
+import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
+import type { UserContactBody } from '../qr/wuminQr';
+import { ScanIcon } from '../components/ScanIcon';
+
+// CPMS 初始化页面。
+// 三个事实状态步骤：1.扫 QR1  2.绑定管理员  3.完成（前往登录）
+// CPMS 是离线系统，不判断授权是否失效——只有 SFID 侧能判断。
 
 export default function InstallPage() {
   const [status, setStatus] = useState<InstallStatus | null>(null);
@@ -38,7 +45,6 @@ export default function InstallPage() {
     setScannerReady(false);
   };
 
-  // 步骤1：摄像头扫码 QR1
   useEffect(() => {
     if (!scannerActive || !videoRef.current) {
       stopScanner();
@@ -55,7 +61,6 @@ export default function InstallPage() {
     return () => stopScanner();
   }, [scannerActive]);
 
-  // 步骤2：摄像头扫码绑定管理员
   const stopBindScanner = () => {
     if (bindScanCleanupRef.current) {
       bindScanCleanupRef.current();
@@ -87,23 +92,26 @@ export default function InstallPage() {
     setBindScannerActive(false);
     stopBindScanner();
     try {
-      let pubkey = raw;
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed.pubkey) pubkey = parsed.pubkey;
-        else if (parsed.address) pubkey = parsed.address;
-        else if (parsed.account) pubkey = parsed.account;
-      } catch { /* 不是 JSON，当作裸公钥 */ }
-      await api.bindSuperAdmin(pubkey.trim());
+      // WUMIN_QR_V1 统一协议：解析 user_contact envelope，取 address（SS58）
+      const env = parseQrEnvelope(raw);
+      if (env.kind !== 'user_contact') {
+        throw new Error(`需要扫描公民名片二维码（user_contact），当前为 ${env.kind}`);
+      }
+      const { address } = env.body as UserContactBody;
+      // SS58 address 传后端，后端做 SS58→hex 解码
+      await api.bindSuperAdmin(address.trim());
       setMsg('超级管理员绑定成功');
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '绑定失败');
+      if (e instanceof QrParseError) {
+        setError(`二维码格式错误：${e.message}`);
+      } else {
+        setError(e instanceof Error ? e.message : '绑定失败');
+      }
     }
     setBindLoading(false);
   };
 
-  // 图片上传识别 QR
   const onUploadQrImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -125,7 +133,7 @@ export default function InstallPage() {
     try {
       const res = await api.installInitialize(qrContent);
       if (res.data) {
-        setMsg(`初始化成功，站点 SFID: ${res.data.site_sfid}`);
+        setMsg(`站点 SFID: ${res.data.site_sfid}`);
       }
       await load();
     } catch (e) {
@@ -134,6 +142,7 @@ export default function InstallPage() {
     setLoading(false);
   };
 
+  // 三个事实状态：1.未初始化  2.已初始化未绑定管理员  3.已初始化已绑定管理员
   const initialized = status?.initialized ?? false;
   const adminBound = (status?.super_admin_bound_count ?? 0) >= 1;
 
@@ -169,7 +178,7 @@ export default function InstallPage() {
 
           {currentStep === 1 && (
             <div className="card" style={{ boxShadow: 'none', border: '1px solid var(--color-border)' }}>
-              <div className="card__title">步骤 1：扫描 SFID 安装授权二维码（QR1）</div>
+              <div className="card__title">扫描 SFID 安装授权二维码（QR1）</div>
               <div style={{
                 width: '80%',
                 maxWidth: 280,
@@ -191,7 +200,7 @@ export default function InstallPage() {
                     alignItems: 'center', justifyContent: 'center', gap: 8,
                     cursor: 'pointer', userSelect: 'none',
                   }} onClick={() => setScannerActive(true)}>
-                    <div style={{ fontSize: 28, color: 'rgba(255,255,255,0.25)' }}>📷</div>
+                    <ScanIcon size={32} color="rgba(255,255,255,0.25)" />
                     <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
                       点击开启摄像头扫码
                     </div>
@@ -221,7 +230,7 @@ export default function InstallPage() {
 
           {currentStep === 2 && (
             <div className="card" style={{ boxShadow: 'none', border: '1px solid var(--color-border)' }}>
-              <div className="card__title">步骤 2：绑定超级管理员</div>
+              <div className="card__title">绑定超级管理员</div>
               <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: 13, marginBottom: 12 }}>
                 打开手机公民钱包，展示用户名片二维码，用摄像头扫码读取公钥
               </div>
@@ -246,7 +255,7 @@ export default function InstallPage() {
                     alignItems: 'center', justifyContent: 'center', gap: 8,
                     cursor: 'pointer', userSelect: 'none',
                   }} onClick={() => setBindScannerActive(true)}>
-                    <div style={{ fontSize: 28, color: 'rgba(255,255,255,0.25)' }}>📷</div>
+                    <ScanIcon size={32} color="rgba(255,255,255,0.25)" />
                     <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
                       点击开启摄像头扫码
                     </div>

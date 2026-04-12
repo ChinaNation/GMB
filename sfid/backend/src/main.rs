@@ -822,6 +822,7 @@ fn main() {
 
         // Phase 2 Day 3：cpms_site_keys 迁移到 sharded_store 后，清理孤儿需要 async
         app_core::runtime_ops::cleanup_orphan_cpms_sites(&state).await;
+        app_core::runtime_ops::cleanup_stale_cpms_sites(&state).await;
 
         tokio::spawn(bind_callback_worker(state.clone()));
         tokio::spawn(indexer::indexer_worker(state.store.backend.clone()));

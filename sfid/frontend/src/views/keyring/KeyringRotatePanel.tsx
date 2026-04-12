@@ -1,7 +1,7 @@
 // 中文注释:密钥轮换面板 —— 包含轮换表单、二维码展示、扫码窗口。
 // 从 KeyringView.tsx 拆出(任务卡 20260408-sfid-frontend-app-tsx-split 步 3 模块化)。
 
-import { QrcodeOutlined } from '@ant-design/icons';
+
 import { Button, Card, Form, Input, QRCode, Typography } from 'antd';
 import { decodeSs58, tryEncodeSs58 } from '../../utils/ss58';
 import { glassCardStyle, glassCardHeadStyle } from '../../components/App';
@@ -242,7 +242,7 @@ export function KeyringRotatePanel({ state }: { state: KeyringSharedState }) {
                     gap: 8,
                   }}
                 >
-                  <QrcodeOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.25)' }} />
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
                     {keyringScannerActive ? '摄像头初始化中...' : '等待开启摄像头'}
                   </Typography.Text>

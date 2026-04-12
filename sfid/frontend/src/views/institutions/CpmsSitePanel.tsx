@@ -18,7 +18,6 @@ import {
   Typography,
 } from 'antd';
 import {
-  deleteCpmsKeys,
   disableCpmsKeys,
   reissueInstallToken,
   revokeCpmsKeys,
@@ -72,10 +71,9 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
 
   const status = site.status as CpmsSiteStatus | undefined;
   const tokenStatus = site.install_token_status as InstallTokenStatus | undefined;
-  const canReissue = canWrite && (status === 'PENDING' || tokenStatus === 'REVOKED');
+  const canReissue = canWrite;
   const canDisable = canWrite && status === 'ACTIVE';
   const canRevoke = canWrite && (status === 'ACTIVE' || status === 'DISABLED');
-  const canDelete = canWrite && status === 'PENDING';
 
   const onReissue = async () => {
     setBusy(true);
@@ -115,19 +113,6 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
       onChanged();
     } catch (err) {
       message.error(err instanceof Error ? err.message : '吊销失败');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onDelete = async () => {
-    setBusy(true);
-    try {
-      await deleteCpmsKeys(auth, site.site_sfid);
-      message.success('已删除');
-      onChanged();
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '删除失败');
     } finally {
       setBusy(false);
     }
@@ -187,9 +172,11 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
               }}
             >
               {canReissue && (
-                <Button size="small" onClick={onReissue} loading={busy}>
-                  重发令牌
-                </Button>
+                <Popconfirm title="重发后旧 QR1 将失效，确认重发？" onConfirm={onReissue}>
+                  <Button size="small" loading={busy}>
+                    重发令牌
+                  </Button>
+                </Popconfirm>
               )}
               {canDisable && (
                 <Popconfirm title="确认禁用 CPMS 站点?" onConfirm={onDisable}>
@@ -202,13 +189,6 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
                 <Popconfirm title="确认吊销?此操作不可逆" onConfirm={onRevoke}>
                   <Button size="small" danger>
                     吊销
-                  </Button>
-                </Popconfirm>
-              )}
-              {canDelete && (
-                <Popconfirm title="确认删除 CPMS 站点?" onConfirm={onDelete}>
-                  <Button size="small" danger>
-                    删除
                   </Button>
                 </Popconfirm>
               )}

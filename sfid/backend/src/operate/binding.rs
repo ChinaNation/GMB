@@ -286,7 +286,10 @@ pub(crate) async fn citizen_bind(
             Json(ApiResponse { code: 0, message: "ok".to_string(), data: output }).into_response()
         }
         "bind_pubkey" => {
-            // 有档案号的记录，绑定新公钥
+            // 旧档案绑新账户：
+            // 1. 用 user_address 在系统中查找 PENDING 状态的记录(用户已通过 wuminapp 注册)
+            // 2. 将 UNLINKED 记录的档案号+SFID码与该账户关联
+            // 3. 删除原 PENDING 记录
             let citizen_id = match input.citizen_id {
                 Some(v) => v,
                 None => return api_error(StatusCode::BAD_REQUEST, 1001, "citizen_id is required for bind_pubkey"),
@@ -295,32 +298,54 @@ pub(crate) async fn citizen_bind(
                 Ok(v) => v,
                 Err(resp) => return resp,
             };
-            // 检查公钥是否已被占用
-            if store.citizen_id_by_pubkey.contains_key(account_pubkey_hex.as_str()) {
-                return api_error(StatusCode::CONFLICT, 1005, "pubkey already bound to another record");
+            // 比对：user_address 对应的 pubkey 必须已在系统中注册(PENDING 状态)
+            let source_citizen_id = match store.citizen_id_by_pubkey.get(account_pubkey_hex.as_str()) {
+                Some(id) => *id,
+                None => return api_error(
+                    StatusCode::NOT_FOUND, 1004,
+                    "该账户未在系统中注册，请先在公民钱包中设置投票账户",
+                ),
+            };
+            // 校验 source 记录是 PENDING 状态(只有地址无档案)
+            {
+                let source = match store.citizen_records.get(&source_citizen_id) {
+                    Some(v) => v,
+                    None => return api_error(StatusCode::NOT_FOUND, 1004, "source citizen record not found"),
+                };
+                if source.archive_no.is_some() {
+                    return api_error(StatusCode::CONFLICT, 1005, "该账户已绑定档案，不能重复绑定");
+                }
             }
-            let record = match store.citizen_records.get_mut(&citizen_id) {
+            // 校验 target 记录是 UNLINKED 状态(有档案无账户)
+            let target = match store.citizen_records.get(&citizen_id) {
                 Some(v) => v,
                 None => return api_error(StatusCode::NOT_FOUND, 1004, "citizen record not found"),
             };
-            if record.account_pubkey.is_some() {
-                return api_error(StatusCode::CONFLICT, 1005, "record already has a pubkey, unbind first");
+            if target.account_pubkey.is_some() {
+                return api_error(StatusCode::CONFLICT, 1005, "该记录已有账户，请先解绑");
             }
-            record.account_pubkey = Some(account_pubkey_hex.as_str().to_string());
-            record.account_address = pubkey_hex_to_ss58(&account_pubkey_hex);
-            record.chain_confirmed = false;
-            record.bound_at = Some(Utc::now());
-            record.bound_by = Some(ctx.admin_pubkey.clone());
+            if target.archive_no.is_none() {
+                return api_error(StatusCode::BAD_REQUEST, 1001, "该记录没有档案号，无法绑定");
+            }
+            // 将 target 记录关联账户
+            let target = store.citizen_records.get_mut(&citizen_id).unwrap();
+            target.account_pubkey = Some(account_pubkey_hex.clone());
+            target.account_address = pubkey_hex_to_ss58(&account_pubkey_hex);
+            target.chain_confirmed = false;
+            target.bound_at = Some(Utc::now());
+            target.bound_by = Some(ctx.admin_pubkey.clone());
             let output = CitizenBindOutput {
                 id: citizen_id,
-                account_pubkey: record.account_pubkey.clone(),
-                account_address: record.account_address.clone(),
-                archive_no: record.archive_no.clone(),
-                sfid_code: record.sfid_code.clone(),
-                province_code: record.province_code.clone(),
-                status: record.status(),
+                account_pubkey: target.account_pubkey.clone(),
+                account_address: target.account_address.clone(),
+                archive_no: target.archive_no.clone(),
+                sfid_code: target.sfid_code.clone(),
+                province_code: target.province_code.clone(),
+                status: target.status(),
             };
-            store.citizen_id_by_pubkey.insert(account_pubkey_hex.as_str().to_string(), citizen_id);
+            // 删除原 PENDING 记录,更新索引指向 target
+            store.citizen_records.remove(&source_citizen_id);
+            store.citizen_id_by_pubkey.insert(account_pubkey_hex, citizen_id);
             drop(store);
             Json(ApiResponse { code: 0, message: "ok".to_string(), data: output }).into_response()
         }

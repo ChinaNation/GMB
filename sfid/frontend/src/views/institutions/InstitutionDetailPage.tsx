@@ -44,7 +44,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
     setLoading(true);
     getInstitution(auth, sfidId)
       .then(setDetail)
-      .catch((err) => message.error(err instanceof Error ? err.message : '加载机构详情失败'))
+      .catch(() => { /* 静默：后台刷新失败不弹窗 */ })
       .finally(() => setLoading(false));
   }, [auth.access_token, sfidId]);
 
@@ -59,12 +59,8 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
     (instSfidId: string) => {
       getCpmsSiteByInstitution(auth, instSfidId)
         .then((row) => setCpmsSite(row))
-        .catch((err) => {
-          // CPMS 站点不存在是正常情况(尚未生成),404 静默降级;其他错误提示用户
-          const msg = err instanceof Error ? err.message : String(err);
-          if (!msg.includes('404') && !msg.includes('not found')) {
-            message.warning('CPMS 站点加载失败');
-          }
+        .catch(() => {
+          // 静默：后台刷新失败不弹窗（404 是正常场景——尚未生成）
           setCpmsSite(null);
         });
     },
@@ -113,7 +109,9 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
         created_at: new Date().toISOString(),
       });
       message.success('CPMS 安装二维码已生成');
-      loadCpms(inst.sfid_id);
+      // 首次生成 QR1 会替换机构 sfid_id,需刷新机构详情拿到新号
+      load();
+      loadCpms(result.site_sfid);
     } catch (err) {
       message.error(err instanceof Error ? err.message : '生成失败');
     } finally {

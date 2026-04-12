@@ -3,6 +3,7 @@
 // 右侧摄像头扫码 → 扫描手机签名回执 → 完成登录
 
 import { useState, useEffect, useRef } from 'react';
+import { ScanIcon } from '../components/ScanIcon';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../auth';
@@ -233,7 +234,7 @@ export default function LoginPage() {
                     position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center', gap: 8,
                   }}>
-                    <div style={{ fontSize: 28, color: 'rgba(255,255,255,0.25)' }}>📷</div>
+                    <ScanIcon size={32} color="rgba(255,255,255,0.25)" />
                     <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
                       {scannerActive ? '摄像头初始化中...' : '等待开启摄像头'}
                     </div>
