@@ -13,6 +13,7 @@ import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_transfer_body.dart';
 import 'package:wuminapp_mobile/trade/offchain/clearing_banks.dart';
+import 'package:wuminapp_mobile/util/amount_format.dart';
 
 /// 临时收款码页面。
 ///
@@ -51,7 +52,8 @@ class _ReceiveQrPageState extends State<ReceiveQrPage> {
   }
 
   String _buildQrData() {
-    final amountText = _amountController.text.trim();
+    // QR 码内金额用纯数字（不含千分位逗号），付款方解析时按数字处理
+    final amountText = AmountFormat.stripCommas(_amountController.text);
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final id = 'rcv_${DateTime.now().microsecondsSinceEpoch}';
     return QrEnvelope<UserTransferBody>(
@@ -134,7 +136,8 @@ class _ReceiveQrPageState extends State<ReceiveQrPage> {
               padding: const EdgeInsets.all(16),
               child: TextField(
                 controller: _amountController,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [ThousandSeparatorFormatter()],
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w700,

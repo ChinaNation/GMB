@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
@@ -207,13 +208,14 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
     }
 
     final toAddress = _toController.text.trim();
-    final amountText = _amountController.text.trim();
-    if (toAddress.isEmpty || amountText.isEmpty) {
+    final amountRaw = _amountController.text.trim();
+    if (toAddress.isEmpty || amountRaw.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('请先填写完整的收款地址和金额')),
       );
       return;
     }
+    final amountText = AmountFormat.stripCommas(amountRaw);
 
     // SS58 地址校验（prefix 2027）
     try {
@@ -310,10 +312,9 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
           final qrSigner = QrSigner();
           final requestId = QrSigner.generateRequestId(prefix: 'tx-');
           final toAddr = _toController.text.trim();
-          final amountText = _amountController.text.trim();
           // 统一格式化为两位小数，与 PayloadDecoder._fenToYuan 对齐
           final amountFormatted =
-              (double.tryParse(amountText) ?? 0).toStringAsFixed(2);
+              (AmountFormat.tryParse(_amountController.text) ?? 0).toStringAsFixed(2);
           final rv = await ChainRpc().fetchRuntimeVersion();
           final request = qrSigner.buildRequest(
             requestId: requestId,
@@ -506,7 +507,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                 Expanded(
                   child: TextField(
                     controller: _amountController,
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [ThousandSeparatorFormatter()],
                     style: const TextStyle(color: AppTheme.textPrimary),
                     decoration: const InputDecoration(
                       labelText: '金额',

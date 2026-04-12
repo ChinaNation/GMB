@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/rpc/offchain.dart';
@@ -117,8 +118,7 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
   Future<void> _submit() async {
     if (_loadingWallet || _currentWallet == null) return;
 
-    final amountText = _amountController.text.trim();
-    final amount = double.tryParse(amountText);
+    final amount = AmountFormat.tryParse(_amountController.text);
     if (amount == null || amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('请输入有效金额')),
@@ -203,7 +203,7 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
           final qrSigner = QrSigner();
           final requestId = QrSigner.generateRequestId(prefix: 'offpay-');
           final amountFormatted =
-              (double.tryParse(_amountController.text.trim()) ?? 0)
+              (AmountFormat.tryParse(_amountController.text) ?? 0)
                   .toStringAsFixed(2);
           final rv = await ChainRpc().fetchRuntimeVersion();
           final request = qrSigner.buildRequest(
@@ -429,7 +429,8 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
                       else
                         TextField(
                           controller: _amountController,
-                          keyboardType: TextInputType.number,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [ThousandSeparatorFormatter()],
                           style: const TextStyle(color: AppTheme.textPrimary),
                           decoration: const InputDecoration(
                             labelText: '支付金额',
