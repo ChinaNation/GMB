@@ -62,21 +62,68 @@ jobs:
         working-directory: sfid/frontend
         run: npm run build
 
-      # ── 打包 Linux 安装包 ──
-      - name: 组装安装包
+      # ── 构建 .deb 安装包 ──
+      - name: 构建 SFID.deb
         run: |
-          PKG_DIR="sfid-server"
-          mkdir -p "$PKG_DIR/bin"
-          mkdir -p "$PKG_DIR/frontend"
+          DEB_ROOT="deb-pkg"
+          mkdir -p "$DEB_ROOT/DEBIAN"
+          mkdir -p "$DEB_ROOT/opt/sfid/bin"
+          mkdir -p "$DEB_ROOT/opt/sfid/frontend"
+          mkdir -p "$DEB_ROOT/etc/systemd/system"
+          mkdir -p "$DEB_ROOT/etc/nginx/sites-available"
 
           # 后端二进制
-          cp sfid/backend/target/release/sfid-backend "$PKG_DIR/bin/"
+          cp sfid/backend/target/release/sfid-backend "$DEB_ROOT/opt/sfid/bin/"
+          chmod 755 "$DEB_ROOT/opt/sfid/bin/sfid-backend"
 
           # 前端静态文件
-          cp -r sfid/frontend/dist/* "$PKG_DIR/frontend/"
+          cp -r sfid/frontend/dist/* "$DEB_ROOT/opt/sfid/frontend/"
 
-          # systemd 服务文件
-          cat > "$PKG_DIR/sfid-server.service" << 'EOF'
+          # deb 控制文件
+          cat > "$DEB_ROOT/DEBIAN/control" << 'EOF'
+          Package: sfid
+          Version: 1.0.0
+          Section: web
+          Priority: optional
+          Architecture: amd64
+          Depends: postgresql, redis-server, nginx
+          Maintainer: GMB <noreply@gmb.org>
+          Description: SFID 系统
+           公民身份识别码系统服务端，包含后端 API 和前端静态文件。
+          EOF
+
+          # 安装后脚本
+          cat > "$DEB_ROOT/DEBIAN/postinst" << 'POSTINST'
+          #!/bin/bash
+          set -e
+          # 创建用户
+          if ! id -u sfid >/dev/null 2>&1; then
+            useradd --system --no-create-home --shell /usr/sbin/nologin sfid
+          fi
+          # 环境变量模板
+          if [ ! -f /opt/sfid/.env ]; then
+            cat > /opt/sfid/.env << 'ENVEOF'
+          SFID_ENV=production
+          DATABASE_URL=postgres://sfid:sfid_pwd@127.0.0.1:5432/sfid
+          SFID_REDIS_URL=redis://127.0.0.1:6379/0
+          SFID_SIGNING_SEED_HEX=<替换为主签名种子>
+          SFID_CHAIN_WS_URL=ws://127.0.0.1:9944
+          SFID_BIND_ADDR=127.0.0.1:8899
+          SFID_CHAIN_TOKEN=<替换为链路鉴权 token>
+          SFID_CHAIN_SIGNING_SECRET=<替换为签名密钥>
+          SFID_PUBLIC_SEARCH_TOKEN=<替换为公共搜索 token>
+          ENVEOF
+            echo "请编辑 /opt/sfid/.env 配置环境变量"
+          fi
+          chown -R sfid:sfid /opt/sfid
+          systemctl daemon-reload
+          systemctl enable sfid-server
+          echo "SFID 安装完成。启动: sudo systemctl start sfid-server"
+          POSTINST
+          chmod 755 "$DEB_ROOT/DEBIAN/postinst"
+
+          # systemd 服务
+          cat > "$DEB_ROOT/etc/systemd/system/sfid-server.service" << 'EOF'
           [Unit]
           Description=SFID Server
           After=network.target postgresql.service redis.service
@@ -94,25 +141,18 @@ jobs:
           WantedBy=multi-user.target
           EOF
 
-          # nginx 配置（前端静态 + 后端 API 代理）
-          cat > "$PKG_DIR/sfid-nginx.conf" << 'EOF'
+          # nginx 配置
+          cat > "$DEB_ROOT/etc/nginx/sites-available/sfid" << 'EOF'
           server {
               listen 443 ssl;
               server_name sfid.example.com;
-
-              # TLS 证书（部署时替换）
               ssl_certificate     /etc/ssl/sfid/cert.pem;
               ssl_certificate_key /etc/ssl/sfid/key.pem;
-
-              # 前端静态文件
               root /opt/sfid/frontend;
               index index.html;
-
               location / {
                   try_files $uri $uri/ /index.html;
               }
-
-              # 后端 API 代理
               location /api/ {
                   proxy_pass http://127.0.0.1:8899;
                   proxy_set_header Host $host;
@@ -123,55 +163,23 @@ jobs:
           }
           EOF
 
-          # 环境变量模板
-          cat > "$PKG_DIR/.env.template" << 'EOF'
-          SFID_ENV=production
-          DATABASE_URL=postgres://sfid:sfid_pwd@127.0.0.1:5432/sfid
-          SFID_REDIS_URL=redis://127.0.0.1:6379/0
-          SFID_SIGNING_SEED_HEX=<替换为主签名种子>
-          SFID_CHAIN_WS_URL=ws://127.0.0.1:9944
-          SFID_BIND_ADDR=127.0.0.1:8899
-          SFID_CHAIN_TOKEN=<替换为链路鉴权 token>
-          SFID_CHAIN_SIGNING_SECRET=<替换为签名密钥>
-          SFID_PUBLIC_SEARCH_TOKEN=<替换为公共搜索 token>
-          EOF
-
-          # 安装脚本
-          cat > "$PKG_DIR/install.sh" << 'INSTALL'
-          #!/usr/bin/env bash
-          set -euo pipefail
-          INSTALL_DIR="/opt/sfid"
-          echo "==> 安装 SFID 系统到 $INSTALL_DIR"
-          sudo mkdir -p "$INSTALL_DIR"
-          sudo cp -r bin frontend "$INSTALL_DIR/"
-          sudo cp sfid-server.service /etc/systemd/system/
-          if [ ! -f "$INSTALL_DIR/.env" ]; then
-            sudo cp .env.template "$INSTALL_DIR/.env"
-            echo "    请编辑 $INSTALL_DIR/.env 配置环境变量"
-          fi
-          sudo systemctl daemon-reload
-          sudo systemctl enable sfid-server
-          echo "==> 安装完成。启动: sudo systemctl start sfid-server"
-          INSTALL
-          chmod +x "$PKG_DIR/install.sh"
-
-          # 打包
-          tar czf sfid-server-linux-amd64.tar.gz "$PKG_DIR"
-          echo "安装包大小: $(du -h sfid-server-linux-amd64.tar.gz | cut -f1)"
+          # 构建 deb
+          dpkg-deb --build "$DEB_ROOT" SFID.deb
+          echo "产出: SFID.deb ($(du -h SFID.deb | cut -f1))"
 
       - name: 清理旧 artifact
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api repos/${{ github.repository }}/actions/artifacts \
-            --jq '.artifacts[] | select(.name == "sfid-server") | .id' \
+            --jq '.artifacts[] | select(.name == "SFID") | .id' \
           | while read -r id; do
               gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
             done
 
-      - name: 上传安装包
+      - name: 上传 SFID.deb
         uses: actions/upload-artifact@v4
         with:
-          name: sfid-server
-          path: sfid-server-linux-amd64.tar.gz
+          name: SFID
+          path: SFID.deb
           retention-days: 30
