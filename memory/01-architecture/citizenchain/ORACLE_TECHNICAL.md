@@ -321,7 +321,7 @@ df -h
 
 ```bash
 ping github.com
-nslookup nrcgch.wuminapp.com
+nslookup nrcgch.crcfrcn.com
 ss -lntp | grep 30333
 ```
 
