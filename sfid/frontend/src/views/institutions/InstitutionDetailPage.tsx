@@ -6,6 +6,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Col, Descriptions, message, Row, Typography } from 'antd';
+import { A3_LABEL, INSTITUTION_CODE_LABEL } from './locks';
 import {
   deleteAccount,
   getCpmsSiteByInstitution,
@@ -179,8 +180,8 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
                       </Descriptions.Item>
                       <Descriptions.Item label="省份">{inst.province}</Descriptions.Item>
                       <Descriptions.Item label="城市">{inst.city}</Descriptions.Item>
-                      <Descriptions.Item label="A3 类型">{inst.a3}</Descriptions.Item>
-                      <Descriptions.Item label="机构代码">{inst.institution_code}</Descriptions.Item>
+                      <Descriptions.Item label="A3 类型">{inst.a3}/{A3_LABEL[inst.a3] || inst.a3}</Descriptions.Item>
+                      <Descriptions.Item label="机构代码">{inst.institution_code}/{INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}</Descriptions.Item>
                       <Descriptions.Item label="创建时间">
                         {new Date(inst.created_at).toLocaleString('zh-CN')}
                       </Descriptions.Item>

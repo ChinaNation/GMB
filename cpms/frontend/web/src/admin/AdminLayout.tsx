@@ -89,7 +89,8 @@ export default function AdminLayout() {
         </div>
       </header>
 
-      {/* Tab 栏 */}
+      {/* Tab 栏：普通管理员不显示（只有首页一个页面） */}
+      {isSuperAdmin && (
       <div style={{ position: 'relative', zIndex: 1, padding: '12px 24px 0' }}>
         <div style={{
           display: 'flex', gap: 6, padding: '8px 12px',
@@ -117,6 +118,7 @@ export default function AdminLayout() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Content */}
       <div style={{ position: 'relative', zIndex: 1, padding: '16px 24px 24px' }}>

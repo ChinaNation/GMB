@@ -319,6 +319,7 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
         institution_code: institution.clone(),
         institution_name: institution_name.clone(),
         qr1_payload: qr1_payload.clone(),
+        qr3_payload: None,
         created_by: ctx.admin_pubkey.clone(),
         created_at,
         updated_by: Some(ctx.admin_pubkey.clone()),
@@ -514,6 +515,25 @@ pub(crate) async fn register_cpms(
         Ok(v) => v,
         Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "serialize QR3 failed"),
     };
+
+    // 持久化 QR3 到 sharded store + legacy store
+    {
+        let sfid_for_qr3 = sfid_trimmed_for_legacy.clone();
+        let qr3_for_shard = qr3_payload.clone();
+        let _ = state
+            .sharded_store
+            .write_province(&province, move |shard| {
+                if let Some(site) = shard.cpms_site_keys.get_mut(sfid_for_qr3.as_str()) {
+                    site.qr3_payload = Some(qr3_for_shard);
+                }
+            })
+            .await;
+        if let Ok(mut store) = state.store.write() {
+            if let Some(site) = store.cpms_site_keys.get_mut(sfid_trimmed_for_legacy.as_str()) {
+                site.qr3_payload = Some(qr3_payload.clone());
+            }
+        }
+    }
 
     Json(ApiResponse {
         code: 0,
@@ -804,6 +824,7 @@ pub(crate) async fn reissue_install_token(
             site.install_token_status = InstallTokenStatus::Pending;
             site.status = CpmsSiteStatus::Pending;
             site.qr1_payload = qr1_payload_clone;
+            site.qr3_payload = None; // 重发令牌清除旧 QR3
             site.version += 1;
             site.updated_by = Some(actor_pubkey.clone());
             site.updated_at = Some(Utc::now());
@@ -832,6 +853,7 @@ pub(crate) async fn reissue_install_token(
                     site.install_token_status = InstallTokenStatus::Pending;
                     site.status = CpmsSiteStatus::Pending;
                     site.qr1_payload = qr1_payload.clone();
+                    site.qr3_payload = None;
                     site.version += 1;
                     site.updated_by = Some(ctx.admin_pubkey.clone());
                     site.updated_at = Some(Utc::now());
@@ -1289,6 +1311,7 @@ fn cpms_site_keys_to_list_row(site: &CpmsSiteKeys, store: &Store) -> CpmsSiteKey
         institution_code: site.institution_code.clone(),
         institution_name: site.institution_name.clone(),
         qr1_payload: site.qr1_payload.clone(),
+        qr3_payload: site.qr3_payload.clone(),
         created_by: site.created_by.clone(),
         created_by_name,
         created_at: site.created_at,
@@ -1309,6 +1332,7 @@ fn cpms_site_keys_to_list_row_simple(site: &CpmsSiteKeys, created_by_name: Strin
         institution_code: site.institution_code.clone(),
         institution_name: site.institution_name.clone(),
         qr1_payload: site.qr1_payload.clone(),
+        qr3_payload: site.qr3_payload.clone(),
         created_by: site.created_by.clone(),
         created_by_name,
         created_at: site.created_at,

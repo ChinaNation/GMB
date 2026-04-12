@@ -103,7 +103,6 @@ function AppInner() {
         if (!cancelled) {
           clearStoredAuth();
           setAuth(null);
-          message.warning('登录状态已失效，请重新登录');
         }
       } finally {
         if (!cancelled) setBootstrapping(false);

@@ -18,7 +18,7 @@ export default function ArchiveList() {
     try {
       const res = await api.listArchives({ full_name: search || undefined, page, page_size: PAGE_SIZE });
       if (res.data) {
-        setArchives(res.data.archives || []);
+        setArchives(res.data.items || []);
         setTotal(res.data.total || 0);
       }
     } catch { /* ignore */ }
@@ -31,14 +31,15 @@ export default function ArchiveList() {
 
   return (
     <div className="card">
-      <div className="card__title flex-between">
-        公民信息
-        <button className="btn btn--primary" onClick={() => navigate('/admin/create')}>+ 新建档案</button>
+      <div className="card__title" style={{ textAlign: 'center', borderLeft: 'none', paddingLeft: 0 }}>
+        公民信息列表
       </div>
-
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <input className="form-input" style={{ maxWidth: 260 }} placeholder="按姓名搜索" value={search} onChange={e => setSearch(e.target.value)} />
-        <button className="btn btn--blue" onClick={() => { setPage(1); load(); }}>搜索</button>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input className="form-input" style={{ width: 360 }} placeholder="按姓名、档案号搜索" value={search} onChange={e => setSearch(e.target.value)} />
+          <button className="btn btn--blue" onClick={() => { setPage(1); load(); }}>搜索</button>
+        </div>
+        <button className="btn btn--primary" onClick={() => navigate('/admin/create')}>+ 新建档案</button>
       </div>
 
       <table className="table">
