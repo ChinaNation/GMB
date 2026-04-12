@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../qr/envelope.dart';
 import '../qr/qr_protocols.dart';
 import '../ui/app_theme.dart';
@@ -191,8 +192,7 @@ class _PersonalDuoqianCreatePageState
     }
     if (threshold > adminCount) return '阈值不能超过管理员数量';
 
-    final amountText = _amountController.text.trim();
-    final amount = double.tryParse(amountText);
+    final amount = AmountFormat.tryParse(_amountController.text);
     if (amount == null || amount <= 0) return '请输入有效金额';
     if ((amount * 100).round() < 111) return '初始资金不能低于 1.11 元';
 
@@ -213,7 +213,7 @@ class _PersonalDuoqianCreatePageState
       final nameText = _nameController.text.trim();
       final nameBytes = Uint8List.fromList(utf8.encode(nameText));
       final threshold = int.parse(_thresholdController.text.trim());
-      final amountYuan = double.parse(_amountController.text.trim());
+      final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
       final amountFen = BigInt.from((amountYuan * 100).round());
 
       final adminPubkeyBytes = _adminPubkeys
@@ -422,6 +422,7 @@ class _PersonalDuoqianCreatePageState
           TextField(
             controller: _amountController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [ThousandSeparatorFormatter()],
             decoration: InputDecoration(
               hintText: '最低 1.11 元',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),

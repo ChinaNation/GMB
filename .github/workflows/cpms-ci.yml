@@ -18,8 +18,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend:
-    name: cpms 后端编译与测试
+  build:
+    name: CPMS 编译、测试与打包
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
@@ -28,34 +28,100 @@ jobs:
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
 
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cpms/frontend/web/package-lock.json
+
       - name: 缓存 Rust 依赖
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "cpms-backend"
-          workspaces: |
-            cpms/backend -> target
+          workspaces: cpms/backend -> target
 
+      # ── 后端 ──
       - name: 编译后端
         working-directory: cpms/backend
-        run: cargo check
+        run: cargo build --release
 
       - name: 运行后端测试
         working-directory: cpms/backend
         run: cargo test
 
-  frontend-placeholder:
-    name: cpms 前端构建入口检查
-    runs-on: ubuntu-latest
-    steps:
-      - name: 拉取代码
-        uses: actions/checkout@v4
+      # ── 前端 ──
+      - name: 安装前端依赖
+        working-directory: cpms/frontend/web
+        run: npm ci
 
-      - name: 检查前端构建入口
-        shell: bash
+      - name: 构建前端
+        working-directory: cpms/frontend/web
+        run: npm run build
+
+      # ── 构建 .deb 安装包 ──
+      - name: 构建 CPMS.deb
         run: |
-          set -euo pipefail
-          if find cpms/frontend -maxdepth 3 \( -name package.json -o -name pubspec.yaml \) | grep -q .; then
-            echo "检测到 CPMS 前端构建入口，请后续补充对应 CI。"
-          else
-            echo "当前 CPMS 前端尚未定义可执行构建入口，跳过。"
+          DEB_ROOT="deb-pkg"
+          mkdir -p "$DEB_ROOT/DEBIAN"
+          mkdir -p "$DEB_ROOT/opt/cpms/bin"
+          mkdir -p "$DEB_ROOT/opt/cpms/frontend"
+
+          # 后端二进制
+          cp cpms/backend/target/release/cpms-backend "$DEB_ROOT/opt/cpms/bin/"
+          chmod 755 "$DEB_ROOT/opt/cpms/bin/cpms-backend"
+
+          # 前端静态文件（后端直接 serve）
+          cp -r cpms/frontend/web/dist/* "$DEB_ROOT/opt/cpms/frontend/"
+
+          # deb 控制文件
+          cat > "$DEB_ROOT/DEBIAN/control" << 'EOF'
+          Package: cpms
+          Version: 1.0.0
+          Section: web
+          Priority: optional
+          Architecture: amd64
+          Depends: postgresql
+          Maintainer: GMB <noreply@gmb.org>
+          Description: CPMS 公民护照管理系统
+           离线公民护照管理系统，安装后通过浏览器访问。
+          EOF
+
+          # 安装后脚本
+          cat > "$DEB_ROOT/DEBIAN/postinst" << 'POSTINST'
+          #!/bin/bash
+          set -e
+          if [ ! -f /opt/cpms/.env ]; then
+            cat > /opt/cpms/.env << 'ENVEOF'
+          CPMS_ENV=production
+          CPMS_DATABASE_URL=postgres://cpms:cpms_pwd@127.0.0.1:5432/cpms
+          CPMS_BIND=0.0.0.0:8080
+          CPMS_FRONTEND_DIR=/opt/cpms/frontend
+          ENVEOF
+            echo "请编辑 /opt/cpms/.env 配置环境变量"
           fi
+          echo "CPMS 安装完成。启动: cd /opt/cpms && source .env && bin/cpms-backend"
+          echo "浏览器访问: http://<本机IP>:8080"
+          POSTINST
+          chmod 755 "$DEB_ROOT/DEBIAN/postinst"
+
+          # 构建 deb
+          dpkg-deb --build "$DEB_ROOT" CPMS.deb
+          echo "产出: CPMS.deb ($(du -h CPMS.deb | cut -f1))"
+
+      - name: 清理旧 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/${{ github.repository }}/actions/artifacts \
+            --jq '.artifacts[] | select(.name == "CPMS") | .id' \
+          | while read -r id; do
+              gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
+            done
+
+      - name: 上传 CPMS.deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPMS
+          path: CPMS.deb
+          retention-days: 30

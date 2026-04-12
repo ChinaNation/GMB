@@ -103,6 +103,12 @@ async fn main() {
     };
 
     let cleanup_db = state.db.clone();
+
+    // 前端静态文件目录：优先 CPMS_FRONTEND_DIR 环境变量，默认 ./frontend
+    let frontend_dir = env::var("CPMS_FRONTEND_DIR").unwrap_or_else(|_| "./frontend".to_string());
+    let serve_frontend = tower_http::services::ServeDir::new(&frontend_dir)
+        .fallback(tower_http::services::ServeFile::new(format!("{}/index.html", frontend_dir)));
+
     let app = Router::new()
         .route("/api/v1/health", get(health))
         .merge(initialize::router())
@@ -110,7 +116,8 @@ async fn main() {
         .merge(super_admin::router())
         .merge(operator_admin::router())
         .merge(address::router())
-        .with_state(state);
+        .with_state(state)
+        .fallback_service(serve_frontend);
 
     let addr: SocketAddr = env::var("CPMS_BIND")
         .unwrap_or_else(|_| "0.0.0.0:8080".to_string())

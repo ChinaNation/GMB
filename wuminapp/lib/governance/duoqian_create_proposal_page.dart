@@ -4,6 +4,7 @@ import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../ui/app_theme.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
@@ -278,8 +279,7 @@ class _DuoqianCreateProposalPageState
     }
     if (threshold > adminCount) return '阈值不能超过管理员数量';
 
-    final amountText = _amountController.text.trim();
-    final amount = double.tryParse(amountText);
+    final amount = AmountFormat.tryParse(_amountController.text);
     if (amount == null || amount <= 0) return '请输入有效金额';
     if ((amount * 100).round() < 111) return '初始资金不能低于 1.11 元';
 
@@ -301,7 +301,7 @@ class _DuoqianCreateProposalPageState
       final sfidBytes =
           Uint8List.fromList(utf8.encode(_sfidIdController.text.trim()));
       final threshold = int.parse(_thresholdController.text.trim());
-      final amountYuan = double.parse(_amountController.text.trim());
+      final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
       final amountFen = BigInt.from((amountYuan * 100).round());
 
       final adminPubkeyBytes = _adminPubkeys
@@ -634,6 +634,7 @@ class _DuoqianCreateProposalPageState
           TextField(
             controller: _amountController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [ThousandSeparatorFormatter()],
             decoration: InputDecoration(
               hintText: '最低 1.11 元',
               border:
