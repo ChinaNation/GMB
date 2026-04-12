@@ -66,7 +66,7 @@
 参考 Nginx 片段：
 ```nginx
 server {
-    server_name sfid.wuminapp.com;
+    server_name sfid.crcfrcn.com;
 
     root /var/www/sfid/current;
     index index.html;
@@ -97,7 +97,7 @@ server {
 
 可选 GitHub Variables（不配时使用默认值）：
 - `SFID_DEPLOY_HOST`：默认 `147.224.14.117`
-- `SFID_DEPLOY_DOMAIN`：默认 `sfid.wuminapp.com`
+- `SFID_DEPLOY_DOMAIN`：默认 `sfid.crcfrcn.com`
 - `SFID_DEPLOY_PORT`：默认 `22`
 - `SFID_DEPLOY_APP_HOME`：默认 `/opt/sfid`
 - `SFID_DEPLOY_FRONTEND_ROOT`：默认 `/var/www/sfid`

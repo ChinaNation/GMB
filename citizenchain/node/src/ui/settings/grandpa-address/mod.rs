@@ -61,7 +61,7 @@ pub(crate) struct InstitutionCatalogEntry {
     pub role: String,
     pub peer_id: String,
     pub grandpa_pubkey_hex: String,
-    /// 引导节点域名（如 `nrcgch.wuminapp.com`），用于远程 RPC 查询。
+    /// 引导节点域名（如 `nrcgch.crcfrcn.com`），用于远程 RPC 查询。
     #[serde(default)]
     pub domain: String,
 }
