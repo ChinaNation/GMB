@@ -95,8 +95,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
   }
 
   void _onAmountChanged() {
-    final text = _amountController.text.trim();
-    final amount = double.tryParse(text);
+    final amount = AmountFormat.tryParse(_amountController.text);
     setState(() {
       if (amount != null && amount > 0) {
         _estimatedFee = OnchainRpc.estimateTransferFeeYuan(amount);
@@ -143,8 +142,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
   }
 
   bool _validateAmount() {
-    final text = _amountController.text.trim();
-    final amount = double.tryParse(text);
+    final amount = AmountFormat.tryParse(_amountController.text);
     if (amount == null || amount < 1.11) {
       setState(() => _amountError = '最低转账金额为 1.11 元（存在性保证金）');
       return false;
@@ -188,10 +186,9 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
         // 管理员操作统一通过 QR 码签名（wumin 冷钱包）
         final qrSigner = QrSigner();
         final beneficiary = _beneficiaryController.text.trim();
-        final amountText = _amountController.text.trim();
         // 统一格式化为两位小数，与 PayloadDecoder._fenToYuan 对齐
         final amountFormatted =
-            (double.tryParse(amountText) ?? 0).toStringAsFixed(2);
+            (AmountFormat.tryParse(_amountController.text) ?? 0).toStringAsFixed(2);
         final remarkText = _remarkController.text;
         final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
@@ -231,7 +228,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       await service.submitProposeTransfer(
         institution: widget.institution,
         beneficiaryAddress: _beneficiaryController.text.trim(),
-        amountYuan: double.parse(_amountController.text.trim()),
+        amountYuan: AmountFormat.tryParse(_amountController.text) ?? 0,
         remark: _remarkController.text,
         fromAddress: wallet.address,
         signerPubkey: signerPubkey,
@@ -341,9 +338,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
           TextField(
             controller: _amountController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-            ],
+            inputFormatters: [ThousandSeparatorFormatter()],
             decoration: InputDecoration(
               hintText: '最低 1.11 元',
               hintStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 14),
