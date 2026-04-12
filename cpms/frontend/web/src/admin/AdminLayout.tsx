@@ -1,6 +1,7 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 import * as api from '../api';
+import { QrIcon } from '../components/QrIcon';
 
 export default function AdminLayout() {
   const { user, logout } = useAuth();
@@ -56,12 +57,13 @@ export default function AdminLayout() {
             width: 44, height: 44, borderRadius: 10,
             background: 'rgba(255,255,255,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 20, border: '1px solid rgba(255,255,255,0.25)',
-            color: '#fff',
-          }}>📋</div>
+            border: '1px solid rgba(255,255,255,0.25)',
+          }}>
+            <QrIcon size={22} color="#fff" />
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-            <span style={{ color: '#fff', fontSize: 20, fontWeight: 700, letterSpacing: 2 }}>公民护照管理系统</span>
-            <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 500, letterSpacing: 4, marginTop: 2 }}>CPMS</span>
+            <span style={{ color: '#fff', fontSize: 20, fontWeight: 700, letterSpacing: 2 }}>中华民族联邦共和国</span>
+            <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 500, letterSpacing: 4, marginTop: 2 }}>护照管理系统</span>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

@@ -50,6 +50,11 @@ pub struct MultisigInstitution {
     /// 取值:SOLE_PROPRIETORSHIP / PARTNERSHIP / LIMITED_LIABILITY / JOINT_STOCK
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sub_type: Option<String>,
+    /// sfid_id 是否已通过首次 QR1 生成固化。
+    /// reconcile 批量创建时为 false,首次生成 QR1 时设为 true 并替换 sfid_id,
+    /// 此后永久不变。
+    #[serde(default)]
+    pub sfid_finalized: bool,
     /// 创建人 pubkey。
     pub created_by: String,
     pub created_at: DateTime<Utc>,

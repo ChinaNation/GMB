@@ -21,6 +21,8 @@ use crate::{
 #[derive(Deserialize)]
 struct CreateOperatorRequest {
     admin_pubkey: String,
+    #[serde(default)]
+    admin_name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -38,6 +40,7 @@ struct UpdateOperatorStatusRequest {
 struct OperatorData {
     user_id: String,
     admin_pubkey: String,
+    admin_name: String,
     role: String,
     status: String,
 }
@@ -82,7 +85,7 @@ async fn list_operators(
     authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
 
     let rows = sqlx::query(
-        "SELECT user_id, admin_pubkey, role, status
+        "SELECT user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name, role, status
          FROM admin_users
          WHERE role = 'OPERATOR_ADMIN'
          ORDER BY user_id",
@@ -102,6 +105,7 @@ async fn list_operators(
         .map(|r| OperatorData {
             user_id: r.get("user_id"),
             admin_pubkey: r.get("admin_pubkey"),
+            admin_name: r.get("admin_name"),
             role: r.get("role"),
             status: r.get("status"),
         })
@@ -116,11 +120,24 @@ async fn create_operator(
     Json(req): Json<CreateOperatorRequest>,
 ) -> Result<Json<ApiResponse<OperatorData>>, (StatusCode, Json<ApiError>)> {
     let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
-    if req.admin_pubkey.trim().is_empty() {
+    let raw_input = req.admin_pubkey.trim().to_string();
+    if raw_input.is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid admin_pubkey"));
     }
+    // 归一化公钥：支持 SS58 地址或 0x hex
+    let admin_pubkey = {
+        let stripped = raw_input.strip_prefix("0x").or_else(|| raw_input.strip_prefix("0X")).unwrap_or(&raw_input);
+        if stripped.len() == 64 && stripped.chars().all(|c| c.is_ascii_hexdigit()) {
+            stripped.to_lowercase()
+        } else if let Some(hex_with_prefix) = crate::ss58::ss58_to_pubkey_hex(&raw_input) {
+            hex_with_prefix.strip_prefix("0x").unwrap_or(&hex_with_prefix).to_lowercase()
+        } else {
+            return Err(err(StatusCode::BAD_REQUEST, 1001, "admin_pubkey must be SS58 address or 32-byte hex"));
+        }
+    };
+    let admin_name = req.admin_name.as_deref().unwrap_or("").trim().to_string();
 
-    if find_admin_by_pubkey(&state, req.admin_pubkey.trim())
+    if find_admin_by_pubkey(&state, &admin_pubkey)
         .await
         .is_ok()
     {
@@ -134,17 +151,19 @@ async fn create_operator(
     let now_ts = Utc::now().timestamp();
     let operator = OperatorData {
         user_id: format!("u_operator_{}", Uuid::new_v4().simple()),
-        admin_pubkey: req.admin_pubkey.trim().to_string(),
+        admin_pubkey,
+        admin_name,
         role: "OPERATOR_ADMIN".to_string(),
         status: "ACTIVE".to_string(),
     };
 
     sqlx::query(
-        "INSERT INTO admin_users (user_id, admin_pubkey, role, status, immutable, managed_key_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, FALSE, NULL, $5, $6)",
+        "INSERT INTO admin_users (user_id, admin_pubkey, admin_name, role, status, immutable, managed_key_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, FALSE, NULL, $6, $7)",
     )
     .bind(&operator.user_id)
     .bind(&operator.admin_pubkey)
+    .bind(&operator.admin_name)
     .bind(&operator.role)
     .bind(&operator.status)
     .bind(now_ts)
@@ -176,7 +195,7 @@ async fn update_operator(
     let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
 
     let row = sqlx::query(
-        "SELECT user_id, admin_pubkey, role, status
+        "SELECT user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name, role, status
          FROM admin_users
          WHERE user_id = $1",
     )
@@ -272,9 +291,11 @@ async fn update_operator(
     )
     .await?;
 
+    let admin_name: String = row.try_get("admin_name").unwrap_or_default();
     Ok(Json(ok(OperatorData {
         user_id: id,
         admin_pubkey,
+        admin_name,
         role,
         status,
     })))

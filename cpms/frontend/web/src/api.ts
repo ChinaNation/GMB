@@ -71,8 +71,8 @@ export const authQrResult = (challenge_id: string, session_id: string) =>
 
 // ── 超级管理员 ──
 export const listOperators = () => get<AdminUser[]>('/api/v1/admin/operators');
-export const createOperator = (admin_pubkey: string) =>
-  post<AdminUser>('/api/v1/admin/operators', { admin_pubkey });
+export const createOperator = (admin_pubkey: string, admin_name: string) =>
+  post<AdminUser>('/api/v1/admin/operators', { admin_pubkey, admin_name });
 export const updateOperatorStatus = (id: string, status: string) =>
   put<null>(`/api/v1/admin/operators/${id}/status`, { status });
 export const deleteOperator = (id: string) => del<null>(`/api/v1/admin/operators/${id}`);

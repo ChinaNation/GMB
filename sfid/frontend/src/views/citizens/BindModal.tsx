@@ -1,17 +1,24 @@
-// 中文注释:从 App.tsx 迁移(任务卡 20260408-sfid-frontend-app-tsx-split 步 4)
-// 绑定弹窗 —— 双模式:bind_archive 扫描 CPMS 档案 QR4 / bind_pubkey 输入新账户。
-// 内部持有所有 bind 相关 state 和 bindVideoRef,扫码 useEffect 完整迁移。
+// 绑定弹窗 —— 双模式:
+// 模式1 bind_archive: 新账户绑档案(PENDING) — 扫 CPMS QR4 → 签名 → 绑定
+// 模式2 bind_pubkey:  旧档案绑新账户(UNLINKED) — 扫用户二维码 → 系统比对 → 签名 → 绑定
 
 import { useEffect, useRef, useState } from 'react';
 import { Button, Form, Input, Modal, QRCode, Typography, message } from 'antd';
-import { QrcodeOutlined } from '@ant-design/icons';
+
 import type { AdminAuth, CitizenBindChallengeResult, CitizenRow } from '../../api/client';
 import { citizenBind, citizenBindChallenge } from '../../api/client';
+import { ScanAccountModal } from '../../components/ScanAccountModal';
 import { startCameraScanner } from '../../utils/cameraScanner';
 import { parseKeyringSignedPayload } from '../../utils/parseSignedPayload';
 
 type BindMode = 'bind_archive' | 'bind_pubkey';
-type BindStep = 'scan_qr4' | 'sign_challenge' | 'scan_signature' | 'input_pubkey' | 'done';
+type BindStep =
+  | 'scan_qr4'           // 模式1第一步:扫 CPMS QR4
+  | 'scan_user_qr'       // 模式2第一步:扫用户钱包二维码
+  | 'confirm_address'    // 模式2第二步:确认识别的地址并点击绑定
+  | 'sign_challenge'     // 共用:显示签名挑战二维码
+  | 'scan_signature'     // 共用:扫签名结果
+  | 'done';
 
 interface BindModalProps {
   auth: AdminAuth | null;
@@ -22,31 +29,33 @@ interface BindModalProps {
 }
 
 export function BindModal({ auth, open, record, onClose, onBound }: BindModalProps) {
-  const [bindTargetPubkey, setBindTargetPubkey] = useState('');
   const [bindMode, setBindMode] = useState<BindMode>('bind_archive');
+  const [bindStep, setBindStep] = useState<BindStep>('scan_qr4');
   const [bindChallenge, setBindChallenge] = useState<CitizenBindChallengeResult | null>(null);
   const [bindChallengeLoading, setBindChallengeLoading] = useState(false);
   const [bindQr4Payload, setBindQr4Payload] = useState<string | null>(null);
   const [bindQr4ScanLoading, setBindQr4ScanLoading] = useState(false);
   const [, setBindSignature] = useState<string | null>(null);
-  const [bindStep, setBindStep] = useState<BindStep>('scan_qr4');
-  const [bindNewPubkey, setBindNewPubkey] = useState('');
+  const [bindTargetPubkey, setBindTargetPubkey] = useState('');
+  // 模式2:扫用户二维码识别的地址
+  const [scannedAddress, setScannedAddress] = useState('');
+  const [scanAccountOpen, setScanAccountOpen] = useState(false);
   const [bindScannerActive, setBindScannerActive] = useState(false);
   const [bindScannerReady, setBindScannerReady] = useState(false);
   const bindVideoRef = useRef<HTMLVideoElement | null>(null);
   const bindScanCleanupRef = useRef<(() => void) | null>(null);
 
-  // 当 record 变化时,重置表单状态(等价于原 openBindModal 初始化)
+  // record 变化时重置
   useEffect(() => {
     if (!open || !record) return;
-    const mode: BindMode = (record.status === 'UNLINKED' || record.status === 'PENDING') ? 'bind_pubkey' : 'bind_archive';
+    const mode: BindMode = record.archive_no ? 'bind_pubkey' : 'bind_archive';
     setBindTargetPubkey(record.account_pubkey || '');
     setBindMode(mode);
     setBindChallenge(null);
     setBindQr4Payload(null);
     setBindSignature(null);
-    setBindNewPubkey('');
-    setBindStep(mode === 'bind_archive' ? 'scan_qr4' : 'input_pubkey');
+    setScannedAddress('');
+    setBindStep(mode === 'bind_archive' ? 'scan_qr4' : 'scan_user_qr');
     setBindScannerActive(false);
     stopBindScanner();
   }, [open, record]);
@@ -69,12 +78,10 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
     setBindScannerActive(true);
   };
 
+  // 模式1:扫 CPMS QR4
   const onScanBindQr4 = async (qrPayload: string) => {
     if (!auth) return;
-    if (!qrPayload.trim()) {
-      message.error('二维码识别失败');
-      return;
-    }
+    if (!qrPayload.trim()) { message.error('二维码识别失败'); return; }
     setBindQr4ScanLoading(true);
     try {
       setBindQr4Payload(qrPayload);
@@ -85,46 +92,45 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
       setBindChallenge(challenge);
       setBindStep('sign_challenge');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'QR4 扫码处理失败';
-      message.error(msg);
+      message.error(err instanceof Error ? err.message : 'QR4 扫码处理失败');
     } finally {
       setBindQr4ScanLoading(false);
     }
   };
 
-  const onBindPubkeyNext = async () => {
-    if (!auth) return;
-    if (!bindNewPubkey.trim()) {
-      message.error('请输入新账户');
-      return;
-    }
+  // 模式2:扫用户二维码后识别到地址
+  const onUserAddressResolved = (addr: string) => {
+    setScannedAddress(addr);
+    setScanAccountOpen(false);
+    setBindStep('confirm_address');
+  };
+
+  // 模式2:确认地址后点击绑定 → 生成签名挑战
+  const onConfirmBind = async () => {
+    if (!auth || !scannedAddress.trim()) return;
     setBindChallengeLoading(true);
     try {
       const challenge = await citizenBindChallenge(auth);
       setBindChallenge(challenge);
       setBindStep('sign_challenge');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '生成签名挑战失败';
-      message.error(msg);
+      message.error(err instanceof Error ? err.message : '生成签名挑战失败');
     } finally {
       setBindChallengeLoading(false);
     }
   };
 
+  // 共用:扫签名结果
   const onScanBindSignature = async (raw: string) => {
     if (!auth || !bindChallenge) return;
-    const trimmed = raw.trim();
-    if (!trimmed) {
-      message.error('签名二维码识别失败');
-      return;
-    }
+    if (!raw.trim()) { message.error('签名二维码识别失败'); return; }
     setBindQr4ScanLoading(true);
     try {
-      const payload = parseKeyringSignedPayload(trimmed, bindChallenge.challenge_id);
+      const payload = parseKeyringSignedPayload(raw.trim(), bindChallenge.challenge_id);
       setBindSignature(payload.signature);
       setBindScannerActive(false);
       stopBindScanner();
-      const userAddress = bindMode === 'bind_pubkey' ? bindNewPubkey.trim() : (bindTargetPubkey || '');
+      const userAddress = bindMode === 'bind_pubkey' ? scannedAddress.trim() : (bindTargetPubkey || '');
       const result = await citizenBind(auth, {
         mode: bindMode,
         user_address: userAddress,
@@ -137,13 +143,13 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
       onClose();
       await onBound();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '绑定失败';
-      message.error(msg);
+      message.error(err instanceof Error ? err.message : '绑定失败');
     } finally {
       setBindQr4ScanLoading(false);
     }
   };
 
+  // 扫码 effect
   useEffect(() => {
     if (!open || !bindScannerActive || !bindVideoRef.current) {
       stopBindScanner();
@@ -168,172 +174,174 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, bindScannerActive, bindStep]);
 
-  return (
-    <Modal
-      title={<span style={{ fontSize: 20, fontWeight: 600 }}>绑定身份</span>}
-      open={open}
-      footer={null}
-      onCancel={() => {
-        setBindScannerActive(false);
-        stopBindScanner();
-        onClose();
+  // 扫码窗口 UI
+  const scannerBox = (label: string) => (
+    <div
+      style={{
+        width: '84%', maxWidth: 320, aspectRatio: '1 / 1',
+        background: 'linear-gradient(145deg, #0f172a, #1e293b)',
+        borderRadius: 16, overflow: 'hidden',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position: 'relative', margin: '14px auto 12px',
+        border: '2px solid #334155', boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)',
       }}
-      destroyOnClose
-      width={520}
     >
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        {bindMode === 'bind_archive'
-          ? '模式：有账户绑档案（扫描 CPMS 档案二维码 → 签名验证 → 完成绑定）'
-          : '模式：有档案绑账户（输入新账户 → 签名验证 → 完成绑定）'}
-      </Typography.Paragraph>
-
-      {bindMode === 'bind_archive' && bindStep === 'scan_qr4' && (
-        <>
-          <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-            第一步：扫描 CPMS 档案二维码（QR4）
+      {[{ t: 8, l: 8, bt: true, bl: true, r: 'borderTopLeftRadius' },
+        { t: 8, r2: 8, bt: true, br: true, r: 'borderTopRightRadius' },
+        { b: 8, l: 8, bb: true, bl: true, r: 'borderBottomLeftRadius' },
+        { b: 8, r2: 8, bb: true, br: true, r: 'borderBottomRightRadius' },
+      ].map((c, i) => (
+        <div key={i} style={{
+          position: 'absolute', width: 16, height: 16, zIndex: 2,
+          ...(c.t !== undefined ? { top: c.t } : {}),
+          ...(c.b !== undefined ? { bottom: c.b } : {}),
+          ...(c.l !== undefined ? { left: c.l } : {}),
+          ...(c.r2 !== undefined ? { right: c.r2 } : {}),
+          ...(c.bt ? { borderTop: '2px solid #0d9488' } : {}),
+          ...(c.bb ? { borderBottom: '2px solid #0d9488' } : {}),
+          ...(c.bl ? { borderLeft: '2px solid #0d9488' } : {}),
+          ...(c.br ? { borderRight: '2px solid #0d9488' } : {}),
+          [c.r]: 4,
+        }} />
+      ))}
+      <video ref={bindVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+      {!bindScannerReady && (
+        <div
+          style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: bindScannerActive ? 'default' : 'pointer', userSelect: 'none' }}
+          onClick={() => { if (!bindScannerActive) onToggleBindScanner(); }}
+        >
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+          <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+            {bindScannerActive ? '摄像头初始化中...' : label}
           </Typography.Text>
-          <div
-            style={{
-              width: '84%',
-              maxWidth: 320,
-              aspectRatio: '1 / 1',
-              background: 'linear-gradient(145deg, #0f172a, #1e293b)',
-              borderRadius: 16,
-              overflow: 'hidden',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              position: 'relative',
-              margin: '14px auto 12px',
-              border: '2px solid #334155',
-              boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)',
-            }}
-          >
-            <div style={{ position: 'absolute', top: 8, left: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderTopLeftRadius: 4, zIndex: 2 }} />
-            <div style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderTopRightRadius: 4, zIndex: 2 }} />
-            <div style={{ position: 'absolute', bottom: 8, left: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderBottomLeftRadius: 4, zIndex: 2 }} />
-            <div style={{ position: 'absolute', bottom: 8, right: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderBottomRightRadius: 4, zIndex: 2 }} />
-            <video ref={bindVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
-            {!bindScannerReady && (
-              <div
-                style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: bindScannerActive ? 'default' : 'pointer', userSelect: 'none' }}
-                onClick={() => { if (!bindScannerActive) onToggleBindScanner(); }}
-              >
-                <QrcodeOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.25)' }} />
-                <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
-                  {bindScannerActive ? '摄像头初始化中...' : '点击扫描档案二维码'}
-                </Typography.Text>
-              </div>
-            )}
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <Button onClick={onToggleBindScanner} loading={bindQr4ScanLoading}>
-              {bindScannerActive ? '停止扫码' : '开启扫码'}
-            </Button>
-          </div>
-        </>
+        </div>
       )}
+    </div>
+  );
 
-      {bindMode === 'bind_pubkey' && bindStep === 'input_pubkey' && (
-        <>
-          <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-            第一步：输入新账户
-          </Typography.Text>
-          <Form layout="vertical">
-            <Form.Item label="记录ID">
-              <Input value={record?.id ?? ''} disabled />
-            </Form.Item>
-            <Form.Item label="档案号">
-              <Input value={record?.archive_no ?? ''} disabled />
-            </Form.Item>
-            <Form.Item label="SFID码">
-              <Input value={record?.sfid_code ?? ''} disabled />
-            </Form.Item>
-            <Form.Item label="新账户" required>
-              <Input
-                value={bindNewPubkey}
-                onChange={(e) => setBindNewPubkey(e.target.value)}
-                placeholder="请输入新账户（SS58 地址）"
-              />
-            </Form.Item>
-            <Button type="primary" onClick={onBindPubkeyNext} loading={bindChallengeLoading}>
-              下一步：生成签名挑战
-            </Button>
-          </Form>
-        </>
-      )}
+  return (
+    <>
+      <Modal
+        title={<span style={{ fontSize: 20, fontWeight: 600 }}>绑定身份</span>}
+        open={open}
+        footer={null}
+        onCancel={() => { setBindScannerActive(false); stopBindScanner(); onClose(); }}
+        destroyOnClose
+        width={520}
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+          {bindMode === 'bind_archive'
+            ? '模式：新账户绑档案（扫描 CPMS 档案二维码 → 签名验证 → 完成绑定）'
+            : '模式：旧档案绑新账户（扫描用户二维码 → 系统比对 → 签名验证 → 完成绑定）'}
+        </Typography.Paragraph>
 
-      {bindStep === 'sign_challenge' && bindChallenge && (
-        <>
-          <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-            第二步：用 公民 钱包扫码签名
-          </Typography.Text>
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
-            <QRCode value={bindChallenge.sign_request} size={260} color="#134e4a" />
-          </div>
-          <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
-            有效期至：{new Date(bindChallenge.expire_at * 1000).toLocaleTimeString()}
-          </Typography.Paragraph>
-          <div style={{ textAlign: 'center' }}>
-            <Button
-              type="primary"
-              onClick={() => {
-                setBindStep('scan_signature');
-                setBindScannerActive(true);
-              }}
-            >
-              下一步：扫描签名结果
-            </Button>
-          </div>
-        </>
-      )}
+        {/* ── 模式1:扫 CPMS QR4 ── */}
+        {bindMode === 'bind_archive' && bindStep === 'scan_qr4' && (
+          <>
+            <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+              第一步：扫描 CPMS 档案二维码（QR4）
+            </Typography.Text>
+            {scannerBox('点击扫描档案二维码')}
+            <div style={{ textAlign: 'center' }}>
+              <Button onClick={onToggleBindScanner} loading={bindQr4ScanLoading}>
+                {bindScannerActive ? '停止扫码' : '开启扫码'}
+              </Button>
+            </div>
+          </>
+        )}
 
-      {bindStep === 'scan_signature' && (
-        <>
-          <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-            第三步：扫描签名结果二维码
-          </Typography.Text>
-          <div
-            style={{
-              width: '84%',
-              maxWidth: 320,
-              aspectRatio: '1 / 1',
-              background: 'linear-gradient(145deg, #0f172a, #1e293b)',
-              borderRadius: 16,
-              overflow: 'hidden',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              position: 'relative',
-              margin: '14px auto 12px',
-              border: '2px solid #334155',
-              boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)',
-            }}
-          >
-            <div style={{ position: 'absolute', top: 8, left: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderTopLeftRadius: 4, zIndex: 2 }} />
-            <div style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderTopRightRadius: 4, zIndex: 2 }} />
-            <div style={{ position: 'absolute', bottom: 8, left: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderBottomLeftRadius: 4, zIndex: 2 }} />
-            <div style={{ position: 'absolute', bottom: 8, right: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderBottomRightRadius: 4, zIndex: 2 }} />
-            <video ref={bindVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
-            {!bindScannerReady && (
-              <div
-                style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: bindScannerActive ? 'default' : 'pointer', userSelect: 'none' }}
-                onClick={() => { if (!bindScannerActive) onToggleBindScanner(); }}
-              >
-                <QrcodeOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.25)' }} />
-                <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
-                  {bindScannerActive ? '摄像头初始化中...' : '点击扫描签名二维码'}
-                </Typography.Text>
-              </div>
-            )}
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <Button onClick={onToggleBindScanner} loading={bindQr4ScanLoading}>
-              {bindScannerActive ? '停止扫码' : '开启扫码'}
-            </Button>
-          </div>
-        </>
-      )}
-    </Modal>
+        {/* ── 模式2第一步:扫用户钱包二维码 ── */}
+        {bindMode === 'bind_pubkey' && bindStep === 'scan_user_qr' && (
+          <>
+            <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+              第一步：扫描用户钱包中的用户二维码
+            </Typography.Text>
+            <Form layout="vertical">
+              <Form.Item label="档案号">
+                <Input value={record?.archive_no ?? ''} disabled />
+              </Form.Item>
+              <Form.Item label="SFID码">
+                <Input value={record?.sfid_code ?? ''} disabled />
+              </Form.Item>
+            </Form>
+            <div style={{ textAlign: 'center' }}>
+              <Button type="primary" onClick={() => setScanAccountOpen(true)}>
+                扫描用户二维码
+              </Button>
+            </div>
+          </>
+        )}
+
+        {/* ── 模式2第二步:确认识别的地址 ── */}
+        {bindMode === 'bind_pubkey' && bindStep === 'confirm_address' && (
+          <>
+            <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+              第二步：确认用户账户并绑定
+            </Typography.Text>
+            <Form layout="vertical">
+              <Form.Item label="档案号">
+                <Input value={record?.archive_no ?? ''} disabled />
+              </Form.Item>
+              <Form.Item label="SFID码">
+                <Input value={record?.sfid_code ?? ''} disabled />
+              </Form.Item>
+              <Form.Item label="用户账户（扫码识别）">
+                <Input value={scannedAddress} disabled />
+              </Form.Item>
+            </Form>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <Button onClick={() => { setScannedAddress(''); setBindStep('scan_user_qr'); }}>
+                重新扫码
+              </Button>
+              <Button type="primary" onClick={onConfirmBind} loading={bindChallengeLoading}>
+                绑定
+              </Button>
+            </div>
+          </>
+        )}
+
+        {/* ── 共用:签名挑战二维码 ── */}
+        {bindStep === 'sign_challenge' && bindChallenge && (
+          <>
+            <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+              {bindMode === 'bind_archive' ? '第二步' : '第三步'}：用公民钱包扫码签名
+            </Typography.Text>
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+              <QRCode value={bindChallenge.sign_request} size={260} color="#134e4a" />
+            </div>
+            <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
+              有效期至：{new Date(bindChallenge.expire_at * 1000).toLocaleTimeString()}
+            </Typography.Paragraph>
+            <div style={{ textAlign: 'center' }}>
+              <Button type="primary" onClick={() => { setBindStep('scan_signature'); setBindScannerActive(true); }}>
+                下一步：扫描签名结果
+              </Button>
+            </div>
+          </>
+        )}
+
+        {/* ── 共用:扫签名结果 ── */}
+        {bindStep === 'scan_signature' && (
+          <>
+            <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+              {bindMode === 'bind_archive' ? '第三步' : '第四步'}：扫描签名结果二维码
+            </Typography.Text>
+            {scannerBox('点击扫描签名二维码')}
+            <div style={{ textAlign: 'center' }}>
+              <Button onClick={onToggleBindScanner} loading={bindQr4ScanLoading}>
+                {bindScannerActive ? '停止扫码' : '开启扫码'}
+              </Button>
+            </div>
+          </>
+        )}
+      </Modal>
+
+      {/* 模式2:扫用户二维码弹窗(复用 ScanAccountModal) */}
+      <ScanAccountModal
+        open={scanAccountOpen}
+        onClose={() => setScanAccountOpen(false)}
+        onResolved={onUserAddressResolved}
+      />
+    </>
   );
 }

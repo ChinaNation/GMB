@@ -362,6 +362,7 @@ pub(crate) async fn create_institution(
             city_code,
             institution_code: institution_code.clone(),
             sub_type: validated_sub_type.clone(),
+            sfid_finalized: true,
             created_by: ctx.admin_pubkey.clone(),
             created_at: Utc::now(),
         };

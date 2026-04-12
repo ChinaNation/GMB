@@ -16,6 +16,7 @@ mod login;
 mod operator_admin;
 mod qr;
 mod rsa_blind_client;
+mod ss58;
 mod super_admin;
 
 #[derive(Clone)]
