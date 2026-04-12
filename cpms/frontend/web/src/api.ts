@@ -2,7 +2,7 @@
 
 import type {
   ApiResponse, AdminUser, Archive, ChallengeData, VerifyData,
-  InstallStatus, QrPayload, QrPrintRecord,
+  InstallStatus,
 } from './types';
 
 function getToken(): string | null {
@@ -20,6 +20,12 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(url, { ...options, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }));
+    // token 过期自动退出登录
+    if (res.status === 401 && token) {
+      localStorage.removeItem('cpms_token');
+      localStorage.removeItem('cpms_user');
+      window.location.href = '/login';
+    }
     throw new Error(err.message || `HTTP ${res.status}`);
   }
   return res.json();
@@ -79,11 +85,20 @@ export const deleteOperator = (id: string) => del<null>(`/api/v1/admin/operators
 export const updateCitizenStatus = (archive_id: string, citizen_status: string) =>
   put<{ archive_id: string; citizen_status: string }>(`/api/v1/archives/${archive_id}/citizen-status`, { citizen_status });
 
+// ── 地址管理 ──
+export const listTowns = () => get<{ town_code: string; town_name: string }[]>('/api/v1/address/towns');
+export const listVillages = (town_code: string) => get<{ village_id: string; town_code: string; village_name: string }[]>(`/api/v1/address/villages?town_code=${encodeURIComponent(town_code)}`);
+export const createTown = (town_code: string, town_name: string) => post<{ town_code: string; town_name: string }>('/api/v1/address/towns', { town_code, town_name });
+export const deleteTown = (code: string) => del<null>(`/api/v1/address/towns/${code}`);
+export const createVillage = (town_code: string, village_name: string) => post<{ village_id: string; town_code: string; village_name: string }>('/api/v1/address/villages', { town_code, village_name });
+export const deleteVillage = (id: string) => del<null>(`/api/v1/address/villages/${id}`);
+
 // ── 操作员 ──
 export const createArchive = (body: {
   province_code: string; city_code: string; full_name: string;
   birth_date: string; gender_code: string; height_cm?: number;
-  passport_no: string; citizen_status?: string;
+  town_code?: string; village_id?: string; address?: string;
+  citizen_status?: string; voting_eligible?: boolean;
 }) => post<{ archive_id: string; archive_no: string }>('/api/v1/archives', body);
 export const listArchives = (params?: { full_name?: string; page?: number; page_size?: number }) => {
   const qs = new URLSearchParams();
@@ -91,13 +106,11 @@ export const listArchives = (params?: { full_name?: string; page?: number; page_
   if (params?.page) qs.set('page', String(params.page));
   if (params?.page_size) qs.set('page_size', String(params.page_size));
   const q = qs.toString();
-  return get<{ archives: Archive[]; total: number }>(`/api/v1/archives${q ? '?' + q : ''}`);
+  return get<{ items: Archive[]; total: number }>(`/api/v1/archives${q ? '?' + q : ''}`);
 };
 export const getArchive = (id: string) => get<Archive>(`/api/v1/archives/${id}`);
-export const generateQr = (archive_id: string) =>
-  post<{ qr_payload: QrPayload; qr_content: string }>(`/api/v1/archives/${archive_id}/qr/generate`);
-export const printQr = (archive_id: string) =>
-  post<QrPrintRecord>(`/api/v1/archives/${archive_id}/qr/print`);
+export const updateArchive = (id: string, body: Record<string, unknown>) =>
+  put<Archive>(`/api/v1/archives/${id}`, body);
 
 // ── 健康检查 ──
 export const health = () => get<{ status: string }>('/api/v1/health');

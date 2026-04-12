@@ -1,6 +1,18 @@
+pub struct VillageCode {
+    pub name: &'static str,
+    pub code: &'static str,
+}
+
+pub struct TownCode {
+    pub name: &'static str,
+    pub code: &'static str,
+    pub villages: &'static [VillageCode],
+}
+
 pub struct CityCode {
     pub name: &'static str,
     pub code: &'static str,
+    pub towns: &'static [TownCode],
 }
 
 pub struct ProvinceCode {

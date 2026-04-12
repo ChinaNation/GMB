@@ -35,8 +35,13 @@ export interface Archive {
   gender_code: string;
   height_cm: number | null;
   passport_no: string;
+  town_code: string;
+  village_id: string;
+  address: string;
   status: string;
   citizen_status: string;
+  voting_eligible: boolean;
+  qr4_payload: string;
   created_at: number;
   updated_at: number;
 }

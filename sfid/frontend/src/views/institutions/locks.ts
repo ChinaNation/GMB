@@ -23,6 +23,29 @@ export interface InstitutionFieldLocks {
   modalTitle: string;
 }
 
+// ── A3 类型中文映射 ──
+export const A3_LABEL: Record<string, string> = {
+  GFR: '公法人',
+  SFR: '私法人',
+  FFR: '非法人',
+  GMR: '公民人',
+  ZNR: '自然人',
+  ZRR: '智能人',
+};
+
+// ── 机构代码中文映射 ──
+export const INSTITUTION_CODE_LABEL: Record<string, string> = {
+  ZF: '政府',
+  LF: '立法院',
+  SF: '司法院',
+  JC: '监察院',
+  JY: '教育委员会',
+  CB: '储备委员会',
+  CH: '储备银行',
+  ZG: '中国',
+  TG: '他国',
+};
+
 // ── 公权机构可选机构代码 ──
 const GFR_NONPROFIT_GOV: ChoiceItem[] = [
   { value: 'ZF', label: '政府 (ZF)' },

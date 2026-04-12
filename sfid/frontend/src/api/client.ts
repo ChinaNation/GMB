@@ -61,10 +61,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
 
-  // ── 401 统一拦截：token 失效 → 触发登出，防抖只触发一次 ──
-  if (resp.status === 401 && _onUnauthorized && !_unauthorizedFired) {
-    _unauthorizedFired = true;
-    _onUnauthorized();
+  // ── 401 统一拦截：token 失效 → 触发登出，不再向调用方抛错(防止双重提示) ──
+  if (resp.status === 401) {
+    if (_onUnauthorized && !_unauthorizedFired) {
+      _unauthorizedFired = true;
+      _onUnauthorized();
+    }
+    // 静默返回空对象,调用方不会触发 catch
+    return undefined as unknown as T;
   }
 
   if (!resp.ok || !body || body.code !== 0) {
@@ -206,6 +210,7 @@ export type CpmsSiteRow = {
   institution_code?: string;
   institution_name?: string;
   qr1_payload?: string;
+  qr3_payload?: string | null;
   created_by: string;
   created_by_name?: string;
   created_at: string;
@@ -635,6 +640,20 @@ export async function disableCpmsKeys(
       ...adminHeaders(auth)
     },
     body: JSON.stringify({ reason })
+  });
+}
+
+export async function enableCpmsKeys(
+  auth: AdminAuth,
+  siteSfid: string,
+): Promise<CpmsSiteRow> {
+  return request<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/enable`, {
+    method: 'PUT',
+    headers: {
+      'content-type': 'application/json',
+      ...adminHeaders(auth)
+    },
+    body: JSON.stringify({})
   });
 }
 

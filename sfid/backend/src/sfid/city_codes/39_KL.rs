@@ -1,44 +1,111 @@
-use super::CityCode;
+use super::{CityCode, TownCode, VillageCode};
+
+static TOWNS_KL_001: [TownCode; 11] = [
+    TownCode { name: "昆仑路街道", code: "001", villages: &[VillageCode { name: "博爱巷社区居委会", code: "001" }, VillageCode { name: "育红巷社区居委会", code: "002" }, VillageCode { name: "建兴巷社区居委会", code: "003" }, VillageCode { name: "盐湖社区居委会", code: "004" }, VillageCode { name: "宇宙巷社区居委会", code: "005" }, VillageCode { name: "星园路社区居委会", code: "006" }, VillageCode { name: "体育场社区居委会", code: "007" }, VillageCode { name: "海湖社区居委会", code: "008" }] },
+    TownCode { name: "黄河路街道", code: "002", villages: &[VillageCode { name: "铁西社区居委会", code: "001" }, VillageCode { name: "铁东社区居委会", code: "002" }, VillageCode { name: "石油社区居委会", code: "003" }, VillageCode { name: "园艺社区居委会", code: "004" }, VillageCode { name: "团结湖路社区委员会", code: "005" }] },
+    TownCode { name: "金峰路街道", code: "003", villages: &[VillageCode { name: "金北社区居委会", code: "001" }, VillageCode { name: "杨树巷社区居委会", code: "002" }, VillageCode { name: "昆仑北路社区居委会", code: "003" }, VillageCode { name: "金南社区居委会", code: "004" }, VillageCode { name: "园林社区居委会", code: "005" }] },
+    TownCode { name: "河西街道", code: "004", villages: &[VillageCode { name: "望柳庄社区居委会", code: "001" }, VillageCode { name: "建安社区居委会", code: "002" }, VillageCode { name: "八一社区居委会", code: "003" }, VillageCode { name: "小岛社区居委会", code: "004" }, VillageCode { name: "河滩社区居委会", code: "005" }, VillageCode { name: "北郊社区居委会", code: "006" }] },
+    TownCode { name: "西藏路街道", code: "005", villages: &[VillageCode { name: "青藏路社区居委会", code: "001" }, VillageCode { name: "光明路社区居委会", code: "002" }, VillageCode { name: "援藏巷社区居委会", code: "003" }, VillageCode { name: "兴业路社区委员会", code: "004" }, VillageCode { name: "长江路社区委员会", code: "005" }] },
+    TownCode { name: "郭勒木德镇", code: "006", villages: &[VillageCode { name: "胡杨城镇社区居委会", code: "001" }, VillageCode { name: "中村委会", code: "002" }, VillageCode { name: "众祥村委会", code: "003" }, VillageCode { name: "西村委会", code: "004" }, VillageCode { name: "小岛村委会", code: "005" }, VillageCode { name: "宝库村委会", code: "006" }, VillageCode { name: "城北村委会", code: "007" }, VillageCode { name: "盐桥村委会", code: "008" }, VillageCode { name: "新华村委会", code: "009" }, VillageCode { name: "新乐村委会", code: "010" }, VillageCode { name: "乐苑村委会", code: "011" }, VillageCode { name: "民康村委会", code: "012" }, VillageCode { name: "富源村委会", code: "013" }, VillageCode { name: "阿拉尔牧委会", code: "014" }, VillageCode { name: "清水河牧委会", code: "015" }, VillageCode { name: "拖拉海牧委会", code: "016" }, VillageCode { name: "鱼水河牧委会", code: "017" }, VillageCode { name: "秀沟牧委会", code: "018" }, VillageCode { name: "红柳村委会", code: "019" }, VillageCode { name: "和谐村委会", code: "020" }, VillageCode { name: "中源村委会", code: "021" }, VillageCode { name: "西大滩牧委会", code: "022" }] },
+    TownCode { name: "唐古拉镇", code: "007", villages: &[VillageCode { name: "多尔玛牧委会", code: "001" }, VillageCode { name: "格日罗牧委会", code: "002" }, VillageCode { name: "措里玛牧委会", code: "003" }, VillageCode { name: "拉智牧委会", code: "004" }, VillageCode { name: "要盖牧委会", code: "005" }, VillageCode { name: "努日巴牧委会", code: "006" }, VillageCode { name: "长江源村委会", code: "007" }] },
+    TownCode { name: "大格勒乡", code: "008", villages: &[VillageCode { name: "龙羊村委会", code: "001" }, VillageCode { name: "查那村委会", code: "002" }, VillageCode { name: "菊花村委会", code: "003" }, VillageCode { name: "新庄村委会", code: "004" }] },
+    TownCode { name: "乌图美仁乡", code: "009", villages: &[VillageCode { name: "柴开牧委会", code: "001" }, VillageCode { name: "俄日腾牧委会", code: "002" }, VillageCode { name: "那棱格勒牧委会", code: "003" }, VillageCode { name: "察汗乌苏牧委会", code: "004" }, VillageCode { name: "哈夏图牧委会", code: "005" }, VillageCode { name: "敖包图牧委会", code: "006" }, VillageCode { name: "巴勒格图牧委会", code: "007" }, VillageCode { name: "乌兰美仁牧委会", code: "008" }, VillageCode { name: "白力其尔牧委会", code: "009" }, VillageCode { name: "祥和村委会", code: "010" }, VillageCode { name: "安康村委会", code: "011" }, VillageCode { name: "团结村委会", code: "012" }, VillageCode { name: "幸福村委会", code: "013" }] },
+    TownCode { name: "察尔汗工行委", code: "010", villages: &[VillageCode { name: "察尔汗路西社区居委会", code: "001" }, VillageCode { name: "察尔汗路东社区居委会", code: "002" }] },
+    TownCode { name: "格尔木农垦有限公司", code: "011", villages: &[VillageCode { name: "河东农工商公司生活区", code: "001" }, VillageCode { name: "河西农工商公司生活区", code: "002" }] },
+];
+
+static TOWNS_KL_002: [TownCode; 3] = [
+    TownCode { name: "花土沟镇", code: "001", villages: &[VillageCode { name: "团结路社区居委会", code: "001" }, VillageCode { name: "平安巷社区居委会", code: "002" }, VillageCode { name: "昆仑路社区居委会", code: "003" }, VillageCode { name: "油龙路社区居委会", code: "004" }, VillageCode { name: "大浪滩社区居委会", code: "005" }, VillageCode { name: "金山路社区居委会", code: "006" }, VillageCode { name: "岗茨牧委会", code: "007" }, VillageCode { name: "莫河尔布鲁克牧委会", code: "008" }, VillageCode { name: "代尔森牧委会", code: "009" }] },
+    TownCode { name: "茫崖镇", code: "002", villages: &[VillageCode { name: "昆仑路西社区居委会", code: "001" }, VillageCode { name: "昆仑路东社区居委会", code: "002" }] },
+    TownCode { name: "冷湖镇", code: "003", villages: &[VillageCode { name: "兴湖街社区居委会", code: "001" }, VillageCode { name: "油田东五村居民委员会", code: "002" }, VillageCode { name: "油田东二村居民委员会", code: "003" }, VillageCode { name: "油田东一村居民委员会", code: "004" }, VillageCode { name: "油田跃进居民委员会", code: "005" }, VillageCode { name: "油田新一区居民委员会", code: "006" }, VillageCode { name: "油田新二区居民委员会", code: "007" }, VillageCode { name: "油田新三村居民委员会", code: "008" }, VillageCode { name: "油田东坪居民委员会", code: "009" }] },
+];
+
+static TOWNS_KL_003: [TownCode; 12] = [
+    TownCode { name: "结古街道", code: "001", villages: &[VillageCode { name: "民主路社区居委会", code: "001" }, VillageCode { name: "日吾格社区居委会", code: "002" }, VillageCode { name: "格下社区居委会", code: "003" }, VillageCode { name: "折龙达社区居委会", code: "004" }, VillageCode { name: "团结社区居委会", code: "005" }, VillageCode { name: "仲多村委会", code: "006" }, VillageCode { name: "萨果贡村委会", code: "007" }, VillageCode { name: "杂从考村委会", code: "008" }] },
+    TownCode { name: "扎西科街道", code: "002", villages: &[VillageCode { name: "德尼格社区居委会", code: "001" }, VillageCode { name: "德秀格社区居委会", code: "002" }, VillageCode { name: "扎西科社区居委会", code: "003" }, VillageCode { name: "西同社区居委会", code: "004" }, VillageCode { name: "果青村委会", code: "005" }, VillageCode { name: "甘达村委会", code: "006" }] },
+    TownCode { name: "西杭街道", code: "003", villages: &[VillageCode { name: "西杭社区居委会", code: "001" }, VillageCode { name: "胜利路社区居委会", code: "002" }, VillageCode { name: "扎西大通社区居委会", code: "003" }, VillageCode { name: "禅古村委会", code: "004" }, VillageCode { name: "扎西大通村委会", code: "005" }] },
+    TownCode { name: "新寨街道", code: "004", villages: &[VillageCode { name: "琼龙社区居委会", code: "001" }, VillageCode { name: "代莫社区居委会", code: "002" }, VillageCode { name: "当代路社区居委会", code: "003" }, VillageCode { name: "新寨社区居委会", code: "004" }, VillageCode { name: "新寨村委会", code: "005" }, VillageCode { name: "代格村委会", code: "006" }, VillageCode { name: "卡孜村委会", code: "007" }, VillageCode { name: "当代村委会", code: "008" }] },
+    TownCode { name: "隆宝镇", code: "005", villages: &[VillageCode { name: "隆宝社区居委会", code: "001" }, VillageCode { name: "杂娘村委会", code: "002" }, VillageCode { name: "措多村委会", code: "003" }, VillageCode { name: "措桑村委会", code: "004" }, VillageCode { name: "措美村委会", code: "005" }, VillageCode { name: "君青村委会", code: "006" }, VillageCode { name: "代青村委会", code: "007" }] },
+    TownCode { name: "下拉秀镇", code: "006", villages: &[VillageCode { name: "下拉秀社区居委会", code: "001" }, VillageCode { name: "白玛村委会", code: "002" }, VillageCode { name: "拉日村委会", code: "003" }, VillageCode { name: "叶吉村委会", code: "004" }, VillageCode { name: "钻多村委会", code: "005" }, VillageCode { name: "尕玛村委会", code: "006" }, VillageCode { name: "高强村委会", code: "007" }, VillageCode { name: "塔玛村委会", code: "008" }, VillageCode { name: "当卡村委会", code: "009" }, VillageCode { name: "苏鲁村委会", code: "010" }] },
+    TownCode { name: "仲达乡", code: "007", villages: &[VillageCode { name: "电达村委会", code: "001" }, VillageCode { name: "尕拉村委会", code: "002" }, VillageCode { name: "歇格村委会", code: "003" }, VillageCode { name: "塘达村委会", code: "004" }] },
+    TownCode { name: "巴塘乡", code: "008", villages: &[VillageCode { name: "铁力角村委会", code: "001" }, VillageCode { name: "上巴塘村委会", code: "002" }, VillageCode { name: "下巴塘村委会", code: "003" }, VillageCode { name: "老叶村委会", code: "004" }, VillageCode { name: "岔来村委会", code: "005" }, VillageCode { name: "相古村委会", code: "006" }, VillageCode { name: "当头村委会", code: "007" }] },
+    TownCode { name: "小苏莽乡", code: "009", villages: &[VillageCode { name: "西扎村委会", code: "001" }, VillageCode { name: "本江村委会", code: "002" }, VillageCode { name: "扎秋村委会", code: "003" }, VillageCode { name: "多龙村委会", code: "004" }, VillageCode { name: "让多村委会", code: "005" }, VillageCode { name: "协新村委会", code: "006" }, VillageCode { name: "江西村委会", code: "007" }, VillageCode { name: "草格村委会", code: "008" }, VillageCode { name: "莫地村委会", code: "009" }] },
+    TownCode { name: "上拉秀乡", code: "010", villages: &[VillageCode { name: "日玛村委会", code: "001" }, VillageCode { name: "多拉村委会", code: "002" }, VillageCode { name: "沙宁村委会", code: "003" }, VillageCode { name: "加桥村委会", code: "004" }, VillageCode { name: "曲新村委会", code: "005" }, VillageCode { name: "玛龙村委会", code: "006" }, VillageCode { name: "布罗村委会", code: "007" }] },
+    TownCode { name: "安冲乡", code: "011", villages: &[VillageCode { name: "拉则村委会", code: "001" }, VillageCode { name: "结拉村委会", code: "002" }, VillageCode { name: "布让村委会", code: "003" }, VillageCode { name: "叶吉村委会", code: "004" }, VillageCode { name: "来叶村委会", code: "005" }] },
+    TownCode { name: "哈秀乡", code: "012", villages: &[VillageCode { name: "甘宁村委会", code: "001" }, VillageCode { name: "岗日村委会", code: "002" }, VillageCode { name: "哇龙村委会", code: "003" }, VillageCode { name: "云塔村委会", code: "004" }] },
+];
+
+static TOWNS_KL_004: [TownCode; 8] = [
+    TownCode { name: "萨呼腾镇", code: "001", villages: &[VillageCode { name: "温琼滩城南社区居委会", code: "001" }, VillageCode { name: "然子滩城北居委会", code: "002" }, VillageCode { name: "夏果滩居委会", code: "003" }, VillageCode { name: "萨呼腾社区居委会", code: "004" }, VillageCode { name: "加索滩上滩社区居委会", code: "005" }, VillageCode { name: "然子滩城南居委会", code: "006" }, VillageCode { name: "温琼滩城北社区居委会", code: "007" }, VillageCode { name: "加索滩下滩社区居委会", code: "008" }, VillageCode { name: "易地搬迁社区居民委员会", code: "009" }, VillageCode { name: "吉乃滩社区居民委员会", code: "010" }, VillageCode { name: "沙青村民委员会", code: "011" }, VillageCode { name: "多那村民委员会", code: "012" }, VillageCode { name: "扎沟村民委员会", code: "013" }, VillageCode { name: "闹从村民委员会", code: "014" }] },
+    TownCode { name: "昂赛乡", code: "002", villages: &[VillageCode { name: "热情村民委员会", code: "001" }, VillageCode { name: "苏绕村民委员会", code: "002" }, VillageCode { name: "年都村民委员会", code: "003" }] },
+    TownCode { name: "结多乡", code: "003", villages: &[VillageCode { name: "巴麻村民委员会", code: "001" }, VillageCode { name: "达阿村民委员会", code: "002" }, VillageCode { name: "占尕村民委员会", code: "003" }, VillageCode { name: "优多村民委员会", code: "004" }, VillageCode { name: "优美村民委员会", code: "005" }] },
+    TownCode { name: "阿多乡", code: "004", villages: &[VillageCode { name: "多加村民委员会", code: "001" }, VillageCode { name: "吉乃村民委员会", code: "002" }, VillageCode { name: "瓦河村民委员会", code: "003" }, VillageCode { name: "朴克村民委员会", code: "004" }] },
+    TownCode { name: "苏鲁乡", code: "005", villages: &[VillageCode { name: "新云村民委员会", code: "001" }, VillageCode { name: "山荣村民委员会", code: "002" }, VillageCode { name: "多晓村民委员会", code: "003" }] },
+    TownCode { name: "查旦乡", code: "006", villages: &[VillageCode { name: "达谷村民委员会", code: "001" }, VillageCode { name: "跃尼村民委员会", code: "002" }, VillageCode { name: "齐荣村民委员会", code: "003" }, VillageCode { name: "巴青村民委员会", code: "004" }] },
+    TownCode { name: "莫云乡", code: "007", villages: &[VillageCode { name: "巴阳村民委员会", code: "001" }, VillageCode { name: "达英村民委员会", code: "002" }, VillageCode { name: "格云村民委员会", code: "003" }, VillageCode { name: "结绕村民委员会", code: "004" }] },
+    TownCode { name: "扎青乡", code: "008", villages: &[VillageCode { name: "地青村民委员会", code: "001" }, VillageCode { name: "格赛村民委员会", code: "002" }, VillageCode { name: "昂闹村民委员会", code: "003" }, VillageCode { name: "达清村民委员会", code: "004" }] },
+];
+
+static TOWNS_KL_005: [TownCode; 7] = [
+    TownCode { name: "称文镇", code: "001", villages: &[VillageCode { name: "卡安社区", code: "001" }, VillageCode { name: "周均社区", code: "002" }, VillageCode { name: "诺布愣社区", code: "003" }, VillageCode { name: "查拉沟社区", code: "004" }, VillageCode { name: "宋当村委会", code: "005" }, VillageCode { name: "上庄村委会", code: "006" }, VillageCode { name: "下庄村委会", code: "007" }, VillageCode { name: "白龙村委会", code: "008" }, VillageCode { name: "岗茸村委会", code: "009" }, VillageCode { name: "拉贡村委会", code: "010" }, VillageCode { name: "赛河村委会", code: "011" }, VillageCode { name: "阿多村委会", code: "012" }, VillageCode { name: "者贝村委会", code: "013" }, VillageCode { name: "雪吾村委会", code: "014" }, VillageCode { name: "芒查村委会", code: "015" }] },
+    TownCode { name: "歇武镇", code: "002", villages: &[VillageCode { name: "巴庆社区", code: "001" }, VillageCode { name: "歇武村委会", code: "002" }, VillageCode { name: "阿卓茸巴村委会", code: "003" }, VillageCode { name: "直门达村委会", code: "004" }, VillageCode { name: "当巴村委会", code: "005" }, VillageCode { name: "牧业村委会", code: "006" }, VillageCode { name: "上赛巴村委会", code: "007" }, VillageCode { name: "下赛巴村委会", code: "008" }] },
+    TownCode { name: "扎朵镇", code: "003", villages: &[VillageCode { name: "泥玛龙沟社区", code: "001" }, VillageCode { name: "巴格村委会", code: "002" }, VillageCode { name: "治多村委会", code: "003" }, VillageCode { name: "直美村委会", code: "004" }, VillageCode { name: "宗青村委会", code: "005" }, VillageCode { name: "才迪村委会", code: "006" }, VillageCode { name: "达龙村委会", code: "007" }] },
+    TownCode { name: "清水河镇", code: "004", villages: &[VillageCode { name: "尼玛隆社区", code: "001" }, VillageCode { name: "扎哈村委会", code: "002" }, VillageCode { name: "贝奔村委会", code: "003" }, VillageCode { name: "文措村委会", code: "004" }, VillageCode { name: "普桑村委会", code: "005" }, VillageCode { name: "扎麻村委会", code: "006" }, VillageCode { name: "尕青村委会", code: "007" }, VillageCode { name: "中卡村委会", code: "008" }] },
+    TownCode { name: "珍秦镇", code: "005", villages: &[VillageCode { name: "索南岭社区", code: "001" }, VillageCode { name: "扎玛村（一村）委会", code: "002" }, VillageCode { name: "査玛村（二村）委会", code: "003" }, VillageCode { name: "赛通村（三村）委会", code: "004" }, VillageCode { name: "曲庆村（四村）委会", code: "005" }, VillageCode { name: "直庆村（五村）委会", code: "006" }, VillageCode { name: "色然村（六村）委会", code: "007" }, VillageCode { name: "忠宗村（七村）委会", code: "008" }, VillageCode { name: "措龙村（八村）委会", code: "009" }, VillageCode { name: "丽庆村（九村）委会", code: "010" }, VillageCode { name: "乐荣村（十村)委会", code: "011" }, VillageCode { name: "向阳村（十一村）委会", code: "012" }] },
+    TownCode { name: "尕朵乡", code: "006", villages: &[VillageCode { name: "卡龙村委会", code: "001" }, VillageCode { name: "卡吉村委会", code: "002" }, VillageCode { name: "科玛村委会", code: "003" }, VillageCode { name: "岗由村委会", code: "004" }, VillageCode { name: "布由村委会", code: "005" }, VillageCode { name: "卓木其村委会", code: "006" }, VillageCode { name: "吾云达村委会", code: "007" }, VillageCode { name: "吉新村委会", code: "008" }] },
+    TownCode { name: "拉布乡", code: "007", villages: &[VillageCode { name: "拉司通村委会", code: "001" }, VillageCode { name: "吾海村委会", code: "002" }, VillageCode { name: "郭吾村委会", code: "003" }, VillageCode { name: "兰达村委会", code: "004" }, VillageCode { name: "达哇村委会", code: "005" }, VillageCode { name: "德达村委会", code: "006" }, VillageCode { name: "帮布村委会", code: "007" }] },
+];
+
+static TOWNS_KL_006: [TownCode; 6] = [
+    TownCode { name: "加吉博洛格镇", code: "001", villages: &[VillageCode { name: "下社区居委会", code: "001" }, VillageCode { name: "治渠街居委会", code: "002" }, VillageCode { name: "上社区居委会", code: "003" }, VillageCode { name: "珠姆街居委会", code: "004" }, VillageCode { name: "曲那滩居委会", code: "005" }, VillageCode { name: "西顺根夏居委会", code: "006" }, VillageCode { name: "日青村委会", code: "007" }, VillageCode { name: "改查村委会", code: "008" }] },
+    TownCode { name: "索加乡", code: "002", villages: &[VillageCode { name: "当曲村委会", code: "001" }, VillageCode { name: "牙曲村委会", code: "002" }, VillageCode { name: "君曲村委会", code: "003" }, VillageCode { name: "莫曲村委会", code: "004" }] },
+    TownCode { name: "扎河乡", code: "003", villages: &[VillageCode { name: "治赛村委会", code: "001" }, VillageCode { name: "口前村委会", code: "002" }, VillageCode { name: "大旺村委会", code: "003" }, VillageCode { name: "马赛村委会", code: "004" }] },
+    TownCode { name: "多彩乡", code: "004", villages: &[VillageCode { name: "达生村委会", code: "001" }, VillageCode { name: "当江荣村委会", code: "002" }, VillageCode { name: "拉日村委会", code: "003" }, VillageCode { name: "聂恰村委会", code: "004" }] },
+    TownCode { name: "治渠乡", code: "005", villages: &[VillageCode { name: "江庆村委会", code: "001" }, VillageCode { name: "同卡村委会", code: "002" }, VillageCode { name: "治加村委会", code: "003" }] },
+    TownCode { name: "立新乡", code: "006", villages: &[VillageCode { name: "扎西村委会", code: "001" }, VillageCode { name: "岗查村委会", code: "002" }, VillageCode { name: "叶青村委会", code: "003" }] },
+];
+
+static TOWNS_KL_007: [TownCode; 10] = [
+    TownCode { name: "香达镇", code: "001", villages: &[VillageCode { name: "智茶卡社区居委会", code: "001" }, VillageCode { name: "茶卡塘社区居委会", code: "002" }, VillageCode { name: "央龙卡社区居委会", code: "003" }, VillageCode { name: "格东涌社区居委会", code: "004" }, VillageCode { name: "塘萨涌社区居委会", code: "005" }, VillageCode { name: "萨玛那社区居委会", code: "006" }, VillageCode { name: "闹吾拉泽社区居委会", code: "007" }, VillageCode { name: "扎西塘社区居委会", code: "008" }, VillageCode { name: "巴米村委会", code: "009" }, VillageCode { name: "青土村委会", code: "010" }, VillageCode { name: "东才西村委会", code: "011" }, VillageCode { name: "拉宗村委会", code: "012" }, VillageCode { name: "大桥村委会", code: "013" }, VillageCode { name: "江卡村委会", code: "014" }, VillageCode { name: "砍达村委会", code: "015" }, VillageCode { name: "多昌村委会", code: "016" }, VillageCode { name: "冷日村委会", code: "017" }, VillageCode { name: "前买村委会", code: "018" }, VillageCode { name: "前多村委会", code: "019" }, VillageCode { name: "香达村委会", code: "020" }] },
+    TownCode { name: "白扎乡", code: "002", villages: &[VillageCode { name: "吉沙村委会", code: "001" }, VillageCode { name: "东帕村委会", code: "002" }, VillageCode { name: "也巴村委会", code: "003" }, VillageCode { name: "潘洪村委会", code: "004" }, VillageCode { name: "生达村委会", code: "005" }, VillageCode { name: "东日村委会", code: "006" }, VillageCode { name: "查秀村委会", code: "007" }, VillageCode { name: "白扎村委会", code: "008" }, VillageCode { name: "巴麦村委会", code: "009" }, VillageCode { name: "卡那村委会", code: "010" }] },
+    TownCode { name: "吉曲乡", code: "003", villages: &[VillageCode { name: "外户卡村委会", code: "001" }, VillageCode { name: "瓦堡村委会", code: "002" }, VillageCode { name: "多改村委会", code: "003" }, VillageCode { name: "山荣村委会", code: "004" }, VillageCode { name: "改多村委会", code: "005" }, VillageCode { name: "瓦江村委会", code: "006" }, VillageCode { name: "江麻村委会", code: "007" }, VillageCode { name: "巴沙村委会", code: "008" }, VillageCode { name: "瓦卡村委会", code: "009" }, VillageCode { name: "热多村委会", code: "010" }, VillageCode { name: "热买村委会", code: "011" }] },
+    TownCode { name: "娘拉乡", code: "004", villages: &[VillageCode { name: "娘买村委会", code: "001" }, VillageCode { name: "多伦多村委会", code: "002" }, VillageCode { name: "娘多村委会", code: "003" }, VillageCode { name: "上拉村委会", code: "004" }, VillageCode { name: "下拉村委会", code: "005" }] },
+    TownCode { name: "毛庄乡", code: "005", villages: &[VillageCode { name: "麻永村委会", code: "001" }, VillageCode { name: "赛吾村委会", code: "002" }, VillageCode { name: "孜荣村委会", code: "003" }, VillageCode { name: "孜多村委会", code: "004" }, VillageCode { name: "孜买村委会", code: "005" }] },
+    TownCode { name: "觉拉乡", code: "006", villages: &[VillageCode { name: "那索尼村委会", code: "001" }, VillageCode { name: "布卫村委会", code: "002" }, VillageCode { name: "交江尼村委会", code: "003" }, VillageCode { name: "肖尚村委会", code: "004" }, VillageCode { name: "卡永尼村委会", code: "005" }, VillageCode { name: "四红村委会", code: "006" }, VillageCode { name: "尕少村委会", code: "007" }] },
+    TownCode { name: "东坝乡", code: "007", villages: &[VillageCode { name: "果永村委会", code: "001" }, VillageCode { name: "吉塞村委会", code: "002" }, VillageCode { name: "尤达村委会", code: "003" }, VillageCode { name: "热拉村委会", code: "004" }, VillageCode { name: "尕买村委会", code: "005" }] },
+    TownCode { name: "尕羊乡", code: "008", villages: &[VillageCode { name: "茶滩村委会", code: "001" }, VillageCode { name: "麦多村委会", code: "002" }, VillageCode { name: "麦买村委会", code: "003" }, VillageCode { name: "色青村委会", code: "004" }] },
+    TownCode { name: "吉尼赛乡", code: "009", villages: &[VillageCode { name: "拉翁村委会", code: "001" }, VillageCode { name: "瓦左村委会", code: "002" }, VillageCode { name: "麦曲村委会", code: "003" }, VillageCode { name: "吉赖村委会", code: "004" }] },
+    TownCode { name: "着晓乡", code: "010", villages: &[VillageCode { name: "巴尕村委会", code: "001" }, VillageCode { name: "茶哈村委会", code: "002" }, VillageCode { name: "由涌村委会", code: "003" }, VillageCode { name: "班多村委会", code: "004" }, VillageCode { name: "焦西村委会", code: "005" }, VillageCode { name: "尖座村委会", code: "006" }] },
+];
+
+static TOWNS_KL_008: [TownCode; 6] = [
+    TownCode { name: "约改镇", code: "001", villages: &[VillageCode { name: "扎西居委会", code: "001" }, VillageCode { name: "德勒居委会", code: "002" }, VillageCode { name: "长江路社区", code: "003" }, VillageCode { name: "黄河源社区", code: "004" }, VillageCode { name: "格尔木黄河源昆仑社区", code: "005" }, VillageCode { name: "长江村村委会", code: "006" }, VillageCode { name: "格欠村村委会", code: "007" }, VillageCode { name: "岗当村村委会", code: "008" }] },
+    TownCode { name: "巴干乡", code: "002", villages: &[VillageCode { name: "代曲村村委会", code: "001" }, VillageCode { name: "团结村村委会", code: "002" }, VillageCode { name: "麻秀村村委会", code: "003" }] },
+    TownCode { name: "秋智乡", code: "003", villages: &[VillageCode { name: "布甫村村委会", code: "001" }, VillageCode { name: "加巧村村委会", code: "002" }, VillageCode { name: "格麻村村委会", code: "003" }] },
+    TownCode { name: "叶格乡", code: "004", villages: &[VillageCode { name: "红旗村村委会", code: "001" }, VillageCode { name: "龙麻村村委会", code: "002" }, VillageCode { name: "莱阳村村委会", code: "003" }] },
+    TownCode { name: "麻多乡", code: "005", villages: &[VillageCode { name: "巴颜村村委会", code: "001" }, VillageCode { name: "郭洋村村委会", code: "002" }, VillageCode { name: "扎日加村村委会", code: "003" }] },
+    TownCode { name: "曲麻河乡", code: "006", villages: &[VillageCode { name: "昂拉村村委会", code: "001" }, VillageCode { name: "措池村村委会", code: "002" }, VillageCode { name: "勒池村村委会", code: "003" }, VillageCode { name: "多秀村村委会", code: "004" }] },
+];
+
+static TOWNS_KL_009: [TownCode; 7] = [
+    TownCode { name: "措折罗玛镇", code: "001", villages: &[VillageCode { name: "克那村", code: "001" }, VillageCode { name: "申亚扎地村", code: "002" }, VillageCode { name: "牛维改栋村", code: "003" }, VillageCode { name: "罗玛尼直村", code: "004" }, VillageCode { name: "曾康村", code: "005" }, VillageCode { name: "佳隆村", code: "006" }, VillageCode { name: "空隆村", code: "007" }, VillageCode { name: "加吾村", code: "008" }] },
+    TownCode { name: "协德乡", code: "002", villages: &[VillageCode { name: "达吾玛宗村", code: "001" }, VillageCode { name: "昂白底布村", code: "002" }, VillageCode { name: "奇那嘎巴村", code: "003" }, VillageCode { name: "鲁玛扎村", code: "004" }, VillageCode { name: "祖姆村", code: "005" }] },
+    TownCode { name: "雅曲乡", code: "003", villages: &[VillageCode { name: "依根索村", code: "001" }, VillageCode { name: "雅尼曲隆村", code: "002" }, VillageCode { name: "确尔村", code: "003" }, VillageCode { name: "渡日村", code: "004" }] },
+    TownCode { name: "嘎措乡", code: "004", villages: &[VillageCode { name: "玛威荣那村", code: "001" }, VillageCode { name: "瓦日香琼村", code: "002" }] },
+    TownCode { name: "措折强玛乡", code: "005", villages: &[VillageCode { name: "查仓村", code: "001" }, VillageCode { name: "挪贵措果村", code: "002" }, VillageCode { name: "才玛荣村", code: "003" }] },
+    TownCode { name: "多玛乡", code: "006", villages: &[VillageCode { name: "仲鲁玛村", code: "001" }, VillageCode { name: "果根擦曲村", code: "002" }, VillageCode { name: "萨那沃村", code: "003" }, VillageCode { name: "拉加鲁玛村", code: "004" }, VillageCode { name: "嘠喀玛村", code: "005" }] },
+    TownCode { name: "巴岭乡", code: "007", villages: &[VillageCode { name: "达威村", code: "001" }, VillageCode { name: "麦相村", code: "002" }, VillageCode { name: "格拉俄栋村", code: "003" }, VillageCode { name: "拉玛布村", code: "004" }] },
+];
 
 pub const CITIES_KL: [CityCode; 10] = [
-    CityCode {
-        name: "省辖市",
-        code: "000",
-    },
-    CityCode {
-        name: "格尔木市",
-        code: "001",
-    },
-    CityCode {
-        name: "茫崖市",
-        code: "002",
-    },
-    CityCode {
-        name: "玉树市",
-        code: "003",
-    },
-    CityCode {
-        name: "杂多市",
-        code: "004",
-    },
-    CityCode {
-        name: "称多市",
-        code: "005",
-    },
-    CityCode {
-        name: "治多市",
-        code: "006",
-    },
-    CityCode {
-        name: "囊谦市",
-        code: "007",
-    },
-    CityCode {
-        name: "曲麻莱市",
-        code: "008",
-    },
-    CityCode {
-        name: "双湖市",
-        code: "009",
-    },
+    CityCode { name: "省辖市", code: "000", towns: &[] },
+    CityCode { name: "格尔木市", code: "001", towns: &TOWNS_KL_001 },
+    CityCode { name: "茫崖市", code: "002", towns: &TOWNS_KL_002 },
+    CityCode { name: "玉树市", code: "003", towns: &TOWNS_KL_003 },
+    CityCode { name: "杂多市", code: "004", towns: &TOWNS_KL_004 },
+    CityCode { name: "称多市", code: "005", towns: &TOWNS_KL_005 },
+    CityCode { name: "治多市", code: "006", towns: &TOWNS_KL_006 },
+    CityCode { name: "囊谦市", code: "007", towns: &TOWNS_KL_007 },
+    CityCode { name: "曲麻莱市", code: "008", towns: &TOWNS_KL_008 },
+    CityCode { name: "双湖市", code: "009", towns: &TOWNS_KL_009 },
 ];

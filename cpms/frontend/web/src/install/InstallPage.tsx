@@ -154,15 +154,15 @@ export default function InstallPage() {
     <div className="login-page">
       <div className="login-card" style={{ width: 580 }}>
         <div className="login-card__header">
-          <div className="login-card__title">CPMS 系统初始化</div>
-          <div className="login-card__subtitle">公民护照管理系统</div>
+          <div className="login-card__title">公民护照管理系统</div>
+          <div className="login-card__subtitle">系统初始化</div>
         </div>
         <div className="login-card__body">
           {error && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{error}</div>}
           {msg && <div style={{ color: 'var(--color-success)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{msg}</div>}
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 20, justifyContent: 'center' }}>
-            {['扫码QR1', '绑定管理员', '完成'].map((label, i) => (
+            {['扫描QR1码', '绑定管理员', '完成'].map((label, i) => (
               <div key={i} style={{
                 padding: '4px 12px',
                 borderRadius: 6,
@@ -178,7 +178,7 @@ export default function InstallPage() {
 
           {currentStep === 1 && (
             <div className="card" style={{ boxShadow: 'none', border: '1px solid var(--color-border)' }}>
-              <div className="card__title">扫描 SFID 安装授权二维码（QR1）</div>
+              <div className="card__title" style={{ textAlign: 'center', borderLeft: 'none', paddingLeft: 0 }}>扫描 SFID 安装授权二维码（QR1）</div>
               <div style={{
                 width: '80%',
                 maxWidth: 280,
@@ -230,9 +230,9 @@ export default function InstallPage() {
 
           {currentStep === 2 && (
             <div className="card" style={{ boxShadow: 'none', border: '1px solid var(--color-border)' }}>
-              <div className="card__title">绑定超级管理员</div>
+              <div className="card__title" style={{ textAlign: 'center', borderLeft: 'none', paddingLeft: 0 }}>绑定超级管理员</div>
               <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: 13, marginBottom: 12 }}>
-                打开手机公民钱包，展示用户名片二维码，用摄像头扫码读取公钥
+                打开公民钱包，展示钱包二维码，用摄像头扫码读取账户地址
               </div>
               <div style={{
                 width: '80%',

@@ -15,6 +15,7 @@ mod initialize;
 mod login;
 mod operator_admin;
 mod qr;
+mod address;
 mod rsa_blind_client;
 mod ss58;
 mod super_admin;
@@ -49,8 +50,13 @@ struct Archive {
     gender_code: String,
     height_cm: Option<f32>,
     passport_no: String,
+    town_code: String,
+    village_id: String,
+    address: String,
     status: String,
     citizen_status: String,
+    voting_eligible: bool,
+    qr4_payload: String,
     created_at: i64,
     updated_at: i64,
 }
@@ -88,6 +94,9 @@ async fn main() {
 
     MIGRATOR.run(&db).await.expect("run migrations failed");
 
+    // 启动时 seed 内置镇村数据（不覆盖超管已修改的数据）
+    address::seed_builtin_address(&db).await;
+
     let state = AppState {
         db,
         qr_result_gc_lock: Arc::new(RwLock::new(())),
@@ -100,6 +109,7 @@ async fn main() {
         .merge(login::router())
         .merge(super_admin::router())
         .merge(operator_admin::router())
+        .merge(address::router())
         .with_state(state);
 
     let addr: SocketAddr = env::var("CPMS_BIND")
@@ -300,7 +310,7 @@ fn err(status: StatusCode, code: i32, message: &str) -> (StatusCode, Json<ApiErr
 #[cfg(test)]
 mod tests {
     use super::{
-        dangan::{archive_checksum_digit, sign_qr_payload_with_secret, validate_citizen_status},
+        dangan::{archive_checksum_digit_v4, sign_qr_payload_with_secret, validate_citizen_status},
         login::verify_challenge_signature,
     };
     use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -369,16 +379,15 @@ mod tests {
     }
 
     #[test]
-    fn archive_no_v3_format_is_stable() {
+    fn archive_no_v4_format_is_stable() {
         let province = "GD";
-        let city = "001";
-        let random9 = "123456789";
-        let created_date = "20260227";
-        let check = archive_checksum_digit(province, city, random9, created_date);
-        let archive_no = format!("{}{}{}{}{}", province, city, check, random9, created_date);
-        assert_eq!(archive_no.len(), 23);
-        assert!(archive_no.starts_with("GD001"));
-        assert!(archive_no.ends_with("20260227"));
+        let random8 = "12345678";
+        let year = "2026";
+        let check = archive_checksum_digit_v4(province, random8, year);
+        let archive_no = format!("{}{}{}{}", province, check, random8, year);
+        assert_eq!(archive_no.len(), 15);
+        assert!(archive_no.starts_with("GD"));
+        assert!(archive_no.ends_with("2026"));
     }
 
     fn build_signed_payload(payload: &str) -> (String, String) {

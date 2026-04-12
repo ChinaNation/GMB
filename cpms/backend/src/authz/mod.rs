@@ -36,7 +36,7 @@ pub(crate) async fn require_auth(
     let token = bearer_token(headers)?;
 
     let row = sqlx::query("SELECT user_id, role, expires_at FROM sessions WHERE access_token = $1")
-        .bind(token)
+        .bind(&token)
         .fetch_optional(&state.db)
         .await
         .map_err(|_| {
@@ -48,14 +48,33 @@ pub(crate) async fn require_auth(
         })?
         .ok_or_else(|| err(StatusCode::UNAUTHORIZED, 2001, "invalid token"))?;
 
+    let role: String = row.get("role");
     let expires_at: i64 = row.get("expires_at");
-    if expires_at < Utc::now().timestamp() {
-        return Err(err(StatusCode::UNAUTHORIZED, 2009, "token expired"));
+
+    // 超管 session 不过期；普通管理员检查过期 + 滑动续期 30 分钟
+    if role != "SUPER_ADMIN" {
+        if expires_at < Utc::now().timestamp() {
+            // 过期则删除 session，强制重新登录
+            let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
+                .bind(&token)
+                .execute(&state.db)
+                .await;
+            return Err(err(StatusCode::UNAUTHORIZED, 2009, "token expired"));
+        }
+        // 滑动续期：每次请求刷新过期时间
+        let new_expires = (Utc::now() + chrono::Duration::seconds(
+            crate::login::TOKEN_EXPIRES_SECONDS,
+        )).timestamp();
+        let _ = sqlx::query("UPDATE sessions SET expires_at = $1 WHERE access_token = $2")
+            .bind(new_expires)
+            .bind(&token)
+            .execute(&state.db)
+            .await;
     }
 
     Ok(AuthContext {
         user_id: row.get("user_id"),
-        role: row.get("role"),
+        role,
     })
 }
 

@@ -161,8 +161,8 @@ export default function LoginPage() {
     <div className="login-page">
       <div className="login-card" style={{ width: 680 }}>
         <div className="login-card__header">
-          <div className="login-card__title">CPMS</div>
-          <div className="login-card__subtitle">公民护照管理系统 — 管理员扫码登录</div>
+          <div className="login-card__title">公民护照管理系统</div>
+          <div className="login-card__subtitle">管理员登录</div>
         </div>
         <div className="login-card__body">
           {error && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{error}</div>}

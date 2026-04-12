@@ -79,7 +79,6 @@ export function LoginView() {
         signer_pubkey: payload.signer_pubkey,
         signature: payload.signature,
       });
-      message.success('签名已提交，正在确认登录结果');
       stopScanner();
       setScannerActive(false);
       const status = await queryAdminQrLoginResult(

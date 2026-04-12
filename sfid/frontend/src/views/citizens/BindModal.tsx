@@ -85,7 +85,6 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
     setBindQr4ScanLoading(true);
     try {
       setBindQr4Payload(qrPayload);
-      message.success('QR4 扫码成功，正在生成签名挑战...');
       setBindScannerActive(false);
       stopBindScanner();
       const challenge = await citizenBindChallenge(auth);

@@ -20,7 +20,10 @@ fn generate_secure_token(prefix: &str) -> String {
     format!("{}_{}", prefix, hex::encode(buf))
 }
 
+/// 普通管理员 session 过期时间（30 分钟无操作后过期）。
 pub(crate) const TOKEN_EXPIRES_SECONDS: i64 = 30 * 60;
+/// 超级管理员 session 不过期（10 年）。
+pub(crate) const SUPER_ADMIN_TOKEN_EXPIRES_SECONDS: i64 = 10 * 365 * 24 * 3600;
 const CHALLENGE_EXPIRES_SECONDS: i64 = 90;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -302,7 +305,9 @@ async fn auth_verify(
     }
 
     let access_token = generate_secure_token("atk");
-    let expires_at = (Utc::now() + Duration::seconds(TOKEN_EXPIRES_SECONDS)).timestamp();
+    // 超管不过期，普通管理员 30 分钟无操作后过期
+    let ttl = if admin.role == "SUPER_ADMIN" { SUPER_ADMIN_TOKEN_EXPIRES_SECONDS } else { TOKEN_EXPIRES_SECONDS };
+    let expires_at = (Utc::now() + Duration::seconds(ttl)).timestamp();
 
     sqlx::query(
         "INSERT INTO sessions (access_token, user_id, role, expires_at, created_at)
@@ -336,7 +341,7 @@ async fn auth_verify(
 
     Ok(Json(ok(VerifyData {
         access_token,
-        expires_in: TOKEN_EXPIRES_SECONDS,
+        expires_in: ttl,
         user: SessionUser {
             user_id: admin.user_id,
             role: admin.role,
@@ -539,7 +544,8 @@ async fn auth_qr_complete(
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
     let access_token = generate_secure_token("atk");
-    let expires_at = (Utc::now() + Duration::seconds(TOKEN_EXPIRES_SECONDS)).timestamp();
+    let ttl = if admin.role == "SUPER_ADMIN" { SUPER_ADMIN_TOKEN_EXPIRES_SECONDS } else { TOKEN_EXPIRES_SECONDS };
+    let expires_at = (Utc::now() + Duration::seconds(ttl)).timestamp();
 
     let mut tx2 = state
         .db
@@ -580,7 +586,7 @@ async fn auth_qr_complete(
     .bind(req.challenge_id.trim())
     .bind(req.session_id.trim())
     .bind(&access_token)
-    .bind(TOKEN_EXPIRES_SECONDS)
+    .bind(ttl)
     .bind(&admin.user_id)
     .bind(&admin.role)
     .bind(now_ts)

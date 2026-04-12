@@ -147,7 +147,6 @@ export function KeyringView() {
       setKeyringSignedPayload(payload);
       setKeyringScannerActive(false);
       stopKeyringScanner();
-      message.success('签名校验通过,正在提交轮换...');
       setKeyringCommitLoading(true);
       try {
         const newBackupName = keyringForm.getFieldValue('new_backup_name')?.trim();
