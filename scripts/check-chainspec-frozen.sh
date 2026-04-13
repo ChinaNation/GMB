@@ -2,8 +2,8 @@
 # chainspec.json 创世冻结守卫
 #
 # 校验 wuminapp/assets/chainspec.json 中 **影响 genesis hash 的字段** 是否被篡改。
-# bootNodes 仅用于节点发现，不参与 genesis hash 计算，因此允许修改（如域名变更）。
-# 校验方式：用 jq 剔除 bootNodes 后计算 sha256，与 .sha256 文件比对。
+# bootNodes（节点发现）和 lightSyncState（轻节点 checkpoint）不参与 genesis hash，
+# 因此允许修改。校验方式：用 jq 剔除这两个字段后计算 sha256，与 .sha256 文件比对。
 #
 # runtime 升级请走链上 system.setCode 交易，不要重新 build-spec。
 # 详见 memory/07-ai/chainspec-frozen.md
@@ -21,9 +21,9 @@ if [[ ! -s "$SHAFILE" ]]; then
   exit 1
 fi
 
-# bootNodes 不参与 genesis hash，剔除后再校验，允许域名等网络层变更。
+# bootNodes / lightSyncState 不参与 genesis hash，剔除后再校验，允许网络层与轻节点 checkpoint 变更。
 EXPECTED="$(awk '{print $1}' "$SHAFILE")"
-ACTUAL="$(jq -cS 'del(.bootNodes)' "$CHAINSPEC" | shasum -a 256 | awk '{print $1}')"
+ACTUAL="$(jq -cS 'del(.bootNodes, .lightSyncState)' "$CHAINSPEC" | shasum -a 256 | awk '{print $1}')"
 
 if [[ "$ACTUAL" != "$EXPECTED" ]]; then
   cat >&2 <<EOF
@@ -45,4 +45,4 @@ runtime 升级请走链上 system.setCode 交易， 不要重新 build-spec。
 EOF
   exit 1
 fi
-echo "[chainspec-frozen] chainspec.json 创世内容校验通过（bootNodes 变更不受限）"
+echo "[chainspec-frozen] chainspec.json 创世内容校验通过（bootNodes / lightSyncState 变更不受限）"

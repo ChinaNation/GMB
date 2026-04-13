@@ -5,7 +5,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import '../ui/app_theme.dart';
+import '../ui/widgets/chain_progress_banner.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../util/amount_format.dart';
@@ -39,7 +41,6 @@ class DuoqianCreateProposalPage extends StatefulWidget {
 
 class _DuoqianCreateProposalPageState
     extends State<DuoqianCreateProposalPage> {
-
   final _sfidIdController = TextEditingController();
   final _amountController = TextEditingController();
   final _thresholdController = TextEditingController();
@@ -51,6 +52,8 @@ class _DuoqianCreateProposalPageState
   String? _sfidError;
   String? _registeredAddress; // 查链获得的派生多签地址 hex
   bool _checkingSfid = false;
+  LightClientStatusSnapshot? _chainProgress;
+  String? _chainProgressError;
 
   // ── 机构账户列表（从 SFID 后端查询） ──
   String? _institutionName;                     // 查到的机构名称
@@ -287,6 +290,14 @@ class _DuoqianCreateProposalPageState
   }
 
   Future<void> _submit() async {
+    final blockedReason = _submitBlockedReason;
+    if (blockedReason != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(blockedReason)),
+      );
+      return;
+    }
+
     final error = _validate();
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -396,6 +407,40 @@ class _DuoqianCreateProposalPageState
     }
   }
 
+  void _handleChainProgressChanged(LightClientStatusSnapshot? progress) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgress = progress;
+    });
+  }
+
+  void _handleChainProgressErrorChanged(String? error) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgressError = error;
+    });
+  }
+
+  bool get _canSubmit => !_submitting && _submitBlockedReason == null;
+
+  /// 中文注释：创建多签依赖多次链上读取与最终 extrinsic 提交，未就绪时直接拦截。
+  String? get _submitBlockedReason {
+    final progress = _chainProgress;
+    if (progress == null) {
+      return _chainProgressError ?? '正在读取区块链状态，请稍后再试';
+    }
+    if (!progress.hasPeers) {
+      return '轻节点尚未连接到区块链网络，暂不能发起创建提案';
+    }
+    if (progress.isSyncing) {
+      return '轻节点仍在同步区块头，完成后才能发起创建提案';
+    }
+    if (!progress.isUsable) {
+      return _chainProgressError ?? '区块链状态尚未就绪，暂不能发起创建提案';
+    }
+    return null;
+  }
+
   // ──── UI ────
 
   @override
@@ -418,6 +463,11 @@ class _DuoqianCreateProposalPageState
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
+          ChainProgressBanner(
+            busy: _submitting || _checkingSfid || _verifyingChain,
+            onProgressChanged: _handleChainProgressChanged,
+            onErrorChanged: _handleChainProgressErrorChanged,
+          ),
           // SFID ID 输入
           _buildSectionTitle('SFID ID'),
           const SizedBox(height: 8),
@@ -677,7 +727,7 @@ class _DuoqianCreateProposalPageState
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _submitting ? null : _submit,
+              onPressed: _canSubmit ? _submit : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryDark,
                 foregroundColor: Colors.white,
@@ -697,6 +747,17 @@ class _DuoqianCreateProposalPageState
                           TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             ),
           ),
+          if (_submitBlockedReason != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _submitBlockedReason!,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
         ],
       ),
     );

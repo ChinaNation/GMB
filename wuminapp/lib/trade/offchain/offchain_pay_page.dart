@@ -55,24 +55,41 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
   /// 省储行真实费率（bp），从省储行节点查询。
   int _rateBp = 1;
   bool _loadingRate = true;
+  bool _rateFailed = false; // 费率查询失败，禁止交易
 
   /// 后台轮询链上状态，确认上链后更新本地交易记录。
   ///
-  /// fire-and-forget，不阻塞 UI。每 30 秒查询一次，最多 2 小时。
+  /// fire-and-forget，不阻塞 UI。
+  /// 省储行打包周期约 60 分钟，加缓冲共轮询 90 分钟（180 × 30s）。
+  /// 连续查询失败 5 次后停止轮询并标记 pending_check。
   static Future<void> _pollOnchainStatus(String txId, String bank) async {
-    const maxAttempts = 240; // 240 × 30s = 2 小时
+    const maxAttempts = 180; // 180 × 30s = 90 分钟
+    const maxConsecutiveErrors = 5;
+    int consecutiveErrors = 0;
+
     for (var i = 0; i < maxAttempts; i++) {
       await Future.delayed(const Duration(seconds: 30));
       try {
         final receipt = await OffchainRpc.queryTxStatus(bank, txId);
+        consecutiveErrors = 0; // 成功一次就重置
         if (receipt.status == OffchainTxStatus.onchain) {
           await LocalTxStore.updateStatus(txId, 'onchain');
+          debugPrint('[OffchainPoll] tx=$txId 已上链 (第${i + 1}次查询)');
           return;
         }
-      } catch (_) {
-        // 查询失败继续重试
+      } catch (e) {
+        consecutiveErrors++;
+        debugPrint('[OffchainPoll] tx=$txId 查询失败($consecutiveErrors/$maxConsecutiveErrors): $e');
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          debugPrint('[OffchainPoll] tx=$txId 连续失败$maxConsecutiveErrors次，标记 pending_check');
+          await LocalTxStore.updateStatus(txId, 'pending_check');
+          return;
+        }
       }
     }
+    // 90 分钟仍未上链，标记待人工检查
+    debugPrint('[OffchainPoll] tx=$txId 轮询超时(${maxAttempts}次)，标记 pending_check');
+    await LocalTxStore.updateStatus(txId, 'pending_check');
   }
 
   /// 商户是否预设了金额。
@@ -90,12 +107,23 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
   }
 
   Future<void> _loadRate() async {
-    final rate = await OffchainRpc.queryInstitutionRate(widget.bank);
-    if (mounted) {
-      setState(() {
-        _rateBp = rate;
-        _loadingRate = false;
-      });
+    try {
+      final rate = await OffchainRpc.queryInstitutionRate(widget.bank);
+      if (mounted) {
+        setState(() {
+          _rateBp = rate;
+          _loadingRate = false;
+          _rateFailed = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[OffchainPay] 费率查询失败: $e');
+      if (mounted) {
+        setState(() {
+          _loadingRate = false;
+          _rateFailed = true;
+        });
+      }
     }
   }
 
@@ -117,6 +145,13 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
 
   Future<void> _submit() async {
     if (_loadingWallet || _currentWallet == null) return;
+    if (_loadingRate) return;
+    if (_rateFailed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法获取清算行费率，请稍后重试')),
+      );
+      return;
+    }
 
     final amount = AmountFormat.tryParse(_amountController.text);
     if (amount == null || amount <= 0) {
@@ -414,6 +449,27 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
 
                       // 清算行
                       _buildInfoRow('清算行', bankName),
+                      if (_rateFailed) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppTheme.danger.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.error_outline, size: 16, color: AppTheme.danger),
+                              SizedBox(width: 6),
+                              Expanded(child: Text(
+                                '无法获取清算行费率，暂时无法支付',
+                                style: TextStyle(fontSize: 12, color: AppTheme.danger),
+                              )),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
 
                       // 备注
@@ -447,7 +503,7 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: (_submitting || _loadingWallet || _loadingRate || _currentWallet == null)
+                  onPressed: (_submitting || _loadingWallet || _loadingRate || _rateFailed || _currentWallet == null)
                       ? null
                       : _submit,
                   child: Padding(

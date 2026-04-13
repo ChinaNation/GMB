@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart'
     show Hasher, RuntimeMetadata, RuntimeVersion;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 
 import 'smoldot_client.dart';
 
@@ -77,6 +78,13 @@ class ChainRpc {
   }
 
   Uint8List? _cachedGenesisHash;
+
+  /// 获取轻节点当前同步进度（同步中也可读）。
+  ///
+  /// 仅用于 UI 展示和诊断，不应用于交易构造或需要最新状态一致性的逻辑。
+  Future<LightClientStatusSnapshot> fetchChainProgress() async {
+    return SmoldotClientManager.instance.getStatusSnapshotRaw();
+  }
 
   /// 获取最新区块的哈希和块号（用于 mortal era 计算）。
   Future<({Uint8List blockHash, int blockNumber})> fetchLatestBlock() async {
