@@ -51,7 +51,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
     <section className="section settings-nodekey-section">
       <div className="bootnode-inline">
         <h2>
-          区块链引导节点
+          节点身份密钥
           <span className="grandpa-bind-state">
             {bootnodeInstitutionName ?? '未绑定'}
           </span>
@@ -59,7 +59,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="请输入区块链引导节点私钥"
+          placeholder="请输入节点身份密钥（Ed25519 私钥 hex）"
           type="password"
           disabled={disabled || saving}
         />
@@ -67,7 +67,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
           disabled={disabled || saving}
           onClick={() => {
             if (!input.trim()) {
-              setBootnodeError('请输入区块链引导节点私钥');
+              setBootnodeError('请输入节点身份密钥');
               return;
             }
             setBootnodeError(null);
@@ -77,7 +77,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
             setShowPasswordModal(true);
           }}
         >
-          {saving ? '上传中...' : '上传私钥'}
+          {saving ? '绑定中...' : '绑定身份'}
         </button>
       </div>
       <div className="bootnode-inline grandpa-inline">

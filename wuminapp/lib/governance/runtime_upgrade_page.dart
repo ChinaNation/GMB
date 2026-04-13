@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import '../ui/app_theme.dart';
+import '../ui/widgets/chain_progress_banner.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -25,7 +27,6 @@ class RuntimeUpgradePage extends StatefulWidget {
 }
 
 class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
-
   final _reasonController = TextEditingController();
 
   bool _submitting = false;
@@ -36,6 +37,8 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
   int? _wasmFileSize;
   Uint8List? _wasmCode;
   String? _reasonError;
+  LightClientStatusSnapshot? _chainProgress;
+  String? _chainProgressError;
 
   @override
   void initState() {
@@ -133,6 +136,14 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
   }
 
   Future<void> _submit() async {
+    final blockedReason = _submitBlockedReason;
+    if (blockedReason != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(blockedReason)),
+      );
+      return;
+    }
+
     if (!_validateReason()) return;
 
     if (_wasmCode == null) {
@@ -234,6 +245,40 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
     }
   }
 
+  void _handleChainProgressChanged(LightClientStatusSnapshot? progress) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgress = progress;
+    });
+  }
+
+  void _handleChainProgressErrorChanged(String? error) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgressError = error;
+    });
+  }
+
+  bool get _canSubmit => !_submitting && _submitBlockedReason == null;
+
+  /// 中文注释：Runtime 升级是高风险操作，链状态未就绪时必须前置拦截。
+  String? get _submitBlockedReason {
+    final progress = _chainProgress;
+    if (progress == null) {
+      return _chainProgressError ?? '正在读取区块链状态，请稍后再试';
+    }
+    if (!progress.hasPeers) {
+      return '轻节点尚未连接到区块链网络，暂不能提交升级提案';
+    }
+    if (progress.isSyncing) {
+      return '轻节点仍在同步区块头，完成后才能提交升级提案';
+    }
+    if (!progress.isUsable) {
+      return _chainProgressError ?? '区块链状态尚未就绪，暂不能提交升级提案';
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -252,6 +297,11 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
+          ChainProgressBanner(
+            busy: _submitting || _fetchingSnapshot,
+            onProgressChanged: _handleChainProgressChanged,
+            onErrorChanged: _handleChainProgressErrorChanged,
+          ),
           // ──── 标题 ────
           _buildTitleHeader(),
           const SizedBox(height: 16),
@@ -312,7 +362,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              onPressed: _submitting ? null : _submit,
+              onPressed: _canSubmit ? _submit : null,
               child: _submitting
                   ? Row(
                       mainAxisSize: MainAxisSize.min,
@@ -347,6 +397,17 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
                     ),
             ),
           ),
+          if (_submitBlockedReason != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _submitBlockedReason!,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
         ],
       ),
     );

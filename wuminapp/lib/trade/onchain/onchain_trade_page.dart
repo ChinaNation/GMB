@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
+import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
@@ -47,11 +47,13 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   final OnchainTradeService _tradeService = OnchainTradeService();
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
-  String _selectedSymbol = 'GMB';
+  final String _selectedSymbol = 'GMB';
 
   WalletProfile? _currentWallet;
   bool _loadingWallet = true;
   bool _submitting = false;
+  LightClientStatusSnapshot? _chainProgress;
+  String? _chainProgressError;
 
   /// 本地链上转账记录（用于状态行显示）。
   List<LocalTxEntity> _localTxRecords = [];
@@ -196,6 +198,15 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   }
 
   Future<void> _submit() async {
+    final blockedReason = _submitBlockedReason;
+    if (blockedReason != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(blockedReason)));
+      }
+      return;
+    }
     if (_loadingWallet) {
       return;
     }
@@ -261,7 +272,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('确认交易'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -279,11 +290,11 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(_, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(_, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('确认'),
           ),
         ],
@@ -335,6 +346,9 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
           );
           final requestJson = qrSigner.encodeRequest(request);
 
+          if (!mounted) {
+            throw Exception('页面已关闭，无法继续扫码签名');
+          }
           final response = await Navigator.push<SignResponseEnvelope>(
             context,
             MaterialPageRoute(
@@ -539,13 +553,24 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed:
-                    (_submitting || _loadingWallet || _currentWallet == null)
-                        ? null
-                        : _submit,
+                onPressed: _canSubmit ? _submit : null,
                 child: Text(_submitting ? '签名中' : '签名交易'),
               ),
             ),
+            if (_submitBlockedReason != null &&
+                !_loadingWallet &&
+                _currentWallet != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _submitBlockedReason!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ),
             const SizedBox(height: 12),
             // 链上交易状态行
             Row(
@@ -634,6 +659,10 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 children: [
+                  ChainProgressBanner(
+                    onProgressChanged: _handleChainProgressChanged,
+                    onErrorChanged: _handleChainProgressErrorChanged,
+                  ),
                   if (_currentWallet == null && !_loadingWallet)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
@@ -765,6 +794,47 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         ),
       ),
     );
+  }
+
+  void _handleChainProgressChanged(LightClientStatusSnapshot? progress) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgress = progress;
+    });
+  }
+
+  void _handleChainProgressErrorChanged(String? error) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgressError = error;
+    });
+  }
+
+  bool get _canSubmit =>
+      !_submitting &&
+      !_loadingWallet &&
+      _currentWallet != null &&
+      _submitBlockedReason == null;
+
+  String? get _submitBlockedReason {
+    if (_submitting || _loadingWallet || _currentWallet == null) {
+      return null;
+    }
+
+    final progress = _chainProgress;
+    if (progress == null) {
+      return _chainProgressError ?? '正在读取区块链状态，请稍后再试';
+    }
+    if (!progress.hasPeers) {
+      return '轻节点尚未连接到区块链网络，请等待至少 1 个 peer';
+    }
+    if (progress.isSyncing) {
+      return '轻节点仍在同步区块头，完成后才能签名交易';
+    }
+    if (!progress.isUsable) {
+      return _chainProgressError ?? '区块链状态尚未就绪，请稍后再试';
+    }
+    return null;
   }
 }
 

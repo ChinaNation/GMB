@@ -45,13 +45,16 @@
 ## 防御措施
 
 1. **文件**：`wuminapp/assets/chainspec.json.sha256` 记录冻结版本的 sha256。
-2. **脚本**：`scripts/check-chainspec-frozen.sh` 做完整性校验。
-3. **git hook**：`.githooks/pre-commit` 拒绝任何对 `chainspec.json` 的提交，
-   并运行完整性校验。启用：`git config core.hooksPath .githooks`。
+   sha256 基于 `jq -cS 'del(.bootNodes, .lightSyncState)'` 后的内容计算，
+   bootNodes 和 lightSyncState 变更不影响校验（两者都不参与 genesis hash）。
+2. **脚本**：`scripts/check-chainspec-frozen.sh` 做完整性校验（已排除 bootNodes）。
+3. **git hook**：`.githooks/pre-commit` 调用上述脚本校验创世内容。
+   bootNodes 域名变更可正常提交，genesis 内容变更会被拦截。
+   启用：`git config core.hooksPath .githooks`。
 4. **CI**：`.github/workflows/wuminapp-ci.yml` 在 check 和 android job 开头
    都调用 `scripts/check-chainspec-frozen.sh`。
-5. **启动脚本**：`wuminapp/scripts/wuminapp-run.sh` 启动前先校验哈希，不一致
-   直接退出。
+5. **启动脚本**：`wuminapp/scripts/wuminapp-run.sh` 启动前先校验哈希（已排除 bootNodes），
+   不一致直接退出。
 
 ## 如果真的需要改（硬分叉流程）
 
@@ -68,11 +71,12 @@
 - ❌ 在 CI 里从 artifact 下载 chainspec.json 覆盖仓库版本
 - ❌ 每次 runtime 升级都"顺手"重新导出 chainspec
 - ❌ 用 `--chain=local` / `--chain=dev` 导出的 chainspec 覆盖主网 chainspec
-- ❌ 只改 `bootNodes` 字段就重新导出（会连带改 `:code:`）
+- ❌ 用 `build-spec --raw` 只为改 `bootNodes`（会连带改 `:code:`）
 
 ## 正确的事
 
 - ✅ runtime 升级 = 编译新 wasm + 发 `system.setCode` 交易
 - ✅ 全节点升级 client 代码 = 重编二进制 + 重启，chainspec 不动
 - ✅ 轻节点升级 = 发新版 App，chainspec 不动
-- ✅ 添加新 bootnode = 直接在 App 侧配置额外 bootnode 列表（不进 chainspec）
+- ✅ 直接编辑 chainspec.json 中的 `bootNodes` 字段（域名变更、增删节点）— 不影响 genesis hash，校验已排除此字段
+- ✅ 更新 chainspec.json 中的 `lightSyncState` 字段（轻节点 checkpoint）— 不影响 genesis hash，校验已排除此字段
