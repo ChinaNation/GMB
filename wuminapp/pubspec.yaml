@@ -45,6 +45,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/chainspec.json
+    - assets/light_sync_state.json
     - assets/icons/scan-line.svg
     - assets/icons/wallet.svg
     - assets/icons/copy.svg

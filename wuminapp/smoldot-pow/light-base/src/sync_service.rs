@@ -650,16 +650,38 @@ impl<TPlat: PlatformRef> StorageQuery<TPlat> {
 
             // Choose peer to query.
             // TODO: better peers selection
-            let Some(target) = self
-                .sync_service
-                .peers_assumed_know_blocks(self.block_number, &self.block_hash)
-                .await
-                .choose(&mut self.randomness)
-            else {
-                // No peer knows this block. Returning with a failure.
-                return StorageQueryProgress::Error(StorageQueryError {
-                    errors: self.outcome_errors,
-                });
+            let target = {
+                let first = self
+                    .sync_service
+                    .peers_assumed_know_blocks(self.block_number, &self.block_hash)
+                    .await
+                    .choose(&mut self.randomness);
+                if let Some(t) = first {
+                    t
+                } else {
+                    // peer 列表为空，等待 P2P 层发现/重连后重试（最多 3 次 × 2 秒）。
+                    let mut found = None;
+                    for _ in 0..3u8 {
+                        self.sync_service.platform.sleep(Duration::from_secs(2)).await;
+                        let retry = self
+                            .sync_service
+                            .peers_assumed_know_blocks(self.block_number, &self.block_hash)
+                            .await
+                            .choose(&mut self.randomness);
+                        if let Some(t) = retry {
+                            found = Some(t);
+                            break;
+                        }
+                    }
+                    match found {
+                        Some(t) => t,
+                        None => {
+                            return StorageQueryProgress::Error(StorageQueryError {
+                                errors: self.outcome_errors,
+                            });
+                        }
+                    }
+                }
             };
 
             // Build the list of keys to request.

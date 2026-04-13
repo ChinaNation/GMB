@@ -21,7 +21,15 @@
 - `memory/08-tasks/open/20260405-111030-结合全仓库实现复查-resolution-issuance-gov-投票引擎链路-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留.md`
 - `memory/08-tasks/open/20260405-114311-结合全仓库实现复查-resolution-destro-gov-投票引擎模块-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留.md`
 - `memory/08-tasks/open/20260405-122920-结合全仓库实现复查-shengbank-stake-interest-模块-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留-本轮只负责检查.md`
+- `memory/08-tasks/open/20260405-123821-结合全仓库实现复查-resolution-destro-gov-grandpa-key-gov-admins-origin-gov-模块-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留.md`
+- `memory/08-tasks/open/20260405-124627-结合全仓库实现复查-pow-difficulty-module-与-sfid-code-auth-模块-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留.md`
 - `memory/08-tasks/open/20260405-offchain-deposit-model-redesign.md`
+- `memory/08-tasks/open/20260405-sfid-多签地址派生加入name字段.md`
+- `memory/08-tasks/open/20260405-府院机构地址接入治理框架.md`
+- `memory/08-tasks/open/20260408-省储会治理入口补齐-决议发行-验证密钥-状态升级.md`
+- `memory/08-tasks/open/20260409-qr-protocol-unify-v1.md`
+- `memory/08-tasks/open/20260411-vote-account-binding.md`
+- `memory/08-tasks/open/20260413-083358-轻节点连接稳定性逐行审计-检查轻节点为何总是连不上区块链-逐文件逐行审查连接链路代码并输出完整检查报告与改进方案.md`
 
 ## done
 
@@ -97,3 +105,18 @@
 - `memory/08-tasks/done/20260401-runtime-noamount-fee-无金额交易收取最低手续费.md`
 - `memory/08-tasks/done/20260402-125842-排查-wuminapp-手机轻节点连不上-citizenchain-导致钱包余额-治理提案-机构数据不显示-确认根因并修复移动端或节点侧相关问题.md`
 - `memory/08-tasks/done/20260402-governance-admin-activation.md`
+- `memory/08-tasks/done/20260407-sfid-runtime-meta-清理-与-pow-推链修复.md`
+- `memory/08-tasks/done/20260408-sfid-frontend-app-tsx-split-plan.md`
+- `memory/08-tasks/done/20260408-sfid-frontend-app-tsx-split.md`
+- `memory/08-tasks/done/20260408-sfid-public-security-cpms-embed.md`
+- `memory/08-tasks/done/20260408-sfid-三角色命名统一-任务卡0.5.md`
+- `memory/08-tasks/done/20260408-sfid-公安局市清单对账-任务卡6.md`
+- `memory/08-tasks/done/20260408-sfid-前端三机构视图-任务卡4.md`
+- `memory/08-tasks/done/20260408-sfid-前端最小脚手架-任务卡3.md`
+- `memory/08-tasks/done/20260408-sfid-机构详情页多账户-任务卡5.md`
+- `memory/08-tasks/done/20260408-sfid-机构账户两层模型-任务卡2.md`
+- `memory/08-tasks/done/20260408-sfid-模块补全-任务卡1.md`
+- `memory/08-tasks/done/20260409-sfid-sheng-admin-per-province-keyring-impl.md`
+- `memory/08-tasks/done/20260409-sfid-sheng-admin-per-province-keyring.md`
+- `memory/08-tasks/done/20260410-sfid-store-shard-by-province-impl.md`
+- `memory/08-tasks/done/20260410-sfid-store-shard-by-province.md`

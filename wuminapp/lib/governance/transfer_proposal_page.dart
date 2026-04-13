@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import '../ui/app_theme.dart';
+import '../ui/widgets/chain_progress_banner.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
@@ -39,7 +41,6 @@ class TransferProposalPage extends StatefulWidget {
 }
 
 class _TransferProposalPageState extends State<TransferProposalPage> {
-
   final _beneficiaryController = TextEditingController();
   final _amountController = TextEditingController();
   final _remarkController = TextEditingController();
@@ -50,6 +51,8 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
   double _estimatedFee = 0.0;
   String? _addressError;
   String? _amountError;
+  LightClientStatusSnapshot? _chainProgress;
+  String? _chainProgressError;
 
   late final String _fromSs58;
   late WalletProfile _selectedWallet;
@@ -173,6 +176,14 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
   }
 
   Future<void> _submit() async {
+    final blockedReason = _submitBlockedReason;
+    if (blockedReason != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(blockedReason)),
+      );
+      return;
+    }
+
     if (!_validateAddress() || !_validateAmount() || !_validateRemark()) {
       return;
     }
@@ -257,6 +268,40 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
     }
   }
 
+  void _handleChainProgressChanged(LightClientStatusSnapshot? progress) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgress = progress;
+    });
+  }
+
+  void _handleChainProgressErrorChanged(String? error) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgressError = error;
+    });
+  }
+
+  bool get _canSubmit => !_submitting && _submitBlockedReason == null;
+
+  /// 中文注释：提案页允许用户先填写表单，但链未连上或仍在同步时禁止真正提交。
+  String? get _submitBlockedReason {
+    final progress = _chainProgress;
+    if (progress == null) {
+      return _chainProgressError ?? '正在读取区块链状态，请稍后再试';
+    }
+    if (!progress.hasPeers) {
+      return '轻节点尚未连接到区块链网络，暂不能提交转账提案';
+    }
+    if (progress.isSyncing) {
+      return '轻节点仍在同步区块头，完成后才能提交转账提案';
+    }
+    if (!progress.isUsable) {
+      return _chainProgressError ?? '区块链状态尚未就绪，暂不能提交转账提案';
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -275,6 +320,11 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
+          ChainProgressBanner(
+            busy: _submitting || _loadingBalance,
+            onProgressChanged: _handleChainProgressChanged,
+            onErrorChanged: _handleChainProgressErrorChanged,
+          ),
           // ──── 机构信息 ────
           _buildInstitutionHeader(),
           const SizedBox(height: 16),
@@ -420,7 +470,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              onPressed: _submitting ? null : _submit,
+              onPressed: _canSubmit ? _submit : null,
               child: _submitting
                   ? const SizedBox(
                       width: 20,
@@ -440,6 +490,17 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
                     ),
             ),
           ),
+          if (_submitBlockedReason != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _submitBlockedReason!,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
         ],
       ),
     );

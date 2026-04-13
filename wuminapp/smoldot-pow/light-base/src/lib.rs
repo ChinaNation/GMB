@@ -2005,7 +2005,7 @@ fn start_services<TPlat: platform::PlatformRef>(
 
     let network_service_chain = network_service.add_chain(network_service::ConfigChain {
         log_name: log_name.clone(),
-        num_out_slots: 4,
+        num_out_slots: 8,
         grandpa_protocol_finalized_block_height: if let StartServicesChainTy::RelayChain {
             chain_information,
         } = &config

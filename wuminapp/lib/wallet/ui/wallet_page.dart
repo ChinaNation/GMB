@@ -20,6 +20,7 @@ import 'package:wuminapp_mobile/ui/widgets/shimmer_loading.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/util/screenshot_guard.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
+import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
@@ -521,6 +522,8 @@ class _MyWalletPageState extends State<MyWalletPage> {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 children: [
+                  if (!_isSelectionMode)
+                    ChainProgressBanner(busy: _balanceRefreshing),
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),

@@ -45,7 +45,8 @@ if [[ ! -s "$CHAINSPEC_OUT" ]]; then
 fi
 if [[ -s "$CHAINSPEC_SHA_FILE" ]]; then
   EXPECTED_SHA="$(awk '{print $1}' "$CHAINSPEC_SHA_FILE")"
-  ACTUAL_SHA="$(shasum -a 256 "$CHAINSPEC_OUT" | awk '{print $1}')"
+  # bootNodes / lightSyncState 不参与 genesis hash，剔除后校验，允许网络层与轻节点 checkpoint 变更。
+  ACTUAL_SHA="$(jq -cS 'del(.bootNodes, .lightSyncState)' "$CHAINSPEC_OUT" | shasum -a 256 | awk '{print $1}')"
   if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
     echo "错误：chainspec.json 哈希不一致！这是创世冻结文件，禁止修改。"
     echo "       期望 $EXPECTED_SHA"

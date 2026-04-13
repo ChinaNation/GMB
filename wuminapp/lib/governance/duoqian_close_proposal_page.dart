@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import '../ui/app_theme.dart';
+import '../ui/widgets/chain_progress_banner.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../util/amount_format.dart';
@@ -33,7 +35,6 @@ class DuoqianCloseProposalPage extends StatefulWidget {
 }
 
 class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
-
   final _beneficiaryController = TextEditingController();
   final _manageService = DuoqianManageService();
 
@@ -41,6 +42,8 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
   bool _loadingBalance = true;
   double? _availableBalance;
   String? _addressError;
+  LightClientStatusSnapshot? _chainProgress;
+  String? _chainProgressError;
 
   late WalletProfile _selectedWallet;
   late String _duoqianSs58;
@@ -100,6 +103,14 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
   // ──── 提交 ────
 
   Future<void> _submit() async {
+    final blockedReason = _submitBlockedReason;
+    if (blockedReason != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(blockedReason)),
+      );
+      return;
+    }
+
     final beneficiary = _beneficiaryController.text.trim();
     if (!_validateAddress(beneficiary)) return;
 
@@ -176,6 +187,40 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
     }
   }
 
+  void _handleChainProgressChanged(LightClientStatusSnapshot? progress) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgress = progress;
+    });
+  }
+
+  void _handleChainProgressErrorChanged(String? error) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgressError = error;
+    });
+  }
+
+  bool get _canSubmit => !_submitting && _submitBlockedReason == null;
+
+  /// 中文注释：关闭多签会直接动到账户资金，链不同步时不允许继续发起。
+  String? get _submitBlockedReason {
+    final progress = _chainProgress;
+    if (progress == null) {
+      return _chainProgressError ?? '正在读取区块链状态，请稍后再试';
+    }
+    if (!progress.hasPeers) {
+      return '轻节点尚未连接到区块链网络，暂不能发起关闭提案';
+    }
+    if (progress.isSyncing) {
+      return '轻节点仍在同步区块头，完成后才能发起关闭提案';
+    }
+    if (!progress.isUsable) {
+      return _chainProgressError ?? '区块链状态尚未就绪，暂不能发起关闭提案';
+    }
+    return null;
+  }
+
   // ──── UI ────
 
   @override
@@ -196,6 +241,11 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
+          ChainProgressBanner(
+            busy: _submitting || _loadingBalance,
+            onProgressChanged: _handleChainProgressChanged,
+            onErrorChanged: _handleChainProgressErrorChanged,
+          ),
           // 多签地址（只读）
           _buildSectionTitle('多签地址'),
           const SizedBox(height: 8),
@@ -316,7 +366,7 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _submitting ? null : _submit,
+              onPressed: _canSubmit ? _submit : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.danger,
                 foregroundColor: Colors.white,
@@ -336,6 +386,17 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
                           TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             ),
           ),
+          if (_submitBlockedReason != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _submitBlockedReason!,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
         ],
       ),
     );

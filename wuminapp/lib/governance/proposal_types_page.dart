@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import '../ui/app_theme.dart';
+import '../ui/widgets/chain_progress_banner.dart';
 
 import 'duoqian_close_proposal_page.dart';
 import 'duoqian_create_proposal_page.dart';
@@ -16,7 +18,7 @@ import '../wallet/core/wallet_manager.dart';
 /// - 所有机构：转账、换管理员、决议销毁
 /// - 国储会 + 省储会（NRC/PRC）：决议发行、状态升级、验证密钥
 /// - 仅国储会（NRC）：安全基金转账
-class ProposalTypesPage extends StatelessWidget {
+class ProposalTypesPage extends StatefulWidget {
   const ProposalTypesPage({
     super.key,
     required this.institution,
@@ -37,7 +39,18 @@ class ProposalTypesPage extends StatelessWidget {
   final bool isActivated;
 
   @override
+  State<ProposalTypesPage> createState() => _ProposalTypesPageState();
+}
+
+class _ProposalTypesPageState extends State<ProposalTypesPage> {
+  LightClientStatusSnapshot? _chainProgress;
+  String? _chainProgressError;
+
+  @override
   Widget build(BuildContext context) {
+    final proposalActionsEnabled =
+        widget.isActivated && _proposalBlockedReason == null;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -54,6 +67,10 @@ class ProposalTypesPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
+          ChainProgressBanner(
+            onProgressChanged: _handleChainProgressChanged,
+            onErrorChanged: _handleChainProgressErrorChanged,
+          ),
           // 机构信息
           Padding(
             padding: const EdgeInsets.only(bottom: 16),
@@ -63,15 +80,15 @@ class ProposalTypesPage extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: badgeColor.withValues(alpha: 0.12),
+                    color: widget.badgeColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon, size: 18, color: badgeColor),
+                  child: Icon(widget.icon, size: 18, color: widget.badgeColor),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    institution.name,
+                    widget.institution.name,
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -83,14 +100,14 @@ class ProposalTypesPage extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: badgeColor.withValues(alpha: 0.10),
+                    color: widget.badgeColor.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    OrgType.label(institution.orgType),
+                    OrgType.label(widget.institution.orgType),
                     style: TextStyle(
                       fontSize: 11,
-                      color: badgeColor,
+                      color: widget.badgeColor,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -100,7 +117,7 @@ class ProposalTypesPage extends StatelessWidget {
           ),
 
           // ──── 非管理员提示 ────
-          if (!isActivated)
+          if (!widget.isActivated)
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: Container(
@@ -131,6 +148,38 @@ class ProposalTypesPage extends StatelessWidget {
                 ),
               ),
             ),
+          if (widget.isActivated && _proposalBlockedReason != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.warning.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppTheme.warning.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.sync_problem,
+                        size: 16, color: AppTheme.warning),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _proposalBlockedReason!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           // ──── 通用提案类型（所有机构） ────
           _buildSectionTitle('通用提案'),
@@ -140,14 +189,14 @@ class ProposalTypesPage extends StatelessWidget {
             title: '转账',
             subtitle: '从机构多签账户发起转账',
             color: AppTheme.primary,
-            enabled: isActivated,
+            enabled: proposalActionsEnabled,
             onTap: () => _checkAndOpenProposal(
                 context,
                 () => TransferProposalPage(
-                      institution: institution,
-                      icon: icon,
-                      badgeColor: badgeColor,
-                      adminWallets: adminWallets,
+                      institution: widget.institution,
+                      icon: widget.icon,
+                      badgeColor: widget.badgeColor,
+                      adminWallets: widget.adminWallets,
                     )),
           ),
           const SizedBox(height: 8),
@@ -156,7 +205,7 @@ class ProposalTypesPage extends StatelessWidget {
             title: '换管理员',
             subtitle: '提议更换本机构管理员',
             color: AppTheme.accent,
-            enabled: isActivated,
+            enabled: proposalActionsEnabled,
             onTap: () => _checkAndOpenProposal(context, null, name: '换管理员'),
           ),
           const SizedBox(height: 8),
@@ -165,12 +214,12 @@ class ProposalTypesPage extends StatelessWidget {
             title: '决议销毁',
             subtitle: '提议销毁机构持有的资产',
             color: AppTheme.danger,
-            enabled: isActivated,
+            enabled: proposalActionsEnabled,
             onTap: () => _checkAndOpenProposal(context, null, name: '决议销毁'),
           ),
 
           // ──── 注册多签机构专属提案类型 ────
-          if (institution.orgType == OrgType.duoqian) ...[
+          if (widget.institution.orgType == OrgType.duoqian) ...[
             const SizedBox(height: 20),
             _buildSectionTitle('多签管理'),
             const SizedBox(height: 8),
@@ -179,12 +228,12 @@ class ProposalTypesPage extends StatelessWidget {
               title: '创建多签',
               subtitle: '发起创建多签账户提案',
               color: AppTheme.info,
-              enabled: isActivated,
+              enabled: proposalActionsEnabled,
               onTap: () => _checkAndOpenProposal(
                 context,
                 () => DuoqianCreateProposalPage(
-                  institution: institution,
-                  adminWallets: adminWallets,
+                  institution: widget.institution,
+                  adminWallets: widget.adminWallets,
                 ),
               ),
             ),
@@ -194,20 +243,20 @@ class ProposalTypesPage extends StatelessWidget {
               title: '关闭多签',
               subtitle: '发起关闭多签账户提案，资金转入指定受益人',
               color: AppTheme.danger,
-              enabled: isActivated,
+              enabled: proposalActionsEnabled,
               onTap: () => _checkAndOpenProposal(
                 context,
                 () => DuoqianCloseProposalPage(
-                  institution: institution,
-                  adminWallets: adminWallets,
+                  institution: widget.institution,
+                  adminWallets: widget.adminWallets,
                 ),
               ),
             ),
           ],
 
           // ──── 联合投票提案（国储会 + 省储会可发起）────
-          if (institution.orgType == OrgType.nrc ||
-              institution.orgType == OrgType.prc) ...[
+          if (widget.institution.orgType == OrgType.nrc ||
+              widget.institution.orgType == OrgType.prc) ...[
             const SizedBox(height: 20),
             _buildSectionTitle('联合投票提案'),
             const SizedBox(height: 8),
@@ -216,7 +265,7 @@ class ProposalTypesPage extends StatelessWidget {
               title: '决议发行',
               subtitle: '发起公民币发行决议，需联合投票+公民投票',
               color: AppTheme.primaryDark,
-              enabled: isActivated,
+              enabled: proposalActionsEnabled,
               onTap: () => _checkAndOpenProposal(context, null, name: '决议发行'),
             ),
             const SizedBox(height: 8),
@@ -225,10 +274,10 @@ class ProposalTypesPage extends StatelessWidget {
               title: '状态升级',
               subtitle: 'Runtime 升级，需联合投票+公民投票',
               color: AppTheme.info,
-              enabled: isActivated,
+              enabled: proposalActionsEnabled,
               onTap: () => _checkAndOpenProposal(
                 context,
-                () => RuntimeUpgradePage(adminWallets: adminWallets),
+                () => RuntimeUpgradePage(adminWallets: widget.adminWallets),
               ),
             ),
             const SizedBox(height: 8),
@@ -237,13 +286,13 @@ class ProposalTypesPage extends StatelessWidget {
               title: '验证密钥',
               subtitle: '更换 GRANDPA 共识验证密钥（本机构内部投票）',
               color: const Color(0xFF4527A0),
-              enabled: isActivated,
+              enabled: proposalActionsEnabled,
               onTap: () => _checkAndOpenProposal(context, null, name: '验证密钥'),
             ),
           ],
 
           // ──── 国储会专属提案 ────
-          if (institution.orgType == OrgType.nrc) ...[
+          if (widget.institution.orgType == OrgType.nrc) ...[
             const SizedBox(height: 20),
             _buildSectionTitle('国储会专属提案'),
             const SizedBox(height: 8),
@@ -252,7 +301,7 @@ class ProposalTypesPage extends StatelessWidget {
               title: '安全基金转账',
               subtitle: '从安全基金账户向指定地址转账',
               color: AppTheme.info,
-              enabled: isActivated,
+              enabled: proposalActionsEnabled,
               onTap: () => _checkAndOpenProposal(context, null, name: '安全基金转账'),
             ),
           ],
@@ -279,10 +328,19 @@ class ProposalTypesPage extends StatelessWidget {
     Widget Function()? pageBuilder, {
     String? name,
   }) async {
+    final blockedReason = _proposalBlockedReason;
+    if (blockedReason != null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(blockedReason)),
+        );
+      }
+      return;
+    }
     try {
       final service = TransferProposalService();
       final activeIds =
-          await service.fetchActiveProposalIds(institution.shenfenId);
+          await service.fetchActiveProposalIds(widget.institution.shenfenId);
       if (!context.mounted) return;
 
       if (activeIds.length >=
@@ -330,6 +388,37 @@ class ProposalTypesPage extends StatelessWidget {
         ),
       );
     }
+  }
+
+  void _handleChainProgressChanged(LightClientStatusSnapshot? progress) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgress = progress;
+    });
+  }
+
+  void _handleChainProgressErrorChanged(String? error) {
+    if (!mounted) return;
+    setState(() {
+      _chainProgressError = error;
+    });
+  }
+
+  String? get _proposalBlockedReason {
+    final progress = _chainProgress;
+    if (progress == null) {
+      return _chainProgressError ?? '正在读取区块链状态，请稍后再试';
+    }
+    if (!progress.hasPeers) {
+      return '轻节点尚未连接到区块链网络，暂不能发起提案';
+    }
+    if (progress.isSyncing) {
+      return '轻节点仍在同步区块头，完成后才能发起提案';
+    }
+    if (!progress.isUsable) {
+      return _chainProgressError ?? '区块链状态尚未就绪，暂不能发起提案';
+    }
+    return null;
   }
 }
 
@@ -397,7 +486,7 @@ class _ProposalTypeCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         subtitle,
-                        style: TextStyle(
+                        style: const TextStyle(
                             fontSize: 12, color: AppTheme.textTertiary),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,

@@ -115,21 +115,23 @@ class OffchainRpc {
   /// 查询省储行的链下交易费率（bp）。
   ///
   /// 通过 WSS 调用省储行节点 offchain_queryInstitutionRate。
-  /// 返回费率 bp（1-10），查询失败时默认返回 1 bp。
+  /// 返回费率 bp（1-10）。查询失败时抛异常，调用方必须处理。
   static Future<int> queryInstitutionRate(String bankShenfenId) async {
     final bank = findClearingBank(bankShenfenId);
-    if (bank == null) return 1;
-
-    try {
-      final result = await _callRpc(
-        bank.wssUrl,
-        'offchain_queryInstitutionRate',
-        {},
-      );
-      return (result['rate_bp'] as num?)?.toInt() ?? 1;
-    } catch (_) {
-      return 1; // 查询失败默认 1 bp
+    if (bank == null) {
+      throw Exception('未找到清算行配置: $bankShenfenId');
     }
+
+    final result = await _callRpc(
+      bank.wssUrl,
+      'offchain_queryInstitutionRate',
+      {},
+    );
+    final rateBp = (result['rate_bp'] as num?)?.toInt();
+    if (rateBp == null || rateBp < 1 || rateBp > 10) {
+      throw Exception('费率数据异常: rate_bp=$rateBp');
+    }
+    return rateBp;
   }
 
   /// 根据真实费率计算链下交易手续费（元）。

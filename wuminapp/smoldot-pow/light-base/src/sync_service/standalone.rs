@@ -977,12 +977,20 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                     if !primary.is_empty() {
                         primary
                     } else {
-                        sync.sources()
+                        let relaxed: Vec<_> = sync.sources()
                             .filter(|source_id| {
                                 sync.source_best_block(*source_id).0 >= block_number
                             })
                             .map(|id| sync[id].0.clone())
-                            .collect()
+                            .collect();
+                        if !relaxed.is_empty() {
+                            relaxed
+                        } else {
+                            // 终极兜底：所有已连接 source，让网络层自行尝试。
+                            sync.sources()
+                                .map(|id| sync[id].0.clone())
+                                .collect()
+                        }
                     }
                 };
 

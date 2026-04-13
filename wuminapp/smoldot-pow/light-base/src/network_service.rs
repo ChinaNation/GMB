@@ -1789,12 +1789,12 @@ async fn background_task<TPlat: PlatformRef>(mut task: BackgroundTask<TPlat>) {
                     PeerId::from_public_key(&peer_id::PublicKey::Ed25519(pub_key))
                 };
 
-                // TODO: select target closest to the random peer instead
+                // 随机选取一个 gossip peer 发送 FindNode，扩大发现覆盖范围。
                 let target = task
                     .network
                     .gossip_connected_peers(chain_id, service::GossipKind::ConsensusTransactions)
-                    .next()
-                    .cloned();
+                    .cloned()
+                    .choose(&mut task.randomness);
 
                 if let Some(target) = target {
                     match task.network.start_kademlia_find_node_request(
