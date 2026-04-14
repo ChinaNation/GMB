@@ -16,8 +16,8 @@ export default function Footer() {
               </div>
             </div>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-400">
-              中华民族联邦共和国公民储备委员会。致力于构建主权区块链，
-              服务公民建国运动，实现自由民主的中华联邦共和国。
+              中华民族联邦共和国公民储备委员会，致力于构建主权区块链，
+              服务于公民建国运动，建立自由民主的中华民族联邦共和国。
             </p>
           </div>
 

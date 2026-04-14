@@ -5,29 +5,29 @@ const allocations = [
   {
     name: '创世发行',
     amount: '1,443.49 亿',
-    percent: 36.4,
-    desc: '初始分配至国储与省储账户',
+    percent: 7.10,
+    desc: '创世发行由国储会账户持有',
     color: 'bg-gold-400',
   },
   {
-    name: '省行质押',
+    name: '省储行创立发行',
     amount: '1,443.49 亿',
-    percent: 36.4,
-    desc: '省级银行永久质押，不进入流通',
+    percent: 7.10,
+    desc: '永久质押省储行创立发行的公民币，不进入流通',
     color: 'bg-gold-600',
   },
   {
-    name: '质押利息',
+    name: '省储行质押利息发行',
     amount: '728.97 亿',
-    percent: 18.4,
-    desc: '省行质押利息，100 年线性释放',
+    percent: 3.58,
+    desc: '省储行质押利息，100 年线性释放',
     color: 'bg-navy-400',
   },
   {
-    name: '全节点奖励',
+    name: '全节点铸块发行',
     amount: '999.89 亿',
-    percent: 8.8,
-    desc: 'PoW 出块奖励，逐块释放约 1000 万块',
+    percent: 4.92,
+    desc: 'PoW 出块奖励，逐块释放约 1000 万个区块',
     color: 'bg-navy-300',
   },
 ]
@@ -38,14 +38,14 @@ const economics = [
   { label: '基本单位', value: '元 (Yuan)' },
   { label: '最小单位', value: '分 (Fen)' },
   { label: '精度', value: '1 元 = 100 分' },
-  { label: '流通总量', value: '~3.96 万亿 GMB' },
+  { label: '流通总量', value: '~1443.49亿 GMB' },
   { label: '交易费率', value: '0.1% (最低 0.1 元)' },
   { label: '最小存款', value: '1.11 元' },
 ]
 
 const feeDistribution = [
   { name: '全节点奖励', share: '80%', desc: '出块全节点获得交易手续费的 80%' },
-  { name: '手续费账户', share: '10%', desc: '系统手续费账户积累' },
+  { name: '手续费账户', share: '10%', desc: '国储会手续费账户用于国储会运营' },
   { name: '安全基金', share: '10%', desc: '网络安全与应急储备基金' },
 ]
 
@@ -61,7 +61,7 @@ export default function Tokenomics() {
           <SectionTitle
             subtitle="公民币经济"
             title="公民币代币经济模型"
-            description="基于《公民宪法》发行的法定数字货币，总量约 3.96 万亿 GMB，通过多渠道发行机制确保公平分配。"
+            description="基于《公民宪法》发行的法定数字货币，通过多渠道发行机制确保公平分配。"
           />
         </div>
       </section>
@@ -111,14 +111,21 @@ export default function Tokenomics() {
 
         {/* Additional: Citizen Light Node */}
         <GlowCard glow="gold" className="mt-6">
-          <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-            <div>
-              <h3 className="text-lg font-semibold text-white">公民轻节点发行</h3>
-              <p className="mt-1 text-sm text-slate-400">经 SFID 认证的公民轻节点按认证数量获得公民币发行，总量约 15,719.81 亿 GMB</p>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-white">公民轻节点发行</h3>
+            <span className="text-2xl font-bold text-gold-400">77.30%</span>
+          </div>
+          <div className="mb-4 h-2 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full rounded-full bg-gradient-to-r from-gold-300 to-gold-500" style={{ width: '77.30%' }} />
+          </div>
+          <div className="flex flex-col items-start justify-between gap-2 md:flex-row md:items-center">
+            <span className="text-sm text-slate-400">经 SFID 认证的公民，按认证数量获得公民币认证奖励，共 1,443,497,378 个名额。</span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-white">15,719.81 亿</span>
+              <span className="whitespace-nowrap rounded-full border border-gold-500/30 bg-gold-500/10 px-3 py-1 text-xs font-semibold text-gold-400">
+                按节点认证发放
+              </span>
             </div>
-            <span className="whitespace-nowrap rounded-full border border-gold-500/30 bg-gold-500/10 px-4 py-2 text-sm font-semibold text-gold-400">
-              按节点认证发放
-            </span>
           </div>
         </GlowCard>
       </section>

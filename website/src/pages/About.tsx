@@ -13,24 +13,24 @@ const orgStructure = [
   {
     level: '国家储备委员会',
     count: '1',
-    admins: '19 位管理员',
-    threshold: '13/19 多签',
-    desc: '负责国家级货币发行与全网治理决策',
+    admins: '19 位委员',
+    threshold: '13/19 多签管理',
+    desc: '负责行使国家铸币权与全网治理决策',
     color: 'gold',
   },
   {
     level: '省级储备委员会',
     count: '43',
-    admins: '9 位管理员/省',
-    threshold: '6/9 多签',
-    desc: '管辖各省储备事务与区域治理',
+    admins: '9 位委员/省',
+    threshold: '6/9 多签管理',
+    desc: '行使省铸币权，负责省储备事务与区域治理',
     color: 'blue',
   },
   {
     level: '省级银行',
     count: '43',
     admins: '9 位董事/行',
-    threshold: '6/9 多签',
+    threshold: '6/9 多签管理',
     desc: '执行省级金融服务与公民币流通',
     color: 'blue',
   },
@@ -48,7 +48,7 @@ export default function About() {
           <SectionTitle
             subtitle="关于我们"
             title="中华民族联邦共和国公民储备委员会"
-            description="致力于构建主权区块链基础设施，发行公民币法定数字货币，服务公民建国运动，实现自由民主的中华联邦共和国。"
+            description="致力于构建主权区块链基础设施，发行公民币法定数字货币，服务公民建国运动，建立自由民主的中华民族联邦共和国。"
           />
         </div>
       </section>
@@ -83,7 +83,7 @@ export default function About() {
         <SectionTitle
           subtitle="组织架构"
           title="三级储备体系"
-          description="国家储备委员会、省级储备委员会、省级银行构成完整的三级治理与储备架构。"
+          description="国家储备委员会、省储备委员会、省储备银行构成完整的三级治理与治理架构。"
         />
 
         <div className="grid gap-8 md:grid-cols-3">
@@ -108,8 +108,8 @@ export default function About() {
         <div className="mx-auto max-w-4xl px-6 text-center">
           <h2 className="text-3xl font-bold text-white md:text-4xl">我们的使命</h2>
           <p className="mt-8 text-lg leading-relaxed text-slate-400">
-            建立一套不受任何单一机构控制的去中心化数字货币体系，让每一位中华公民都能平等地参与国家治理与经济建设。
-            通过区块链技术保障交易透明、身份自主、治理民主，推动公民建国运动，最终实现自由民主的中华联邦共和国。
+            建立一套不受任何单一机构控制的去中心化数字货币体系，让每一位公民都能平等地参与国家治理与经济建设。
+            通过区块链技术保障交易透明、身份自主、治理民主，推动公民建国运动，最终建立自由民主的中华民族联邦共和国。
           </p>
         </div>
       </section>
