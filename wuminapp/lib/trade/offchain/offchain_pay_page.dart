@@ -237,9 +237,10 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
         signCallback = (Uint8List payload) async {
           final qrSigner = QrSigner();
           final requestId = QrSigner.generateRequestId(prefix: 'offpay-');
-          final amountFormatted =
-              (AmountFormat.tryParse(_amountController.text) ?? 0)
-                  .toStringAsFixed(2);
+          final amountFormatted = AmountFormat.format(
+              AmountFormat.tryParse(_amountController.text) ?? 0,
+              symbol: '')
+              .trim();
           final rv = await ChainRpc().fetchRuntimeVersion();
           final request = qrSigner.buildRequest(
             requestId: requestId,
