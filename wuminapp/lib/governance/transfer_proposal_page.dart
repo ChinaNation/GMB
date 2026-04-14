@@ -197,9 +197,11 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
         // 管理员操作统一通过 QR 码签名（wumin 冷钱包）
         final qrSigner = QrSigner();
         final beneficiary = _beneficiaryController.text.trim();
-        // 统一格式化为两位小数，与 PayloadDecoder._fenToYuan 对齐
-        final amountFormatted =
-            (AmountFormat.tryParse(_amountController.text) ?? 0).toStringAsFixed(2);
+        // 千分位格式化，与 PayloadDecoder._fenToYuan 对齐
+        final amountFormatted = AmountFormat.format(
+            AmountFormat.tryParse(_amountController.text) ?? 0,
+            symbol: '')
+            .trim();
         final remarkText = _remarkController.text;
         final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
