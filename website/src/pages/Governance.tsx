@@ -5,19 +5,21 @@ const votingTiers = [
   {
     tier: '第一级',
     name: '内部投票',
-    scope: '国储 / 省储 / 省行内部',
+    scope: '国储会 / 省储会 / 省储行',
     desc: '各级机构内部的管理决策投票，由该机构管理员或董事参与',
     voters: '机构内管理员',
     threshold: '多签门槛通过',
+    extraTag: '',
     color: 'gold',
   },
   {
     tier: '第二级',
     name: '联合投票',
-    scope: '国储 + 全部省储 + 全部省行',
-    desc: '涉及全网治理的重大决策，需国储（19票）、省储（43票）、省行（43票）联合投票',
+    scope: '国储会 + 全部省储会 + 全部省储行',
+    desc: '涉及全网治理的重大决策，需国储会（19票）、省储会（43票）、省储行（43票）联合投票',
     voters: '105 票总计',
-    threshold: '>50% 通过',
+    threshold: '全票立即通过',
+    extraTag: '非全票则公民投票',
     color: 'gold',
   },
   {
@@ -27,6 +29,7 @@ const votingTiers = [
     desc: '所有经 SFID 认证并绑定的公民轻节点均有投票权，实现真正的公民民主',
     voters: '全体认证公民',
     threshold: '>50% 通过',
+    extraTag: '',
     color: 'gold',
   },
 ]
@@ -57,7 +60,7 @@ const rules = [
       </svg>
     ),
     title: '链上透明',
-    desc: '所有投票记录与计票结果永久存储在区块链上，公开可验证',
+    desc: '所有投票记录与计票结果存储在区块链上，公开可验证',
   },
   {
     icon: (
@@ -114,6 +117,9 @@ export default function Governance() {
               <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4">
                 <span className="rounded-md bg-white/5 px-2 py-1 text-xs text-slate-300">{v.voters}</span>
                 <span className="rounded-md bg-white/5 px-2 py-1 text-xs text-slate-300">{v.threshold}</span>
+                {v.extraTag && (
+                  <span className="rounded-md bg-white/5 px-2 py-1 text-xs text-slate-300">{v.extraTag}</span>
+                )}
               </div>
             </GlowCard>
           ))}

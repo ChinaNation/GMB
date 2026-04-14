@@ -3,10 +3,10 @@ import { Link, useLocation } from 'react-router-dom'
 
 const navItems = [
   { path: '/', label: '首页' },
-  { path: '/about', label: '关于我们' },
   { path: '/technology', label: '区块链技术' },
   { path: '/tokenomics', label: '公民币经济' },
   { path: '/governance', label: '治理体系' },
+  { path: '/about', label: '关于我们' },
   { path: '/ecosystem', label: '生态系统' },
 ]
 

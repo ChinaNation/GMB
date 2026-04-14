@@ -2,10 +2,10 @@ import { Link } from 'react-router-dom'
 import GlowCard from '../components/GlowCard'
 
 const stats = [
-  { value: '3.96万亿', label: '流通总量 (GMB)', suffix: '' },
-  { value: '44', label: '权威节点', suffix: '' },
-  { value: '43', label: '省级储备局', suffix: '' },
-  { value: '6', label: '核心系统模块', suffix: '' },
+  { value: '2.03万亿', label: '预计发行总量 (GMB)', suffix: '' },
+  { value: '44', label: '权威节点（国储会+省储会）', suffix: '' },
+  { value: '43', label: '权益节点（省储行）', suffix: '' },
+  { value: '12', label: '核心系统模块', suffix: '' },
 ]
 
 const features = [
@@ -43,7 +43,7 @@ const features = [
       </svg>
     ),
     title: '数字法定货币',
-    desc: '基于《公民宪法》的法定数字货币，服务全体中华公民',
+    desc: '基于《公民宪法》的法定数字货币，每一位公民都有权参与治理',
   },
 ]
 
@@ -75,8 +75,8 @@ export default function Home() {
             </h1>
 
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-slate-400 md:text-xl">
-              构建去中心化主权区块链，发行公民币法定数字货币，
-              服务公民建国运动，实现自由民主的中华联邦共和国
+              构建去中心化主权区块链，发行法定数字公民币，
+              推动公民建国运动，建立自由民主的中华民族联邦共和国
             </p>
 
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
