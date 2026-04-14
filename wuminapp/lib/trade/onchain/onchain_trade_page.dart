@@ -323,9 +323,11 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
           final qrSigner = QrSigner();
           final requestId = QrSigner.generateRequestId(prefix: 'tx-');
           final toAddr = _toController.text.trim();
-          // 统一格式化为两位小数，与 PayloadDecoder._fenToYuan 对齐
-          final amountFormatted =
-              (AmountFormat.tryParse(_amountController.text) ?? 0).toStringAsFixed(2);
+          // 千分位格式化，与 PayloadDecoder._fenToYuan 对齐
+          final amountFormatted = AmountFormat.format(
+              AmountFormat.tryParse(_amountController.text) ?? 0,
+              symbol: '')
+              .trim();
           final rv = await ChainRpc().fetchRuntimeVersion();
           final request = qrSigner.buildRequest(
             requestId: requestId,

@@ -48,7 +48,7 @@ export function SweepProposalPage({
 
   const handleSubmit = async () => {
     if (!selectedWallet) { setFormError('请选择管理员钱包'); return; }
-    const amount = parseFloat(amountYuan);
+    const amount = parseFloat(amountYuan.replace(/,/g, ''));
     if (isNaN(amount) || amount <= 0) { setFormError('金额必须大于 0'); return; }
     setFormError(null);
     setSubmitting(true);
@@ -120,9 +120,16 @@ export function SweepProposalPage({
           <div className="wallet-form-field">
             <label>划转金额（元）</label>
             <input
-              type="number" value={amountYuan}
-              onChange={(e) => setAmountYuan(e.target.value)}
-              placeholder="0.00" min="0.01" step="0.01"
+              type="text" inputMode="decimal" value={amountYuan}
+              onChange={(e) => {
+                const v = e.target.value.replace(/[^0-9.,]/g, '');
+                const clean = v.replace(/,/g, '');
+                const dot = clean.indexOf('.');
+                const int = dot >= 0 ? clean.slice(0, dot) : clean;
+                const dec = dot >= 0 ? clean.slice(dot) : '';
+                setAmountYuan(int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + dec);
+              }}
+              placeholder="0.00"
               disabled={submitting}
             />
           </div>

@@ -64,7 +64,7 @@ export function CreateProposalPage({
   const validateForm = (): string | null => {
     if (!selectedWallet) return '请选择管理员钱包';
     if (!beneficiary.trim()) return '请输入收款地址';
-    const amount = parseFloat(amountYuan);
+    const amount = parseFloat(amountYuan.replace(/,/g, ''));
     if (isNaN(amount) || amount < 1.11) return '转账金额不能低于 1.11 元';
     const remarkBytes = new TextEncoder().encode(remark);
     if (remarkBytes.length > 256) return `备注超过 256 字节（当前 ${remarkBytes.length}）`;
@@ -78,7 +78,7 @@ export function CreateProposalPage({
     setSubmitting(true);
 
     try {
-      const amount = parseFloat(amountYuan);
+      const amount = parseFloat(amountYuan.replace(/,/g, ''));
       formValuesRef.current = { beneficiary: beneficiary.trim(), amountYuan: amount, remark };
 
       const result = await api.buildProposeTransferRequest(
@@ -182,9 +182,16 @@ export function CreateProposalPage({
           <div className="wallet-form-field">
             <label>转账金额（元，最少 1.11）</label>
             <input
-              type="number" value={amountYuan}
-              onChange={(e) => setAmountYuan(e.target.value)}
-              placeholder="0.00" min="1.11" step="0.01"
+              type="text" inputMode="decimal" value={amountYuan}
+              onChange={(e) => {
+                const v = e.target.value.replace(/[^0-9.,]/g, '');
+                const clean = v.replace(/,/g, '');
+                const dot = clean.indexOf('.');
+                const int = dot >= 0 ? clean.slice(0, dot) : clean;
+                const dec = dot >= 0 ? clean.slice(dot) : '';
+                setAmountYuan(int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + dec);
+              }}
+              placeholder="0.00"
               disabled={submitting}
             />
           </div>
