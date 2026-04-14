@@ -1977,3 +1977,705 @@ select option:checked {
   text-align: center;
   margin: 0 0 12px;
 }
+
+/* ── 首页左右双框布局 ── */
+
+.home-dual-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .home-dual-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+.issuance-stack-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.identity-p2p-line {
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+.identity-p2p-address {
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+/* ── 交易面板 ── */
+
+.transaction-panel {
+  padding: 0;
+}
+
+.transaction-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.transaction-panel-header h2 {
+  margin: 0;
+}
+
+.wallet-icon-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.wallet-icon-btn:hover {
+  border-color: var(--primary);
+}
+
+.wallet-info-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.wallet-info-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.wallet-info-address {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.wallet-info-balance {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 8px;
+}
+
+.wallet-info-balance-unit {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+.no-wallet-prompt {
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+  padding: 24px 0;
+}
+
+/* ── 转账表单 ── */
+
+.transfer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.transfer-form label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.transfer-form input {
+  padding: 8px 10px;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.transfer-form input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+
+.transfer-fee-line {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+}
+
+.transfer-total-line {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.transfer-form-balance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+
+.transfer-form-balance-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.transfer-form-balance-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.transfer-form-status-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  margin: 8px 0;
+}
+
+.transfer-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.transfer-form-field label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.transfer-form-field input {
+  padding: 8px 10px;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.transfer-form-field input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+
+.transfer-form-amount-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.transfer-form-amount-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.transfer-form-amount-row input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+
+.transfer-form-currency {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.transfer-form-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.transfer-form-summary-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.transfer-form-summary-line.total {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.transfer-form-submit {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 10px 0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.transfer-form-submit:hover {
+  opacity: 0.9;
+}
+
+.transfer-form-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wallet-manage-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.wallet-manage-btn:hover {
+  border-color: var(--primary);
+}
+
+.transfer-submit-btn {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 10px 0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.transfer-submit-btn:hover {
+  opacity: 0.9;
+}
+
+.transfer-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── 钱包管理弹窗 ── */
+
+.wallet-manager-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.wallet-manager-modal {
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 680px;
+  max-width: calc(100vw - 32px);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.wallet-manager-modal h3 {
+  margin: 0 0 16px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wallet-manager-close {
+  font-size: 20px;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  line-height: 1;
+}
+
+.wallet-manager-close:hover {
+  color: var(--text-primary);
+}
+
+/* 钱包列表行：radio + 名称 + 地址 + 删除 一行排列 */
+
+.wallet-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.wallet-row:hover {
+  border-color: var(--primary);
+}
+
+.wallet-row.active {
+  border-color: var(--primary);
+  background: rgba(6, 182, 212, 0.08);
+}
+
+.wallet-radio {
+  flex-shrink: 0;
+}
+
+.wallet-row-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.wallet-row-address {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-row-delete-text {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.wallet-row-delete-text:hover {
+  color: #ef4444;
+}
+
+.wallet-row-delete-text.confirm {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.wallet-row-balance {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+/* 添加区（上方） */
+.wallet-add-section-top {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.wallet-add-section-top h4 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.wallet-add-section-top input {
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.wallet-add-section-top input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+
+.wallet-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 14px 0;
+  flex-shrink: 0;
+}
+
+/* 钱包列表（下方，可滚动） */
+.wallet-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.wallet-add-section {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wallet-add-section input {
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.wallet-add-section input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+
+.wallet-add-btn {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 8px 0;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.wallet-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wallet-add-btn-half {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 8px 0;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  width: 50%;
+}
+
+.wallet-add-btn-half:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wallet-manager-close-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 8px 0;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 12px;
+}
+
+/* ── 转账签名流程弹窗 ── */
+
+.transfer-signing-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.transfer-signing-modal {
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+/* 签名弹窗头部：标题 + 右上角叉 */
+.transfer-signing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.transfer-signing-header h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.transfer-signing-close {
+  font-size: 20px;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.transfer-signing-close:hover {
+  color: var(--text-primary);
+}
+
+.transfer-signing-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 确认摘要行：label 和 value 之间有间距，行间也有间距 */
+.transfer-signing-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.transfer-signing-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.transfer-signing-label {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.transfer-signing-value {
+  color: var(--text-primary);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-all;
+}
+
+.transfer-signing-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.transfer-signing-actions button {
+  flex: 1;
+  padding: 10px 0;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.transfer-signing-confirm {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  padding: 10px 0;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.transfer-signing-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* QR 码正方形白色背景 */
+.transfer-qr-box {
+  display: inline-flex;
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  align-self: center;
+}
+
+.qr-countdown {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.qr-instruction {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin: 0;
+}
+
+.transfer-success {
+  text-align: center;
+}
+
+.transfer-success p {
+  font-size: 16px;
+  font-weight: 600;
+  color: #22c55e;
+}
+
+.tx-hash {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--primary);
+  word-break: break-all;
+  display: block;
+  background: var(--bg-card);
+  padding: 8px;
+  border-radius: 6px;
+  margin: 8px 0;
+}
+
+.transfer-success-msg {
+  color: #22c55e;
+  font-size: 13px;
+  text-align: center;
+  margin-top: 8px;
+}
