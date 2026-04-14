@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::time::Duration;
 
-use super::storage_keys;
+use super::{signing, storage_keys};
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -1075,15 +1075,13 @@ fn fetch_proposal_display(
         // 先尝试转账提案
         if let Some(detail) = decode_transfer_action(proposal_id, data) {
             let amount: u128 = detail.amount_fen.parse().unwrap_or(0);
-            let yuan = amount / 100;
-            let fen = amount % 100;
             let remark_short = if detail.remark.len() > 30 {
                 format!("{}…", &detail.remark[..30])
             } else {
                 detail.remark.clone()
             };
             return Ok(ProposalDisplayInfo {
-                summary: format!("转账 {yuan}.{fen:02} 元：{remark_short}"),
+                summary: format!("转账 {} 元：{remark_short}", signing::format_amount(amount as f64 / 100.0)),
                 status: meta.status,
                 status_label: status_label(meta.status).to_string(),
             });
@@ -1095,7 +1093,7 @@ fn fetch_proposal_display(
             let inst_name = resolve_institution_name(Some(&detail.institution_hex))
                 .unwrap_or_else(|| "未知机构".to_string());
             return Ok(ProposalDisplayInfo {
-                summary: format!("决议销毁 {}.{:02} 元：{inst_name}", amount / 100, amount % 100),
+                summary: format!("决议销毁 {} 元：{inst_name}", signing::format_amount(amount as f64 / 100.0)),
                 status: meta.status,
                 status_label: status_label(meta.status).to_string(),
             });
@@ -1117,7 +1115,7 @@ fn fetch_proposal_display(
         if let Ok(Some(_sf)) = fetch_safety_fund_proposal_action(proposal_id) {
             let amount: u128 = _sf.amount_fen.parse().unwrap_or(0);
             return Ok(ProposalDisplayInfo {
-                summary: format!("安全基金转账 {}.{:02} 元", amount / 100, amount % 100),
+                summary: format!("安全基金转账 {} 元", signing::format_amount(amount as f64 / 100.0)),
                 status: meta.status,
                 status_label: status_label(meta.status).to_string(),
             });
@@ -1129,7 +1127,7 @@ fn fetch_proposal_display(
             let inst_name = resolve_institution_name(Some(&sweep.institution_hex))
                 .unwrap_or_else(|| "未知机构".to_string());
             return Ok(ProposalDisplayInfo {
-                summary: format!("手续费划转 {}.{:02} 元：{inst_name}", amount / 100, amount % 100),
+                summary: format!("手续费划转 {} 元：{inst_name}", signing::format_amount(amount as f64 / 100.0)),
                 status: meta.status,
                 status_label: status_label(meta.status).to_string(),
             });

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { GovernanceSection } from './governance/GovernanceSection';
 import { HomeNodeSection } from './home/home-node';
+import { TransactionPanel } from './transaction/TransactionPanel';
 import { MiningDashboardSection } from './mining/mining-dashboard';
 import { NetworkOverviewSection } from './network/network-overview';
 import { OtherTabsSection } from './other/other-tabs';
@@ -31,37 +32,48 @@ export default function App() {
         <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>设置</button>
       </nav>
 
-      <main className="app">
-        <section className="content">
-          {tab === 'home' ? (
-            <HomeNodeSection onNodeActionBusyChange={setNodeActionBusy} />
-          ) : null}
+      {tab === 'home' ? (
+        <div className="home-dual-panel">
+          <main className="app">
+            <section className="content">
+              <HomeNodeSection onNodeActionBusyChange={setNodeActionBusy} />
+            </section>
+          </main>
+          <aside className="app">
+            <section className="content">
+              <TransactionPanel />
+            </section>
+          </aside>
+        </div>
+      ) : (
+        <main className="app">
+          <section className="content">
+            {tab === 'settings' ? (
+              <SettingsSection disabled={nodeActionBusy} />
+            ) : null}
 
-          {tab === 'settings' ? (
-            <SettingsSection disabled={nodeActionBusy} />
-          ) : null}
+            {tab === 'mining' ? (
+              <MiningDashboardSection />
+            ) : null}
 
-          {tab === 'mining' ? (
-            <MiningDashboardSection />
-          ) : null}
+            {tab === 'governance' ? (
+              <GovernanceSection />
+            ) : null}
 
-          {tab === 'governance' ? (
-            <GovernanceSection />
-          ) : null}
+            {tab === 'network' ? (
+              <NetworkOverviewSection />
+            ) : null}
 
-          {tab === 'network' ? (
-            <NetworkOverviewSection />
-          ) : null}
+            {tab === 'whitepaper' ? (
+              <OtherTabsSection activeKey="whitepaper" />
+            ) : null}
 
-          {tab === 'whitepaper' ? (
-            <OtherTabsSection activeKey="whitepaper" />
-          ) : null}
-
-          {tab === 'constitution' ? (
-            <OtherTabsSection activeKey="constitution" />
-          ) : null}
-        </section>
-      </main>
+            {tab === 'constitution' ? (
+              <OtherTabsSection activeKey="constitution" />
+            ) : null}
+          </section>
+        </main>
+      )}
     </div>
   );
 }

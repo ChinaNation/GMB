@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, sanitizeError } from '../api';
-import { hexToSs58 } from '../format';
+import { hexToSs58, formatBalance } from '../format';
 import { QrScanner } from './QrScanner';
 import type {
   ActivateRequestResult,
@@ -142,7 +142,7 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
             const isSigningAdminKey = signingAdmin?.pubkeyHex.toLowerCase() === pubkey.toLowerCase();
             const ss58 = hexToSs58(pubkey);
             const balanceDisplay = admin.balanceFen != null
-              ? `${(parseInt(admin.balanceFen) / 100).toFixed(2)} 元`
+              ? formatBalance(admin.balanceFen)
               : '—';
             return (
               <div key={pubkey} className={`metric-card admin-card ${isActivated ? 'admin-card-activated' : ''}`}>

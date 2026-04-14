@@ -1,7 +1,7 @@
 // 治理模块入口：注册 Tauri 命令，聚合机构数据。
 
 pub mod activation;
-mod institution;
+pub(crate) mod institution;
 pub mod proposal;
 pub mod sfid_api;
 pub mod signing;
