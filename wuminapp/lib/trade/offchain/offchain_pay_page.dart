@@ -480,7 +480,7 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
 
                       // 金额输入
                       if (_amountPreset)
-                        _buildInfoRow('金额', '${widget.amount} GMB',
+                        _buildInfoRow('金额', AmountFormat.format(widget.amount),
                             bold: true)
                       else
                         TextField(

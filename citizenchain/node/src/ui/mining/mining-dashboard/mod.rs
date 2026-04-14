@@ -508,7 +508,17 @@ fn fullnode_fee_income_fen(total_fee_fen: u128) -> u128 {
 fn format_2_decimals_fen(amount_fen: u128) -> String {
     let major = amount_fen / 100;
     let minor = amount_fen % 100;
-    format!("{major}.{minor:02}")
+    // 千分位格式化
+    let major_str = major.to_string();
+    let mut result = String::new();
+    for (i, ch) in major_str.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            result.push(',');
+        }
+        result.push(ch);
+    }
+    let formatted: String = result.chars().rev().collect();
+    format!("{formatted}.{minor:02}")
 }
 
 fn block_reward_fen_by_height(height: u64) -> u128 {

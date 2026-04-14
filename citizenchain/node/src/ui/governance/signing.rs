@@ -21,7 +21,7 @@ use crate::ui::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 const SS58_PREFIX: u16 = 2027;
 
 /// 金额格式化：带千分位逗号，保留 2 位小数。
-fn format_amount(yuan: f64) -> String {
+pub(crate) fn format_amount(yuan: f64) -> String {
     let fixed = format!("{:.2}", yuan);
     let parts: Vec<&str> = fixed.split('.').collect();
     let int_part = parts[0];
@@ -1606,6 +1606,65 @@ fn generate_request_id(prefix: &str) -> String {
 /// 生成请求 ID（供 activation 模块调用）。
 pub(crate) fn generate_request_id_public(prefix: &str) -> String {
     generate_request_id(prefix)
+}
+
+/// 通用签名请求构建：给定 call_data + display 信息，返回完整的 QR 签名请求。
+///
+/// 供 transaction 模块等外部调用方使用，避免重复获取链上参数和构建 payload。
+pub fn build_sign_request_from_call_data(
+    pubkey_hex: &str,
+    pubkey_bytes: &[u8],
+    call_data: &[u8],
+    action: &str,
+    summary: &str,
+    fields: &serde_json::Value,
+) -> Result<VoteSignRequestResult, String> {
+    let (spec_version, tx_version) = fetch_runtime_version()?;
+    let genesis_hash = fetch_genesis_hash()?;
+    let (block_hash, block_number) = fetch_latest_block()?;
+    let nonce = fetch_nonce(pubkey_hex)?;
+
+    let payload = build_signing_payload(
+        call_data, &genesis_hash, &block_hash, block_number,
+        nonce, spec_version, tx_version,
+    );
+    let payload_hash = sha256_hash(&payload);
+    let request_id = generate_request_id(action);
+    let account_ss58 = pubkey_to_ss58(pubkey_bytes)?;
+
+    let display = serde_json::json!({
+        "action": action,
+        "summary": summary,
+        "fields": fields
+    });
+
+    let now = now_secs();
+    let request = QrSignRequest {
+        proto: PROTOCOL_VERSION.to_string(),
+        kind: "sign_request".to_string(),
+        id: request_id.clone(),
+        issued_at: now,
+        expires_at: now + DEFAULT_TTL_SECS,
+        body: SignRequestBody {
+            address: account_ss58,
+            pubkey: format!("0x{pubkey_hex}"),
+            sig_alg: "sr25519".to_string(),
+            payload_hex: format!("0x{}", hex::encode(&payload)),
+            spec_version,
+            display,
+        },
+    };
+
+    let request_json = serde_json::to_string(&request)
+        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+
+    Ok(VoteSignRequestResult {
+        request_json,
+        request_id,
+        expected_payload_hash: format!("0x{}", hex::encode(payload_hash)),
+        sign_nonce: nonce,
+        sign_block_number: block_number,
+    })
 }
 
 #[cfg(test)]

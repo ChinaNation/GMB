@@ -6,6 +6,8 @@ cleanup() {
     echo ""
     echo "==> 正在关闭节点进程..."
     pkill -f "citizenchain" 2>/dev/null || true
+    # vite dev server 进程名是 node，pkill citizenchain 杀不到，需按端口清理
+    lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
     sleep 1
     echo "    节点已关闭"
 }

@@ -10,7 +10,7 @@ export function IdentitySection({ identity }: Props) {
     <section className="section">
       <h2>身份</h2>
       <p>节点角色: {identity.role ?? '全节点'}</p>
-      <p>P2P地址: {identity.peerId ? `/p2p/${identity.peerId}` : '-'}</p>
+      <p className="identity-p2p-line">P2P地址: <span className="identity-p2p-address">{identity.peerId ? `/p2p/${identity.peerId}` : '-'}</span></p>
     </section>
   );
 }

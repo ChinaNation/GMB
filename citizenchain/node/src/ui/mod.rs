@@ -11,6 +11,7 @@ pub(crate) mod other;
 pub(crate) mod settings;
 pub(crate) mod shared;
 pub(crate) mod node_runner;
+pub(crate) mod transaction;
 
 use home::{cleanup_on_exit, cleanup_on_startup, AppState, RuntimeState};
 use std::sync::Mutex;
@@ -74,7 +75,14 @@ pub fn run_desktop() {
             governance::build_rate_vote_request,
             governance::build_propose_rate_request,
             governance::submit_propose_rate,
-            governance::query_institution_rate_bp
+            governance::query_institution_rate_bp,
+            transaction::get_wallets,
+            transaction::add_wallet,
+            transaction::remove_wallet,
+            transaction::set_active_wallet,
+            transaction::get_wallet_balance,
+            transaction::build_transfer_request,
+            transaction::submit_transfer
         ])
         .setup(|app| {
             cleanup_on_startup(app.handle());

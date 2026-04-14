@@ -630,7 +630,8 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
             child: QrImageView(
               data: responseJson,
               version: QrVersions.auto,
-              size: 220,
+              size: 360,
+              errorCorrectionLevel: QrErrorCorrectLevel.M,
               eyeStyle: const QrEyeStyle(
                 eyeShape: QrEyeShape.square,
                 color: AppTheme.primaryDark,

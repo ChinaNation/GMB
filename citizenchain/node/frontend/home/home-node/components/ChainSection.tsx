@@ -26,7 +26,6 @@ export function ChainSection({ chain, nodeRunning }: Props) {
       <h2>区块</h2>
       <p>当前高度: {chain.blockHeight ?? '-'}</p>
       <p>最终确认高度: {chain.finalizedHeight ?? '-'}</p>
-      <p>区块状态: {status}</p>
     </section>
   );
 }
