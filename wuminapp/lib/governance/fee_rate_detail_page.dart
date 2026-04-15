@@ -215,6 +215,7 @@ class _FeeRateDetailPageState extends State<FeeRateDetailPage> {
           ),
         );
         final requestJson = qrSigner.encodeRequest(request);
+        if (!mounted) throw Exception('页面已关闭');
         final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
@@ -363,7 +364,7 @@ class _FeeRateDetailPageState extends State<FeeRateDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppTheme.border),
+        side: const BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -392,7 +393,7 @@ class _FeeRateDetailPageState extends State<FeeRateDetailPage> {
     return Row(
       children: [
         SizedBox(width: 80,
-          child: Text(label, style: TextStyle(fontSize: 13, color: AppTheme.textTertiary))),
+          child: Text(label, style: const TextStyle(fontSize: 13, color: AppTheme.textTertiary))),
         Expanded(
           child: Text(value, style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
       ],

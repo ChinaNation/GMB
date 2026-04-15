@@ -242,12 +242,12 @@ class _DuoqianInstitutionInfoPageState
           children: [
             const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
             const SizedBox(height: 12),
-            Text('加载失败',
+            const Text('加载失败',
                 style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
             const SizedBox(height: 6),
             Text(
               _error!,
-              style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+              style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -284,7 +284,7 @@ class _DuoqianInstitutionInfoPageState
             margin: EdgeInsets.zero,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: AppTheme.border),
+              side: const BorderSide(color: AppTheme.border),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -344,7 +344,7 @@ class _DuoqianInstitutionInfoPageState
             margin: EdgeInsets.zero,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: AppTheme.border),
+              side: const BorderSide(color: AppTheme.border),
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -364,8 +364,8 @@ class _DuoqianInstitutionInfoPageState
                   ),
                   const Divider(),
                   if (_adminPubkeys.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(16),
+                    const Padding(
+                      padding: EdgeInsets.all(16),
                       child: Text(
                         '暂无管理员信息',
                         style: TextStyle(color: AppTheme.textTertiary),
@@ -414,7 +414,7 @@ class _DuoqianInstitutionInfoPageState
           width: 80,
           child: Text(
             label,
-            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+            style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
           ),
         ),
         Expanded(
@@ -430,7 +430,7 @@ class _DuoqianInstitutionInfoPageState
         if (onCopy != null)
           GestureDetector(
             onTap: onCopy,
-            child: Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
+            child: const Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
           ),
       ],
     );

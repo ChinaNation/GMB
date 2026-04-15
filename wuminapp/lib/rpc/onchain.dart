@@ -302,7 +302,7 @@ class OnchainRpc {
 
     final keyHex = '0x${_hexEncode(keyBytes)}';
     final data = await _rpc.fetchStorage(keyHex);
-    if (data == null || data.length < 1) return null;
+    if (data == null || data.isEmpty) return null;
 
     // 返回值是 [u8; 48]，去尾部零字节还原 shenfen_id
     final institutionBytes = data.length >= 48 ? data.sublist(0, 48) : data;

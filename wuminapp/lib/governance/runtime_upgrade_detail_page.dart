@@ -288,6 +288,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       display: display,
     );
     final requestJson = qrSigner.encodeRequest(request);
+    if (!mounted) throw Exception('页面已关闭');
     final response = await Navigator.push<SignResponseEnvelope>(
       context,
       MaterialPageRoute(
@@ -457,12 +458,12 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           children: [
             const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
             const SizedBox(height: 12),
-            Text('加载失败',
+            const Text('加载失败',
                 style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
             const SizedBox(height: 6),
             Text(
               _error!,
-              style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+              style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               textAlign: TextAlign.center,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
@@ -514,7 +515,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppTheme.border),
+        side: const BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -595,7 +596,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           width: 80,
           child: Text(
             label,
-            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+            style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
           ),
         ),
         Expanded(
@@ -629,7 +630,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           width: 80,
           child: Text(
             label,
-            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+            style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
           ),
         ),
         Expanded(
@@ -641,7 +642,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         if (onCopy != null)
           GestureDetector(
             onTap: onCopy,
-            child: Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
+            child: const Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
           ),
       ],
     );
@@ -657,7 +658,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppTheme.border),
+        side: const BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -697,7 +698,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                 ),
                 Text(
                   '反对 ${_jointTally.no}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 13,
                     color: AppTheme.danger,
                   ),
@@ -707,7 +708,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             const SizedBox(height: 6),
             Text(
               '联合投票总权重 $jointVoteTotal，国储会权重 19，省储会/省储行各权重 1',
-              style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+              style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
             ),
           ],
         ),
@@ -725,7 +726,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppTheme.border),
+        side: const BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -771,11 +772,11 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               children: [
                 Text(
                   '管理员反对 ${_institutionAdminTally.no}',
-                  style: TextStyle(fontSize: 13, color: AppTheme.danger),
+                  style: const TextStyle(fontSize: 13, color: AppTheme.danger),
                 ),
                 Text(
                   '链上当前管理员 ${_admins.length} 人',
-                  style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                 ),
               ],
             ),
@@ -783,7 +784,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             _buildVoteWalletSelector(),
             if (_admins.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text(
+              const Text(
                 '本机构管理员直接上链投票，赞成达到阈值会自动形成机构赞成结果；若剩余管理员已不足以达到阈值，链上会自动形成机构反对结果。',
                 style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               ),
@@ -820,7 +821,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         ),
         child: Text(
           _allImportedAdminsVoted ? '已导入管理员钱包均已完成投票' : '当前没有可用的管理员钱包',
-          style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
         ),
       );
     }
@@ -837,7 +838,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           _pubkeyToSs58(wallet.pubkeyHex),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 11, color: AppTheme.textTertiary),
+          style: const TextStyle(fontSize: 11, color: AppTheme.textTertiary),
         ),
         trailing: const Icon(Icons.shield_outlined,
             size: 18, color: AppTheme.warning),
@@ -892,7 +893,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppTheme.border),
+        side: const BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -921,7 +922,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                 ),
                 Text(
                   '反对 ${_citizenTally.no}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 13,
                     color: AppTheme.danger,
                   ),
@@ -972,8 +973,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 10),
             child: Text(
               '公民投票',
               style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
@@ -1103,7 +1104,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               padding: const EdgeInsets.only(bottom: 10),
               child: Text(
                 disabledReason,
-                style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
+                style: const TextStyle(fontSize: 13, color: AppTheme.textTertiary),
                 textAlign: TextAlign.center,
               ),
             ),

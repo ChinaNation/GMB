@@ -899,20 +899,6 @@ class WalletManager {
     );
   }
 
-  WalletProfileEntity _toEntity(WalletProfile profile) {
-    return WalletProfileEntity()
-      ..walletIndex = profile.walletIndex
-      ..walletName = profile.walletName
-      ..walletIcon = profile.walletIcon
-      ..balance = profile.balance
-      ..address = profile.address
-      ..pubkeyHex = profile.pubkeyHex
-      ..alg = profile.alg
-      ..ss58 = profile.ss58
-      ..createdAtMillis = profile.createdAtMillis
-      ..source = profile.source
-      ..signMode = profile.signMode;
-  }
 }
 
 class _DerivedWallet {

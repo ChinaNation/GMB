@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -114,7 +113,7 @@ class _DuoqianInstitutionListPageState
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(Icons.business, color: _institutionColor),
+              leading: const Icon(Icons.business, color: _institutionColor),
               title: const Text('创建机构多签账户'),
               subtitle: const Text('需要 SFID 机构标识'),
               onTap: () {
@@ -123,7 +122,7 @@ class _DuoqianInstitutionListPageState
               },
             ),
             ListTile(
-              leading: Icon(Icons.person, color: _personalColor),
+              leading: const Icon(Icons.person, color: _personalColor),
               title: const Text('创建个人多签账户'),
               subtitle: const Text('无需 SFID，直接设置管理员'),
               onTap: () {
@@ -133,7 +132,7 @@ class _DuoqianInstitutionListPageState
             ),
             const Divider(height: 1),
             ListTile(
-              leading: Icon(Icons.qr_code_scanner, color: AppTheme.primaryDark),
+              leading: const Icon(Icons.qr_code_scanner, color: AppTheme.primaryDark),
               title: const Text('扫码加入多签账户'),
               subtitle: const Text('扫描多签账户二维码加入'),
               onTap: () {
@@ -162,7 +161,7 @@ class _DuoqianInstitutionListPageState
       context,
       MaterialPageRoute(
         builder: (_) => DuoqianCreateProposalPage(
-          institution: InstitutionInfo(
+          institution: const InstitutionInfo(
             name: '新建多签机构',
             shenfenId:
                 'duoqian:0000000000000000000000000000000000000000000000000000000000000000',
@@ -390,15 +389,15 @@ class _DuoqianInstitutionListPageState
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.groups_outlined, size: 64, color: AppTheme.border),
+          const Icon(Icons.groups_outlined, size: 64, color: AppTheme.border),
           const SizedBox(height: 12),
-          Text(
+          const Text(
             '暂无多签账户',
             style: TextStyle(fontSize: 16, color: AppTheme.textTertiary),
           ),
           if (widget.mode == InstitutionListMode.manage) ...[
             const SizedBox(height: 6),
-            Text(
+            const Text(
               '点击右上角 + 创建',
               style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
             ),
@@ -490,12 +489,12 @@ class _DuoqianInstitutionListPageState
                     const SizedBox(height: 2),
                     Text(
                       _truncateAddress(ss58),
-                      style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
+              const Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),

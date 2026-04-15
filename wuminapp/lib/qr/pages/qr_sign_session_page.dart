@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
-import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 
 /// 冷钱包扫码签名会话页面。

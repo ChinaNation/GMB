@@ -198,6 +198,7 @@ class _BindClearingPageState extends State<BindClearingPage> {
           );
           final requestJson = qrSigner.encodeRequest(request);
 
+          if (!mounted) throw Exception('页面已关闭');
           final response = await Navigator.push<SignResponseEnvelope>(
             context,
             MaterialPageRoute(

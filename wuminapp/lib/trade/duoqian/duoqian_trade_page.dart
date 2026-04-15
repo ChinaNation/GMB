@@ -273,18 +273,18 @@ class _DuoqianTradePageState extends State<DuoqianTradePage> {
   }
 
   Widget _buildEmpty() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.receipt_long, size: 64, color: AppTheme.border),
-          const SizedBox(height: 12),
-          const Text(
+          Icon(Icons.receipt_long, size: 64, color: AppTheme.border),
+          SizedBox(height: 12),
+          Text(
             '暂无多签交易记录',
             style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
           ),
-          const SizedBox(height: 6),
-          const Text(
+          SizedBox(height: 6),
+          Text(
             '点击右上角 + 发起多签转账',
             style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
           ),

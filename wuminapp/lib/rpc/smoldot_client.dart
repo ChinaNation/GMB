@@ -319,7 +319,7 @@ class SmoldotClientManager {
       final spec = jsonDecode(chainSpecJson) as Map<String, dynamic>;
       final List<dynamic> bootNodes =
           (spec['bootNodes'] as List?)?.cast<dynamic>() ?? <dynamic>[];
-      final localBoot = '/ip4/127.0.0.1/tcp/$localPort/ws/p2p/$localPeerId';
+      const localBoot = '/ip4/127.0.0.1/tcp/$localPort/ws/p2p/$localPeerId';
       // 去重（防止热重载叠加）
       bootNodes.removeWhere((e) => e == localBoot);
       bootNodes.insert(0, localBoot);

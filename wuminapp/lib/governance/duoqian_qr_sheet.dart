@@ -116,7 +116,7 @@ class _DuoqianQrSheetState extends State<DuoqianQrSheet> {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
+            const Text(
               '多签账户二维码',
               style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
             ),

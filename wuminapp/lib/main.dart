@@ -376,14 +376,14 @@ class _AppShellState extends State<AppShell> {
               margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: AppTheme.bannerDecoration(AppTheme.danger),
-              child: SafeArea(
+              child: const SafeArea(
                 bottom: false,
                 child: Row(
                   children: [
                     Icon(Icons.warning_rounded,
                         color: AppTheme.danger, size: 18),
-                    const SizedBox(width: 8),
-                    const Expanded(
+                    SizedBox(width: 8),
+                    Expanded(
                       child: Text(
                         '检测到设备已 root/越狱，密钥安全无法保障',
                         style: TextStyle(
@@ -406,7 +406,7 @@ class _AppShellState extends State<AppShell> {
         ],
       ),
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: AppTheme.surfaceWhite,
           border: Border(
             top: BorderSide(color: AppTheme.border, width: 0.5),
@@ -513,14 +513,14 @@ class _HomePageState extends State<HomePage> {
               });
             },
           ),
-          Expanded(
+          const Expanded(
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.explore_outlined,
                       size: 48, color: AppTheme.textTertiary),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   Text(
                     '广场页面（开发中）',
                     style: TextStyle(
@@ -578,13 +578,13 @@ class _VotingPageState extends State<VotingPage> {
 
     switch (_selectedTab) {
       case 0:
-        return Stack(
+        return const Stack(
           children: [
             // 背景层：宪法引言，投票功能上线后保留
             Positioned.fill(
               child: Center(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  padding: EdgeInsets.symmetric(horizontal: 32),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -602,7 +602,7 @@ class _VotingPageState extends State<VotingPage> {
                           letterSpacing: 0.3,
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      SizedBox(height: 20),
                       SizedBox(
                         width: 160,
                         child: Divider(
@@ -610,7 +610,7 @@ class _VotingPageState extends State<VotingPage> {
                           thickness: 0.8,
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      SizedBox(height: 14),
                       Text(
                         '《公民宪法》撰写人 \u00B7 程伟',
                         textAlign: TextAlign.center,
@@ -633,7 +633,7 @@ class _VotingPageState extends State<VotingPage> {
           onPendingVoteCountChanged: widget.onPendingVoteCountChanged,
         );
       case 2:
-        return _InstitutionCategoryView(
+        return const _InstitutionCategoryView(
           nationalCouncil: kNationalCouncil,
           provincialCouncils: kProvincialCouncils,
           provincialBanks: kProvincialBanks,
@@ -741,14 +741,14 @@ class _MessagePageState extends State<MessagePage> {
               ),
             ),
           ),
-          Expanded(
+          const Expanded(
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.chat_bubble_outline_rounded,
                       size: 48, color: AppTheme.textTertiary),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   Text(
                     '消息页面（开发中）',
                     style: TextStyle(
@@ -990,7 +990,7 @@ class _InstitutionCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Icon(
+                  const Icon(
                     Icons.chevron_right,
                     size: 16,
                     color: AppTheme.textTertiary,

@@ -102,7 +102,7 @@ void main() {
     });
 
     test('should route gmb:// address', () {
-      final raw =
+      const raw =
           'gmb://account/5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
       final result = router.route(raw);
       expect(result.type, QrRouteType.legacyAddress);
@@ -111,7 +111,7 @@ void main() {
     });
 
     test('should route bare SS58 address', () {
-      final raw = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
+      const raw = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
       final result = router.route(raw);
       expect(result.type, QrRouteType.legacyAddress);
       expect(result.extractedAddress, raw);

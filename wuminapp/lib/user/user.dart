@@ -9,10 +9,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:qr/qr.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/governance/duoqian_institution_list_page.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
@@ -705,7 +703,8 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
               _voteBindState.walletPubkeyHex!.toLowerCase(),
           orElse: () => null,
         );
-    if (wallet == null || !mounted) {
+    if (!mounted) return;
+    if (wallet == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('未找到匹配的钱包')),
       );
@@ -976,65 +975,6 @@ class _ContactBookPageState extends State<ContactBookPage> {
     _reload();
   }
 
-  Future<void> _renameContact(UserContact contact) async {
-    final controller = TextEditingController(text: contact.localNickname ?? '');
-    final nextName = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('修改通讯录昵称'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLength: 20,
-            decoration: InputDecoration(
-              hintText: contact.sourceNickname,
-              helperText: '留空则恢复显示对方原始昵称',
-              border: const OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () =>
-                  Navigator.of(context).pop(controller.text.trim()),
-              child: const Text('保存'),
-            ),
-          ],
-        );
-      },
-    );
-    controller.dispose();
-
-    if (!mounted || nextName == null) {
-      return;
-    }
-
-    try {
-      await _userContactService.renameContact(
-        contact.accountPubkeyHex,
-        nextName,
-      );
-      if (!mounted) {
-        return;
-      }
-      _reload();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('通讯录昵称已更新')),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('更新失败：$e')),
-      );
-    }
-  }
-
   Future<void> _openContactDetail(UserContact contact) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -1071,10 +1011,10 @@ class _ContactBookPageState extends State<ContactBookPage> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 10),
-            Text(
+            const Text(
               '扫描其他用户的二维码后，会把对方的昵称和公钥加入通讯录。',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppTheme.textSecondary, height: 1.5),
+              style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
             ),
           ],
         ),
@@ -1650,14 +1590,14 @@ class _SettingsPageState extends State<_SettingsPage> {
               padding: const EdgeInsets.all(16),
               children: [
                 // 安全区标题
-                Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 10),
+                const Padding(
+                  padding: EdgeInsets.only(left: 4, bottom: 10),
                   child: Row(
                     children: [
                       Icon(Icons.security_rounded,
                           size: 16, color: AppTheme.primary),
-                      const SizedBox(width: 8),
-                      const Text(
+                      SizedBox(width: 8),
+                      Text(
                         '安全',
                         style: TextStyle(
                           fontSize: 13,
@@ -1700,14 +1640,14 @@ class _SettingsPageState extends State<_SettingsPage> {
                 ),
                 const SizedBox(height: 28),
                 // 关于区标题
-                Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 10),
+                const Padding(
+                  padding: EdgeInsets.only(left: 4, bottom: 10),
                   child: Row(
                     children: [
                       Icon(Icons.info_outline_rounded,
                           size: 16, color: AppTheme.primary),
-                      const SizedBox(width: 8),
-                      const Text(
+                      SizedBox(width: 8),
+                      Text(
                         '关于',
                         style: TextStyle(
                           fontSize: 13,

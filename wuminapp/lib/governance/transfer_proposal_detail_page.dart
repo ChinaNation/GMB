@@ -240,6 +240,7 @@ class _TransferProposalDetailPageState
           ),
         );
         final requestJson = qrSigner.encodeRequest(request);
+        if (!mounted) throw Exception('页面已关闭');
         final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
@@ -372,7 +373,7 @@ class _TransferProposalDetailPageState
             const SizedBox(height: 6),
             Text(
               _error!,
-              style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+              style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               textAlign: TextAlign.center,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
@@ -408,9 +409,7 @@ class _TransferProposalDetailPageState
             admins: _admins,
             adminVotes: _adminVotes,
             pendingPubkeys: _pendingPubkeys,
-            proposerPubkey: _proposalInfo != null
-                ? _proposalInfo!.proposer
-                : null,
+            proposerPubkey: _proposalInfo?.proposer,
           ),
         ],
       ),
@@ -428,7 +427,7 @@ class _TransferProposalDetailPageState
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppTheme.border),
+        side: const BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -489,7 +488,7 @@ class _TransferProposalDetailPageState
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
+            const SizedBox(
               width: 80,
               child: Text(
                 '备注',
@@ -530,7 +529,7 @@ class _TransferProposalDetailPageState
           width: 80,
           child: Text(
             label,
-            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+            style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
           ),
         ),
         Expanded(
@@ -542,7 +541,7 @@ class _TransferProposalDetailPageState
         if (onCopy != null)
           GestureDetector(
             onTap: onCopy,
-            child: Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
+            child: const Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
           ),
       ],
     );
