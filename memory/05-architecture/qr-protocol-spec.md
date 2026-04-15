@@ -273,9 +273,9 @@ WUMIN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
 
 **绝对不允许出现的旧协议字符串**:
 ```
-WUMIN_USER_V1.0.0
-WUMIN_LOGIN_V1.0.0
-WUMIN_SIGN_V1.0.0
+WUMIN_QR_V1
+WUMIN_QR_V1
+WUMIN_QR_V1
 WUMINAPP_USER_CARD_V1
 ```
 

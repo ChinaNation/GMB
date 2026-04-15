@@ -34,7 +34,7 @@ GMB/
       src/                         ← Rust 后端
         ui/governance/             ← 治理后端逻辑
           mod.rs                   ← 治理入口命令（check_admin_wallets 等）
-          signing.rs               ← QR 签名协议（WUMIN_SIGN_V1.0.0）
+          signing.rs               ← QR 签名协议（WUMIN_QR_V1）
           institution.rs           ← 链上机构 RPC 查询
           types.rs                 ← 后端类型定义
           proposal.rs              ← 提案查询
@@ -114,9 +114,9 @@ GMB/
      - timestamp (8 bytes, u64 LE)
      - random_nonce (16 bytes)
   3. 计算 payload_hex = hex(上述拼接)
-  4. 复用 WUMIN_SIGN_V1.0.0 协议生成 QrSignRequest：
+  4. 复用 WUMIN_QR_V1 协议生成 QrSignRequest：
      {
-       proto: "WUMIN_SIGN_V1.0.0",
+       proto: "WUMIN_QR_V1",
        type: "sign_request",
        request_id: 随机生成,
        account: pubkey 对应的 SS58 地址,
@@ -181,7 +181,7 @@ GMB/
 
 #### 4.2 签名协议扩展
 
-**不需要新增协议版本**，仍用 `WUMIN_SIGN_V1.0.0`。
+**不需要新增协议版本**，仍用 `WUMIN_QR_V1`。
 
 关键区别：激活不是链上交易，`payload_hex` 不包含 nonce/era/genesis_hash 等链上签名扩展，而是自定义的 "GMB_ACTIVATE" 前缀 payload。
 

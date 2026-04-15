@@ -447,7 +447,7 @@ message = blake2_256(SCALE.encode(payload))
 
 所有需要签名的操作（发起提案、投票、普通转账）统一检查钱包类型：
 - **热钱包**（`signMode == 'local'`）：通过 `WalletManager.signWithWallet()` 本地签名，私钥不出类；签名前必须校验本地 seed 派生公钥与页面选中的管理员钱包 `pubkeyHex` 一致
-- **冷钱包**（`signMode == 'external'`）：通过 `QrSigner` 协议（`WUMIN_SIGN_V1.0.0`）发起扫码签名会话，导航到 `QrSignSessionPage` 展示请求二维码，用户用离线设备扫码签名后扫描回执二维码获取签名；回执中的 `pubkey` 必须与页面选中的管理员钱包一致
+- **冷钱包**（`signMode == 'external'`）：通过 `QrSigner` 协议（`WUMIN_QR_V1`）发起扫码签名会话，导航到 `QrSignSessionPage` 展示请求二维码，用户用离线设备扫码签名后扫描回执二维码获取签名；回执中的 `pubkey` 必须与页面选中的管理员钱包一致
 
 管理员钱包选择硬约束：
 - 发起提案页面中选中的管理员钱包，是本次提案唯一允许的签名钱包

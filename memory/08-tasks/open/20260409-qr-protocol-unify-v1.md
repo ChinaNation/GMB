@@ -9,9 +9,9 @@
 
 历史上存在三个 QR 协议并行:
 
-- `WUMIN_USER_V1.0.0`(用户码/收款码/联系人/多签)
-- `WUMIN_LOGIN_V1.0.0`(登录挑战/回执)
-- `WUMIN_SIGN_V1.0.0`(离线签名请求/回执)
+- `WUMIN_QR_V1`(用户码/收款码/联系人/多签)
+- `WUMIN_QR_V1`(登录挑战/回执)
+- `WUMIN_QR_V1`(离线签名请求/回执)
 
 三者 wire format 同构但字段名散乱(`to`/`address`/`account`/`account_pubkey`/`admin_pubkey`/`public_key`、`challenge`/`request_id`/`challenge_id`、`type`/`purpose`/`msg_type`),导致:
 
@@ -134,9 +134,9 @@ WUMIN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<address 或 pubkey>
 
 必须全仓库 0 命中:
 ```
-WUMIN_USER_V1.0.0
-WUMIN_LOGIN_V1.0.0
-WUMIN_SIGN_V1.0.0
+WUMIN_QR_V1
+WUMIN_QR_V1
+WUMIN_QR_V1
 WUMINAPP_USER_CARD_V1
 TransferQrPayload
 UserQrPayload
