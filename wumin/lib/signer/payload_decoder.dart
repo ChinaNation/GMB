@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../chain/chain_constants.dart';
-import '../chain/clearing_banks.dart';
+import '../chain/institutions.dart';
 import 'pallet_registry.dart';
 
 /// payload_hex 中 call data 的解码结果。
@@ -465,7 +465,7 @@ class PayloadDecoder {
     }
     final shenfenId =
         endIndex > 0 ? String.fromCharCodes(bankBytes.sublist(0, endIndex)) : '';
-    final bankName = clearingBankName(shenfenId) ?? shenfenId;
+    final bankName = institutionName(shenfenId) ?? shenfenId;
 
     return DecodedPayload(
       action: 'offchain_pay',
@@ -497,7 +497,7 @@ class PayloadDecoder {
     }
     if (endIndex == 0) return null;
     final shenfenId = String.fromCharCodes(institutionBytes.sublist(0, endIndex));
-    final bankName = clearingBankName(shenfenId) ?? shenfenId;
+    final bankName = institutionName(shenfenId) ?? shenfenId;
 
     return DecodedPayload(
       action: 'bind_clearing',
@@ -747,7 +747,7 @@ class PayloadDecoder {
     var endIndex = 48;
     while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) { endIndex--; }
     final shenfenId = endIndex > 0 ? String.fromCharCodes(institutionBytes.sublist(0, endIndex)) : '';
-    final bankName = clearingBankName(shenfenId) ?? shenfenId;
+    final bankName = institutionName(shenfenId) ?? shenfenId;
     final amountFen = _readU128Le(bytes, offset);
     final amountYuan = _fenToYuan(amountFen);
     return DecodedPayload(
