@@ -50,7 +50,7 @@ onchain/
 
 扫码功能已迁移到统一扫码页面 `lib/qr/pages/qr_scan_page.dart`，支持三类输入：
 
-- `WUMIN_USER_V1.0.0`（purpose=transfer）JSON 格式 → 完整解析（收款地址 + 金额 + 币种）
+- `WUMIN_QR_V1`（purpose=transfer）JSON 格式 → 完整解析（收款地址 + 金额 + 币种）
 - `gmb://account/<address>` → 仅填充收款地址
 - 直接 SS58 地址 → 仅填充收款地址
 
@@ -65,7 +65,7 @@ onchain/
 
 扫码签名扩展：
 
-- 协议层由 `QrSigner` 提供（`WUMIN_SIGN_V1.0.0`）
+- 协议层由 `QrSigner` 提供（`WUMIN_QR_V1`）
 - 签名会话页面由 `QrSignSessionPage`（`lib/qr/pages/qr_sign_session_page.dart`）提供
 
 ## 5. 错误处理

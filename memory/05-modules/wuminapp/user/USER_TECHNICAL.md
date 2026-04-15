@@ -60,11 +60,11 @@
 
 协议号：
 
-- `WUMIN_USER_V1.0.0`
+- `WUMIN_QR_V1`
 
 字段：
 
-- `proto` — 协议标识（固定 `WUMIN_USER_V1.0.0`）
+- `proto` — 协议标识（固定 `WUMIN_QR_V1`）
 - `address` — 通信账户 SS58 地址
 - `purpose` — 用途（contact / transfer）
 - `name` — 用户昵称（= 通信钱包名称）
