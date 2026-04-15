@@ -62,7 +62,7 @@
 3. 初始化成功后写入 PostgreSQL：
    - `system_install.site_sfid`、`rsa_public_key_pem`
    - `qr_sign_keys`（1 把：`K1`）
-4. `install/super-admin/bind` 接收 `admin_pubkey`（从手机 `WUMIN_USER_V1.0.0` 名片扫码获取）绑定超管。
+4. `install/super-admin/bind` 接收 `admin_pubkey`（从手机 `WUMIN_QR_V1` 名片扫码获取）绑定超管。
 5. 超级管理员登录后，在管理后台完成 QR2 生成和 QR3 盲化。
 
 ### 5.3 安全约束
@@ -85,12 +85,12 @@
 - 扫码登录：后端生成挑战二维码，手机签名后回传，后端验签并落登录结果，页面轮询拿 token。
 
 ### 6.3 与 wuminapp 对齐口径（当前）
-- 协议：`WUMIN_LOGIN_V1.0.0`
+- 协议：`WUMIN_QR_V1`
 - 挑战字段：`proto/system/challenge/issued_at/expires_at/sys_pubkey/sys_sig`
 - 签名原文固定：
 
 ```text
-WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
+WUMIN_QR_V1|system|challenge|expires_at
 ```
 
 - `origin` 不参与移动端扫码验签，可仅作为网页侧上下文保留。
@@ -243,9 +243,9 @@ cpms-qr-v1|site_sfid|sign_key_id|archive_no|citizen_status|voting_eligible|issue
 - `5001+`：服务内部错误。
 
 ## 14. 与 wuminapp / SFID 联调要点
-- wuminapp 扫码登录使用 `WUMIN_LOGIN_V1.0.0` 协议。
+- wuminapp 扫码登录使用 `WUMIN_QR_V1` 协议。
 - CPMS 初始化扫描 SFID 签发的 QR1（`SFID_CPMS_V1` 协议 `INSTALL` 类型），CPMS 不验签（离线系统无 SFID 公钥）。
-- 超级管理员绑定通过扫描手机 `WUMIN_USER_V1.0.0` 名片获取公钥。
+- 超级管理员绑定通过扫描手机 `WUMIN_QR_V1` 名片获取公钥。
 - QR2/QR3/QR4 使用 `SFID_CPMS_V1` 协议（`REGISTER`/`CERT`/`ARCHIVE` 类型）。
 - 业务二维码与机构公钥体系分离于管理员登录公钥体系，不可混用。
 - 登录信任链固定为：区块链持有 SFID 当前公钥 -> SFID 背书 CPMS 登录公钥 -> CPMS 签发登录挑战。

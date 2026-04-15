@@ -45,7 +45,7 @@
 
 ## 6. 扫码登录协议（与 wuminapp 对齐）
 ### 6.1 挑战二维码字段
-- `proto`: 固定 `WUMIN_LOGIN_V1.0.0`
+- `proto`: 固定 `WUMIN_QR_V1`
 - `system`: 固定 `cpms`
 - `request_id`: 挑战 ID（即 `challenge_id`）
 - `challenge`: 随机挑战串
@@ -63,7 +63,7 @@
 
 ### 6.2 验签拼串（后端与移动端一致）
 ```text
-WUMIN_LOGIN_V1.0.0|system|request_id|challenge|nonce|expires_at
+WUMIN_QR_V1|system|request_id|challenge|nonce|expires_at
 ```
 
 ### 6.3 CPMS 证书链规范

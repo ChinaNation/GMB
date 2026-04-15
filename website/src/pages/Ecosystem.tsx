@@ -61,6 +61,25 @@ const systems = [
     ],
     tech: 'Rust (Tauri) / React / TypeScript',
     color: 'blue',
+    fullWidth: false,
+  },
+  {
+    name: 'Wumin 冷钱包',
+    subtitle: '离线签名冷钱包',
+    desc: '完全离线运行的签名钱包，用于关键身份与治理操作的气隙式 Sr25519 签名，与 WuminApp 热钱包形成"冷热分离"的双钱包体系。',
+    features: [
+      '完全离线运行（气隙）',
+      'Sr25519 离线签名',
+      'WUMIN_QR_V1 统一扫码协议',
+      '加密 keystore 私钥保管',
+      '交易离线签名',
+      '管理员激活签名',
+      '治理提案离线签名',
+      '登录挑战签名回执',
+    ],
+    tech: 'Dart / Flutter / 完全离线 / 独立应用',
+    color: 'gold',
+    fullWidth: true,
   },
 ]
 
@@ -103,15 +122,19 @@ export default function Ecosystem() {
 
       {/* Systems */}
       <section className="mx-auto max-w-7xl px-6 py-24">
-        <SectionTitle subtitle="核心产品" title="四大核心系统" />
+        <SectionTitle subtitle="核心产品" title="五大核心系统" />
         <div className="grid gap-8 md:grid-cols-2">
           {systems.map((s) => (
-            <GlowCard key={s.name} glow={s.color === 'gold' ? 'gold' : 'blue'} className="flex flex-col">
+            <GlowCard
+              key={s.name}
+              glow={s.color === 'gold' ? 'gold' : 'blue'}
+              className={`flex flex-col ${s.fullWidth ? 'md:col-span-2' : ''}`}
+            >
               <div className="mb-1 text-xs font-medium uppercase tracking-wider text-gold-400">{s.subtitle}</div>
               <h3 className="mb-3 text-2xl font-bold text-white">{s.name}</h3>
               <p className="mb-6 text-sm leading-relaxed text-slate-400">{s.desc}</p>
 
-              <div className="mb-6 grid grid-cols-2 gap-2">
+              <div className={`mb-6 grid gap-2 grid-cols-2 ${s.fullWidth ? 'md:grid-cols-4' : ''}`}>
                 {s.features.map((f) => (
                   <div key={f} className="flex items-center gap-2 text-sm text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-gold-400" />

@@ -71,12 +71,12 @@
   - `test/qr/qr_router_test.dart`
 - 已完成 `sfid` 后端对齐：
   - 登录二维码改为输出 `proto/system/challenge/issued_at/expires_at/sys_pubkey/sys_sig`
-  - 系统签名原文改为 `WUMIN_LOGIN_V1.0.0|system|challenge|issued_at|expires_at|sys_pubkey`
+  - 系统签名原文改为 `WUMIN_QR_V1|system|challenge|issued_at|expires_at|sys_pubkey`
   - 登录完成接口兼容 `challenge|challenge_id|request_id` 回传
   - 已跑通 `cargo test --offline qr_login --manifest-path /Users/rhett/GMB/sfid/backend/Cargo.toml`
 - 已完成 `cpms` 后端对齐：
   - 登录二维码改为输出 `proto/system/challenge/issued_at/expires_at/sys_pubkey/sys_sig`
-  - 系统签名原文改为 `WUMIN_LOGIN_V1.0.0|system|challenge|issued_at|expires_at|sys_pubkey`
+  - 系统签名原文改为 `WUMIN_QR_V1|system|challenge|issued_at|expires_at|sys_pubkey`
   - 登录完成接口兼容 `challenge|challenge_id` 回传
   - 已完成 `cargo test --offline login --manifest-path /Users/rhett/GMB/cpms/backend/Cargo.toml` 编译级验证
 - 已同步更新架构/模块文档，明确：

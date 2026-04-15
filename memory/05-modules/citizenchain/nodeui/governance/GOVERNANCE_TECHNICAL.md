@@ -18,7 +18,7 @@ governance/
 
 - 为前端治理页面提供所有 Tauri 命令（提案列表、提案详情、发起提案、投票、执行）
 - 实现管理员激活机制（冷钱包扫码签名 → 本地验证 → 解锁提案操作）
-- 实现 WUMIN_SIGN_V1.0.0 QR 签名协议（离线签名设备 ↔ nodeui）
+- 实现 WUMIN_QR_V1 QR 签名协议（离线签名设备 ↔ nodeui）
 - 从链上 RPC 解码提案数据（联合投票/内部投票/机构管理员/销毁/发行/运行时升级）
 - 从 SFID 服务获取人口快照（eligible_total + snapshot_nonce + signature）
 
@@ -34,7 +34,7 @@ governance/
 1. 用户点击管理员行的"激活"按钮
 2. 后端验证公钥在链上管理员列表中
 3. 构建 GMB_ACTIVATE 签名 payload（非链上交易）
-4. 生成 WUMIN_SIGN_V1.0.0 格式的 QR 签名请求
+4. 生成 WUMIN_QR_V1 格式的 QR 签名请求
 5. 用户用 wumin 冷钱包扫码签名
 6. 后端验证 sr25519 签名（本地验证，不提交链上）
 7. 签名验证成功 → 写入本地加密存储

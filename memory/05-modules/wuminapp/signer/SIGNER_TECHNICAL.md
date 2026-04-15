@@ -52,7 +52,7 @@ lib/signer/
 
 职责：
 
-- 定义扫码签名协议 `WUMIN_SIGN_V1.0.0`
+- 定义扫码签名协议 `WUMIN_QR_V1`
 - 定义请求/回执数据结构与校验
 - 校验 request/response 关键信息一致性（`request_id`、`account`、`payload_hash`）
 - 校验过期时间、时钟偏差、hex 字段合法性
@@ -126,13 +126,13 @@ lib/signer/
 - `cpms` 场景校验 `sys_cert` 是否由链上 SFID 当前公钥签发
 - 对 CPMS 证书时间窗口做覆盖校验，拒绝挑战有效期超出证书范围的请求
 
-## 5. 协议口径（WUMIN_SIGN_V1.0.0）
+## 5. 协议口径（WUMIN_QR_V1）
 
 ### 5.1 签名请求（手机 -> 外部签名设备）
 
 字段：
 
-- `proto = WUMIN_SIGN_V1.0.0`
+- `proto = WUMIN_QR_V1`
 - `type = sign_request`
 - `request_id`
 - `account`
@@ -147,7 +147,7 @@ lib/signer/
 
 字段：
 
-- `proto = WUMIN_SIGN_V1.0.0`
+- `proto = WUMIN_QR_V1`
 - `type = sign_response`
 - `request_id`
 - `pubkey`
@@ -181,7 +181,7 @@ lib/signer/
 - 固定拼串：
 
 ```text
-WUMIN_LOGIN_V1.0.0|system|request_id|challenge|nonce|expires_at
+WUMIN_QR_V1|system|request_id|challenge|nonce|expires_at
 ```
 
 ### 7.2 转账/治理交易签名域

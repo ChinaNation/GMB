@@ -7,14 +7,14 @@
 - 涉及系统：wumin（冷钱包）、wuminapp（热钱包）、SFID 前端、CPMS 前端
 
 ## 需求背景
-SFID 和 CPMS 管理员登录使用 `WUMIN_LOGIN_V1.0.0` QR 码协议。当前 wuminapp 已有登录能力但需验证完整性，wumin 冷钱包完全不支持登录协议。两端需独立支持扫码登录，不依赖对方中转。
+SFID 和 CPMS 管理员登录使用 `WUMIN_QR_V1` QR 码协议。当前 wuminapp 已有登录能力但需验证完整性，wumin 冷钱包完全不支持登录协议。两端需独立支持扫码登录，不依赖对方中转。
 
 ## 协议规格
 
 ### 登录 QR（SFID/CPMS 后端生成）
 ```json
 {
-  "proto": "WUMIN_LOGIN_V1.0.0",
+  "proto": "WUMIN_QR_V1",
   "type": "challenge",
   "system": "sfid" | "cpms",
   "challenge": "<UUID>",
@@ -27,18 +27,18 @@ SFID 和 CPMS 管理员登录使用 `WUMIN_LOGIN_V1.0.0` QR 码协议。当前 w
 
 ### 系统签名消息
 ```
-WUMIN_LOGIN_V1.0.0|<system>|<challenge>|<issued_at>|<expires_at>|<sys_pubkey>
+WUMIN_QR_V1|<system>|<challenge>|<issued_at>|<expires_at>|<sys_pubkey>
 ```
 
 ### 用户签名消息
 ```
-WUMIN_LOGIN_V1.0.0|<system>|<challenge>|<expires_at>
+WUMIN_QR_V1|<system>|<challenge>|<expires_at>
 ```
 
 ### Receipt（签名结果）
 ```json
 {
-  "proto": "WUMIN_LOGIN_V1.0.0",
+  "proto": "WUMIN_QR_V1",
   "type": "login_receipt",
   "system": "<system>",
   "challenge": "<challenge_id>",
@@ -53,12 +53,12 @@ WUMIN_LOGIN_V1.0.0|<system>|<challenge>|<expires_at>
 ## 任务拆分
 
 ### T1: wumin 冷钱包 — 新增登录协议支持
-- [ ] 新增 `LoginQrHandler`：解析 `WUMIN_LOGIN_V1.0.0` challenge QR
+- [ ] 新增 `LoginQrHandler`：解析 `WUMIN_QR_V1` challenge QR
 - [ ] 验证系统签名（sr25519 验签 sys_sig）
 - [ ] 显示登录确认界面（系统名、过期时间）
 - [ ] 用户确认后用选定钱包签名
 - [ ] 生成 receipt QR 显示在屏幕上
-- [ ] QR 路由器增加 `WUMIN_LOGIN_V1.0.0` 分发
+- [ ] QR 路由器增加 `WUMIN_QR_V1` 分发
 
 ### T2: wuminapp 热钱包 — 验证已有登录能力
 - [ ] 确认 LoginService + QR 路由完整可用

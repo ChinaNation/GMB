@@ -44,9 +44,9 @@ lib/qr/
 
 | 协议常量 | 值 | 用途 |
 | --- | --- | --- |
-| `login` | `WUMIN_LOGIN_V1.0.0` | 登录、绑定签名验证 |
-| `sign` | `WUMIN_SIGN_V1.0.0` | 冷钱包离线交易签名 |
-| `user` | `WUMIN_USER_V1.0.0` | 用户信息传输（联系人、付款，通过 purpose 字段区分） |
+| `login` | `WUMIN_QR_V1` | 登录、绑定签名验证 |
+| `sign` | `WUMIN_QR_V1` | 冷钱包离线交易签名 |
+| `user` | `WUMIN_QR_V1` | 用户信息传输（联系人、付款，通过 purpose 字段区分） |
 
 ## 4. 路由器（QrRouter）
 
@@ -65,14 +65,14 @@ lib/qr/
 
 | 类型 | 触发条件 |
 | --- | --- |
-| `login` | `proto == WUMIN_LOGIN_V1.0.0` |
-| `transfer` | `proto == WUMIN_USER_V1.0.0` 且 `purpose == transfer` |
-| `contact` | `proto == WUMIN_USER_V1.0.0` 且 `purpose == contact`（或无 purpose） |
-| `sign` | `proto == WUMIN_SIGN_V1.0.0` |
+| `login` | `proto == WUMIN_QR_V1` |
+| `transfer` | `proto == WUMIN_QR_V1` 且 `purpose == transfer` |
+| `contact` | `proto == WUMIN_QR_V1` 且 `purpose == contact`（或无 purpose） |
+| `sign` | `proto == WUMIN_QR_V1` |
 | `legacyAddress` | `gmb://account/...` 或裸 SS58 地址 |
 | `unknown` | 无法识别 |
 
-## 5. 登录码协议（WUMIN_LOGIN_V1.0.0）
+## 5. 登录码协议（WUMIN_QR_V1）
 
 ### 5.1 系统架构
 
@@ -87,7 +87,7 @@ lib/qr/
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `proto` | string | 是 | 固定 `WUMIN_LOGIN_V1.0.0` |
+| `proto` | string | 是 | 固定 `WUMIN_QR_V1` |
 | `system` | string | 是 | `sfid` 或 `cpms` |
 | `challenge` | string | 是 | 随机挑战值 |
 | `issued_at` | int | 是 | 签发时间（秒级 epoch） |
@@ -122,7 +122,7 @@ proto|system|challenge|issued_at|expires_at|sys_pubkey
 ### 5.5 用户签名原文（手机签名）
 
 ```text
-WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
+WUMIN_QR_V1|system|challenge|expires_at
 ```
 
 说明：不包含 `aud` 字段，系统身份通过 `sys_pubkey`/`sys_sig` 密码学验证。
@@ -131,7 +131,7 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `proto` | string | 固定 `WUMIN_LOGIN_V1.0.0` |
+| `proto` | string | 固定 `WUMIN_QR_V1` |
 | `system` | string | 回执来源系统（`sfid` 或 `cpms`） |
 | `challenge` | string | 与挑战码对应 |
 | `pubkey` | string | 用户公钥（`0x` + hex） |
@@ -178,13 +178,13 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 | L1401 | `biometricUnavailable` | 生物识别不可用 |
 | L1402 | `biometricRejected` | 生物识别被拒绝 |
 
-## 6. 收款码协议（WUMIN_USER_V1.0.0（purpose=transfer））
+## 6. 收款码协议（WUMIN_QR_V1（purpose=transfer））
 
 ### 6.1 字段
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `proto` | string | 是 | 固定 `WUMIN_USER_V1.0.0（purpose=transfer）` |
+| `proto` | string | 是 | 固定 `WUMIN_QR_V1（purpose=transfer）` |
 | `to` | string | 是 | 收款地址（SS58 格式） |
 | `amount` | string | 否 | 金额（字符串避免浮点精度） |
 | `symbol` | string | 否 | 币种，默认 `GMB` |
@@ -201,17 +201,17 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 
 扫码页同时支持：
 
-- `WUMIN_USER_V1.0.0（purpose=transfer）` JSON 格式 → 完整解析
+- `WUMIN_QR_V1（purpose=transfer）` JSON 格式 → 完整解析
 - `gmb://account/<address>` 格式 → 仅填充收款地址
 - 裸 SS58 地址 → 仅填充收款地址
 
-## 7. 用户码协议（WUMIN_USER_V1.0.0）
+## 7. 用户码协议（WUMIN_QR_V1）
 
 ### 7.1 新版字段
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `proto` | string | 是 | 固定 `WUMIN_USER_V1.0.0` |
+| `proto` | string | 是 | 固定 `WUMIN_QR_V1` |
 | `address` | string | 是 | 链上地址（SS58 格式） |
 | `name` | string | 是 | 用户昵称 |
 
@@ -231,7 +231,7 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 
 - 旧版使用 `account_pubkey`（裸公钥 hex），新版使用 `address`（SS58 地址）
 - SS58 地址包含链标识（ss58 = 2027），更安全且用户可读
-- 生成二维码统一使用新版 `WUMIN_USER_V1.0.0` 格式
+- 生成二维码统一使用新版 `WUMIN_QR_V1` 格式
 - 解析二维码同时兼容新旧两版
 
 ## 8. 统一扫码页面
@@ -269,7 +269,7 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 
 - `signer/`：
   - `LocalSigner` 执行 sr25519 登录签名
-  - `QrSigner` 提供扫码签名协议（`WUMIN_SIGN_V1.0.0`）
+  - `QrSigner` 提供扫码签名协议（`WUMIN_QR_V1`）
   - `OfflineSignService` 为离线设备执行 `sign_request -> sign_response`（含 payload 交叉验证）
   - `PayloadDecoder` 独立解码 SCALE call data，用于离线端防盲签验证
 - `wallet/`：
@@ -278,7 +278,7 @@ WUMIN_LOGIN_V1.0.0|system|challenge|expires_at
 - `trade/onchain/`：
   - 使用 `QrScanTransferResult` 预填转账表单
 - `user/`：
-  - `UserQrPayload` 已迁移到 `WUMIN_USER_V1.0.0` 格式
+  - `UserQrPayload` 已迁移到 `WUMIN_QR_V1` 格式
   - 扫码页面由 `qr/pages/qr_scan_page.dart` 统一提供
 
 ## 10. 安全要求

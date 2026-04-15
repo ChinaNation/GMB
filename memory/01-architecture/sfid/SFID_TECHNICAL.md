@@ -68,16 +68,16 @@
 
 ### 4.3 登录流程（二维码挑战签名）
 1. 管理员点击“生成登录二维码”，SFID 前端向后端申请一次性登录 challenge。
-2. SFID 页面展示登录二维码（`WUMIN_LOGIN_V1.0.0` 协议）。
+2. SFID 页面展示登录二维码（`WUMIN_QR_V1` 协议）。
 3. 管理员手机扫码后完成签名，并在手机端展示“签名结果二维码”。
 4. SFID 前端扫描该签名结果二维码（或粘贴签名原文）后，提交到 `/api/v1/admin/auth/qr/complete`。
 5. SFID 校验扫码公钥与签名：是管理员则登录管理员模式，不是管理员或签名失败则拒绝登录。
 6. 页面轮询 challenge 结果，成功后自动写入会话并完成登录。
 7. challenge 固定有效期 `90` 秒，且 `challenge` 一次性消费，防重放。
-8. 登录二维码协议固定为 `WUMIN_LOGIN_V1.0.0`，字段必须包含：
+8. 登录二维码协议固定为 `WUMIN_QR_V1`，字段必须包含：
 `proto/system/challenge/issued_at/expires_at/sys_pubkey/sys_sig`（时间戳为秒级）。
 9. 系统先使用自身私钥对登录二维码签名；手机验 `sys_pubkey + sys_sig` 后，管理员钱包再对登录 challenge 签名。
-10. 手机端登录签名原文固定为：`WUMIN_LOGIN_V1.0.0|system|challenge|expires_at`。
+10. 手机端登录签名原文固定为：`WUMIN_QR_V1|system|challenge|expires_at`。
 11. `origin`/`domain`/`session_id` 仅作为网页侧上下文，不属于移动端扫码验签协议字段。
 
 ## 5. 核心业务流程
@@ -439,14 +439,14 @@
 ## 12. WUMINAPP 扫码登录协议规范（统一口径）
 
 ### 12.1 目标状态
-- 协议：`WUMIN_LOGIN_V1.0.0`。
+- 协议：`WUMIN_QR_V1`。
 - 责任边界：`wuminapp` 负责挑战解析、系统身份验签、手机签名与回执生成；SFID 独立完成回执验签、授权与登录结果展示。
 - 信任来源：WuminApp 通过区块链 RPC 获取 SFID 当前公钥；CPMS 通过 SFID 背书建立信任，不直接依赖区块链。
 
 ### 12.2 挑战码（SFID -> 手机）
 ```json
 {
-  "proto": "WUMIN_LOGIN_V1.0.0",
+  "proto": "WUMIN_QR_V1",
   "system": "sfid",
   "request_id": "uuid",
   "challenge": "string",
@@ -466,7 +466,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 ### 12.4 回执码（手机 -> SFID）
 ```json
 {
-  "proto": "WUMIN_LOGIN_V1.0.0",
+  "proto": "WUMIN_QR_V1",
   "system": "sfid",
   "request_id": "uuid",
   "pubkey": "0x...",
@@ -484,7 +484,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 2. 按 `request_id` 查挑战缓存，校验 `proto/system/request_id/challenge/nonce/issued_at/expires_at` 字段完整性与格式。
 3. 校验系统固定为 `sfid`。
 4. 校验挑战固定 `90` 秒时效：`expires_at - issued_at == 90` 且当前未过期。
-5. 按固定拼串 `WUMIN_LOGIN_V1.0.0|system|request_id|challenge|nonce|expires_at` 重建用户签名原文并执行 `sr25519` 验签。
+5. 按固定拼串 `WUMIN_QR_V1|system|request_id|challenge|nonce|expires_at` 重建用户签名原文并执行 `sr25519` 验签。
 6. 校验 `request_id` 未消费后一次性消费，再做管理员授权判定（是管理员登录，不是管理员拒绝）。
 7. 服务端接收回执时应兼容 `request_id|challenge_id`、`pubkey|admin_pubkey|public_key`、`signature|sig` 字段别名。
 - `archive_no` 校验位算法与 SFID `sfid_code` 统一：`BLAKE2b` 摘要字节和 `mod 10`。

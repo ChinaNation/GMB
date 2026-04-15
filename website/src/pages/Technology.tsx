@@ -55,12 +55,27 @@ const pallets = [
   },
 ]
 
-const nodeTypes = [
+const topNodeTypes = [
+  {
+    type: '全节点',
+    count: '无限',
+    desc: '任何组织或个人均可运行，参与 PoW 出块',
+    features: ['PoW 出块', '交易验证', '去中心化'],
+  },
+  {
+    type: '轻节点',
+    count: '无限',
+    desc: '公民用户运行的轻客户端（WuminApp），经 SFID 认证后可参与链上投票',
+    features: ['SFID 认证', '转账交易', '公民投票'],
+  },
+]
+
+const bottomNodeTypes = [
   {
     type: '国储会权威节点',
     count: '1',
     desc: '国家级货币发行控制，19 位管理员多签治理',
-    features: ['国家铸币权', '全网治理', '13/19 多签'],
+    features: ['国家铸币权', '全网治理', '13/19 多签', '联合投票'],
   },
   {
     type: '省储会权威节点',
@@ -72,13 +87,7 @@ const nodeTypes = [
     type: '省储行权益节点',
     count: '43',
     desc: '省级金融服务执行，9 位董事管理',
-    features: ['金融服务', '质押利息', '链下支付'],
-  },
-  {
-    type: '全节点',
-    count: '无限',
-    desc: '任何组织或个人均可运行，参与 PoW 出块',
-    features: ['PoW 出块', '交易验证', '去中心化'],
+    features: ['金融服务', '质押利息', '链下支付', '联合投票'],
   },
 ]
 
@@ -141,11 +150,29 @@ export default function Technology() {
       <section className="mx-auto max-w-7xl px-6 py-24">
         <SectionTitle
           subtitle="节点体系"
-          title="四类节点架构"
+          title="五类节点架构"
           description="从国家级权威节点到公民全节点，构成完整的去中心化网络拓扑。"
         />
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {nodeTypes.map((n) => (
+        {/* Top row: 全节点 + 轻节点 (centered) */}
+        <div className="mx-auto grid max-w-3xl gap-6 md:grid-cols-2">
+          {topNodeTypes.map((n) => (
+            <GlowCard key={n.type} glow="gold" className="flex flex-col">
+              <div className="mb-4 text-4xl font-extrabold text-gold-400">{n.count}</div>
+              <h3 className="mb-2 text-lg font-semibold text-white">{n.type}</h3>
+              <p className="mb-4 flex-1 text-sm text-slate-400">{n.desc}</p>
+              <div className="flex flex-wrap gap-2">
+                {n.features.map((f) => (
+                  <span key={f} className="rounded-md bg-gold-500/10 px-2 py-1 text-xs font-medium text-gold-300">
+                    {f}
+                  </span>
+                ))}
+              </div>
+            </GlowCard>
+          ))}
+        </div>
+        {/* Bottom row: 国储会 / 省储会 / 省储行 */}
+        <div className="mt-6 grid gap-6 md:grid-cols-3">
+          {bottomNodeTypes.map((n) => (
             <GlowCard key={n.type} glow="gold" className="flex flex-col">
               <div className="mb-4 text-4xl font-extrabold text-gold-400">{n.count}</div>
               <h3 className="mb-2 text-lg font-semibold text-white">{n.type}</h3>
