@@ -117,25 +117,25 @@ class ProposalCardSkeleton extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.border),
       ),
-      child: Row(
+      child: const Row(
         children: [
           // 图标占位
-          const ShimmerBox(width: 36, height: 36, radius: 10),
-          const SizedBox(width: 12),
+          ShimmerBox(width: 36, height: 36, radius: 10),
+          SizedBox(width: 12),
           // 文本行
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 ShimmerBox(width: 120, height: 14),
                 SizedBox(height: 6),
                 ShimmerBox(width: 180, height: 12),
               ],
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           // 状态徽章占位
-          const ShimmerBox(width: 52, height: 20, radius: 10),
+          ShimmerBox(width: 52, height: 20, radius: 10),
         ],
       ),
     );
@@ -159,15 +159,15 @@ class WalletCardSkeleton extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.border),
       ),
-      child: Row(
+      child: const Row(
         children: [
           // 头像占位
-          const ShimmerBox(width: 40, height: 40, radius: 20),
-          const SizedBox(width: 12),
+          ShimmerBox(width: 40, height: 40, radius: 20),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 ShimmerBox(width: 100, height: 14),
                 SizedBox(height: 6),
                 ShimmerBox(height: 12),

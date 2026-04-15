@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -219,7 +218,7 @@ class _DuoqianCreateProposalPageState
       final env = QrEnvelope.parse(result.trim());
       if (env.kind == QrKind.userContact || env.kind == QrKind.userDuoqian) {
         final address = (env.body as dynamic).address?.toString() ?? '';
-        if (address.isEmpty) throw FormatException('缺少 address 字段');
+        if (address.isEmpty) throw const FormatException('缺少 address 字段');
         final pubkey = Keyring().decodeAddress(address);
         _addAdminPubkey(_toHex(pubkey));
         return;
@@ -362,6 +361,7 @@ class _DuoqianCreateProposalPageState
           ),
         );
         final requestJson = qrSigner.encodeRequest(request);
+        if (!mounted) throw Exception('页面已关闭');
         final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
@@ -535,7 +535,7 @@ class _DuoqianCreateProposalPageState
             _buildSectionTitle('选择账户'),
             const SizedBox(height: 8),
             DropdownButtonFormField<InstitutionAccountEntry>(
-              value: _selectedAccount,
+              initialValue: _selectedAccount,
               hint: const Text('请选择多签账户', style: TextStyle(fontSize: 13)),
               items: _accounts.map((a) {
                 return DropdownMenuItem(
@@ -642,7 +642,7 @@ class _DuoqianCreateProposalPageState
               trailing: isCreator
                   ? null
                   : IconButton(
-                      icon: Icon(Icons.close, size: 18, color: AppTheme.danger),
+                      icon: const Icon(Icons.close, size: 18, color: AppTheme.danger),
                       onPressed: () => _removeAdmin(index),
                     ),
             );
@@ -699,7 +699,7 @@ class _DuoqianCreateProposalPageState
             _buildSectionTitle('签名钱包'),
             const SizedBox(height: 8),
             DropdownButtonFormField<WalletProfile>(
-              value: _selectedWallet,
+              initialValue: _selectedWallet,
               items: widget.adminWallets.map((w) {
                 return DropdownMenuItem(
                   value: w,

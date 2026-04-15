@@ -81,13 +81,13 @@ class _AdminListPageState extends State<AdminListPage> {
           // 管理员总数
           Text(
             '共 ${widget.admins.length} 位管理员　通过阈值 ${widget.institution.internalThreshold}',
-            style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
+            style: const TextStyle(fontSize: 13, color: AppTheme.textTertiary),
           ),
           const SizedBox(height: 12),
           // 管理员列表
           if (widget.admins.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
               child: Center(
                 child: Text(
                   '暂无管理员信息',
@@ -290,7 +290,7 @@ class _AdminTile extends StatelessWidget {
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 '$index',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: AppTheme.textTertiary,

@@ -1,12 +1,10 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../qr/envelope.dart';
 import '../qr/qr_protocols.dart';
 import '../ui/app_theme.dart';
-import 'package:isar/isar.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
@@ -128,7 +126,7 @@ class _PersonalDuoqianCreatePageState
       final env = QrEnvelope.parse(result.trim());
       if (env.kind == QrKind.userContact || env.kind == QrKind.userDuoqian) {
         final address = (env.body as dynamic).address?.toString() ?? '';
-        if (address.isEmpty) throw FormatException('缺少 address 字段');
+        if (address.isEmpty) throw const FormatException('缺少 address 字段');
         final pubkey = Keyring().decodeAddress(address);
         _addAdminPubkey(_toHex(pubkey));
         return;
@@ -253,6 +251,7 @@ class _PersonalDuoqianCreatePageState
           ),
         );
         final requestJson = qrSigner.encodeRequest(request);
+        if (!mounted) throw Exception('页面已关闭');
         final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
@@ -391,7 +390,7 @@ class _PersonalDuoqianCreatePageState
               trailing: isCreator
                   ? null
                   : IconButton(
-                      icon: Icon(Icons.close, size: 18, color: AppTheme.danger),
+                      icon: const Icon(Icons.close, size: 18, color: AppTheme.danger),
                       onPressed: () => _removeAdmin(entry.key),
                     ),
             );
@@ -435,7 +434,7 @@ class _PersonalDuoqianCreatePageState
             _buildSectionTitle('签名钱包'),
             const SizedBox(height: 8),
             DropdownButtonFormField<WalletProfile>(
-              value: _selectedWallet,
+              initialValue: _selectedWallet,
               items: _wallets.map((w) => DropdownMenuItem(value: w, child: Text('${w.walletName} (${_truncateAddress(w.address)})', style: const TextStyle(fontSize: 13)))).toList(),
               onChanged: (w) { if (w != null) setState(() { _selectedWallet = w; _syncCreatorAdmin(w); }); },
               decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),

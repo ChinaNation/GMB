@@ -182,6 +182,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
           ),
         );
         final requestJson = qrSigner.encodeRequest(request);
+        if (!mounted) throw Exception('页面已关闭');
         final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
@@ -320,7 +321,7 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
             maxLines: 5,
             decoration: InputDecoration(
               hintText: '输入升级理由（最多 341 个汉字）',
-              hintStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 14),
+              hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 14),
               filled: true,
               fillColor: AppTheme.surfaceMuted,
               enabledBorder: OutlineInputBorder(
@@ -590,13 +591,13 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
                       _wasmCode = null;
                     });
                   },
-                  child: Icon(Icons.close, size: 16, color: AppTheme.textTertiary),
+                  child: const Icon(Icons.close, size: 16, color: AppTheme.textTertiary),
                 ),
               ],
             ),
           )
         else
-          Text(
+          const Text(
             '支持 .wasm 文件，最大 5MB',
             style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
           ),

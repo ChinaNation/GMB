@@ -148,6 +148,7 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
           ),
         );
         final requestJson = qrSigner.encodeRequest(request);
+        if (!mounted) throw Exception('页面已关闭');
         final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
@@ -257,7 +258,7 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
             ),
             child: Text(
               _duoqianSs58,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 13,
                 fontFamily: 'monospace',
                 color: AppTheme.textSecondary,
@@ -338,7 +339,7 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
             _buildSectionTitle('签名钱包'),
             const SizedBox(height: 8),
             DropdownButtonFormField<WalletProfile>(
-              value: _selectedWallet,
+              initialValue: _selectedWallet,
               items: widget.adminWallets.map((w) {
                 return DropdownMenuItem(
                   value: w,
