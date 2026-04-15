@@ -108,6 +108,60 @@ void main() {
       expect(PayloadDecoder.decode('0x0203'), isNull);
     });
 
+    test('decodes propose_sweep_to_main 国储会 (pallet=19 call=5)', () {
+      // 回归:国储会 shenfen_id 在 institutions.dart 中存在,应还原为"国家储备委员会"
+      // 而不是 fallback 成原始 shenfen_id 字符串。
+      // [0x13, 0x05, 48 bytes shenfen_id (零填充), 16 bytes u128_le amount_fen]
+      const shenfenId = 'GFR-LN001-CB0C-617776487-20260222';
+      final idBytes = List<int>.filled(48, 0);
+      final idChars = shenfenId.codeUnits;
+      for (var i = 0; i < idChars.length; i++) {
+        idBytes[i] = idChars[i];
+      }
+      // amount = 100.00 GMB = 10000 分
+      const amount = 10000;
+      final amountBytes = List<int>.filled(16, 0);
+      amountBytes[0] = amount & 0xff;
+      amountBytes[1] = (amount >> 8) & 0xff;
+
+      final payload = Uint8List.fromList([
+        0x13, 0x05,
+        ...idBytes,
+        ...amountBytes,
+      ]);
+
+      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final decoded = PayloadDecoder.decode(hex, specVersion: PalletRegistry.supportedSpecVersions.first);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_sweep_to_main');
+      expect(decoded.fields['institution'], '国家储备委员会');
+      expect(decoded.fields['amount_yuan'], '100.00 GMB');
+    });
+
+    test('decodes propose_sweep_to_main 省储会 (pallet=19 call=5)', () {
+      // 回归:省储会 shenfen_id 应还原为中文名。
+      const shenfenId = 'GFR-ZS001-CB0X-464088047-20260222';
+      final idBytes = List<int>.filled(48, 0);
+      final idChars = shenfenId.codeUnits;
+      for (var i = 0; i < idChars.length; i++) {
+        idBytes[i] = idChars[i];
+      }
+      final amountBytes = List<int>.filled(16, 0);
+      amountBytes[0] = 0x10; // 16 分 = 0.16 元
+
+      final payload = Uint8List.fromList([
+        0x13, 0x05,
+        ...idBytes,
+        ...amountBytes,
+      ]);
+      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final decoded = PayloadDecoder.decode(hex, specVersion: PalletRegistry.supportedSpecVersions.first);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.fields['institution'], '中枢省储备委员会');
+    });
+
     test('Compact encoding mode 1 (two-byte)', () {
       // Compact(234): value=234, mode 1 => (234 << 2) | 1 = 937 = 0x03A9
       // little-endian: [0xA9, 0x03]

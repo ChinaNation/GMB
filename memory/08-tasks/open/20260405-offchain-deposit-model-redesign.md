@@ -464,7 +464,7 @@ impl DepositLedger {
 |------|------|
 | **offchain_pay_page.dart** | 余额检查从链上余额改为存款余额；新增"余额不足请充值"提示 |
 | **钱包主页** | 新增"链下支付账户"卡片，显示开户银行和存款余额 |
-| **clearing_banks.dart** | 从硬编码改为链上查询已注册银行 |
+| **institutions.dart**（原 `clearing_banks.dart`，2026-04-15 合并重构） | 从硬编码改为链上查询已注册机构 |
 
 ### 8.3 新增 RPC 调用
 
