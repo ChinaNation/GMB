@@ -302,17 +302,17 @@ class _AllProposalsViewState extends State<AllProposalsView> {
       );
     }
     if (_items.isEmpty && !_hasMore) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.ballot_outlined,
+            Icon(Icons.ballot_outlined,
                 size: 48, color: AppTheme.textTertiary),
-            const SizedBox(height: 12),
-            const Text('暂无提案',
+            SizedBox(height: 12),
+            Text('暂无提案',
                 style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
-            const SizedBox(height: 4),
-            const Text('全链提案将在此显示',
+            SizedBox(height: 4),
+            Text('全链提案将在此显示',
                 style: TextStyle(fontSize: 13, color: AppTheme.textTertiary)),
           ],
         ),

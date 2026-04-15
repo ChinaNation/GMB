@@ -262,13 +262,13 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     Text(
                       '管理员 ${_admins.length} 人　通过阈值 ${inst.internalThreshold}',
                       style:
-                          TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                          const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                     ),
                   ],
                 ),
               ),
               // 右侧箭头
-              Icon(Icons.chevron_right,
+              const Icon(Icons.chevron_right,
                   size: 20, color: AppTheme.textTertiary),
             ],
           ),
@@ -333,7 +333,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppTheme.border),
+        side: const BorderSide(color: AppTheme.border),
       ),
       child: InkWell(
         onTap: _openAdminList,
@@ -369,12 +369,12 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     Text(
                       '共 ${_admins.length} 位管理员',
                       style:
-                          TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                          const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
+              const Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),
@@ -406,17 +406,17 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               border: Border.all(color: AppTheme.border),
             ),
-            child: Column(
+            child: const Column(
               children: [
-                const Icon(Icons.ballot_outlined,
+                Icon(Icons.ballot_outlined,
                     size: 40, color: AppTheme.textTertiary),
-                const SizedBox(height: 8),
-                const Text(
+                SizedBox(height: 8),
+                Text(
                   '暂无投票事件',
                   style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
                 ),
-                const SizedBox(height: 4),
-                const Text(
+                SizedBox(height: 4),
+                Text(
                   '本机构提案和全局联合投票事件将在此显示',
                   style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                 ),
@@ -559,7 +559,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     Text(
                       _proposalSubtitle(proposal),
                       style:
-                          TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                          const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                     ),
                   ],
                 ),
@@ -580,7 +580,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                 ),
               ),
               const SizedBox(width: 4),
-              Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
+              const Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),

@@ -15,12 +15,12 @@ void main() {
     const payload = '0x01020304';
     const signature =
         '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
-    final display = SignDisplay(
+    const display = SignDisplay(
       action: 'transfer',
       summary: '转账 100.00 GMB',
       fields: [
-        const SignDisplayField(label: '收款账户', value: '5Grw...'),
-        const SignDisplayField(label: '金额', value: '100.00 GMB'),
+        SignDisplayField(label: '收款账户', value: '5Grw...'),
+        SignDisplayField(label: '金额', value: '100.00 GMB'),
       ],
     );
 
@@ -93,7 +93,7 @@ void main() {
         pubkey: pubkey,
         payloadHex: payload,
         specVersion: 100,
-        display: SignDisplay(action: 'login', summary: '登录'),
+        display: const SignDisplay(action: 'login', summary: '登录'),
         nowEpochSeconds: now - 200,
       );
       final encoded = signer.encodeRequest(expired);

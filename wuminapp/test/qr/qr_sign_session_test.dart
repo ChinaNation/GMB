@@ -10,11 +10,11 @@ void main() {
     late SignRequestEnvelope request;
     late String requestJson;
 
-    final display = SignDisplay(
+    const display = SignDisplay(
       action: 'transfer',
       summary: '转账 1.00 GMB',
       fields: [
-        const SignDisplayField(label: '金额', value: '1.00 GMB'),
+        SignDisplayField(label: '金额', value: '1.00 GMB'),
       ],
     );
 

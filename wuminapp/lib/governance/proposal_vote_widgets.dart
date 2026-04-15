@@ -31,7 +31,7 @@ class ProposalVoteProgress extends StatelessWidget {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppTheme.border),
+        side: const BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -71,7 +71,7 @@ class ProposalVoteProgress extends StatelessWidget {
                 ),
                 Text(
                   '反对 $noCount',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 13,
                     color: AppTheme.danger,
                   ),
@@ -116,7 +116,7 @@ class ProposalAdminVoteList extends StatelessWidget {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppTheme.border),
+        side: const BorderSide(color: AppTheme.border),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -235,7 +235,7 @@ class ProposalAdminVoteList extends StatelessWidget {
           color: AppTheme.warning.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Row(
+        child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
@@ -246,7 +246,7 @@ class ProposalAdminVoteList extends StatelessWidget {
                 color: AppTheme.warning,
               ),
             ),
-            const SizedBox(width: 4),
+            SizedBox(width: 4),
             Text(
               '投票中',
               style: TextStyle(
@@ -265,7 +265,7 @@ class ProposalAdminVoteList extends StatelessWidget {
           color: AppTheme.textTertiary.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Text(
+        child: const Text(
           '未投票 -',
           style: TextStyle(
             fontSize: 12,
@@ -374,8 +374,8 @@ class ProposalVoteActions extends StatelessWidget {
               ),
             ),
           if (allVoted)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 10),
               child: Text(
                 '你的管理员钱包均已投票',
                 style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
@@ -519,7 +519,7 @@ class ProposalStatusBadge extends StatelessWidget {
         const Spacer(),
         Text(
           '提案 #$proposalId',
-          style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
+          style: const TextStyle(fontSize: 13, color: AppTheme.textTertiary),
         ),
       ],
     );

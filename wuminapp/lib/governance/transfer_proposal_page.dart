@@ -222,6 +222,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
           ),
         );
         final requestJson = qrSigner.encodeRequest(request);
+        if (!mounted) throw Exception('页面已关闭');
         final response = await Navigator.push<SignResponseEnvelope>(
           context,
           MaterialPageRoute(
@@ -350,7 +351,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
             controller: _beneficiaryController,
             decoration: InputDecoration(
               hintText: '输入 SS58 格式地址',
-              hintStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 14),
+              hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 14),
               filled: true,
               fillColor: AppTheme.surfaceMuted,
               enabledBorder: OutlineInputBorder(
@@ -393,7 +394,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
             inputFormatters: [ThousandSeparatorFormatter()],
             decoration: InputDecoration(
               hintText: '最低 1.11 元',
-              hintStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 14),
+              hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 14),
               filled: true,
               fillColor: AppTheme.surfaceMuted,
               enabledBorder: OutlineInputBorder(
@@ -445,7 +446,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
             maxLines: 3,
             decoration: InputDecoration(
               hintText: '最多 256 字节',
-              hintStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 14),
+              hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 14),
               filled: true,
               fillColor: AppTheme.surfaceMuted,
               enabledBorder: OutlineInputBorder(
@@ -657,7 +658,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       ),
       child: SelectableText(
         value,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 13,
           color: AppTheme.textSecondary,
           fontFamily: 'monospace',
@@ -672,7 +673,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       children: [
         Text(
           label,
-          style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
         ),
         Text(
           value,

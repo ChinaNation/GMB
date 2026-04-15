@@ -827,6 +827,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       if (!_screenshotGuardActive) {
         _screenshotGuardActive = true;
         await ScreenshotGuard.enable();
+        if (!mounted) return;
       }
       await showDialog<void>(
         context: context,
@@ -1194,19 +1195,19 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                   ),
                 );
               },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
                 child: Row(
                   children: [
-                    const Text(
+                    Text(
                       '交易记录',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const Spacer(),
-                    const Icon(Icons.chevron_right,
+                    Spacer(),
+                    Icon(Icons.chevron_right,
                         size: 20, color: AppTheme.textTertiary),
                   ],
                 ),
@@ -1351,6 +1352,7 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
         return;
       }
       await ScreenshotGuard.enable();
+      if (!mounted) return;
       await showDialog<void>(
         context: context,
         barrierDismissible: false,

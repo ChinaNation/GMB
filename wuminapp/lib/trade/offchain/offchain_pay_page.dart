@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -88,7 +87,7 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
       }
     }
     // 90 分钟仍未上链，标记待人工检查
-    debugPrint('[OffchainPoll] tx=$txId 轮询超时(${maxAttempts}次)，标记 pending_check');
+    debugPrint('[OffchainPoll] tx=$txId 轮询超时($maxAttempts次)，标记 pending_check');
     await LocalTxStore.updateStatus(txId, 'pending_check');
   }
 
@@ -261,6 +260,7 @@ class _OffchainPayPageState extends State<OffchainPayPage> {
           );
           final requestJson = qrSigner.encodeRequest(request);
 
+          if (!mounted) throw Exception('页面已关闭');
           final response = await Navigator.push<SignResponseEnvelope>(
             context,
             MaterialPageRoute(
