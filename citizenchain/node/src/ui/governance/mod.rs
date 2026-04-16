@@ -105,7 +105,7 @@ static PROVINCIAL_BANKS: &[InstitutionEntry] = &[
     InstitutionEntry { name: "四川省公民储备银行", shenfen_id: "SFR-SC000-CH19-320507619-20260222", org_type: OrgType::Prb, duoqian_address: "e104ec87a747420fc31702551d8153f0edf0a7ac2a77a5bfe8910adc3f8b0ae9" },
     InstitutionEntry { name: "甘肃省公民储备银行", shenfen_id: "SFR-GS000-CH1U-319639307-20260222", org_type: OrgType::Prb, duoqian_address: "ea360306c0190de49513faede894fc44f827960fa8f45b33be9093800d104791" },
     InstitutionEntry { name: "北平省公民储备银行", shenfen_id: "SFR-BP001-CH19-330141933-20260222", org_type: OrgType::Prb, duoqian_address: "5b9005b8abfb70803e2b0fdbd31e494044f09e8f3bd369abbafdeb481c0e148a" },
-    InstitutionEntry { name: "滨海省公民储备银行", shenfen_id: "SFR-HA000-CH1N-832919801-20260222", org_type: OrgType::Prb, duoqian_address: "3670a84c5f8a3d0e710e881d59113df7f3d8694532be797c9415e0bdd5d25a3a" },
+    InstitutionEntry { name: "海滨省公民储备银行", shenfen_id: "SFR-HA000-CH1N-832919801-20260222", org_type: OrgType::Prb, duoqian_address: "3670a84c5f8a3d0e710e881d59113df7f3d8694532be797c9415e0bdd5d25a3a" },
     InstitutionEntry { name: "松江省公民储备银行", shenfen_id: "SFR-SJ000-CH17-991726244-20260222", org_type: OrgType::Prb, duoqian_address: "6842bab4d4c88d0508255d1f6e768262c1dffe5b6f31470757bebbaab37990bb" },
     InstitutionEntry { name: "龙江省公民储备银行", shenfen_id: "SFR-LJ000-CH1U-321069400-20260222", org_type: OrgType::Prb, duoqian_address: "b30f35b0013af60c12cda5c17b997957412a090e2b49987cfba291778774bd92" },
     InstitutionEntry { name: "吉林省公民储备银行", shenfen_id: "SFR-JL000-CH1Z-114671562-20260222", org_type: OrgType::Prb, duoqian_address: "9ee95711f6dc002676e3da8dc1cb9bf88669b9e12e5349636e0f2700560c0c21" },

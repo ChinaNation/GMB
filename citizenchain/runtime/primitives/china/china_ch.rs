@@ -519,7 +519,7 @@ pub const CHINA_CH: &[ChinaCh] = &[
     },
     ChinaCh {
         shenfen_id: "SFR-HA000-CH1N-832919801-20260222",
-        shenfen_name: "滨海省公民储备银行",
+        shenfen_name: "海滨省公民储备银行",
         citizens_number: 24_720_871,
         stake_amount: 24_720_871_0000,
         wss_url: "wss://prbhas.crcfrcn.com",
