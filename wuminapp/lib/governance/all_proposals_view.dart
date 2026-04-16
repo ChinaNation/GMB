@@ -591,6 +591,31 @@ class _AllProposalsViewState extends State<AllProposalsView> {
           ),
         ),
       );
+    } else if (item.proposal.safetyFundDetail != null && inst != null) {
+      // 安全基金转账提案：复用 TransferProposalDetailPage，传 kind=safetyFund
+      // 以便内部按 call_index=4 提交 vote_safety_fund_transfer。
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TransferProposalDetailPage(
+            institution: inst,
+            proposalId: proposalId,
+            proposalContext: item.context,
+            kind: TransferProposalKind.safetyFund,
+          ),
+        ),
+      );
+    } else if (item.proposal.sweepDetail != null && inst != null) {
+      // 手续费划转提案：kind=sweep，按 call_index=6 提交 vote_sweep_to_main。
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TransferProposalDetailPage(
+            institution: inst,
+            proposalId: proposalId,
+            proposalContext: item.context,
+            kind: TransferProposalKind.sweep,
+          ),
+        ),
+      );
     } else {
       // 其他未知类型
       ScaffoldMessenger.of(context).showSnackBar(

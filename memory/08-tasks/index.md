@@ -121,3 +121,5 @@
 - `memory/08-tasks/done/20260410-sfid-store-shard-by-province-impl.md`
 - `memory/08-tasks/done/20260410-sfid-store-shard-by-province.md`
 - `memory/08-tasks/done/20260415-wumin-institutions-unified-registry.md`
+- `memory/08-tasks/done/20260415-proposal-action-resolver.md`
+- `memory/08-tasks/done/20260415-governance-nrc-back-nav-fix.md`

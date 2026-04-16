@@ -41,14 +41,20 @@
 | `wumin/test/signer/payload_decoder_test.dart` | 加 2 测试 | 国储会 / 省储会 `propose_sweep_to_main` 应分别还原为 `国家储备委员会` / `中枢省储备委员会` |
 | `memory/08-tasks/open/20260405-offchain-deposit-model-redesign.md` | 改 1 行 | 旧文件名 `clearing_banks.dart` 改为 `institutions.dart` |
 
-### 命名一致性遗留说明
+### HA000 省份名统一
 
-服务端权威源自身对 HA000 省份在两种机构角色下使用了不同中文名：
-- 省储会 (`GFR-HA000-CB02-...`) = `海滨省储备委员会`
-- 省储行 (`SFR-HA000-CH1N-...`) = `滨海省公民储备银行`
+发现服务端权威源历史上对 HA000 省份在两种机构角色下使用了不同中文名
+（PRB 用 `滨海省`，其他所有模块都用 `海滨省`）。本次一并统一为 `海滨省`。
 
-冷钱包必须 1:1 对齐，不自行统一。此现象在 `institutions.dart`
-对应条目旁有中文注释标注。
+改动点：
+- `citizenchain/runtime/primitives/china/china_ch.rs:522`
+- `citizenchain/node/src/ui/governance/mod.rs:108`
+- `wumin/lib/chain/institutions.dart`
+- `wuminapp/lib/trade/offchain/clearing_banks.dart:45`
+- `wuminapp/lib/governance/institution_data.dart:706`
+
+`shenfen_id` 未变（仍为 `SFR-HA000-CH1N-832919801-20260222`），链上标识不受影响；
+`shenfen_name` 仅用于展示，runtime 升级即可生效。
 
 ## 验证
 

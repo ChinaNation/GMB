@@ -703,7 +703,7 @@ const List<InstitutionInfo> kProvincialBanks = [
         '5b9005b8abfb70803e2b0fdbd31e494044f09e8f3bd369abbafdeb481c0e148a',
   ),
   InstitutionInfo(
-    name: '滨海省公民储备银行',
+    name: '海滨省公民储备银行',
     shenfenId: 'SFR-HA000-CH1N-832919801-20260222',
     orgType: OrgType.prb,
     duoqianAddress:

@@ -18,6 +18,12 @@ import type { AdminWalletMatch } from './governance-types';
 /// 国储会 shenfenId（只有 1 个，直接进详情）。
 const NRC_SHENFEN_ID = 'GFR-LN001-CB0C-617776487-20260222';
 
+// 注意:从 NRC 发起的提案页(propose-sweep / propose-fee-rate)返回时,
+// backTab='nrc' 必须直接回到 { page: 'nrc' } tab 状态,
+// 不能跳 { page: 'institution-detail' } —— 后者是 PRC/PRB 从列表进入的通用机构详情页,
+// 与 NRC tab 结构不同(无治理子 Tab 栏、多"返回机构列表"按钮、
+// 缺 onCreateSafetyFund/onCreateRuntimeUpgrade handler)。
+// 具体分发逻辑见 backToInstitutionParent。
 type GovernanceView =
   | { page: 'proposals' }
   | { page: 'nrc' }
@@ -42,6 +48,18 @@ export function GovernanceSection() {
   const switchTab = (tab: SubTab) => {
     setActiveTab(tab);
     setView({ page: tab });
+  };
+
+  /// 机构详情类提案页(sweep / fee-rate)的返回父级分发:
+  ///   - NRC(backTab='nrc')→ 直接回 tab 状态 { page: 'nrc' },因为 NRC 的"真正主页"
+  ///     是 tab 下嵌入的内联渲染(带治理子 Tab 栏),与通用 institution-detail 视图结构不同。
+  ///   - PRC/PRB → 回到通用 institution-detail 视图(来时即从此处进入)。
+  const backToInstitutionParent = (backTab: SubTab, shenfenId: string) => {
+    if (backTab === 'nrc') {
+      setView({ page: 'nrc' });
+    } else {
+      setView({ page: 'institution-detail', shenfenId, backTab });
+    }
   };
 
   const handleCreateProposal = (
@@ -71,26 +89,28 @@ export function GovernanceSection() {
 
   // 费率设置提案页
   if (view.page === 'propose-fee-rate') {
+    const backToParent = () => backToInstitutionParent(view.backTab, view.shenfenId);
     return (
       <FeeRateProposalPage
         shenfenId={view.shenfenId}
         institutionName={view.institutionName}
         adminWallets={view.adminWallets}
-        onBack={() => setView({ page: 'institution-detail', shenfenId: view.shenfenId, backTab: view.backTab })}
-        onSuccess={() => setView({ page: 'institution-detail', shenfenId: view.shenfenId, backTab: view.backTab })}
+        onBack={backToParent}
+        onSuccess={backToParent}
       />
     );
   }
 
   // 手续费划转提案页
   if (view.page === 'propose-sweep') {
+    const backToParent = () => backToInstitutionParent(view.backTab, view.shenfenId);
     return (
       <SweepProposalPage
         shenfenId={view.shenfenId}
         institutionName={view.institutionName}
         adminWallets={view.adminWallets}
-        onBack={() => setView({ page: 'institution-detail', shenfenId: view.shenfenId, backTab: view.backTab })}
-        onSuccess={() => setView({ page: 'institution-detail', shenfenId: view.shenfenId, backTab: view.backTab })}
+        onBack={backToParent}
+        onSuccess={backToParent}
       />
     );
   }
