@@ -16,17 +16,37 @@ import '../signer/qr_signer.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'proposal_vote_widgets.dart';
 
+/// 详情页展示/投票的三种提案类型。
+///
+/// 决定：读哪个 storage map、提交哪个 extrinsic、QR 签名如何展示。
+/// pallet_index 都是 19（DuoqianTransferPow），只有 call_index 不同。
+enum TransferProposalKind {
+  /// 机构转账提案（propose_transfer / vote_transfer，call_index=0/1）。
+  transfer,
+
+  /// 安全基金转账提案（propose_safety_fund_transfer / vote_safety_fund_transfer，call_index=3/4）。
+  safetyFund,
+
+  /// 手续费划转提案（propose_sweep_to_main / vote_sweep_to_main，call_index=5/6）。
+  sweep,
+}
+
 /// 转账提案详情页：展示提案信息、投票进度、管理员投票明细及投票操作。
+///
+/// 通过 [kind] 区分三种转账类提案；不同 kind 读不同 storage、提交不同 extrinsic、
+/// QR 签名显示不同文案。
 class TransferProposalDetailPage extends StatefulWidget {
   const TransferProposalDetailPage({
     super.key,
     required this.institution,
     required this.proposalId,
     required this.proposalContext,
+    this.kind = TransferProposalKind.transfer,
   });
 
   final InstitutionInfo institution;
   final int proposalId;
+  final TransferProposalKind kind;
 
   /// 统一的提案上下文。
   final ProposalContext proposalContext;
@@ -52,9 +72,49 @@ class _TransferProposalDetailPageState
   // 提案状态
   int? _status;
 
-  // 提案详情（从链上读取）
-  TransferProposalInfo? _proposalInfo;
+  // 提案详情（从链上读取）— 按 kind 使用对应字段，其余字段为 null。
+  TransferProposalInfo? _transferInfo;
+  SafetyFundProposalInfo? _safetyFundInfo;
+  SweepProposalInfo? _sweepInfo;
   bool _remarkExpanded = false;
+
+  // ──── kind 相关常量 ────
+
+  /// 本详情页绑定的提案类型标签（供 PendingVoteStore 区分 key）。
+  String get _proposalTypeKey {
+    switch (widget.kind) {
+      case TransferProposalKind.transfer:
+        return 'transfer';
+      case TransferProposalKind.safetyFund:
+        return 'safety_fund';
+      case TransferProposalKind.sweep:
+        return 'sweep';
+    }
+  }
+
+  /// 签名显示用的人类可读类型名。
+  String get _kindLabel {
+    switch (widget.kind) {
+      case TransferProposalKind.transfer:
+        return '转账提案';
+      case TransferProposalKind.safetyFund:
+        return '安全基金转账提案';
+      case TransferProposalKind.sweep:
+        return '手续费划转提案';
+    }
+  }
+
+  /// QR 签名 action 字段（与链上 extrinsic 名对齐，便于冷钱包识别）。
+  String get _signAction {
+    switch (widget.kind) {
+      case TransferProposalKind.transfer:
+        return 'vote_transfer';
+      case TransferProposalKind.safetyFund:
+        return 'vote_safety_fund_transfer';
+      case TransferProposalKind.sweep:
+        return 'vote_sweep_to_main';
+    }
+  }
 
   // 投票计数
   int _yesCount = 0;
@@ -85,18 +145,37 @@ class _TransferProposalDetailPageState
     });
 
     try {
+      // 根据 kind 选择对应的详情查询方法。
+      // 不同 kind 写在不同的 storage map：
+      //   transfer   → VotingEngineSystem.ProposalData（带 dq-xfer tag）
+      //   safetyFund → DuoqianTransferPow.SafetyFundProposalActions
+      //   sweep      → DuoqianTransferPow.SweepProposalActions
+      final Future<dynamic> detailFuture;
+      switch (widget.kind) {
+        case TransferProposalKind.transfer:
+          detailFuture = _proposalService.fetchProposalAction(widget.proposalId);
+          break;
+        case TransferProposalKind.safetyFund:
+          detailFuture =
+              _proposalService.fetchSafetyFundAction(widget.proposalId);
+          break;
+        case TransferProposalKind.sweep:
+          detailFuture = _proposalService.fetchSweepAction(widget.proposalId);
+          break;
+      }
+
       // 并行加载管理员列表、提案状态、投票计数、提案详情
       final results = await Future.wait([
         _adminService.fetchAdmins(widget.institution.shenfenId),
         _proposalService.fetchProposalStatus(widget.proposalId),
         _proposalService.fetchVoteTally(widget.proposalId),
-        _proposalService.fetchProposalAction(widget.proposalId),
+        detailFuture,
       ]);
 
       final admins = results[0] as List<String>;
       final status = results[1] as int?;
       final tally = results[2] as ({int yes, int no});
-      final proposalInfo = results[3] as TransferProposalInfo?;
+      final detail = results[3];
 
       // 逐个查询每位管理员的投票记录
       final votes = <String, bool?>{};
@@ -110,9 +189,11 @@ class _TransferProposalDetailPageState
         votes[entry.key] = entry.value;
       }
 
-      // 检查待确认投票：先批量确认，再获取仍在等待的记录
+      // 检查待确认投票：先批量确认，再获取仍在等待的记录。
+      // 用 kind 对应的 type key，避免跨类型提案 ID 误判（虽然 ID 全局递增，
+      // 但分开归档便于后续清理/迁移）。
       final pendingRecords = await PendingVoteStore.instance.confirmAll(
-        'transfer',
+        _proposalTypeKey,
         widget.proposalId,
         OnchainRpc(),
       );
@@ -140,7 +221,20 @@ class _TransferProposalDetailPageState
         _pendingPubkeys = pendingPks;
         _votableWallets = votable;
         _selectedVoteWallet = votable.isNotEmpty ? votable.first : null;
-        _proposalInfo = proposalInfo;
+        _transferInfo = null;
+        _safetyFundInfo = null;
+        _sweepInfo = null;
+        switch (widget.kind) {
+          case TransferProposalKind.transfer:
+            _transferInfo = detail as TransferProposalInfo?;
+            break;
+          case TransferProposalKind.safetyFund:
+            _safetyFundInfo = detail as SafetyFundProposalInfo?;
+            break;
+          case TransferProposalKind.sweep:
+            _sweepInfo = detail as SweepProposalInfo?;
+            break;
+        }
         _loading = false;
       });
     } catch (e) {
@@ -225,17 +319,12 @@ class _TransferProposalDetailPageState
           payloadHex: '0x${_toHex(payload)}',
           specVersion: rv.specVersion,
           display: SignDisplay(
-            action: 'vote_transfer',
-            summary: '转账提案 #${widget.proposalId} 投票：$voteText',
+            action: _signAction,
+            summary: '$_kindLabel #${widget.proposalId} 投票：$voteText',
             fields: [
               SignDisplayField(label: '提案编号', value: widget.proposalId.toString()),
               SignDisplayField(label: '投票', value: approve.toString()),
-              if (_proposalInfo != null) ...[
-                SignDisplayField(label: '收款账户', value: _proposalInfo!.beneficiary),
-                SignDisplayField(label: '金额', value: AmountFormat.format(_proposalInfo!.amountYuan)),
-                if (_proposalInfo!.remark.isNotEmpty)
-                  SignDisplayField(label: '备注', value: _proposalInfo!.remark),
-              ],
+              ..._buildSignDisplayFields(),
             ],
           ),
         );
@@ -254,19 +343,46 @@ class _TransferProposalDetailPageState
         return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
-      final result = await _proposalService.submitVoteTransfer(
-        proposalId: widget.proposalId,
-        approve: approve,
-        fromAddress: wallet.address,
-        signerPubkey: Uint8List.fromList(pubkeyBytes),
-        sign: signCallback,
-      );
+      // 按 kind 调用对应 submit 方法，确保 call_index 与 runtime 端一致：
+      //   transfer   → vote_transfer（1）
+      //   safetyFund → vote_safety_fund_transfer（4）
+      //   sweep      → vote_sweep_to_main（6）
+      final ({String txHash, int usedNonce}) result;
+      switch (widget.kind) {
+        case TransferProposalKind.transfer:
+          result = await _proposalService.submitVoteTransfer(
+            proposalId: widget.proposalId,
+            approve: approve,
+            fromAddress: wallet.address,
+            signerPubkey: Uint8List.fromList(pubkeyBytes),
+            sign: signCallback,
+          );
+          break;
+        case TransferProposalKind.safetyFund:
+          result = await _proposalService.submitVoteSafetyFund(
+            proposalId: widget.proposalId,
+            approve: approve,
+            fromAddress: wallet.address,
+            signerPubkey: Uint8List.fromList(pubkeyBytes),
+            sign: signCallback,
+          );
+          break;
+        case TransferProposalKind.sweep:
+          result = await _proposalService.submitVoteSweep(
+            proposalId: widget.proposalId,
+            approve: approve,
+            fromAddress: wallet.address,
+            signerPubkey: Uint8List.fromList(pubkeyBytes),
+            sign: signCallback,
+          );
+          break;
+      }
 
       // 持久化待确认投票记录
       var pubkey = wallet.pubkeyHex.toLowerCase();
       if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
       await PendingVoteStore.instance.save(PendingVoteRecord(
-        proposalType: 'transfer',
+        proposalType: _proposalTypeKey,
         proposalId: widget.proposalId,
         walletPubkey: pubkey,
         approve: approve,
@@ -330,9 +446,9 @@ class _TransferProposalDetailPageState
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
-        title: const Text(
-          '提案详情',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        title: Text(
+          '$_kindLabel详情',
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
         foregroundColor: AppTheme.textPrimary,
@@ -409,7 +525,7 @@ class _TransferProposalDetailPageState
             admins: _admins,
             adminVotes: _adminVotes,
             pendingPubkeys: _pendingPubkeys,
-            proposerPubkey: _proposalInfo?.proposer,
+            proposerPubkey: _proposerPubkey,
           ),
         ],
       ),
@@ -418,10 +534,54 @@ class _TransferProposalDetailPageState
 
   // ──── 提案信息卡片 ────
 
-  Widget _buildProposalInfoCard() {
-    final info = _proposalInfo;
-    final remark = info?.remark ?? '';
+  /// 提案创建者公钥（仅 transfer / safetyFund 有）。
+  String? get _proposerPubkey {
+    switch (widget.kind) {
+      case TransferProposalKind.transfer:
+        return _transferInfo?.proposer;
+      case TransferProposalKind.safetyFund:
+        return _safetyFundInfo?.proposer;
+      case TransferProposalKind.sweep:
+        return null; // sweep 提案 storage 不记录 proposer
+    }
+  }
 
+  /// QR 签名时附加的类型特有字段。
+  List<SignDisplayField> _buildSignDisplayFields() {
+    switch (widget.kind) {
+      case TransferProposalKind.transfer:
+        final info = _transferInfo;
+        if (info == null) return const [];
+        return [
+          SignDisplayField(label: '收款账户', value: info.beneficiary),
+          SignDisplayField(
+              label: '金额', value: AmountFormat.format(info.amountYuan)),
+          if (info.remark.isNotEmpty)
+            SignDisplayField(label: '备注', value: info.remark),
+        ];
+      case TransferProposalKind.safetyFund:
+        final info = _safetyFundInfo;
+        if (info == null) return const [];
+        return [
+          SignDisplayField(label: '收款账户', value: info.beneficiary),
+          SignDisplayField(
+              label: '金额', value: AmountFormat.format(info.amountYuan)),
+          if (info.remark.isNotEmpty)
+            SignDisplayField(label: '备注', value: info.remark),
+        ];
+      case TransferProposalKind.sweep:
+        final info = _sweepInfo;
+        if (info == null) return const [];
+        return [
+          SignDisplayField(label: '机构', value: widget.institution.name),
+          SignDisplayField(
+              label: '划转金额', value: AmountFormat.format(info.amountYuan)),
+          const SignDisplayField(label: '目标', value: '机构主账户'),
+        ];
+    }
+  }
+
+  Widget _buildProposalInfoCard() {
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -443,36 +603,102 @@ class _TransferProposalDetailPageState
               ),
             ),
             const SizedBox(height: 12),
-            _buildInfoRow(
-              '机构名称',
-              widget.institution.name,
-            ),
-            if (info != null) ...[
-              const Divider(height: 20),
-              _buildInfoRow(
-                '转账金额',
-                '${AmountFormat.format(info.amountYuan, symbol: '')} 元',
-              ),
-              const Divider(height: 20),
-              _buildInfoRow(
-                '收款地址',
-                _truncateAddress(info.beneficiary),
-                onCopy: () {
-                  Clipboard.setData(ClipboardData(text: info.beneficiary));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('地址已复制'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                },
-              ),
-            ],
-            const Divider(height: 20),
-            // 备注（可折叠）
-            _buildRemarkRow(remark),
+            ..._buildInfoRowsByKind(),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 按 kind 生成提案信息卡的内容行（含 Divider）。
+  List<Widget> _buildInfoRowsByKind() {
+    switch (widget.kind) {
+      case TransferProposalKind.transfer:
+        return _buildTransferRows();
+      case TransferProposalKind.safetyFund:
+        return _buildSafetyFundRows();
+      case TransferProposalKind.sweep:
+        return _buildSweepRows();
+    }
+  }
+
+  /// 普通机构转账：机构名称 + 金额 + 收款地址 + 备注。
+  List<Widget> _buildTransferRows() {
+    final info = _transferInfo;
+    final rows = <Widget>[
+      _buildInfoRow('机构名称', widget.institution.name),
+    ];
+    if (info != null) {
+      rows
+        ..add(const Divider(height: 20))
+        ..add(_buildInfoRow(
+          '转账金额',
+          '${AmountFormat.format(info.amountYuan, symbol: '')} 元',
+        ))
+        ..add(const Divider(height: 20))
+        ..add(_buildInfoRow(
+          '收款地址',
+          _truncateAddress(info.beneficiary),
+          onCopy: () => _copyToClipboard(info.beneficiary),
+        ));
+    }
+    rows
+      ..add(const Divider(height: 20))
+      ..add(_buildRemarkRow(info?.remark ?? ''));
+    return rows;
+  }
+
+  /// 安全基金转账：金额 + 收款地址 + 备注（无机构维度，安全基金是全链级账户）。
+  List<Widget> _buildSafetyFundRows() {
+    final info = _safetyFundInfo;
+    final rows = <Widget>[
+      _buildInfoRow('付款账户', '安全基金账户'),
+    ];
+    if (info != null) {
+      rows
+        ..add(const Divider(height: 20))
+        ..add(_buildInfoRow(
+          '转账金额',
+          '${AmountFormat.format(info.amountYuan, symbol: '')} 元',
+        ))
+        ..add(const Divider(height: 20))
+        ..add(_buildInfoRow(
+          '收款地址',
+          _truncateAddress(info.beneficiary),
+          onCopy: () => _copyToClipboard(info.beneficiary),
+        ));
+    }
+    rows
+      ..add(const Divider(height: 20))
+      ..add(_buildRemarkRow(info?.remark ?? ''));
+    return rows;
+  }
+
+  /// 手续费划转：机构名称 + 划转金额 + 目标（机构主账户），无备注、无收款地址。
+  List<Widget> _buildSweepRows() {
+    final info = _sweepInfo;
+    final rows = <Widget>[
+      _buildInfoRow('机构名称', widget.institution.name),
+    ];
+    if (info != null) {
+      rows
+        ..add(const Divider(height: 20))
+        ..add(_buildInfoRow(
+          '划转金额',
+          '${AmountFormat.format(info.amountYuan, symbol: '')} 元',
+        ))
+        ..add(const Divider(height: 20))
+        ..add(_buildInfoRow('划转路径', '手续费账户 → 机构主账户'));
+    }
+    return rows;
+  }
+
+  void _copyToClipboard(String value) {
+    Clipboard.setData(ClipboardData(text: value));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('地址已复制'),
+        duration: Duration(seconds: 1),
       ),
     );
   }

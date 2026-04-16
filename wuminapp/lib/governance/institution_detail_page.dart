@@ -647,9 +647,32 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           ),
         ),
       );
-    } else if (proposal.meta.kind == 0 &&
-        proposal.meta.institutionBytes != null) {
-      // 内部投票提案（费率设置等）
+    } else if (proposal.safetyFundDetail != null) {
+      // 安全基金转账提案：传 kind=safetyFund，页面内按 call_index=4 投票。
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TransferProposalDetailPage(
+            institution: widget.institution,
+            proposalId: proposalId,
+            proposalContext: ctx,
+            kind: TransferProposalKind.safetyFund,
+          ),
+        ),
+      );
+    } else if (proposal.sweepDetail != null) {
+      // 手续费划转提案：传 kind=sweep，页面内按 call_index=6 投票。
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TransferProposalDetailPage(
+            institution: widget.institution,
+            proposalId: proposalId,
+            proposalContext: ctx,
+            kind: TransferProposalKind.sweep,
+          ),
+        ),
+      );
+    } else if (proposal.feeRateDetail != null) {
+      // 费率提案
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => FeeRateDetailPage(

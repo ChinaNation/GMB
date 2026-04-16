@@ -68,7 +68,6 @@ const List<Institution> kProvincialCouncils = [
   Institution(shenfenId: 'GFR-SC000-CB0N-676087668-20260222', name: '四川省储备委员会', type: InstitutionType.prc),
   Institution(shenfenId: 'GFR-GS000-CB02-451145443-20260222', name: '甘肃省储备委员会', type: InstitutionType.prc),
   Institution(shenfenId: 'GFR-BP001-CB0C-164347900-20260222', name: '北平省储备委员会', type: InstitutionType.prc),
-  // 注：HA000 省储会名为"海滨"，省储行名为"滨海"（服务端权威源原样如此，不自行统一）。
   Institution(shenfenId: 'GFR-HA000-CB02-156526094-20260222', name: '海滨省储备委员会', type: InstitutionType.prc),
   Institution(shenfenId: 'GFR-SJ000-CB0A-005282342-20260222', name: '松江省储备委员会', type: InstitutionType.prc),
   Institution(shenfenId: 'GFR-LJ000-CB0A-105584375-20260222', name: '龙江省储备委员会', type: InstitutionType.prc),
@@ -116,7 +115,7 @@ const List<Institution> kProvincialBanks = [
   Institution(shenfenId: 'SFR-SC000-CH19-320507619-20260222', name: '四川省公民储备银行', type: InstitutionType.prb),
   Institution(shenfenId: 'SFR-GS000-CH1U-319639307-20260222', name: '甘肃省公民储备银行', type: InstitutionType.prb),
   Institution(shenfenId: 'SFR-BP001-CH19-330141933-20260222', name: '北平省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-HA000-CH1N-832919801-20260222', name: '滨海省公民储备银行', type: InstitutionType.prb),
+  Institution(shenfenId: 'SFR-HA000-CH1N-832919801-20260222', name: '海滨省公民储备银行', type: InstitutionType.prb),
   Institution(shenfenId: 'SFR-SJ000-CH17-991726244-20260222', name: '松江省公民储备银行', type: InstitutionType.prb),
   Institution(shenfenId: 'SFR-LJ000-CH1U-321069400-20260222', name: '龙江省公民储备银行', type: InstitutionType.prb),
   Institution(shenfenId: 'SFR-JL000-CH1Z-114671562-20260222', name: '吉林省公民储备银行', type: InstitutionType.prb),

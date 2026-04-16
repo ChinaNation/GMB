@@ -343,6 +343,8 @@ class TransferProposalService {
       CreateDuoqianProposalInfo? createDuoqianDetail;
       CloseDuoqianProposalInfo? closeDuoqianDetail;
       FeeRateProposalInfo? feeRateDetail;
+      SafetyFundProposalInfo? safetyFundDetail;
+      SweepProposalInfo? sweepDetail;
       if (meta.kind == 0) {
         // 内部投票提案 → 先尝试管理提案，再尝试转账提案，最后尝试费率提案
         try {
@@ -372,6 +374,20 @@ class TransferProposalService {
           try {
             feeRateDetail = await fetchRateProposalAction(meta.proposalId);
           } catch (_) {}
+        }
+        // 如果仍无匹配，尝试安全基金 / 手续费划转提案
+        if (transferDetail == null &&
+            createDuoqianDetail == null &&
+            closeDuoqianDetail == null &&
+            feeRateDetail == null) {
+          try {
+            safetyFundDetail = await fetchSafetyFundAction(meta.proposalId);
+          } catch (_) {}
+          if (safetyFundDetail == null) {
+            try {
+              sweepDetail = await fetchSweepAction(meta.proposalId);
+            } catch (_) {}
+          }
         }
       } else if (meta.kind == 1) {
         // 联合投票提案 → 尝试解码为 runtime 升级提案
@@ -409,6 +425,8 @@ class TransferProposalService {
         transferDetail: transferDetail?.copyWithStatus(meta.status),
         runtimeUpgradeDetail: runtimeUpgradeDetail,
         feeRateDetail: feeRateDetail,
+        safetyFundDetail: safetyFundDetail,
+        sweepDetail: sweepDetail,
         resolutionIssuanceSummary: resIssuanceSummary,
         resolutionDestroySummary: resDestroySummary,
       ));
@@ -560,6 +578,8 @@ class TransferProposalService {
       final closeDuoqianDetail = cachedCloseDuoqianDetails[id];
       // 如果都没匹配到，尝试费率提案
       FeeRateProposalInfo? feeRateDetail;
+      SafetyFundProposalInfo? safetyFundDetail;
+      SweepProposalInfo? sweepDetail;
       if (transferDetail == null &&
           runtimeUpgradeDetail == null &&
           createDuoqianDetail == null &&
@@ -568,6 +588,17 @@ class TransferProposalService {
         try {
           feeRateDetail = await fetchRateProposalAction(id);
         } catch (_) {}
+        // 如果仍无匹配，尝试安全基金 / 手续费划转提案
+        if (feeRateDetail == null) {
+          try {
+            safetyFundDetail = await fetchSafetyFundAction(id);
+          } catch (_) {}
+          if (safetyFundDetail == null) {
+            try {
+              sweepDetail = await fetchSweepAction(id);
+            } catch (_) {}
+          }
+        }
       }
       // 联合提案且不是 runtime 升级，尝试检测决议发行/销毁
       String? resIssuanceSummary;
@@ -592,6 +623,8 @@ class TransferProposalService {
         createDuoqianDetail: createDuoqianDetail?.copyWithStatus(meta.status),
         closeDuoqianDetail: closeDuoqianDetail?.copyWithStatus(meta.status),
         feeRateDetail: feeRateDetail,
+        safetyFundDetail: safetyFundDetail,
+        sweepDetail: sweepDetail,
         resolutionIssuanceSummary: resIssuanceSummary,
         resolutionDestroySummary: resDestroySummary,
       ));
@@ -1105,6 +1138,73 @@ class TransferProposalService {
     );
   }
 
+  /// 从链上 SafetyFundProposalActions 存储查询安全基金转账提案详情。
+  Future<SafetyFundProposalInfo?> fetchSafetyFundAction(int proposalId) async {
+    final key = _buildStorageKey(
+      'DuoqianTransferPow',
+      'SafetyFundProposalActions',
+      _u64ToLeBytes(proposalId),
+    );
+    final raw = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    // SafetyFundAction: beneficiary(32) + amount(u128=16) + remark(BoundedVec) + proposer(32)
+    if (raw == null || raw.length < 32 + 16 + 1 + 32) return null;
+    try {
+      var offset = 0;
+      final beneficiaryBytes = raw.sublist(offset, offset + 32);
+      offset += 32;
+      var amountBig = BigInt.zero;
+      for (var i = 15; i >= 0; i--) {
+        amountBig = (amountBig << 8) | BigInt.from(raw[offset + i]);
+      }
+      offset += 16;
+      final (remarkLen, remarkLenSize) = _decodeCompact(raw, offset);
+      offset += remarkLenSize;
+      final remark = utf8.decode(
+        raw.sublist(offset, offset + remarkLen),
+        allowMalformed: true,
+      );
+      offset += remarkLen;
+      final proposerBytes = raw.sublist(offset, offset + 32);
+      return SafetyFundProposalInfo(
+        proposalId: proposalId,
+        beneficiary:
+            Keyring().encodeAddress(Uint8List.fromList(beneficiaryBytes), 2027),
+        amountFen: amountBig,
+        remark: remark,
+        proposer:
+            Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 从链上 SweepProposalActions 存储查询手续费划转提案详情。
+  Future<SweepProposalInfo?> fetchSweepAction(int proposalId) async {
+    final key = _buildStorageKey(
+      'DuoqianTransferPow',
+      'SweepProposalActions',
+      _u64ToLeBytes(proposalId),
+    );
+    final raw = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    // SweepAction: institution([u8;48]) + amount(u128=16)
+    if (raw == null || raw.length < 48 + 16) return null;
+    try {
+      final institutionBytes = Uint8List.fromList(raw.sublist(0, 48));
+      var amountBig = BigInt.zero;
+      for (var i = 15; i >= 0; i--) {
+        amountBig = (amountBig << 8) | BigInt.from(raw[48 + i]);
+      }
+      return SweepProposalInfo(
+        proposalId: proposalId,
+        institutionBytes: institutionBytes,
+        amountFen: amountBig,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// 签名并提交 extrinsic（复用 onchain.dart 的流程）。
   ///
   /// 返回交易哈希和使用的 nonce（用于链上确认跟踪）。
@@ -1386,6 +1486,8 @@ class ProposalWithDetail {
     this.createDuoqianDetail,
     this.closeDuoqianDetail,
     this.feeRateDetail,
+    this.safetyFundDetail,
+    this.sweepDetail,
     this.resolutionIssuanceSummary,
     this.resolutionDestroySummary,
   });
@@ -1407,9 +1509,53 @@ class ProposalWithDetail {
   /// 费率提案详情。
   final FeeRateProposalInfo? feeRateDetail;
 
+  /// 安全基金转账提案详情。
+  final SafetyFundProposalInfo? safetyFundDetail;
+
+  /// 手续费划转提案详情。
+  final SweepProposalInfo? sweepDetail;
+
   /// 决议发行提案摘要（仅列表展示用）。
   final String? resolutionIssuanceSummary;
 
   /// 决议销毁提案摘要（仅列表展示用）。
   final String? resolutionDestroySummary;
+}
+
+/// 安全基金转账提案详情（从 SafetyFundProposalActions 存储解码）。
+class SafetyFundProposalInfo {
+  const SafetyFundProposalInfo({
+    required this.proposalId,
+    required this.beneficiary,
+    required this.amountFen,
+    required this.remark,
+    required this.proposer,
+    this.status,
+  });
+
+  final int proposalId;
+  final String beneficiary; // SS58
+  final BigInt amountFen;
+  final String remark;
+  final String proposer; // SS58
+  final int? status;
+
+  double get amountYuan => amountFen.toDouble() / 100;
+}
+
+/// 手续费划转提案详情（从 SweepProposalActions 存储解码）。
+class SweepProposalInfo {
+  const SweepProposalInfo({
+    required this.proposalId,
+    required this.institutionBytes,
+    required this.amountFen,
+    this.status,
+  });
+
+  final int proposalId;
+  final Uint8List institutionBytes;
+  final BigInt amountFen;
+  final int? status;
+
+  double get amountYuan => amountFen.toDouble() / 100;
 }

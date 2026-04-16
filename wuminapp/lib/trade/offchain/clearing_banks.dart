@@ -42,7 +42,7 @@ const List<ClearingBank> clearingBanks = [
   ClearingBank(shenfenId: 'SFR-SC000-CH19-320507619-20260222', shenfenName: '四川省公民储备银行', wssUrl: 'wss://prbscs.crcfrcn.com', enabled: false),
   ClearingBank(shenfenId: 'SFR-GS000-CH1U-319639307-20260222', shenfenName: '甘肃省公民储备银行', wssUrl: 'wss://prbgss.crcfrcn.com', enabled: false),
   ClearingBank(shenfenId: 'SFR-BP001-CH19-330141933-20260222', shenfenName: '北平省公民储备银行', wssUrl: 'wss://prbbps.crcfrcn.com', enabled: false),
-  ClearingBank(shenfenId: 'SFR-HA000-CH1N-832919801-20260222', shenfenName: '滨海省公民储备银行', wssUrl: 'wss://prbhas.crcfrcn.com', enabled: false),
+  ClearingBank(shenfenId: 'SFR-HA000-CH1N-832919801-20260222', shenfenName: '海滨省公民储备银行', wssUrl: 'wss://prbhas.crcfrcn.com', enabled: false),
   ClearingBank(shenfenId: 'SFR-SJ000-CH17-991726244-20260222', shenfenName: '松江省公民储备银行', wssUrl: 'wss://prbsjs.crcfrcn.com', enabled: false),
   ClearingBank(shenfenId: 'SFR-LJ000-CH1U-321069400-20260222', shenfenName: '龙江省公民储备银行', wssUrl: 'wss://prbljs.crcfrcn.com', enabled: false),
   ClearingBank(shenfenId: 'SFR-JL000-CH1Z-114671562-20260222', shenfenName: '吉林省公民储备银行', wssUrl: 'wss://prbjls.crcfrcn.com', enabled: false),
