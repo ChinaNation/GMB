@@ -518,16 +518,19 @@ select option:checked {
   font-size: 14px;
 }
 
+/* 白皮书/公民宪法页:iframe 直接铺满顶部 tab 栏以下的整块区域,
+   section 去掉内外边距,iframe 高度按视口计算(100vh - 顶部 tab 栏高度)。 */
 .other-tab-section {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-  min-height: calc(100vh - 180px);
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-height: calc(100vh - 120px);
 }
 
 .other-tab-iframe {
+  display: block;
   width: 100%;
-  min-height: calc(100vh - 180px);
+  height: calc(100vh - 120px);
   border: 0;
   border-radius: 10px;
   background: var(--bg-card);

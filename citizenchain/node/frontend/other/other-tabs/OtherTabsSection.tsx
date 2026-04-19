@@ -49,9 +49,10 @@ export function OtherTabsSection({ activeKey }: Props) {
     );
   }
 
+  // 白皮书/公民宪法页不再在 UI 内重复显示标题文字(顶部 tab 栏已经表明当前页),
+  // 让 iframe/文本内容直接铺满可用区域。tab.title 仍传给 iframe 的 title 属性用于无障碍。
   return (
     <section className="section other-tab-section" key={tab.key}>
-      <h2>{tab.title}</h2>
       {tab.contentType === 'iframe' ? (
         <iframe
           className="other-tab-iframe"

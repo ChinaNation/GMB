@@ -1,9 +1,14 @@
-// 中文注释:通用"新增机构"弹窗,按 category 锁字段。
-// 交互规则:
-//   1. 机构名称查重:私权机构全国唯一;公权机构同城唯一(不同市可重名)
-//   2. A3 切换联动:SFR → P1=盈利+企业类型必选; FFR → P1=非盈利+无企业类型+机构去掉 CH
-//   3. 企业类型联动:仅股份公司(JOINT_STOCK)可选储备银行(CH),其余三种不可
-//   4. 所有必填项已填 + 名称查重通过 → "生成"按钮变绿可点击
+// 中文注释:通用"新增机构"弹窗。两步式创建(2026-04-19 改造)。
+//
+// ─── 第一步(本弹窗) ───
+//   私权(SFR/FFR):**只生成 SFID**,不输入 institution_name / sub_type。
+//     字段:A3、P1、省、市、机构代码。提交后跳转到机构详情页。
+//   公权(GFR)公安局/机构:保持原流程(含 institution_name + 同城查重),
+//     本次改造范围仅限私权,下一步再做两步式改造。
+//
+// ─── 第二步(详情页) ───
+//   在 PrivateInstitutionLayout "完善机构信息" Card 中设置机构名称、
+//   企业类型(SFR)等可变字段。名称全国唯一,保存时后端查重。
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Form, Input, message, Modal, Select, Spin } from 'antd';
@@ -15,7 +20,7 @@ import {
   type InstitutionCategory,
 } from '../../api/institution';
 import { listSfidCities, type AdminAuth, type SfidCityItem } from '../../api/client';
-import { dynamicLocksForA3, institutionChoicesForSubType, locksForCategory } from './locks';
+import { dynamicLocksForA3, locksForCategory } from './locks';
 
 interface Props {
   auth: AdminAuth;
@@ -35,8 +40,8 @@ interface FormValues {
   province: string;
   city: string;
   institution: string;
-  institution_name: string;
-  sub_type?: string;
+  /** 仅公权(GFR)使用;私权不填 */
+  institution_name?: string;
 }
 
 export const CreateInstitutionModal: React.FC<Props> = ({
@@ -54,33 +59,29 @@ export const CreateInstitutionModal: React.FC<Props> = ({
   const [citiesLoading, setCitiesLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // ── 名称查重状态 ──
+  // 公权机构名称查重状态(私权不再在此弹窗查重)
   const [nameChecking, setNameChecking] = useState(false);
-  // null=未查, true=可用, false=已占用
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
 
   // ── a3 动态联动(仅 PRIVATE_INSTITUTION 有效) ──
   const [currentA3, setCurrentA3] = useState<string>(locks.a3Choices[0]?.value ?? '');
-  const [currentSubType, setCurrentSubType] = useState<string | undefined>(undefined);
   const dynamicLocks = useMemo(() => dynamicLocksForA3(currentA3), [currentA3]);
   const isPrivate = category === 'PRIVATE_INSTITUTION';
   const isPublicGov = category === 'GOV_INSTITUTION';
+  const isPublicSecurity = category === 'PUBLIC_SECURITY';
+
+  // 是否在本弹窗中收集机构名称:仅公权分支(公安局/公权机构)
+  const collectNameInModal = !isPrivate;
 
   // 实际使用的选项:非私权时用 locks 原始值,私权时用 dynamicLocks
   const effectiveP1Choices = isPrivate ? dynamicLocks.p1Choices : locks.p1Choices;
-  // SFR 机构代码还需按企业类型(sub_type)细化:仅股份公司可选储备银行
-  const effectiveInstChoices = isPrivate
-    ? (currentA3 === 'SFR' ? institutionChoicesForSubType(currentSubType) : dynamicLocks.institutionChoices)
-    : locks.institutionChoices;
-  const effectiveSubTypeChoices = isPrivate ? dynamicLocks.subTypeChoices : [];
-  const showSubType = effectiveSubTypeChoices.length > 0;
+  const effectiveInstChoices = isPrivate ? dynamicLocks.institutionChoices : locks.institutionChoices;
 
   // 打开时预填锁定字段
   useEffect(() => {
     if (!open) return;
     const defaultA3 = locks.a3Choices[0]?.value ?? '';
     setCurrentA3(defaultA3);
-    setCurrentSubType(undefined);
     setNameAvailable(null);
     const dl = dynamicLocksForA3(defaultA3);
     form.setFieldsValue({
@@ -89,8 +90,7 @@ export const CreateInstitutionModal: React.FC<Props> = ({
       province: lockedProvince ?? '',
       city: lockedCity ?? '',
       institution: isPrivate ? dl.institutionChoices[0]?.value : locks.institutionChoices[0]?.value,
-      institution_name: locks.lockedInstitutionName ?? '',
-      sub_type: isPrivate && defaultA3 === 'SFR' ? undefined : undefined,
+      institution_name: collectNameInModal ? (locks.lockedInstitutionName ?? '') : undefined,
     });
   }, [open, category, lockedProvince, lockedCity]);
 
@@ -117,31 +117,17 @@ export const CreateInstitutionModal: React.FC<Props> = ({
     };
   }, [open, lockedProvince, auth.access_token]);
 
-  // ── a3 切换联动 ──
+  // ── a3 切换联动(仅私权) ──
   const onA3Change = (a3: string) => {
     setCurrentA3(a3);
-    setCurrentSubType(undefined);
     const dl = dynamicLocksForA3(a3);
     form.setFieldsValue({
       p1: dl.p1Default,
       institution: dl.institutionChoices[0]?.value,
-      sub_type: undefined,
     });
   };
 
-  // ── 企业类型切换联动:更新可选机构代码 ──
-  const onSubTypeChange = (subType: string) => {
-    setCurrentSubType(subType);
-    const choices = institutionChoicesForSubType(subType);
-    const currentInst = form.getFieldValue('institution');
-    // 如果当前选中的机构代码不在新列表中,回退到第一个
-    if (!choices.some((c) => c.value === currentInst)) {
-      form.setFieldsValue({ institution: choices[0]?.value });
-    }
-  };
-
-  // ── 名称查重 ──
-  // 公权机构(GFR)按同城查重,私权机构按全国查重
+  // ── 公权机构名称查重:公安局名称锁定;公权机构同城唯一 ──
   const onCheckName = async () => {
     const name = (form.getFieldValue('institution_name') ?? '').trim();
     if (!name) {
@@ -157,11 +143,10 @@ export const CreateInstitutionModal: React.FC<Props> = ({
     }
     setNameChecking(true);
     try {
-      const a3Val = isPublicGov ? 'GFR' : undefined;
       const cityVal = isPublicGov ? (form.getFieldValue('city') ?? '').trim() : undefined;
-      const { exists } = await checkInstitutionName(auth, name, a3Val, cityVal);
+      const { exists } = await checkInstitutionName(auth, name, 'GFR', cityVal);
       if (exists) {
-        message.error(isPublicGov ? '该市已存在同名机构，请更换名称' : '该机构名称已被使用，请更换名称');
+        message.error('该市已存在同名机构，请更换名称');
         setNameAvailable(false);
       } else {
         message.success('名称可用');
@@ -175,17 +160,14 @@ export const CreateInstitutionModal: React.FC<Props> = ({
     }
   };
 
-  // 名称变化时重置查重状态
   const onNameChange = () => {
-    if (nameAvailable !== null) {
-      setNameAvailable(null);
-    }
+    if (nameAvailable !== null) setNameAvailable(null);
   };
 
   // ── 提交 ──
   const onSubmit = async (values: FormValues) => {
-    // 非锁定名称的,必须先通过查重
-    if (!locks.lockedInstitutionName && nameAvailable !== true) {
+    // 公权分支:名称必须查重通过(公安局名称锁定视为已通过)
+    if (collectNameInModal && !locks.lockedInstitutionName && nameAvailable !== true) {
       message.warning('请先点击搜索图标检查名称是否可用');
       return;
     }
@@ -197,10 +179,16 @@ export const CreateInstitutionModal: React.FC<Props> = ({
         province: values.province.trim(),
         city: values.city.trim(),
         institution: values.institution.trim(),
-        institution_name: values.institution_name.trim(),
-        sub_type: values.sub_type?.trim() || undefined,
+        // 私权两步式:第一步不提交 institution_name,由详情页补填
+        institution_name: collectNameInModal
+          ? (values.institution_name ?? '').trim()
+          : undefined,
       });
-      message.success(`机构已创建:${result.sfid_id}`);
+      if (isPrivate) {
+        message.success(`机构 SFID 已生成,请到详情页完善信息:${result.sfid_id}`);
+      } else {
+        message.success(`机构已创建:${result.sfid_id}`);
+      }
       onCreated(result);
     } catch (err) {
       const raw = err instanceof Error ? err.message : '创建机构失败';
@@ -209,7 +197,7 @@ export const CreateInstitutionModal: React.FC<Props> = ({
       } else if (raw.includes('密钥管理员不能直接推送')) {
         message.error('请以省或市管理员身份操作');
       } else if (raw.includes('已被使用') || raw.includes('同名机构')) {
-        message.error(isPublicGov ? '该市已存在同名机构，请更换名称' : '该机构名称已被使用，请更换名称');
+        message.error('该市已存在同名机构，请更换名称');
         setNameAvailable(false);
       } else {
         message.error(raw);
@@ -224,8 +212,8 @@ export const CreateInstitutionModal: React.FC<Props> = ({
   const p1Disabled = effectiveP1Choices.length === 1;
   const instDisabled = effectiveInstChoices.length === 1;
   const nameDisabled = locks.lockedInstitutionName !== null;
-  // 公安局名称锁定,不需要查重;其他必须查重通过
-  const nameCheckPassed = nameDisabled || nameAvailable === true;
+  // 私权无需在此查重;公权名称锁定或查重通过即可
+  const nameCheckPassed = !collectNameInModal || nameDisabled || nameAvailable === true;
 
   return (
     <Modal
@@ -260,15 +248,6 @@ export const CreateInstitutionModal: React.FC<Props> = ({
         <Form.Item label="P1 盈利属性" name="p1" rules={[{ required: true }]}>
           <Select options={effectiveP1Choices} disabled={p1Disabled} />
         </Form.Item>
-        {showSubType && (
-          <Form.Item
-            label="企业类型"
-            name="sub_type"
-            rules={[{ required: true, message: '请选择企业类型' }]}
-          >
-            <Select options={effectiveSubTypeChoices} placeholder="请选择企业类型" onChange={onSubTypeChange} />
-          </Form.Item>
-        )}
         <Form.Item label="省" name="province" rules={[{ required: true }]}>
           <Input disabled />
         </Form.Item>
@@ -284,39 +263,48 @@ export const CreateInstitutionModal: React.FC<Props> = ({
         <Form.Item label="机构" name="institution" rules={[{ required: true }]}>
           <Select options={effectiveInstChoices} disabled={instDisabled} />
         </Form.Item>
-        <Form.Item
-          label="机构名称"
-          name="institution_name"
-          rules={[
-            { required: true, message: '请输入机构名称' },
-            { max: 30, message: '最多 30 个字' },
-          ]}
-        >
-          <Input
-            disabled={nameDisabled}
-            placeholder="请输入机构名称(最多 30 字)"
-            maxLength={30}
-            onChange={onNameChange}
-            suffix={
-              nameDisabled ? null : (
-                <span
-                  style={{ cursor: 'pointer', color: nameChecking ? '#999' : '#1890ff' }}
-                  onClick={nameChecking ? undefined : onCheckName}
-                >
-                  {nameChecking ? <Spin size="small" /> : <SearchOutlined />}
-                </span>
-              )
-            }
-          />
-        </Form.Item>
-        {!nameDisabled && nameAvailable === true && (
-          <div style={{ color: '#52c41a', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
-            名称可用
-          </div>
+        {collectNameInModal && (
+          <>
+            <Form.Item
+              label="机构名称"
+              name="institution_name"
+              rules={[
+                { required: true, message: '请输入机构名称' },
+                { max: 30, message: '最多 30 个字' },
+              ]}
+            >
+              <Input
+                disabled={nameDisabled}
+                placeholder="请输入机构名称(最多 30 字)"
+                maxLength={30}
+                onChange={onNameChange}
+                suffix={
+                  nameDisabled || isPublicSecurity ? null : (
+                    <span
+                      style={{ cursor: 'pointer', color: nameChecking ? '#999' : '#1890ff' }}
+                      onClick={nameChecking ? undefined : onCheckName}
+                    >
+                      {nameChecking ? <Spin size="small" /> : <SearchOutlined />}
+                    </span>
+                  )
+                }
+              />
+            </Form.Item>
+            {!nameDisabled && nameAvailable === true && (
+              <div style={{ color: '#52c41a', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
+                名称可用
+              </div>
+            )}
+            {!nameDisabled && nameAvailable === false && (
+              <div style={{ color: '#ff4d4f', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
+                该名称已被占用，请更换
+              </div>
+            )}
+          </>
         )}
-        {!nameDisabled && nameAvailable === false && (
-          <div style={{ color: '#ff4d4f', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
-            该名称已被占用，请更换
+        {isPrivate && (
+          <div style={{ color: '#888', fontSize: 12, marginTop: -8 }}>
+            提示:本步骤仅生成机构 SFID。生成后请在详情页设置机构名称、企业类型等信息。
           </div>
         )}
       </Form>

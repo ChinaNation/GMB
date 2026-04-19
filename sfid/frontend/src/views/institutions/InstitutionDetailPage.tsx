@@ -94,7 +94,8 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
         province: inst.province,
         city: inst.city,
         institution: inst.institution_code,
-        institution_name: inst.institution_name,
+        // 公权机构/公安局此路径必然有名称;两步式未命名的私权机构根本走不到本路径
+        institution_name: inst.institution_name ?? '',
       });
       setCpmsSite({
         site_sfid: result.site_sfid,
@@ -105,7 +106,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
         admin_province: inst.province,
         city_name: inst.city,
         institution_code: inst.institution_code,
-        institution_name: inst.institution_name,
+        institution_name: inst.institution_name ?? '',
         created_by: auth.admin_pubkey,
         created_at: new Date().toISOString(),
       });
@@ -147,7 +148,9 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
               {/* ── 公安局 / 公权机构:默认布局 ── */}
               <Card
                 title={
-                  <span style={{ fontSize: 18, fontWeight: 600 }}>{inst.institution_name}</span>
+                  <span style={{ fontSize: 18, fontWeight: 600 }}>
+                    {inst.institution_name ?? '(未命名机构)'}
+                  </span>
                 }
                 extra={(() => {
                   if (inst.category !== 'PUBLIC_SECURITY' || !canWrite) return null;
@@ -222,7 +225,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
               <CreateAccountModal
                 auth={auth}
                 sfidId={inst.sfid_id}
-                institutionName={inst.institution_name}
+                institutionName={inst.institution_name ?? ''}
                 existingAccounts={accounts}
                 open={createAccountOpen}
                 onCancel={() => setCreateAccountOpen(false)}

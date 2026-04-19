@@ -16,7 +16,8 @@ export type MultisigChainStatus = 'PENDING' | 'REGISTERED' | 'FAILED';
 
 export interface MultisigInstitution {
   sfid_id: string;
-  institution_name: string;
+  /** 机构名称。两步式创建(2026-04-19):第一步生成时为 null,详情页补填后非空。 */
+  institution_name: string | null;
   category: InstitutionCategory;
   a3: string;
   p1: string;
@@ -26,8 +27,12 @@ export interface MultisigInstitution {
   /** 任务卡 6 新增:2 位数字市代码(r5 段后 3 字符),作为公安局对账稳定主键 */
   city_code?: string;
   institution_code: string;
-  /** 私法人子类型(仅 A3=SFR 时有值) */
-  sub_type?: string;
+  /** 私法人子类型(仅 A3=SFR 且 P1 填完后才有值) */
+  sub_type?: string | null;
+  /** 所属法人 sfid_id(仅 A3=FFR 非法人必填;指向 SFR/GFR) */
+  parent_sfid_id?: string | null;
+  /** 清算行设置:SFR/JOINT_STOCK 或 FFR 挂靠此类 SFR 时可开启;开启则创建主账户/费用账户上链 */
+  is_clearing_bank?: boolean;
   created_by: string;
   created_at: string;
 }
@@ -53,21 +58,32 @@ export interface MultisigAccount {
 
 export interface InstitutionListRow {
   sfid_id: string;
-  institution_name: string;
+  /** 两步式创建:第一步仅有 SFID 时为 null,详情页补填后非空 */
+  institution_name: string | null;
   category: InstitutionCategory;
   a3: string;
   p1: string;
   province: string;
   city: string;
   institution_code: string;
-  sub_type?: string;
+  sub_type?: string | null;
+  parent_sfid_id?: string | null;
+  is_clearing_bank?: boolean;
   account_count: number;
   created_at: string;
+  /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users);未命中 null */
+  created_by_name?: string | null;
+  /** 创建者角色:KEY_ADMIN / SHENG_ADMIN / SHI_ADMIN;未命中 null */
+  created_by_role?: string | null;
 }
 
 export interface InstitutionDetail {
   institution: MultisigInstitution;
   accounts: MultisigAccount[];
+  /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users) */
+  created_by_name?: string | null;
+  /** 创建者角色:KEY_ADMIN / SHENG_ADMIN / SHI_ADMIN */
+  created_by_role?: string | null;
 }
 
 /** 机构资料库文档 */
@@ -98,15 +114,41 @@ export interface CreateInstitutionInput {
   province?: string;
   city: string;
   institution: string;
-  institution_name: string;
-  /** 私法人子类型(仅 A3=SFR 时必填) */
-  sub_type?: string;
+  /**
+   * 机构名称。
+   * - 私权(SFR/FFR)两步式:**不传**(或 undefined),由详情页 updateInstitution 补填
+   * - 公权(GFR)/公安局:**必传**,同步做查重
+   */
+  institution_name?: string;
 }
 
 export interface CreateInstitutionOutput {
   sfid_id: string;
-  institution_name: string;
+  /** 首次创建:私权为 null,公权为已填入的名称 */
+  institution_name: string | null;
   category: InstitutionCategory;
+}
+
+/** 机构详情页可编辑字段(两步式第二步) */
+export interface UpdateInstitutionInput {
+  institution_name?: string;
+  sub_type?: string | null;
+  /** 所属法人 sfid_id(仅 FFR;传空串后端会拒) */
+  parent_sfid_id?: string;
+  /** 清算行开关:true=开启(创建主账户/费用账户上链);false=关闭(前置:两账户已软删) */
+  is_clearing_bank?: boolean;
+}
+
+/** 法人机构搜索结果项(FFR 详情页"所属法人"选择器用) */
+export interface ParentInstitutionRow {
+  sfid_id: string;
+  institution_name: string;
+  a3: string;
+  /** 私法人子类型(仅 a3=SFR);FFR 判断父 SFR 是否 JOINT_STOCK 以显示清算行设置 */
+  sub_type?: string | null;
+  category: InstitutionCategory;
+  province: string;
+  city: string;
 }
 
 export interface CreateAccountOutput {
@@ -122,6 +164,8 @@ export interface ListInstitutionsQuery {
   category?: InstitutionCategory;
   province?: string;
   city?: string;
+  /** 模糊搜索关键字:匹配机构名称或 SFID 子串(大小写不敏感);空=不过滤 */
+  q?: string;
 }
 
 // ─── API 调用 ─────────────────────────────────────────────────
@@ -188,9 +232,46 @@ export async function listInstitutions(
   if (query?.category) params.set('category', query.category);
   if (query?.province) params.set('province', query.province);
   if (query?.city) params.set('city', query.city);
+  if (query?.q && query.q.trim()) params.set('q', query.q.trim());
   const qs = params.toString();
   const path = qs ? `/api/v1/institution/list?${qs}` : '/api/v1/institution/list';
   return adminRequest<InstitutionListRow[]>(path, auth);
+}
+
+/**
+ * 搜索可选的法人机构(供 FFR 详情页"所属法人"选择器使用)。
+ * q 可匹配 sfid_id 子串或 institution_name 子串,全国范围,最多 20 条。
+ */
+export async function searchParentInstitutions(
+  auth: AdminAuth,
+  q: string,
+): Promise<ParentInstitutionRow[]> {
+  const params = new URLSearchParams({ q });
+  return adminRequest<ParentInstitutionRow[]>(
+    `/api/v1/institution/search-parents?${params.toString()}`,
+    auth,
+  );
+}
+
+/**
+ * 更新机构详情(两步式第二步)。支持修改机构名称和企业类型。
+ * 机构名称后端全国唯一校验(排除自身 sfid_id)。
+ * 企业类型与 P1 联动:P1=0 必须 NON_PROFIT;P1=1 不得为 NON_PROFIT。
+ */
+export async function updateInstitution(
+  auth: AdminAuth,
+  sfidId: string,
+  input: UpdateInstitutionInput,
+): Promise<MultisigInstitution> {
+  return adminRequest<MultisigInstitution>(
+    `/api/v1/institution/${encodeURIComponent(sfidId)}`,
+    auth,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 /**
