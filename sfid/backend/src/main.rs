@@ -931,6 +931,11 @@ fn main() {
                 "/api/v1/institution/check-name",
                 get(institutions::handler::check_institution_name),
             )
+            // FFR 详情页"所属法人"搜索(全国范围 SFR/GFR 模糊匹配)
+            .route(
+                "/api/v1/institution/search-parents",
+                get(institutions::handler::search_parent_institutions),
+            )
             .route(
                 "/api/v1/institution/create",
                 post(institutions::handler::create_institution),
@@ -945,7 +950,9 @@ fn main() {
             )
             .route(
                 "/api/v1/institution/:sfid_id",
-                get(institutions::handler::get_institution),
+                get(institutions::handler::get_institution)
+                    // 两步式第二步:详情页更新机构名称/企业类型
+                    .patch(institutions::handler::update_institution),
             )
             .route(
                 "/api/v1/institution/:sfid_id/accounts",

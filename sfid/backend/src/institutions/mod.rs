@@ -29,5 +29,5 @@ pub use model::{
     account_key_from_string, account_key_to_string, AccountKey, CreateAccountInput,
     CreateAccountOutput, CreateInstitutionInput, CreateInstitutionOutput, InstitutionDetailOutput,
     InstitutionDocument, InstitutionListRow, MultisigAccount, MultisigInstitution,
-    VALID_DOC_TYPES,
+    ParentInstitutionRow, UpdateInstitutionInput, VALID_DOC_TYPES,
 };
