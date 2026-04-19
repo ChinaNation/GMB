@@ -26,7 +26,12 @@ pub struct MultisigInstitution {
     /// SFID 号,参与链上派生。
     pub sfid_id: String,
     /// 机构展示名称(如"广州市公安局"),**不进链**,只在 sfid 系统内部显示。
-    pub institution_name: String,
+    ///
+    /// 两步式创建(2026-04-19):
+    ///   - 私权机构(SFR/FFR)第一步创建时为 `None`,由详情页 `update_institution` 补填
+    ///   - 公权机构(GFR)/公安局创建时必传,不会为 `None`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub institution_name: Option<String>,
     /// 机构分类(公安局/公权机构/私权机构)。
     pub category: InstitutionCategory,
     /// 主体属性(GFR/SFR/FFR)。
@@ -47,9 +52,21 @@ pub struct MultisigInstitution {
     /// 机构类型代码(ZF/LF/SF/...)。
     pub institution_code: String,
     /// 私法人子类型(仅 A3=SFR 时有值)。
-    /// 取值:SOLE_PROPRIETORSHIP / PARTNERSHIP / LIMITED_LIABILITY / JOINT_STOCK
+    /// 取值:SOLE_PROPRIETORSHIP / PARTNERSHIP / LIMITED_LIABILITY / JOINT_STOCK / NON_PROFIT
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sub_type: Option<String>,
+    /// 所属法人机构 SFID(**仅 A3=FFR 非法人必填**)。
+    /// 指向一个私法人(SFR)或公法人(GFR)机构的 sfid_id。
+    /// 非法人机构必须挂在某个法人机构下,全国范围可选。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_sfid_id: Option<String>,
+    /// 清算行设置标志。仅下列机构可置为 true:
+    ///   - SFR 且 sub_type == JOINT_STOCK
+    ///   - FFR 且 parent 是 SFR 且 parent.sub_type == JOINT_STOCK
+    /// 置 true 时链上已注册"主账户"和"费用账户"2 个默认多签账户。
+    /// 置回 false 前提:2 个账户都已从 sfid 本地软删(链上注销走 propose_close 投票)。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_clearing_bank: bool,
     /// sfid_id 是否已通过首次 QR1 生成固化。
     /// reconcile 批量创建时为 false,首次生成 QR1 时设为 true 并替换 sfid_id,
     /// 此后永久不变。
@@ -141,16 +158,35 @@ pub struct CreateInstitutionInput {
     pub province: Option<String>,
     pub city: String,
     pub institution: String,
-    pub institution_name: String,
-    /// 私法人子类型(仅 A3=SFR 时必填)
+    /// 两步式:私权(SFR/FFR)不传,由详情页 `update_institution` 补填;
+    /// 公权(GFR)/公安局必传
+    pub institution_name: Option<String>,
+    /// 私法人子类型。两步式改造后:**创建阶段不再接受** sub_type,
+    /// 统一由 `update_institution` 在详情页设置。保留字段仅为向后兼容旧请求(忽略)。
+    #[serde(default)]
     pub sub_type: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct CreateInstitutionOutput {
     pub sfid_id: String,
-    pub institution_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub institution_name: Option<String>,
     pub category: InstitutionCategory,
+}
+
+/// 两步式第二步:机构详情页提交的可编辑字段。
+#[derive(Debug, Deserialize)]
+pub struct UpdateInstitutionInput {
+    pub institution_name: Option<String>,
+    pub sub_type: Option<String>,
+    /// 所属法人 sfid_id(仅 FFR 可设置;SFR/GFR 传值会被拒)
+    #[serde(default)]
+    pub parent_sfid_id: Option<String>,
+    /// 清算行开关:Some(true)=尝试开启(自动创建主/费用账户并上链);
+    /// Some(false)=尝试关闭(前置要求两账户已软删);None=不变
+    #[serde(default)]
+    pub is_clearing_bank: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -171,7 +207,8 @@ pub struct CreateAccountOutput {
 #[derive(Debug, Serialize)]
 pub struct InstitutionListRow {
     pub sfid_id: String,
-    pub institution_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub institution_name: Option<String>,
     pub category: InstitutionCategory,
     pub a3: String,
     pub p1: String,
@@ -180,12 +217,43 @@ pub struct InstitutionListRow {
     pub institution_code: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sub_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_sfid_id: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_clearing_bank: bool,
     pub account_count: usize,
     pub created_at: DateTime<Utc>,
+    /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)
+    /// 命中:admin_name;未命中:None(前端显示为"未知")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by_name: Option<String>,
+    /// 创建者角色:"KEY_ADMIN" / "SHENG_ADMIN" / "SHI_ADMIN" / None
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by_role: Option<String>,
+}
+
+/// 法人机构搜索结果项(用于 FFR 详情页"所属法人"选择器)
+#[derive(Debug, Serialize)]
+pub struct ParentInstitutionRow {
+    pub sfid_id: String,
+    pub institution_name: String,
+    pub a3: String,
+    /// 私法人子类型(仅 a3=SFR 有值);FFR 前端用此判断父 SFR 是否 JOINT_STOCK 以开放清算行设置
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sub_type: Option<String>,
+    pub category: InstitutionCategory,
+    pub province: String,
+    pub city: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct InstitutionDetailOutput {
     pub institution: MultisigInstitution,
     pub accounts: Vec<MultisigAccount>,
+    /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by_name: Option<String>,
+    /// 创建者角色:"KEY_ADMIN" / "SHENG_ADMIN" / "SHI_ADMIN"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by_role: Option<String>,
 }

@@ -34,12 +34,14 @@ use crate::institutions::chain::submit_register_account;
 use crate::institutions::model::{
     CreateAccountInput, CreateAccountOutput, CreateInstitutionInput, CreateInstitutionOutput,
     InstitutionDetailOutput, InstitutionDocument, InstitutionListRow, MultisigAccount,
-    MultisigInstitution, VALID_DOC_TYPES, account_key_to_string,
+    MultisigInstitution, UpdateInstitutionInput, VALID_DOC_TYPES, account_key_to_string,
 };
 use crate::institutions::service::{
     backfill_public_security_city_codes, derive_category, ensure_account_name_unique,
-    ensure_institution_exists, ensure_institution_not_exists, institution_name_exists, institution_name_exists_in_city,
+    ensure_institution_exists, ensure_institution_not_exists, institution_name_exists,
+    institution_name_exists_excluding, institution_name_exists_in_city,
     reconcile_public_security_for_province, validate_account_name, validate_institution_name,
+    validate_sub_type_with_p1,
     ReconcileReport, ServiceError,
 };
 use crate::institutions::store;
@@ -94,6 +96,43 @@ fn resolve_province_from_sfid_id(sfid_id: &str) -> Option<String> {
     province_name_by_code(&code).map(|n| n.to_string())
 }
 
+/// 反查 `created_by` pubkey → (管理员姓名, 角色枚举字符串)。
+/// 未命中两者均为 `None`(前端显示"未知")。
+fn resolve_created_by(state: &AppState, created_by: &str) -> (Option<String>, Option<String>) {
+    let norm = match crate::business::pubkey::normalize_admin_pubkey(created_by) {
+        Some(v) => v,
+        None => return (None, None),
+    };
+    let store = match state.store.read() {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "resolve_created_by: store read failed");
+            return (None, None);
+        }
+    };
+    for user in store.admin_users_by_pubkey.values() {
+        let Some(user_norm) = crate::business::pubkey::normalize_admin_pubkey(&user.admin_pubkey) else {
+            continue;
+        };
+        if user_norm == norm {
+            let role_str = match user.role {
+                crate::models::AdminRole::KeyAdmin => "KEY_ADMIN",
+                crate::models::AdminRole::ShengAdmin => "SHENG_ADMIN",
+                crate::models::AdminRole::ShiAdmin => "SHI_ADMIN",
+            };
+            // 内置 KeyAdmin 默认 admin_name=""(见 key-admins/mod.rs sync_key_admin_users),
+            // 此时返回 None 避免前端误判为"未知";role 仍然填
+            let name_opt = if user.admin_name.trim().is_empty() {
+                None
+            } else {
+                Some(user.admin_name.clone())
+            };
+            return (name_opt, Some(role_str.to_string()));
+        }
+    }
+    (None, None)
+}
+
 /// Phase 2 Day 3 Round 2:两段提交 audit_log(机构/账户版)。
 /// 先 sharded_store async 写业务数据(已成功),再 legacy store 短锁写审计。
 /// 审计写失败只记 WARN,不影响业务返回。
@@ -124,14 +163,6 @@ fn append_inst_audit_log_best_effort(
         }
     }
 }
-
-// ── 允许的私法人子类型 ──
-const VALID_SUB_TYPES: &[&str] = &[
-    "SOLE_PROPRIETORSHIP",
-    "PARTNERSHIP",
-    "LIMITED_LIABILITY",
-    "JOINT_STOCK",
-];
 
 // ─── 0. 机构名称查重(私权=全国唯一,公权=同城唯一) ──────────────
 
@@ -189,6 +220,12 @@ struct CheckNameResult {
 }
 
 // ─── 1. 创建机构(不上链)─────────────────────────────────────────
+//
+// 两步式(2026-04-19):
+//   - 私权(SFR/FFR):`institution_name` **不传**,仅生成 SFID,name 落库为 None,
+//     由详情页 `update_institution` 补填。不再在此校验 sub_type。
+//   - 公权(GFR)/公安局:`institution_name` 必传并做同城查重(公权)或"公民安全局"
+//     固定名称(公安局);保留原来的行为不改造。
 
 pub(crate) async fn create_institution(
     State(state): State<AppState>,
@@ -201,17 +238,33 @@ pub(crate) async fn create_institution(
     };
     let scope = get_visible_scope(&ctx);
 
-    // ── 输入校验 ──
-    let institution_name = match validate_institution_name(&input.institution_name) {
-        Ok(v) => v,
-        Err(e) => return service_error_to_response(e),
-    };
     let a3 = input.a3.trim().to_string();
     let institution_code = input.institution.trim().to_string();
     let p1_input = input.p1.as_deref().unwrap_or("").trim().to_string();
     if a3.is_empty() || institution_code.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "a3 and institution are required");
     }
+
+    // 是否私权两步式流程(此时允许 institution_name 缺失)
+    let is_private = matches!(a3.as_str(), "SFR" | "FFR");
+
+    // ── 机构名称:私权两步式允许 None;公权必填 ──
+    let institution_name_opt: Option<String> = match input.institution_name.as_deref().map(str::trim) {
+        Some(raw) if !raw.is_empty() => match validate_institution_name(raw) {
+            Ok(v) => Some(v),
+            Err(e) => return service_error_to_response(e),
+        },
+        _ => {
+            if !is_private {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "institution_name is required for non-private institutions",
+                );
+            }
+            None
+        }
+    };
 
     let province = match scope.locked_province.clone() {
         Some(locked) => {
@@ -253,7 +306,11 @@ pub(crate) async fn create_institution(
         return api_error(StatusCode::BAD_REQUEST, 1001, "city too long");
     }
 
-    let category = match derive_category(&a3, &institution_code, &institution_name) {
+    // ── 分类判定 ──
+    // 两步式:私权机构 institution_name 为 None 时,derive_category 传空串不影响
+    // (classify 仅在 GFR+ZF+"公民安全局" 才返回 PublicSecurity,对私权无副作用)
+    let name_for_classify = institution_name_opt.as_deref().unwrap_or("");
+    let category = match derive_category(&a3, &institution_code, name_for_classify) {
         Some(c) => c,
         None => {
             return api_error(
@@ -265,55 +322,26 @@ pub(crate) async fn create_institution(
     };
 
     // ── A3 ↔ P1 联动硬校验 ──
-    if a3 == "SFR" && p1_input != "1" {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "私法人(SFR)盈利属性必须为盈利(1)");
-    }
-    if a3 == "FFR" && p1_input != "0" {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "非法人(FFR)盈利属性必须为非盈利(0)");
-    }
-
-    // ── 私法人企业类型校验 ──
-    let validated_sub_type: Option<String> = if a3 == "SFR" {
-        match input.sub_type.as_deref().map(str::trim) {
-            Some(v) if VALID_SUB_TYPES.contains(&v) => Some(v.to_string()),
-            _ => {
-                return api_error(
-                    StatusCode::BAD_REQUEST,
-                    1001,
-                    "私法人(SFR)必须选择企业类型(SOLE_PROPRIETORSHIP/PARTNERSHIP/LIMITED_LIABILITY/JOINT_STOCK)",
-                );
-            }
-        }
-    } else {
-        if input.sub_type.as_deref().map_or(false, |v| !v.trim().is_empty()) {
-            return api_error(StatusCode::BAD_REQUEST, 1001, "非 SFR 类型不允许传 sub_type");
-        }
-        None
-    };
-
-    // ── 储备银行(CH)仅股份公司(JOINT_STOCK)可选 ──
-    if institution_code == "CH" {
-        match validated_sub_type.as_deref() {
-            Some("JOINT_STOCK") => {} // OK
-            _ => {
-                return api_error(
-                    StatusCode::BAD_REQUEST,
-                    1001,
-                    "储备银行(CH)仅股份公司可选择",
-                );
-            }
+    // 两步式:SFR/FFR 均允许 P1=0/1,由用户自主选择(sub_type 联动延后到 update_institution)
+    if matches!(a3.as_str(), "SFR" | "FFR") {
+        if p1_input != "0" && p1_input != "1" {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "P1 非法(仅 0/1)");
         }
     }
 
-    // ── 机构名称唯一校验:公权机构同城唯一,私权机构全国唯一 ──
-    {
+    // 两步式:创建阶段忽略 sub_type(由详情页 update_institution 设置)
+    // 旧客户端如仍传入,不报错,直接丢弃。
+    let validated_sub_type: Option<String> = None;
+
+    // ── 机构名称唯一校验:公权机构同城唯一,私权若未命名则跳过 ──
+    if let Some(ref name) = institution_name_opt {
         let is_public = a3 == "GFR";
         let name_exists = match state.store.read() {
             Ok(store) => {
                 if is_public {
-                    institution_name_exists_in_city(&store, &institution_name, &city)
+                    institution_name_exists_in_city(&store, name, &city)
                 } else {
-                    institution_name_exists(&store, &institution_name)
+                    institution_name_exists(&store, name)
                 }
             }
             Err(e) => {
@@ -353,7 +381,7 @@ pub(crate) async fn create_institution(
         // Phase 2 Day 3 Round 2:写 sharded_store 分片
         let inst = MultisigInstitution {
             sfid_id: site_sfid.clone(),
-            institution_name: institution_name.clone(),
+            institution_name: institution_name_opt.clone(),
             category,
             a3: a3.clone(),
             p1: p1_input.clone(),
@@ -363,6 +391,8 @@ pub(crate) async fn create_institution(
             city_code,
             institution_code: institution_code.clone(),
             sub_type: validated_sub_type.clone(),
+            parent_sfid_id: None, // 两步式:FFR 的所属法人由 update_institution 设置
+            is_clearing_bank: false, // 创建时默认关闭,由 update_institution 开启
             sfid_finalized: true,
             created_by: ctx.admin_pubkey.clone(),
             created_at: Utc::now(),
@@ -414,8 +444,8 @@ pub(crate) async fn create_institution(
             None,
             "SUCCESS",
             format!(
-                "sfid={} name={} category={:?} province={} city={}",
-                site_sfid, institution_name, category, province, city
+                "sfid={} name={:?} category={:?} province={} city={}",
+                site_sfid, institution_name_opt, category, province, city
             ),
         );
 
@@ -424,7 +454,7 @@ pub(crate) async fn create_institution(
             message: "ok".to_string(),
             data: CreateInstitutionOutput {
                 sfid_id: site_sfid,
-                institution_name,
+                institution_name: institution_name_opt.clone(),
                 category,
             },
         })
@@ -436,6 +466,536 @@ pub(crate) async fn create_institution(
         1005,
         "institution sfid_id collision retry exhausted",
     )
+}
+
+// ─── 1b. 更新机构详情(两步式第二步)────────────────────────────
+//
+// PATCH /api/v1/institution/:sfid_id
+//   body: { institution_name?: string, sub_type?: string | null }
+//
+// 仅允许编辑 institution_name 与 sub_type,其他(A3/P1/institution_code/省市)一律
+// 不可变 — 那是 SFID 派生的基础属性,创建时已固化。
+//
+// 校验:
+//   - scope:KEY=全国 / SHENG=本省 / SHI=本市
+//   - institution_name:格式 + 全国唯一(排除自身 sfid_id)
+//   - sub_type:与 (a3, p1) 联动(仅 SFR 可设,FFR/GFR 不得设)
+
+pub(crate) async fn update_institution(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(sfid_id): Path<String>,
+    Json(input): Json<UpdateInstitutionInput>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let scope = get_visible_scope(&ctx);
+
+    let province = match resolve_province_from_sfid_id(&sfid_id) {
+        Some(p) => p,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "cannot resolve province from sfid_id"),
+    };
+
+    // 读取机构,做 scope 校验并缓存 a3/p1
+    let sfid_id_r = sfid_id.clone();
+    let read_result = state
+        .sharded_store
+        .read_province(&province, move |shard| {
+            shard.multisig_institutions.get(&sfid_id_r).cloned()
+        })
+        .await;
+    let existing = match read_result {
+        Ok(Some(v)) => v,
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &format!("shard read: {e}")),
+    };
+    if !scope.includes_province(&existing.province) || !scope.includes_city(&existing.city) {
+        return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");
+    }
+
+    // ── 校验并构造新值 ──
+    let new_name: Option<String> = match input.institution_name.as_deref().map(str::trim) {
+        Some(raw) if !raw.is_empty() => match validate_institution_name(raw) {
+            Ok(v) => Some(v),
+            Err(e) => return service_error_to_response(e),
+        },
+        _ => None, // 字段缺省 → 不更新 name
+    };
+    // 清算行开启期间锁定 sub_type:若请求中 sub_type 与现值不同则拒绝
+    let sub_type_change_requested = input.sub_type.is_some();
+    if existing.is_clearing_bank && sub_type_change_requested {
+        let requested = input.sub_type.as_deref().map(str::trim).filter(|s| !s.is_empty());
+        let current = existing.sub_type.as_deref();
+        if requested != current {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "清算行开启期间不允许修改企业类型,请先关闭清算行",
+            );
+        }
+    }
+    let new_sub_type: Option<String> = if sub_type_change_requested {
+        match validate_sub_type_with_p1(
+            &existing.a3,
+            &existing.p1,
+            input.sub_type.as_deref(),
+        ) {
+            Ok(v) => v,
+            Err(e) => return service_error_to_response(e),
+        }
+    } else {
+        existing.sub_type.clone()
+    };
+
+    // ── parent_sfid_id:仅 FFR(非法人)可设置,必须指向已存在的 SFR/GFR ──
+    // 清算行开启期间同样锁定 parent_sfid_id
+    let parent_change_requested = input.parent_sfid_id.is_some();
+    if existing.is_clearing_bank && parent_change_requested {
+        let requested = input.parent_sfid_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+        let current = existing.parent_sfid_id.as_deref();
+        if requested != current {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "清算行开启期间不允许修改所属法人,请先关闭清算行",
+            );
+        }
+    }
+    let new_parent: Option<String> = if parent_change_requested {
+        let raw = input.parent_sfid_id.as_deref().unwrap_or("").trim().to_string();
+        if existing.a3 != "FFR" {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "仅非法人(FFR)可设置所属法人",
+            );
+        }
+        if raw.is_empty() {
+            // FFR 明确传空串 → 允许清除?两步式第二步"必填"语义下不允许,直接拒
+            return api_error(StatusCode::BAD_REQUEST, 1001, "所属法人不能为空");
+        }
+        // 校验目标机构存在 + a3 ∈ {SFR, GFR}
+        let target_province = match resolve_province_from_sfid_id(&raw) {
+            Some(p) => p,
+            None => return api_error(StatusCode::BAD_REQUEST, 1001, "所属法人 sfid_id 格式无效"),
+        };
+        let raw_clone = raw.clone();
+        let target_read = state
+            .sharded_store
+            .read_province(&target_province, move |shard| {
+                shard.multisig_institutions.get(&raw_clone).cloned()
+            })
+            .await;
+        let target_inst = match target_read {
+            Ok(Some(v)) => v,
+            Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "所属法人机构不存在"),
+            Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &format!("shard read: {e}")),
+        };
+        if target_inst.a3 != "SFR" && target_inst.a3 != "GFR" {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "所属法人必须是私法人(SFR)或公法人(GFR)",
+            );
+        }
+        Some(raw)
+    } else {
+        existing.parent_sfid_id.clone()
+    };
+
+    // 全国唯一校验(仅在真正要更新 name 时做)
+    if let Some(ref name) = new_name {
+        let conflict = match state.store.read() {
+            Ok(store) => institution_name_exists_excluding(&store, name, Some(&sfid_id)),
+            Err(e) => {
+                tracing::warn!(error = %e, "update_institution: store read failed for name check");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed");
+            }
+        };
+        if conflict {
+            return api_error(StatusCode::CONFLICT, 1007, "该机构名称已被使用");
+        }
+    }
+
+    // 构造更新后的实例(clone existing + overlay)
+    let mut updated = existing.clone();
+    if let Some(name) = new_name.clone() {
+        updated.institution_name = Some(name);
+    }
+    if sub_type_change_requested {
+        updated.sub_type = new_sub_type.clone();
+    }
+    if parent_change_requested {
+        updated.parent_sfid_id = new_parent.clone();
+    }
+
+    // ── 清算行开关处理 ──
+    // 把 updated 的 sub_type/parent_sfid_id 作为"最终态"参与资格判定
+    // (同一 PATCH 里允许先把 sub_type 设成 JOINT_STOCK 再开清算行)
+    if let Some(want) = input.is_clearing_bank {
+        if want && !existing.is_clearing_bank {
+            // 关 → 开:资格校验 + 创建 2 个默认账户上链
+            if let Err(resp) = check_clearing_bank_eligible(&state, &updated).await {
+                return resp;
+            }
+            if let Err(resp) = create_clearing_bank_accounts(&state, &ctx, &sfid_id, &province).await {
+                return resp;
+            }
+            updated.is_clearing_bank = true;
+        } else if !want && existing.is_clearing_bank {
+            // 开 → 关:两个默认账户必须都已软删
+            if let Err(resp) = ensure_clearing_bank_accounts_absent(&state, &sfid_id, &province).await {
+                return resp;
+            }
+            updated.is_clearing_bank = false;
+        }
+        // want == existing.is_clearing_bank → 幂等,无操作
+    }
+
+    // 写分片
+    let sfid_id_w = sfid_id.clone();
+    let updated_shard = updated.clone();
+    if let Err(e) = state
+        .sharded_store
+        .write_province(&province, move |shard| {
+            shard
+                .multisig_institutions
+                .insert(sfid_id_w.clone(), updated_shard);
+        })
+        .await
+    {
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &format!("shard write: {e}"));
+    }
+
+    // 双写 legacy store
+    {
+        match state.store.write() {
+            Ok(mut store) => {
+                store.multisig_institutions.insert(sfid_id.clone(), updated.clone());
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "dual-write legacy store failed (institution update)");
+            }
+        }
+    }
+
+    append_inst_audit_log_best_effort(
+        &state,
+        "INSTITUTION_UPDATE",
+        &ctx.admin_pubkey,
+        Some(sfid_id.clone()),
+        None,
+        "SUCCESS",
+        format!(
+            "sfid={} name={:?} sub_type={:?} parent={:?} clearing_bank={}",
+            sfid_id,
+            updated.institution_name,
+            updated.sub_type,
+            updated.parent_sfid_id,
+            updated.is_clearing_bank
+        ),
+    );
+
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: updated,
+    })
+    .into_response()
+}
+
+// ─── 1c. 清算行辅助函数 ─────────────────────────────────────────
+
+/// 资格校验:
+///   - SFR + sub_type=JOINT_STOCK  → OK
+///   - FFR + parent 存在 + parent.a3=SFR + parent.sub_type=JOINT_STOCK  → OK
+///   - 其他 → 400
+async fn check_clearing_bank_eligible(
+    state: &AppState,
+    inst: &MultisigInstitution,
+) -> Result<(), axum::response::Response> {
+    match inst.a3.as_str() {
+        "SFR" => {
+            if inst.sub_type.as_deref() == Some("JOINT_STOCK") {
+                return Ok(());
+            }
+            Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "仅私法人股份公司可开启清算行设置",
+            ))
+        }
+        "FFR" => {
+            let parent_id = match inst.parent_sfid_id.as_deref() {
+                Some(v) if !v.is_empty() => v.to_string(),
+                _ => {
+                    return Err(api_error(
+                        StatusCode::BAD_REQUEST,
+                        1001,
+                        "非法人需先设置所属法人才能开启清算行",
+                    ))
+                }
+            };
+            let parent_province = match resolve_province_from_sfid_id(&parent_id) {
+                Some(p) => p,
+                None => {
+                    return Err(api_error(
+                        StatusCode::BAD_REQUEST,
+                        1001,
+                        "所属法人 sfid_id 无效",
+                    ))
+                }
+            };
+            let parent_id_clone = parent_id.clone();
+            let read = state
+                .sharded_store
+                .read_province(&parent_province, move |shard| {
+                    shard.multisig_institutions.get(&parent_id_clone).cloned()
+                })
+                .await;
+            let parent = match read {
+                Ok(Some(v)) => v,
+                Ok(None) => {
+                    return Err(api_error(
+                        StatusCode::NOT_FOUND,
+                        1004,
+                        "所属法人机构不存在",
+                    ))
+                }
+                Err(e) => {
+                    return Err(api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        1004,
+                        &format!("parent shard read: {e}"),
+                    ))
+                }
+            };
+            if parent.a3 == "SFR" && parent.sub_type.as_deref() == Some("JOINT_STOCK") {
+                return Ok(());
+            }
+            Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "非法人的所属法人必须是私法人股份公司才能开启清算行",
+            ))
+        }
+        _ => Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "仅私法人股份公司或挂靠此类法人的非法人可开启清算行",
+        )),
+    }
+}
+
+/// 创建清算行 2 个默认账户(主账户、费用账户)并逐个上链。
+/// 任何一个失败就中止返回错误;已成功的账户保留,下次重试幂等跳过。
+async fn create_clearing_bank_accounts(
+    state: &AppState,
+    ctx: &crate::login::AdminAuthContext,
+    sfid_id: &str,
+    province: &str,
+) -> Result<(), axum::response::Response> {
+    use crate::institutions::service::CLEARING_BANK_NAMES;
+    use crate::institutions::chain::submit_register_account;
+
+    for name in CLEARING_BANK_NAMES {
+        let account_name = name.to_string();
+        let acc_key = account_key_to_string(sfid_id, &account_name);
+
+        // 检查当前账户状态:存在且 Registered → 幂等跳过;Pending → 拒绝;不存在或 Failed → 继续创建
+        let sfid_r = sfid_id.to_string();
+        let key_r = acc_key.clone();
+        let existing_acc = state
+            .sharded_store
+            .read_province(province, move |shard| {
+                shard.multisig_accounts.get(&key_r).cloned()
+            })
+            .await;
+        let current = match existing_acc {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    1004,
+                    &format!("shard read: {e}"),
+                ))
+            }
+        };
+        if let Some(acc) = current.as_ref() {
+            match acc.chain_status {
+                MultisigChainStatus::Registered => continue, // 幂等跳过
+                MultisigChainStatus::Pending => {
+                    return Err(api_error(
+                        StatusCode::CONFLICT,
+                        1007,
+                        &format!("账户 \"{}\" 正在上链中,请稍后重试", account_name),
+                    ))
+                }
+                MultisigChainStatus::Failed => {
+                    // 允许覆盖重试:继续走下面的写 Pending → 上链流程
+                }
+            }
+        }
+
+        // 写 Pending 到分片
+        let now = chrono::Utc::now();
+        let account = MultisigAccount {
+            sfid_id: sfid_r.clone(),
+            account_name: account_name.clone(),
+            duoqian_address: None,
+            chain_status: MultisigChainStatus::Pending,
+            chain_tx_hash: None,
+            chain_block_number: None,
+            created_by: ctx.admin_pubkey.clone(),
+            created_at: now,
+        };
+        let acc_shard = account.clone();
+        let key_w = acc_key.clone();
+        if let Err(e) = state
+            .sharded_store
+            .write_province(province, move |shard| {
+                shard.multisig_accounts.insert(key_w.clone(), acc_shard);
+            })
+            .await
+        {
+            return Err(api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                &format!("shard write: {e}"),
+            ));
+        }
+        // legacy 双写
+        if let Ok(mut store) = state.store.write() {
+            store.multisig_accounts.insert(acc_key.clone(), account.clone());
+        }
+
+        // 上链
+        match submit_register_account(state, ctx, sfid_id, &account_name).await {
+            Ok(receipt) => {
+                let key_u = acc_key.clone();
+                let tx_hash = receipt.tx_hash.clone();
+                let block_number = receipt.block_number;
+                let addr = receipt.duoqian_address.clone();
+                let addr_shard = addr.clone();
+                let _ = state
+                    .sharded_store
+                    .write_province(province, move |shard| {
+                        if let Some(a) = shard.multisig_accounts.get_mut(&key_u) {
+                            a.chain_status = MultisigChainStatus::Registered;
+                            a.chain_tx_hash = Some(tx_hash);
+                            a.chain_block_number = Some(block_number);
+                            a.duoqian_address = addr_shard;
+                        }
+                    })
+                    .await;
+                if let Ok(mut store) = state.store.write() {
+                    if let Some(a) = store.multisig_accounts.get_mut(&acc_key) {
+                        a.chain_status = MultisigChainStatus::Registered;
+                        a.chain_tx_hash = Some(receipt.tx_hash.clone());
+                        a.chain_block_number = Some(receipt.block_number);
+                        a.duoqian_address = addr.clone();
+                    }
+                }
+                append_inst_audit_log_best_effort(
+                    state,
+                    "CLEARING_BANK_ACCOUNT_CREATE",
+                    &ctx.admin_pubkey,
+                    Some(sfid_id.to_string()),
+                    None,
+                    "SUCCESS",
+                    format!(
+                        "sfid={} account={} tx={} block={}",
+                        sfid_id, account_name, receipt.tx_hash, receipt.block_number
+                    ),
+                );
+            }
+            Err(err) => {
+                // 标记 Failed
+                let key_f = acc_key.clone();
+                let _ = state
+                    .sharded_store
+                    .write_province(province, move |shard| {
+                        if let Some(a) = shard.multisig_accounts.get_mut(&key_f) {
+                            a.chain_status = MultisigChainStatus::Failed;
+                        }
+                    })
+                    .await;
+                if let Ok(mut store) = state.store.write() {
+                    if let Some(a) = store.multisig_accounts.get_mut(&acc_key) {
+                        a.chain_status = MultisigChainStatus::Failed;
+                    }
+                }
+                append_inst_audit_log_best_effort(
+                    state,
+                    "CLEARING_BANK_ACCOUNT_CREATE",
+                    &ctx.admin_pubkey,
+                    Some(sfid_id.to_string()),
+                    None,
+                    "FAILED",
+                    format!("sfid={} account={} error={}", sfid_id, account_name, err),
+                );
+                return Err(api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    1004,
+                    &format!("清算行账户 \"{}\" 上链失败:{}", account_name, err),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 关闭清算行前置校验:机构下不存在 "主账户" / "费用账户" 任一记录。
+/// 链上实际注销走 `duoqian-manage-pow::propose_close` 投票流程,成功后用户再调
+/// `DELETE /institution/:sfid_id/account/:name` 软删本地记录。
+async fn ensure_clearing_bank_accounts_absent(
+    state: &AppState,
+    sfid_id: &str,
+    province: &str,
+) -> Result<(), axum::response::Response> {
+    use crate::institutions::service::CLEARING_BANK_NAMES;
+    let keys: Vec<String> = CLEARING_BANK_NAMES
+        .iter()
+        .map(|n| account_key_to_string(sfid_id, n))
+        .collect();
+    let keys_r = keys.clone();
+    let read = state
+        .sharded_store
+        .read_province(province, move |shard| {
+            keys_r
+                .iter()
+                .map(|k| shard.multisig_accounts.contains_key(k))
+                .collect::<Vec<bool>>()
+        })
+        .await;
+    let exists_vec = match read {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                &format!("shard read: {e}"),
+            ))
+        }
+    };
+    let remaining: Vec<&str> = CLEARING_BANK_NAMES
+        .iter()
+        .zip(exists_vec.iter())
+        .filter_map(|(n, exists)| if *exists { Some(*n) } else { None })
+        .collect();
+    if !remaining.is_empty() {
+        return Err(api_error(
+            StatusCode::CONFLICT,
+            1007,
+            &format!(
+                "请先在链上注销并从 sfid 系统删除剩余账户 [{}] 后再关闭清算行",
+                remaining.join(", ")
+            ),
+        ));
+    }
+    Ok(())
 }
 
 // ─── 2. 创建账户(上链)──────────────────────────────────────────
@@ -670,6 +1230,10 @@ pub(crate) struct ListInstitutionQuery {
     pub category: Option<String>,
     pub province: Option<String>,
     pub city: Option<String>,
+    /// 模糊搜索关键字:匹配 institution_name 或 sfid_id 子串(大小写不敏感)。
+    /// 为空或缺省时返回 scope 范围内全量。
+    /// scope(密钥=全国 / 省级=本省 / 市级=本市)由上游 `filter_by_scope` 自动保证。
+    pub q: Option<String>,
 }
 
 pub(crate) async fn list_institutions(
@@ -691,15 +1255,53 @@ pub(crate) async fn list_institutions(
         PROVINCES.iter().map(|p| p.name.to_string()).collect()
     };
 
+    // 预先从 legacy store 构建 admin pubkey → (name, role_str) 反查表
+    // 用于 InstitutionListRow.created_by_name / created_by_role 填充
+    // 归一化 key:去 0x 前缀 + 转小写,匹配 created_by 的格式
+    // value = (可选姓名, 角色):name 为空视为 None(内置 KeyAdmin 默认空名)
+    let admin_lookup: std::collections::HashMap<String, (Option<String>, &'static str)> =
+        match state.store.read() {
+            Ok(store) => store
+                .admin_users_by_pubkey
+                .values()
+                .filter_map(|u| {
+                    let key = crate::business::pubkey::normalize_admin_pubkey(&u.admin_pubkey)?;
+                    let role_str: &'static str = match u.role {
+                        crate::models::AdminRole::KeyAdmin => "KEY_ADMIN",
+                        crate::models::AdminRole::ShengAdmin => "SHENG_ADMIN",
+                        crate::models::AdminRole::ShiAdmin => "SHI_ADMIN",
+                    };
+                    let name_opt = if u.admin_name.trim().is_empty() {
+                        None
+                    } else {
+                        Some(u.admin_name.clone())
+                    };
+                    Some((key, (name_opt, role_str)))
+                })
+                .collect(),
+            Err(e) => {
+                tracing::warn!(error = %e, "list_institutions: admin_users lookup read failed");
+                std::collections::HashMap::new()
+            }
+        };
+
     let query_category = query.category.clone();
     let query_province = query.province.clone();
     let query_city = query.city.clone();
+    // 模糊关键字统一小写参与比较
+    let query_q: Option<String> = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_lowercase());
     let scope_clone = scope.clone();
     let mut rows: Vec<InstitutionListRow> = Vec::new();
     for prov in &target_provinces {
         let q_cat = query_category.clone();
         let q_prov = query_province.clone();
         let q_city = query_city.clone();
+        let q_kw = query_q.clone();
         let sc = scope_clone.clone();
         let read_result = state
             .sharded_store
@@ -742,19 +1344,37 @@ pub(crate) async fn list_institutions(
                     if q_city.as_deref().map_or(false, |c| inst.city != c) {
                         continue;
                     }
+                    // 模糊关键字:匹配 sfid_id 子串或 institution_name 子串(大小写不敏感)
+                    if let Some(ref kw) = q_kw {
+                        let sfid_lc = inst.sfid_id.to_lowercase();
+                        let name_lc = inst
+                            .institution_name
+                            .as_deref()
+                            .map(|n| n.to_lowercase())
+                            .unwrap_or_default();
+                        if !sfid_lc.contains(kw) && !name_lc.contains(kw) {
+                            continue;
+                        }
+                    }
                     let account_count = account_counts.get(inst.sfid_id.as_str()).copied().unwrap_or(0);
                     province_rows.push(InstitutionListRow {
                         sfid_id: inst.sfid_id.clone(),
                         institution_name: inst.institution_name.clone(),
                         category: inst.category,
+                        // above: institution_name 为 Option<String>;两步式私权机构未命名时为 None
                         a3: inst.a3.clone(),
                         p1: inst.p1.clone(),
                         province: inst.province.clone(),
                         city: inst.city.clone(),
                         institution_code: inst.institution_code.clone(),
                         sub_type: inst.sub_type.clone(),
+                        parent_sfid_id: inst.parent_sfid_id.clone(),
+                        is_clearing_bank: inst.is_clearing_bank,
                         account_count,
                         created_at: inst.created_at,
+                        // 两个字段由外层循环根据 admin_lookup 反查填充(无法跨 shard 闭包传入)
+                        created_by_name: None,
+                        created_by_role: Some(inst.created_by.clone()),
                     });
                 }
                 province_rows
@@ -769,10 +1389,112 @@ pub(crate) async fn list_institutions(
     }
     rows.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
+    // ── 反查 created_by → (姓名, 角色) ──
+    // 上面 shard 闭包里临时把 created_by pubkey 塞进了 created_by_role,这里归一化
+    // + 查 admin_lookup;未命中则两字段均置 None(前端显示"未知")
+    for row in rows.iter_mut() {
+        let raw_created_by = row.created_by_role.take();
+        let Some(raw) = raw_created_by else { continue };
+        let Some(norm) = crate::business::pubkey::normalize_admin_pubkey(&raw) else {
+            continue;
+        };
+        if let Some((name_opt, role)) = admin_lookup.get(&norm) {
+            row.created_by_name = name_opt.clone();
+            row.created_by_role = Some((*role).to_string());
+        }
+    }
+
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: rows,
+    })
+    .into_response()
+}
+
+// ─── 3b. 法人机构搜索(FFR 详情页"所属法人"选择器用)───────────
+//
+// GET /api/v1/institution/search-parents?q=关键字
+//   按 sfid_id 子串(大小写不敏感)或 institution_name 子串模糊匹配,
+//   仅返回 a3 ∈ {SFR, GFR} 且 institution_name 已补填的机构,
+//   最多返回 20 条。**全国范围**可选(FFR 非法人可跨省挂靠法人)。
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct SearchParentsQuery {
+    pub q: Option<String>,
+}
+
+pub(crate) async fn search_parent_institutions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<SearchParentsQuery>,
+) -> impl IntoResponse {
+    if let Err(resp) = require_admin_any(&state, &headers) {
+        return resp;
+    }
+    let q = query.q.as_deref().unwrap_or("").trim().to_lowercase();
+    if q.is_empty() {
+        return Json(ApiResponse {
+            code: 0,
+            message: "ok".to_string(),
+            data: Vec::<crate::institutions::model::ParentInstitutionRow>::new(),
+        })
+        .into_response();
+    }
+
+    let mut hits: Vec<crate::institutions::model::ParentInstitutionRow> = Vec::new();
+    const LIMIT: usize = 20;
+    for p in PROVINCES {
+        if hits.len() >= LIMIT {
+            break;
+        }
+        let q_clone = q.clone();
+        let need = LIMIT - hits.len();
+        let read_result = state
+            .sharded_store
+            .read_province(p.name, move |shard| {
+                let mut local: Vec<crate::institutions::model::ParentInstitutionRow> = Vec::new();
+                for inst in shard.multisig_institutions.values() {
+                    if local.len() >= need {
+                        break;
+                    }
+                    // 仅法人(SFR/GFR)且已命名
+                    if inst.a3 != "SFR" && inst.a3 != "GFR" {
+                        continue;
+                    }
+                    let name = match &inst.institution_name {
+                        Some(n) if !n.trim().is_empty() => n.clone(),
+                        _ => continue,
+                    };
+                    let sfid_lc = inst.sfid_id.to_lowercase();
+                    let name_lc = name.to_lowercase();
+                    if !sfid_lc.contains(&q_clone) && !name_lc.contains(&q_clone) {
+                        continue;
+                    }
+                    local.push(crate::institutions::model::ParentInstitutionRow {
+                        sfid_id: inst.sfid_id.clone(),
+                        institution_name: name,
+                        a3: inst.a3.clone(),
+                        sub_type: inst.sub_type.clone(),
+                        category: inst.category,
+                        province: inst.province.clone(),
+                        city: inst.city.clone(),
+                    });
+                }
+                local
+            })
+            .await;
+        match read_result {
+            Ok(mut v) => hits.append(&mut v),
+            Err(e) => {
+                tracing::warn!(province = %p.name, error = %e, "search_parents shard read failed");
+            }
+        }
+    }
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: hits,
     })
     .into_response()
 }
@@ -820,12 +1542,18 @@ pub(crate) async fn get_institution(
     if !scope.includes_province(&inst.province) || !scope.includes_city(&inst.city) {
         return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");
     }
+
+    // 反查 created_by → 管理员姓名 + 角色
+    let (created_by_name, created_by_role) = resolve_created_by(&state, &inst.created_by);
+
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: InstitutionDetailOutput {
             institution: inst,
             accounts,
+            created_by_name,
+            created_by_role,
         },
     })
     .into_response()
@@ -931,7 +1659,7 @@ pub(crate) async fn app_list_accounts(
         message: "ok".to_string(),
         data: AppInstitutionAccounts {
             sfid_id,
-            institution_name: inst.institution_name,
+            institution_name: inst.institution_name.unwrap_or_default(),
             accounts,
         },
     })
@@ -947,6 +1675,7 @@ struct AppAccountEntry {
 }
 
 /// wuminapp 公开接口返回的机构+账户汇总。
+/// 两步式:未命名私权机构的 name 以空串下发(wuminapp 端自行兜底展示)。
 #[derive(Serialize)]
 struct AppInstitutionAccounts {
     sfid_id: String,
