@@ -34,7 +34,7 @@ void main() {
       expect(PalletRegistry.transferKeepAliveCall, isNonNegative);
       // DuoqianTransferPow
       expect(PalletRegistry.proposeTransferCall, isNonNegative);
-      expect(PalletRegistry.voteTransferCall, isNonNegative);
+      // Step 2 · voteTransferCall 已删除(vote_transfer → finalize_transfer,冷钱包不盲签)
       // VotingEngineSystem
       expect(PalletRegistry.jointVoteCall, isNonNegative);
       expect(PalletRegistry.citizenVoteCall, isNonNegative);

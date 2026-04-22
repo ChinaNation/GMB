@@ -24,6 +24,7 @@
 // For more information, please refer to <http://unlicense.org>
 
 // Substrate and Polkadot dependencies
+use alloc::vec::Vec;
 use codec::Decode;
 use codec::Encode;
 use frame_support::{
