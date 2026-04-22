@@ -215,10 +215,13 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
                 }
               >
                 <AccountList
+                  auth={auth}
+                  sfidId={inst.sfid_id}
                   accounts={accounts}
                   loading={loading}
                   canDelete={canWrite}
                   onDelete={onDeleteAccount}
+                  onActivated={load}
                 />
               </Card>
 

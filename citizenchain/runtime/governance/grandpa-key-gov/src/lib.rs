@@ -1027,8 +1027,8 @@ mod tests {
     fn propose_rejects_unchanged_key() {
         new_test_ext().execute_with(|| {
             let institution = prc_pallet_id();
-            let current_key = CurrentGrandpaKeys::<Test>::get(institution)
-                .expect("institution should have key");
+            let current_key =
+                CurrentGrandpaKeys::<Test>::get(institution).expect("institution should have key");
             assert_noop!(
                 GrandpaKeyGov::propose_replace_grandpa_key(
                     RuntimeOrigin::signed(prc_admin(0)),

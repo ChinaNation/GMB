@@ -22,7 +22,7 @@ import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/user/user.dart' show ContactBookPage;
 import 'package:wuminapp_mobile/user/user_service.dart' show UserContact;
 import 'package:wuminapp_mobile/trade/duoqian/duoqian_trade_page.dart';
-import 'package:wuminapp_mobile/trade/offchain/offchain_pay_page.dart';
+import 'package:wuminapp_mobile/trade/offchain/offchain_clearing_pay_page.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
 import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
@@ -169,32 +169,65 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
     });
   }
 
-  /// 扫码支付：扫商户收款码，根据 bank 字段分流。
+  /// 扫码支付入口(Step 2c-i):扫商户收款码,解析 bank 字段后跳转到
+  /// `OffchainClearingPayPage` 走新清算行体系支付。
+  ///
+  /// - 商户码 `UserTransferBody.bank` 为 `shenfen_id`,`OffchainClearingPayPage`
+  ///   内部再用 SFID API 反查主账户地址并做同行校验。
+  /// - 未绑定钱包 / 扫码结果无 bank 字段 / 未配置清算行节点 WSS,均在此短路
+  ///   并提示用户。
   Future<void> _openOffchainPay() async {
+    if (_currentWallet == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先选择付款钱包')),
+      );
+      return;
+    }
     final result = await Navigator.of(context).push<QrScanTransferResult>(
       MaterialPageRoute(
           builder: (_) => const QrScanPage(mode: QrScanMode.transfer)),
     );
     if (result == null || !mounted) return;
 
-    if (result.bank != null && result.bank!.isNotEmpty) {
-      // 有 bank 字段 → 走链下快捷支付
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => OffchainPayPage(
-            toAddress: result.toAddress,
-            amount: result.amount,
-            bank: result.bank!,
-            memo: result.memo,
-          ),
+    if (result.bank == null || result.bank!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('该收款码不支持扫码支付(未绑定清算行)')),
+      );
+      return;
+    }
+
+    // 与 wallet_page._openClearingPaymentEntry 同口径的配置注入占位。
+    // 打包时以 `--dart-define` 传入生产地址;dev 模式用 localhost。
+    const sfidBaseUrl = String.fromEnvironment(
+      'SFID_BASE_URL',
+      defaultValue: 'http://127.0.0.1:8080',
+    );
+    const clearingNodeWss = String.fromEnvironment(
+      'CLEARING_NODE_WSS',
+      defaultValue: '',
+    );
+    if (clearingNodeWss.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('未配置清算行节点 WSS,请先在启动参数中设置 CLEARING_NODE_WSS'),
         ),
       );
-    } else {
-      // 无 bank 字段 → 提示不支持扫码支付
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('该收款码不支持扫码支付（未绑定清算行）')),
-      );
+      return;
     }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OffchainClearingPayPage(
+          wallet: _currentWallet!,
+          toAddress: result.toAddress,
+          recipientBankShenfenId: result.bank!,
+          clearingNodeWssUrl: clearingNodeWss,
+          sfidBaseUrl: sfidBaseUrl,
+          initialAmountYuan: result.amount,
+          memo: result.memo,
+        ),
+      ),
+    );
   }
 
   Future<void> _submit() async {

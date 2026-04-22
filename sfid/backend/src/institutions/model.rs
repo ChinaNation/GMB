@@ -60,13 +60,6 @@ pub struct MultisigInstitution {
     /// 非法人机构必须挂在某个法人机构下,全国范围可选。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_sfid_id: Option<String>,
-    /// 清算行设置标志。仅下列机构可置为 true:
-    ///   - SFR 且 sub_type == JOINT_STOCK
-    ///   - FFR 且 parent 是 SFR 且 parent.sub_type == JOINT_STOCK
-    /// 置 true 时链上已注册"主账户"和"费用账户"2 个默认多签账户。
-    /// 置回 false 前提:2 个账户都已从 sfid 本地软删(链上注销走 propose_close 投票)。
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub is_clearing_bank: bool,
     /// sfid_id 是否已通过首次 QR1 生成固化。
     /// reconcile 批量创建时为 false,首次生成 QR1 时设为 true 并替换 sfid_id,
     /// 此后永久不变。
@@ -183,10 +176,6 @@ pub struct UpdateInstitutionInput {
     /// 所属法人 sfid_id(仅 FFR 可设置;SFR/GFR 传值会被拒)
     #[serde(default)]
     pub parent_sfid_id: Option<String>,
-    /// 清算行开关:Some(true)=尝试开启(自动创建主/费用账户并上链);
-    /// Some(false)=尝试关闭(前置要求两账户已软删);None=不变
-    #[serde(default)]
-    pub is_clearing_bank: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -219,8 +208,6 @@ pub struct InstitutionListRow {
     pub sub_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_sfid_id: Option<String>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub is_clearing_bank: bool,
     pub account_count: usize,
     pub created_at: DateTime<Utc>,
     /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)

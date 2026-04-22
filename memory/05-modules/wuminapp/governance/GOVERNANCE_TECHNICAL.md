@@ -79,7 +79,8 @@
 | 管理员更换 | `propose_admin_replacement` | `org, institution, old_admin, new_admin` | 目标省级管理员 | 内部 |
 | 决议销毁 | `propose_destroy` | `org, institution, amount` | 目标省级管理员 | 内部 |
 | GRANDPA 密钥更换 | `propose_replace_grandpa_key` | `institution, new_key(32B)` | NRC/PRC 省级管理员 | 内部 |
-| 省储行业务治理 | `propose_institution_rate / propose_verify_key / propose_sweep_to_main / propose_relay_submitters` | 见 4.4 | PRB 省级管理员 | 内部 |
+| 省储行业务治理(已下线) | ~~`propose_institution_rate / propose_verify_key / propose_sweep_to_main / propose_relay_submitters`~~ | Step 2b-iv-b 随老省储行清算 pallet 一起从 runtime 删除 | — | — |
+| 清算行费率治理(新) | `propose_l2_fee_rate(call_index 40)` / `set_max_l2_fee_rate(call_index 41, Root)` | `bank, new_rate_bp` | 清算行管理员 / Root | — |
 
 ### 4.1 联合提案额外字段标准（决议发行 / Runtime 升级）
 
@@ -91,7 +92,8 @@
 
 ```text
 payload = (
-  "GMB_SFID_POPULATION_V3",
+  DUOQIAN_DOMAIN,
+  OP_SIGN_POP,
   genesis_hash,
   who,
   eligible_total,
@@ -114,18 +116,24 @@ message = blake2_256(SCALE.encode(payload))
 - `new_key` 不得与当前 key 相同，不得与其他机构正在使用 key 冲突。
 - 同一 `new_key` 不得被并发提案占用。
 
-### 4.4 省储行业务治理约束（offchain-transaction-pos）
+### 4.4 清算行(L2)费率治理(当前,替代原省储行治理)
 
-- `propose_institution_rate`：
-  - `new_rate_bp` 范围 `1..10`（0.01%~0.1%）。
-- `propose_verify_key`：
-  - `new_key` 非空，长度不超过 `MaxVerifyKeyLen(当前 256)`。
-- `propose_sweep_to_main`：
-  - `amount > 0`；
-  - 执行时还要满足保底与上限规则（保留费地址最低余额、单次最多提可用余额 80%）。
-- `propose_relay_submitters`：
-  - `submitters` 数量 `1..MaxRelaySubmitters(当前 8)`；
-  - 账户不得重复。
+Step 2b-iv-b 删除了原省储行 `propose_institution_rate / propose_verify_key /
+propose_sweep_to_main / propose_relay_submitters` 四项治理 Call。新清算行体系
+下的等价机制:
+
+- `propose_l2_fee_rate(bank, new_rate_bp)`(call_index 40):
+  - 签名者必须是该清算行主账户的多签管理员之一(`SfidAccountQuery::is_admin_of`)
+  - `new_rate_bp` 范围 `[1, min(MaxL2FeeRateBp, 10)]`(默认上限 10 bp = 0.1%)
+  - 成功后写 `L2FeeRateProposed[bank] = (rate, now + 20160 块)`(7 天延迟)
+  - `on_initialize` 每块扫描,到期后自动搬到 `L2FeeRateBp[bank]` 并发 `L2FeeRateActivated` 事件
+- `set_max_l2_fee_rate(new_max)`(call_index 41,Root Origin):
+  - 调整全局费率上限 `MaxL2FeeRateBp`,范围 `[1, 10]` bp
+  - Step 2b 起将改为由联合投票回调(免费调用)
+- `propose_verify_key` / `propose_sweep_to_main` / `propose_relay_submitters`
+  在清算行体系下均无等价 Call。验签密钥由清算行多签管理员的 sr25519 私钥本地持有
+  (offchain_keystore),不再走链上提案;手续费划转(sweep)仍由
+  `duoqian-transfer-pow` pallet 的 `propose_sweep_to_main(call_index 5)` 治理。
 
 ## 5. 投票字段规范
 
@@ -141,10 +149,8 @@ message = blake2_256(SCALE.encode(payload))
 - `vote_admin_replacement`
 - `vote_destroy`
 - `vote_replace_grandpa_key`
-- `vote_institution_rate`
-- `vote_verify_key`
-- `vote_sweep_to_main`
-- `vote_relay_submitters`
+- ~~`vote_institution_rate` / `vote_verify_key` / `vote_relay_submitters`~~(Step 2b-iv-b 已下线,随老省储行 pallet 一起从 runtime 删除)
+- `vote_sweep_to_main`(留在 `duoqian-transfer-pow`,未改动)
 
 ### 5.2 联合机构投票（投票引擎）
 
@@ -174,7 +180,8 @@ message = blake2_256(SCALE.encode(payload))
 
 ```text
 payload = (
-  "GMB_SFID_VOTE_V3",
+  DUOQIAN_DOMAIN,
+  OP_SIGN_VOTE,
   genesis_hash,
   account,
   binding_id,
@@ -414,14 +421,14 @@ message = blake2_256(SCALE.encode(payload))
 | `propose_transfer(org, institution, beneficiary, amount, remark)` | 0 | 管理员发起转账提案 |
 | `vote_transfer(proposal_id, approve)` | 1 | 管理员投票，达到阈值自动执行 |
 
-投票通过后自动执行 `Currency::transfer(duoqian_address → beneficiary)`。
+投票通过后自动执行 `Currency::transfer(机构主账户 → beneficiary)`（治理机构为 `main_address`，注册多签为 `duoqian_address`）。
 执行失败不回滚投票，发出 `TransferExecutionFailed` 事件，清理提案，管理员需重新发起。
 
 #### 7.5.1.1 手续费模型
 
 **提案提交和投票均免费**（`CallAmount` 返回 `NoAmount`），管理员个人账户零消耗，0 余额管理员也能操作。
 
-**手续费仅在投票通过后执行转账时扣取**，从机构 `duoqian_address` 一次性扣除 `转账金额 + 手续费`。
+**手续费仅在投票通过后执行转账时扣取**，从机构主账户一次性扣除 `转账金额 + 手续费`。
 
 手续费计算公式（与链上交易费一致）：
 - 费率：`amount × 0.1%`
@@ -466,9 +473,9 @@ message = blake2_256(SCALE.encode(payload))
 **propose_transfer**: `[0x13][0x00][org:u8][institution:48B][beneficiary:32B][amount:u128_le_16B][Vec remark]`
 **vote_transfer**: `[0x13][0x01][proposal_id:u64_le][approve:bool]`
 
-#### 7.5.5 机构 duoqian_address
+#### 7.5.5 机构主账户地址（duoqianAddress 字段）
 
-每个 `InstitutionInfo` 包含 `duoqianAddress` 字段（32 字节 hex），来源于 `primitives` 中的 `duoqian_address`。
+每个 `InstitutionInfo` 包含 `duoqianAddress` 字段（32 字节 hex）。对于治理机构，来源于 `primitives` 中的 `main_address`；对于注册多签机构，来源于 `duoqian-manage-pow::DuoqianAccounts` 的 `duoqian_address`。
 通过 `Keyring().encodeAddress(bytes, 2027)` 转为 SS58 地址展示。
 
 ### 7.6 管理员列表页面

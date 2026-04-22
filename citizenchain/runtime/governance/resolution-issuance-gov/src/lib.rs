@@ -149,8 +149,8 @@ pub mod pallet {
                 .iter()
                 .skip(1)
                 .map(|node| {
-                    T::AccountId::decode(&mut &node.duoqian_address[..])
-                        .expect("CHINA_CB duoqian_address must decode to AccountId")
+                    T::AccountId::decode(&mut &node.main_address[..])
+                        .expect("CHINA_CB main_address must decode to AccountId")
                 })
                 .collect();
             Self { allowed_recipients }
@@ -612,7 +612,7 @@ pub mod pallet {
             let valid_set: BTreeSet<T::AccountId> = CHINA_CB
                 .iter()
                 .skip(1)
-                .filter_map(|node| T::AccountId::decode(&mut &node.duoqian_address[..]).ok())
+                .filter_map(|node| T::AccountId::decode(&mut &node.main_address[..]).ok())
                 .collect();
             for recipient in recipients.iter() {
                 ensure!(
@@ -628,7 +628,7 @@ pub mod pallet {
             let recipients: Vec<T::AccountId> = CHINA_CB
                 .iter()
                 .skip(1)
-                .filter_map(|node| T::AccountId::decode(&mut &node.duoqian_address[..]).ok())
+                .filter_map(|node| T::AccountId::decode(&mut &node.main_address[..]).ok())
                 .collect();
             if recipients.is_empty() {
                 return None;
@@ -917,7 +917,7 @@ mod tests {
         primitives::china::china_cb::CHINA_CB
             .iter()
             .skip(1)
-            .map(|n| AccountId32::new(n.duoqian_address))
+            .map(|n| AccountId32::new(n.main_address))
             .collect()
     }
 

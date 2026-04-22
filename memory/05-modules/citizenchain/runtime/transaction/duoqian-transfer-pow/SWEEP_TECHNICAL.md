@@ -2,7 +2,7 @@
 
 ## 概述
 
-`duoqian-transfer-pow` 模块中的 sweep 子功能，将机构手续费账户 (`fee_address`) 余额划转至机构主账户 (`duoqian_address`)。仅限国储会 (NRC) 和省储行 (PRB) 使用，注册多签机构不支持。
+`duoqian-transfer-pow` 模块中的 sweep 子功能，将机构手续费账户 (`fee_address`) 余额划转至机构主账户 (`main_address`)。仅限国储会 (NRC) 和省储行 (PRB) 使用，注册多签机构不支持。
 
 ## 数据结构
 
@@ -31,7 +31,7 @@ pub struct SweepAction<Balance> {
 ## 账户解析
 
 - `resolve_fee_account`：NRC 取 `CHINA_CB[0].fee_address`，PRB 取对应 `CHINA_CH` 节点的 `fee_address`
-- `resolve_main_account`：通过 `institution_pallet_address` 查 `duoqian_address`
+- `resolve_main_account`：通过 `institution_pallet_address` 查 `main_address`
 
 ## 提案/投票/执行流程
 
@@ -42,14 +42,23 @@ pub struct SweepAction<Balance> {
 3. 写入 `SweepProposalActions` 存储
 4. 触发 `SweepToMainProposed` 事件
 
-### 2. vote_sweep_to_main (call_index=6)
+### 2. finalize_sweep_to_main (call_index=6,Step 2 · 2026-04-21)
 
-1. 从 `SweepProposalActions` 读取提案数据
-2. 校验投票者为该机构管理员
-3. 调用 `InternalVoteEngine::cast_internal_vote` 记录投票
-4. 触发 `SweepToMainVoteSubmitted` 事件
-5. 若赞成票且提案状态变为 `STATUS_PASSED`，在 `with_transaction` 中调用 `try_execute_sweep`
-6. 执行失败时回滚存储变更，触发 `SweepExecutionFailed` 事件（提案数据保留）
+替换原 `vote_sweep_to_main`(已物理删除)。发起人一次性提交所有管理员 sr25519 签名聚合:
+
+1. 从 `SweepProposalActions` 读取 `SweepAction`(含 proposer)
+2. 解析 `(org, from = fee_account, to = main_account)`
+3. 查阈值 `InternalThresholdProvider::pass_threshold(org, institution)`
+4. 构造 `TransferVoteIntent { from, to, amount, remark_hash: blake2_256(b""), proposer, approve: true }`
+5. `signing_hash = intent.signing_hash(ss58, OP_SIGN_SWEEP = 0x17)`
+6. 共用 helper `verify_and_cast_votes`:逐条验签 + `cast_internal_vote`
+7. 达阈值 `STATUS_PASSED` → 事务内 `try_execute_sweep`;失败发 `SweepExecutionFailed`
+8. 发 `SweepToMainFinalized { proposal_id, signatures_accepted, final_status }` 事件
+
+**SweepAction 结构变更**:新增 `proposer: AccountId` 字段,用于 intent 构造。
+
+**sweep 签名域隔离**:`OP_SIGN_SWEEP = 0x17` 与 transfer / safety_fund 签名域完全隔离,
+跨业务签名重放自动失败。
 
 ### 3. try_execute_sweep（内部方法）
 
@@ -82,4 +91,9 @@ pub struct SweepAction<Balance> {
 | `SweepProposalNotPassed` | 提案未通过 |
 | `InsufficientFeeReserve` | 余额不足以覆盖划转+手续费+保留 |
 | `SweepAmountExceedsCap` | 超过可用余额 80% 上限 |
+| `UnauthorizedSignature` | Step 2 · finalize 签名 admin 非本机构管理员 |
+| `DuplicateSignature` | Step 2 · 同批次 admin 签名重复 |
+| `InvalidSignature` | Step 2 · sr25519 验签失败 |
+| `InsufficientSignatures` | Step 2 · 签名数 < 阈值 |
+| `MalformedSignature` | Step 2 · sig 长度非 64 字节 |
 | `InstitutionSpendNotAllowed` | 资产保护检查未通过 |

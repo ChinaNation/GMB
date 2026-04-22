@@ -23,11 +23,9 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
-import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/rpc/chain_tx_monitor.dart';
-import 'package:wuminapp_mobile/wallet/ui/bind_clearing_page.dart';
-import 'package:wuminapp_mobile/wallet/ui/receive_qr_page.dart';
-import 'package:wuminapp_mobile/trade/offchain/clearing_banks.dart';
+// 清算行(L2)统一入口页
+import 'package:wuminapp_mobile/trade/offchain/clearing_payment_entry_page.dart';
 
 class MyWalletPage extends StatefulWidget {
   const MyWalletPage({
@@ -647,9 +645,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   List<LocalTxEntity> _recentRecords = const [];
   bool _screenshotGuardActive = false;
 
-  /// 当前钱包绑定的清算省储行 shenfen_id（null 表示未绑定）。
-  String? _boundClearingBankId;
-
   @override
   void dispose() {
     _nameEditController.dispose();
@@ -664,7 +659,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     _walletName = widget.wallet.walletName;
     _nameEditController = TextEditingController(text: _walletName);
     _loadRecentRecords();
-    _loadClearingBank();
     // 中文注释：启动链上交易监控（余额变化触发模式）。
     ChainTxMonitor.instance.watchWallet(
       widget.wallet.address,
@@ -681,37 +675,30 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     ChainTxMonitor.instance.start();
   }
 
-  /// 从链上查询当前钱包绑定的清算省储行。
-  Future<void> _loadClearingBank() async {
-    try {
-      final onchainRpc = OnchainRpc();
-      final shenfenId = await onchainRpc.queryClearingInstitution(
-        widget.wallet.pubkeyHex,
-      );
-      if (!mounted) return;
-      setState(() {
-        _boundClearingBankId = shenfenId;
-      });
-    } catch (_) {
-      // 查询失败静默忽略，不影响页面其他功能
-    }
-  }
+  /// 打开清算行(L2)统一入口页。
+  ///
+  /// SFID baseUrl / 清算行节点 WSS 由全局配置注入(本步先用占位常量,
+  /// 后续接入完整配置层时改为读取 `Env.sfidBaseUrl` 等)。
+  Future<void> _openClearingPaymentEntry() async {
+    // TODO(step2): 替换为环境/配置注入的真实地址
+    const sfidBaseUrl = String.fromEnvironment(
+      'SFID_BASE_URL',
+      defaultValue: 'http://127.0.0.1:8080',
+    );
+    const clearingNodeWss = String.fromEnvironment(
+      'CLEARING_NODE_WSS',
+      defaultValue: '',
+    );
 
-  /// 打开绑定清算省储行页面。
-  Future<void> _openBindClearingBank() async {
-    final result = await Navigator.of(context).push<ClearingBank>(
+    await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => BindClearingPage(
-          currentShenfenId: _boundClearingBankId,
+        builder: (_) => ClearingPaymentEntryPage(
           wallet: widget.wallet,
+          sfidBaseUrl: sfidBaseUrl,
+          clearingNodeWssUrl: clearingNodeWss.isEmpty ? null : clearingNodeWss,
         ),
       ),
     );
-    if (result != null && mounted) {
-      setState(() {
-        _boundClearingBankId = result.shenfenId;
-      });
-    }
   }
 
   Future<void> _loadRecentRecords() async {
@@ -769,10 +756,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
 
   Future<void> _onMenuAction(String action) async {
     switch (action) {
-      case 'receive':
-        await _openReceiveQr();
-      case 'clearing':
-        await _openBindClearingBank();
+      case 'clearing_bank_v2':
+        await _openClearingPaymentEntry();
       case 'seed':
         await _revealSecret('私钥', () async {
           final seed =
@@ -784,19 +769,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
           return _walletService.getMnemonic(widget.wallet.walletIndex);
         });
     }
-  }
-
-  /// 打开临时收款码页面（带金额设置）。
-  Future<void> _openReceiveQr() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ReceiveQrPage(
-          address: widget.wallet.address,
-          walletName: _walletName,
-          bankShenfenId: _boundClearingBankId,
-        ),
-      ),
-    );
   }
 
   Future<void> _revealSecret(
@@ -968,8 +940,12 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
               icon: const Icon(Icons.more_vert),
               onSelected: _onMenuAction,
               itemBuilder: (_) => [
-                const PopupMenuItem(value: 'receive', child: Text('收款')),
-                const PopupMenuItem(value: 'clearing', child: Text('设置清算行')),
+                // 清算行(L2)体系:绑定 / 充值 / 提现 / 生成收款码 / 扫码付款
+                // 全部在此入口下(`ClearingPaymentEntryPage`)。
+                const PopupMenuItem(
+                  value: 'clearing_bank_v2',
+                  child: Text('扫码支付(清算行)'),
+                ),
                 if (widget.wallet.isHotWallet) ...[
                   const PopupMenuItem(value: 'seed', child: Text('查看私钥')),
                   const PopupMenuItem(value: 'mnemonic', child: Text('查看助记词')),

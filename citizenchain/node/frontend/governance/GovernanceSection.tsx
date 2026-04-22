@@ -7,10 +7,8 @@ import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalListView } from './ProposalListView';
 import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateProposalPage } from './CreateProposalPage';
-import { FeeRateProposalPage } from './FeeRateProposalPage';
 import { SafetyFundProposalPage } from './SafetyFundProposalPage';
 import { SweepProposalPage } from './SweepProposalPage';
-// ColdWalletManager 已删除，管理员激活改为机构详情页内操作。
 import { DeveloperUpgradePage } from './DeveloperUpgradePage';
 import { RuntimeUpgradeProposalPage } from './RuntimeUpgradeProposalPage';
 import type { AdminWalletMatch } from './governance-types';
@@ -18,7 +16,7 @@ import type { AdminWalletMatch } from './governance-types';
 /// 国储会 shenfenId（只有 1 个，直接进详情）。
 const NRC_SHENFEN_ID = 'GFR-LN001-CB0C-617776487-20260222';
 
-// 注意:从 NRC 发起的提案页(propose-sweep / propose-fee-rate)返回时,
+// 注意:从 NRC 发起的提案页(propose-sweep)返回时,
 // backTab='nrc' 必须直接回到 { page: 'nrc' } tab 状态,
 // 不能跳 { page: 'institution-detail' } —— 后者是 PRC/PRB 从列表进入的通用机构详情页,
 // 与 NRC tab 结构不同(无治理子 Tab 栏、多"返回机构列表"按钮、
@@ -33,9 +31,8 @@ type GovernanceView =
   | { page: 'institution-detail'; shenfenId: string; backTab: SubTab }
   | { page: 'admin-list'; shenfenId: string; backTab: SubTab }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; shenfenId?: string; backTab: SubTab }
-  | { page: 'create-proposal'; shenfenId: string; orgType: number; institutionName: string; duoqianAddress: string; adminWallets: AdminWalletMatch[]; backTab: SubTab }
+  | { page: 'create-proposal'; shenfenId: string; orgType: number; institutionName: string; mainAddress: string; adminWallets: AdminWalletMatch[]; backTab: SubTab }
   | { page: 'propose-upgrade'; adminWallets: AdminWalletMatch[]; backTab: SubTab }
-  | { page: 'propose-fee-rate'; shenfenId: string; institutionName: string; adminWallets: AdminWalletMatch[]; backTab: SubTab }
   | { page: 'propose-safety-fund'; adminWallets: AdminWalletMatch[]; backTab: SubTab }
   | { page: 'propose-sweep'; shenfenId: string; institutionName: string; adminWallets: AdminWalletMatch[]; backTab: SubTab };
 
@@ -68,7 +65,7 @@ export function GovernanceSection() {
   ) => {
     setView({
       page: 'create-proposal', shenfenId: sid, orgType,
-      institutionName: name, duoqianAddress: duoqian, adminWallets: aw, backTab,
+      institutionName: name, mainAddress: duoqian, adminWallets: aw, backTab,
     });
   };
 
@@ -79,24 +76,10 @@ export function GovernanceSection() {
         shenfenId={view.shenfenId}
         orgType={view.orgType}
         institutionName={view.institutionName}
-        duoqianAddress={view.duoqianAddress}
+        mainAddress={view.mainAddress}
         adminWallets={view.adminWallets}
         onBack={() => setView({ page: view.backTab })}
         onSuccess={() => setView({ page: view.backTab })}
-      />
-    );
-  }
-
-  // 费率设置提案页
-  if (view.page === 'propose-fee-rate') {
-    const backToParent = () => backToInstitutionParent(view.backTab, view.shenfenId);
-    return (
-      <FeeRateProposalPage
-        shenfenId={view.shenfenId}
-        institutionName={view.institutionName}
-        adminWallets={view.adminWallets}
-        onBack={backToParent}
-        onSuccess={backToParent}
       />
     );
   }
@@ -178,9 +161,6 @@ export function GovernanceSection() {
         }
         onCreateProposal={(sid, orgType, name, duoqian, aw) =>
           handleCreateProposal(sid, orgType, name, duoqian, aw, view.backTab)
-        }
-        onCreateFeeRate={(sid, name, aw) =>
-          setView({ page: 'propose-fee-rate', shenfenId: sid, institutionName: name, adminWallets: aw, backTab: view.backTab })
         }
         onCreateSweep={(sid, name, aw) =>
           setView({ page: 'propose-sweep', shenfenId: sid, institutionName: name, adminWallets: aw, backTab: view.backTab })

@@ -9,6 +9,7 @@ mod benchmarks;
 pub mod weights;
 
 use codec::{Decode, Encode, MaxEncodedLen};
+use frame_support::storage::with_transaction;
 use frame_support::{
     ensure,
     pallet_prelude::*,
@@ -18,13 +19,35 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
 use scale_info::TypeInfo;
-use sp_runtime::{traits::{Hash, Zero}, SaturatedConversion, TransactionOutcome};
-use frame_support::storage::with_transaction;
+use sp_core::sr25519::{Public as Sr25519Public, Signature as Sr25519Signature};
+use sp_runtime::{
+    traits::{Hash, Zero},
+    SaturatedConversion, TransactionOutcome,
+};
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 use voting_engine_system::{InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED, STATUS_REJECTED};
 
 type BalanceOf<T> =
     <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+
+/// SFID 登记机构下的账户角色枚举，决定地址派生走哪个 op_tag：
+/// - `Main`：所有机构的主账户，preimage 不含 account_name，走 `OP_MAIN = 0x00`。
+/// - `Fee`：所有机构的费用账户，preimage 不含 account_name，走 `OP_FEE = 0x01`。
+/// - `Named(account_name)`：SFID 机构自定义命名账户（临时 / 工资 / 运营等），走
+///   `OP_INSTITUTION = 0x05`，account_name 非空且不得为保留名 `"主账户"`/`"费用账户"`。
+///
+/// 见 `primitives::core_const::{OP_MAIN, OP_FEE, OP_INSTITUTION}` 常量定义。
+#[derive(Clone, Copy, Debug)]
+pub enum InstitutionAccountRole<'a> {
+    Main,
+    Fee,
+    Named(&'a [u8]),
+}
+
+/// 机构账户角色保留名：这两个中文字串必须强制走 Role::Main / Role::Fee，
+/// 禁止被误当作 Named 命名账户落到 OP_INSTITUTION。
+const RESERVED_NAME_MAIN: &[u8] = "主账户".as_bytes();
+const RESERVED_NAME_FEE: &[u8] = "费用账户".as_bytes();
 
 /// 账户地址合法性抽象：用于校验 duoqian_address 是否为本链合法哈希地址。
 pub trait DuoqianAddressValidator<AccountId> {
@@ -62,20 +85,20 @@ impl<AccountId> ProtectedSourceChecker<AccountId> for () {
 /// SFID 机构登记验签抽象：链上按省分流验签。
 /// - `signing_province = Some(p)`：runtime 查该省的省级签名公钥（`ShengSigningPubkey[p]`）验签；
 /// - `signing_province = None`：fallback 用 `SfidMainAccount` 当前主公钥验签（兼容旧调用）。
-pub trait SfidInstitutionVerifier<Name, Nonce, Signature> {
+pub trait SfidInstitutionVerifier<AccountName, Nonce, Signature> {
     fn verify_institution_registration(
         sfid_id: &[u8],
-        name: &Name,
+        account_name: &AccountName,
         nonce: &Nonce,
         signature: &Signature,
         signing_province: Option<&[u8]>,
     ) -> bool;
 }
 
-impl<Name, Nonce, Signature> SfidInstitutionVerifier<Name, Nonce, Signature> for () {
+impl<AccountName, Nonce, Signature> SfidInstitutionVerifier<AccountName, Nonce, Signature> for () {
     fn verify_institution_registration(
         _sfid_id: &[u8],
-        _name: &Name,
+        _account_name: &AccountName,
         _nonce: &Nonce,
         _signature: &Signature,
         _signing_province: Option<&[u8]>,
@@ -136,9 +159,9 @@ pub struct DuoqianAccount<AdminList, AccountId, BlockNumber> {
     PartialEq,
     Eq,
 )]
-pub struct RegisteredInstitution<SfidId, SfidName> {
+pub struct RegisteredInstitution<SfidId, AccountName> {
     pub sfid_id: SfidId,
-    pub name: SfidName,
+    pub account_name: AccountName,
 }
 
 /// 创建多签账户提案的业务数据（存入投票引擎 ProposalData）
@@ -151,6 +174,56 @@ pub struct CreateDuoqianAction<AccountId, Balance> {
     pub amount: Balance,
 }
 
+/// 创建多签账户的离线管理员签名意图（Step 1 · 多签注册离线 QR 聚合版）。
+///
+/// 每个管理员在 wuminapp 扫描发起人导出的 QR 后,对此结构做 sr25519 签名,
+/// 回传给发起人。发起人把 N 个 (admin, signature) 聚合后一笔 `finalize_create`
+/// 代投,投票引擎内部自动达阈值 → `execute_create`。
+///
+/// 设计要点:
+/// - `admins_root = blake2_256(SCALE.encode(sorted_admins))`:让签名消息体积固定,
+///   QR 小;链上 finalize 时可重算等值校验。
+/// - `approve` 恒为 true:拒绝的语义不通过离线签名表达(拒绝走"不签名超时自动 reject")。
+/// - 所有字段都来自 Tx 1 的 `CreateDuoqianProposed` / `PersonalDuoqianProposed`
+///   event,wuminapp 扫码后即可完整重建 intent。
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo)]
+pub struct CreateVoteIntent<AccountId, Balance> {
+    /// 投票引擎分配的提案 ID(Tx 1 的 event 中返回)
+    pub proposal_id: u64,
+    /// Tx 1 中预写入的多签账户地址
+    pub duoqian_address: AccountId,
+    /// Tx 1 的发起人(= `CreateDuoqianAction.proposer`)
+    pub creator: AccountId,
+    /// `blake2_256(SCALE.encode(sorted_admins))`,let 签名消息体积固定
+    pub admins_root: [u8; 32],
+    /// Tx 1 预写入的阈值
+    pub threshold: u32,
+    /// Tx 1 预设的入金金额
+    pub amount: Balance,
+    /// 固定 true,占位防误签
+    pub approve: bool,
+}
+
+impl<AccountId: Encode, Balance: Encode> CreateVoteIntent<AccountId, Balance> {
+    /// 根据签名域铁律构造标准签名消息 hash。
+    ///
+    /// preimage = DUOQIAN_DOMAIN (10B) || OP_SIGN_CREATE (1B) || SS58_PREFIX_LE (2B)
+    ///         || blake2_256(SCALE.encode(self))
+    /// signing_hash = blake2_256(preimage)
+    ///
+    /// wuminapp 扫码后与本函数等价实现(Dart 端用相同 SCALE 布局 + 相同 domain/op_tag),
+    /// 链上 finalize 用本函数得到的 32 字节 hash 作为 sr25519 签名的消息体。
+    pub fn signing_hash(&self, ss58_prefix: u16) -> [u8; 32] {
+        let intent_hash = sp_io::hashing::blake2_256(&self.encode());
+        let mut preimage = Vec::with_capacity(10 + 1 + 2 + 32);
+        preimage.extend_from_slice(primitives::core_const::DUOQIAN_DOMAIN);
+        preimage.push(primitives::core_const::OP_SIGN_CREATE);
+        preimage.extend_from_slice(&ss58_prefix.to_le_bytes());
+        preimage.extend_from_slice(&intent_hash);
+        sp_io::hashing::blake2_256(&preimage)
+    }
+}
+
 /// 关闭多签账户提案的业务数据
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct CloseDuoqianAction<AccountId> {
@@ -161,12 +234,19 @@ pub struct CloseDuoqianAction<AccountId> {
 
 /// 个人多签账户元数据（存储在 PersonalDuoqianInfo 中）
 #[derive(
-    Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen,
-    PartialEq, Eq,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
 )]
-pub struct PersonalDuoqianMeta<AccountId, Name> {
+pub struct PersonalDuoqianMeta<AccountId, AccountName> {
     pub creator: AccountId,
-    pub name: Name,
+    pub account_name: AccountName,
 }
 
 /// 将 AccountId（32 字节）转为 InstitutionPalletId（48 字节），右填充 16 个零。
@@ -201,7 +281,7 @@ pub mod pallet {
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
         type InstitutionAssetGuard: institution_asset_guard::InstitutionAssetGuard<Self::AccountId>;
         type SfidInstitutionVerifier: SfidInstitutionVerifier<
-            SfidNameOf<Self>,
+            AccountNameOf<Self>,
             RegisterNonceOf<Self>,
             RegisterSignatureOf<Self>,
         >;
@@ -219,13 +299,18 @@ pub mod pallet {
 
         /// 机构名称最大字节长度。
         #[pallet::constant]
-        type MaxSfidNameLength: Get<u32>;
+        type MaxAccountNameLength: Get<u32>;
 
         #[pallet::constant]
         type MaxRegisterNonceLength: Get<u32>;
 
         #[pallet::constant]
         type MaxRegisterSignatureLength: Get<u32>;
+
+        /// 管理员 sr25519 签名最大字节数(固定 64)。
+        /// 用于 `finalize_create` 聚合签名时的 BoundedVec 容量上限,防止过大输入。
+        #[pallet::constant]
+        type MaxAdminSignatureLength: Get<u32>;
 
         /// 创建时最低入金（默认应设置为 111 分 = 1.11 元）。
         #[pallet::constant]
@@ -248,9 +333,18 @@ pub mod pallet {
     >;
 
     pub type SfidIdOf<T> = BoundedVec<u8, <T as Config>::MaxSfidIdLength>;
-    pub type SfidNameOf<T> = BoundedVec<u8, <T as Config>::MaxSfidNameLength>;
+    pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
     pub type RegisterNonceOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterNonceLength>;
     pub type RegisterSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterSignatureLength>;
+
+    /// 管理员离线 sr25519 签名载体(固定 64 字节)。
+    pub type AdminSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxAdminSignatureLength>;
+    /// finalize_create 聚合签名载荷:`Vec<(管理员地址, sr25519 签名)>`,
+    /// 容量上限等于该多签允许的最多管理员数。
+    pub type AdminSignaturesOf<T> = BoundedVec<
+        (<T as frame_system::Config>::AccountId, AdminSignatureOf<T>),
+        <T as Config>::MaxAdmins,
+    >;
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -262,15 +356,15 @@ pub mod pallet {
     pub type DuoqianAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, DuoqianAccountOf<T>, OptionQuery>;
 
-    /// SFID 机构登记：(sfid_id, name) -> duoqian_address（由 blake2b_256 派生）。
-    /// 同一 sfid_id 可通过不同 name 注册多个多签地址。
+    /// SFID 机构登记：(sfid_id, account_name) -> duoqian_address（由 blake2b_256 派生）。
+    /// 同一 sfid_id 可通过不同 account_name 注册多个多签地址。
     #[pallet::storage]
     pub type SfidRegisteredAddress<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         SfidIdOf<T>,
         Blake2_128Concat,
-        SfidNameOf<T>,
+        AccountNameOf<T>,
         T::AccountId,
         OptionQuery,
     >;
@@ -282,7 +376,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         T::AccountId,
-        RegisteredInstitution<SfidIdOf<T>, SfidNameOf<T>>,
+        RegisteredInstitution<SfidIdOf<T>, AccountNameOf<T>>,
         OptionQuery,
     >;
 
@@ -292,14 +386,14 @@ pub mod pallet {
     pub type UsedRegisterNonce<T: Config> =
         StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
-    /// 个人多签反向索引：duoqian_address -> { creator, name }
+    /// 个人多签反向索引：duoqian_address -> { creator, account_name }
     #[pallet::storage]
     #[pallet::getter(fn personal_duoqian_info)]
     pub type PersonalDuoqianInfo<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         T::AccountId,
-        PersonalDuoqianMeta<T::AccountId, SfidNameOf<T>>,
+        PersonalDuoqianMeta<T::AccountId, AccountNameOf<T>>,
         OptionQuery,
     >;
 
@@ -344,20 +438,23 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 创建多签账户提案已发起（pending 状态预写入）
+        /// 机构多签账户创建提案已发起（Tx 1,pending 状态预写入）。
+        /// wuminapp 扫描此事件后即可构造 `CreateVoteIntent` + QR,发给其他管理员离线签名。
         CreateDuoqianProposed {
             proposal_id: u64,
             duoqian_address: T::AccountId,
             proposer: T::AccountId,
+            /// 关联的 SFID 机构标识
+            sfid_id: SfidIdOf<T>,
+            /// 关联的机构账户名("主账户"/"费用账户"/自定义)
+            account_name: AccountNameOf<T>,
+            /// 管理员完整列表(供 wuminapp 构建 QR 和 admins_root)
+            admins: DuoqianAdminsOf<T>,
             admin_count: u32,
             threshold: u32,
             amount: BalanceOf<T>,
-        },
-        /// 创建多签投票已提交
-        CreateVoteSubmitted {
-            proposal_id: u64,
-            who: T::AccountId,
-            approve: bool,
+            /// 投票引擎分配的超时区块(投票期最后允许区块)
+            expires_at: BlockNumberFor<T>,
         },
         /// 多签账户创建成功（投票通过，入金完成，状态变为 Active）
         DuoqianCreated {
@@ -371,6 +468,11 @@ pub mod pallet {
         },
         /// 创建提案投票通过但执行失败
         CreateExecutionFailed {
+            proposal_id: u64,
+            duoqian_address: T::AccountId,
+        },
+        /// 创建提案最终被拒绝(投票引擎返回 STATUS_REJECTED 后清理 Pending)
+        DuoqianCreateRejected {
             proposal_id: u64,
             duoqian_address: T::AccountId,
         },
@@ -400,20 +502,34 @@ pub mod pallet {
             proposal_id: u64,
             duoqian_address: T::AccountId,
         },
-        /// 个人多签账户创建提案已发起
+        /// 个人多签账户创建提案已发起（Tx 1,无 SFID 归属）。
         PersonalDuoqianProposed {
             proposal_id: u64,
             duoqian_address: T::AccountId,
             proposer: T::AccountId,
-            name: SfidNameOf<T>,
+            account_name: AccountNameOf<T>,
+            /// 管理员完整列表(供 wuminapp 构建 QR 和 admins_root)
+            admins: DuoqianAdminsOf<T>,
             admin_count: u32,
             threshold: u32,
             amount: BalanceOf<T>,
+            /// 投票引擎分配的超时区块(投票期最后允许区块)
+            expires_at: BlockNumberFor<T>,
+        },
+        /// finalize_create 代投完成(不论最终状态):统计接受的签名数 + 投票引擎返回状态。
+        /// 便于链下观测 "N 签提交 → 投票引擎状态" 的一一对应。
+        CreateFinalized {
+            proposal_id: u64,
+            /// 本次 finalize_create 接受并代投成功的签名数
+            signatures_accepted: u32,
+            /// 调用结束时投票引擎的提案状态
+            /// (STATUS_PASSED / STATUS_REJECTED / STATUS_VOTING / STATUS_EXECUTED / STATUS_EXECUTION_FAILED)
+            final_status: u8,
         },
         /// SFID 机构登记
         SfidInstitutionRegistered {
             sfid_id: SfidIdOf<T>,
-            name: SfidNameOf<T>,
+            account_name: AccountNameOf<T>,
             duoqian_address: T::AccountId,
             submitter: T::AccountId,
         },
@@ -480,19 +596,32 @@ pub mod pallet {
         /// 管理员非本提案管理员
         UnauthorizedAdmin,
         /// 机构名称为空
-        EmptySfidName,
+        EmptyAccountName,
         /// 手续费扣取失败
         FeeWithdrawFailed,
         /// 注销后转账金额低于 ED
         CloseTransferBelowED,
         /// 个人多签名称为空
         EmptyPersonalName,
-        /// 个人多签地址已存在（同一 creator + name）
+        /// 个人多签地址已存在（同一 creator + account_name）
         PersonalDuoqianAlreadyExists,
         /// 该多签账户已有进行中的关闭提案，不允许重复发起
         CloseAlreadyPending,
         /// 提案未被拒绝，不可清理
         ProposalNotRejected,
+        /// 账户名占用保留角色名（"主账户"/"费用账户" 必须走 Role::Main/Fee，
+        /// 禁止作为 Role::Named 的自定义命名参数）
+        ReservedAccountName,
+        /// finalize_create 提交的签名对应的 admin 不在该多签的管理员列表
+        UnauthorizedSignature,
+        /// finalize_create 同一 admin 在同一批签名里重复出现
+        DuplicateSignature,
+        /// finalize_create sr25519 签名验证失败
+        InvalidSignature,
+        /// finalize_create 提交的签名数量少于阈值
+        InsufficientSignatures,
+        /// finalize_create sr25519 签名长度必须恰好为 64 字节
+        MalformedSignature,
     }
 
     /// 提案操作类型标记：存储在 ProposalData 的第一个字节
@@ -512,7 +641,7 @@ pub mod pallet {
         pub fn propose_create(
             origin: OriginFor<T>,
             sfid_id: SfidIdOf<T>,
-            name: SfidNameOf<T>,
+            account_name: AccountNameOf<T>,
             admin_count: u32,
             duoqian_admins: DuoqianAdminsOf<T>,
             threshold: u32,
@@ -565,8 +694,8 @@ pub mod pallet {
                 Error::<T>::PermissionDenied
             );
 
-            // 解析 SFID 机构登记（sfid_id + name 双键查询）
-            let duoqian_address = SfidRegisteredAddress::<T>::get(&sfid_id, &name)
+            // 解析 SFID 机构登记（sfid_id + account_name 双键查询）
+            let duoqian_address = SfidRegisteredAddress::<T>::get(&sfid_id, &account_name)
                 .ok_or(Error::<T>::InstitutionNotRegistered)?;
             let registered = AddressRegisteredSfid::<T>::get(&duoqian_address)
                 .ok_or(Error::<T>::InstitutionNotRegistered)?;
@@ -627,80 +756,163 @@ pub mod pallet {
             voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
             voting_engine_system::Pallet::<T>::store_proposal_meta(proposal_id, now);
 
+            // 从投票引擎回读提案超时区块,便于 wuminapp 倒计时。
+            let expires_at = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .map(|p| p.end)
+                .ok_or(Error::<T>::VoteEngineError)?;
+
             Self::deposit_event(Event::<T>::CreateDuoqianProposed {
                 proposal_id,
                 duoqian_address,
                 proposer: who,
+                sfid_id,
+                account_name,
+                admins: duoqian_admins,
                 admin_count,
                 threshold,
                 amount,
+                expires_at,
             });
 
             Ok(())
         }
 
-        /// 对"创建多签账户"提案投票，达到阈值后自动执行入金并激活。
+        /// finalize_create:离线聚合管理员 sr25519 签名,一笔代投 + 自动激活。
+        ///
+        /// 替代原 `vote_create` 的"每人一笔在线投票"模式:
+        /// - 发起人(Tx 1 中锁定的 `action.proposer`)把所有线下收集的
+        ///   `(admin, sr25519_signature)` 装入 `sigs`,一次上链。
+        /// - 本函数逐条:成员校验 → 去重 → sr25519 验签 → 代投 → 阈值自动判定。
+        /// - 达阈值 `STATUS_PASSED` → 原子执行 `execute_create`(入金 + 激活)。
+        /// - 被拒绝 `STATUS_REJECTED` → 清除 Pending 记录。
+        ///
+        /// 签名消息:参见 `CreateVoteIntent::signing_hash`(DUOQIAN_V1 + OP_SIGN_CREATE + ss58 + intent)。
+        ///
+        /// 语义要点:
+        /// - **发起人不必是管理员**:Tx 1 已把 proposer 锁定,Tx 2 仅代投 + 代付 gas。
+        /// - **幂等性**:投票引擎内部 `AlreadyVoted` 保护,重复提交会直接失败,不会导致重复入金。
+        /// - **部分补签不支持**:一次提交必须 >= 阈值;否则 `InsufficientSignatures` 拒绝。
         #[pallet::call_index(3)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::vote_create())]
-        pub fn vote_create(
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::finalize_create(sigs.len() as u32))]
+        pub fn finalize_create(
             origin: OriginFor<T>,
             proposal_id: u64,
-            approve: bool,
+            sigs: AdminSignaturesOf<T>,
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
+            // 任意签名账户都可代投(支付 gas)。发起人身份已在 Tx 1 中锁定。
+            let _submitter = ensure_signed(origin)?;
 
-            // 读取提案数据（MODULE_TAG + ACTION_CREATE + payload）
+            // 1. 读取提案业务数据 (MODULE_TAG + ACTION_CREATE + SCALE)
             let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             let tag = crate::MODULE_TAG;
-            ensure!(raw.len() > tag.len() && &raw[..tag.len()] == tag, Error::<T>::ProposalActionNotFound);
-            ensure!(raw[tag.len()] == ACTION_CREATE, Error::<T>::ProposalActionNotFound);
-            let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(&mut &raw[tag.len() + 1..])
-                .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-
-            // 校验管理员权限
-            let institution = account_to_institution_id(&action.duoqian_address);
             ensure!(
-                Self::is_duoqian_admin(institution, &who),
-                Error::<T>::UnauthorizedAdmin
+                raw.len() > tag.len() && &raw[..tag.len()] == tag,
+                Error::<T>::ProposalActionNotFound
+            );
+            ensure!(
+                raw[tag.len()] == ACTION_CREATE,
+                Error::<T>::ProposalActionNotFound
+            );
+            let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(
+                &mut &raw[tag.len() + 1..],
+            )
+            .map_err(|_| Error::<T>::ProposalActionNotFound)?;
+
+            // 2. 读取 Pending 状态下的 DuoqianAccount:拿到管理员集合和阈值。
+            let duoqian = DuoqianAccounts::<T>::get(&action.duoqian_address)
+                .ok_or(Error::<T>::DuoqianNotFound)?;
+
+            // 3. 签名数不能少于阈值
+            let sigs_len_u32 = sigs.len() as u32;
+            ensure!(
+                sigs_len_u32 >= duoqian.threshold,
+                Error::<T>::InsufficientSignatures
             );
 
-            // 投票
-            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
-
-            Self::deposit_event(Event::<T>::CreateVoteSubmitted {
+            // 4. 构造签名消息 hash(链上与 wuminapp 端用同一公式)
+            let admins_root = Self::compute_admins_root(&duoqian.duoqian_admins);
+            let intent = CreateVoteIntent::<T::AccountId, BalanceOf<T>> {
                 proposal_id,
-                who,
-                approve,
-            });
+                duoqian_address: action.duoqian_address.clone(),
+                creator: action.proposer.clone(),
+                admins_root,
+                threshold: action.threshold,
+                amount: action.amount,
+                approve: true,
+            };
+            let signing_hash = intent.signing_hash(T::SS58Prefix::get());
 
-            // 检查投票结果并执行或清理
-            if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
-                if proposal.status == STATUS_PASSED {
-                    // 使用 with_transaction 保证 execute_create 内部的资金操作和状态变更原子性：
-                    // 若 execute_create 中途失败（如余额不足），已执行的转账会随事务回滚。
-                    let exec_result = with_transaction(|| {
-                        match Self::execute_create(proposal_id, &action) {
-                            Ok(()) => TransactionOutcome::Commit(Ok(())),
-                            Err(e) => TransactionOutcome::Rollback(Err(e)),
-                        }
+            // 5. 循环验签 + 代投
+            let mut seen: BTreeSet<T::AccountId> = BTreeSet::new();
+            let mut accepted: u32 = 0;
+            for (admin, sig_bytes) in sigs.iter() {
+                // 5.1 必须是该多签的管理员之一
+                ensure!(
+                    duoqian.duoqian_admins.iter().any(|a| a == admin),
+                    Error::<T>::UnauthorizedSignature
+                );
+                // 5.2 同批次内去重
+                ensure!(
+                    seen.insert(admin.clone()),
+                    Error::<T>::DuplicateSignature
+                );
+                // 5.3 签名长度必须是 sr25519 的 64 字节
+                ensure!(
+                    sig_bytes.len() == 64,
+                    Error::<T>::MalformedSignature
+                );
+                let sig = Sr25519Signature::try_from(sig_bytes.as_slice())
+                    .map_err(|_| Error::<T>::MalformedSignature)?;
+                let pubkey = Self::pubkey_from_accountid(admin)?;
+                ensure!(
+                    sp_io::crypto::sr25519_verify(&sig, &signing_hash, &pubkey),
+                    Error::<T>::InvalidSignature
+                );
+                // 5.4 代投;投票引擎自己做"已投过"/"快照外"/"阈值"等所有检查
+                T::InternalVoteEngine::cast_internal_vote(admin.clone(), proposal_id, true)?;
+                accepted = accepted.saturating_add(1);
+            }
+
+            // 6. 根据投票引擎最终状态执行或清理
+            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+
+            if proposal.status == STATUS_PASSED {
+                // 事务内执行,失败随事务回滚资金操作
+                let exec_result =
+                    with_transaction(|| match Self::execute_create(proposal_id, &action) {
+                        Ok(()) => TransactionOutcome::Commit(Ok(())),
+                        Err(e) => TransactionOutcome::Rollback(Err(e)),
                     });
-                    if exec_result.is_err() {
-                        // 执行失败后清理 propose_create/propose_create_personal 写入的 pending 记录，
-                        // 释放地址锁定，防止地址被永久占用。
-                        DuoqianAccounts::<T>::remove(&action.duoqian_address);
-                        PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
-                        Self::deposit_event(Event::<T>::CreateExecutionFailed {
-                            proposal_id,
-                            duoqian_address: action.duoqian_address,
-                        });
-                    }
-                } else if proposal.status == STATUS_REJECTED {
-                    // 提案被拒绝：清理 Pending 条目，释放地址锁定。
+                if exec_result.is_err() {
+                    // 执行失败:清除 Pending,释放地址锁定,防止永久占用。
                     DuoqianAccounts::<T>::remove(&action.duoqian_address);
                     PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
+                    Self::deposit_event(Event::<T>::CreateExecutionFailed {
+                        proposal_id,
+                        duoqian_address: action.duoqian_address.clone(),
+                    });
                 }
+            } else if proposal.status == STATUS_REJECTED {
+                // 提案被拒绝:清理 Pending,释放地址锁定。
+                DuoqianAccounts::<T>::remove(&action.duoqian_address);
+                PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
+                Self::deposit_event(Event::<T>::DuoqianCreateRejected {
+                    proposal_id,
+                    duoqian_address: action.duoqian_address.clone(),
+                });
             }
+
+            // 读回最新 status(execute_create 内部会把 PASSED 推进到 EXECUTED)
+            let final_status = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .map(|p| p.status)
+                .unwrap_or(proposal.status);
+            Self::deposit_event(Event::<T>::CreateFinalized {
+                proposal_id,
+                signatures_accepted: accepted,
+                final_status,
+            });
 
             Ok(())
         }
@@ -711,7 +923,7 @@ pub mod pallet {
         pub fn register_sfid_institution(
             origin: OriginFor<T>,
             sfid_id: SfidIdOf<T>,
-            name: SfidNameOf<T>,
+            account_name: AccountNameOf<T>,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
             // 中文注释：可选的省名（UTF-8 字节），传入即按省签名密钥验签；不传走 SfidMainAccount 兼容路径。
@@ -719,7 +931,7 @@ pub mod pallet {
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
-            ensure!(!name.is_empty(), Error::<T>::EmptySfidName);
+            ensure!(!account_name.is_empty(), Error::<T>::EmptyAccountName);
             let register_nonce_hash = T::Hashing::hash(register_nonce.as_slice());
             ensure!(
                 !UsedRegisterNonce::<T>::get(register_nonce_hash),
@@ -728,7 +940,7 @@ pub mod pallet {
             ensure!(
                 T::SfidInstitutionVerifier::verify_institution_registration(
                     sfid_id.as_slice(),
-                    &name,
+                    &account_name,
                     &register_nonce,
                     &signature,
                     signing_province.as_deref(),
@@ -736,11 +948,14 @@ pub mod pallet {
                 Error::<T>::InvalidSfidInstitutionSignature
             );
             ensure!(
-                !SfidRegisteredAddress::<T>::contains_key(&sfid_id, &name),
+                !SfidRegisteredAddress::<T>::contains_key(&sfid_id, &account_name),
                 Error::<T>::SfidAlreadyRegistered
             );
 
-            let duoqian_address = Self::derive_duoqian_address_from_sfid_id(sfid_id.as_slice(), name.as_slice())?;
+            // 按账户名翻译到 Role（"主账户"/"费用账户" 强制走 OP_MAIN/OP_FEE 且不再拼 account_name；
+            // 其他非空 account_name 走 OP_INSTITUTION 并把 account_name 拼进 preimage）。
+            let role = Self::role_from_account_name(account_name.as_slice())?;
+            let duoqian_address = Self::derive_institution_address(sfid_id.as_slice(), role)?;
             ensure!(
                 !AddressRegisteredSfid::<T>::contains_key(&duoqian_address),
                 Error::<T>::AddressAlreadyExists
@@ -758,18 +973,18 @@ pub mod pallet {
                 Error::<T>::ProtectedSource
             );
 
-            SfidRegisteredAddress::<T>::insert(&sfid_id, &name, &duoqian_address);
+            SfidRegisteredAddress::<T>::insert(&sfid_id, &account_name, &duoqian_address);
             UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
             AddressRegisteredSfid::<T>::insert(
                 &duoqian_address,
                 RegisteredInstitution {
                     sfid_id: sfid_id.clone(),
-                    name: name.clone(),
+                    account_name: account_name.clone(),
                 },
             );
             Self::deposit_event(Event::<T>::SfidInstitutionRegistered {
                 sfid_id,
-                name,
+                account_name,
                 duoqian_address,
                 submitter,
             });
@@ -896,8 +1111,14 @@ pub mod pallet {
             let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             let tag = crate::MODULE_TAG;
-            ensure!(raw.len() > tag.len() && &raw[..tag.len()] == tag, Error::<T>::ProposalActionNotFound);
-            ensure!(raw[tag.len()] == ACTION_CLOSE, Error::<T>::ProposalActionNotFound);
+            ensure!(
+                raw.len() > tag.len() && &raw[..tag.len()] == tag,
+                Error::<T>::ProposalActionNotFound
+            );
+            ensure!(
+                raw[tag.len()] == ACTION_CLOSE,
+                Error::<T>::ProposalActionNotFound
+            );
             let action = CloseDuoqianAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
                 .map_err(|_| Error::<T>::ProposalActionNotFound)?;
 
@@ -922,12 +1143,11 @@ pub mod pallet {
                 if proposal.status == STATUS_PASSED {
                     // 使用 with_transaction 保证 execute_close 内部的资金操作原子性：
                     // 若扣费或转出中途失败，已执行的操作会随事务回滚。
-                    let exec_result = with_transaction(|| {
-                        match Self::execute_close(proposal_id, &action) {
+                    let exec_result =
+                        with_transaction(|| match Self::execute_close(proposal_id, &action) {
                             Ok(()) => TransactionOutcome::Commit(Ok(())),
                             Err(e) => TransactionOutcome::Rollback(Err(e)),
-                        }
-                    });
+                        });
                     if exec_result.is_err() {
                         // 执行失败后清除活跃关闭提案记录，允许重新发起关闭提案（账户仍为 Active）。
                         PendingCloseProposal::<T>::remove(&action.duoqian_address);
@@ -947,15 +1167,15 @@ pub mod pallet {
 
         /// 发起"创建个人多签账户"提案（无需 SFID 注册）。
         ///
-        /// 地址由 `creator + name` 派生：
-        /// `Blake2b_256("DUOQIAN_PERSONAL_V1" || SS58_PREFIX_LE || creator.encode() || name_utf8)`
+        /// 地址由 `creator + account_name` 派生：
+        /// `Blake2b_256(DUOQIAN_DOMAIN || OP_PERSONAL || SS58_PREFIX_LE || creator.encode() || name_utf8)`
         ///
         /// 投票通过后由 vote_create 自动执行入金 + 激活（复用 execute_create）。
         #[pallet::call_index(5)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_create_personal())]
         pub fn propose_create_personal(
             origin: OriginFor<T>,
-            name: SfidNameOf<T>,
+            account_name: AccountNameOf<T>,
             admin_count: u32,
             duoqian_admins: DuoqianAdminsOf<T>,
             threshold: u32,
@@ -968,7 +1188,7 @@ pub mod pallet {
                 Error::<T>::ProtectedSource
             );
 
-            ensure!(!name.is_empty(), Error::<T>::EmptyPersonalName);
+            ensure!(!account_name.is_empty(), Error::<T>::EmptyPersonalName);
 
             ensure!(T::MaxAdmins::get() >= 2, Error::<T>::InvalidRuntimeConfig);
             ensure!(
@@ -1011,7 +1231,7 @@ pub mod pallet {
 
             // 派生地址
             let duoqian_address =
-                Self::derive_personal_duoqian_address(&who, name.as_slice())?;
+                Self::derive_personal_duoqian_address(&who, account_name.as_slice())?;
             ensure!(
                 !DuoqianAccounts::<T>::contains_key(&duoqian_address),
                 Error::<T>::PersonalDuoqianAlreadyExists
@@ -1048,7 +1268,7 @@ pub mod pallet {
                 &duoqian_address,
                 PersonalDuoqianMeta {
                     creator: who.clone(),
-                    name: name.clone(),
+                    account_name: account_name.clone(),
                 },
             );
 
@@ -1072,14 +1292,21 @@ pub mod pallet {
             voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
             voting_engine_system::Pallet::<T>::store_proposal_meta(proposal_id, now);
 
+            // 从投票引擎回读提案超时区块,便于 wuminapp 倒计时。
+            let expires_at = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .map(|p| p.end)
+                .ok_or(Error::<T>::VoteEngineError)?;
+
             Self::deposit_event(Event::<T>::PersonalDuoqianProposed {
                 proposal_id,
                 duoqian_address,
                 proposer: who,
-                name,
+                account_name,
+                admins: duoqian_admins,
                 admin_count,
                 threshold,
                 amount,
+                expires_at,
             });
 
             Ok(())
@@ -1090,17 +1317,17 @@ pub mod pallet {
         /// 本模块无法自动收到通知导致的 Pending / PendingCloseProposal 残留。
         #[pallet::call_index(6)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::cleanup_rejected_proposal())]
-        pub fn cleanup_rejected_proposal(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-        ) -> DispatchResult {
+        pub fn cleanup_rejected_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let _ = ensure_signed(origin)?;
 
             // 读取提案数据，校验 MODULE_TAG 后判断操作类型
             let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             let tag = crate::MODULE_TAG;
-            ensure!(raw.len() > tag.len() && &raw[..tag.len()] == tag, Error::<T>::ProposalActionNotFound);
+            ensure!(
+                raw.len() > tag.len() && &raw[..tag.len()] == tag,
+                Error::<T>::ProposalActionNotFound
+            );
             let action_tag = raw[tag.len()];
 
             // 校验投票引擎状态必须为 REJECTED
@@ -1113,15 +1340,17 @@ pub mod pallet {
 
             match action_tag {
                 ACTION_CREATE => {
-                    let action =
-                        CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(&mut &raw[tag.len() + 1..])
-                            .map_err(|_| Error::<T>::ProposalActionNotFound)?;
+                    let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(
+                        &mut &raw[tag.len() + 1..],
+                    )
+                    .map_err(|_| Error::<T>::ProposalActionNotFound)?;
                     DuoqianAccounts::<T>::remove(&action.duoqian_address);
                     PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
                 }
                 ACTION_CLOSE => {
-                    let action = CloseDuoqianAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
-                        .map_err(|_| Error::<T>::ProposalActionNotFound)?;
+                    let action =
+                        CloseDuoqianAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
+                            .map_err(|_| Error::<T>::ProposalActionNotFound)?;
                     PendingCloseProposal::<T>::remove(&action.duoqian_address);
                 }
                 _ => return Err(Error::<T>::ProposalActionNotFound.into()),
@@ -1137,32 +1366,77 @@ pub mod pallet {
             T::SS58Prefix::get().to_le_bytes()
         }
 
-        /// 从 sfid_id（+ 可选 name）派生 duoqian 地址。
-        /// name 非空时参与派生（注册机构多签），为空时不参与（治理机构多签），保持向后兼容。
-        pub fn derive_duoqian_address_from_sfid_id(
+        /// 按角色派生机构多签账户地址（所有机构统一走这条路径）。
+        ///
+        /// 派生公式按 `role` 分支：
+        /// - `Main` → `blake2_256(DUOQIAN_DOMAIN || OP_MAIN || ss58_le || sfid_id)`
+        /// - `Fee`  → `blake2_256(DUOQIAN_DOMAIN || OP_FEE  || ss58_le || sfid_id)`
+        /// - `Named(account_name)` → `blake2_256(DUOQIAN_DOMAIN || OP_INSTITUTION || ss58_le || sfid_id || account_name)`
+        ///
+        /// 保留名校验：`Named(b"主账户")` 和 `Named(b"费用账户")` 被拒绝（返回
+        /// `ReservedAccountName` 错误），强制这两个角色走 `Main`/`Fee` 分支避免
+        /// 命名空间重叠。空 account_name 的 `Named` 也被拒绝（返回 `EmptyAccountName`）。
+        pub fn derive_institution_address(
             sfid_id: &[u8],
-            name: &[u8],
+            role: InstitutionAccountRole<'_>,
         ) -> Result<T::AccountId, DispatchError> {
-            let mut input = b"DUOQIAN_SFID_V1".to_vec();
+            let (op_tag, name_suffix): (u8, &[u8]) = match role {
+                InstitutionAccountRole::Main => (primitives::core_const::OP_MAIN, &[]),
+                InstitutionAccountRole::Fee => (primitives::core_const::OP_FEE, &[]),
+                InstitutionAccountRole::Named(n) => {
+                    ensure!(!n.is_empty(), Error::<T>::EmptyAccountName);
+                    ensure!(
+                        n != RESERVED_NAME_MAIN && n != RESERVED_NAME_FEE,
+                        Error::<T>::ReservedAccountName
+                    );
+                    (primitives::core_const::OP_INSTITUTION, n)
+                }
+            };
+            let mut input = primitives::core_const::DUOQIAN_DOMAIN.to_vec();
+            input.push(op_tag);
             input.extend_from_slice(&Self::chain_domain_prefix());
             input.extend_from_slice(sfid_id);
-            if !name.is_empty() {
-                input.extend_from_slice(name);
-            }
+            input.extend_from_slice(name_suffix);
             let digest = sp_runtime::traits::BlakeTwo256::hash(input.as_slice());
             T::AccountId::decode(&mut digest.as_ref())
                 .map_err(|_| Error::<T>::DerivedAddressDecodeFailed.into())
         }
 
-        /// 从 creator + name 派生个人多签地址。
+        /// 把 SFID 账户名 bytes 翻译成 `InstitutionAccountRole`：
+        /// - `"主账户"` → `Main`
+        /// - `"费用账户"` → `Fee`
+        /// - 其他非空 → `Named(account_name)`
+        /// - 空 → 返回 `EmptyAccountName`
+        ///
+        /// 这是 `register_sfid_institution` 等 extrinsic 的唯一入口——禁止调用方
+        /// 绕开此函数直接构造 `Role::Named("主账户")`（虽然 `derive_institution_address`
+        /// 里也会拦截，但这里作为第一道防线更清晰）。
+        pub fn role_from_account_name(
+            account_name: &[u8],
+        ) -> Result<InstitutionAccountRole<'_>, DispatchError> {
+            if account_name.is_empty() {
+                return Err(Error::<T>::EmptyAccountName.into());
+            }
+            if account_name == RESERVED_NAME_MAIN {
+                Ok(InstitutionAccountRole::Main)
+            } else if account_name == RESERVED_NAME_FEE {
+                Ok(InstitutionAccountRole::Fee)
+            } else {
+                Ok(InstitutionAccountRole::Named(account_name))
+            }
+        }
+
+        /// 从 creator + account_name 派生个人多签地址。
+        /// 统一 domain：`DUOQIAN_DOMAIN || OP_PERSONAL || ss58_le || creator_32 || account_name_utf8`。
         pub fn derive_personal_duoqian_address(
             creator: &T::AccountId,
-            name: &[u8],
+            account_name: &[u8],
         ) -> Result<T::AccountId, DispatchError> {
-            let mut input = b"DUOQIAN_PERSONAL_V1".to_vec();
+            let mut input = primitives::core_const::DUOQIAN_DOMAIN.to_vec();
+            input.push(primitives::core_const::OP_PERSONAL);
             input.extend_from_slice(&Self::chain_domain_prefix());
             input.extend_from_slice(&creator.encode());
-            input.extend_from_slice(name);
+            input.extend_from_slice(account_name);
             let digest = sp_runtime::traits::BlakeTwo256::hash(input.as_slice());
             T::AccountId::decode(&mut digest.as_ref())
                 .map_err(|_| Error::<T>::DerivedAddressDecodeFailed.into())
@@ -1174,6 +1448,30 @@ pub mod pallet {
                 ensure!(seen.insert(admin.clone()), Error::<T>::DuplicateAdmin);
             }
             Ok(())
+        }
+
+        /// 计算 `admins_root = blake2_256(SCALE.encode(sorted_admins))`。
+        ///
+        /// 排序规则:按 `AccountId` 的字节序(Substrate AccountId32 默认 Ord 即字典序)。
+        /// wuminapp 端需要用同样的排序规则 + SCALE 布局,保证签名消息字节一致。
+        pub fn compute_admins_root(admins: &DuoqianAdminsOf<T>) -> [u8; 32] {
+            let mut sorted: Vec<T::AccountId> = admins.iter().cloned().collect();
+            sorted.sort();
+            sp_io::hashing::blake2_256(&sorted.encode())
+        }
+
+        /// 把 `AccountId` 编码后的前 32 字节当作 sr25519 公钥。
+        ///
+        /// 铁律:项目内 `AccountId = AccountId32`,其 32 字节原始内容即对应 sr25519 公钥。
+        /// 与 `offchain-transaction-pos::settlement::pubkey_from_accountid` 语义对齐。
+        pub fn pubkey_from_accountid(acc: &T::AccountId) -> Result<Sr25519Public, Error<T>> {
+            let encoded = acc.encode();
+            if encoded.len() < 32 {
+                return Err(Error::<T>::MalformedSignature);
+            }
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&encoded[..32]);
+            Ok(Sr25519Public::from_raw(arr))
         }
 
         /// 检查 who 是否是某个 duoqian 机构的管理员
@@ -1222,7 +1520,6 @@ pub mod pallet {
                     account.status = DuoqianStatus::Active;
                 }
             });
-
 
             Self::deposit_event(Event::<T>::DuoqianCreated {
                 proposal_id,
@@ -1317,6 +1614,7 @@ mod tests {
         traits::{ConstU128, ConstU32, VariantCountOf},
     };
     use frame_system as system;
+    use sp_core::{sr25519, Pair as PairT};
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
     use voting_engine_system::internal_vote::ORG_DUOQIAN;
 
@@ -1394,12 +1692,16 @@ mod tests {
     }
 
     pub struct TestSfidInstitutionVerifier;
-    impl SfidInstitutionVerifier<SfidNameOf<Test>, RegisterNonceOf<Test>, RegisterSignatureOf<Test>>
-        for TestSfidInstitutionVerifier
+    impl
+        SfidInstitutionVerifier<
+            AccountNameOf<Test>,
+            RegisterNonceOf<Test>,
+            RegisterSignatureOf<Test>,
+        > for TestSfidInstitutionVerifier
     {
         fn verify_institution_registration(
             _sfid_id: &[u8],
-            _name: &SfidNameOf<Test>,
+            _account_name: &AccountNameOf<Test>,
             nonce: &RegisterNonceOf<Test>,
             signature: &RegisterSignatureOf<Test>,
             _signing_province: Option<&[u8]>,
@@ -1492,10 +1794,7 @@ mod tests {
             }
         }
 
-        fn get_admin_list(
-            org: u8,
-            institution: InstitutionPalletId,
-        ) -> Option<Vec<AccountId32>> {
+        fn get_admin_list(org: u8, institution: InstitutionPalletId) -> Option<Vec<AccountId32>> {
             if org != ORG_DUOQIAN {
                 return None;
             }
@@ -1570,9 +1869,10 @@ mod tests {
         type FeeRouter = ();
         type MaxAdmins = ConstU32<10>;
         type MaxSfidIdLength = ConstU32<96>;
-        type MaxSfidNameLength = ConstU32<128>;
+        type MaxAccountNameLength = ConstU32<128>;
         type MaxRegisterNonceLength = ConstU32<64>;
         type MaxRegisterSignatureLength = ConstU32<64>;
+        type MaxAdminSignatureLength = ConstU32<64>;
         type MinCreateAmount = ConstU128<111>;
         type MinCloseBalance = ConstU128<121>;
         type WeightInfo = ();
@@ -1582,25 +1882,112 @@ mod tests {
         AccountId32::new([0x55; 32])
     }
 
-    fn admin(seed: u8) -> AccountId32 {
-        AccountId32::new([seed; 32])
+    /// 从固定 seed 派生 sr25519 keypair:公钥即为 AccountId32。
+    /// 这样管理员既能作为链上 origin,又能对 CreateVoteIntent 做可验证 sr25519 签名,
+    /// 支撑 `finalize_create` 的离线聚合签名测试。
+    fn admin_pair(seed: u8) -> (AccountId32, sr25519::Pair) {
+        let mut seed_bytes = [0u8; 32];
+        seed_bytes[0] = seed;
+        let pair = sr25519::Pair::from_seed(&seed_bytes);
+        let account = AccountId32::new(pair.public().0);
+        (account, pair)
     }
 
-    fn register_sfid_and_get_address(tag: &str) -> (SfidIdOf<Test>, SfidNameOf<Test>, AccountId32) {
+    fn admin(seed: u8) -> AccountId32 {
+        admin_pair(seed).0
+    }
+
+    /// 从 seed 构造 admins BoundedVec + 对应的 Pair 数组,两者 index 对齐。
+    fn make_admins_keyed(seeds: &[u8]) -> (DuoqianAdminsOf<Test>, Vec<sr25519::Pair>) {
+        let mut accts = Vec::with_capacity(seeds.len());
+        let mut pairs = Vec::with_capacity(seeds.len());
+        for s in seeds {
+            let (a, p) = admin_pair(*s);
+            accts.push(a);
+            pairs.push(p);
+        }
+        let bounded: DuoqianAdminsOf<Test> =
+            accts.try_into().expect("admins bounded vec should fit");
+        (bounded, pairs)
+    }
+
+    /// 构造一条管理员 sr25519 签名(对 `CreateVoteIntent`)。
+    fn sign_create_intent(
+        pair: &sr25519::Pair,
+        proposal_id: u64,
+        duoqian_address: &AccountId32,
+        creator: &AccountId32,
+        admins: &DuoqianAdminsOf<Test>,
+        threshold: u32,
+        amount: u128,
+    ) -> AdminSignatureOf<Test> {
+        let admins_root = Pallet::<Test>::compute_admins_root(admins);
+        let intent = CreateVoteIntent::<AccountId32, u128> {
+            proposal_id,
+            duoqian_address: duoqian_address.clone(),
+            creator: creator.clone(),
+            admins_root,
+            threshold,
+            amount,
+            approve: true,
+        };
+        let ss58 = <Test as frame_system::Config>::SS58Prefix::get();
+        let msg = intent.signing_hash(ss58);
+        let sig = pair.sign(&msg);
+        sig.0.to_vec().try_into().expect("sig should fit")
+    }
+
+    /// finalize_create 聚合 helper:从 pairs 前 `take` 个生成签名 + 调 extrinsic。
+    fn finalize_with(
+        submitter: AccountId32,
+        proposal_id: u64,
+        duoqian_address: &AccountId32,
+        creator: &AccountId32,
+        admins: &DuoqianAdminsOf<Test>,
+        pairs: &[sr25519::Pair],
+        threshold: u32,
+        amount: u128,
+        take: usize,
+    ) -> frame_support::dispatch::DispatchResult {
+        let sigs: AdminSignaturesOf<Test> = admins
+            .iter()
+            .zip(pairs.iter())
+            .take(take)
+            .map(|(a, p)| {
+                let sig = sign_create_intent(
+                    p,
+                    proposal_id,
+                    duoqian_address,
+                    creator,
+                    admins,
+                    threshold,
+                    amount,
+                );
+                (a.clone(), sig)
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("sigs vec should fit");
+        Duoqian::finalize_create(RuntimeOrigin::signed(submitter), proposal_id, sigs)
+    }
+
+    fn register_sfid_with_account_name(
+        tag: &str,
+        account_name_bytes: &[u8],
+    ) -> (SfidIdOf<Test>, AccountNameOf<Test>, AccountId32) {
         let sfid: SfidIdOf<Test> = format!("GFR-LN001-CB0C-{}-20260222", tag)
             .as_bytes()
             .to_vec()
             .try_into()
             .expect("sfid id should fit");
-        let name: SfidNameOf<Test> = format!("Test Institution {}", tag)
-            .as_bytes()
+        let account_name: AccountNameOf<Test> = account_name_bytes
             .to_vec()
             .try_into()
-            .expect("name should fit");
-        let register_nonce: RegisterNonceOf<Test> = b"register-nonce"
-            .to_vec()
-            .try_into()
-            .expect("register nonce should fit");
+            .expect("account_name should fit");
+        let mut nonce_bytes = format!("register-{}-", tag).into_bytes();
+        nonce_bytes.extend_from_slice(&sp_io::hashing::blake2_128(account_name_bytes));
+        let register_nonce: RegisterNonceOf<Test> =
+            nonce_bytes.try_into().expect("register nonce should fit");
         let signature: RegisterSignatureOf<Test> = b"register-ok"
             .to_vec()
             .try_into()
@@ -1608,14 +1995,21 @@ mod tests {
         assert_ok!(Duoqian::register_sfid_institution(
             RuntimeOrigin::signed(relayer()),
             sfid.clone(),
-            name.clone(),
+            account_name.clone(),
             register_nonce,
             signature,
             None,
         ));
-        let duoqian_address = SfidRegisteredAddress::<Test>::get(&sfid, &name)
+        let duoqian_address = SfidRegisteredAddress::<Test>::get(&sfid, &account_name)
             .expect("sfid should be registered");
-        (sfid, name, duoqian_address)
+        (sfid, account_name, duoqian_address)
+    }
+
+    fn register_sfid_and_get_address(
+        tag: &str,
+    ) -> (SfidIdOf<Test>, AccountNameOf<Test>, AccountId32) {
+        let account_name = format!("Test Institution {}", tag);
+        register_sfid_with_account_name(tag, account_name.as_bytes())
     }
 
     fn new_test_ext() -> sp_io::TestExternalities {
@@ -1659,8 +2053,11 @@ mod tests {
     #[test]
     fn register_sfid_works() {
         new_test_ext().execute_with(|| {
-            let (sfid, name, duoqian_address) = register_sfid_and_get_address("A001");
-            assert!(SfidRegisteredAddress::<Test>::contains_key(&sfid, &name));
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("A001");
+            assert!(SfidRegisteredAddress::<Test>::contains_key(
+                &sfid,
+                &account_name
+            ));
             assert!(AddressRegisteredSfid::<Test>::contains_key(
                 &duoqian_address
             ));
@@ -1674,10 +2071,10 @@ mod tests {
                 .to_vec()
                 .try_into()
                 .expect("sfid id should fit");
-            let name: SfidNameOf<Test> = b"Bad Institution"
+            let account_name: AccountNameOf<Test> = b"Bad Institution"
                 .to_vec()
                 .try_into()
-                .expect("name should fit");
+                .expect("account_name should fit");
             let register_nonce: RegisterNonceOf<Test> = b"bad-register-nonce"
                 .to_vec()
                 .try_into()
@@ -1690,7 +2087,7 @@ mod tests {
                 Duoqian::register_sfid_institution(
                     RuntimeOrigin::signed(admin(1)),
                     sfid,
-                    name,
+                    account_name,
                     register_nonce,
                     bad_signature,
                     None,
@@ -1701,16 +2098,69 @@ mod tests {
     }
 
     #[test]
-    fn propose_create_and_vote_to_activate() {
+    fn reserved_role_names_register_to_fixed_main_and_fee_addresses() {
         new_test_ext().execute_with(|| {
-            let (sfid, name, duoqian_address) = register_sfid_and_get_address("B001");
-            let admins = make_admins(&[1, 2, 3]);
+            // 中文注释：同一个 sfid_id 下，"主账户"/"费用账户" 必须强制命中固定角色派生。
+            let (sfid, _, main_address) =
+                register_sfid_with_account_name("ROLE1", RESERVED_NAME_MAIN);
+            let (same_sfid, _, fee_address) =
+                register_sfid_with_account_name("ROLE1", RESERVED_NAME_FEE);
 
-            // 发起创建提案
+            assert_eq!(sfid, same_sfid);
+
+            let expected_main = Pallet::<Test>::derive_institution_address(
+                sfid.as_slice(),
+                InstitutionAccountRole::Main,
+            )
+            .expect("main address should derive");
+            let expected_fee = Pallet::<Test>::derive_institution_address(
+                sfid.as_slice(),
+                InstitutionAccountRole::Fee,
+            )
+            .expect("fee address should derive");
+
+            assert_eq!(main_address, expected_main);
+            assert_eq!(fee_address, expected_fee);
+            assert_ne!(main_address, fee_address);
+        });
+    }
+
+    #[test]
+    fn reserved_role_names_cannot_fall_back_to_named_namespace() {
+        new_test_ext().execute_with(|| {
+            let sfid: SfidIdOf<Test> = b"GFR-LN001-CB0C-ROLE2-20260222"
+                .to_vec()
+                .try_into()
+                .expect("sfid id should fit");
+
+            // 中文注释：保留角色名不能通过 Named 分支落到 OP_INSTITUTION 命名空间。
+            let main_err = Pallet::<Test>::derive_institution_address(
+                sfid.as_slice(),
+                InstitutionAccountRole::Named(RESERVED_NAME_MAIN),
+            )
+            .expect_err("reserved main name must be rejected");
+            assert_eq!(main_err, Error::<Test>::ReservedAccountName.into());
+
+            let fee_err = Pallet::<Test>::derive_institution_address(
+                sfid.as_slice(),
+                InstitutionAccountRole::Named(RESERVED_NAME_FEE),
+            )
+            .expect_err("reserved fee name must be rejected");
+            assert_eq!(fee_err, Error::<Test>::ReservedAccountName.into());
+        });
+    }
+
+    #[test]
+    fn propose_create_and_finalize_to_activate() {
+        new_test_ext().execute_with(|| {
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("B001");
+            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
+
+            // Tx 1:发起创建提案
             assert_ok!(Duoqian::propose_create(
-                RuntimeOrigin::signed(admin(1)),
+                RuntimeOrigin::signed(admins[0].clone()),
                 sfid.clone(),
-                name.clone(),
+                account_name.clone(),
                 3,
                 admins.clone(),
                 2,
@@ -1724,23 +2174,22 @@ mod tests {
 
             let pid = last_proposal_id();
 
-            // 两个管理员投赞成票（阈值 2）
-            assert_ok!(Duoqian::vote_create(
-                RuntimeOrigin::signed(admin(1)),
+            // Tx 2:离线聚合 2 个管理员 sr25519 签名,发起人一笔 finalize_create
+            assert_ok!(finalize_with(
+                admins[0].clone(),
                 pid,
-                true
-            ));
-            assert_ok!(Duoqian::vote_create(
-                RuntimeOrigin::signed(admin(2)),
-                pid,
-                true
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                &pairs,
+                2,
+                1_000,
+                2,
             ));
 
-            // 投票通过后 DuoqianAccounts 应该变为 Active
+            // 投票通过 + execute_create 已入金 + 状态 Active
             let account = DuoqianAccounts::<Test>::get(&duoqian_address).expect("should exist");
             assert_eq!(account.status, DuoqianStatus::Active);
-
-            // 资金已转入
             assert_eq!(Balances::free_balance(&duoqian_address), 1_000);
         });
     }
@@ -1748,30 +2197,31 @@ mod tests {
     #[test]
     fn propose_close_and_vote_to_close() {
         new_test_ext().execute_with(|| {
-            let (sfid, name, duoqian_address) = register_sfid_and_get_address("C001");
-            let admins = make_admins(&[1, 2, 3]);
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("C001");
+            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
             let beneficiary = admin(4);
 
-            // 先创建
+            // 先创建(走 finalize_create 离线聚合路径)
             assert_ok!(Duoqian::propose_create(
-                RuntimeOrigin::signed(admin(1)),
+                RuntimeOrigin::signed(admins[0].clone()),
                 sfid.clone(),
-                name.clone(),
+                account_name.clone(),
                 3,
                 admins.clone(),
                 2,
                 1_000,
             ));
             let create_pid = last_proposal_id();
-            assert_ok!(Duoqian::vote_create(
-                RuntimeOrigin::signed(admin(1)),
+            assert_ok!(finalize_with(
+                admins[0].clone(),
                 create_pid,
-                true
-            ));
-            assert_ok!(Duoqian::vote_create(
-                RuntimeOrigin::signed(admin(2)),
-                create_pid,
-                true
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                &pairs,
+                2,
+                1_000,
+                2,
             ));
 
             // 确认 active
@@ -1780,21 +2230,21 @@ mod tests {
 
             // 发起关闭提案
             assert_ok!(Duoqian::propose_close(
-                RuntimeOrigin::signed(admin(1)),
+                RuntimeOrigin::signed(admins[0].clone()),
                 duoqian_address.clone(),
                 beneficiary.clone(),
             ));
 
             let close_pid = last_proposal_id();
 
-            // 投票关闭
+            // 关闭仍走在线投票(vote_close 本步未改造)
             assert_ok!(Duoqian::vote_close(
-                RuntimeOrigin::signed(admin(1)),
+                RuntimeOrigin::signed(admins[0].clone()),
                 close_pid,
                 true
             ));
             assert_ok!(Duoqian::vote_close(
-                RuntimeOrigin::signed(admin(2)),
+                RuntimeOrigin::signed(admins[1].clone()),
                 close_pid,
                 true
             ));
@@ -1812,7 +2262,7 @@ mod tests {
     #[test]
     fn non_admin_cannot_propose_create() {
         new_test_ext().execute_with(|| {
-            let (sfid, name, _) = register_sfid_and_get_address("D001");
+            let (sfid, account_name, _) = register_sfid_and_get_address("D001");
             let admins = make_admins(&[1, 2, 3]);
 
             // admin(4) 不在管理员列表中
@@ -1820,7 +2270,7 @@ mod tests {
                 Duoqian::propose_create(
                     RuntimeOrigin::signed(admin(4)),
                     sfid.clone(),
-                    name.clone(),
+                    account_name.clone(),
                     3,
                     admins,
                     2,
@@ -1832,27 +2282,57 @@ mod tests {
     }
 
     #[test]
-    fn non_admin_cannot_vote() {
+    fn finalize_rejects_non_admin_signature() {
         new_test_ext().execute_with(|| {
-            let (sfid, name, _) = register_sfid_and_get_address("E001");
-            let admins = make_admins(&[1, 2, 3]);
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("E001");
+            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
 
             assert_ok!(Duoqian::propose_create(
-                RuntimeOrigin::signed(admin(1)),
+                RuntimeOrigin::signed(admins[0].clone()),
                 sfid.clone(),
-                name.clone(),
+                account_name.clone(),
                 3,
-                admins,
+                admins.clone(),
                 2,
                 1_000,
             ));
 
             let pid = last_proposal_id();
 
-            // admin(4) 不在管理员列表中
+            // 构造 sig:一个合法管理员 + 一个非管理员(admin(4) 不在 admins 列表)
+            let legit_sig = sign_create_intent(
+                &pairs[0],
+                pid,
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                2,
+                1_000,
+            );
+            let (outsider, outsider_pair) = admin_pair(99);
+            let outsider_sig = sign_create_intent(
+                &outsider_pair,
+                pid,
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                2,
+                1_000,
+            );
+            let sigs: AdminSignaturesOf<Test> = vec![
+                (admins[0].clone(), legit_sig),
+                (outsider, outsider_sig),
+            ]
+            .try_into()
+            .expect("sigs vec should fit");
+
             assert_noop!(
-                Duoqian::vote_create(RuntimeOrigin::signed(admin(4)), pid, true),
-                Error::<Test>::UnauthorizedAdmin
+                Duoqian::finalize_create(
+                    RuntimeOrigin::signed(admins[0].clone()),
+                    pid,
+                    sigs
+                ),
+                Error::<Test>::UnauthorizedSignature
             );
         });
     }
@@ -1860,14 +2340,14 @@ mod tests {
     #[test]
     fn cannot_close_pending_account() {
         new_test_ext().execute_with(|| {
-            let (sfid, name, duoqian_address) = register_sfid_and_get_address("F001");
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("F001");
             let admins = make_admins(&[1, 2, 3]);
 
             // propose create 但不投票通过
             assert_ok!(Duoqian::propose_create(
                 RuntimeOrigin::signed(admin(1)),
                 sfid,
-                name.clone(),
+                account_name.clone(),
                 3,
                 admins,
                 2,
@@ -1884,35 +2364,40 @@ mod tests {
     #[test]
     fn propose_close_is_blocked_when_institution_guard_denies_source() {
         new_test_ext().execute_with(|| {
-            let (sfid, name, duoqian_address) = register_sfid_and_get_address("F002");
-            let admins = make_admins(&[1, 2, 3]);
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("F002");
+            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
 
             assert_ok!(Duoqian::propose_create(
-                RuntimeOrigin::signed(admin(1)),
+                RuntimeOrigin::signed(admins[0].clone()),
                 sfid,
-                name.clone(),
+                account_name.clone(),
                 3,
-                admins,
+                admins.clone(),
                 2,
                 1_000,
             ));
             let create_pid = last_proposal_id();
-            assert_ok!(Duoqian::vote_create(
-                RuntimeOrigin::signed(admin(1)),
+            assert_ok!(finalize_with(
+                admins[0].clone(),
                 create_pid,
-                true
-            ));
-            assert_ok!(Duoqian::vote_create(
-                RuntimeOrigin::signed(admin(2)),
-                create_pid,
-                true
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                &pairs,
+                2,
+                1_000,
+                2,
             ));
 
             DENIED_CLOSE_SOURCE
                 .with(|blocked| *blocked.borrow_mut() = Some(duoqian_address.clone()));
 
             assert_noop!(
-                Duoqian::propose_close(RuntimeOrigin::signed(admin(1)), duoqian_address, admin(4),),
+                Duoqian::propose_close(
+                    RuntimeOrigin::signed(admins[0].clone()),
+                    duoqian_address,
+                    admin(4),
+                ),
                 Error::<Test>::ProtectedSource
             );
 
@@ -1923,7 +2408,7 @@ mod tests {
     #[test]
     fn duplicate_admin_is_rejected() {
         new_test_ext().execute_with(|| {
-            let (sfid, name, _) = register_sfid_and_get_address("G001");
+            let (sfid, account_name, _) = register_sfid_and_get_address("G001");
             let admins: DuoqianAdminsOf<Test> = vec![admin(1), admin(1), admin(2)]
                 .try_into()
                 .expect("should fit");
@@ -1932,7 +2417,7 @@ mod tests {
                 Duoqian::propose_create(
                     RuntimeOrigin::signed(admin(1)),
                     sfid,
-                    name.clone(),
+                    account_name.clone(),
                     3,
                     admins,
                     2,
@@ -1946,14 +2431,14 @@ mod tests {
     #[test]
     fn amount_below_minimum_is_rejected() {
         new_test_ext().execute_with(|| {
-            let (sfid, name, _) = register_sfid_and_get_address("H001");
+            let (sfid, account_name, _) = register_sfid_and_get_address("H001");
             let admins = make_admins(&[1, 2, 3]);
 
             assert_noop!(
                 Duoqian::propose_create(
                     RuntimeOrigin::signed(admin(1)),
                     sfid,
-                    name.clone(),
+                    account_name.clone(),
                     3,
                     admins,
                     2,
@@ -1970,28 +2455,37 @@ mod tests {
     #[test]
     fn duplicate_close_proposal_is_rejected() {
         new_test_ext().execute_with(|| {
-            let (sfid, name, duoqian_address) = register_sfid_and_get_address("I001");
-            let admins = make_admins(&[1, 2]);
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("I001");
+            let (admins, pairs) = make_admins_keyed(&[1, 2]);
 
-            // 创建并激活
+            // 创建并激活(走 finalize_create)
             assert_ok!(Duoqian::propose_create(
-                RuntimeOrigin::signed(admin(1)),
+                RuntimeOrigin::signed(admins[0].clone()),
                 sfid,
-                name.clone(),
+                account_name.clone(),
                 2,
-                admins,
+                admins.clone(),
                 2,
                 1_000,
             ));
             let create_pid = last_proposal_id();
-            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(1)), create_pid, true));
-            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(2)), create_pid, true));
+            assert_ok!(finalize_with(
+                admins[0].clone(),
+                create_pid,
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                &pairs,
+                2,
+                1_000,
+                2,
+            ));
 
             let beneficiary = admin(3);
 
             // 第一个关闭提案 — 应该成功
             assert_ok!(Duoqian::propose_close(
-                RuntimeOrigin::signed(admin(1)),
+                RuntimeOrigin::signed(admins[0].clone()),
                 duoqian_address.clone(),
                 beneficiary.clone(),
             ));
@@ -1999,7 +2493,7 @@ mod tests {
             // 第二个关闭提案 — 应该被 CloseAlreadyPending 拒绝
             assert_noop!(
                 Duoqian::propose_close(
-                    RuntimeOrigin::signed(admin(2)),
+                    RuntimeOrigin::signed(admins[1].clone()),
                     duoqian_address.clone(),
                     beneficiary.clone(),
                 ),
@@ -2012,13 +2506,13 @@ mod tests {
     #[test]
     fn execute_create_failure_releases_address() {
         new_test_ext().execute_with(|| {
-            let (sfid, name, duoqian_address) = register_sfid_and_get_address("J001");
-            let admins = make_admins(&[1, 2]);
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("J001");
+            let (admins, pairs) = make_admins_keyed(&[1, 2]);
 
             assert_ok!(Duoqian::propose_create(
-                RuntimeOrigin::signed(admin(1)),
+                RuntimeOrigin::signed(admins[0].clone()),
                 sfid.clone(),
-                name.clone(),
+                account_name.clone(),
                 2,
                 admins.clone(),
                 2,
@@ -2026,13 +2520,22 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            // 排干 admin(1) 的余额，使 execute_create 在 transfer 时失败
-            let _ = Balances::slash(&admin(1), 99_900);
-            assert!(Balances::free_balance(&admin(1)) < 1_010);
+            // 排干 admins[0] 的余额,使 execute_create 在 transfer 时失败
+            let _ = Balances::slash(&admins[0], 99_900);
+            assert!(Balances::free_balance(&admins[0]) < 1_010);
 
-            // 最后一票触发 execute_create，因余额不足应失败
-            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(1)), pid, true));
-            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(2)), pid, true));
+            // finalize_create 达阈值 → 触发 execute_create,因余额不足失败
+            assert_ok!(finalize_with(
+                admins[0].clone(),
+                pid,
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                &pairs,
+                2,
+                1_000,
+                2,
+            ));
 
             // execute_create 失败后 DuoqianAccounts 中的 Pending 条目应被清除
             assert!(
@@ -2045,52 +2548,290 @@ mod tests {
         });
     }
 
-    /// 修复验证：个人多签创建流程正常。
+    /// 个人多签(无 SFID 归属)也走 finalize_create 离线聚合路径。
     #[test]
     fn personal_duoqian_create_works() {
         new_test_ext().execute_with(|| {
-            let name: SfidNameOf<Test> = b"Family Fund"
+            let account_name: AccountNameOf<Test> = b"Family Fund"
                 .to_vec()
                 .try_into()
-                .expect("name should fit");
-            let admins = make_admins(&[1, 2]);
+                .expect("account_name should fit");
+            let (admins, pairs) = make_admins_keyed(&[1, 2]);
 
             assert_ok!(Duoqian::propose_create_personal(
-                RuntimeOrigin::signed(admin(1)),
-                name.clone(),
+                RuntimeOrigin::signed(admins[0].clone()),
+                account_name.clone(),
                 2,
-                admins,
+                admins.clone(),
                 2,
                 1_000,
             ));
             let pid = last_proposal_id();
 
             // 派生地址
-            let duoqian_address =
-                Pallet::<Test>::derive_personal_duoqian_address(&admin(1), name.as_slice())
-                    .expect("derive should succeed");
+            let duoqian_address = Pallet::<Test>::derive_personal_duoqian_address(
+                &admins[0],
+                account_name.as_slice(),
+            )
+            .expect("derive should succeed");
 
-            // 投票通过前处于 Pending
+            // finalize 前处于 Pending
             assert_eq!(
-                DuoqianAccounts::<Test>::get(&duoqian_address)
-                    .map(|a| a.status),
+                DuoqianAccounts::<Test>::get(&duoqian_address).map(|a| a.status),
                 Some(DuoqianStatus::Pending)
             );
 
-            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(1)), pid, true));
-            assert_ok!(Duoqian::vote_create(RuntimeOrigin::signed(admin(2)), pid, true));
+            // 两人签名聚合一笔 finalize_create
+            assert_ok!(finalize_with(
+                admins[0].clone(),
+                pid,
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                &pairs,
+                2,
+                1_000,
+                2,
+            ));
 
-            // 投票通过后变为 Active，资金已转入
-            let account =
-                DuoqianAccounts::<Test>::get(&duoqian_address).expect("should exist");
+            // 投票通过后变为 Active,资金已转入
+            let account = DuoqianAccounts::<Test>::get(&duoqian_address).expect("should exist");
             assert_eq!(account.status, DuoqianStatus::Active);
             assert_eq!(Balances::free_balance(&duoqian_address), 1_000);
 
             // PersonalDuoqianInfo 已写入
             let meta = PersonalDuoqianInfo::<Test>::get(&duoqian_address)
                 .expect("personal info should exist");
-            assert_eq!(meta.creator, admin(1));
-            assert_eq!(meta.name, name);
+            assert_eq!(meta.creator, admins[0]);
+            assert_eq!(meta.account_name, account_name);
+        });
+    }
+
+    // ──── Step 1 离线 QR 聚合专项测试 ────
+
+    /// finalize_create 签名数不足阈值时必须拒绝。
+    #[test]
+    fn finalize_create_insufficient_sigs_rejected() {
+        new_test_ext().execute_with(|| {
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("K001");
+            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
+
+            assert_ok!(Duoqian::propose_create(
+                RuntimeOrigin::signed(admins[0].clone()),
+                sfid,
+                account_name,
+                3,
+                admins.clone(),
+                2,
+                1_000,
+            ));
+            let pid = last_proposal_id();
+
+            // 只提交 1 个签名,阈值 2,应拒绝
+            assert_noop!(
+                finalize_with(
+                    admins[0].clone(),
+                    pid,
+                    &duoqian_address,
+                    &admins[0],
+                    &admins,
+                    &pairs,
+                    2,
+                    1_000,
+                    1,
+                ),
+                Error::<Test>::InsufficientSignatures
+            );
+        });
+    }
+
+    /// 同一 admin 在同一批签名里重复出现必须拒绝。
+    #[test]
+    fn finalize_create_duplicate_sig_rejected() {
+        new_test_ext().execute_with(|| {
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("K002");
+            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
+
+            assert_ok!(Duoqian::propose_create(
+                RuntimeOrigin::signed(admins[0].clone()),
+                sfid,
+                account_name,
+                3,
+                admins.clone(),
+                2,
+                1_000,
+            ));
+            let pid = last_proposal_id();
+
+            let sig0 =
+                sign_create_intent(&pairs[0], pid, &duoqian_address, &admins[0], &admins, 2, 1_000);
+            let sig0_dup =
+                sign_create_intent(&pairs[0], pid, &duoqian_address, &admins[0], &admins, 2, 1_000);
+            let sigs: AdminSignaturesOf<Test> = vec![
+                (admins[0].clone(), sig0),
+                (admins[0].clone(), sig0_dup),
+            ]
+            .try_into()
+            .expect("sigs vec should fit");
+
+            assert_noop!(
+                Duoqian::finalize_create(
+                    RuntimeOrigin::signed(admins[0].clone()),
+                    pid,
+                    sigs
+                ),
+                Error::<Test>::DuplicateSignature
+            );
+        });
+    }
+
+    /// 被篡改的签名验证失败必须拒绝。
+    #[test]
+    fn finalize_create_tampered_sig_rejected() {
+        new_test_ext().execute_with(|| {
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("K003");
+            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
+
+            assert_ok!(Duoqian::propose_create(
+                RuntimeOrigin::signed(admins[0].clone()),
+                sfid,
+                account_name,
+                3,
+                admins.clone(),
+                2,
+                1_000,
+            ));
+            let pid = last_proposal_id();
+
+            // 对错误 amount 签(wuminapp 用 999 签但链上 Tx 1 写的是 1_000)
+            let wrong_sig = sign_create_intent(
+                &pairs[0],
+                pid,
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                2,
+                999,
+            );
+            let right_sig = sign_create_intent(
+                &pairs[1],
+                pid,
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                2,
+                1_000,
+            );
+            let sigs: AdminSignaturesOf<Test> = vec![
+                (admins[0].clone(), wrong_sig),
+                (admins[1].clone(), right_sig),
+            ]
+            .try_into()
+            .expect("sigs vec should fit");
+
+            assert_noop!(
+                Duoqian::finalize_create(
+                    RuntimeOrigin::signed(admins[0].clone()),
+                    pid,
+                    sigs
+                ),
+                Error::<Test>::InvalidSignature
+            );
+        });
+    }
+
+    /// 签名长度不是 64 字节必须拒绝。
+    #[test]
+    fn finalize_create_malformed_sig_rejected() {
+        new_test_ext().execute_with(|| {
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("K004");
+            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
+
+            assert_ok!(Duoqian::propose_create(
+                RuntimeOrigin::signed(admins[0].clone()),
+                sfid,
+                account_name,
+                3,
+                admins.clone(),
+                2,
+                1_000,
+            ));
+            let pid = last_proposal_id();
+
+            let good =
+                sign_create_intent(&pairs[0], pid, &duoqian_address, &admins[0], &admins, 2, 1_000);
+            // 构造长度 32 的非法签名(应为 64)
+            let bad_sig: AdminSignatureOf<Test> =
+                vec![0u8; 32].try_into().expect("32 bytes fits");
+            let sigs: AdminSignaturesOf<Test> = vec![
+                (admins[0].clone(), good),
+                (admins[1].clone(), bad_sig),
+            ]
+            .try_into()
+            .expect("sigs vec should fit");
+
+            assert_noop!(
+                Duoqian::finalize_create(
+                    RuntimeOrigin::signed(admins[0].clone()),
+                    pid,
+                    sigs
+                ),
+                Error::<Test>::MalformedSignature
+            );
+        });
+    }
+
+    /// finalize_create 成功后再次调用应当被投票引擎的 AlreadyVoted 保护。
+    #[test]
+    fn finalize_create_second_call_is_replay_protected() {
+        new_test_ext().execute_with(|| {
+            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("K005");
+            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
+
+            assert_ok!(Duoqian::propose_create(
+                RuntimeOrigin::signed(admins[0].clone()),
+                sfid,
+                account_name,
+                3,
+                admins.clone(),
+                2,
+                1_000,
+            ));
+            let pid = last_proposal_id();
+
+            // 第一次 finalize:成功激活
+            assert_ok!(finalize_with(
+                admins[0].clone(),
+                pid,
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                &pairs,
+                2,
+                1_000,
+                2,
+            ));
+            assert_eq!(
+                DuoqianAccounts::<Test>::get(&duoqian_address).map(|a| a.status),
+                Some(DuoqianStatus::Active)
+            );
+
+            // 第二次 finalize:投票引擎已 STATUS_EXECUTED → 非 Voting 状态 → 拒绝
+            let second = finalize_with(
+                admins[0].clone(),
+                pid,
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                &pairs,
+                2,
+                1_000,
+                2,
+            );
+            assert!(second.is_err(), "replay must fail");
+
+            // 余额依然等于第一次的 1_000(没有重复入金)
+            assert_eq!(Balances::free_balance(&duoqian_address), 1_000);
         });
     }
 }

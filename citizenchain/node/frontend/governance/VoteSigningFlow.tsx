@@ -10,8 +10,6 @@ type Props = {
   proposalKind: number;
   adminWallets: AdminWalletMatch[];
   shenfenId?: string;
-  /** 费率提案投票：使用 pallet 21 call 2 而非默认的 pallet 19 call 1。 */
-  useRateVote?: boolean;
   /** 安全基金提案投票：使用 pallet 19 call 4。 */
   useSafetyFundVote?: boolean;
   /** 手续费划转投票：使用 pallet 19 call 6。 */
@@ -23,7 +21,7 @@ type Props = {
 type FlowStep = 'select' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function VoteSigningFlow({
-  proposalId, proposalKind, adminWallets, shenfenId, useRateVote, useSafetyFundVote, useSweepVote, onClose, onSuccess,
+  proposalId, proposalKind, adminWallets, shenfenId, useSafetyFundVote, useSweepVote, onClose, onSuccess,
 }: Props) {
   const [step, setStep] = useState<FlowStep>('select');
   const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
@@ -65,9 +63,6 @@ export function VoteSigningFlow({
       } else if (useSafetyFundVote) {
         result = await api.buildSafetyFundVoteRequest(proposalId, selectedWallet.pubkeyHex, approve);
         cdHex = buildSafetyFundVoteCallDataHex(proposalId, approve);
-      } else if (useRateVote) {
-        result = await api.buildRateVoteRequest(proposalId, selectedWallet.pubkeyHex, approve);
-        cdHex = buildRateVoteCallDataHex(proposalId, approve);
       } else {
         result = await api.buildVoteRequest(proposalId, selectedWallet.pubkeyHex, approve);
         cdHex = buildVoteCallDataHex(proposalId, approve);
@@ -194,17 +189,6 @@ function buildSafetyFundVoteCallDataHex(proposalId: number, approve: boolean): s
   const view = new DataView(buf);
   const arr = new Uint8Array(buf);
   arr[0] = 19; arr[1] = 4; // pallet 19, call 4 = vote_safety_fund_transfer
-  view.setUint32(2, proposalId & 0xFFFFFFFF, true);
-  view.setUint32(6, Math.floor(proposalId / 0x100000000), true);
-  arr[10] = approve ? 1 : 0;
-  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function buildRateVoteCallDataHex(proposalId: number, approve: boolean): string {
-  const buf = new ArrayBuffer(11);
-  const view = new DataView(buf);
-  const arr = new Uint8Array(buf);
-  arr[0] = 21; arr[1] = 2; // pallet 21, call 2 = vote_institution_rate
   view.setUint32(2, proposalId & 0xFFFFFFFF, true);
   view.setUint32(6, Math.floor(proposalId / 0x100000000), true);
   arr[10] = approve ? 1 : 0;

@@ -115,8 +115,8 @@ mod benchmarks {
         let old_raw = voting_engine_system::Pallet::<T>::get_proposal_data(0)
             .expect("proposal data should exist");
         let tag = crate::MODULE_TAG;
-        let mut action =
-            GrandpaKeyReplacementAction::decode(&mut &old_raw[tag.len()..]).expect("action should decode");
+        let mut action = GrandpaKeyReplacementAction::decode(&mut &old_raw[tag.len()..])
+            .expect("action should decode");
         action.old_key = seeded_public_key(250);
         let mut new_data = sp_runtime::sp_std::vec::Vec::from(tag);
         new_data.extend_from_slice(&action.encode());

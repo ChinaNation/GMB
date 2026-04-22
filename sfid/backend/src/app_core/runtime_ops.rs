@@ -528,6 +528,173 @@ pub(crate) fn backfill_and_reconcile_public_security(state: &AppState) {
     );
 }
 
+/// 把 `backfill_and_reconcile_public_security` 新写入的公安局机构 + 2 条默认账户
+/// 从 legacy store 幂等同步到 sharded_store。
+///
+/// 为什么需要这一步:
+/// - `reconcile_public_security_for_province` 是同步函数,只持 legacy `&mut Store`,
+///   无法写 sharded_store(sharded 接口是 async)
+/// - `migrate_legacy_store_if_needed` 只在空库首次启动时写 DB
+/// - `preload_all_shards` 从 DB 加载已分片的数据,读不到 legacy 内存新增条目
+///
+/// 所以启动时 reconcile 新建的公安局机构和它们的主账户 / 费用账户,前端按省读
+/// sharded_store 永远看不到。本函数在 tokio runtime 起来 + preload 完成后跑一次,
+/// 把 legacy 里所有 `PublicSecurity` 机构及其默认账户写入 sharded,**幂等**(or_insert)。
+pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
+    use crate::institutions::model::{account_key_to_string, MultisigAccount, MultisigInstitution};
+    use crate::models::MultisigChainStatus;
+    use crate::sfid::InstitutionCategory;
+
+    // 1. 从 legacy 快照取所有公安局机构 + 其 2 条默认账户
+    let snapshot: Vec<(MultisigInstitution, Vec<MultisigAccount>)> = match state.store.read() {
+        Ok(store) => {
+            let institutions: Vec<MultisigInstitution> = store
+                .multisig_institutions
+                .values()
+                .filter(|i| matches!(i.category, InstitutionCategory::PublicSecurity))
+                .cloned()
+                .collect();
+            institutions
+                .into_iter()
+                .map(|inst| {
+                    let accs: Vec<MultisigAccount> = store
+                        .multisig_accounts
+                        .values()
+                        .filter(|a| a.sfid_id == inst.sfid_id)
+                        .cloned()
+                        .collect();
+                    (inst, accs)
+                })
+                .collect()
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "sync_public_security_to_sharded: store read failed");
+            return;
+        }
+    };
+
+    let mut inst_written = 0usize;
+    let mut acc_written = 0usize;
+
+    // 2. 按省分组 → 一次 write_province 写入
+    use std::collections::HashMap;
+    let mut by_province: HashMap<String, Vec<(MultisigInstitution, Vec<MultisigAccount>)>> =
+        HashMap::new();
+    for (inst, accs) in snapshot {
+        by_province.entry(inst.province.clone()).or_default().push((inst, accs));
+    }
+    for (province, group) in by_province {
+        let group_len = group.len();
+        let acc_count: usize = group.iter().map(|(_, a)| a.len()).sum();
+        let write_result = state
+            .sharded_store
+            .write_province(&province, move |shard| {
+                for (inst, accs) in group {
+                    shard
+                        .multisig_institutions
+                        .entry(inst.sfid_id.clone())
+                        .or_insert(inst.clone());
+                    for acc in accs {
+                        let key = account_key_to_string(&acc.sfid_id, &acc.account_name);
+                        // 已存在账户保留链上状态/地址;不存在才补
+                        shard.multisig_accounts.entry(key).or_insert(acc);
+                    }
+                }
+            })
+            .await;
+        match write_result {
+            Ok(()) => {
+                inst_written += group_len;
+                acc_written += acc_count;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    province = %province,
+                    error = %e,
+                    "sync_public_security_to_sharded: shard write failed"
+                );
+            }
+        }
+    }
+
+    // 3. 对 legacy 里存在但缺默认账户的公安局(老版本遗留),再补齐一次默认账户
+    //    走 DUOQIAN_V1 本地派生;同时双写 legacy + sharded
+    let missing: Vec<(String, String)> = {
+        let mut out: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+        if let Ok(store) = state.store.read() {
+            for inst in store
+                .multisig_institutions
+                .values()
+                .filter(|i| matches!(i.category, InstitutionCategory::PublicSecurity))
+            {
+                for name in crate::institutions::service::DEFAULT_ACCOUNT_NAMES {
+                    let key = account_key_to_string(&inst.sfid_id, name);
+                    if !store.multisig_accounts.contains_key(&key) {
+                        out.insert((inst.province.clone(), inst.sfid_id.clone()));
+                    }
+                }
+            }
+        }
+        out.into_iter().collect()
+    };
+    if !missing.is_empty() {
+        if let Ok(mut store) = state.store.write() {
+            for (_, sfid) in &missing {
+                crate::institutions::service::insert_default_accounts_into_legacy(
+                    &mut store, sfid, "SYSTEM",
+                );
+            }
+        }
+        // 同步到 sharded
+        let missing_by_prov: HashMap<String, Vec<String>> = missing.into_iter().fold(
+            HashMap::new(),
+            |mut acc, (prov, sfid)| {
+                acc.entry(prov).or_default().push(sfid);
+                acc
+            },
+        );
+        for (province, sfids) in missing_by_prov {
+            let sfids_clone = sfids.clone();
+            let backfilled = sfids.len() * crate::institutions::service::DEFAULT_ACCOUNT_NAMES.len();
+            let write_result = state
+                .sharded_store
+                .write_province(&province, move |shard| {
+                    let now = chrono::Utc::now();
+                    for sfid in &sfids_clone {
+                        for name in crate::institutions::service::DEFAULT_ACCOUNT_NAMES {
+                            let key = account_key_to_string(sfid, name);
+                            let addr = crate::institutions::derive::derive_duoqian_address(
+                                sfid, name,
+                            );
+                            shard.multisig_accounts.entry(key).or_insert_with(|| {
+                                MultisigAccount {
+                                    sfid_id: sfid.clone(),
+                                    account_name: (*name).to_string(),
+                                    duoqian_address: addr,
+                                    chain_status: MultisigChainStatus::Inactive,
+                                    chain_tx_hash: None,
+                                    chain_block_number: None,
+                                    created_by: "SYSTEM".to_string(),
+                                    created_at: now,
+                                }
+                            });
+                        }
+                    }
+                })
+                .await;
+            if write_result.is_ok() {
+                acc_written += backfilled;
+            }
+        }
+    }
+
+    tracing::info!(
+        institutions_synced = inst_written,
+        accounts_synced = acc_written,
+        "public security sharded_store sync finished"
+    );
+}
+
 /// 任务卡 `20260408-sfid-public-security-cpms-embed`:
 /// 启动时清理孤儿 CPMS 站点。
 ///

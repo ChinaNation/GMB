@@ -17,7 +17,6 @@ import 'proposal_cache.dart';
 import 'proposal_context.dart';
 import 'runtime_upgrade_detail_page.dart';
 import 'runtime_upgrade_service.dart';
-import 'fee_rate_detail_page.dart';
 import 'transfer_proposal_detail_page.dart';
 import 'transfer_proposal_service.dart';
 
@@ -574,17 +573,6 @@ class _AllProposalsViewState extends State<AllProposalsView> {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => DuoqianManageDetailPage(
-            institution: inst,
-            proposalId: proposalId,
-            proposalContext: item.context,
-          ),
-        ),
-      );
-    } else if (item.proposal.feeRateDetail != null && inst != null) {
-      // 费率提案
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => FeeRateDetailPage(
             institution: inst,
             proposalId: proposalId,
             proposalContext: item.context,

@@ -71,7 +71,10 @@ pub fn fetch_population_snapshot(pubkey_hex: &str) -> Result<PopulationSnapshot,
 
     if body.code != Some(0) {
         let msg = body.message.unwrap_or_default();
-        return Err(format!("SFID 返回错误: code={:?}, message={msg}", body.code));
+        return Err(format!(
+            "SFID 返回错误: code={:?}, message={msg}",
+            body.code
+        ));
     }
 
     let data = body.data.ok_or("SFID 响应缺少 data 字段")?;

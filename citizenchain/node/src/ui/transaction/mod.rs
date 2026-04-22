@@ -78,10 +78,7 @@ pub fn add_wallet(
 }
 
 #[tauri::command]
-pub fn remove_wallet(
-    app: tauri::AppHandle,
-    wallet_id: String,
-) -> Result<WalletStore, String> {
+pub fn remove_wallet(app: tauri::AppHandle, wallet_id: String) -> Result<WalletStore, String> {
     let mut store = wallet_store::load(&app)?;
     let before_len = store.wallets.len();
     store.wallets.retain(|w| w.id != wallet_id);
@@ -97,10 +94,7 @@ pub fn remove_wallet(
 }
 
 #[tauri::command]
-pub fn set_active_wallet(
-    app: tauri::AppHandle,
-    wallet_id: String,
-) -> Result<WalletStore, String> {
+pub fn set_active_wallet(app: tauri::AppHandle, wallet_id: String) -> Result<WalletStore, String> {
     let mut store = wallet_store::load(&app)?;
     if !store.wallets.iter().any(|w| w.id == wallet_id) {
         return Err("钱包不存在".to_string());
@@ -144,8 +138,8 @@ pub fn build_transfer_request(
     if sender_clean.len() != 64 || !sender_clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("发送方公钥格式无效".to_string());
     }
-    let sender_bytes = hex::decode(&sender_clean)
-        .map_err(|e| format!("发送方公钥解码失败: {e}"))?;
+    let sender_bytes =
+        hex::decode(&sender_clean).map_err(|e| format!("发送方公钥解码失败: {e}"))?;
 
     // 校验收款地址
     let dest_pubkey = signing::decode_ss58_to_pubkey(&to_address)?;
@@ -168,8 +162,8 @@ pub fn build_transfer_request(
     let fee_yuan = fee_fen as f64 / 100.0;
 
     // 校验余额
-    let balance_fen = institution::fetch_balance(&sender_clean)?
-        .ok_or("发送方账户不存在或余额为零")?;
+    let balance_fen =
+        institution::fetch_balance(&sender_clean)?.ok_or("发送方账户不存在或余额为零")?;
     let existential_deposit: u128 = 111; // 1.11 元
     let total_needed = amount_fen + fee_fen;
     if balance_fen < total_needed + existential_deposit {
@@ -189,8 +183,8 @@ pub fn build_transfer_request(
     // 构建 call_data: Balances::transfer_keep_alive
     // pallet_index=2, call_index=3, MultiAddress::Id(0x00) + 32 bytes, Compact<u128>(amount_fen)
     let mut call_data = Vec::with_capacity(70);
-    call_data.push(2u8);  // Balances pallet index
-    call_data.push(3u8);  // transfer_keep_alive call index
+    call_data.push(2u8); // Balances pallet index
+    call_data.push(3u8); // transfer_keep_alive call index
     call_data.push(0x00); // MultiAddress::Id variant
     call_data.extend_from_slice(&dest_pubkey);
     call_data.extend_from_slice(&encode_compact_u128(amount_fen));
@@ -201,7 +195,12 @@ pub fn build_transfer_request(
         &sender_bytes,
         &call_data,
         "transfer",
-        &format!("转账 {} GMB 给 {}...{}", signing::format_amount(amount_yuan), &to_address[..8], &to_address[to_address.len()-6..]),
+        &format!(
+            "转账 {} GMB 给 {}...{}",
+            signing::format_amount(amount_yuan),
+            &to_address[..8],
+            &to_address[to_address.len() - 6..]
+        ),
         &serde_json::json!([
             { "key": "to", "label": "收款地址", "value": to_address },
             { "key": "amount_yuan", "label": "金额", "value": format!("{} GMB", signing::format_amount(amount_yuan)) }
@@ -230,11 +229,8 @@ pub fn submit_transfer(
     sign_block_number: u64,
     response_json: String,
 ) -> Result<TransferSubmitResult, String> {
-    let call_data_clean = call_data_hex
-        .strip_prefix("0x")
-        .unwrap_or(&call_data_hex);
-    let call_data = hex::decode(call_data_clean)
-        .map_err(|e| format!("call_data 解码失败: {e}"))?;
+    let call_data_clean = call_data_hex.strip_prefix("0x").unwrap_or(&call_data_hex);
+    let call_data = hex::decode(call_data_clean).map_err(|e| format!("call_data 解码失败: {e}"))?;
 
     let result = signing::verify_and_submit(
         &request_id,
@@ -294,7 +290,9 @@ fn generate_uuid() -> String {
         u16::from_be_bytes([bytes[4], bytes[5]]),
         u16::from_be_bytes([bytes[6], bytes[7]]),
         u16::from_be_bytes([bytes[8], bytes[9]]),
-        u64::from_be_bytes([0, 0, bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]]),
+        u64::from_be_bytes([
+            0, 0, bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+        ]),
     )
 }
 
@@ -318,7 +316,10 @@ mod tests {
     #[test]
     fn compact_u128_four_bytes() {
         assert_eq!(encode_compact_u128(16384), vec![0x02, 0x00, 0x01, 0x00]);
-        assert_eq!(encode_compact_u128(1_073_741_823), vec![0xfe, 0xff, 0xff, 0xff]);
+        assert_eq!(
+            encode_compact_u128(1_073_741_823),
+            vec![0xfe, 0xff, 0xff, 0xff]
+        );
     }
 
     #[test]

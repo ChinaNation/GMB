@@ -47,7 +47,14 @@ mod runtime {
 
 /// 中文注释：测试用验签器——仅当 signature == b"valid" 时返回 true。
 pub struct TestSfidVerifier;
-impl SfidVerifier<u64, <Test as frame_system::Config>::Hash, sfid_code_auth::pallet::NonceOf<Test>, sfid_code_auth::pallet::SignatureOf<Test>> for TestSfidVerifier {
+impl
+    SfidVerifier<
+        u64,
+        <Test as frame_system::Config>::Hash,
+        sfid_code_auth::pallet::NonceOf<Test>,
+        sfid_code_auth::pallet::SignatureOf<Test>,
+    > for TestSfidVerifier
+{
     fn verify(
         _account: &u64,
         credential: &BindCredential<
@@ -62,7 +69,14 @@ impl SfidVerifier<u64, <Test as frame_system::Config>::Hash, sfid_code_auth::pal
 
 /// 中文注释：测试用投票验签器——集成测试不涉及投票，始终返回 false。
 pub struct TestSfidVoteVerifier;
-impl SfidVoteVerifier<u64, <Test as frame_system::Config>::Hash, sfid_code_auth::pallet::NonceOf<Test>, sfid_code_auth::pallet::SignatureOf<Test>> for TestSfidVoteVerifier {
+impl
+    SfidVoteVerifier<
+        u64,
+        <Test as frame_system::Config>::Hash,
+        sfid_code_auth::pallet::NonceOf<Test>,
+        sfid_code_auth::pallet::SignatureOf<Test>,
+    > for TestSfidVoteVerifier
+{
     fn verify_vote(
         _account: &u64,
         _binding_id: <Test as frame_system::Config>::Hash,
@@ -183,8 +197,14 @@ fn bind_sfid_triggers_reward_issuance() {
         assert!(citizen_lightnode_issuance::AccountRewarded::<Test>::contains_key(1));
 
         // 验证上游绑定状态也正确写入
-        assert_eq!(sfid_code_auth::BindingIdToAccount::<Test>::get(binding_id), Some(1));
-        assert_eq!(sfid_code_auth::AccountToBindingId::<Test>::get(1), Some(binding_id));
+        assert_eq!(
+            sfid_code_auth::BindingIdToAccount::<Test>::get(binding_id),
+            Some(1)
+        );
+        assert_eq!(
+            sfid_code_auth::AccountToBindingId::<Test>::get(1),
+            Some(binding_id)
+        );
         assert_eq!(sfid_code_auth::BoundCount::<Test>::get(), 1);
 
         // 验证事件链：先 issuance 事件，后 sfid 事件

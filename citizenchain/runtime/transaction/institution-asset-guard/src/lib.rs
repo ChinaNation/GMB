@@ -9,7 +9,7 @@
 //!
 //! 默认 `()` 实现为 **fail-open（全放行）**，仅适用于测试。
 //! 生产 runtime 必须配置为 `RuntimeInstitutionAssetGuard`，否则资金白名单层将完全失效。
-//! runtime 层应有集成测试锁定 keyless/duoqian/fee_account/普通账户 的允许矩阵。
+//! runtime 层应有集成测试锁定 stake/main/fee_account/普通账户 的允许矩阵。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -21,9 +21,9 @@ use scale_info::TypeInfo;
 /// 这里只描述“内部动钱”的执行动作，不描述提案、投票、管理员变更等纯治理动作。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub enum InstitutionAssetAction {
-    /// 机构多签转账执行：从 `duoqian_address` 向外部收款地址转账，并扣手续费。
+    /// 机构多签转账执行：从 `main_address` 向外部收款地址转账，并扣手续费。
     DuoqianTransferExecute,
-    /// 多签账户关闭执行：把 `duoqian_address` 的余额整体转出。
+    /// 多签账户关闭执行：把 `main_address` 的余额整体转出。
     DuoqianCloseExecute,
     /// 链下清算批次执行：允许普通付款账户作为批次 source。
     OffchainBatchDebit,
@@ -31,6 +31,16 @@ pub enum InstitutionAssetAction {
     OffchainFeeSweepExecute,
     /// 国储会安全基金转账：从 `NRC_ANQUAN_ADDRESS` 向指定收款地址转账。
     NrcSafetyFundTransfer,
+    // ========== 扫码支付 Step 1 新增:清算行(L2)体系动作 ==========
+    /// L3 用户向清算行主账户充值。source 为 L3 自持账户。
+    L3DepositIn,
+    /// 清算行主账户向 L3 自持账户提现。source 为清算行主账户。
+    L3WithdrawOut,
+    /// 清算行主账户在扫码清算时扣款(Step 2 启用)。source 为清算行主账户。
+    L2ClearingDebit,
+    /// 清算行费用账户收手续费(Step 2 启用)。source 为清算行主账户(转出),
+    /// 接收方为清算行费用账户。
+    L2FeeCollect,
 }
 
 /// 机构账户资金白名单检查器。
@@ -73,6 +83,23 @@ mod tests {
         assert!(<() as InstitutionAssetGuard<[u8; 32]>>::can_spend(
             &account,
             InstitutionAssetAction::NrcSafetyFundTransfer,
+        ));
+        // 扫码支付 Step 1 新增 4 个动作
+        assert!(<() as InstitutionAssetGuard<[u8; 32]>>::can_spend(
+            &account,
+            InstitutionAssetAction::L3DepositIn,
+        ));
+        assert!(<() as InstitutionAssetGuard<[u8; 32]>>::can_spend(
+            &account,
+            InstitutionAssetAction::L3WithdrawOut,
+        ));
+        assert!(<() as InstitutionAssetGuard<[u8; 32]>>::can_spend(
+            &account,
+            InstitutionAssetAction::L2ClearingDebit,
+        ));
+        assert!(<() as InstitutionAssetGuard<[u8; 32]>>::can_spend(
+            &account,
+            InstitutionAssetAction::L2FeeCollect,
         ));
     }
 }

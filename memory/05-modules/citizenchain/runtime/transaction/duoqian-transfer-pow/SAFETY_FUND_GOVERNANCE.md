@@ -11,7 +11,7 @@ pub const NRC_ANQUAN_ADDRESS: [u8; 32] =
     hex!("045bdb35046c60c1346ba48e1e79049519edf4c009e40c7ecead1bebd1884a37");
 ```
 
-地址派生方式：`BLAKE2-256("ANQUAN_SFID_V1" + SS58_PREFIX_LE + 国储会 shenfen_id)`，详见 BLAKE2_ADDRESS_DERIVATION.md。
+地址派生方式：`BLAKE2-256(DUOQIAN_DOMAIN + OP_AN + SS58_PREFIX_LE + 国储会 shenfen_id)`，详见 BLAKE2_ADDRESS_DERIVATION.md。
 
 ## 存储
 
@@ -47,14 +47,24 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
   2. 将 SafetyFundAction 写入存储
   3. 触发 SafetyFundTransferProposed 事件
 
-### 2. 投票（vote_safety_fund_transfer，call_index=4）
+### 2. 离线聚合代投(finalize_safety_fund_transfer,call_index=4,Step 2 · 2026-04-21)
 
-- **调用者**：国储会管理员
-- **校验**：proposal_id 存在、调用者为 NRC admin
-- **操作**：
-  1. 调用 InternalVoteEngine::cast_internal_vote
-  2. 触发 SafetyFundVoteSubmitted 事件
-  3. 若赞成票且状态变为 PASSED，立即尝试执行
+- **调用者**:任意签名账户(代付 gas;发起人身份已在 Tx 1 锁定)
+- **输入**:`(proposal_id, sigs: BoundedVec<(AccountId, AdminSignatureOf), MaxAdmins>)`
+- **签名消息**:`TransferVoteIntent { from: NRC_ANQUAN_ADDRESS, to: beneficiary, ... }`
+  的 `signing_hash(ss58_prefix, OP_SIGN_SAFETY_FUND = 0x16)`
+- **校验**:
+  1. SafetyFundAction 存在
+  2. `sigs.len() >= 阈值(NRC 硬编码阈值)`
+  3. 每个 admin 是 NRC 管理员(`UnauthorizedSignature`)
+  4. 同批次不重复(`DuplicateSignature`)
+  5. sig 长度 64(`MalformedSignature`)
+  6. sr25519 验签通过(`InvalidSignature`)
+- **操作**:
+  1. 逐条 `cast_internal_vote(admin, proposal_id, true)`
+  2. 达阈值后 `STATUS_PASSED` → 事务内 `try_execute_safety_fund`
+  3. 发 `SafetyFundFinalized { signatures_accepted, final_status }` 事件
+- **已删除**:原 `vote_safety_fund_transfer` + `SafetyFundVoteSubmitted` 事件,无兼容保留
 
 ### 3. 自动执行（try_execute_safety_fund）
 
@@ -91,7 +101,9 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 ## 源码位置
 
 - `citizenchain/runtime/transaction/duoqian-transfer-pow/src/lib.rs`
-  - `propose_safety_fund_transfer`（call_index=3）
-  - `vote_safety_fund_transfer`（call_index=4）
-  - `try_execute_safety_fund`（内部方法）
+  - `propose_safety_fund_transfer`(call_index=3)
+  - `finalize_safety_fund_transfer`(call_index=4,Step 2 替换原 `vote_safety_fund_transfer`)
+  - `try_execute_safety_fund`(内部方法)
+  - `verify_and_cast_votes`(Step 2 · 三组 finalize_X 共用的验签 + 代投 helper)
 - `citizenchain/runtime/primitives/china/china_cb.rs` - NRC_ANQUAN_ADDRESS 定义
+- `citizenchain/runtime/primitives/src/core_const.rs` - `OP_SIGN_SAFETY_FUND = 0x16` 签名域常量

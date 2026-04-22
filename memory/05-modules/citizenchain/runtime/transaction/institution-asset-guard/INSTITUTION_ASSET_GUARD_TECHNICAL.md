@@ -46,9 +46,9 @@ pub trait InstitutionAssetGuard<AccountId> {
 
 当前 `citizenchain/runtime/src/configs/mod.rs` 中的 `RuntimeInstitutionAssetGuard` 规则是：
 
-1. `keyless_address`
+1. `stake_address`
    - 一律拒绝
-2. 制度保留 `duoqian_address`
+2. 制度保留 `main_address`
    - 只允许 `DuoqianTransferExecute`
    - 只允许 `DuoqianCloseExecute`
 3. 制度 `fee_account`
@@ -75,12 +75,12 @@ pub trait InstitutionAssetGuard<AccountId> {
 
 ## 5. 设计原因
 
-- `ProtectedSourceChecker` 只能表达“完全禁止的源地址”，适合 `keyless_address`。
-- `duoqian_address` 不是完全禁止，而是“只有特定治理执行模块能动钱”。
+- `ProtectedSourceChecker` 只能表达“完全禁止的源地址”，适合 `stake_address`。
+- `main_address` 不是完全禁止，而是“只有特定治理执行模块能动钱”。
 - 所以需要单独的资金动作白名单层，不能继续复用单一布尔语义的 `ProtectedSourceChecker`。
 
 ## 6. 安全注意事项
 
 - 默认 `()` 实现为 **fail-open（全放行）**，仅适用于测试 mock。
 - 生产 runtime 必须配置为 `RuntimeInstitutionAssetGuard`，否则这一层资金白名单将完全失效。
-- 建议 runtime 层维护集成测试，锁定 keyless / 保留 duoqian / fee_account / 普通账户的允许矩阵，防止规则意外退化。
+- 建议 runtime 层维护集成测试，锁定 stake / 保留 main / fee_account / 普通账户的允许矩阵，防止规则意外退化。

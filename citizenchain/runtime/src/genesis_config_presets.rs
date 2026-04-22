@@ -118,7 +118,7 @@ fn build_genesis() -> Value {
     // 中文注释：国储会信息统一从常量数组入口读取。
     let nrc_account = CHINA_CB
         .first()
-        .and_then(|n| AccountId::decode(&mut &n.duoqian_address[..]).ok())
+        .and_then(|n| AccountId::decode(&mut &n.main_address[..]).ok())
         .expect("NRC pallet_address must decode to AccountId");
 
     // 中文注释：每位国储会管理员创世预置 1000 万元（单位：分）。
@@ -139,11 +139,11 @@ fn build_genesis() -> Value {
         (account, admin_each)
     }));
 
-    // 中文注释：省储行创立发行在创世时直接预置到各自 keyless_address（无私钥永久质押地址）。
+    // 中文注释：省储行创立发行在创世时直接预置到各自 stake_address（无私钥永久质押地址）。
     genesis_balances.extend(
         CHINA_CH
             .iter()
-            .map(|bank| (AccountId::new(bank.keyless_address), bank.stake_amount)),
+            .map(|bank| (AccountId::new(bank.stake_address), bank.stake_amount)),
     );
 
     // 中文注释：创世账户统一输出为链 SS58 地址（前缀 2027）。
@@ -171,8 +171,8 @@ fn build_genesis() -> Value {
         .iter()
         .skip(1)
         .map(|n| {
-            let account = AccountId::decode(&mut &n.duoqian_address[..])
-                .expect("PRC duoqian_address must decode to AccountId");
+            let account = AccountId::decode(&mut &n.main_address[..])
+                .expect("PRC main_address must decode to AccountId");
             Value::String(account_to_genesis_ss58(&account))
         })
         .collect();
@@ -291,7 +291,7 @@ mod tests {
             .as_array()
             .expect("balances.balances should be an array");
 
-        // 中文注释：创世包含 1 个国储会多签地址 + 19 个 NRC 管理员 + 43 个省储行 keyless 质押地址。
+        // 中文注释：创世包含 1 个国储会多签地址 + 19 个 NRC 管理员 + 43 个省储行 stake 质押地址。
         let nrc_admin_count = CHINA_CB
             .first()
             .map(|n| n.duoqian_admins.len())
@@ -308,7 +308,7 @@ mod tests {
 
         let nrc_account = CHINA_CB
             .first()
-            .and_then(|n| AccountId::decode(&mut &n.duoqian_address[..]).ok())
+            .and_then(|n| AccountId::decode(&mut &n.main_address[..]).ok())
             .expect("NRC pallet_address must decode to AccountId");
         let nrc_ss58 = account_to_genesis_ss58(&nrc_account);
 
