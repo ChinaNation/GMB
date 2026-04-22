@@ -12,7 +12,7 @@ class PalletRegistry {
   ///
   /// 链升级后若 pallet 索引未变，将新 spec_version 加入此集合即可。
   /// 若索引发生变化，需同步修改下方常量并更新此集合。
-  static const Set<int> supportedSpecVersions = {8};
+  static const Set<int> supportedSpecVersions = {1};
 
   /// 检查给定 spec_version 是否与当前注册表兼容。
   ///
