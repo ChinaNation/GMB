@@ -101,11 +101,7 @@ class PayloadDecoder {
         return _decodeProposeTransfer(bytes);
       }
 
-      // DuoqianTransferPow / vote_transfer
-      if (palletIndex == PalletRegistry.duoqianTransferPowPallet &&
-          callIndex == PalletRegistry.voteTransferCall) {
-        return _decodeVoteTransfer(bytes);
-      }
+      // Step 2 · vote_transfer 已删除(替换为 finalize_transfer,冷钱包不负责)
 
       // VotingEngineSystem / joint_vote
       if (palletIndex == PalletRegistry.votingEngineSystemPallet &&
@@ -132,20 +128,19 @@ class PayloadDecoder {
       }
 
       // ── DuoqianManagePow(17) ──
+      // Step 1 · vote_create 已替换为 finalize_create(冷钱包不负责盲签聚合签名)
       if (palletIndex == PalletRegistry.duoqianManagePowPallet) {
         if (callIndex == PalletRegistry.proposeCreateCall) return _decodeProposeCreate(bytes);
         if (callIndex == PalletRegistry.proposeCloseCall) return _decodeProposeClose(bytes);
-        if (callIndex == PalletRegistry.voteCreateCall) return _decodeVoteProposal(bytes, 'vote_create', '多签创建提案');
         if (callIndex == PalletRegistry.proposeCreatePersonalCall) return _decodeProposeCreatePersonal(bytes);
         if (callIndex == PalletRegistry.voteCloseCall) return _decodeVoteProposal(bytes, 'vote_close', '多签关闭提案');
       }
 
       // ── DuoqianTransferPow(19) 补充 ──
+      // Step 2 · vote_safety_fund_transfer / vote_sweep_to_main 已替换为 finalize_X(冷钱包不负责)
       if (palletIndex == PalletRegistry.duoqianTransferPowPallet) {
         if (callIndex == PalletRegistry.proposeSafetyFundCall) return _decodeProposeSafetyFund(bytes);
-        if (callIndex == PalletRegistry.voteSafetyFundCall) return _decodeVoteProposal(bytes, 'vote_safety_fund_transfer', '安全基金提案');
         if (callIndex == PalletRegistry.proposeSweepCall) return _decodeProposeSweep(bytes);
-        if (callIndex == PalletRegistry.voteSweepCall) return _decodeVoteProposal(bytes, 'vote_sweep_to_main', '手续费划转提案');
       }
 
       // ── ResolutionDestroGov(14) ──
@@ -257,27 +252,9 @@ class PayloadDecoder {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // DuoqianTransferPow(19) / vote_transfer(1)
-  // 格式：[0x13][0x01][proposal_id:u64_le][approve:bool]
-  // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeVoteTransfer(Uint8List bytes) {
-    // 2 + 8 + 1 = 11
-    if (bytes.length < 11) return null;
-
-    final proposalId = _readU64Le(bytes, 2);
-    final approve = bytes[10] != 0;
-    final voteText = approve ? '赞成' : '反对';
-
-    return DecodedPayload(
-      action: 'vote_transfer',
-      summary: '转账提案 #$proposalId 投票：$voteText',
-      fields: {
-        'proposal_id': proposalId.toString(),
-        'approve': approve.toString(),
-      },
-    );
-  }
+  // Step 2 · vote_transfer 已废弃,`_decodeVoteTransfer` 移除:
+  // finalize_transfer 的参数是 `(proposal_id, sigs: Vec<(AccountId, sig64)>)`,
+  // sigs 体积随 N 增长,盲签无人类可读语义,冷钱包不提供该解码能力。
 
   // ---------------------------------------------------------------------------
   // VotingEngineSystem(9) / joint_vote(3)
