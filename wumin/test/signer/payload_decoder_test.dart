@@ -34,22 +34,9 @@ void main() {
       expect(decoded.fields['to'], dest.address);
     });
 
-    test('decodes vote_transfer (pallet=19 call=1)', () {
-      // [0x13, 0x01, u64_le proposal_id=42, bool approve=true]
-      final payload = Uint8List.fromList([
-        0x13, 0x01,
-        42, 0, 0, 0, 0, 0, 0, 0, // proposal_id = 42
-        1, // approve = true
-      ]);
-
-      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex, specVersion: PalletRegistry.supportedSpecVersions.first);
-
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'vote_transfer');
-      expect(decoded.fields['proposal_id'], '42');
-      expect(decoded.fields['approve'], 'true');
-    });
+    // Step 2 · vote_transfer 已替换为 finalize_transfer(离线 QR 聚合签名,
+    // 冷钱包不盲签 sr25519 签名聚合),`_decodeVoteTransfer` 已从
+    // payload_decoder 移除,原测试同步删除。
 
     test('decodes joint_vote (pallet=9 call=3)', () {
       // [0x09, 0x03, u64_le proposal_id=7, 48 bytes institution, bool approve=false]
