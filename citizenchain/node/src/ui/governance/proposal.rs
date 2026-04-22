@@ -19,7 +19,12 @@ const TAG_DUOQIAN_MANAGE: &[u8] = b"dq-mgmt";
 use crate::ui::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, RPC_RESPONSE_LIMIT_SMALL)
+    rpc::rpc_post(
+        method,
+        params,
+        RPC_REQUEST_TIMEOUT,
+        RPC_RESPONSE_LIMIT_SMALL,
+    )
 }
 
 /// 提案元数据（从 VotingEngineSystem::Proposals 解码）。
@@ -221,10 +226,7 @@ enum ProposalAction {
 /// 查询 NextProposalId（VotingEngineSystem 全局递增 ID）。
 pub fn fetch_next_proposal_id() -> Result<u64, String> {
     let key = storage_keys::value_key("VotingEngineSystem", "NextProposalId");
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key)]),
-    )?;
+    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(0),
         Value::String(hex_data) => {
@@ -232,7 +234,11 @@ pub fn fetch_next_proposal_id() -> Result<u64, String> {
             if data.len() < 8 {
                 return Ok(0);
             }
-            Ok(u64::from_le_bytes(data[..8].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?))
+            Ok(u64::from_le_bytes(
+                data[..8]
+                    .try_into()
+                    .map_err(|_| "SCALE 数据长度不足".to_string())?,
+            ))
         }
         _ => Ok(0),
     }
@@ -271,7 +277,9 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
             Ok(Some(meta)) => {
                 // 中文注释：多签管理提案（创建/关闭多签账户）不在治理列表中显示。
                 if is_duoqian_manage_proposal(id) {
-                    if id == 0 { break; }
+                    if id == 0 {
+                        break;
+                    }
                     id -= 1;
                     continue;
                 }
@@ -333,8 +341,8 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
 /// 业务动作统一走 [`resolve_proposal_action`] 解析,再按变体填入对应 `*_detail` 字段;
 /// 投票计数按 kind/stage 独立查询(保留原有条件)。
 pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String> {
-    let meta = fetch_proposal_meta(proposal_id)?
-        .ok_or_else(|| format!("提案 {proposal_id} 不存在"))?;
+    let meta =
+        fetch_proposal_meta(proposal_id)?.ok_or_else(|| format!("提案 {proposal_id} 不存在"))?;
 
     // 业务动作:一次性解析,按变体分发到 7 个 *_detail 字段。
     let action = resolve_proposal_action(proposal_id, &meta)?;
@@ -444,7 +452,8 @@ pub fn fetch_institution_proposal_page(
                             status_label: status_label(meta.status).to_string(),
                         },
                     };
-                    let institution_name = resolve_institution_name(meta.institution_hex.as_deref());
+                    let institution_name =
+                        resolve_institution_name(meta.institution_hex.as_deref());
                     items.push(ProposalListItem {
                         proposal_id: id,
                         display_id: format_proposal_id(id),
@@ -475,7 +484,11 @@ pub fn fetch_institution_proposal_page(
     Ok(ProposalPageResult {
         items,
         has_more,
-        warning: if warnings.is_empty() { None } else { Some(warnings.join("；")) },
+        warning: if warnings.is_empty() {
+            None
+        } else {
+            Some(warnings.join("；"))
+        },
     })
 }
 
@@ -487,10 +500,7 @@ pub fn fetch_active_proposal_ids(shenfen_id: &str) -> Result<Vec<u64>, String> {
         "ActiveProposalsByInstitution",
         &institution_id,
     );
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key)]),
-    )?;
+    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(Vec::new()),
         Value::String(hex_data) => {
@@ -509,10 +519,7 @@ fn fetch_proposal_meta(proposal_id: u64) -> Result<Option<ProposalMeta>, String>
         "Proposals",
         &proposal_id.to_le_bytes(),
     );
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key)]),
-    )?;
+    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(None),
         Value::String(hex_data) => {
@@ -529,10 +536,7 @@ fn fetch_proposal_data_raw(proposal_id: u64) -> Result<Option<Vec<u8>>, String> 
         "ProposalData",
         &proposal_id.to_le_bytes(),
     );
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key)]),
-    )?;
+    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(None),
         Value::String(hex_data) => {
@@ -547,13 +551,14 @@ fn fetch_proposal_data_raw(proposal_id: u64) -> Result<Option<Vec<u8>>, String> 
 ///
 /// 查找顺序(命中即返回,不重复查询):
 /// 1. `VotingEngineSystem::ProposalData`(转账/升级/发行/销毁 4 种,按 kind 分流)
-/// 2. `OffchainTransactionPos::RateProposalActions`
-/// 3. `DuoqianTransferPow::SafetyFundProposalActions`
-/// 4. `DuoqianTransferPow::SweepProposalActions`
-/// 5. 全部未命中 → [`ProposalAction::Unknown`]
+/// 2. `DuoqianTransferPow::SafetyFundProposalActions`
+/// 3. `DuoqianTransferPow::SweepProposalActions`
+/// 4. 全部未命中 → [`ProposalAction::Unknown`]
 ///
-/// 常见提案(转账/升级/销毁/发行)1 次 RPC 即可命中;费率/安全基金/手续费划转
-/// 因业务 detail 存在独立 pallet 存储,会多查 1~3 次,但这几类提案频率极低。
+/// 常见提案(转账/升级/销毁/发行)1 次 RPC 即可命中;安全基金/手续费划转
+/// 因业务 detail 存在独立 pallet 存储,会多查 1~2 次,但这几类提案频率极低。
+/// 原"省储行费率提案"(`RateProposalActions`)已在 Step 2b-iv-b 随老省储行
+/// pallet Call 一起下线,此处不再枚举。
 fn resolve_proposal_action(
     proposal_id: u64,
     meta: &ProposalMeta,
@@ -587,26 +592,17 @@ fn resolve_proposal_action(
         }
     }
 
-    // ── Step 2:RateProposalActions(费率提案) ──
-    if let Ok(Some(r)) = fetch_rate_proposal_action(proposal_id) {
-        return Ok(ProposalAction::FeeRate(Box::new(FeeRateProposalDetail {
-            proposal_id,
-            institution_hex: r.institution_hex,
-            new_rate_bp: r.new_rate_bp,
-        })));
-    }
-
-    // ── Step 3:SafetyFundProposalActions(安全基金) ──
+    // ── Step 2:SafetyFundProposalActions(安全基金) ──
     if let Ok(Some(detail)) = fetch_safety_fund_proposal_action(proposal_id) {
         return Ok(ProposalAction::SafetyFund(Box::new(detail)));
     }
 
-    // ── Step 4:SweepProposalActions(手续费划转) ──
+    // ── Step 3:SweepProposalActions(手续费划转) ──
     if let Ok(Some(detail)) = fetch_sweep_proposal_action(proposal_id) {
         return Ok(ProposalAction::Sweep(Box::new(detail)));
     }
 
-    // 5:全部未命中
+    // 4:全部未命中
     Ok(ProposalAction::Unknown)
 }
 
@@ -616,10 +612,7 @@ fn fetch_internal_tally(proposal_id: u64) -> Result<VoteTally, String> {
         "InternalTallies",
         &proposal_id.to_le_bytes(),
     );
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key)]),
-    )?;
+    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(VoteTally { yes: 0, no: 0 }),
         Value::String(hex_data) => {
@@ -627,8 +620,16 @@ fn fetch_internal_tally(proposal_id: u64) -> Result<VoteTally, String> {
             if data.len() < 8 {
                 return Ok(VoteTally { yes: 0, no: 0 });
             }
-            let yes = u32::from_le_bytes(data[0..4].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
-            let no = u32::from_le_bytes(data[4..8].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
+            let yes = u32::from_le_bytes(
+                data[0..4]
+                    .try_into()
+                    .map_err(|_| "SCALE 数据长度不足".to_string())?,
+            );
+            let no = u32::from_le_bytes(
+                data[4..8]
+                    .try_into()
+                    .map_err(|_| "SCALE 数据长度不足".to_string())?,
+            );
             Ok(VoteTally { yes, no })
         }
         _ => Ok(VoteTally { yes: 0, no: 0 }),
@@ -641,10 +642,7 @@ fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
         "JointTallies",
         &proposal_id.to_le_bytes(),
     );
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key)]),
-    )?;
+    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(JointVoteTally { yes: 0, no: 0 }),
         Value::String(hex_data) => {
@@ -652,8 +650,16 @@ fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
             if data.len() < 8 {
                 return Ok(JointVoteTally { yes: 0, no: 0 });
             }
-            let yes = u32::from_le_bytes(data[0..4].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
-            let no = u32::from_le_bytes(data[4..8].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
+            let yes = u32::from_le_bytes(
+                data[0..4]
+                    .try_into()
+                    .map_err(|_| "SCALE 数据长度不足".to_string())?,
+            );
+            let no = u32::from_le_bytes(
+                data[4..8]
+                    .try_into()
+                    .map_err(|_| "SCALE 数据长度不足".to_string())?,
+            );
             Ok(JointVoteTally { yes, no })
         }
         _ => Ok(JointVoteTally { yes: 0, no: 0 }),
@@ -666,10 +672,7 @@ fn fetch_citizen_tally(proposal_id: u64) -> Result<CitizenVoteTally, String> {
         "CitizenTallies",
         &proposal_id.to_le_bytes(),
     );
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key)]),
-    )?;
+    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(CitizenVoteTally { yes: 0, no: 0 }),
         Value::String(hex_data) => {
@@ -677,8 +680,16 @@ fn fetch_citizen_tally(proposal_id: u64) -> Result<CitizenVoteTally, String> {
             if data.len() < 16 {
                 return Ok(CitizenVoteTally { yes: 0, no: 0 });
             }
-            let yes = u64::from_le_bytes(data[0..8].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
-            let no = u64::from_le_bytes(data[8..16].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
+            let yes = u64::from_le_bytes(
+                data[0..8]
+                    .try_into()
+                    .map_err(|_| "SCALE 数据长度不足".to_string())?,
+            );
+            let no = u64::from_le_bytes(
+                data[8..16]
+                    .try_into()
+                    .map_err(|_| "SCALE 数据长度不足".to_string())?,
+            );
             Ok(CitizenVoteTally { yes, no })
         }
         _ => Ok(CitizenVoteTally { yes: 0, no: 0 }),
@@ -785,10 +796,7 @@ fn decode_transfer_action(proposal_id: u64, data: &[u8]) -> Option<TransferPropo
     })
 }
 
-fn decode_runtime_upgrade_action(
-    proposal_id: u64,
-    data: &[u8],
-) -> Option<RuntimeUpgradeDetail> {
+fn decode_runtime_upgrade_action(proposal_id: u64, data: &[u8]) -> Option<RuntimeUpgradeDetail> {
     // 跳过 MODULE_TAG("rt-upg":6)
     let tag = TAG_RUNTIME_UPGRADE;
     if data.len() < tag.len() || &data[..tag.len()] != tag {
@@ -809,8 +817,7 @@ fn decode_runtime_upgrade_action(
     if offset + reason_len as usize > data.len() {
         return None;
     }
-    let reason =
-        String::from_utf8_lossy(&data[offset..offset + reason_len as usize]).to_string();
+    let reason = String::from_utf8_lossy(&data[offset..offset + reason_len as usize]).to_string();
     offset += reason_len as usize;
 
     // code_hash: [u8;32]
@@ -860,8 +867,7 @@ fn decode_resolution_issuance_action(
     if offset + reason_len as usize > data.len() {
         return None;
     }
-    let reason =
-        String::from_utf8_lossy(&data[offset..offset + reason_len as usize]).to_string();
+    let reason = String::from_utf8_lossy(&data[offset..offset + reason_len as usize]).to_string();
     offset += reason_len as usize;
 
     // total_amount: u128 (16 bytes LE)
@@ -933,7 +939,11 @@ fn decode_u64_vec(data: &[u8]) -> Result<Vec<u64>, String> {
         if offset + 8 > data.len() {
             break;
         }
-        let val = u64::from_le_bytes(data[offset..offset + 8].try_into().map_err(|_| "SCALE 数据长度不足".to_string())?);
+        let val = u64::from_le_bytes(
+            data[offset..offset + 8]
+                .try_into()
+                .map_err(|_| "SCALE 数据长度不足".to_string())?,
+        );
         ids.push(val);
         offset += 8;
     }
@@ -1014,7 +1024,11 @@ fn resolve_institution_name(institution_hex: Option<&str>) -> Option<String> {
         return None;
     }
     // 截取非零部分作为 UTF-8 字符串
-    let end = bytes.iter().rposition(|&b| b != 0).map(|i| i + 1).unwrap_or(0);
+    let end = bytes
+        .iter()
+        .rposition(|&b| b != 0)
+        .map(|i| i + 1)
+        .unwrap_or(0);
     let shenfen_id = std::str::from_utf8(&bytes[..end]).ok()?;
     // 在静态数据中查找
     super::find_institution_name(shenfen_id)
@@ -1190,11 +1204,10 @@ pub fn fetch_user_vote_status(
     pubkey_hex: &str,
     shenfen_id: Option<&str>,
 ) -> Result<UserVoteStatus, String> {
-    let meta = fetch_proposal_meta(proposal_id)?
-        .ok_or_else(|| format!("提案 {proposal_id} 不存在"))?;
+    let meta =
+        fetch_proposal_meta(proposal_id)?.ok_or_else(|| format!("提案 {proposal_id} 不存在"))?;
 
-    let pubkey_bytes = hex::decode(pubkey_hex)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let pubkey_bytes = hex::decode(pubkey_hex).map_err(|e| format!("公钥解码失败: {e}"))?;
 
     // 查询内部投票状态（InternalVotesByAccount: DoubleMap<u64, AccountId32> → bool）
     let internal_vote = {
@@ -1263,79 +1276,16 @@ struct RateProposalActionDetail {
     new_rate_bp: u32,
 }
 
-/// 从链上 RateProposalActions 存储查询费率提案数据。
-fn fetch_rate_proposal_action(proposal_id: u64) -> Result<Option<RateProposalActionDetail>, String> {
-    let key = storage_keys::map_key(
-        "OffchainTransactionPos",
-        "RateProposalActions",
-        &proposal_id.to_le_bytes(),
-    );
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key)]),
-    )?;
-    match result {
-        Value::Null => Ok(None),
-        Value::String(hex_data) => {
-            let data = decode_hex_storage(&hex_data)?;
-            // RateProposalAction: institution([u8;48]) + new_rate_bp(u32_le)
-            if data.len() < 52 {
-                return Ok(None);
-            }
-            let institution_hex = hex::encode(&data[..48]);
-            let new_rate_bp = u32::from_le_bytes(
-                data[48..52].try_into().map_err(|_| "rate_bp 解码失败".to_string())?
-            );
-            Ok(Some(RateProposalActionDetail {
-                institution_hex,
-                new_rate_bp,
-            }))
-        }
-        _ => Ok(None),
-    }
-}
-
-/// 查询省储行当前链下交易费率（bp）。
-///
-/// 从链上 InstitutionRateBp 存储读取，未设置时返回默认值 1 bp。
-pub fn fetch_institution_rate_bp(shenfen_id: &str) -> Result<u32, String> {
-    let institution_id = storage_keys::shenfen_id_to_fixed48(shenfen_id);
-    let key = storage_keys::map_key(
-        "OffchainTransactionPos",
-        "InstitutionRateBp",
-        &institution_id,
-    );
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key)]),
-    )?;
-    match result {
-        Value::Null => Ok(1), // 默认 1 bp
-        Value::String(hex_data) => {
-            let data = decode_hex_storage(&hex_data)?;
-            if data.len() < 4 {
-                return Ok(1);
-            }
-            let rate = u32::from_le_bytes(
-                data[..4].try_into().map_err(|_| "rate_bp 解码失败".to_string())?
-            );
-            Ok(if rate == 0 { 1 } else { rate })
-        }
-        _ => Ok(1),
-    }
-}
-
 /// 从链上 SafetyFundProposalActions 存储查询安全基金提案数据。
-fn fetch_safety_fund_proposal_action(proposal_id: u64) -> Result<Option<SafetyFundProposalDetail>, String> {
+fn fetch_safety_fund_proposal_action(
+    proposal_id: u64,
+) -> Result<Option<SafetyFundProposalDetail>, String> {
     let key = storage_keys::map_key(
         "DuoqianTransferPow",
         "SafetyFundProposalActions",
         &proposal_id.to_le_bytes(),
     );
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key)]),
-    )?;
+    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(None),
         Value::String(hex_data) => {
@@ -1378,10 +1328,7 @@ fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalD
         "SweepProposalActions",
         &proposal_id.to_le_bytes(),
     );
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(key)]),
-    )?;
+    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(None),
         Value::String(hex_data) => {
@@ -1535,10 +1482,7 @@ mod format_summary_tests {
             institution_hex: "00".repeat(48),
             amount_fen: "999900".to_string(), // 9999 元
         };
-        assert_eq!(
-            format_sweep_summary(&d),
-            "手续费划转 9,999.00 元：未知机构"
-        );
+        assert_eq!(format_sweep_summary(&d), "手续费划转 9,999.00 元：未知机构");
     }
 
     #[test]

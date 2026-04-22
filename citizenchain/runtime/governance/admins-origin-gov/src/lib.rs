@@ -939,9 +939,8 @@ mod tests {
                 .expect("proposal data should exist");
             let tag = MODULE_TAG;
             assert!(data.len() >= tag.len() && &data[..tag.len()] == tag);
-            let _action =
-                AdminReplacementAction::<AccountId32>::decode(&mut &data[tag.len()..])
-                    .expect("should decode");
+            let _action = AdminReplacementAction::<AccountId32>::decode(&mut &data[tag.len()..])
+                .expect("should decode");
             assert_noop!(
                 AdminsOriginGov::execute_admin_replacement(
                     RuntimeOrigin::signed(nrc_admin(0)),

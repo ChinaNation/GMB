@@ -5,7 +5,6 @@ import type {
   AdminWalletMatch,
   GovernanceOverview,
   ProposeUpgradeRequestResult,
-  SigningAdminInfo,
   UserVoteStatus,
   VoteSignRequestResult,
   VoteSubmitResult,
@@ -77,6 +76,10 @@ export const api = {
   getGovernanceOverview: () => invoke<GovernanceOverview>('get_governance_overview'),
   getInstitutionDetail: (shenfenId: string) =>
     invoke<InstitutionDetail>('get_institution_detail', { shenfenId }),
+  startGovernanceBalanceWatch: (shenfenId: string) =>
+    invoke<void>('start_governance_balance_watch', { shenfenId }),
+  stopGovernanceBalanceWatch: (shenfenId: string) =>
+    invoke<void>('stop_governance_balance_watch', { shenfenId }),
   getProposalPage: (startId: number, count: number) =>
     invoke<ProposalPageResult>('get_proposal_page', { startId, count }),
   getProposalDetail: (proposalId: number) =>
@@ -86,9 +89,6 @@ export const api = {
     invoke<ProposalListItem[]>('get_institution_proposals', { shenfenId }),
   getInstitutionProposalPage: (shenfenId: string, startId: number, count: number) =>
     invoke<ProposalPageResult>('get_institution_proposal_page', { shenfenId, startId, count }),
-  setSigningAdmin: (pubkeyHex: string, privateKeyHex: string, unlockPassword: string) =>
-    invoke<SigningAdminInfo | null>('set_signing_admin', { pubkeyHex, privateKeyHex, unlockPassword }),
-  getSigningAdmin: () => invoke<SigningAdminInfo | null>('get_signing_admin'),
   // 管理员激活
   buildActivateAdminRequest: (pubkeyHex: string, shenfenId: string) =>
     invoke<ActivateRequestResult>('build_activate_admin_request', { pubkeyHex, shenfenId }),
@@ -200,21 +200,6 @@ export const api = {
     }),
   buildSafetyFundVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>
     invoke<VoteSignRequestResult>('build_safety_fund_vote_request', { proposalId, pubkeyHex, approve }),
-  buildRateVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>
-    invoke<VoteSignRequestResult>('build_rate_vote_request', { proposalId, pubkeyHex, approve }),
-  queryInstitutionRateBp: (shenfenId: string) =>
-    invoke<number>('query_institution_rate_bp', { shenfenId }),
-  buildProposeRateRequest: (pubkeyHex: string, shenfenId: string, newRateBp: number) =>
-    invoke<VoteSignRequestResult>('build_propose_rate_request', { pubkeyHex, shenfenId, newRateBp }),
-  submitProposeRate: (
-    requestId: string, expectedPubkeyHex: string, expectedPayloadHash: string,
-    shenfenId: string, newRateBp: number,
-    signNonce: number, signBlockNumber: number, responseJson: string,
-  ) =>
-    invoke<VoteSubmitResult>('submit_propose_rate', {
-      requestId, expectedPubkeyHex, expectedPayloadHash,
-      shenfenId, newRateBp, signNonce, signBlockNumber, responseJson,
-    }),
 
   // ── 冷钱包管理 ──
   getWallets: () => invoke<WalletStore>('get_wallets'),

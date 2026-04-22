@@ -131,8 +131,7 @@ pub fn build_vote_sign_request(
     if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("公钥格式无效，应为 64 位十六进制".to_string());
     }
-    let pubkey_bytes = hex::decode(&pubkey_clean)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
     // 获取链上参数
     let (spec_version, tx_version) = fetch_runtime_version()?;
@@ -143,14 +142,19 @@ pub fn build_vote_sign_request(
     // 构建 call data: [pallet=19][call=1][proposal_id: u64_le][approve: bool]
     let mut call_data = Vec::with_capacity(11);
     call_data.push(19u8); // DuoqianTransferPow pallet index
-    call_data.push(1u8);  // vote_transfer call index
+    call_data.push(1u8); // vote_transfer call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.push(if approve { 1u8 } else { 0u8 });
 
     // 构建 signing payload
     let payload = build_signing_payload(
-        &call_data, &genesis_hash, &block_hash, block_number,
-        nonce, spec_version, tx_version,
+        &call_data,
+        &genesis_hash,
+        &block_hash,
+        block_number,
+        nonce,
+        spec_version,
+        tx_version,
     );
 
     // 计算 payload hash
@@ -190,8 +194,8 @@ pub fn build_vote_sign_request(
         },
     };
 
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    let request_json =
+        serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
 
     Ok(VoteSignRequestResult {
         request_json,
@@ -218,8 +222,7 @@ pub fn build_joint_vote_sign_request(
     if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("公钥格式无效，应为 64 位十六进制".to_string());
     }
-    let pubkey_bytes = hex::decode(&pubkey_clean)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
     let institution_id = super::storage_keys::shenfen_id_to_fixed48(shenfen_id);
 
@@ -230,15 +233,20 @@ pub fn build_joint_vote_sign_request(
 
     // call data: [pallet=9][call=3][proposal_id: u64_le][institution_id: 48 bytes][approve: bool]
     let mut call_data = Vec::with_capacity(1 + 1 + 8 + 48 + 1);
-    call_data.push(9u8);  // VotingEngineSystem pallet index
-    call_data.push(3u8);  // joint_vote call index
+    call_data.push(9u8); // VotingEngineSystem pallet index
+    call_data.push(3u8); // joint_vote call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.extend_from_slice(&institution_id);
     call_data.push(if approve { 1u8 } else { 0u8 });
 
     let payload = build_signing_payload(
-        &call_data, &genesis_hash, &block_hash, block_number,
-        nonce, spec_version, tx_version,
+        &call_data,
+        &genesis_hash,
+        &block_hash,
+        block_number,
+        nonce,
+        spec_version,
+        tx_version,
     );
     let payload_hash = sha256_hash(&payload);
     let request_id = generate_request_id("jvote");
@@ -272,8 +280,8 @@ pub fn build_joint_vote_sign_request(
         },
     };
 
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    let request_json =
+        serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
 
     Ok(VoteSignRequestResult {
         request_json,
@@ -301,8 +309,7 @@ pub fn build_propose_transfer_sign_request(
     if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("公钥格式无效，应为 64 位十六进制".to_string());
     }
-    let pubkey_bytes = hex::decode(&pubkey_clean)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
     // 验证金额
     if amount_yuan < 1.11 {
@@ -323,10 +330,10 @@ pub fn build_propose_transfer_sign_request(
     let beneficiary_bytes = decode_ss58_to_pubkey(beneficiary_address)?;
 
     // 验证收款地址不等于本机构多签地址
-    let entry = super::find_entry(shenfen_id)
+    let entry = super::registry::find_institution(shenfen_id)
         .ok_or_else(|| format!("未知的机构 shenfenId: {shenfen_id}"))?;
-    let institution_duoqian = hex::decode(entry.duoqian_address)
-        .map_err(|e| format!("机构多签地址解码失败: {e}"))?;
+    let institution_duoqian =
+        hex::decode(entry.main_address_hex()).map_err(|e| format!("主账户地址解码失败: {e}"))?;
     if beneficiary_bytes[..] == institution_duoqian[..] {
         return Err("收款地址不能为本机构多签地址".to_string());
     }
@@ -340,9 +347,10 @@ pub fn build_propose_transfer_sign_request(
 
     // call data: [0x13][0x00][org:u8][institution:48][beneficiary:32][amount:u128_le][remark:Vec<u8>]
     let remark_compact = encode_compact_u32(remark_bytes.len() as u32);
-    let mut call_data = Vec::with_capacity(2 + 1 + 48 + 32 + 16 + remark_compact.len() + remark_bytes.len());
+    let mut call_data =
+        Vec::with_capacity(2 + 1 + 48 + 32 + 16 + remark_compact.len() + remark_bytes.len());
     call_data.push(19u8); // DuoqianTransferPow pallet
-    call_data.push(0u8);  // propose_transfer call
+    call_data.push(0u8); // propose_transfer call
     call_data.push(org_type);
     call_data.extend_from_slice(&institution_id);
     call_data.extend_from_slice(&beneficiary_bytes);
@@ -351,8 +359,13 @@ pub fn build_propose_transfer_sign_request(
     call_data.extend_from_slice(remark_bytes);
 
     let payload = build_signing_payload(
-        &call_data, &genesis_hash, &block_hash, block_number,
-        nonce, spec_version, tx_version,
+        &call_data,
+        &genesis_hash,
+        &block_hash,
+        block_number,
+        nonce,
+        spec_version,
+        tx_version,
     );
     let payload_hash = sha256_hash(&payload);
     let request_id = generate_request_id("propose");
@@ -394,8 +407,8 @@ pub fn build_propose_transfer_sign_request(
         },
     };
 
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    let request_json =
+        serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
 
     Ok(VoteSignRequestResult {
         request_json,
@@ -420,8 +433,7 @@ pub fn build_propose_safety_fund_sign_request(
     if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("公钥格式无效，应为 64 位十六进制".to_string());
     }
-    let pubkey_bytes = hex::decode(&pubkey_clean)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
     if amount_yuan < 1.11 {
         return Err("转账金额不能低于 1.11 元".to_string());
@@ -430,7 +442,10 @@ pub fn build_propose_safety_fund_sign_request(
 
     let remark_bytes = remark.as_bytes();
     if remark_bytes.len() > 256 {
-        return Err(format!("备注长度不能超过 256 字节，当前 {} 字节", remark_bytes.len()));
+        return Err(format!(
+            "备注长度不能超过 256 字节，当前 {} 字节",
+            remark_bytes.len()
+        ));
     }
 
     let beneficiary_bytes = decode_ss58_to_pubkey(beneficiary_address)?;
@@ -444,15 +459,20 @@ pub fn build_propose_safety_fund_sign_request(
     let remark_compact = encode_compact_u32(remark_bytes.len() as u32);
     let mut call_data = Vec::with_capacity(2 + 32 + 16 + remark_compact.len() + remark_bytes.len());
     call_data.push(19u8); // DuoqianTransferPow pallet
-    call_data.push(3u8);  // propose_safety_fund_transfer call
+    call_data.push(3u8); // propose_safety_fund_transfer call
     call_data.extend_from_slice(&beneficiary_bytes);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
     call_data.extend_from_slice(&remark_compact);
     call_data.extend_from_slice(remark_bytes);
 
     let payload = build_signing_payload(
-        &call_data, &genesis_hash, &block_hash, block_number,
-        nonce, spec_version, tx_version,
+        &call_data,
+        &genesis_hash,
+        &block_hash,
+        block_number,
+        nonce,
+        spec_version,
+        tx_version,
     );
     let payload_hash = sha256_hash(&payload);
     let request_id = generate_request_id("safety");
@@ -485,8 +505,8 @@ pub fn build_propose_safety_fund_sign_request(
         },
     };
 
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    let request_json =
+        serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
 
     Ok(VoteSignRequestResult {
         request_json,
@@ -510,8 +530,7 @@ pub fn build_safety_fund_vote_sign_request(
     if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("公钥格式无效，应为 64 位十六进制".to_string());
     }
-    let pubkey_bytes = hex::decode(&pubkey_clean)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
@@ -521,13 +540,18 @@ pub fn build_safety_fund_vote_sign_request(
     // call data: [0x13][0x04][proposal_id:u64_le][approve:bool]
     let mut call_data = Vec::with_capacity(11);
     call_data.push(19u8); // DuoqianTransferPow pallet
-    call_data.push(4u8);  // vote_safety_fund_transfer call
+    call_data.push(4u8); // vote_safety_fund_transfer call
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.push(if approve { 1u8 } else { 0u8 });
 
     let payload = build_signing_payload(
-        &call_data, &genesis_hash, &block_hash, block_number,
-        nonce, spec_version, tx_version,
+        &call_data,
+        &genesis_hash,
+        &block_hash,
+        block_number,
+        nonce,
+        spec_version,
+        tx_version,
     );
     let payload_hash = sha256_hash(&payload);
     let request_id = generate_request_id("sf-vote");
@@ -559,8 +583,8 @@ pub fn build_safety_fund_vote_sign_request(
         },
     };
 
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    let request_json =
+        serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
 
     Ok(VoteSignRequestResult {
         request_json,
@@ -577,12 +601,17 @@ pub fn build_propose_sweep_sign_request(
     shenfen_id: &str,
     amount_yuan: f64,
 ) -> Result<VoteSignRequestResult, String> {
-    let pubkey_clean = pubkey_hex.strip_prefix("0x").unwrap_or(pubkey_hex).to_ascii_lowercase();
+    let pubkey_clean = pubkey_hex
+        .strip_prefix("0x")
+        .unwrap_or(pubkey_hex)
+        .to_ascii_lowercase();
     if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("公钥格式无效".to_string());
     }
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
-    if amount_yuan <= 0.0 { return Err("划转金额必须大于 0".to_string()); }
+    if amount_yuan <= 0.0 {
+        return Err("划转金额必须大于 0".to_string());
+    }
     let amount_fen = (amount_yuan * 100.0).round() as u128;
 
     let institution_id = super::storage_keys::shenfen_id_to_fixed48(shenfen_id);
@@ -598,13 +627,21 @@ pub fn build_propose_sweep_sign_request(
     call_data.extend_from_slice(&institution_id);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
 
-    let payload = build_signing_payload(&call_data, &genesis_hash, &block_hash, block_number, nonce, spec_version, tx_version);
+    let payload = build_signing_payload(
+        &call_data,
+        &genesis_hash,
+        &block_hash,
+        block_number,
+        nonce,
+        spec_version,
+        tx_version,
+    );
     let payload_hash = sha256_hash(&payload);
     let request_id = generate_request_id("sweep");
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
-    let entry = super::find_entry(shenfen_id);
-    let inst_name = entry.map(|e| e.name).unwrap_or("未知机构");
+    let entry = super::registry::find_institution(shenfen_id);
+    let inst_name = entry.map(|e| e.name()).unwrap_or("未知机构");
 
     let display = serde_json::json!({
         "action": "propose_sweep_to_main",
@@ -634,9 +671,11 @@ pub fn build_propose_sweep_sign_request(
 
     let request_json = serde_json::to_string(&request).map_err(|e| format!("序列化失败: {e}"))?;
     Ok(VoteSignRequestResult {
-        request_json, request_id,
+        request_json,
+        request_id,
         expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
-        sign_nonce: nonce, sign_block_number: block_number,
+        sign_nonce: nonce,
+        sign_block_number: block_number,
     })
 }
 
@@ -646,7 +685,10 @@ pub fn build_sweep_vote_sign_request(
     pubkey_hex: &str,
     approve: bool,
 ) -> Result<VoteSignRequestResult, String> {
-    let pubkey_clean = pubkey_hex.strip_prefix("0x").unwrap_or(pubkey_hex).to_ascii_lowercase();
+    let pubkey_clean = pubkey_hex
+        .strip_prefix("0x")
+        .unwrap_or(pubkey_hex)
+        .to_ascii_lowercase();
     if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("公钥格式无效".to_string());
     }
@@ -663,7 +705,15 @@ pub fn build_sweep_vote_sign_request(
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.push(if approve { 1u8 } else { 0u8 });
 
-    let payload = build_signing_payload(&call_data, &genesis_hash, &block_hash, block_number, nonce, spec_version, tx_version);
+    let payload = build_signing_payload(
+        &call_data,
+        &genesis_hash,
+        &block_hash,
+        block_number,
+        nonce,
+        spec_version,
+        tx_version,
+    );
     let payload_hash = sha256_hash(&payload);
     let request_id = generate_request_id("sw-vote");
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
@@ -696,165 +746,6 @@ pub fn build_sweep_vote_sign_request(
 
     let request_json = serde_json::to_string(&request).map_err(|e| format!("序列化失败: {e}"))?;
     Ok(VoteSignRequestResult {
-        request_json, request_id,
-        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
-        sign_nonce: nonce, sign_block_number: block_number,
-    })
-}
-
-/// 构建 vote_institution_rate 签名请求（费率投票：pallet=21, call=2）。
-pub fn build_rate_vote_sign_request(
-    proposal_id: u64,
-    pubkey_hex: &str,
-    approve: bool,
-) -> Result<VoteSignRequestResult, String> {
-    let pubkey_clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(pubkey_hex)
-        .to_ascii_lowercase();
-    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("公钥格式无效，应为 64 位十六进制".to_string());
-    }
-    let pubkey_bytes = hex::decode(&pubkey_clean)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
-
-    let (spec_version, tx_version) = fetch_runtime_version()?;
-    let genesis_hash = fetch_genesis_hash()?;
-    let (block_hash, block_number) = fetch_latest_block()?;
-    let nonce = fetch_nonce(&pubkey_clean)?;
-
-    // call data: [pallet=21][call=2][proposal_id:u64_le][approve:bool]
-    let mut call_data = Vec::with_capacity(11);
-    call_data.push(21u8); // OffchainTransactionPos pallet
-    call_data.push(2u8);  // vote_institution_rate call
-    call_data.extend_from_slice(&proposal_id.to_le_bytes());
-    call_data.push(if approve { 1u8 } else { 0u8 });
-
-    let payload = build_signing_payload(
-        &call_data, &genesis_hash, &block_hash, block_number,
-        nonce, spec_version, tx_version,
-    );
-    let payload_hash = sha256_hash(&payload);
-    let request_id = generate_request_id("rate-vote");
-    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
-
-    let display = serde_json::json!({
-        "action": "vote_institution_rate",
-        "summary": format!("费率提案 #{proposal_id} 投票：{}", if approve { "赞成" } else { "反对" }),
-        "fields": [
-            { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
-            { "key": "approve", "label": "投票", "value": approve.to_string() }
-        ]
-    });
-
-    let now = now_secs();
-    let request = QrSignRequest {
-        proto: PROTOCOL_VERSION.to_string(),
-        kind: "sign_request".to_string(),
-        id: request_id.clone(),
-        issued_at: now,
-        expires_at: now + DEFAULT_TTL_SECS,
-        body: SignRequestBody {
-            address: account_ss58,
-            pubkey: format!("0x{pubkey_clean}"),
-            sig_alg: "sr25519".to_string(),
-            payload_hex: format!("0x{}", hex::encode(&payload)),
-            spec_version: spec_version,
-            display,
-        },
-    };
-
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
-
-    Ok(VoteSignRequestResult {
-        request_json,
-        request_id,
-        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
-        sign_nonce: nonce,
-        sign_block_number: block_number,
-    })
-}
-
-/// 构建 propose_institution_rate 签名请求（费率设置提案：pallet=21, call=1）。
-pub fn build_propose_rate_sign_request(
-    pubkey_hex: &str,
-    shenfen_id: &str,
-    new_rate_bp: u32,
-) -> Result<VoteSignRequestResult, String> {
-    // 验证公钥
-    let pubkey_clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(pubkey_hex)
-        .to_ascii_lowercase();
-    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("公钥格式无效，应为 64 位十六进制".to_string());
-    }
-    let pubkey_bytes = hex::decode(&pubkey_clean)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
-
-    // 验证费率范围 1-10 bp
-    if !(1..=10).contains(&new_rate_bp) {
-        return Err(format!("费率必须在 1-10 bp 范围内，当前值: {new_rate_bp}"));
-    }
-
-    let institution_id = super::storage_keys::shenfen_id_to_fixed48(shenfen_id);
-
-    let (spec_version, tx_version) = fetch_runtime_version()?;
-    let genesis_hash = fetch_genesis_hash()?;
-    let (block_hash, block_number) = fetch_latest_block()?;
-    let nonce = fetch_nonce(&pubkey_clean)?;
-
-    // call data: [0x15][0x01][institution:48][new_rate_bp:u32_le]
-    // pallet 21 = OffchainTransactionPos, call_index 1 = propose_institution_rate
-    let mut call_data = Vec::with_capacity(2 + 48 + 4);
-    call_data.push(21u8); // OffchainTransactionPos pallet
-    call_data.push(1u8);  // propose_institution_rate call
-    call_data.extend_from_slice(&institution_id);
-    call_data.extend_from_slice(&new_rate_bp.to_le_bytes());
-
-    let payload = build_signing_payload(
-        &call_data, &genesis_hash, &block_hash, block_number,
-        nonce, spec_version, tx_version,
-    );
-    let payload_hash = sha256_hash(&payload);
-    let request_id = generate_request_id("rate");
-    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
-
-    let rate_percent = format!("{:.2}%", new_rate_bp as f64 / 100.0);
-    let entry = super::find_entry(shenfen_id);
-    let inst_name = entry.map(|e| e.name).unwrap_or("未知机构");
-
-    let display = serde_json::json!({
-        "action": "propose_institution_rate",
-        "summary": format!("{inst_name} 提案设置链下交易费率为 {rate_percent}"),
-        "fields": [
-            { "key": "institution", "label": "省储行", "value": inst_name },
-            { "key": "new_rate_bp", "label": "新费率", "value": format!("{new_rate_bp} bp ({rate_percent})") }
-        ]
-    });
-
-    let now = now_secs();
-    let request = QrSignRequest {
-        proto: PROTOCOL_VERSION.to_string(),
-        kind: "sign_request".to_string(),
-        id: request_id.clone(),
-        issued_at: now,
-        expires_at: now + DEFAULT_TTL_SECS,
-        body: SignRequestBody {
-            address: account_ss58,
-            pubkey: format!("0x{pubkey_clean}"),
-            sig_alg: "sr25519".to_string(),
-            payload_hex: format!("0x{}", hex::encode(&payload)),
-            spec_version: spec_version,
-            display,
-        },
-    };
-
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
-
-    Ok(VoteSignRequestResult {
         request_json,
         request_id,
         expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
@@ -877,12 +768,10 @@ pub fn build_developer_upgrade_sign_request(
     if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("公钥格式无效，应为 64 位十六进制".to_string());
     }
-    let pubkey_bytes = hex::decode(&pubkey_clean)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
     // 读取 WASM 文件
-    let wasm_code = std::fs::read(wasm_path)
-        .map_err(|e| format!("读取 WASM 文件失败: {e}"))?;
+    let wasm_code = std::fs::read(wasm_path).map_err(|e| format!("读取 WASM 文件失败: {e}"))?;
     if wasm_code.is_empty() {
         return Err("WASM 文件为空".to_string());
     }
@@ -901,13 +790,18 @@ pub fn build_developer_upgrade_sign_request(
     let wasm_len_compact = encode_compact_u32(wasm_code.len() as u32);
     let mut call_data = Vec::with_capacity(2 + wasm_len_compact.len() + wasm_code.len());
     call_data.push(13u8); // RuntimeRootUpgrade pallet
-    call_data.push(2u8);  // developer_direct_upgrade call
+    call_data.push(2u8); // developer_direct_upgrade call
     call_data.extend_from_slice(&wasm_len_compact);
     call_data.extend_from_slice(&wasm_code);
 
     let payload = build_signing_payload(
-        &call_data, &genesis_hash, &block_hash, block_number,
-        nonce, spec_version, tx_version,
+        &call_data,
+        &genesis_hash,
+        &block_hash,
+        block_number,
+        nonce,
+        spec_version,
+        tx_version,
     );
     let request_id = generate_request_id("devupg");
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
@@ -916,9 +810,7 @@ pub fn build_developer_upgrade_sign_request(
     // runtime WASM payload 远超 256 字节，QR 码装不下完整 payload。
     // 因此 QR 请求中只放 blake2_256(payload)（32 字节），冷钱包对它签名的结果
     // 与对完整 payload 签名的结果一致（sr25519 内部会自动 hash）。
-    let payload_for_qr = blake2b_simd::Params::new()
-        .hash_length(32)
-        .hash(&payload);
+    let payload_for_qr = blake2b_simd::Params::new().hash_length(32).hash(&payload);
     // 中文注释：expected_payload_hash 必须基于 QR 中实际发送的 payload_hex 计算，
     // 因为 wumin 返回的 payload_hash 是对收到的 payload_hex 做 SHA-256。
     let payload_hash = sha256_hash(payload_for_qr.as_bytes());
@@ -949,8 +841,8 @@ pub fn build_developer_upgrade_sign_request(
         },
     };
 
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    let request_json =
+        serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
 
     Ok(VoteSignRequestResult {
         request_json,
@@ -963,8 +855,7 @@ pub fn build_developer_upgrade_sign_request(
 
 /// 构建 developer_direct_upgrade 的 call_data（供 submit 时重建）。
 pub fn build_developer_upgrade_call_data(wasm_path: &str) -> Result<Vec<u8>, String> {
-    let wasm_code = std::fs::read(wasm_path)
-        .map_err(|e| format!("读取 WASM 文件失败: {e}"))?;
+    let wasm_code = std::fs::read(wasm_path).map_err(|e| format!("读取 WASM 文件失败: {e}"))?;
     let wasm_len_compact = encode_compact_u32(wasm_code.len() as u32);
     let mut call_data = Vec::with_capacity(2 + wasm_len_compact.len() + wasm_code.len());
     call_data.push(13u8);
@@ -989,12 +880,10 @@ pub fn build_propose_runtime_upgrade_sign_request(
     if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("公钥格式无效，应为 64 位十六进制".to_string());
     }
-    let pubkey_bytes = hex::decode(&pubkey_clean)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
     // 读取 WASM 文件
-    let wasm_code = std::fs::read(wasm_path)
-        .map_err(|e| format!("读取 WASM 文件失败: {e}"))?;
+    let wasm_code = std::fs::read(wasm_path).map_err(|e| format!("读取 WASM 文件失败: {e}"))?;
     if wasm_code.is_empty() {
         return Err("WASM 文件为空".to_string());
     }
@@ -1012,9 +901,8 @@ pub fn build_propose_runtime_upgrade_sign_request(
     let snapshot = super::sfid_api::fetch_population_snapshot(&pubkey_clean)?;
 
     // 构建 call_data
-    let call_data = build_propose_runtime_upgrade_call_data_inner(
-        &wasm_code, reason_bytes, &snapshot,
-    )?;
+    let call_data =
+        build_propose_runtime_upgrade_call_data_inner(&wasm_code, reason_bytes, &snapshot)?;
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
@@ -1022,15 +910,18 @@ pub fn build_propose_runtime_upgrade_sign_request(
     let nonce = fetch_nonce(&pubkey_clean)?;
 
     let payload = build_signing_payload(
-        &call_data, &genesis_hash, &block_hash, block_number,
-        nonce, spec_version, tx_version,
+        &call_data,
+        &genesis_hash,
+        &block_hash,
+        block_number,
+        nonce,
+        spec_version,
+        tx_version,
     );
     let request_id = generate_request_id("upgrade");
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
-    let payload_for_qr = blake2b_simd::Params::new()
-        .hash_length(32)
-        .hash(&payload);
+    let payload_for_qr = blake2b_simd::Params::new().hash_length(32).hash(&payload);
     let payload_hash = sha256_hash(payload_for_qr.as_bytes());
 
     let display = serde_json::json!({
@@ -1061,8 +952,8 @@ pub fn build_propose_runtime_upgrade_sign_request(
         },
     };
 
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    let request_json =
+        serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
 
     Ok((
         VoteSignRequestResult {
@@ -1084,14 +975,13 @@ pub fn build_propose_runtime_upgrade_call_data(
     snapshot_nonce: &str,
     snapshot_signature: &str,
 ) -> Result<Vec<u8>, String> {
-    let wasm_code = std::fs::read(wasm_path)
-        .map_err(|e| format!("读取 WASM 文件失败: {e}"))?;
+    let wasm_code = std::fs::read(wasm_path).map_err(|e| format!("读取 WASM 文件失败: {e}"))?;
     let nonce_bytes = snapshot_nonce.as_bytes();
     let sig_hex = snapshot_signature
         .strip_prefix("0x")
         .unwrap_or(snapshot_signature);
-    let sig_bytes = hex::decode(sig_hex)
-        .map_err(|e| format!("snapshot signature 解码失败: {e}"))?;
+    let sig_bytes =
+        hex::decode(sig_hex).map_err(|e| format!("snapshot signature 解码失败: {e}"))?;
 
     let snapshot = super::sfid_api::PopulationSnapshot {
         eligible_total,
@@ -1109,14 +999,18 @@ pub fn build_propose_runtime_upgrade_call_data(
     let sig_compact = encode_compact_u32(sig_bytes.len() as u32);
 
     let mut call_data = Vec::with_capacity(
-        2 + reason_compact.len() + reason_bytes.len()
-            + wasm_compact.len() + wasm_code.len()
+        2 + reason_compact.len()
+            + reason_bytes.len()
+            + wasm_compact.len()
+            + wasm_code.len()
             + 8
-            + nonce_compact.len() + nonce_bytes.len()
-            + sig_compact.len() + sig_bytes.len(),
+            + nonce_compact.len()
+            + nonce_bytes.len()
+            + sig_compact.len()
+            + sig_bytes.len(),
     );
     call_data.push(13u8); // RuntimeRootUpgrade pallet
-    call_data.push(0u8);  // propose_runtime_upgrade call
+    call_data.push(0u8); // propose_runtime_upgrade call
     call_data.extend_from_slice(&reason_compact);
     call_data.extend_from_slice(reason_bytes);
     call_data.extend_from_slice(&wasm_compact);
@@ -1140,8 +1034,8 @@ fn build_propose_runtime_upgrade_call_data_inner(
         .signature
         .strip_prefix("0x")
         .unwrap_or(&snapshot.signature);
-    let sig_bytes = hex::decode(sig_hex)
-        .map_err(|e| format!("snapshot signature 解码失败: {e}"))?;
+    let sig_bytes =
+        hex::decode(sig_hex).map_err(|e| format!("snapshot signature 解码失败: {e}"))?;
 
     let reason_compact = encode_compact_u32(reason_bytes.len() as u32);
     let wasm_compact = encode_compact_u32(wasm_code.len() as u32);
@@ -1149,11 +1043,15 @@ fn build_propose_runtime_upgrade_call_data_inner(
     let sig_compact = encode_compact_u32(sig_bytes.len() as u32);
 
     let mut call_data = Vec::with_capacity(
-        2 + reason_compact.len() + reason_bytes.len()
-            + wasm_compact.len() + wasm_code.len()
+        2 + reason_compact.len()
+            + reason_bytes.len()
+            + wasm_compact.len()
+            + wasm_code.len()
             + 8
-            + nonce_compact.len() + nonce_bytes.len()
-            + sig_compact.len() + sig_bytes.len(),
+            + nonce_compact.len()
+            + nonce_bytes.len()
+            + sig_compact.len()
+            + sig_bytes.len(),
     );
     call_data.push(13u8);
     call_data.push(0u8);
@@ -1214,8 +1112,8 @@ pub fn verify_and_submit(
     response_json: &str,
 ) -> Result<VoteSubmitResult, String> {
     // 解析响应
-    let response: QrSignResponse = serde_json::from_str(response_json)
-        .map_err(|e| format!("解析签名响应失败: {e}"))?;
+    let response: QrSignResponse =
+        serde_json::from_str(response_json).map_err(|e| format!("解析签名响应失败: {e}"))?;
 
     // 验证协议版本
     if response.proto != PROTOCOL_VERSION {
@@ -1236,7 +1134,8 @@ pub fn verify_and_submit(
         .unwrap_or(expected_pubkey_hex)
         .to_ascii_lowercase();
     let response_pubkey = response
-        .body.pubkey
+        .body
+        .pubkey
         .strip_prefix("0x")
         .unwrap_or(&response.body.pubkey)
         .to_ascii_lowercase();
@@ -1250,7 +1149,8 @@ pub fn verify_and_submit(
         .unwrap_or(expected_payload_hash)
         .to_ascii_lowercase();
     let response_hash = response
-        .body.payload_hash
+        .body
+        .payload_hash
         .strip_prefix("0x")
         .unwrap_or(&response.body.payload_hash)
         .to_ascii_lowercase();
@@ -1260,21 +1160,23 @@ pub fn verify_and_submit(
 
     // 提取签名
     let sig_hex = response
-        .body.signature
+        .body
+        .signature
         .strip_prefix("0x")
         .unwrap_or(&response.body.signature);
     if sig_hex.len() != 128 {
-        return Err(format!("签名长度无效：期望 128 hex，实际 {}", sig_hex.len()));
+        return Err(format!(
+            "签名长度无效：期望 128 hex，实际 {}",
+            sig_hex.len()
+        ));
     }
-    let signature_bytes = hex::decode(sig_hex)
-        .map_err(|e| format!("签名解码失败: {e}"))?;
+    let signature_bytes = hex::decode(sig_hex).map_err(|e| format!("签名解码失败: {e}"))?;
 
     // 提取公钥
     let pubkey_hex_clean = expected_pubkey
         .strip_prefix("0x")
         .unwrap_or(&expected_pubkey);
-    let pubkey_bytes = hex::decode(pubkey_hex_clean)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let pubkey_bytes = hex::decode(pubkey_hex_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
     // 使用签名时保存的 nonce 和 block_number，必须与签名载荷一致
     eprintln!("[签名提交] sign_nonce={sign_nonce}, sign_block_number={sign_block_number}");
@@ -1294,15 +1196,15 @@ pub fn verify_and_submit(
     extrinsic_body.push(0x01u8);
     extrinsic_body.extend_from_slice(&signature_bytes);
     // extensions_signed（与 signing payload 中的 extensions_signed 完全相同）
-    // AuthorizeCall(0) + CheckNonZeroSender(0) + CheckNonKeylessSender(0)
+    // AuthorizeCall(0) + CheckNonZeroSender(0) + CheckNonStakeSender(0)
     // + CheckSpecVersion(0) + CheckTxVersion(0) + CheckGenesis(0)
-    extrinsic_body.extend_from_slice(&era_bytes);       // CheckEra
-    extrinsic_body.extend_from_slice(&nonce_compact);   // CheckNonce
-    // CheckWeight(0)
-    extrinsic_body.extend_from_slice(&tip_compact);     // ChargeTransactionPayment
-    extrinsic_body.push(0x00u8);                        // CheckMetadataHash: mode=Disabled
-    // WeightReclaim(0)
-    // call data
+    extrinsic_body.extend_from_slice(&era_bytes); // CheckEra
+    extrinsic_body.extend_from_slice(&nonce_compact); // CheckNonce
+                                                      // CheckWeight(0)
+    extrinsic_body.extend_from_slice(&tip_compact); // ChargeTransactionPayment
+    extrinsic_body.push(0x00u8); // CheckMetadataHash: mode=Disabled
+                                 // WeightReclaim(0)
+                                 // call data
     extrinsic_body.extend_from_slice(call_data);
 
     // Length-prefixed extrinsic
@@ -1313,7 +1215,11 @@ pub fn verify_and_submit(
 
     // 先 dry-run 验证，避免提交错误交易导致链卡住
     let extrinsic_hex = format!("0x{}", hex::encode(&full_extrinsic));
-    eprintln!("[签名提交] extrinsic hex ({} bytes): {}", full_extrinsic.len(), &extrinsic_hex[..extrinsic_hex.len().min(200)]);
+    eprintln!(
+        "[签名提交] extrinsic hex ({} bytes): {}",
+        full_extrinsic.len(),
+        &extrinsic_hex[..extrinsic_hex.len().min(200)]
+    );
     eprintln!("[签名提交] call_data hex: 0x{}", hex::encode(call_data));
 
     let dry_run_result = rpc_post(
@@ -1355,9 +1261,7 @@ pub fn verify_and_submit(
                 );
             } else if result_bytes.len() > 1 && result_bytes[1] != 0x00 {
                 // Ok(Err(DispatchError)) — 交易格式正确但执行会失败，阻止提交
-                return Err(format!(
-                    "交易执行会失败: DispatchError (hex: {s})"
-                ));
+                return Err(format!("交易执行会失败: DispatchError (hex: {s})"));
             }
             // 0x0000 = Ok(Ok(())) → 可以提交
         }
@@ -1374,10 +1278,7 @@ pub fn verify_and_submit(
         Value::Array(vec![Value::String(extrinsic_hex)]),
     )?;
 
-    let tx_hash = result
-        .as_str()
-        .unwrap_or("unknown")
-        .to_string();
+    let tx_hash = result.as_str().unwrap_or("unknown").to_string();
 
     Ok(VoteSubmitResult { tx_hash })
 }
@@ -1385,7 +1286,12 @@ pub fn verify_and_submit(
 // ──── RPC 查询 ────
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, RPC_RESPONSE_LIMIT_SMALL)
+    rpc::rpc_post(
+        method,
+        params,
+        RPC_REQUEST_TIMEOUT,
+        RPC_RESPONSE_LIMIT_SMALL,
+    )
 }
 
 fn fetch_runtime_version() -> Result<(u32, u32), String> {
@@ -1406,13 +1312,13 @@ fn fetch_runtime_version() -> Result<(u32, u32), String> {
 /// 签名载荷 = call_data + extensions_signed + extensions_implicit
 ///
 /// extensions_signed（放在 extrinsic body 中、也是 signing payload 的一部分）:
-///   AuthorizeCall: 0B, CheckNonZeroSender: 0B, CheckNonKeylessSender: 0B,
+///   AuthorizeCall: 0B, CheckNonZeroSender: 0B, CheckNonStakeSender: 0B,
 ///   CheckSpecVersion: 0B, CheckTxVersion: 0B, CheckGenesis: 0B,
 ///   CheckEra: 2B (mortal era), CheckNonce: compact(nonce), CheckWeight: 0B,
 ///   ChargeTransactionPayment: compact(tip), CheckMetadataHash: 1B (mode=0), WeightReclaim: 0B
 ///
 /// extensions_implicit（仅在 signing payload 中追加）:
-///   AuthorizeCall: 0B, CheckNonZeroSender: 0B, CheckNonKeylessSender: 0B,
+///   AuthorizeCall: 0B, CheckNonZeroSender: 0B, CheckNonStakeSender: 0B,
 ///   CheckSpecVersion: 4B (u32_le), CheckTxVersion: 4B (u32_le), CheckGenesis: 32B,
 ///   CheckEra: 32B (block_hash), CheckNonce: 0B, CheckWeight: 0B,
 ///   ChargeTransactionPayment: 0B, CheckMetadataHash: 1B (Option::None=0x00), WeightReclaim: 0B
@@ -1433,24 +1339,24 @@ fn build_signing_payload(
     // call data
     payload.extend_from_slice(call_data);
     // extensions_signed（与 extrinsic body 中的扩展字节相同）
-    // AuthorizeCall(0) + CheckNonZeroSender(0) + CheckNonKeylessSender(0)
+    // AuthorizeCall(0) + CheckNonZeroSender(0) + CheckNonStakeSender(0)
     // + CheckSpecVersion(0) + CheckTxVersion(0) + CheckGenesis(0)
-    payload.extend_from_slice(&era_bytes);       // CheckEra: mortal era 2 bytes
-    payload.extend_from_slice(&nonce_compact);   // CheckNonce: compact nonce
-    // CheckWeight(0)
-    payload.extend_from_slice(&tip_compact);     // ChargeTransactionPayment: compact tip
-    payload.push(0x00u8);                        // CheckMetadataHash: mode=Disabled
-    // WeightReclaim(0)
+    payload.extend_from_slice(&era_bytes); // CheckEra: mortal era 2 bytes
+    payload.extend_from_slice(&nonce_compact); // CheckNonce: compact nonce
+                                               // CheckWeight(0)
+    payload.extend_from_slice(&tip_compact); // ChargeTransactionPayment: compact tip
+    payload.push(0x00u8); // CheckMetadataHash: mode=Disabled
+                          // WeightReclaim(0)
 
     // extensions_implicit（additional signed data）
-    // AuthorizeCall(0) + CheckNonZeroSender(0) + CheckNonKeylessSender(0)
-    payload.extend_from_slice(&spec_version.to_le_bytes());  // CheckSpecVersion: u32
-    payload.extend_from_slice(&tx_version.to_le_bytes());    // CheckTxVersion: u32
-    payload.extend_from_slice(genesis_hash);                 // CheckGenesis: H256
-    payload.extend_from_slice(block_hash);                   // CheckEra: birth block hash H256
-    // CheckNonce(0) + CheckWeight(0) + ChargeTransactionPayment(0)
-    payload.push(0x00u8);                                    // CheckMetadataHash: Option::None
-    // WeightReclaim(0)
+    // AuthorizeCall(0) + CheckNonZeroSender(0) + CheckNonStakeSender(0)
+    payload.extend_from_slice(&spec_version.to_le_bytes()); // CheckSpecVersion: u32
+    payload.extend_from_slice(&tx_version.to_le_bytes()); // CheckTxVersion: u32
+    payload.extend_from_slice(genesis_hash); // CheckGenesis: H256
+    payload.extend_from_slice(block_hash); // CheckEra: birth block hash H256
+                                           // CheckNonce(0) + CheckWeight(0) + ChargeTransactionPayment(0)
+    payload.push(0x00u8); // CheckMetadataHash: Option::None
+                          // WeightReclaim(0)
 
     payload
 }
@@ -1460,9 +1366,7 @@ fn fetch_genesis_hash() -> Result<[u8; 32], String> {
         "chain_getBlockHash",
         Value::Array(vec![Value::Number(0.into())]),
     )?;
-    let hash_str = result
-        .as_str()
-        .ok_or("genesis hash 格式无效")?;
+    let hash_str = result.as_str().ok_or("genesis hash 格式无效")?;
     decode_hash32(hash_str)
 }
 
@@ -1470,27 +1374,20 @@ fn fetch_latest_block() -> Result<([u8; 32], u64), String> {
     let header = rpc_post("chain_getHeader", Value::Array(vec![]))?;
     let hash_result = rpc_post("chain_getBlockHash", Value::Array(vec![]))?;
 
-    let block_hash = decode_hash32(
-        hash_result.as_str().ok_or("最新区块哈希格式无效")?,
-    )?;
+    let block_hash = decode_hash32(hash_result.as_str().ok_or("最新区块哈希格式无效")?)?;
 
     let number_hex = header
         .get("number")
         .and_then(|v| v.as_str())
         .ok_or("缺少区块号")?;
-    let number = u64::from_str_radix(
-        number_hex.strip_prefix("0x").unwrap_or(number_hex),
-        16,
-    )
-    .map_err(|e| format!("区块号解析失败: {e}"))?;
+    let number = u64::from_str_radix(number_hex.strip_prefix("0x").unwrap_or(number_hex), 16)
+        .map_err(|e| format!("区块号解析失败: {e}"))?;
 
     Ok((block_hash, number))
 }
 
 fn fetch_nonce(pubkey_hex: &str) -> Result<u32, String> {
-    let ss58 = pubkey_to_ss58(
-        &hex::decode(pubkey_hex).map_err(|e| format!("公钥解码失败: {e}"))?,
-    )?;
+    let ss58 = pubkey_to_ss58(&hex::decode(pubkey_hex).map_err(|e| format!("公钥解码失败: {e}"))?)?;
     let result = rpc_post(
         "system_accountNextIndex",
         Value::Array(vec![Value::String(ss58)]),
@@ -1625,8 +1522,13 @@ pub fn build_sign_request_from_call_data(
     let nonce = fetch_nonce(pubkey_hex)?;
 
     let payload = build_signing_payload(
-        call_data, &genesis_hash, &block_hash, block_number,
-        nonce, spec_version, tx_version,
+        call_data,
+        &genesis_hash,
+        &block_hash,
+        block_number,
+        nonce,
+        spec_version,
+        tx_version,
     );
     let payload_hash = sha256_hash(&payload);
     let request_id = generate_request_id(action);
@@ -1655,8 +1557,8 @@ pub fn build_sign_request_from_call_data(
         },
     };
 
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    let request_json =
+        serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
 
     Ok(VoteSignRequestResult {
         request_json,

@@ -130,7 +130,10 @@ fn cargo_pkg_version() -> String {
 /// 从 state_getRuntimeVersion RPC 获取 spec_version。
 fn fetch_spec_version() -> Option<u32> {
     let result = rpc_post("state_getRuntimeVersion", Value::Array(vec![])).ok()?;
-    result.get("specVersion").and_then(|v| v.as_u64()).map(|v| v as u32)
+    result
+        .get("specVersion")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32)
 }
 
 fn get_chain_status_sync(app: AppHandle) -> Result<ChainStatus, String> {
@@ -275,7 +278,7 @@ pub async fn get_total_issuance(app: AppHandle) -> Result<TotalIssuance, String>
     .await
 }
 
-// ── 永久质押金额（43 个省储行 keyless 地址余额之和）──
+// ── 永久质押金额（43 个省储行 stake_address 余额之和）──
 
 /// Substrate 标准 Blake2_128Concat：blake2b_128(data) ++ data。
 fn blake2b_128(input: &[u8]) -> [u8; 16] {
@@ -330,7 +333,7 @@ fn get_total_stake_sync(app: AppHandle) -> Result<TotalStake, String> {
 
     // 批量构造 43 个存储键，逐个查询。
     for bank in CHINA_CH.iter() {
-        let key = system_account_storage_key(&bank.keyless_address);
+        let key = system_account_storage_key(&bank.stake_address);
         let raw = match rpc_post("state_getStorage", Value::Array(vec![Value::String(key)])) {
             Ok(v) => v,
             Err(_) => continue, // 单个查询失败跳过，不中断

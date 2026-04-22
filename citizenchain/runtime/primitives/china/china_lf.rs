@@ -6,7 +6,7 @@ use hex_literal::hex;
 pub struct ChinaLf {
     pub shenfen_id: &'static str,
     pub shenfen_name: &'static str,
-    pub duoqian_address: [u8; 32],
+    pub main_address: [u8; 32],
     pub duoqian_admins: &'static [[u8; 32]],
 }
 
@@ -16,7 +16,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-ZS001-LF04-322011991-20260222",
         shenfen_name: "国家立法院",
-        duoqian_address: hex!("89240894859dd039d23e394047a2f6b58a0d18f9103719c961bee9b673b5e5cb"),
+        main_address: hex!("c7bdc514a126fa8bacf9809d6b1f23d81879c8f37a04af9820d24544deabeb78"),
         duoqian_admins: &[
             hex!("ba98d5590e86650cbd558af50b7c22a23e4646e4d18ee0d4380fd5e58773270b"),
             hex!("8a488cfeb9c1e1cfed43ab1317007aec6e1b502c6d4131e8cfc6c9f540da8237"),
@@ -32,7 +32,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-ZS001-LF0D-567216072-20260222",
         shenfen_name: "中枢省立法院",
-        duoqian_address: hex!("96f098a34dbc5bf8eba42d3650368cc2cb394a25ad10e8c25ed77cada93e45e2"),
+        main_address: hex!("9cd587ce9a97e63d7a65957e2e9e33231aa5c4ed5e330cc5b1fd20e7bbd330d5"),
         duoqian_admins: &[
             hex!("7e5259d0424cf88ad3dbbe0c99e05790e952445a3ab6923d93d70f05d5aa5162"),
             hex!("babdd20889191c64e9553b63ffd8043bd5b8942201ce61666eeee87d21942b09"),
@@ -48,7 +48,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-LN001-LF0S-687129656-20260222",
         shenfen_name: "岭南省立法院",
-        duoqian_address: hex!("e6cf9ab11d326d3ac67363ed66fef489198f8ba92ddd82039df0fba5e7daf539"),
+        main_address: hex!("b70c48fe852f9aeaedf639d0d039113bc10f0e69827dc6c40d9cd707e2c652c7"),
         duoqian_admins: &[
             hex!("0245fd4ef08d25ec50635c6e0e1b50bdf723aec6b76195baa176798f6dcec720"),
             hex!("94107530c899b42a503985fac0f1f06416537ecfed575e81a35727de7f358b2b"),
@@ -64,7 +64,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-GD000-LF0C-052333305-20260222",
         shenfen_name: "广东省立法院",
-        duoqian_address: hex!("80f0153934d5ab817e46d94619d8fd168adcda162ee1165701ec9df77e81a6df"),
+        main_address: hex!("b831d6410c779a3af504188d47321959cdef4e97737244f3e48ad4ebe9656979"),
         duoqian_admins: &[
             hex!("ce93c51699df6ec7fa3e8770ce9f0a502fd5df05b8dfcec635c4e42b04ad7f01"),
             hex!("ae51b6c2ae2e5ad33acc1898ea72c394450254ff92bc471929772694f8615343"),
@@ -80,7 +80,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-GX000-LF0U-550329623-20260222",
         shenfen_name: "广西省立法院",
-        duoqian_address: hex!("f5dcebbf3c4b0e61f074809ea9761a171b52a59952ac3e9e18fae73f6c5452fe"),
+        main_address: hex!("81b38f16326ed3cce6392f98bebb009e6e5cdb37914c4e3bcde6b4e32f8a0f46"),
         duoqian_admins: &[
             hex!("40ff35dc2afdde79d9e2f41d8e029dd82bcee677975248c223b8d96cf5c6110e"),
             hex!("5ad25b9ceb70f0c78e20e416a94382f18f3b68b0348d871edefa9d5aab261213"),
@@ -96,7 +96,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-FJ000-LF0D-211971255-20260222",
         shenfen_name: "福建省立法院",
-        duoqian_address: hex!("df6949bb3b27ba8f39513a60abe70afa127611c55ff99405dda381e1f079a15b"),
+        main_address: hex!("3c68cadee1fef4cd7433978ceaafce61d5e77a1f95e7afeb5b360188753f10c0"),
         duoqian_admins: &[
             hex!("4eebfbbb8fe61b5ee416742ee16f3b6121c608e9a7c40d1279486e111761b649"),
             hex!("d4c53b824d03f0366799a27003dea819252d6372695f1db44be752879a26190b"),
@@ -112,7 +112,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-HN000-LF0M-994247755-20260222",
         shenfen_name: "海南省立法院",
-        duoqian_address: hex!("599f74aa85d816015f640e175603cabd44a6847225220fd183c8f467b20e3fa4"),
+        main_address: hex!("617a52210e267505d6c452f5443688f5f59f1eeb15b1bcb3288a3ea5e0c2e6e7"),
         duoqian_admins: &[
             hex!("02c4b8ec7efaab624e45f363daf7b2a6a280f3efb9b9a498913f66843328d952"),
             hex!("d242385989f0aff47bc2c96a45721a1a16e9477232a6a7750d647ee74e0bb272"),
@@ -128,7 +128,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-YN000-LF0W-753818460-20260222",
         shenfen_name: "云南省立法院",
-        duoqian_address: hex!("e42a86ee2dddc15ed0732884665b742db9d5e641082e03a567ff153f9a86fe8a"),
+        main_address: hex!("81072834186c772f7d0be2fe5c6c1490ca89617be4819c750cde514e7de74dea"),
         duoqian_admins: &[
             hex!("323c69e679987b049c7eaac656e1bbf0acaaa2427075e08a3baa736d69b64301"),
             hex!("acd1330fe8f909c34a7f7426d1b8036f7a17d83845e8e18c3ee46e36758f4558"),
@@ -144,7 +144,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-GZ000-LF0E-032025014-20260222",
         shenfen_name: "贵州省立法院",
-        duoqian_address: hex!("5ff2e1e9bb211712874c90a05bc8a6257dcd5af2dba8c089e686d3a677e196cb"),
+        main_address: hex!("952b058a35f11a51af08cff8194ec101637a2897f6b0a06d1775af67baf6f661"),
         duoqian_admins: &[
             hex!("4079d74601ba4a9c4bd7b11b89754537e4886ac5012fccedf50afda987450d17"),
             hex!("bab730ba87cfdc312ca1a1bc2d24cbeb2f51058f62b839f56a6d11d57008f723"),
@@ -160,7 +160,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-HU000-LF0R-750335780-20260222",
         shenfen_name: "湖南省立法院",
-        duoqian_address: hex!("e2f36a5af5ea73c2d13ae96588822bca49b2bf5b5aa057b982ed2faf6130f767"),
+        main_address: hex!("c33452077a1acf68e2fdc1f185ae1a4dc51de2cbc6e53e1444ee1ed1b8084847"),
         duoqian_admins: &[
             hex!("28546455364f701c956d5d0ce87b2ff3fe4affee091f7ef96abc14daec6bee43"),
             hex!("cc18513587d5fc0faf436f608e649e30ebaab9b7ec23daf4c7f2640ce7d3b075"),
@@ -176,7 +176,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-JX000-LF0C-050464661-20260222",
         shenfen_name: "江西省立法院",
-        duoqian_address: hex!("8229372c9c8e0f0839d46a84140981a0df1d6cc79ab6727654c143bb6ebaa24c"),
+        main_address: hex!("707aee511259e6b9497245780d78ee3de2c9d04f19884f9549e9012b9343143c"),
         duoqian_admins: &[
             hex!("722f27d80ba098b0cac8da40373b9c67eb34cd63f3993457cd7aabdfe6cb8f7c"),
             hex!("728ec736c99b3c418de62ecc70cdd06a9be67f150b749a19372c9aef5cec643b"),
@@ -192,7 +192,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-ZJ000-LF0M-045881965-20260222",
         shenfen_name: "浙江省立法院",
-        duoqian_address: hex!("a6f12465fd22264ac672219e70e120013bd0122cde0c604b76cc6870f38e6d45"),
+        main_address: hex!("987b608982a021c67cc285fadebcf97f79bb5d0adf3d0b03817817ea1111c16e"),
         duoqian_admins: &[
             hex!("aafa0c2a8504952cda206b1b6a9eabc165d435826432b24864a163c7bc742903"),
             hex!("6ca8f5d4b1b209bd9b89e341b6f432193282e2c477734b1474ecc781d3580b1e"),
@@ -208,7 +208,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-JS000-LF0P-990674786-20260222",
         shenfen_name: "江苏省立法院",
-        duoqian_address: hex!("f5dbf679c26053c11201886b088694763947a6141bb0550199a60d9fcc726624"),
+        main_address: hex!("ebbc4625e581f0259b01b6a9d987829f56e50556ad00b557fc60623877ddedd6"),
         duoqian_admins: &[
             hex!("f8253af9f7de0432a64f513019bebaaac8f7c4328a72cefd5652297b5d5b557e"),
             hex!("16077f8372e19be34ffd5b4f93fa39a0d249b3a4ebc1c48c46a49cc26d419939"),
@@ -224,7 +224,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-SD000-LF0E-425528544-20260222",
         shenfen_name: "山东省立法院",
-        duoqian_address: hex!("60c2e8e48e43a01888f1775fa6a3b30043b5f269b65b4bd6cc639020ffc0ff4b"),
+        main_address: hex!("1582e1548f3fd0b38e7538a2274f64d34832f3f7772339b4a6c950f5d62600d2"),
         duoqian_admins: &[
             hex!("6c9b21a7bc2ed4bae1e5b7c7e4fde221494701432260a3b2d9950977048b5058"),
             hex!("6231a483e10b89389b8c59b6aba4eb75905c2512cbff6b73567b3dc25c924169"),
@@ -240,7 +240,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-SX000-LF0F-024836586-20260222",
         shenfen_name: "山西省立法院",
-        duoqian_address: hex!("44ebb9d2bfb83960ca9d21ab1bd70afd8826b480e1324692152008ede1bf39f6"),
+        main_address: hex!("7f2901478ee27b14a71a787f8db3c7f846d9552bee725381fa0f281b69a91a44"),
         duoqian_admins: &[
             hex!("a6f6195c48e3fab0518dc00ac9d0fc47c6adbb27705fe7fbe67b223a171ac635"),
             hex!("c669cc416720d36f429fb61e275331aa84271508a02d0987e38eac43e02ff84e"),
@@ -256,7 +256,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-HE000-LF0Y-331451307-20260222",
         shenfen_name: "河南省立法院",
-        duoqian_address: hex!("075ef7938da91a7c792ca979571ecf3926b14dea29f12e8baadc9b8ce7d2b882"),
+        main_address: hex!("7124143c2e80863a035c43eba259066b1c59f4ad0dfb44674f1ed81824202636"),
         duoqian_admins: &[
             hex!("a21ef0628cdbb72fa6583faa52a0d6582674ebc22f6215b6516647359226307c"),
             hex!("5e26f2ad3f7408dc1c81edd0f53a9f25fee2f781a345852840ea75545e14e045"),
@@ -272,7 +272,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-HB000-LF08-541657945-20260222",
         shenfen_name: "河北省立法院",
-        duoqian_address: hex!("cbe94d9b6d297d89407e6e6f79f05bd119eca26c1e348dff5ea11dd509b6597a"),
+        main_address: hex!("1cb8259d1bbe360d80376c899bb01124661d633f54bc78b910996848d695a6bf"),
         duoqian_admins: &[
             hex!("ea6d1caaa0b57c55ab198fd9f0df9cfaff54bc3b327691d55c8bbc3cbe285206"),
             hex!("68dca8393538744167e8c86798cf0193febdb8fb544f40c52218cda9d6efb87a"),
@@ -288,7 +288,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-HI000-LF0M-301101620-20260222",
         shenfen_name: "湖北省立法院",
-        duoqian_address: hex!("36e71628af995b540c82a8aa1438d66c03d32ef916036a92914daaf8f2ab6ca2"),
+        main_address: hex!("efa88e8fe2b2ede8b70bf5e0c9063c429affdc08d14efdb5e1fde5d471aab214"),
         duoqian_admins: &[
             hex!("fea6470bd031152f9e3576880fdef2c912000f7534b3e852309f0ec5732def09"),
             hex!("1093c2cbdc2a9f7cc20ef2e0be60bfef861df8f2b1fe6d2125f3e2e78cb39705"),
@@ -304,7 +304,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-SI000-LF0B-236529547-20260222",
         shenfen_name: "陕西省立法院",
-        duoqian_address: hex!("23de9f44147820f6fce84c1a8519c49b4d88f9aa7dc997169a3fb46830912d43"),
+        main_address: hex!("ede83ce9b3e8abc0360a69e888b6fc4121511c6905213e23578387e68d7fdd42"),
         duoqian_admins: &[
             hex!("e04f29145cad81799393910d5e870ff535a60586ca233700679107148da28767"),
             hex!("5643badb73c8a5aa046e85b5fd4061343b4cf6c699b3aaec3fcfa1b2711fcc4c"),
@@ -320,7 +320,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-CQ001-LF0T-076401371-20260222",
         shenfen_name: "重庆省立法院",
-        duoqian_address: hex!("5b90be3819c4006f4e358fa172fd997fe2bdaa1714447084161b897b8d8f77e3"),
+        main_address: hex!("38ed68b445b56b083c46315a0acab66d3dec7f7cbee044d6f0f93c8ca1ef269c"),
         duoqian_admins: &[
             hex!("02c962c56b9a0affbc741402322b8fcf3596f902d7ed7f6eddcd2241eb181605"),
             hex!("3832b00b6b7d695ce0e185f966eee654eb07b1360490126fe9763a706f079f55"),
@@ -336,7 +336,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-SC000-LF08-652961696-20260222",
         shenfen_name: "四川省立法院",
-        duoqian_address: hex!("281aff89be524dbbca015820d481ca218d641b3a7f6e9c10adbbc1c748cb548a"),
+        main_address: hex!("4db0d71fe6fe2131223cf04d5dc0d9c7cb1fd2bf5f369ed8bcbe4a210a6cb6fe"),
         duoqian_admins: &[
             hex!("b8fe79f7a6d6e62869819b08fe9624e23603b0755c1d6187eed6a00bd7af1044"),
             hex!("84655b6517e2230eb0fe194187a8213ad9b3d4f227014b645d1fff69f64c442c"),
@@ -352,7 +352,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-GS000-LF00-041478229-20260222",
         shenfen_name: "甘肃省立法院",
-        duoqian_address: hex!("64c262972b5ab6ed310aa72ce0fe4de9265d412b7b00935f3bc1c7ba04f8bf3b"),
+        main_address: hex!("2a418fe6410e6fd8d0f224166c2d3db1db887188e2dba03709922448864b7cbd"),
         duoqian_admins: &[
             hex!("c0eae94a68769b5dbd646b82b60a56654f3a3ba93670b115e9ae8d8926e79652"),
             hex!("b6977165de1e9ea04865ca0b2a846716b2de928a2439d84d08a937b74046902b"),
@@ -368,7 +368,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-BP001-LF0W-420000038-20260222",
         shenfen_name: "北平省立法院",
-        duoqian_address: hex!("5399e0494aa091a1b3f9e6a113d974c09587e8798a53a38a3deb4d424e0f0c35"),
+        main_address: hex!("a16565e77a856f3c7567fa99b9d8eabe7d9c0607d9023ce085fa8e5d5e54bc7c"),
         duoqian_admins: &[
             hex!("08f3460969c433e7838977d0d8632a0e94fc7f508b0ce7f6839e6b52a8e83207"),
             hex!("82e4c811dcb096a81b3e6c273f4843b53b02378da1a675d66774c0a04633b10e"),
@@ -384,7 +384,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-HA000-LF03-155146715-20260222",
         shenfen_name: "海滨省立法院",
-        duoqian_address: hex!("0b7e89ec65ad6ca9015520e225191f867b0f5833b7dbbcd6705a448c60a32438"),
+        main_address: hex!("4b3637cd5440b8d9754aa14e0a572c1a1f187ae597b482f2088db22d840e6983"),
         duoqian_admins: &[
             hex!("b418980c890c4af4246b9d1d38c5ba030f7809b9fd848b337f01235d8b601761"),
             hex!("82db88509de26c2a82bd1caf1236c374913d204a5d8b59ed5c52846ed8a5b617"),
@@ -400,7 +400,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-SJ000-LF0N-112914008-20260222",
         shenfen_name: "松江省立法院",
-        duoqian_address: hex!("f6bfba487da59b2174dc252a0a2f5910d464e447ec3d6c9bd019c6ef58ae9003"),
+        main_address: hex!("0be7ae36dd890a7476c78b6044787acafc38f6b554cddb708470d9211ca3b4b7"),
         duoqian_admins: &[
             hex!("64d0d039eba1d882b0c749f30f709feee9d55cdb14bf60280ee0714ccb372c55"),
             hex!("7cc407c2944a1693c9959cc09498f6ee37aa9b5e7ce3a202294227cb756fb419"),
@@ -416,7 +416,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-LJ000-LF0V-069130158-20260222",
         shenfen_name: "龙江省立法院",
-        duoqian_address: hex!("666d30bdb700a9494ce4033ce2b37acce81c552693a39e12658dd27d39779766"),
+        main_address: hex!("b3906a5b0fd9f73eb649e0b2a75123a7ed173a85ab88f5328bc9010efc493371"),
         duoqian_admins: &[
             hex!("94b1c8f65968d4eaa001da82c6bef47fd8541530e1c92c756bd6ea2bfe568e15"),
             hex!("0e83d5948a451f3952af113c80836a9ab5317aa3dea8bf6d69106ec3ee8e9570"),
@@ -432,7 +432,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-JL000-LF06-244906085-20260222",
         shenfen_name: "吉林省立法院",
-        duoqian_address: hex!("b08d1767186315c7f25d263de295b1b63ad06eea1c4cea7095cd6d8b85ee10fe"),
+        main_address: hex!("93da1677361a1615f9f42a4bb9a8f6c990db96a73ff514054cc96b055034db9c"),
         duoqian_admins: &[
             hex!("9c7217ac62f5c495788a2685ec64b912fb677fcd0faec82d756097b0cc862751"),
             hex!("02913086398a559d8e6bafd6eb19b406249251b0064e5389b89925a377eb665e"),
@@ -448,7 +448,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-LI000-LF0Z-497176796-20260222",
         shenfen_name: "辽宁省立法院",
-        duoqian_address: hex!("7798a475e5363d5617107144bd2f023a55ec61643ba42fb1fedb59681fb3bfaf"),
+        main_address: hex!("d803227c949aaf83e73d481a508a424a40eb9635e07b8c92f1ddd207530950bc"),
         duoqian_admins: &[
             hex!("7e13c2a5e571cd99e270708d44bb30bed2f88c9f03b9af17a0d2a1c958361070"),
             hex!("945b093b823d942af905948b9267e129b6a57d6db84210d071d013efa8b6967b"),
@@ -464,7 +464,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-NX000-LF0Q-508119872-20260222",
         shenfen_name: "宁夏省立法院",
-        duoqian_address: hex!("faf5791c330e9e800d38246c28115f5323a98906c94179ceaf83503f9bf94c07"),
+        main_address: hex!("a993db5d32d121adf20ef9b2afd2c4caed09bfc8bf4a7c0392d53f04319193b1"),
         duoqian_admins: &[
             hex!("10c61e2da66cfe199e333fa9c8049530cc6aba1b23e2db072cdd4e075d385705"),
             hex!("fef033f7c94be350bae42a889f7008c91fc4f95bb33b46f961b624866356ee6a"),
@@ -480,7 +480,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-QH000-LF0A-504085800-20260222",
         shenfen_name: "青海省立法院",
-        duoqian_address: hex!("dea646822e85785c133f35716ed6c3d6d026da9fa4bbd1f06b7552802a9283fc"),
+        main_address: hex!("48fd28f105afc28bc621804c76e1038783505b373e80cd1f991f0bf2fddd55fb"),
         duoqian_admins: &[
             hex!("1875206a9b24bfd6f9598e6fbd1ec82f341e0700ac34f7ce3ec10213d773ad6f"),
             hex!("e812b9d595ade0a73a1ea6baf7a9f17b0bb9257feba41daa92fce0d30276f02d"),
@@ -496,7 +496,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-AH000-LF0M-648014035-20260222",
         shenfen_name: "安徽省立法院",
-        duoqian_address: hex!("99d9d46efee5695bb930ef8c21aa23f1bcebbbd3a282c621ac47432d0f68f1bf"),
+        main_address: hex!("c134b4ecefe2cb31aa8188f807fafb94f5884df04a5ab668e2f04d6cd1872f83"),
         duoqian_admins: &[
             hex!("724f9577bc03477d0c79cb9ec0329eac306722e012027596dbc98a3a70ac0e59"),
             hex!("0aacb9bdbc77ee2ae3b68a517342a078d6124e12441bc397e164099bb7a63b64"),
@@ -512,7 +512,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-TW000-LF09-852624022-20260222",
         shenfen_name: "台湾省立法院",
-        duoqian_address: hex!("68336bbf44d60e6bafbd0b49725ef043d024c1cdede568523e969aafb0eab151"),
+        main_address: hex!("b3cb5a75196c161bf34bffe4b975e9623d5488bc6ddcd4f21a64d081d7195b97"),
         duoqian_admins: &[
             hex!("b4fd2f51cdd93937ba451d065c941d43e63b049ee5c18834153a14f6c92ae010"),
             hex!("626c938af863053d74b15dec2ee9c678e68ad9699693e53d18e4979cdf74b95f"),
@@ -528,7 +528,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-XZ000-LF0Z-869677815-20260222",
         shenfen_name: "西藏省立法院",
-        duoqian_address: hex!("7171ac27b52651ca2cc704f32e6dcb0f0a37c5cd21059b02f7330f7f1fb49f91"),
+        main_address: hex!("dc57fb7da740067d0676f74f2c5920b02f80538b45e905925158939f004296e1"),
         duoqian_admins: &[
             hex!("5c692d8f1a45d0241d9a0bafe41331c3c3deda599ae53eb6b98611216c185040"),
             hex!("def2eb377c34418dcfb82bc2c40a4ce6be14104aa456a43f8ec5c61406adb204"),
@@ -544,7 +544,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-XJ000-LF0N-319077388-20260222",
         shenfen_name: "新疆省立法院",
-        duoqian_address: hex!("0106255b8f972408f64838f7bf00cfe95e33688c8ded0d15306cd8eb43abf236"),
+        main_address: hex!("b34060ef5994b2dfb2859a0d8fa808d9d4cfab9254de86c22f16b072451036c1"),
         duoqian_admins: &[
             hex!("683dfc1e3598845398a1a7865b5187c458ace1fb9cf8b9de61e8f831f1b8ab68"),
             hex!("c4cd7ebbc72eee8ff27737251a56208d9dd8967ed9ae2891780e8710fa44b15a"),
@@ -560,7 +560,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-XK000-LF0A-700045037-20260222",
         shenfen_name: "西康省立法院",
-        duoqian_address: hex!("e71a79a38c4494a59b1b96735802a570fb50f9898c6e2b6fe051d536614e69d5"),
+        main_address: hex!("acbe45dc5e58c5051608b5b3ae90cf81389b8d1334f6e10a87c383ed631926eb"),
         duoqian_admins: &[
             hex!("186358c27a8169dcf4939e231bc831b8bf151c7a7905ea04b124267df729d114"),
             hex!("e8e44a8c9ec4de9030d76537b4d4d57f2351b053abc7634b6ca51a9f70568265"),
@@ -576,7 +576,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-AL000-LF02-381626250-20260222",
         shenfen_name: "阿里省立法院",
-        duoqian_address: hex!("6d63617bcb51a16fa02bde8170cb9dbe8be9e11dea2ada377ee9b8d80794ac53"),
+        main_address: hex!("b47437fccb483ffc7fb5134ef12fdb789fd973f4a57ec84aa06b8483b426082d"),
         duoqian_admins: &[
             hex!("944f5db0c264f383fe486654fbc78cb7dfbb030e942890cbe518e1c0a249e24d"),
             hex!("4c62b04851ef2712fada11dfe10113719f67f4c73bf2790c5c43f0713129514a"),
@@ -592,7 +592,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-CL000-LF0M-941193753-20260222",
         shenfen_name: "葱岭省立法院",
-        duoqian_address: hex!("22ffa7686f611c409afcb3ce1ef5f0cb73499d88ba63fc9fbf9982422fa71da9"),
+        main_address: hex!("77c511f18c25ddc227a90d4bdfba99f5957b2244b29198e17e96c574f827b304"),
         duoqian_admins: &[
             hex!("c0a07ac561b963f5134aa6bb27cdbf025ab0dd5b71ff0ff3d8fd49e306423b41"),
             hex!("46f1cb081ab098eb13a31d5e7fdf3263c1267170033f626f7752991682cd8b2b"),
@@ -608,7 +608,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-TS000-LF0H-016224869-20260222",
         shenfen_name: "天山省立法院",
-        duoqian_address: hex!("66d7fe372ac150d4293d8667e054d92cc6b80155fd178c46bf35b3dc75aaa199"),
+        main_address: hex!("4d379ef881b529ef864b4cedb40df42e1557a818d79c0f5db287ac28b1ff055d"),
         duoqian_admins: &[
             hex!("9aa2c7aebed03f1ab12ef93ad041a1ea9c30a5fc755023c5b7de963856a36f43"),
             hex!("8e4fb3d057a66675bad2c44dec4c65eef18c8fd5fa544a649f8b23dd43d3535a"),
@@ -624,7 +624,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-HX000-LF0Z-408465994-20260222",
         shenfen_name: "河西省立法院",
-        duoqian_address: hex!("603e094df9834524c30ec5adfc7d96c8e15454e900146e2e1b84f90f849436d0"),
+        main_address: hex!("175ef445cb3816bdf213d46402d6b45ca49c5d40f4aa171b8e24eb7bc557c254"),
         duoqian_admins: &[
             hex!("6c6086b3ee73ba96071673bede5a7332664f1363a13cb66d49d6850b6a771e79"),
             hex!("a464a1d657a2c50139c45f5e028c2bd55db116f47cf6b4ba25039526ea06fe7b"),
@@ -640,7 +640,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-KL000-LF0B-670586781-20260222",
         shenfen_name: "昆仑省立法院",
-        duoqian_address: hex!("c32ea7b121ae75b847eee9faec8519cb9be606e2720eceefce70c6fe45d50255"),
+        main_address: hex!("528dbb334e95099042c80ff72b7f3c7fd94d28c76b2c13a93ae86f29adcb484e"),
         duoqian_admins: &[
             hex!("70bccbbb0c544bdf75f85228a64e9bc1bb0ee3826973483a756cdfbc34a9c461"),
             hex!("84a925a8681bd3619f8a241a3678579c06964d7391c88c06a23e95abe3b7602c"),
@@ -656,7 +656,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-HT000-LF0X-832682996-20260222",
         shenfen_name: "河套省立法院",
-        duoqian_address: hex!("0529fce585e2da57c1828fbdd09545c012c7602ae314fdea8d55b34ad9a8d561"),
+        main_address: hex!("27fcdccf2eb3a469f95e729489e5d9199a20d88e71fb94915e5bc2d1f562dcd2"),
         duoqian_admins: &[
             hex!("10608370947d6e8a4b7fe973d016c44663d94e3dc4097ae07e03ebd30f83e42e"),
             hex!("34e9a70712870f6f2057f863c001d02eb4102a163ba86798a12fe935c6461639"),
@@ -672,7 +672,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-RH000-LF0B-911066915-20260222",
         shenfen_name: "热河省立法院",
-        duoqian_address: hex!("4e6cf40ef7ad2f68fdbe4d77791f07ef42abb2025f38ae40c12d6263a0ac2c5b"),
+        main_address: hex!("e4c0382564aa6ab01e1844bd495e12c11e3e77d2cc351706d812cc0a8ec97f80"),
         duoqian_admins: &[
             hex!("f2829f49a725db88a84a17b9654bc0172c7a68019aa1861668210a1786195358"),
             hex!("4851e360374e6f7307eab6e0c1bb68ab98b033aa7368021b8a3fad5332dcce22"),
@@ -688,7 +688,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-XA000-LF03-382214972-20260222",
         shenfen_name: "兴安省立法院",
-        duoqian_address: hex!("65b676a8d8f291ab18fad3f53d6444fc915e8c49e49afa02052061664e8472e1"),
+        main_address: hex!("7e06d6da97e1e23fc861d8506bfdeec435092e6e0c6b55840d82dd9e9160a28e"),
         duoqian_admins: &[
             hex!("d2ca18f91784275d53e83ccc9bce2cf074b2c12485466de685e3f4896e98222f"),
             hex!("2c5090ca8fa4546b853d5790c62a43bbf328e723a621bf7bd50965d7a782883e"),
@@ -704,7 +704,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         shenfen_id: "GFR-HJ000-LF03-398476598-20260222",
         shenfen_name: "合江省立法院",
-        duoqian_address: hex!("ea012bcc6eff48138290b421261462997657fae9559c95760c6425f8fdedaaba"),
+        main_address: hex!("3148bae40470226ce59093341e4f812c85787cd988ccb34f7addf9f5dd457aea"),
         duoqian_admins: &[
             hex!("9c9b4066690ce5ac4412a0292343d68fa99a428327cb7f72753bf2e04c6cae68"),
             hex!("8c7c3325968054b59e0854ce0f7a5bb5227f20d4e8f4a2159b739d1ee4c3012a"),

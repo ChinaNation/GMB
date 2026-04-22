@@ -296,8 +296,7 @@ pub fn try_start<Proof: Send + 'static>(
                                 break;
                             }
                         };
-                        let seal =
-                            (nonce, sp_core::sr25519::Signature::from(signature)).encode();
+                        let seal = (nonce, sp_core::sr25519::Signature::from(signature)).encode();
                         let submitted = futures::executor::block_on(worker.submit(seal));
                         if submitted {
                             let submit_ns = epoch.elapsed().as_nanos() as u64;
@@ -378,8 +377,14 @@ mod tests {
         for i in 0..4 {
             let o = i * 8;
             words[i] = u64::from_be_bytes([
-                bytes[o], bytes[o+1], bytes[o+2], bytes[o+3],
-                bytes[o+4], bytes[o+5], bytes[o+6], bytes[o+7],
+                bytes[o],
+                bytes[o + 1],
+                bytes[o + 2],
+                bytes[o + 3],
+                bytes[o + 4],
+                bytes[o + 5],
+                bytes[o + 6],
+                bytes[o + 7],
             ]);
         }
         words

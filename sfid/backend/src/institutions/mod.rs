@@ -20,6 +20,7 @@
 #![allow(dead_code)]
 
 pub mod chain;
+pub mod derive;
 pub mod handler;
 pub mod model;
 pub mod service;

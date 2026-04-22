@@ -7,10 +7,10 @@ pub(crate) mod governance;
 pub(crate) mod home;
 pub(crate) mod mining;
 pub(crate) mod network;
+pub(crate) mod node_runner;
 pub(crate) mod other;
 pub(crate) mod settings;
 pub(crate) mod shared;
-pub(crate) mod node_runner;
 pub(crate) mod transaction;
 
 use home::{cleanup_on_exit, cleanup_on_startup, AppState, RuntimeState};
@@ -44,13 +44,13 @@ pub fn run_desktop() {
             other::other_tabs::get_other_tabs_content,
             governance::get_governance_overview,
             governance::get_institution_detail,
+            governance::balance_watch::start_governance_balance_watch,
+            governance::balance_watch::stop_governance_balance_watch,
             governance::get_proposal_page,
             governance::get_proposal_detail,
             governance::get_next_proposal_id,
             governance::get_institution_proposals,
             governance::get_institution_proposal_page,
-            settings::cold_wallets::set_signing_admin,
-            settings::cold_wallets::get_signing_admin,
             governance::activation::build_activate_admin_request,
             governance::activation::verify_activate_admin,
             governance::activation::get_activated_admins,
@@ -72,10 +72,6 @@ pub fn run_desktop() {
             governance::build_propose_safety_fund_request,
             governance::submit_propose_safety_fund,
             governance::build_safety_fund_vote_request,
-            governance::build_rate_vote_request,
-            governance::build_propose_rate_request,
-            governance::submit_propose_rate,
-            governance::query_institution_rate_bp,
             transaction::get_wallets,
             transaction::add_wallet,
             transaction::remove_wallet,

@@ -42,7 +42,9 @@ mod benchmarks {
         let blocks_per_year = T::BlocksPerYear::get();
         // 设置到第 1 年边界块，确保触发结算
         let n: frame_system::pallet_prelude::BlockNumberFor<T> =
-            u32::try_from(blocks_per_year.max(1)).unwrap_or(u32::MAX).into();
+            u32::try_from(blocks_per_year.max(1))
+                .unwrap_or(u32::MAX)
+                .into();
         frame_system::Pallet::<T>::set_block_number(n);
         pallet::LastSettledYear::<T>::put(0u32);
 
@@ -60,7 +62,9 @@ mod benchmarks {
         let blocks_per_year = T::BlocksPerYear::get();
         // 设置到非边界块（第 1 年边界 + 1）
         let n: frame_system::pallet_prelude::BlockNumberFor<T> =
-            u32::try_from((blocks_per_year.max(1)) + 1).unwrap_or(u32::MAX).into();
+            u32::try_from((blocks_per_year.max(1)) + 1)
+                .unwrap_or(u32::MAX)
+                .into();
         frame_system::Pallet::<T>::set_block_number(n);
 
         #[block]

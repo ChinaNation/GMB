@@ -53,8 +53,8 @@ pub fn load(app: &AppHandle) -> Result<WalletStore, String> {
 }
 
 pub fn save(app: &AppHandle, store: &WalletStore) -> Result<(), String> {
-    let raw = serde_json::to_string_pretty(store)
-        .map_err(|e| format!("序列化钱包数据失败: {e}"))?;
+    let raw =
+        serde_json::to_string_pretty(store).map_err(|e| format!("序列化钱包数据失败: {e}"))?;
     security::write_text_atomic(&store_path(app)?, &format!("{raw}\n"))
         .map_err(|e| format!("写入钱包文件失败: {e}"))
 }

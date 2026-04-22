@@ -17,6 +17,25 @@ pub struct Cli {
     /// 强制禁用 GPU 挖矿，即使编译了 gpu-mining feature。
     #[arg(long)]
     pub no_gpu: bool,
+
+    /// 扫码支付 Step 2b-ii-β-2-b 新增:把本节点以清算行角色启动,
+    /// 参数为清算行**主账户 SS58 地址**。若不设则节点不启动清算行组件
+    /// (RPC / ledger / packer / event_listener 全部跳过)。
+    #[arg(long, value_name = "BANK_MAIN_SS58")]
+    pub clearing_bank: Option<String>,
+
+    /// 扫码支付 Step 2b-ii-β-2-b 新增:解锁 `offchain_keystore` 里清算行
+    /// 管理员 sr25519 私钥的密码。不提供时签名密钥保持 `None`,节点能接
+    /// 收扫码支付 RPC(ledger.accept_payment 不需要密钥),但 packer 上链
+    /// 时会 Err → 回滚 pending,直到密码提供并重启。
+    #[arg(long, value_name = "PASSWORD")]
+    pub clearing_bank_password: Option<String>,
+
+    /// 扫码支付 Step 2b-iii-b 新增:`reserve_monitor` 主账对账触发周期(秒)。
+    /// 缺省 300(5 分钟)。设为 0 则关闭对账 worker(不推荐,仅用于排障)。
+    /// 仅在 `--clearing-bank` 生效时启用。
+    #[arg(long, value_name = "SECS")]
+    pub clearing_reserve_monitor_interval_secs: Option<u64>,
 }
 
 #[derive(Debug, clap::Subcommand)]

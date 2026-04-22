@@ -38,7 +38,8 @@ mod benchmarks {
 
         let genesis_block = BlockNumberFor::<T>::zero();
         let payload = (
-            b"GMB_SFID_V1",
+            primitives::core_const::DUOQIAN_DOMAIN,
+            primitives::core_const::OP_SIGN_BIND,
             frame_system::Pallet::<T>::block_hash(genesis_block),
             &caller,
             binding_id,

@@ -66,7 +66,7 @@
    - 影响：当前 production runtime 没这么配，但如果后续新 runtime、mock 或基准环境误接成 `()`, 这条资金白名单边界会静默失效。
 
 2. 模块测试只覆盖了 `()` 的“全放行默认行为”，没有直接覆盖真实 runtime 的拒绝/放行矩阵。
-   - 证据：当前模块只有一个单测 `default_guard_allows_all_actions`；`RuntimeInstitutionAssetGuard` 的 `keyless / reserved duoqian / fee_account / 普通账户` 分支没有独立测试。
+   - 证据：当前模块只有一个单测 `default_guard_allows_all_actions`；`RuntimeInstitutionAssetGuard` 的 `stake / reserved main / fee_account / 普通账户` 分支没有独立测试。
    - 影响：功能现在是对的，但后续改 `configs/mod.rs` 时容易无声回归。
 
 3. `load-context.sh` 未登记 `institution-asset-guard`，属于上下文装载残留。

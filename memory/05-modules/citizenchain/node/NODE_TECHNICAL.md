@@ -73,7 +73,24 @@
 | `--no-gpu` | 强制禁用 GPU |
 | 子命令 | key / export-chain-spec / check-block / export-blocks / import-blocks / purge-chain / revert / benchmark / chain-info |
 
-## 6. 文件索引
+## 6. 治理桌面页账户数据链路
+
+- 地址真源：
+  - `node/src/ui/governance/registry.rs` 直接读取 `runtime/primitives/china/china_cb.rs`、`runtime/primitives/china/china_ch.rs` 和 `NRC_ANQUAN_ADDRESS`
+  - `治理 -> 国储会 / 省储会 / 省储行` 页面的 `主账户 / 费用账户 / 安全基金账户 / 永久质押账户` 不再允许 node 侧手抄第二份地址表
+- 金额真源：
+  - `node/src/ui/governance/institution.rs` 先取 `chain_getFinalizedHead`
+  - 再用同一个 `block_hash` 调 `state_getStorage(System::Account)` 读取 `free` 余额
+  - 同一详情页内所有账户金额必须来自同一个 finalized 快照
+- 实时刷新：
+  - `node/src/ui/governance/balance_watch.rs` 在详情页打开时启动 watcher
+  - watcher 每秒检查一次 finalized hash，哈希变化后重新查询当前页面全部账户余额
+  - 查询结果通过 Tauri 事件 `governance-balance-updated` 推给前端
+- 前端约束：
+  - `node/frontend/governance/InstitutionDetailPage.tsx` 只监听事件并覆盖现有 state
+  - 不改 UI 布局、不改卡片顺序、不改现有中文命名
+
+## 7. 文件索引
 
 | 文件 | 行数 | 说明 |
 |------|------|------|
@@ -87,7 +104,7 @@
 | `src/main.rs` | 15 | 入口 |
 | `vendor/` | ~13,854 | sc-consensus-grandpa v0.40.0（GPL-3.0） |
 
-## 7. 安全风险（已知）
+## 8. 安全风险（已知）
 
 ### 7.1 RPC 代签无鉴权
 `reward_bindWallet` / `reward_rebindWallet` RPC 收到请求即用本地 `powr` 密钥签名发交易，无额外鉴权。
@@ -106,7 +123,7 @@
 - **当前缓解**：CPU / GPU 矿工都在交易池为空时跳过挖矿，代码中也明确写了“避免触发 runtime 的空块 assert panic”。
 - **建议**：后续应把空块限制从 runtime panic 改成非 panic 的制度约束或完全下沉到节点策略，避免状态机层面承受运营错误。
 
-## 8. 已知限制
+## 9. 已知限制
 
 1. `target_block_time_ms` 仅启动时读取一次，链上迁移修改后需重启节点生效。
 2. 节点层无单元测试（Substrate 节点模板通病，功能验证依赖集成测试）。

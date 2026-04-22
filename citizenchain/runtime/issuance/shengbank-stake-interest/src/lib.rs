@@ -211,7 +211,7 @@ pub mod pallet {
             bank: &primitives::china::china_ch::ChinaCh,
             pallet_id: [u8; 48],
         ) -> Option<T::AccountId> {
-            match T::AccountId::decode(&mut &bank.duoqian_address[..]) {
+            match T::AccountId::decode(&mut &bank.main_address[..]) {
                 Ok(a) => Some(a),
                 Err(_) => {
                     Self::deposit_event(Event::<T>::ShengBankDecodeFailed { year, pallet_id });
@@ -509,7 +509,7 @@ mod tests {
     }
 
     fn shengbank_account(index: usize) -> AccountId32 {
-        AccountId32::decode(&mut &primitives::china::china_ch::CHINA_CH[index].duoqian_address[..])
+        AccountId32::decode(&mut &primitives::china::china_ch::CHINA_CH[index].main_address[..])
             .expect("pallet_address must decode")
     }
 
@@ -702,7 +702,7 @@ mod tests {
         // 验证自动结算从第 3 年正常恢复。
         new_test_ext().execute_with(|| {
             System::set_block_number(50); // current_year = 5
-            // 模拟 Root 已跳过前两年故障
+                                          // 模拟 Root 已跳过前两年故障
             LastSettledYear::<Test>::put(2);
             // 自动结算应从第 3 年开始恢复
             ShengBankStakeInterest::on_initialize(50);
@@ -753,7 +753,10 @@ mod tests {
             ShengBankStakeInterest::on_initialize(1010);
             // LastSettledYear 不应前进，余额不应变化
             assert_eq!(LastSettledYear::<Test>::get(), 100);
-            assert_eq!(Balances::free_balance(shengbank_account(0)), balance_after_100);
+            assert_eq!(
+                Balances::free_balance(shengbank_account(0)),
+                balance_after_100
+            );
         });
     }
 }

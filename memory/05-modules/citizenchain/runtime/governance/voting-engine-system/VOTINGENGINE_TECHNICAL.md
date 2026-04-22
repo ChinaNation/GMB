@@ -142,7 +142,7 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 
 ### 5.3 联合投票身份模型收敛
 联合投票已收敛到“管理员直接上链投票”模型：
-- 不再要求 `origin == duoqian_address`
+- 不再要求 `origin == main_address`
 - 不再依赖线下门限签名 proof
 - 权限校验完全基于当前链上管理员集合
 - 机构结果完全由链上按阈值自动形成

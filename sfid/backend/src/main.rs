@@ -824,6 +824,11 @@ fn main() {
         app_core::runtime_ops::cleanup_orphan_cpms_sites(&state).await;
         app_core::runtime_ops::cleanup_stale_cpms_sites(&state).await;
 
+        // 2026-04-21:reconcile 是同步调用,只写 legacy store,新增的公安局机构 +
+        // 主账户/费用账户 不会自动落到 sharded_store,前端按省读分片看不到。
+        // 启动 + preload 完成后,从 legacy 快照幂等同步一次,保证详情页/列表可见。
+        app_core::runtime_ops::sync_public_security_to_sharded(&state).await;
+
         tokio::spawn(bind_callback_worker(state.clone()));
         tokio::spawn(indexer::indexer_worker(state.store.backend.clone()));
 
@@ -943,6 +948,11 @@ fn main() {
             .route(
                 "/api/v1/institution/:sfid_id/account/create",
                 post(institutions::handler::create_account),
+            )
+            // 激活账户(推链):Inactive/Failed → Pending → Registered/Failed
+            .route(
+                "/api/v1/institution/:sfid_id/account/:account_name/activate",
+                post(institutions::handler::activate_account),
             )
             .route(
                 "/api/v1/institution/list",
@@ -1104,6 +1114,13 @@ fn main() {
             .route(
                 "/api/v1/app/institution/:sfid_id/accounts",
                 get(institutions::handler::app_list_accounts),
+            )
+            // ── 扫码支付 Step 1:wuminapp 清算行公开搜索 ──
+            // 仅返回 is_clearing_bank == true 的机构,带主账户/费用账户地址,
+            // 用于 wuminapp 绑定清算行前的列表展示。
+            .route(
+                "/api/v1/app/clearing-banks/search",
+                get(institutions::handler::app_search_clearing_banks),
             );
 
         let app_state = state.clone();

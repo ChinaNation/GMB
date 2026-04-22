@@ -68,7 +68,7 @@ pub struct DestroyAction<Balance> {
 无。提案数据、元数据、活跃提案列表均已移至 `voting-engine-system` 统一管控（lib.rs:103 注释说明）。
 
 ### 机构账户地址
-- 通过 `institution_pallet_address` 从 `CHINA_CB` / `CHINA_CH` 常量中查找机构的 `duoqian_address`。
+- 通过 `institution_pallet_address` 从 `CHINA_CB` / `CHINA_CH` 常量中查找机构的 `main_address`。
 - 执行销毁时从该地址 decode 出 `AccountId`。
 
 ---

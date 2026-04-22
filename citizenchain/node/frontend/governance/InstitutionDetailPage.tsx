@@ -6,6 +6,7 @@ import { formatBalance, hexToSs58 } from '../format';
 import type {
   ActivatedAdmin,
   AdminWalletMatch,
+  InstitutionBalanceUpdate,
   InstitutionDetail,
   ProposalListItem,
 } from './governance-types';
@@ -15,16 +16,15 @@ type Props = {
   onBack: () => void;
   onOpenAdminList?: () => void;
   onSelectProposal?: (proposalId: number, adminWallets: AdminWalletMatch[], shenfenId: string) => void;
-  onCreateProposal?: (shenfenId: string, orgType: number, institutionName: string, duoqianAddress: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateProposal?: (shenfenId: string, orgType: number, institutionName: string, mainAddress: string, adminWallets: AdminWalletMatch[]) => void;
   onCreateRuntimeUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
-  onCreateFeeRate?: (shenfenId: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
   onCreateSafetyFund?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateSweep?: (shenfenId: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
   /** 隐藏返回按钮（用于直接作为 Tab 内容显示时）。 */
   hideBackButton?: boolean;
 };
 
-export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateRuntimeUpgrade, onCreateFeeRate, onCreateSafetyFund, onCreateSweep, hideBackButton }: Props) {
+export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateRuntimeUpgrade, onCreateSafetyFund, onCreateSweep, hideBackButton }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [proposalHasMore, setProposalHasMore] = useState(false);
@@ -72,6 +72,34 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
       })
       .catch((e) => setError(sanitizeError(e)))
       .finally(() => setLoading(false));
+  }, [shenfenId]);
+
+  // 只刷新链上金额和告警，不改现有页面结构。
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        unlisten = await listen<InstitutionBalanceUpdate>(
+          'governance-balance-updated',
+          (event) => {
+            if (cancelled || event.payload.shenfenId !== shenfenId) return;
+            setDetail((prev) => (prev ? { ...prev, ...event.payload } : prev));
+          },
+        );
+        await api.startGovernanceBalanceWatch(shenfenId);
+      } catch {
+        // 监听不可用时静默降级为详情页初次加载结果。
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+      api.stopGovernanceBalanceWatch(shenfenId).catch(() => undefined);
+    };
   }, [shenfenId]);
 
   // 加载更多提案
@@ -132,7 +160,7 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
           <div className="metric-value">{detail.orgTypeLabel}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">机构主账户 <code className="metric-label-id">{hexToSs58(detail.duoqianAddress)}</code></div>
+          <div className="metric-label">机构主账户 <code className="metric-label-id">{hexToSs58(detail.mainAddress)}</code></div>
           <div className="metric-value">
             {detail.balanceFen != null
               ? formatBalance(detail.balanceFen)
@@ -226,18 +254,11 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
             className="proposal-type-button"
             disabled={!isAdmin}
             onClick={() => isAdmin && onCreateProposal?.(
-              shenfenId, detail.orgType, detail.name, detail.duoqianAddress, adminWallets
+              shenfenId, detail.orgType, detail.name, detail.mainAddress, adminWallets
             )}
           >转账</button>
           <button className="proposal-type-button" disabled title="即将上线">换管理员</button>
           <button className="proposal-type-button" disabled title="即将上线">决议销毁</button>
-          {detail.orgType === 2 && (
-            <button
-              className="proposal-type-button"
-              disabled={!isAdmin}
-              onClick={() => isAdmin && onCreateFeeRate?.(shenfenId, detail.name, adminWallets)}
-            >费率设置</button>
-          )}
           {(detail.orgType === 0 || detail.orgType === 2) && (
             <button
               className="proposal-type-button"

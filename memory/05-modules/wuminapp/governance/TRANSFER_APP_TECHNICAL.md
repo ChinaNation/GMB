@@ -24,18 +24,18 @@
 |---|---|---|
 | 机构名称 | 文本（只读） | 自动填充，不可编辑 |
 | 机构类型 | 标签（只读） | NRC/PRC/PRB |
-| 转出地址 | 文本（只读） | 机构 duoqian_address 的 SS58 地址 |
+| 转出地址 | 文本（只读） | 机构 main_address 的 SS58 地址 |
 | 收款地址 | 输入框 | SS58 格式，支持扫码输入 |
 | 转账金额 | 输入框 | 单位：元，最低 1.11 元（111分 = ED） |
 | 预估手续费 | 文本（实时计算） | `max(金额 × 0.1%, 0.10元)` |
 | 备注 | 输入框 | 可选，最长 256 字节 |
-| 可用余额 | 文本（链上查询） | 机构 duoqian_address 的 free_balance |
+| 可用余额 | 文本（链上查询） | 机构 main_address 的 free_balance |
 | 提交按钮 | 按钮 | 校验通过后签名提交 |
 
 **本地校验**：
 
 1. 收款地址必须是合法 SS58 地址（format 2027）
-2. 收款地址不能是本机构的 duoqian_address（自转账）
+2. 收款地址不能是本机构的 main_address（自转账）
 3. 金额 >= 1.11 元（111 分，ED）
 4. 金额 + 手续费 + ED <= 可用余额
 5. 备注 UTF-8 编码后 <= 256 字节
@@ -112,7 +112,7 @@
 
 ```dart
 class TransferProposalService {
-  /// 查询机构 duoqian_address 的可用余额（元）
+  /// 查询机构 main_address 的可用余额（元）
   Future<double> fetchInstitutionBalance(String shenfenId);
 
   /// 查询机构活跃的转账提案 ID（无活跃提案返回 null）
@@ -168,12 +168,12 @@ class TransferProposalService {
 
 注：`blake2_128_concat` = `blake2_128(data) + data`。
 
-## 7. duoqian_address 查询
+## 7. main_address 查询
 
-机构的 duoqian_address 预置在 `primitives` 中，App 侧需要：
+机构的 main_address 预置在 `primitives` 中，App 侧需要：
 
 1. 在 `institution_data.dart` 中为每个 `InstitutionInfo` 增加 `duoqianAddress` 字段（32 字节公钥 hex）
-2. 从 `primitives/china/china_cb.rs` 和 `primitives/china/china_ch.rs` 中提取 87 个机构的 `duoqian_address`
+2. 从 `primitives/china/china_cb.rs` 和 `primitives/china/china_ch.rs` 中提取 87 个机构的 `main_address`
 3. 通过 `Keyring().encodeAddress(bytes, 2027)` 转换为 SS58 地址展示
 
 ## 8. 手续费显示
@@ -182,7 +182,7 @@ class TransferProposalService {
 
 - 费率：0.1%
 - 最低：0.10 元
-- 支付方：机构 duoqian_address（非管理员个人）
+- 支付方：机构 main_address（非管理员个人）
 
 ## 9. 签名适配
 

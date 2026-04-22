@@ -39,10 +39,8 @@ pub fn load_or_generate_tls_cert(base_path: &Path) -> Result<TlsCertData, String
 
     if cert_file.is_file() && key_file.is_file() {
         // 已有证书，直接加载。
-        let cert_der =
-            fs::read(&cert_file).map_err(|e| format!("读取 TLS 证书失败: {e}"))?;
-        let key_der =
-            fs::read(&key_file).map_err(|e| format!("读取 TLS 私钥失败: {e}"))?;
+        let cert_der = fs::read(&cert_file).map_err(|e| format!("读取 TLS 证书失败: {e}"))?;
+        let key_der = fs::read(&key_file).map_err(|e| format!("读取 TLS 私钥失败: {e}"))?;
 
         log::info!("已加载现有 TLS 自签证书: {}", cert_file.display());
 
@@ -70,8 +68,7 @@ pub fn load_or_generate_tls_cert(base_path: &Path) -> Result<TlsCertData, String
     {
         use std::os::unix::fs::PermissionsExt;
         let perms = fs::Permissions::from_mode(0o700);
-        fs::set_permissions(&dir, perms)
-            .map_err(|e| format!("设置 TLS 目录权限失败: {e}"))?;
+        fs::set_permissions(&dir, perms).map_err(|e| format!("设置 TLS 目录权限失败: {e}"))?;
     }
 
     // 原子写入：先写临时文件，再重命名。
@@ -83,8 +80,7 @@ pub fn load_or_generate_tls_cert(base_path: &Path) -> Result<TlsCertData, String
     {
         use std::os::unix::fs::PermissionsExt;
         let perms = fs::Permissions::from_mode(0o600);
-        fs::set_permissions(&key_file, perms)
-            .map_err(|e| format!("设置 TLS 私钥权限失败: {e}"))?;
+        fs::set_permissions(&key_file, perms).map_err(|e| format!("设置 TLS 私钥权限失败: {e}"))?;
     }
 
     log::info!("TLS 自签证书已生成并保存到: {}", dir.display());
@@ -98,7 +94,14 @@ pub fn load_or_generate_tls_cert(base_path: &Path) -> Result<TlsCertData, String
 /// 原子写入文件：先写临时文件，再重命名，避免写入中断导致文件损坏。
 fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
     let tmp_path = path.with_extension("tmp");
-    fs::write(&tmp_path, data).map_err(|e| format!("写入临时文件失败 {}: {e}", tmp_path.display()))?;
-    fs::rename(&tmp_path, path).map_err(|e| format!("重命名文件失败 {} → {}: {e}", tmp_path.display(), path.display()))?;
+    fs::write(&tmp_path, data)
+        .map_err(|e| format!("写入临时文件失败 {}: {e}", tmp_path.display()))?;
+    fs::rename(&tmp_path, path).map_err(|e| {
+        format!(
+            "重命名文件失败 {} → {}: {e}",
+            tmp_path.display(),
+            path.display()
+        )
+    })?;
     Ok(())
 }

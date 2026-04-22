@@ -47,7 +47,7 @@
 | `RuntimeInternalAdminCountProvider` | ORG_DUOQIAN → `DuoqianAccounts.duoqian_admins.len()`; 治理机构 → `CurrentAdmins.len()` |
 | `RuntimeJointVoteResultCallback` | 按模块路由：先查 `resolution-issuance-gov`，再查 `runtime-root-upgrade` |
 | `TransferFeeRouter` | 旧 NegativeImbalance -> Credit 转换 -> `PowOnchainFeeRouter` 80/10/10 分账 |
-| `RuntimeInstitutionAssetGuard` | keyless 禁止一切; reserved_duoqian 仅允许转账/销户; fee_account 仅允许 sweep; 安全基金仅允许安全基金转账; CB 费用账户仅允许 sweep |
+| `RuntimeInstitutionAssetGuard` | stake 禁止一切; reserved main 仅允许转账/销户; fee_account 仅允许 sweep; 安全基金仅允许安全基金转账; CB 费用账户仅允许 sweep |
 
 ## 交易费用流
 

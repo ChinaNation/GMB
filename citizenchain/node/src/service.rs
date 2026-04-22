@@ -11,13 +11,13 @@
 //! - 出块目标时间从 genesis-pallet 链上存储读取，启动时获取一次。
 
 use citizenchain::{self, apis::RuntimeApi, opaque::Block};
-use sc_network::NetworkBackend as _;
 use codec::{Decode, Encode};
 use futures::FutureExt;
 use genesis_pallet::GenesisPalletApi;
 use pow_difficulty_module::PowDifficultyApi;
 use sc_client_api::{Backend, BlockBackend};
 use sc_consensus_pow::{MiningHandle, PowAlgorithm, PowBlockImport};
+use sc_network::NetworkBackend as _;
 use sc_service::WarpSyncConfig;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryWorker};
@@ -38,25 +38,6 @@ use std::{
 
 /// CPU 全线程合计哈希率（hashes/sec），以 f64 bits 存入 AtomicU64。
 static CPU_HASHRATE: AtomicU64 = AtomicU64::new(0);
-
-/// 链下清算配置（由 start_node 检测签名管理员后设置，service 读取）。
-static OFFCHAIN_CONFIG: std::sync::OnceLock<Option<OffchainConfig>> = std::sync::OnceLock::new();
-
-/// 链下清算配置。
-pub struct OffchainConfig {
-    pub ledger: crate::offchain_ledger::OffchainLedger,
-    pub shenfen_id: String,
-}
-
-/// 中文注释：由 nodeui start_node 调用，设置链下清算配置。
-pub fn set_offchain_config(config: Option<OffchainConfig>) {
-    let _ = OFFCHAIN_CONFIG.set(config);
-}
-
-/// 中文注释：获取链下清算配置（service 内部使用）。
-fn get_offchain_config() -> Option<&'static OffchainConfig> {
-    OFFCHAIN_CONFIG.get().and_then(|c| c.as_ref())
-}
 
 // 空块 propose 防护在 start_mining_worker_no_empty 中实现。
 
@@ -153,7 +134,11 @@ impl PowAlgorithm<Block> for SimplePow {
         }
 
         // 中文注释：验证矿工对 pre_hash 的 sr25519 签名，防止冒充他人公钥。
-        Ok(sr25519::Pair::verify(&signature, pre_hash.as_ref(), &public))
+        Ok(sr25519::Pair::verify(
+            &signature,
+            pre_hash.as_ref(),
+            &public,
+        ))
     }
 }
 
@@ -174,9 +159,7 @@ fn hash_meets_difficulty(hash: &[u8; 32], difficulty: U256) -> bool {
 
 /// 中文注释：返回 (pre_digest 编码字节, 矿工公钥)。
 /// pre_digest 中存储的是 sr25519 公钥而非 AccountId，配合 seal 中的签名实现密码学绑定。
-fn author_pre_digest(
-    keystore: &sp_keystore::KeystorePtr,
-) -> Option<(Vec<u8>, sr25519::Public)> {
+fn author_pre_digest(keystore: &sp_keystore::KeystorePtr) -> Option<(Vec<u8>, sr25519::Public)> {
     let keys = keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE);
     let author_public = keys.into_iter().next()?;
     Some((author_public.encode(), author_public))
@@ -419,6 +402,12 @@ pub fn new_full(
     mut config: Configuration,
     mining_threads: usize,
     gpu_device: Option<usize>,
+    // 扫码支付 Step 2b-ii-β-2-b 新增:清算行主账户 SS58(None=本节点不做清算行角色)
+    clearing_bank: Option<String>,
+    // 扫码支付 Step 2b-ii-β-2-b 新增:解锁 offchain_keystore 的密码
+    clearing_bank_password: Option<String>,
+    // 扫码支付 Step 2b-iii-b 新增:reserve_monitor 对账周期(秒),None=默认 300,Some(0)=关闭
+    clearing_reserve_monitor_interval_secs: Option<u64>,
 ) -> Result<TaskManager, ServiceError> {
     // 生成或加载 TLS 自签证书，注入到网络配置中。
     let tls_cert = crate::tls_cert::load_or_generate_tls_cert(config.base_path.path())
@@ -474,17 +463,6 @@ pub fn new_full(
             peer_store_handle,
         );
     net_config.add_notification_protocol(grandpa_protocol_config);
-
-    // 注册链下清算 P2P 广播协议（仅省储行节点——已配置清算签名私钥时才注册）
-    let offchain_clearing_notification_service = if get_offchain_config().is_some() {
-        let (offchain_clearing_config, notification_service) =
-            crate::offchain_gossip::offchain_clearing_protocol_config();
-        net_config.add_notification_protocol(offchain_clearing_config);
-        log::info!("[Offchain] 省储行清算协议已注册");
-        Some(notification_service)
-    } else {
-        None
-    };
 
     let warp_sync = Arc::new(sc_consensus_grandpa::warp_proof::NetworkProvider::new(
         backend.clone(),
@@ -547,13 +525,156 @@ pub fn new_full(
         }
     };
 
-    // 创建链下清算广播 channel（仅省储行节点）
-    let (offchain_gossip_tx, offchain_gossip_rx) =
-        if get_offchain_config().is_some() {
-            let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<crate::offchain_gossip::OffchainGossipMessage>();
-            (Some(tx), Some(rx))
+    // ─── 扫码支付 Step 2b-ii-β-2-b:清算行组件启动 ───────────────────────
+    // 若 CLI 设了 --clearing-bank 且 SS58 合法,启动清算行 offchain 组件
+    // (ledger + packer + rpc_impl + event_listener),并挂一个 30 秒 tick 的
+    // packer worker 到 `task_manager`。启动失败/地址非法时 log warning 但
+    // 不中断 PoW + GRANDPA 启动(基础节点职能优先)。
+    let clearing_rpc_impl: Option<Arc<crate::offchain::rpc::OffchainClearingRpcImpl>> =
+        if let Some(bank_ss58) = clearing_bank.as_deref() {
+            use sp_core::crypto::Ss58Codec;
+            match sp_runtime::AccountId32::from_ss58check(bank_ss58) {
+                Ok(bank_main) => {
+                    let password = clearing_bank_password.as_deref().unwrap_or("");
+                    let keystore_path = config.base_path.path();
+                    let offchain_keystore =
+                        crate::offchain_keystore::OffchainKeystore::new(keystore_path);
+                    let signing_key_slot: Arc<
+                        std::sync::RwLock<Option<crate::offchain_keystore::SigningKey>>,
+                    > = Arc::new(std::sync::RwLock::new(None));
+                    if offchain_keystore.has_signing_key() && !password.is_empty() {
+                        match offchain_keystore.load_signing_key(password) {
+                            Ok(key) => {
+                                *signing_key_slot.write().expect("lock") = Some(key);
+                                log::info!("[ClearingBank] 签名密钥已解锁");
+                            }
+                            Err(e) => log::warn!(
+                                "[ClearingBank] 签名密钥解锁失败:{e},packer 将拒绝提交 extrinsic"
+                            ),
+                        }
+                    } else {
+                        log::warn!(
+                            "[ClearingBank] 签名密钥未加载(密码或密钥文件缺失),\
+                             packer 会在有 pending 时 rollback"
+                        );
+                    }
+
+                    let signer: Arc<dyn crate::offchain::packer::BatchSigner> = Arc::new(
+                        crate::offchain::KeystoreBatchSigner::new(signing_key_slot.clone()),
+                    );
+                    let submitter: Arc<dyn crate::offchain::packer::BatchSubmitter> =
+                        Arc::new(crate::offchain::pool_submitter::PoolBatchSubmitter::new(
+                            client.clone(),
+                            transaction_pool.clone(),
+                            signing_key_slot,
+                        ));
+
+                    match crate::offchain::start_clearing_bank_components(
+                        keystore_path,
+                        bank_main.clone(),
+                        password,
+                        signer,
+                        submitter,
+                        client.clone(),
+                    ) {
+                        Ok(components) => {
+                            let packer = components.packer.clone();
+                            let client_for_loop = client.clone();
+                            task_manager.spawn_handle().spawn(
+                                "offchain-clearing-packer",
+                                Some("offchain"),
+                                async move {
+                                    // 闭包内需要显式引入 HeaderBackend trait 才能调 `info()`。
+                                    use sp_blockchain::HeaderBackend as _;
+                                    use sp_runtime::traits::SaturatedConversion as _;
+                                    let mut interval =
+                                        tokio::time::interval(Duration::from_secs(30));
+                                    loop {
+                                        interval.tick().await;
+                                        let info = client_for_loop.info();
+                                        let current_block: u64 = info.best_number.saturated_into();
+                                        if packer.should_pack(current_block).await {
+                                            match packer.pack_and_submit(current_block).await {
+                                                Ok(Some(hash)) => log::info!(
+                                                    "[ClearingPacker] batch ok tx=0x{:x}",
+                                                    hash
+                                                ),
+                                                Ok(None) => {}
+                                                Err(e) => {
+                                                    log::warn!("[ClearingPacker] {e}")
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                            );
+
+                            // 扫码支付 Step 2b-iii-a:启动链上事件监听 worker。
+                            // 订阅 import_notification_stream,每个新块读 `System::Events`
+                            // → 解码 → 过滤本 pallet 事件 → 分发到 ledger。
+                            // packer 提交 extrinsic 后,runtime 发 `PaymentSettled` 事件,
+                            // 本 worker 捕获后调 `ledger.on_payment_settled` 清理 pending,
+                            // 从而形成 wuminapp RPC → ledger → pool → runtime → 事件回写
+                            // 的完整闭环。
+                            let listener = components.event_listener.clone();
+                            let client_for_events = client.clone();
+                            task_manager.spawn_handle().spawn(
+                                "offchain-clearing-event-listener",
+                                Some("offchain"),
+                                async move {
+                                    listener.run(client_for_events).await;
+                                },
+                            );
+
+                            // 扫码支付 Step 2b-iii-b:启动主账对账 worker(可选)。
+                            // 周期对比本地 `Σ confirmed` 与链上 `BankTotalDeposits`,
+                            // 偏差触发 log::error!。interval=0 时跳过 spawn(关闭对账,仅
+                            // 排障用;生产部署必须保留)。缺省 300 秒。
+                            let monitor_interval_secs =
+                                clearing_reserve_monitor_interval_secs.unwrap_or(300);
+                            if monitor_interval_secs > 0 {
+                                let monitor = components.reserve_monitor.clone();
+                                let client_for_monitor = client.clone();
+                                task_manager.spawn_handle().spawn(
+                                    "offchain-clearing-reserve-monitor",
+                                    Some("offchain"),
+                                    async move {
+                                        monitor
+                                            .run(
+                                                client_for_monitor,
+                                                Duration::from_secs(monitor_interval_secs),
+                                            )
+                                            .await;
+                                    },
+                                );
+                            } else {
+                                log::warn!(
+                                    "[ClearingBank] reserve_monitor 已关闭(interval=0),\
+                                     仅用于排障,生产环境请保留默认 300 秒"
+                                );
+                            }
+
+                            log::info!(
+                                "[ClearingBank] 清算行组件已启动,bank_main={}",
+                                bank_main.to_ss58check()
+                            );
+                            Some(components.rpc_impl.clone())
+                        }
+                        Err(e) => {
+                            log::warn!("[ClearingBank] 组件启动失败:{e}");
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!(
+                        "[ClearingBank] --clearing-bank SS58 解析失败:{e:?},清算行组件不启动"
+                    );
+                    None
+                }
+            }
         } else {
-            (None, None)
+            None
         };
 
     let rpc_extensions_builder = {
@@ -561,6 +682,7 @@ pub fn new_full(
         let pool = transaction_pool.clone();
         let keystore = keystore_container.keystore();
         let chain_spec = config.chain_spec.cloned_box();
+        let clearing_rpc_impl = clearing_rpc_impl.clone();
 
         Box::new(move |_| {
             let deps = crate::rpc::FullDeps {
@@ -570,10 +692,8 @@ pub fn new_full(
                 cpu_hashrate_fn: cpu_hashrate as fn() -> f64,
                 gpu_hashrate_fn,
                 chain_spec: chain_spec.cloned_box(),
-                // 中文注释：从全局配置读取链下清算参数（由 nodeui start_node 设置）。
-                offchain_ledger: get_offchain_config().map(|c| c.ledger.clone()),
-                offchain_shenfen_id: get_offchain_config().map(|c| c.shenfen_id.clone()),
-                offchain_gossip_tx: offchain_gossip_tx.clone(),
+                // 扫码支付 Step 2b-ii-β-2-b:清算行 RPC 命名空间(None 时跳过注入)
+                offchain_clearing_rpc: clearing_rpc_impl.clone(),
             };
             crate::rpc::create_full(deps).map_err(Into::into)
         })
@@ -594,22 +714,6 @@ pub fn new_full(
         telemetry: telemetry.as_mut(),
         tracing_execute_block: None,
     })?;
-
-    // 启动链下清算广播 worker（仅省储行节点——已配置清算签名私钥时才启动）
-    if let (Some(notification_service), Some(offchain_cfg)) =
-        (offchain_clearing_notification_service, get_offchain_config())
-    {
-        let ledger_for_gossip = offchain_cfg.ledger.clone();
-        task_manager.spawn_handle().spawn(
-            "offchain-clearing-gossip",
-            None,
-            crate::offchain_gossip::run_offchain_gossip_worker(
-                notification_service,
-                ledger_for_gossip,
-                offchain_gossip_rx,
-            ),
-        );
-    }
 
     // 中文注释：本链制度要求"安装全节点软件即可参与挖矿"，不再依赖 authority 角色开关。
     ensure_powr_key(&keystore)?;

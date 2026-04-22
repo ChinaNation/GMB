@@ -9,7 +9,6 @@
 - `memory/08-tasks/open/20260322-公民投票完整实现.md`
 - `memory/08-tasks/open/20260325-133531-统一-duoqian-manage-pow-命名.md`
 - `memory/08-tasks/open/20260325-141845-将-duoqian-manage-pow-注册型多签地址接入-duoqian-transfer-pow-转账功能.md`
-- `memory/08-tasks/open/20260325-150802-为-sfid-机构生成流程新增独立机构名称字段并用于-wuminapp-与-wumin-显示.md`
 - `memory/08-tasks/open/20260331-step2-node-offchain-rpc-链下待结算账本.md`
 - `memory/08-tasks/open/20260331-step3-runtime-offchain-transaction-pos-适配验证.md`
 - `memory/08-tasks/open/20260401-step2a-offchain-pallet-简化密钥机制.md`
@@ -30,6 +29,8 @@
 - `memory/08-tasks/open/20260409-qr-protocol-unify-v1.md`
 - `memory/08-tasks/open/20260411-vote-account-binding.md`
 - `memory/08-tasks/open/20260413-083358-轻节点连接稳定性逐行审计-检查轻节点为何总是连不上区块链-逐文件逐行审查连接链路代码并输出完整检查报告与改进方案.md`
+- `memory/08-tasks/open/20260419-扫码支付-step1-同行MVP.md`
+- `memory/08-tasks/open/20260421-092827-全仓库检查机构相关账户计算是否正确-优先核查-runtime-primitives-作为真源定义-并追踪其在-runtime-及相关模块中的使用.md`
 
 ## done
 
@@ -63,6 +64,7 @@
 - `memory/08-tasks/done/20260324-skip-empty-blocks.md`
 - `memory/08-tasks/done/20260325-125830-runtime-wuminapp-wumin-双端联动强制规则.md`
 - `memory/08-tasks/done/20260325-130439-新增-institution-asset-guard-公共模块-并接入机构账户资金操作白名单边界.md`
+- `memory/08-tasks/done/20260325-150802-为-sfid-机构生成流程新增独立机构名称字段并用于-wuminapp-与-wumin-显示.md`
 - `memory/08-tasks/done/20260325-232827-排查出块记录中区块高度-时间-手续费到账收益-铸块奖励-区块作者不显示的原因.md`
 - `memory/08-tasks/done/20260325-genesis-bootstrap.md`
 - `memory/08-tasks/done/20260325-remove-dev-chain.md`
@@ -120,6 +122,14 @@
 - `memory/08-tasks/done/20260409-sfid-sheng-admin-per-province-keyring.md`
 - `memory/08-tasks/done/20260410-sfid-store-shard-by-province-impl.md`
 - `memory/08-tasks/done/20260410-sfid-store-shard-by-province.md`
-- `memory/08-tasks/done/20260415-wumin-institutions-unified-registry.md`
-- `memory/08-tasks/done/20260415-proposal-action-resolver.md`
 - `memory/08-tasks/done/20260415-governance-nrc-back-nav-fix.md`
+- `memory/08-tasks/done/20260415-proposal-action-resolver.md`
+- `memory/08-tasks/done/20260415-wumin-institutions-unified-registry.md`
+- `memory/08-tasks/done/20260419-sfid-机构两步式创建.md`
+- `memory/08-tasks/done/20260420-duoqian_address-改名-main_address.md`
+- `memory/08-tasks/done/20260420-keyless_address-改名-stake_address.md`
+- `memory/08-tasks/done/20260420-unified-DUOQIAN_V1-domain.md`
+- `memory/08-tasks/done/20260421-name-to-account-name-rename.md`
+- `memory/08-tasks/done/20260421-op-institution-role-split.md`
+- `memory/08-tasks/done/20260421-154308-多签账户注册改造-离线QR聚合签名-step1.md`
+- `memory/08-tasks/done/20260421-162425-多签账户转账改造-离线QR聚合签名-step2.md`

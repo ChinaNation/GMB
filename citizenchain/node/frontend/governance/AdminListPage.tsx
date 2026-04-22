@@ -9,7 +9,6 @@ import type {
   ActivateRequestResult,
   ActivatedAdmin,
   InstitutionDetail,
-  SigningAdminInfo,
 } from './governance-types';
 
 type Props = {
@@ -22,7 +21,6 @@ type ActivateStep = 'idle' | 'qr' | 'scan' | 'verifying' | 'done' | 'error';
 export function AdminListPage({ shenfenId, onBack }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [activatedAdmins, setActivatedAdmins] = useState<ActivatedAdmin[]>([]);
-  const [signingAdmin, setSigningAdmin] = useState<SigningAdminInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -33,25 +31,15 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
   const [activateCountdown, setActivateCountdown] = useState(90);
   const [activateError, setActivateError] = useState<string | null>(null);
 
-  // 设为验证者弹窗状态
-  const [showValidatorModal, setShowValidatorModal] = useState(false);
-  const [validatorPubkey, setValidatorPubkey] = useState('');
-  const [privateKeyInput, setPrivateKeyInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
-  const [validatorSaving, setValidatorSaving] = useState(false);
-  const [validatorError, setValidatorError] = useState<string | null>(null);
-
   useEffect(() => {
     setLoading(true);
     Promise.all([
       api.getInstitutionDetail(shenfenId),
       api.getActivatedAdmins(shenfenId).catch(() => [] as ActivatedAdmin[]),
-      api.getSigningAdmin().catch(() => null as SigningAdminInfo | null),
     ])
-      .then(([d, aa, sa]) => {
+      .then(([d, aa]) => {
         setDetail(d);
         setActivatedAdmins(aa);
-        setSigningAdmin(sa);
         setError(null);
       })
       .catch((e) => setError(sanitizeError(e)))
@@ -139,7 +127,6 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
             const isActivated = activatedAdmins.some(
               a => a.pubkeyHex.toLowerCase() === pubkey.toLowerCase()
             );
-            const isSigningAdminKey = signingAdmin?.pubkeyHex.toLowerCase() === pubkey.toLowerCase();
             const ss58 = hexToSs58(pubkey);
             const balanceDisplay = admin.balanceFen != null
               ? formatBalance(admin.balanceFen)
@@ -151,24 +138,7 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
                 <span className="admin-card-balance">｜ {balanceDisplay}</span>
                 <div className="admin-card-actions">
                   {isActivated ? (
-                    <>
-                      <span className="activated-tag">已激活</span>
-                      {detail.orgType === 2 && !isSigningAdminKey && (
-                        <button
-                          className="set-validator-button"
-                          onClick={() => {
-                            setValidatorPubkey(pubkey);
-                            setPrivateKeyInput('');
-                            setPasswordInput('');
-                            setValidatorError(null);
-                            setShowValidatorModal(true);
-                          }}
-                        >设为验证者</button>
-                      )}
-                      {detail.orgType === 2 && isSigningAdminKey && (
-                        <span className="validator-tag">已设为验证者</span>
-                      )}
-                    </>
+                    <span className="activated-tag">已激活</span>
                   ) : (
                     <button
                       className="activate-button"
@@ -230,68 +200,6 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
         </div>
       )}
 
-      {/* 设为验证者弹窗 */}
-      {showValidatorModal && (
-        <div className="modal-overlay" onClick={() => !validatorSaving && setShowValidatorModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h3>设为验证者</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 12px' }}>
-              输入该管理员的私钥种子，用于链下支付验证签名。私钥可在 wumin 冷钱包中复制。
-            </p>
-            <div className="wallet-form-field">
-              <label>私钥种子（64 位十六进制）</label>
-              <input
-                type="password"
-                value={privateKeyInput}
-                onChange={e => setPrivateKeyInput(e.target.value.trim())}
-                placeholder="输入 64 位 hex 私钥种子"
-                disabled={validatorSaving}
-              />
-            </div>
-            <div className="wallet-form-field" style={{ marginTop: 10 }}>
-              <label>设备密码</label>
-              <input
-                type="password"
-                value={passwordInput}
-                onChange={e => setPasswordInput(e.target.value)}
-                placeholder="输入设备开机密码"
-                disabled={validatorSaving}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && privateKeyInput && passwordInput) {
-                    e.preventDefault();
-                    submitValidator();
-                  }
-                }}
-              />
-            </div>
-            {validatorError && <div className="error" style={{ marginTop: 8 }}>{validatorError}</div>}
-            <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
-              <button
-                className="cancel-button"
-                onClick={() => setShowValidatorModal(false)}
-                disabled={validatorSaving}
-              >取消</button>
-              <button
-                onClick={submitValidator}
-                disabled={validatorSaving || !privateKeyInput || !passwordInput}
-              >{validatorSaving ? '设置中…' : '确认设置'}</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
-
-  function submitValidator() {
-    if (!privateKeyInput || !passwordInput) return;
-    setValidatorSaving(true);
-    setValidatorError(null);
-    api.setSigningAdmin(validatorPubkey, privateKeyInput, passwordInput)
-      .then((info) => {
-        setSigningAdmin(info);
-        setShowValidatorModal(false);
-      })
-      .catch((e) => setValidatorError(sanitizeError(e)))
-      .finally(() => setValidatorSaving(false));
-  }
 }

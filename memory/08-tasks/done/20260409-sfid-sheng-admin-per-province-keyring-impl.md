@@ -25,7 +25,7 @@
   - `None` → 回退到 SFID MAIN 验签(向后兼容);`Some(province)` → 要求
     `origin_pubkey == sheng_signing_pubkey(province)`
 - `runtime/src/configs/mod.rs`:
-  - 4 个签名 payload domain tag 统一为 `b"GMB_SFID_V1"`(代码里的 verifier 共享常量,
+  - 4 个签名 payload domain tag 统一为 `b"GMB_SFID_V1"`（2026-04-20 统一为 `DUOQIAN_DOMAIN + OP_SIGN_*`）(代码里的 verifier 共享常量,
     使用 `[u8; N]` 形式,符合 `feedback_scale_domain_must_be_array` 铁律)
   - `RuntimeSfidInstitutionVerifier` 根据 `signing_province` 分流到省级 pubkey
 - `runtime/src/lib.rs`:
@@ -66,11 +66,11 @@
   与 `rotate_main_seed` 原子完成
 - `submit_register_sfid_institution_extrinsic`:
   - signer 改为 `resolve_business_signer` 返回的本省 sr25519 Pair
-  - 签名 payload 追加 `province` 字段,使用 `b"GMB_SFID_V1"` domain
+  - 签名 payload 追加 `province` 字段,使用 `b"GMB_SFID_V1"`（2026-04-20 统一为 `DUOQIAN_DOMAIN + OP_SIGN_*`） domain
   - extrinsic args 追加 `signing_province: Some(province)`
   - **签字段包和 submit 必须用同一把 Pair**(否则链端 verifier 会挂)
 - `src/chain/runtime_align.rs`:
-  - 4 个 `DOMAIN_*` 常量统一为 `b"GMB_SFID_V1"`
+  - 4 个 `DOMAIN_*` 常量统一为 `b"GMB_SFID_V1"`（2026-04-20 统一为 `DUOQIAN_DOMAIN + OP_SIGN_*`）
   - 新建 `build_institution_credential_with_province(state, ctx, ...)`
 - `src/institutions/chain.rs` + `src/institutions/handler.rs` +
   `src/sheng-admins/multisig.rs` 调用点全部级联追加 `ctx: &AdminAuthContext` 参数

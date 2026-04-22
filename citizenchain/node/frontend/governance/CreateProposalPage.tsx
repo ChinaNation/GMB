@@ -11,7 +11,7 @@ type Props = {
   shenfenId: string;
   orgType: number;
   institutionName: string;
-  duoqianAddress: string;
+  mainAddress: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
   onSuccess: () => void;
@@ -20,7 +20,7 @@ type Props = {
 type Step = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function CreateProposalPage({
-  shenfenId, orgType, institutionName, duoqianAddress, adminWallets, onBack, onSuccess,
+  shenfenId, orgType, institutionName, mainAddress, adminWallets, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
 
@@ -158,7 +158,7 @@ export function CreateProposalPage({
 
           <div className="wallet-form-field">
             <label>转出地址（机构多签）</label>
-            <input type="text" value={hexToSs58(duoqianAddress)} disabled />
+            <input type="text" value={hexToSs58(mainAddress)} disabled />
           </div>
 
           <div className="wallet-form-field">

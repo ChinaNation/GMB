@@ -190,21 +190,21 @@ weight：
 
 ### 7.1 绑定凭证域
 `RuntimeSfidVerifier` 的 payload：
-- payload: `("GMB_SFID_BIND_V3", genesis_hash, who, binding_id, bind_nonce)`
+- payload: `(DUOQIAN_DOMAIN, OP_SIGN_BIND, genesis_hash, who, binding_id, bind_nonce)`
 - `genesis_hash = block_hash(0)`（链域隔离）
 - message: `blake2_256(scale_encode(payload))`
 - algorithm: `sr25519`
 
 ### 7.2 公民投票凭证域
 `RuntimeSfidVoteVerifier` 的 payload：
-- payload: `("GMB_SFID_VOTE_V3", genesis_hash, who, binding_id, proposal_id, vote_nonce)`
+- payload: `(DUOQIAN_DOMAIN, OP_SIGN_VOTE, genesis_hash, who, binding_id, proposal_id, vote_nonce)`
 - `genesis_hash = block_hash(0)`（链域隔离）
 - message: `blake2_256(scale_encode(payload))`
 - algorithm: `sr25519`
 
 ### 7.3 人口快照凭证域（同一信任根）
 该逻辑位于 `voting-engine-system` 的 snapshot verifier：
-- payload: `("GMB_SFID_POPULATION_V3", genesis_hash, who, eligible_total, snapshot_nonce)`
+- payload: `(DUOQIAN_DOMAIN, OP_SIGN_POP, genesis_hash, who, eligible_total, snapshot_nonce)`
 - `genesis_hash = block_hash(0)`（链域隔离）
 - message: `blake2_256(scale_encode(payload))`
 - algorithm: `sr25519`
@@ -220,7 +220,7 @@ weight：
 
 ### 功能 1：SFID 绑定
 需要提供：
-1. 固定签名域：`("GMB_SFID_BIND_V3", genesis_hash, who, binding_id, bind_nonce)`。
+1. 固定签名域：`(DUOQIAN_DOMAIN, OP_SIGN_BIND, genesis_hash, who, binding_id, bind_nonce)`。
 2. 链上消费字段：`binding_id`、`bind_nonce`、`signature`。
 3. `bind_nonce` 一次性；链上按 `hash(bind_nonce)` 去重。
 4. SFID 可保留扩展运维字段（如 `key_id`、`key_version`、`alg`），但不改变链上验签字段。
@@ -228,14 +228,14 @@ weight：
 
 ### 功能 2：公民投票凭证校验
 需要提供：
-1. 固定签名域：`("GMB_SFID_VOTE_V3", genesis_hash, who, binding_id, proposal_id, vote_nonce)`。
+1. 固定签名域：`(DUOQIAN_DOMAIN, OP_SIGN_VOTE, genesis_hash, who, binding_id, proposal_id, vote_nonce)`。
 2. SFID 输出字段：`binding_id`、`proposal_id`、`vote_nonce`、`signature`。
 3. 防重放键：`(proposal_id, binding_id, hash(vote_nonce))`。
 4. `vote_nonce` 每次新生成，不复用。
 
 ### 功能 3：人口快照签名
 需要提供：
-1. 固定签名域：`("GMB_SFID_POPULATION_V3", genesis_hash, who, eligible_total, snapshot_nonce)`。
+1. 固定签名域：`(DUOQIAN_DOMAIN, OP_SIGN_POP, genesis_hash, who, eligible_total, snapshot_nonce)`。
 2. SFID 输出字段：`eligible_total`、`snapshot_nonce`、`signature`。
 3. 提交者账户 `who`（治理发起者链上账户）必须进入签名 payload。
 

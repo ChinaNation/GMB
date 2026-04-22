@@ -9,17 +9,29 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{ensure, pallet_prelude::*, traits::Currency};
+use frame_support::{ensure, pallet_prelude::*, traits::Currency, BoundedVec};
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
+use sp_core::sr25519::{Public as Sr25519Public, Signature as Sr25519Signature};
 use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
+use sp_runtime::Vec;
+use sp_std_btreeset::BTreeSet;
 
+// 中文注释:本 pallet 未声明 sp_std 依赖,从 sp_runtime 重新导出取 Vec;
+// BTreeSet 走 alloc::collections。下面的 shim 把 BTreeSet 带入本模块作用域。
+mod sp_std_btreeset {
+    pub use alloc::collections::BTreeSet;
+}
+extern crate alloc;
 
 use primitives::china::china_cb::{
     shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB, NRC_ANQUAN_ADDRESS,
 };
 use primitives::china::china_ch::{
     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
+};
+use primitives::core_const::{
+    DUOQIAN_DOMAIN, OP_SIGN_SAFETY_FUND, OP_SIGN_SWEEP, OP_SIGN_TRANSFER,
 };
 use voting_engine_system::{
     internal_vote::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
@@ -69,12 +81,68 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
 }
 
 /// 手续费划转动作：从机构手续费账户向机构主账户划转。
+///
+/// Step 2 · 离线聚合改造:新增 `proposer` 字段,用于 `TransferVoteIntent` 构造时
+/// 标识提案发起人,与 transfer / safety_fund 两类动作对齐,保证三组业务签名消息
+/// 结构一致。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct SweepAction<Balance> {
+pub struct SweepAction<AccountId, Balance> {
     /// 机构标识
     pub institution: InstitutionPalletId,
     /// 划转金额
     pub amount: Balance,
+    /// 发起管理员(Tx 1 中锁定)
+    pub proposer: AccountId,
+}
+
+/// 三类多签转账(transfer / safety_fund / sweep)共享的离线管理员签名意图。
+///
+/// Step 2 · 离线 QR 聚合签名铁律:
+/// - 一个 struct 覆盖三组业务,字段统一
+/// - 三个 `op_tag`(`OP_SIGN_TRANSFER` / `_SAFETY_FUND` / `_SWEEP`)做签名域硬隔离
+/// - 任一组的签名不能被跨组重放,因为签名消息 hash 的 preimage 含 op_tag
+///
+/// 每个管理员扫描发起人导出的 QR 后对此 intent 的 `signing_hash(ss58, op_tag)` 做
+/// sr25519 签名,回传给发起人聚合,发起人一笔 `finalize_X` 代投。
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo)]
+pub struct TransferVoteIntent<AccountId, Balance> {
+    /// 投票引擎分配的提案 ID
+    pub proposal_id: u64,
+    /// ORG_NRC / ORG_PRC / ORG_PRB / ORG_DUOQIAN
+    pub org: u8,
+    /// 机构 pallet_id(48 字节)
+    pub institution: InstitutionPalletId,
+    /// 资金源地址(transfer:主账户 · safety_fund:NRC_ANQUAN · sweep:费用账户)
+    pub from: AccountId,
+    /// 资金目标地址(transfer/safety_fund:beneficiary · sweep:主账户)
+    pub to: AccountId,
+    pub amount: Balance,
+    /// `blake2_256(remark)`;sweep 无 remark,固定为 `blake2_256(b"")`
+    pub remark_hash: [u8; 32],
+    /// Tx 1 锁定的发起人
+    pub proposer: AccountId,
+    /// 恒 true,占位防误签
+    pub approve: bool,
+}
+
+impl<AccountId: Encode, Balance: Encode> TransferVoteIntent<AccountId, Balance> {
+    /// 按签名域铁律构造标准签名消息 hash。
+    ///
+    /// - `op_tag` 必须是 `OP_SIGN_TRANSFER / _SAFETY_FUND / _SWEEP` 三者之一
+    /// - preimage = `DUOQIAN_DOMAIN(10B) || op_tag(1B) || ss58_le(2B) || blake2_256(intent.encode())`
+    /// - signing_hash = `blake2_256(preimage)`(32 字节 sr25519 签名消息)
+    ///
+    /// wuminapp 端必须用同样公式 + 同样 SCALE 布局构造 intent 后计算 signing_hash,
+    /// 不一致会导致签名验证失败。
+    pub fn signing_hash(&self, ss58_prefix: u16, op_tag: u8) -> [u8; 32] {
+        let intent_hash = sp_io::hashing::blake2_256(&self.encode());
+        let mut preimage = Vec::with_capacity(10 + 1 + 2 + 32);
+        preimage.extend_from_slice(DUOQIAN_DOMAIN);
+        preimage.push(op_tag);
+        preimage.extend_from_slice(&ss58_prefix.to_le_bytes());
+        preimage.extend_from_slice(&intent_hash);
+        sp_io::hashing::blake2_256(&preimage)
+    }
 }
 
 /// 手续费账户最低保留余额：1111.11 元（111111 分）。
@@ -113,19 +181,19 @@ fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
     None
 }
 
-/// 中文注释：从 CHINA_CB/CHINA_CH 中查找机构的多签账户地址（duoqian_address）。
+/// 中文注释：从 CHINA_CB/CHINA_CH 中查找机构的多签账户地址（main_address）。
 fn institution_pallet_address(institution: InstitutionPalletId) -> Option<[u8; 32]> {
     if let Some(node) = CHINA_CB
         .iter()
         .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
     {
-        return Some(node.duoqian_address);
+        return Some(node.main_address);
     }
 
     CHINA_CH
         .iter()
         .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-        .map(|n| n.duoqian_address)
+        .map(|n| n.main_address)
 }
 
 /// 中文注释：检查机构 ID 后 16 字节是否全零（注册多签机构的 ID 格式要求）。
@@ -142,6 +210,7 @@ pub mod pallet {
     use frame_support::traits::OnUnbalanced;
     use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
     use voting_engine_system::InternalAdminProvider;
+    use voting_engine_system::InternalThresholdProvider;
     use voting_engine_system::InternalVoteEngine;
 
     #[pallet::config]
@@ -188,27 +257,27 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         u64,
-        SweepAction<BalanceOf<T>>,
+        SweepAction<T::AccountId, BalanceOf<T>>,
         OptionQuery,
     >;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 转账提案已创建
+        /// 转账提案已创建(Tx 1)。wuminapp 扫描此事件后即可构造 QR 分发给各管理员签名。
         TransferProposed {
             proposal_id: u64,
             org: u8,
             institution: InstitutionPalletId,
             proposer: T::AccountId,
+            /// 资金源(= 机构主账户),Step 2 新增供 QR 生成
+            from: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
-        },
-        /// 投票已提交
-        TransferVoteSubmitted {
-            proposal_id: u64,
-            who: T::AccountId,
-            approve: bool,
+            /// 原文 remark,供管理员扫 QR 时人眼核对;链上验签用 `blake2_256(remark)`
+            remark: BoundedVec<u8, T::MaxRemarkLen>,
+            /// 投票引擎分配的超时区块,供 wuminapp 倒计时
+            expires_at: BlockNumberFor<T>,
         },
         /// 投票通过但执行失败（投票已记录，提案数据保留，可通过 execute_transfer 手动重试）
         TransferExecutionFailed {
@@ -223,18 +292,23 @@ pub mod pallet {
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
         },
-        /// 安全基金转账提案已创建
+        /// finalize_transfer 代投完成(无论最终状态):统计接受签名数 + 投票引擎当前状态。
+        TransferFinalized {
+            proposal_id: u64,
+            signatures_accepted: u32,
+            final_status: u8,
+        },
+        /// 安全基金转账提案已创建(Tx 1)。
         SafetyFundTransferProposed {
             proposal_id: u64,
             proposer: T::AccountId,
+            /// 资金源(= NRC_ANQUAN_ADDRESS 常量)
+            from: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
-        },
-        /// 安全基金投票已提交
-        SafetyFundVoteSubmitted {
-            proposal_id: u64,
-            who: T::AccountId,
-            approve: bool,
+            /// 原文 remark,供管理员扫 QR 核对
+            remark: BoundedVec<u8, T::MaxRemarkLen>,
+            expires_at: BlockNumberFor<T>,
         },
         /// 安全基金转账已执行
         SafetyFundTransferExecuted {
@@ -244,21 +318,24 @@ pub mod pallet {
             fee: BalanceOf<T>,
         },
         /// 安全基金投票通过但执行失败
-        SafetyFundExecutionFailed {
+        SafetyFundExecutionFailed { proposal_id: u64 },
+        /// finalize_safety_fund_transfer 代投完成。
+        SafetyFundFinalized {
             proposal_id: u64,
+            signatures_accepted: u32,
+            final_status: u8,
         },
-        /// 手续费划转提案已创建
+        /// 手续费划转提案已创建(Tx 1)。
         SweepToMainProposed {
             proposal_id: u64,
             institution: InstitutionPalletId,
             proposer: T::AccountId,
+            /// 资金源(= 机构费用账户)
+            from: T::AccountId,
+            /// 资金目标(= 机构主账户)
+            to: T::AccountId,
             amount: BalanceOf<T>,
-        },
-        /// 手续费划转投票已提交
-        SweepToMainVoteSubmitted {
-            proposal_id: u64,
-            voter: T::AccountId,
-            approve: bool,
+            expires_at: BlockNumberFor<T>,
         },
         /// 手续费划转已执行
         SweepToMainExecuted {
@@ -269,8 +346,12 @@ pub mod pallet {
             reserve_left: BalanceOf<T>,
         },
         /// 手续费划转投票通过但执行失败
-        SweepExecutionFailed {
+        SweepExecutionFailed { proposal_id: u64 },
+        /// finalize_sweep_to_main 代投完成。
+        SweepToMainFinalized {
             proposal_id: u64,
+            signatures_accepted: u32,
+            final_status: u8,
         },
     }
 
@@ -318,6 +399,17 @@ pub mod pallet {
         SweepAmountExceedsCap,
         /// 中文注释：手续费划转提案未通过。
         SweepProposalNotPassed,
+        // ── Step 2 · 离线 QR 聚合签名改造新增错误 ──
+        /// finalize_X 提交的签名对应的 admin 不在该机构管理员列表
+        UnauthorizedSignature,
+        /// finalize_X 同一 admin 在同一批签名里重复出现
+        DuplicateSignature,
+        /// finalize_X sr25519 签名验证失败
+        InvalidSignature,
+        /// finalize_X 提交的签名数量少于阈值
+        InsufficientSignatures,
+        /// finalize_X sr25519 签名长度必须恰好为 64 字节
+        MalformedSignature,
     }
 
     #[pallet::call]
@@ -396,7 +488,7 @@ pub mod pallet {
                 institution,
                 beneficiary: beneficiary.clone(),
                 amount,
-                remark,
+                remark: remark.clone(),
                 proposer: who.clone(),
             };
             let mut encoded = sp_runtime::Vec::from(crate::MODULE_TAG);
@@ -407,67 +499,118 @@ pub mod pallet {
                 frame_system::Pallet::<T>::block_number(),
             );
 
+            // 从投票引擎回读 proposal.end 作为 expires_at,供 wuminapp 倒计时。
+            let expires_at = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .map(|p| p.end)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+
             Self::deposit_event(Event::<T>::TransferProposed {
                 proposal_id,
                 org,
                 institution,
                 proposer: who,
+                from: institution_account,
                 beneficiary,
                 amount,
+                remark,
+                expires_at,
             });
             Ok(())
         }
 
-        /// 对转账提案投票，达到阈值后自动执行转账。
+        /// Step 2 · 离线 QR 聚合转账:发起人一笔代投 + 自动执行。
+        ///
+        /// 流程:
+        /// 1. 读取 Tx 1 存入的 `TransferAction`
+        /// 2. 构造 `TransferVoteIntent`(op_tag = `OP_SIGN_TRANSFER`)
+        /// 3. 共用 helper 循环验签 + 代投(`verify_and_cast_votes`)
+        /// 4. 投票引擎达阈值自动 `STATUS_PASSED` → 原子执行 `try_execute_transfer`
+        /// 5. 执行失败保留提案状态供 `execute_transfer` 手动重试
+        ///
+        /// 任意签名账户可调用(代付 gas)。
         #[pallet::call_index(1)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::vote_transfer())]
-        pub fn vote_transfer(
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::finalize_transfer(sigs.len() as u32))]
+        pub fn finalize_transfer(
             origin: OriginFor<T>,
             proposal_id: u64,
-            approve: bool,
+            sigs: BoundedVec<
+                (T::AccountId, duoqian_manage_pow::pallet::AdminSignatureOf<T>),
+                <T as duoqian_manage_pow::Config>::MaxAdmins,
+            >,
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
+            let _submitter = ensure_signed(origin)?;
 
+            // 1. 读取提案业务数据
             let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             let tag = crate::MODULE_TAG;
-            ensure!(raw.len() >= tag.len() && &raw[..tag.len()] == tag, Error::<T>::ProposalActionNotFound);
+            ensure!(
+                raw.len() >= tag.len() && &raw[..tag.len()] == tag,
+                Error::<T>::ProposalActionNotFound
+            );
             let action = TransferAction::<T::AccountId, BalanceOf<T>, T::MaxRemarkLen>::decode(
                 &mut &raw[tag.len()..],
             )
             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-            let org = Self::resolve_actual_org(action.institution)
-                .ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                Self::is_internal_admin(org, action.institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
 
-            <T as duoqian_manage_pow::Config>::InternalVoteEngine::cast_internal_vote(
-                who.clone(),
+            // 2. 解析 (org, from = 机构主账户)
+            let (org, institution_account) = Self::resolve_institution_account(action.institution)?;
+
+            // 3. 从投票引擎查阈值
+            let threshold = <T as voting_engine_system::Config>::InternalThresholdProvider::pass_threshold(
+                org,
+                action.institution,
+            )
+            .ok_or(Error::<T>::InvalidInstitution)?;
+
+            // 4. 构造 intent + signing_hash
+            let remark_hash = sp_io::hashing::blake2_256(action.remark.as_slice());
+            let intent = TransferVoteIntent::<T::AccountId, BalanceOf<T>> {
                 proposal_id,
-                approve,
+                org,
+                institution: action.institution,
+                from: institution_account.clone(),
+                to: action.beneficiary.clone(),
+                amount: action.amount,
+                remark_hash,
+                proposer: action.proposer.clone(),
+                approve: true,
+            };
+            let signing_hash = intent.signing_hash(T::SS58Prefix::get(), OP_SIGN_TRANSFER);
+
+            // 5. 验签 + 代投
+            let accepted = Self::verify_and_cast_votes(
+                proposal_id,
+                org,
+                action.institution,
+                threshold,
+                &signing_hash,
+                &sigs,
             )?;
 
-            Self::deposit_event(Event::<T>::TransferVoteSubmitted {
-                proposal_id,
-                who,
-                approve,
-            });
-
-            // 检查投票结果
-            if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
-                if proposal.status == STATUS_PASSED {
-                    // 投票通过，尝试自动执行转账
-                    let institution = action.institution;
-                    if Self::try_execute_transfer(proposal_id).is_err() {
-                        Self::deposit_event(Event::<T>::TransferExecutionFailed {
-                            proposal_id,
-                            institution,
-                        });
-                    }
+            // 6. 达阈值则自动执行;失败保留提案供 execute_transfer 重试
+            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            if proposal.status == STATUS_PASSED {
+                let institution = action.institution;
+                if Self::try_execute_transfer(proposal_id).is_err() {
+                    Self::deposit_event(Event::<T>::TransferExecutionFailed {
+                        proposal_id,
+                        institution,
+                    });
                 }
             }
+
+            // 读回最新 status(try_execute_transfer 成功推到 EXECUTED)
+            let final_status = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .map(|p| p.status)
+                .unwrap_or(proposal.status);
+            Self::deposit_event(Event::<T>::TransferFinalized {
+                proposal_id,
+                signatures_accepted: accepted,
+                final_status,
+            });
+
             Ok(())
         }
 
@@ -502,15 +645,16 @@ pub mod pallet {
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
-                    ORG_NRC, nrc_institution, &who,
+                    ORG_NRC,
+                    nrc_institution,
+                    &who,
                 ),
                 Error::<T>::UnauthorizedAdmin
             );
 
             // 验证安全基金账户余额
-            let safety_fund_account = T::AccountId::decode(
-                &mut &NRC_ANQUAN_ADDRESS[..],
-            ).map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
+            let safety_fund_account = T::AccountId::decode(&mut &NRC_ANQUAN_ADDRESS[..])
+                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
             ensure!(
                 <T as duoqian_manage_pow::Config>::InstitutionAssetGuard::can_spend(
                     &safety_fund_account,
@@ -523,83 +667,132 @@ pub mod pallet {
             let amount_u128: u128 = amount.saturated_into();
             let fee_u128 = onchain_transaction_pow::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
-            let total = amount.checked_add(&fee).ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
+            let total = amount
+                .checked_add(&fee)
+                .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             let ed: BalanceOf<T> = <T as duoqian_manage_pow::Config>::Currency::minimum_balance();
-            let free = <T as duoqian_manage_pow::Config>::Currency::free_balance(&safety_fund_account);
-            let required = total.checked_add(&ed).ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
+            let free =
+                <T as duoqian_manage_pow::Config>::Currency::free_balance(&safety_fund_account);
+            let required = total
+                .checked_add(&ed)
+                .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             ensure!(free >= required, Error::<T>::SafetyFundInsufficientBalance);
 
             // 创建内部投票提案
-            let proposal_id = <T as duoqian_manage_pow::Config>::InternalVoteEngine
-                ::create_internal_proposal(who.clone(), ORG_NRC, nrc_institution)?;
+            let proposal_id =
+                <T as duoqian_manage_pow::Config>::InternalVoteEngine::create_internal_proposal(
+                    who.clone(),
+                    ORG_NRC,
+                    nrc_institution,
+                )?;
 
             SafetyFundProposalActions::<T>::insert(
                 proposal_id,
                 SafetyFundAction {
                     beneficiary: beneficiary.clone(),
                     amount,
-                    remark,
+                    remark: remark.clone(),
                     proposer: who.clone(),
                 },
             );
 
+            // 从投票引擎回读 proposal.end 作为 expires_at。
+            let expires_at = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .map(|p| p.end)
+                .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
+
             Self::deposit_event(Event::SafetyFundTransferProposed {
                 proposal_id,
                 proposer: who,
+                from: safety_fund_account,
                 beneficiary,
                 amount,
+                remark,
+                expires_at,
             });
             Ok(())
         }
 
-        /// 对国储会安全基金转账提案投票；通过后自动执行。
+        /// Step 2 · 离线 QR 聚合安全基金转账:发起人一笔代投 + 自动执行。
         #[pallet::call_index(4)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(7, 6))]
-        pub fn vote_safety_fund_transfer(
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::finalize_safety_fund_transfer(sigs.len() as u32))]
+        pub fn finalize_safety_fund_transfer(
             origin: OriginFor<T>,
             proposal_id: u64,
-            approve: bool,
+            sigs: BoundedVec<
+                (T::AccountId, duoqian_manage_pow::pallet::AdminSignatureOf<T>),
+                <T as duoqian_manage_pow::Config>::MaxAdmins,
+            >,
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            let _action = SafetyFundProposalActions::<T>::get(proposal_id)
+            let _submitter = ensure_signed(origin)?;
+
+            // 1. 读取 SafetyFundAction
+            let action = SafetyFundProposalActions::<T>::get(proposal_id)
                 .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
 
-            // 验证国储会管理员
+            // 2. org + institution 固定(NRC)
+            let org = ORG_NRC;
             let nrc_institution = reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
                 .ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
-                    ORG_NRC, nrc_institution, &who,
-                ),
-                Error::<T>::UnauthorizedAdmin
-            );
+            let safety_fund_account = T::AccountId::decode(&mut &NRC_ANQUAN_ADDRESS[..])
+                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
 
-            // 投票
-            <T as duoqian_manage_pow::Config>::InternalVoteEngine
-                ::cast_internal_vote(who.clone(), proposal_id, approve)?;
+            // 3. 阈值
+            let threshold = <T as voting_engine_system::Config>::InternalThresholdProvider::pass_threshold(
+                org,
+                nrc_institution,
+            )
+            .ok_or(Error::<T>::InvalidInstitution)?;
 
-            Self::deposit_event(Event::SafetyFundVoteSubmitted {
+            // 4. 构造 intent + signing_hash(用 OP_SIGN_SAFETY_FUND 做签名域隔离)
+            let remark_hash = sp_io::hashing::blake2_256(action.remark.as_slice());
+            let intent = TransferVoteIntent::<T::AccountId, BalanceOf<T>> {
                 proposal_id,
-                who,
-                approve,
-            });
+                org,
+                institution: nrc_institution,
+                from: safety_fund_account.clone(),
+                to: action.beneficiary.clone(),
+                amount: action.amount,
+                remark_hash,
+                proposer: action.proposer.clone(),
+                approve: true,
+            };
+            let signing_hash = intent.signing_hash(T::SS58Prefix::get(), OP_SIGN_SAFETY_FUND);
 
-            // 投票通过后自动执行
-            if approve {
-                if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
-                    if proposal.status == STATUS_PASSED {
-                        let exec_result = frame_support::storage::with_transaction(|| {
-                            match Self::try_execute_safety_fund(proposal_id) {
-                                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
-                                Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
-                            }
-                        });
-                        if exec_result.is_err() {
-                            Self::deposit_event(Event::SafetyFundExecutionFailed { proposal_id });
-                        }
+            // 5. 验签 + 代投
+            let accepted = Self::verify_and_cast_votes(
+                proposal_id,
+                org,
+                nrc_institution,
+                threshold,
+                &signing_hash,
+                &sigs,
+            )?;
+
+            // 6. 达阈值 → 原子执行,失败发 SafetyFundExecutionFailed
+            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
+            if proposal.status == STATUS_PASSED {
+                let exec_result = frame_support::storage::with_transaction(|| {
+                    match Self::try_execute_safety_fund(proposal_id) {
+                        Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                        Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
                     }
+                });
+                if exec_result.is_err() {
+                    Self::deposit_event(Event::SafetyFundExecutionFailed { proposal_id });
                 }
             }
+
+            let final_status = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .map(|p| p.status)
+                .unwrap_or(proposal.status);
+            Self::deposit_event(Event::SafetyFundFinalized {
+                proposal_id,
+                signatures_accepted: accepted,
+                final_status,
+            });
+
             Ok(())
         }
 
@@ -621,72 +814,127 @@ pub mod pallet {
             let org = Self::resolve_sweep_org(institution)?;
             ensure!(
                 <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
-                    org, institution, &who,
+                    org,
+                    institution,
+                    &who,
                 ),
                 Error::<T>::UnauthorizedAdmin
             );
 
-            let proposal_id = <T as duoqian_manage_pow::Config>::InternalVoteEngine
-                ::create_internal_proposal(who.clone(), org, institution)?;
+            let proposal_id =
+                <T as duoqian_manage_pow::Config>::InternalVoteEngine::create_internal_proposal(
+                    who.clone(),
+                    org,
+                    institution,
+                )?;
 
             SweepProposalActions::<T>::insert(
                 proposal_id,
-                SweepAction { institution, amount },
+                SweepAction {
+                    institution,
+                    amount,
+                    proposer: who.clone(),
+                },
             );
+
+            let fee_account = Self::resolve_fee_account(institution)?;
+            let main_account = Self::resolve_main_account(institution)?;
+            let expires_at = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .map(|p| p.end)
+                .ok_or(Error::<T>::SweepProposalNotFound)?;
 
             Self::deposit_event(Event::SweepToMainProposed {
                 proposal_id,
                 institution,
                 proposer: who,
+                from: fee_account,
+                to: main_account,
                 amount,
+                expires_at,
             });
             Ok(())
         }
 
-        /// 对手续费划转提案投票；通过后自动执行划转。
+        /// Step 2 · 离线 QR 聚合费用→主账户划转:发起人一笔代投 + 自动执行。
+        ///
+        /// sweep 无 remark,intent 里 `remark_hash = blake2_256(b"")`。
         #[pallet::call_index(6)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(7, 6))]
-        pub fn vote_sweep_to_main(
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::finalize_sweep_to_main(sigs.len() as u32))]
+        pub fn finalize_sweep_to_main(
             origin: OriginFor<T>,
             proposal_id: u64,
-            approve: bool,
+            sigs: BoundedVec<
+                (T::AccountId, duoqian_manage_pow::pallet::AdminSignatureOf<T>),
+                <T as duoqian_manage_pow::Config>::MaxAdmins,
+            >,
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
+            let _submitter = ensure_signed(origin)?;
+
+            // 1. 读取 SweepAction
             let action = SweepProposalActions::<T>::get(proposal_id)
                 .ok_or(Error::<T>::SweepProposalNotFound)?;
 
+            // 2. 解析 org + from(fee_account) + to(main_account)
             let org = Self::resolve_sweep_org(action.institution)?;
-            ensure!(
-                <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
-                    org, action.institution, &who,
-                ),
-                Error::<T>::UnauthorizedAdmin
-            );
+            let fee_account = Self::resolve_fee_account(action.institution)?;
+            let main_account = Self::resolve_main_account(action.institution)?;
 
-            <T as duoqian_manage_pow::Config>::InternalVoteEngine
-                ::cast_internal_vote(who.clone(), proposal_id, approve)?;
+            // 3. 阈值
+            let threshold = <T as voting_engine_system::Config>::InternalThresholdProvider::pass_threshold(
+                org,
+                action.institution,
+            )
+            .ok_or(Error::<T>::InvalidInstitution)?;
 
-            Self::deposit_event(Event::SweepToMainVoteSubmitted {
+            // 4. intent(sweep 无 remark,用 blake2_256(b""))+ OP_SIGN_SWEEP 隔离签名域
+            let remark_hash = sp_io::hashing::blake2_256(&[][..]);
+            let intent = TransferVoteIntent::<T::AccountId, BalanceOf<T>> {
                 proposal_id,
-                voter: who,
-                approve,
-            });
+                org,
+                institution: action.institution,
+                from: fee_account,
+                to: main_account,
+                amount: action.amount,
+                remark_hash,
+                proposer: action.proposer.clone(),
+                approve: true,
+            };
+            let signing_hash = intent.signing_hash(T::SS58Prefix::get(), OP_SIGN_SWEEP);
 
-            if approve {
-                if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
-                    if proposal.status == STATUS_PASSED {
-                        let exec_result = frame_support::storage::with_transaction(|| {
-                            match Self::try_execute_sweep(proposal_id) {
-                                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
-                                Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
-                            }
-                        });
-                        if exec_result.is_err() {
-                            Self::deposit_event(Event::SweepExecutionFailed { proposal_id });
-                        }
+            // 5. 验签 + 代投
+            let accepted = Self::verify_and_cast_votes(
+                proposal_id,
+                org,
+                action.institution,
+                threshold,
+                &signing_hash,
+                &sigs,
+            )?;
+
+            // 6. 达阈值 → 原子执行,失败发 SweepExecutionFailed
+            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .ok_or(Error::<T>::SweepProposalNotFound)?;
+            if proposal.status == STATUS_PASSED {
+                let exec_result = frame_support::storage::with_transaction(|| {
+                    match Self::try_execute_sweep(proposal_id) {
+                        Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                        Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
                     }
+                });
+                if exec_result.is_err() {
+                    Self::deposit_event(Event::SweepExecutionFailed { proposal_id });
                 }
             }
+
+            let final_status = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .map(|p| p.status)
+                .unwrap_or(proposal.status);
+            Self::deposit_event(Event::SweepToMainFinalized {
+                proposal_id,
+                signatures_accepted: accepted,
+                final_status,
+            });
+
             Ok(())
         }
     }
@@ -708,16 +956,6 @@ pub mod pallet {
                 Error::<T>::InvalidInstitution
             );
             Ok(account)
-        }
-
-        fn resolve_actual_org(institution: InstitutionPalletId) -> Option<u8> {
-            if let Some(org) = institution_org(institution) {
-                return Some(org);
-            }
-            if Self::registered_duoqian_account(institution).is_ok() {
-                return Some(ORG_DUOQIAN);
-            }
-            None
         }
 
         fn resolve_institution_account(
@@ -747,6 +985,68 @@ pub mod pallet {
             )
         }
 
+        /// 三类 finalize_X 共用:循环验签 + 代投。
+        ///
+        /// 任一签名失败(成员校验 / 去重 / 长度 / 验签 / 代投)都让整笔交易回滚,
+        /// 不接受部分签名语义。
+        ///
+        /// `signing_hash` 由调用方按 `TransferVoteIntent::signing_hash(ss58, op_tag)`
+        /// 事先算好传入,本函数只做"签名有效性 + 管理员身份 + 投票引擎代投"。
+        ///
+        /// 返回接受并代投成功的签名数(= sigs.len(),若循环中途失败则函数已 Err 返回)。
+        fn verify_and_cast_votes(
+            proposal_id: u64,
+            org: u8,
+            institution: InstitutionPalletId,
+            threshold: u32,
+            signing_hash: &[u8; 32],
+            sigs: &BoundedVec<
+                (T::AccountId, duoqian_manage_pow::pallet::AdminSignatureOf<T>),
+                <T as duoqian_manage_pow::Config>::MaxAdmins,
+            >,
+        ) -> Result<u32, DispatchError> {
+            ensure!(
+                sigs.len() as u32 >= threshold,
+                Error::<T>::InsufficientSignatures
+            );
+
+            let mut seen: BTreeSet<T::AccountId> = BTreeSet::new();
+            let mut accepted: u32 = 0;
+            for (admin, sig_bytes) in sigs.iter() {
+                // 成员校验:必须是该机构的内部管理员
+                ensure!(
+                    Self::is_internal_admin(org, institution, admin),
+                    Error::<T>::UnauthorizedSignature
+                );
+                // 同批次去重
+                ensure!(
+                    seen.insert(admin.clone()),
+                    Error::<T>::DuplicateSignature
+                );
+                // sr25519 签名长度必须恰好 64 字节
+                ensure!(sig_bytes.len() == 64, Error::<T>::MalformedSignature);
+                let sig = Sr25519Signature::try_from(sig_bytes.as_slice())
+                    .map_err(|_| Error::<T>::MalformedSignature)?;
+                // AccountId 前 32 字节 = sr25519 公钥(复用 Step 1 建立的铁律)
+                let pubkey: Sr25519Public =
+                    duoqian_manage_pow::Pallet::<T>::pubkey_from_accountid(admin)
+                        .map_err(|_| Error::<T>::MalformedSignature)?;
+                // 验签
+                ensure!(
+                    sp_io::crypto::sr25519_verify(&sig, signing_hash, &pubkey),
+                    Error::<T>::InvalidSignature
+                );
+                // 代投(投票引擎内部自动做快照检查 / AlreadyVoted / 阈值 / 状态推进)
+                <T as duoqian_manage_pow::Config>::InternalVoteEngine::cast_internal_vote(
+                    admin.clone(),
+                    proposal_id,
+                    true,
+                )?;
+                accepted = accepted.saturating_add(1);
+            }
+            Ok(accepted)
+        }
+
         /// 判断机构的 org 类型用于 sweep 提案。
         fn resolve_sweep_org(institution: InstitutionPalletId) -> Result<u8, Error<T>> {
             // 国储会
@@ -769,7 +1069,9 @@ pub mod pallet {
         }
 
         /// 解析机构手续费账户。
-        fn resolve_fee_account(institution: InstitutionPalletId) -> Result<T::AccountId, DispatchError> {
+        fn resolve_fee_account(
+            institution: InstitutionPalletId,
+        ) -> Result<T::AccountId, DispatchError> {
             // 国储会：使用常量地址
             if CHINA_CB
                 .first()
@@ -789,9 +1091,11 @@ pub mod pallet {
         }
 
         /// 解析机构主账户。
-        fn resolve_main_account(institution: InstitutionPalletId) -> Result<T::AccountId, DispatchError> {
-            let raw = institution_pallet_address(institution)
-                .ok_or(Error::<T>::InvalidInstitution)?;
+        fn resolve_main_account(
+            institution: InstitutionPalletId,
+        ) -> Result<T::AccountId, DispatchError> {
+            let raw =
+                institution_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
             T::AccountId::decode(&mut &raw[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into())
         }
@@ -824,7 +1128,9 @@ pub mod pallet {
             let tx_fee_u128 = onchain_transaction_pow::calculate_onchain_fee(amount_u128);
             let tx_fee: BalanceOf<T> = tx_fee_u128.saturated_into();
 
-            let fee_balance_u128: u128 = <T as duoqian_manage_pow::Config>::Currency::free_balance(&fee_account).saturated_into();
+            let fee_balance_u128: u128 =
+                <T as duoqian_manage_pow::Config>::Currency::free_balance(&fee_account)
+                    .saturated_into();
             let reserve_u128 = FEE_ADDRESS_MIN_RESERVE_FEN;
 
             // ── 余额检查：amount + tx_fee + reserve ──
@@ -855,10 +1161,12 @@ pub mod pallet {
                 tx_fee,
                 frame_support::traits::WithdrawReasons::FEE,
                 frame_support::traits::ExistenceRequirement::KeepAlive,
-            ).map_err(|_| Error::<T>::InsufficientFeeReserve)?;
+            )
+            .map_err(|_| Error::<T>::InsufficientFeeReserve)?;
             <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
-            let reserve_left = <T as duoqian_manage_pow::Config>::Currency::free_balance(&fee_account);
+            let reserve_left =
+                <T as duoqian_manage_pow::Config>::Currency::free_balance(&fee_account);
 
             Self::deposit_event(Event::SweepToMainExecuted {
                 proposal_id,
@@ -883,9 +1191,8 @@ pub mod pallet {
                 Error::<T>::SafetyFundProposalNotPassed
             );
 
-            let safety_fund_account = T::AccountId::decode(
-                &mut &NRC_ANQUAN_ADDRESS[..],
-            ).map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
+            let safety_fund_account = T::AccountId::decode(&mut &NRC_ANQUAN_ADDRESS[..])
+                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
 
             ensure!(
                 <T as duoqian_manage_pow::Config>::InstitutionAssetGuard::can_spend(
@@ -899,12 +1206,14 @@ pub mod pallet {
             let amount_u128: u128 = action.amount.saturated_into();
             let fee_u128 = onchain_transaction_pow::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
-            let total = action.amount
+            let total = action
+                .amount
                 .checked_add(&fee)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
 
             // ── 余额检查：amount + fee + ED ──
-            let free = <T as duoqian_manage_pow::Config>::Currency::free_balance(&safety_fund_account);
+            let free =
+                <T as duoqian_manage_pow::Config>::Currency::free_balance(&safety_fund_account);
             let ed = <T as duoqian_manage_pow::Config>::Currency::minimum_balance();
             let required = total
                 .checked_add(&ed)
@@ -917,7 +1226,8 @@ pub mod pallet {
                 &action.beneficiary,
                 action.amount,
                 frame_support::traits::ExistenceRequirement::KeepAlive,
-            ).map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
+            )
+            .map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
 
             // ── 手续费：从安全基金扣取，通过 FeeRouter 按 80/10/10 分账 ──
             let fee_imbalance = <T as duoqian_manage_pow::Config>::Currency::withdraw(
@@ -925,13 +1235,11 @@ pub mod pallet {
                 fee,
                 frame_support::traits::WithdrawReasons::FEE,
                 frame_support::traits::ExistenceRequirement::KeepAlive,
-            ).map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
+            )
+            .map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
             <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
-            voting_engine_system::Pallet::<T>::set_status_and_emit(
-                proposal_id,
-                STATUS_EXECUTED,
-            )?;
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
 
             Self::deposit_event(Event::SafetyFundTransferExecuted {
                 proposal_id,
@@ -956,7 +1264,10 @@ pub mod pallet {
             let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             let tag = crate::MODULE_TAG;
-            ensure!(raw.len() >= tag.len() && &raw[..tag.len()] == tag, Error::<T>::ProposalActionNotFound);
+            ensure!(
+                raw.len() >= tag.len() && &raw[..tag.len()] == tag,
+                Error::<T>::ProposalActionNotFound
+            );
             let action = TransferAction::<T::AccountId, BalanceOf<T>, T::MaxRemarkLen>::decode(
                 &mut &raw[tag.len()..],
             )
@@ -998,9 +1309,11 @@ pub mod pallet {
                     ExistenceRequirement::KeepAlive,
                 ) {
                     Ok(imbalance) => imbalance,
-                    Err(_) => return frame_support::storage::TransactionOutcome::Rollback(
-                        Err(Error::<T>::InsufficientBalance.into())
-                    ),
+                    Err(_) => {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(
+                            Error::<T>::InsufficientBalance.into(),
+                        ))
+                    }
                 };
                 <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
@@ -1041,6 +1354,7 @@ mod tests {
         traits::{ConstU128, ConstU32},
     };
     use frame_system as system;
+    use sp_core::{sr25519, Pair as PairT};
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
     use voting_engine_system::STATUS_REJECTED;
 
@@ -1122,14 +1436,14 @@ mod tests {
     pub struct TestSfidInstitutionVerifier;
     impl
         duoqian_manage_pow::SfidInstitutionVerifier<
-            duoqian_manage_pow::pallet::SfidNameOf<Test>,
+            duoqian_manage_pow::pallet::AccountNameOf<Test>,
             duoqian_manage_pow::pallet::RegisterNonceOf<Test>,
             duoqian_manage_pow::pallet::RegisterSignatureOf<Test>,
         > for TestSfidInstitutionVerifier
     {
         fn verify_institution_registration(
             _sfid_id: &[u8],
-            _name: &duoqian_manage_pow::pallet::SfidNameOf<Test>,
+            _account_name: &duoqian_manage_pow::pallet::AccountNameOf<Test>,
             nonce: &duoqian_manage_pow::pallet::RegisterNonceOf<Test>,
             signature: &duoqian_manage_pow::pallet::RegisterSignatureOf<Test>,
             _signing_province: Option<&[u8]>,
@@ -1178,9 +1492,49 @@ mod tests {
         }
     }
 
+    // Step 2 · 测试扩展:
+    // 原 TestInternalAdminProvider 只读 CHINA_CB/CHINA_CH 硬编码 admin(非真实 sr25519 公钥,无法签名)。
+    // 为支持 finalize_X 的 sr25519 验签路径,新增 thread_local 覆盖层:
+    //   - EXTRA_ADMINS 按 (org, institution) 注入 sr25519 派生 admin 集合
+    //   - EXTRA_THRESHOLDS 按 (org, institution) 覆盖阈值(方便用 2 个签名就达标)
+    // 若某 (org, institution) 在 thread_local 有注入,优先用;否则 fallback 到原硬编码逻辑。
+    thread_local! {
+        static EXTRA_ADMINS: core::cell::RefCell<
+            alloc::collections::BTreeMap<(u8, InstitutionPalletId), alloc::vec::Vec<AccountId32>>,
+        > = core::cell::RefCell::new(alloc::collections::BTreeMap::new());
+        static EXTRA_THRESHOLDS: core::cell::RefCell<
+            alloc::collections::BTreeMap<(u8, InstitutionPalletId), u32>,
+        > = core::cell::RefCell::new(alloc::collections::BTreeMap::new());
+    }
+
+    fn set_extra_admins(org: u8, institution: InstitutionPalletId, admins: Vec<AccountId32>) {
+        EXTRA_ADMINS.with(|m| {
+            m.borrow_mut().insert((org, institution), admins);
+        });
+    }
+
+    fn set_extra_threshold(org: u8, institution: InstitutionPalletId, threshold: u32) {
+        EXTRA_THRESHOLDS.with(|m| {
+            m.borrow_mut().insert((org, institution), threshold);
+        });
+    }
+
+    fn get_extra_admins(org: u8, institution: InstitutionPalletId) -> Option<Vec<AccountId32>> {
+        EXTRA_ADMINS.with(|m| m.borrow().get(&(org, institution)).cloned())
+    }
+
+    fn get_extra_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+        EXTRA_THRESHOLDS.with(|m| m.borrow().get(&(org, institution)).copied())
+    }
+
     pub struct TestInternalAdminProvider;
     impl voting_engine_system::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
+            // 优先:测试注入的 sr25519 派生 admin
+            if let Some(admins) = get_extra_admins(org, institution) {
+                return admins.iter().any(|a| a == who);
+            }
+            // Fallback:原硬编码 admin
             let who_bytes = who.encode();
             if who_bytes.len() != 32 {
                 return false;
@@ -1214,19 +1568,31 @@ mod tests {
             }
         }
 
-        fn get_admin_list(
-            org: u8,
-            institution: InstitutionPalletId,
-        ) -> Option<Vec<AccountId32>> {
+        fn get_admin_list(org: u8, institution: InstitutionPalletId) -> Option<Vec<AccountId32>> {
+            if let Some(admins) = get_extra_admins(org, institution) {
+                return Some(admins);
+            }
             match org {
                 ORG_NRC | ORG_PRC => CHINA_CB
                     .iter()
                     .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .map(|n| n.duoqian_admins.iter().copied().map(AccountId32::new).collect()),
+                    .map(|n| {
+                        n.duoqian_admins
+                            .iter()
+                            .copied()
+                            .map(AccountId32::new)
+                            .collect()
+                    }),
                 ORG_PRB => CHINA_CH
                     .iter()
                     .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .map(|n| n.duoqian_admins.iter().copied().map(AccountId32::new).collect()),
+                    .map(|n| {
+                        n.duoqian_admins
+                            .iter()
+                            .copied()
+                            .map(AccountId32::new)
+                            .collect()
+                    }),
                 ORG_DUOQIAN => {
                     let account = AccountId32::decode(&mut &institution[..32]).ok()?;
                     let duoqian = duoqian_manage_pow::DuoqianAccounts::<Test>::get(&account)?;
@@ -1262,6 +1628,10 @@ mod tests {
     pub struct TestInternalThresholdProvider;
     impl voting_engine_system::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+            // 优先:测试注入的阈值覆盖(用于把 NRC/PRC/PRB 的大阈值降到 2,方便 finalize 测试)
+            if let Some(t) = get_extra_threshold(org, institution) {
+                return Some(t);
+            }
             match org {
                 ORG_NRC | ORG_PRC | ORG_PRB => {
                     voting_engine_system::internal_vote::governance_org_pass_threshold(org)
@@ -1338,9 +1708,10 @@ mod tests {
         type FeeRouter = ();
         type MaxAdmins = ConstU32<10>;
         type MaxSfidIdLength = ConstU32<96>;
-        type MaxSfidNameLength = ConstU32<128>;
+        type MaxAccountNameLength = ConstU32<128>;
         type MaxRegisterNonceLength = ConstU32<64>;
         type MaxRegisterSignatureLength = ConstU32<64>;
+        type MaxAdminSignatureLength = ConstU32<64>;
         type MinCreateAmount = ConstU128<111>;
         type MinCloseBalance = ConstU128<111>;
         type WeightInfo = ();
@@ -1353,16 +1724,85 @@ mod tests {
         type WeightInfo = ();
     }
 
+    /// Step 2 · 测试 helper:从 (org, institution, index) 派生 sr25519 keypair。
+    ///
+    /// 同 (org, institution, index) 每次调用返回相同 keypair,保证测试确定性。
+    /// 公钥的 32 字节直接作为 AccountId32,满足 `pubkey_from_accountid` 的铁律。
+    fn derive_admin_pair(
+        org: u8,
+        institution: &InstitutionPalletId,
+        index: u8,
+    ) -> (AccountId32, sr25519::Pair) {
+        let mut seed_bytes = [0u8; 32];
+        seed_bytes[0] = org;
+        seed_bytes[1] = index;
+        // 后 30 字节由 institution_pallet_id 前 30 字节填充,保证不同机构的 seed 不同
+        seed_bytes[2..32].copy_from_slice(&institution[..30]);
+        let pair = sr25519::Pair::from_seed(&seed_bytes);
+        let account = AccountId32::new(pair.public().0);
+        (account, pair)
+    }
+
     fn nrc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CB[0].duoqian_admins[index])
+        derive_admin_pair(ORG_NRC, &nrc_pallet_id(), index as u8).0
     }
 
     fn prc_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CB[1].duoqian_admins[index])
+        derive_admin_pair(ORG_PRC, &prc_pallet_id(), index as u8).0
     }
 
     fn prb_admin(index: usize) -> AccountId32 {
-        AccountId32::new(CHINA_CH[0].duoqian_admins[index])
+        derive_admin_pair(ORG_PRB, &prb_pallet_id(), index as u8).0
+    }
+
+    /// Step 2 · 离线聚合签名 helper:
+    /// 对 `TransferVoteIntent` 做 sr25519 签名,按管理员 pair 数组批量产出 sigs。
+    fn make_transfer_sigs(
+        pairs: &[(AccountId32, sr25519::Pair)],
+        take: usize,
+        proposal_id: u64,
+        org: u8,
+        institution: InstitutionPalletId,
+        from: AccountId32,
+        to: AccountId32,
+        amount: Balance,
+        remark_hash: [u8; 32],
+        proposer: AccountId32,
+        op_tag: u8,
+    ) -> BoundedVec<
+        (
+            AccountId32,
+            duoqian_manage_pow::pallet::AdminSignatureOf<Test>,
+        ),
+        <Test as duoqian_manage_pow::Config>::MaxAdmins,
+    > {
+        let intent = TransferVoteIntent::<AccountId32, Balance> {
+            proposal_id,
+            org,
+            institution,
+            from,
+            to,
+            amount,
+            remark_hash,
+            proposer,
+            approve: true,
+        };
+        let ss58 = <Test as frame_system::Config>::SS58Prefix::get();
+        let msg = intent.signing_hash(ss58, op_tag);
+        let sigs: Vec<_> = pairs
+            .iter()
+            .take(take)
+            .map(|(a, p)| {
+                let sig_bytes: duoqian_manage_pow::pallet::AdminSignatureOf<Test> = p
+                    .sign(&msg)
+                    .0
+                    .to_vec()
+                    .try_into()
+                    .expect("sig 64 bytes fits");
+                (a.clone(), sig_bytes)
+            })
+            .collect();
+        sigs.try_into().expect("sigs vec fits MaxAdmins")
     }
 
     fn nrc_pallet_id() -> InstitutionPalletId {
@@ -1392,11 +1832,17 @@ mod tests {
     }
 
     fn registered_duoqian_admin(index: usize) -> AccountId32 {
-        match index {
-            0 => AccountId32::new([0x31; 32]),
-            1 => AccountId32::new([0x32; 32]),
-            _ => AccountId32::new([0x33; 32]),
-        }
+        registered_duoqian_pair(index).0
+    }
+
+    /// 注册多签(ORG_DUOQIAN)的 admin sr25519 keypair helper。
+    /// seed 按 (ORG_DUOQIAN, registered_duoqian_institution, index) 派生,保证确定性。
+    fn registered_duoqian_pair(index: usize) -> (AccountId32, sr25519::Pair) {
+        derive_admin_pair(ORG_DUOQIAN, &registered_duoqian_institution(), index as u8)
+    }
+
+    fn registered_duoqian_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
+        (0..count).map(|i| registered_duoqian_pair(i as usize)).collect()
     }
 
     /// 收款人：使用一个不是管理员也不是机构的普通地址
@@ -1407,6 +1853,62 @@ mod tests {
     /// 获取最近一次 create_internal_proposal 分配的 proposal_id。
     fn last_proposal_id() -> u64 {
         voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+    }
+
+    /// 返回 (org, institution) 对应的前 `count` 个 sr25519 admin keypair。
+    fn admin_pairs(
+        org: u8,
+        institution: InstitutionPalletId,
+        count: u8,
+    ) -> Vec<(AccountId32, sr25519::Pair)> {
+        (0..count)
+            .map(|i| derive_admin_pair(org, &institution, i))
+            .collect()
+    }
+
+    fn nrc_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
+        admin_pairs(ORG_NRC, nrc_pallet_id(), count)
+    }
+
+    fn prc_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
+        admin_pairs(ORG_PRC, prc_pallet_id(), count)
+    }
+
+    fn prb_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
+        admin_pairs(ORG_PRB, prb_pallet_id(), count)
+    }
+
+    /// Step 2 · finalize_transfer 测试辅助:生成 N 个签名 + 调 extrinsic。
+    ///
+    /// 入参 `remark` 必须与 Tx 1 `propose_transfer` 传入的 remark 字节完全一致,
+    /// 否则 `remark_hash` 不同,验签失败。
+    fn finalize_transfer_n(
+        pairs: &[(AccountId32, sr25519::Pair)],
+        n: usize,
+        pid: u64,
+        org: u8,
+        institution: InstitutionPalletId,
+        from: AccountId32,
+        to: AccountId32,
+        amount: Balance,
+        remark: &[u8],
+        proposer: AccountId32,
+    ) -> frame_support::dispatch::DispatchResult {
+        let remark_hash = sp_io::hashing::blake2_256(remark);
+        let sigs = make_transfer_sigs(
+            pairs,
+            n,
+            pid,
+            org,
+            institution,
+            from,
+            to,
+            amount,
+            remark_hash,
+            proposer.clone(),
+            OP_SIGN_TRANSFER,
+        );
+        DuoqianTransferPow::finalize_transfer(RuntimeOrigin::signed(proposer), pid, sigs)
     }
 
     fn new_test_ext() -> sp_io::TestExternalities {
@@ -1426,11 +1928,34 @@ mod tests {
         .assimilate_storage(&mut storage)
         .expect("balances should assimilate");
 
-        storage.into()
+        let mut ext: sp_io::TestExternalities = storage.into();
+        ext.execute_with(|| {
+            // Step 2 · 离线聚合改造:为 4 种 org 注入 sr25519 派生 admin(每组前 3 个)+
+            // 覆盖阈值 2,让 finalize_X 测试只需 2 个签名即可达阈值。
+            // Provider 的 is_internal_admin / get_admin_list / pass_threshold 会优先
+            // 读 thread_local 注入,未注入时 fallback 到 CHINA_CB / CHINA_CH 硬编码。
+            let nrc = nrc_pallet_id();
+            let prc = prc_pallet_id();
+            let prb = prb_pallet_id();
+            let dq = registered_duoqian_institution();
+            let nrc_accts: Vec<AccountId32> = nrc_pairs(3).into_iter().map(|(a, _)| a).collect();
+            let prc_accts: Vec<AccountId32> = prc_pairs(3).into_iter().map(|(a, _)| a).collect();
+            let prb_accts: Vec<AccountId32> = prb_pairs(3).into_iter().map(|(a, _)| a).collect();
+            set_extra_admins(ORG_NRC, nrc, nrc_accts);
+            set_extra_admins(ORG_PRC, prc, prc_accts);
+            set_extra_admins(ORG_PRB, prb, prb_accts);
+            set_extra_threshold(ORG_NRC, nrc, 2);
+            set_extra_threshold(ORG_PRC, prc, 2);
+            set_extra_threshold(ORG_PRB, prb, 2);
+            // ORG_DUOQIAN 的 admin / threshold 直接从 DuoqianAccounts 读,测试需要时
+            // 显式写入 DuoqianAccounts(见 `registered_duoqian_admin` 路径)。
+            let _ = dq;
+        });
+        ext
     }
 
     #[test]
-    fn nrc_transfer_executes_when_yes_votes_reach_threshold() {
+    fn nrc_transfer_executes_when_finalize_reaches_threshold() {
         new_test_ext().execute_with(|| {
             let institution = nrc_pallet_id();
             let inst_account = institution_account(institution);
@@ -1446,13 +1971,18 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            for i in 0..13 {
-                assert_ok!(DuoqianTransferPow::vote_transfer(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
-            }
+            assert_ok!(finalize_transfer_n(
+                &nrc_pairs(2),
+                2,
+                pid,
+                ORG_NRC,
+                institution,
+                inst_account.clone(),
+                dest.clone(),
+                1_000,
+                &[],
+                nrc_admin(0),
+            ));
 
             // 转账已执行（含手续费 10）
             assert_eq!(Balances::free_balance(&inst_account), 8_990);
@@ -1463,7 +1993,7 @@ mod tests {
     }
 
     #[test]
-    fn prc_transfer_executes_when_yes_votes_reach_threshold() {
+    fn prc_transfer_executes_when_finalize_reaches_threshold() {
         new_test_ext().execute_with(|| {
             let institution = prc_pallet_id();
             let inst_account = institution_account(institution);
@@ -1479,13 +2009,18 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            for i in 0..6 {
-                assert_ok!(DuoqianTransferPow::vote_transfer(
-                    RuntimeOrigin::signed(prc_admin(i)),
-                    pid,
-                    true
-                ));
-            }
+            assert_ok!(finalize_transfer_n(
+                &prc_pairs(2),
+                2,
+                pid,
+                ORG_PRC,
+                institution,
+                inst_account.clone(),
+                dest.clone(),
+                2_000,
+                &[],
+                prc_admin(0),
+            ));
 
             assert_eq!(Balances::free_balance(&inst_account), 7_990);
             assert_eq!(Balances::free_balance(&dest), 2_000);
@@ -1494,7 +2029,7 @@ mod tests {
     }
 
     #[test]
-    fn prb_transfer_executes_when_yes_votes_reach_threshold() {
+    fn prb_transfer_executes_when_finalize_reaches_threshold() {
         new_test_ext().execute_with(|| {
             let institution = prb_pallet_id();
             let inst_account = institution_account(institution);
@@ -1510,13 +2045,18 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            for i in 0..6 {
-                assert_ok!(DuoqianTransferPow::vote_transfer(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
-            }
+            assert_ok!(finalize_transfer_n(
+                &prb_pairs(2),
+                2,
+                pid,
+                ORG_PRB,
+                institution,
+                inst_account.clone(),
+                dest.clone(),
+                3_000,
+                &[],
+                prb_admin(0),
+            ));
 
             assert_eq!(Balances::free_balance(&inst_account), 6_990);
             assert_eq!(Balances::free_balance(&dest), 3_000);
@@ -1525,7 +2065,7 @@ mod tests {
     }
 
     #[test]
-    fn registered_duoqian_transfer_executes_when_yes_votes_reach_threshold() {
+    fn registered_duoqian_transfer_executes_when_finalize_reaches_threshold() {
         new_test_ext().execute_with(|| {
             let institution = registered_duoqian_institution();
             let inst_account = registered_duoqian_account();
@@ -1560,15 +2100,17 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            assert_ok!(DuoqianTransferPow::vote_transfer(
-                RuntimeOrigin::signed(registered_duoqian_admin(0)),
+            assert_ok!(finalize_transfer_n(
+                &registered_duoqian_pairs(2),
+                2,
                 pid,
-                true
-            ));
-            assert_ok!(DuoqianTransferPow::vote_transfer(
-                RuntimeOrigin::signed(registered_duoqian_admin(1)),
-                pid,
-                true
+                ORG_DUOQIAN,
+                institution,
+                inst_account.clone(),
+                dest.clone(),
+                1_500,
+                &[],
+                registered_duoqian_admin(0),
             ));
 
             assert_eq!(Balances::free_balance(&inst_account), 8_490);
@@ -1583,9 +2125,10 @@ mod tests {
     }
 
     #[test]
-    fn non_admin_cannot_propose_or_vote() {
+    fn non_admin_cannot_propose_or_finalize() {
         new_test_ext().execute_with(|| {
             let institution = nrc_pallet_id();
+            let inst_account = institution_account(institution);
             let dest = beneficiary();
 
             // PRC 管理员不能给 NRC 提案
@@ -1605,17 +2148,27 @@ mod tests {
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
                 institution,
-                dest,
+                dest.clone(),
                 100,
                 BoundedVec::default(),
             ));
             let pid = last_proposal_id();
 
-            // PRC 管理员不能给 NRC 投票
-            assert_noop!(
-                DuoqianTransferPow::vote_transfer(RuntimeOrigin::signed(prc_admin(0)), pid, true),
-                Error::<Test>::UnauthorizedAdmin
+            // 把 PRC 管理员的签名 + 其他非 NRC 管理员的公钥塞进 finalize_transfer
+            // 应被 UnauthorizedSignature 拒绝
+            let res = finalize_transfer_n(
+                &prc_pairs(2),
+                2,
+                pid,
+                ORG_NRC,
+                institution,
+                inst_account.clone(),
+                dest.clone(),
+                100,
+                &[],
+                nrc_admin(0),
             );
+            assert_noop!(res, Error::<Test>::UnauthorizedSignature);
         });
     }
 
@@ -1692,29 +2245,38 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_vote_is_rejected() {
+    fn duplicate_signature_is_rejected() {
         new_test_ext().execute_with(|| {
             let institution = nrc_pallet_id();
+            let inst_account = institution_account(institution);
             let dest = beneficiary();
 
             assert_ok!(DuoqianTransferPow::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
                 institution,
-                dest,
+                dest.clone(),
                 100,
                 BoundedVec::default(),
             ));
             let pid = last_proposal_id();
-            assert_ok!(DuoqianTransferPow::vote_transfer(
-                RuntimeOrigin::signed(nrc_admin(1)),
+
+            // 同一 admin 签名两次,同批次内应被 DuplicateSignature 拒绝
+            let dup_pair = nrc_pairs(1)[0].clone();
+            let pairs = vec![dup_pair.clone(), dup_pair];
+            let res = finalize_transfer_n(
+                &pairs,
+                2,
                 pid,
-                true
-            ));
-            assert_noop!(
-                DuoqianTransferPow::vote_transfer(RuntimeOrigin::signed(nrc_admin(1)), pid, true),
-                voting_engine_system::pallet::Error::<Test>::AlreadyVoted
+                ORG_NRC,
+                institution,
+                inst_account,
+                dest,
+                100,
+                &[],
+                nrc_admin(0),
             );
+            assert_noop!(res, Error::<Test>::DuplicateSignature);
         });
     }
 
@@ -1749,6 +2311,7 @@ mod tests {
     fn executed_transfer_does_not_block_new_proposal() {
         new_test_ext().execute_with(|| {
             let institution = nrc_pallet_id();
+            let inst_account = institution_account(institution);
             let dest = beneficiary();
 
             assert_ok!(DuoqianTransferPow::propose_transfer(
@@ -1761,13 +2324,18 @@ mod tests {
             ));
             let pid1 = last_proposal_id();
 
-            for i in 0..13 {
-                assert_ok!(DuoqianTransferPow::vote_transfer(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid1,
-                    true
-                ));
-            }
+            assert_ok!(finalize_transfer_n(
+                &nrc_pairs(2),
+                2,
+                pid1,
+                ORG_NRC,
+                institution,
+                inst_account,
+                dest.clone(),
+                100,
+                &[],
+                nrc_admin(0),
+            ));
 
             // 转账已执行，可以创建新提案
             assert_ok!(DuoqianTransferPow::propose_transfer(
@@ -1843,13 +2411,18 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            for i in 0..13 {
-                assert_ok!(DuoqianTransferPow::vote_transfer(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
-            }
+            assert_ok!(finalize_transfer_n(
+                &nrc_pairs(2),
+                2,
+                pid,
+                ORG_NRC,
+                institution,
+                inst_account.clone(),
+                dest.clone(),
+                9_989,
+                &[],
+                nrc_admin(0),
+            ));
 
             assert_eq!(Balances::free_balance(&inst_account), 1);
             assert_eq!(Balances::free_balance(&dest), 9_989);
@@ -1863,9 +2436,8 @@ mod tests {
             let inst_account = institution_account(institution);
             let dest = beneficiary();
 
-            // 余额 10_000，提案 9_990（required=9_990+10+1=10_001>10_000）
-            // propose 预检也含手续费，所以 9_990 会被拒绝
-            // 先用 9_989 创建提案（刚好通过预检），然后手动减余额使执行失败
+            // 余额 10_000,提案 9_000(预检通过),然后在 finalize 前转走 9_000
+            // 使余额仅 1_000,finalize 时自动执行因余额不足失败,但提案保留,可 execute_transfer 重试。
             assert_ok!(DuoqianTransferPow::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
@@ -1876,8 +2448,7 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            // 在投票前减少余额，使自动执行失败
-            // 转走 9_000 使余额仅剩 1_000，不够 amount(9_000)+fee(10)+ED(1)=9_011
+            // finalize 前转走余额,使自动执行失败
             let drain_dest = AccountId32::new([88u8; 32]);
             let _ = Balances::deposit_creating(&drain_dest, 1);
             assert_ok!(<Balances as frame_support::traits::Currency<_>>::transfer(
@@ -1888,16 +2459,20 @@ mod tests {
             ));
             assert_eq!(Balances::free_balance(&inst_account), 1_000);
 
-            // 投票通过，自动执行因余额不足失败
-            for i in 0..13 {
-                assert_ok!(DuoqianTransferPow::vote_transfer(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
-            }
-
-            // 提案状态为 PASSED，但转账未执行
+            // finalize:签名验证 + 代投通过,但 try_execute_transfer 因余额不足失败。
+            // 提案仍为 PASSED,转账未执行。
+            assert_ok!(finalize_transfer_n(
+                &nrc_pairs(2),
+                2,
+                pid,
+                ORG_NRC,
+                institution,
+                inst_account.clone(),
+                dest.clone(),
+                9_000,
+                &[],
+                nrc_admin(0),
+            ));
             assert_eq!(
                 voting_engine_system::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
@@ -1905,7 +2480,6 @@ mod tests {
                 STATUS_PASSED
             );
             assert_eq!(Balances::free_balance(&dest), 0);
-            // 提案数据仍保留
             assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
 
             // 补充余额后手动执行
@@ -1974,13 +2548,18 @@ mod tests {
                 frame_support::traits::ExistenceRequirement::KeepAlive,
             ));
 
-            for i in 0..13 {
-                assert_ok!(DuoqianTransferPow::vote_transfer(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
-            }
+            assert_ok!(finalize_transfer_n(
+                &nrc_pairs(2),
+                2,
+                pid,
+                ORG_NRC,
+                institution,
+                inst_account.clone(),
+                dest.clone(),
+                100,
+                &[],
+                nrc_admin(0),
+            ));
 
             // 自动执行失败，补充余额
             assert_eq!(Balances::free_balance(&dest), 0);
@@ -1999,25 +2578,31 @@ mod tests {
     fn executed_transfer_cannot_be_executed_again() {
         new_test_ext().execute_with(|| {
             let institution = nrc_pallet_id();
+            let inst_account = institution_account(institution);
             let dest = beneficiary();
 
             assert_ok!(DuoqianTransferPow::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
                 institution,
-                dest,
+                dest.clone(),
                 1_000,
                 BoundedVec::default(),
             ));
             let pid = last_proposal_id();
 
-            for i in 0..13 {
-                assert_ok!(DuoqianTransferPow::vote_transfer(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
-            }
+            assert_ok!(finalize_transfer_n(
+                &nrc_pairs(2),
+                2,
+                pid,
+                ORG_NRC,
+                institution,
+                inst_account,
+                dest,
+                1_000,
+                &[],
+                nrc_admin(0),
+            ));
 
             // 自动执行成功，状态变为 EXECUTED
             assert_eq!(
@@ -2101,17 +2686,353 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            for i in 0..13 {
-                assert_ok!(DuoqianTransferPow::vote_transfer(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
-            }
+            assert_ok!(finalize_transfer_n(
+                &nrc_pairs(2),
+                2,
+                pid,
+                ORG_NRC,
+                institution,
+                inst_account.clone(),
+                dest.clone(),
+                1,
+                &[],
+                nrc_admin(0),
+            ));
 
             // 余额 10_000 - 1(转账) - 10(最低手续费) = 9_989
             assert_eq!(Balances::free_balance(&inst_account), 9_989);
             assert_eq!(Balances::free_balance(&dest), 1);
+        });
+    }
+
+    // ──── Step 2 · 离线 QR 聚合专项测试 ────
+
+    /// finalize_transfer 签名不足阈值时必须拒绝。
+    #[test]
+    fn finalize_transfer_insufficient_sigs_rejected() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let inst_account = institution_account(institution);
+            let dest = beneficiary();
+
+            assert_ok!(DuoqianTransferPow::propose_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                dest.clone(),
+                100,
+                BoundedVec::default(),
+            ));
+            let pid = last_proposal_id();
+
+            // 只提交 1 个签名,阈值 2 → InsufficientSignatures
+            let res = finalize_transfer_n(
+                &nrc_pairs(1),
+                1,
+                pid,
+                ORG_NRC,
+                institution,
+                inst_account,
+                dest,
+                100,
+                &[],
+                nrc_admin(0),
+            );
+            assert_noop!(res, Error::<Test>::InsufficientSignatures);
+        });
+    }
+
+    /// 篡改 amount 后签名验证失败。
+    #[test]
+    fn finalize_transfer_tampered_amount_rejected() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let inst_account = institution_account(institution);
+            let dest = beneficiary();
+
+            assert_ok!(DuoqianTransferPow::propose_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                dest.clone(),
+                100,
+                BoundedVec::default(),
+            ));
+            let pid = last_proposal_id();
+
+            // 管理员用 amount=999 签名,但链上实际 amount=100
+            // → 链上重算 intent.amount=100,signing_hash 与 sig 不匹配 → InvalidSignature
+            let res = finalize_transfer_n(
+                &nrc_pairs(2),
+                2,
+                pid,
+                ORG_NRC,
+                institution,
+                inst_account,
+                dest,
+                999, // 错误 amount
+                &[],
+                nrc_admin(0),
+            );
+            assert_noop!(res, Error::<Test>::InvalidSignature);
+        });
+    }
+
+    /// 签名长度非 64 字节必须拒绝。
+    #[test]
+    fn finalize_transfer_malformed_sig_rejected() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let inst_account = institution_account(institution);
+            let dest = beneficiary();
+
+            assert_ok!(DuoqianTransferPow::propose_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                dest.clone(),
+                100,
+                BoundedVec::default(),
+            ));
+            let pid = last_proposal_id();
+
+            // 构造一个合法 sig 和一个长度 32 的非法 sig
+            let sigs: Vec<_> = {
+                let pairs = nrc_pairs(2);
+                let remark_hash = sp_io::hashing::blake2_256(&[][..]);
+                let intent = TransferVoteIntent::<AccountId32, Balance> {
+                    proposal_id: pid,
+                    org: ORG_NRC,
+                    institution,
+                    from: inst_account.clone(),
+                    to: dest.clone(),
+                    amount: 100,
+                    remark_hash,
+                    proposer: nrc_admin(0),
+                    approve: true,
+                };
+                let msg = intent.signing_hash(
+                    <Test as frame_system::Config>::SS58Prefix::get(),
+                    OP_SIGN_TRANSFER,
+                );
+                let good: duoqian_manage_pow::pallet::AdminSignatureOf<Test> = pairs[0]
+                    .1
+                    .sign(&msg)
+                    .0
+                    .to_vec()
+                    .try_into()
+                    .expect("good sig fits");
+                let bad: duoqian_manage_pow::pallet::AdminSignatureOf<Test> =
+                    vec![0u8; 32].try_into().expect("32 bytes fits");
+                vec![
+                    (pairs[0].0.clone(), good),
+                    (pairs[1].0.clone(), bad),
+                ]
+            };
+            let sigs_bounded: BoundedVec<_, <Test as duoqian_manage_pow::Config>::MaxAdmins> =
+                sigs.try_into().expect("sigs vec fits");
+            assert_noop!(
+                DuoqianTransferPow::finalize_transfer(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    pid,
+                    sigs_bounded,
+                ),
+                Error::<Test>::MalformedSignature
+            );
+        });
+    }
+
+    /// finalize_safety_fund_transfer 端到端成功路径。
+    #[test]
+    fn finalize_safety_fund_end_to_end() {
+        new_test_ext().execute_with(|| {
+            let safety_fund_account = AccountId32::decode(
+                &mut &primitives::china::china_cb::NRC_ANQUAN_ADDRESS[..],
+            )
+            .expect("NRC_ANQUAN decodes");
+            // 为安全基金预置余额
+            let _ = Balances::deposit_creating(&safety_fund_account, 100_000);
+
+            let dest = beneficiary();
+            let amount: Balance = 5_000;
+
+            assert_ok!(DuoqianTransferPow::propose_safety_fund_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                dest.clone(),
+                amount,
+                BoundedVec::default(),
+            ));
+            let pid = last_proposal_id();
+
+            // 构造 finalize_safety_fund_transfer 的 sigs(用 OP_SIGN_SAFETY_FUND 签名域)
+            let remark_hash = sp_io::hashing::blake2_256(&[][..]);
+            let sigs = make_transfer_sigs(
+                &nrc_pairs(2),
+                2,
+                pid,
+                ORG_NRC,
+                nrc_pallet_id(),
+                safety_fund_account.clone(),
+                dest.clone(),
+                amount,
+                remark_hash,
+                nrc_admin(0),
+                OP_SIGN_SAFETY_FUND,
+            );
+            assert_ok!(DuoqianTransferPow::finalize_safety_fund_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                pid,
+                sigs,
+            ));
+
+            // 转账已执行(amount 5_000 + fee 10)
+            assert_eq!(Balances::free_balance(&dest), 5_000);
+            assert_eq!(Balances::free_balance(&safety_fund_account), 100_000 - 5_000 - 10);
+            assert_eq!(
+                voting_engine_system::Pallet::<Test>::proposals(pid)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_EXECUTED
+            );
+        });
+    }
+
+    /// finalize_sweep_to_main 端到端成功路径(省储行 ORG_PRB)。
+    #[test]
+    fn finalize_sweep_end_to_end() {
+        new_test_ext().execute_with(|| {
+            let institution = prb_pallet_id();
+            let fee_account = AccountId32::new(CHINA_CH[0].fee_address);
+            let main_account = AccountId32::new(CHINA_CH[0].main_address);
+
+            // 给费用账户预置大额余额,满足 1111.11 元 reserve + 80% cap
+            let _ = Balances::deposit_creating(&fee_account, 1_000_000);
+
+            let amount: Balance = 100_000; // 1000 元,远低于 80% cap
+
+            assert_ok!(DuoqianTransferPow::propose_sweep_to_main(
+                RuntimeOrigin::signed(prb_admin(0)),
+                institution,
+                amount,
+            ));
+            let pid = last_proposal_id();
+
+            // 构造 finalize_sweep_to_main sigs(用 OP_SIGN_SWEEP + 空 remark)
+            let remark_hash = sp_io::hashing::blake2_256(&[][..]);
+            let sigs = make_transfer_sigs(
+                &prb_pairs(2),
+                2,
+                pid,
+                ORG_PRB,
+                institution,
+                fee_account.clone(),
+                main_account.clone(),
+                amount,
+                remark_hash,
+                prb_admin(0),
+                OP_SIGN_SWEEP,
+            );
+            assert_ok!(DuoqianTransferPow::finalize_sweep_to_main(
+                RuntimeOrigin::signed(prb_admin(0)),
+                pid,
+                sigs,
+            ));
+
+            // 转账已执行:费用账户 -amount -fee,主账户 +amount
+            let main_after = Balances::free_balance(&main_account);
+            assert!(main_after >= 10_000 + amount, "main account should receive amount");
+        });
+    }
+
+    /// 跨业务签名隔离铁律:transfer 的签名不能在 finalize_safety_fund_transfer 里通过。
+    /// 即使字段内容"看起来对",由于 op_tag 不同 → signing_hash 不同 → sr25519_verify 失败。
+    #[test]
+    fn cross_op_signature_rejected_transfer_to_safety_fund() {
+        new_test_ext().execute_with(|| {
+            let safety_fund_account = AccountId32::decode(
+                &mut &primitives::china::china_cb::NRC_ANQUAN_ADDRESS[..],
+            )
+            .expect("NRC_ANQUAN decodes");
+            let _ = Balances::deposit_creating(&safety_fund_account, 100_000);
+
+            let dest = beneficiary();
+            let amount: Balance = 5_000;
+
+            assert_ok!(DuoqianTransferPow::propose_safety_fund_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                dest.clone(),
+                amount,
+                BoundedVec::default(),
+            ));
+            let pid = last_proposal_id();
+
+            // 管理员错误地用 OP_SIGN_TRANSFER 签名,企图给 safety_fund 提案投票
+            let remark_hash = sp_io::hashing::blake2_256(&[][..]);
+            let sigs = make_transfer_sigs(
+                &nrc_pairs(2),
+                2,
+                pid,
+                ORG_NRC,
+                nrc_pallet_id(),
+                safety_fund_account,
+                dest,
+                amount,
+                remark_hash,
+                nrc_admin(0),
+                OP_SIGN_TRANSFER, // 错误 op_tag
+            );
+            assert_noop!(
+                DuoqianTransferPow::finalize_safety_fund_transfer(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    pid,
+                    sigs,
+                ),
+                Error::<Test>::InvalidSignature
+            );
+        });
+    }
+
+    /// 跨业务签名隔离铁律:sweep 的签名不能在 finalize_transfer 里通过。
+    #[test]
+    fn cross_op_signature_rejected_sweep_to_transfer() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            let inst_account = institution_account(institution);
+            let dest = beneficiary();
+
+            assert_ok!(DuoqianTransferPow::propose_transfer(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                dest.clone(),
+                100,
+                BoundedVec::default(),
+            ));
+            let pid = last_proposal_id();
+
+            // 管理员错误地用 OP_SIGN_SWEEP 签名,企图给 transfer 提案投票
+            let remark_hash = sp_io::hashing::blake2_256(&[][..]);
+            let sigs = make_transfer_sigs(
+                &nrc_pairs(2),
+                2,
+                pid,
+                ORG_NRC,
+                institution,
+                inst_account,
+                dest,
+                100,
+                remark_hash,
+                nrc_admin(0),
+                OP_SIGN_SWEEP, // 错误 op_tag
+            );
+            assert_noop!(
+                DuoqianTransferPow::finalize_transfer(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    pid,
+                    sigs,
+                ),
+                Error::<Test>::InvalidSignature
+            );
         });
     }
 }

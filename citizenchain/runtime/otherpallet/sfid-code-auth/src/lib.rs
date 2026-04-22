@@ -111,10 +111,10 @@ pub trait SfidEligibilityProvider<AccountId, Hash> {
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
+    use alloc::vec::Vec;
     use frame_support::{pallet_prelude::*, Blake2_128Concat};
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::Hash;
-    use alloc::vec::Vec;
 
     pub type NonceOf<T> = BoundedVec<u8, <T as Config>::MaxCredentialNonceLength>;
     pub type SignatureOf<T> = BoundedVec<u8, <T as Config>::MaxCredentialSignatureLength>;
@@ -212,24 +212,14 @@ pub mod pallet {
     /// 用于机构登记（`register_sfid_institution`）按省分流验签。
     #[pallet::storage]
     #[pallet::getter(fn sheng_signing_pubkey_storage)]
-    pub type ShengSigningPubkey<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        BoundedVec<u8, ConstU32<64>>,
-        [u8; 32],
-        OptionQuery,
-    >;
+    pub type ShengSigningPubkey<T: Config> =
+        StorageMap<_, Blake2_128Concat, BoundedVec<u8, ConstU32<64>>, [u8; 32], OptionQuery>;
 
     /// 中文注释：反向索引（公钥 → 省名），用于 O(1) 冲突检测和快速查省。
     #[pallet::storage]
     #[pallet::getter(fn province_by_signing_pubkey)]
-    pub type ProvinceBySigningPubkey<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        [u8; 32],
-        BoundedVec<u8, ConstU32<64>>,
-        OptionQuery,
-    >;
+    pub type ProvinceBySigningPubkey<T: Config> =
+        StorageMap<_, Blake2_128Concat, [u8; 32], BoundedVec<u8, ConstU32<64>>, OptionQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -402,10 +392,10 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // 权限验证：仅 SFID 主账户或省级签名账户可调用
-            let main = SfidMainAccount::<T>::get()
-                .ok_or(Error::<T>::UnauthorizedSfidOperator)?;
+            let main = SfidMainAccount::<T>::get().ok_or(Error::<T>::UnauthorizedSfidOperator)?;
             if who != main {
-                let who_bytes: [u8; 32] = who.encode()
+                let who_bytes: [u8; 32] = who
+                    .encode()
                     .try_into()
                     .map_err(|_| Error::<T>::UnauthorizedSfidOperator)?;
                 ensure!(
@@ -415,8 +405,7 @@ pub mod pallet {
             }
 
             // 移除 target 的绑定映射
-            let binding_id = AccountToBindingId::<T>::get(&target)
-                .ok_or(Error::<T>::NotBound)?;
+            let binding_id = AccountToBindingId::<T>::get(&target).ok_or(Error::<T>::NotBound)?;
             AccountToBindingId::<T>::remove(&target);
             BindingIdToAccount::<T>::remove(binding_id);
             BoundCount::<T>::mutate(|v| *v = v.saturating_sub(1));
@@ -613,8 +602,8 @@ pub mod pallet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types, BoundedVec};
     use frame_support::pallet_prelude::ConstU32;
+    use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types, BoundedVec};
     use frame_system as system;
     use sp_runtime::traits::Hash;
     use sp_runtime::{traits::IdentityLookup, BuildStorage};
@@ -852,7 +841,11 @@ mod tests {
                 u64,
                 <Test as frame_system::Config>::Hash,
             >>::verify_and_consume_vote_credential(
-                &binding_id, &1, proposal_a, b"same-nonce", b"vote-ok"
+                &binding_id,
+                &1,
+                proposal_a,
+                b"same-nonce",
+                b"vote-ok"
             ));
 
             // 同一 nonce 对同一提案重放 → 失败
@@ -860,7 +853,11 @@ mod tests {
                 u64,
                 <Test as frame_system::Config>::Hash,
             >>::verify_and_consume_vote_credential(
-                &binding_id, &1, proposal_a, b"same-nonce", b"vote-ok"
+                &binding_id,
+                &1,
+                proposal_a,
+                b"same-nonce",
+                b"vote-ok"
             ));
 
             // 同一 nonce 对不同提案 → 成功（nonce 按 proposal_id 分区存储，
@@ -869,7 +866,11 @@ mod tests {
                 u64,
                 <Test as frame_system::Config>::Hash,
             >>::verify_and_consume_vote_credential(
-                &binding_id, &1, proposal_b, b"same-nonce", b"vote-ok"
+                &binding_id,
+                &1,
+                proposal_b,
+                b"same-nonce",
+                b"vote-ok"
             ));
         });
     }
@@ -963,7 +964,10 @@ mod tests {
         new_test_ext().execute_with(|| {
             let credential = bind_credential(b"binding-unbind", "nonce-unbind", "bind-ok");
             let bid = credential.binding_id;
-            assert_ok!(SfidCodeAuth::bind_sfid(RuntimeOrigin::signed(1), credential));
+            assert_ok!(SfidCodeAuth::bind_sfid(
+                RuntimeOrigin::signed(1),
+                credential
+            ));
             assert_eq!(BoundCount::<Test>::get(), 1);
 
             // 主账户（10）代为解绑用户 1
@@ -982,7 +986,10 @@ mod tests {
     fn unbind_rejects_non_admin() {
         new_test_ext().execute_with(|| {
             let credential = bind_credential(b"binding-reject", "nonce-reject", "bind-ok");
-            assert_ok!(SfidCodeAuth::bind_sfid(RuntimeOrigin::signed(1), credential));
+            assert_ok!(SfidCodeAuth::bind_sfid(
+                RuntimeOrigin::signed(1),
+                credential
+            ));
 
             // 普通用户（包括被绑定用户本人）不允许解绑
             assert_noop!(
@@ -1069,10 +1076,7 @@ mod tests {
             ));
             let province: BoundedVec<u8, ConstU32<64>> =
                 b"\xe8\xbe\xbd\xe5\xae\x81".to_vec().try_into().unwrap();
-            assert_eq!(
-                ShengSigningPubkey::<Test>::get(&province),
-                Some(pubkey)
-            );
+            assert_eq!(ShengSigningPubkey::<Test>::get(&province), Some(pubkey));
             assert_eq!(
                 ProvinceBySigningPubkey::<Test>::get(&pubkey),
                 Some(province.clone())
@@ -1135,8 +1139,7 @@ mod tests {
                 b"liaoning".to_vec(),
                 None,
             ));
-            let province: BoundedVec<u8, ConstU32<64>> =
-                b"liaoning".to_vec().try_into().unwrap();
+            let province: BoundedVec<u8, ConstU32<64>> = b"liaoning".to_vec().try_into().unwrap();
             assert!(ShengSigningPubkey::<Test>::get(&province).is_none());
             assert!(ProvinceBySigningPubkey::<Test>::get(&pubkey).is_none());
         });
@@ -1160,12 +1163,8 @@ mod tests {
             // 旧 pubkey 的反向索引已清
             assert!(ProvinceBySigningPubkey::<Test>::get(&old).is_none());
             // 新 pubkey 的反向索引已写
-            let province: BoundedVec<u8, ConstU32<64>> =
-                b"liaoning".to_vec().try_into().unwrap();
-            assert_eq!(
-                ProvinceBySigningPubkey::<Test>::get(&new),
-                Some(province)
-            );
+            let province: BoundedVec<u8, ConstU32<64>> = b"liaoning".to_vec().try_into().unwrap();
+            assert_eq!(ProvinceBySigningPubkey::<Test>::get(&new), Some(province));
         });
     }
 
@@ -1199,7 +1198,11 @@ mod tests {
                 u64,
                 <Test as frame_system::Config>::Hash,
             >>::verify_and_consume_vote_credential(
-                &bid, &1, 42, b"vote-nonce-c", b"vote-ok"
+                &bid,
+                &1,
+                42,
+                b"vote-nonce-c",
+                b"vote-ok"
             ));
 
             // 清理提案 42 的 nonce
@@ -1213,7 +1216,11 @@ mod tests {
                 u64,
                 <Test as frame_system::Config>::Hash,
             >>::verify_and_consume_vote_credential(
-                &bid, &1, 42, b"vote-nonce-c", b"vote-ok"
+                &bid,
+                &1,
+                42,
+                b"vote-nonce-c",
+                b"vote-ok"
             ));
         });
     }
