@@ -218,13 +218,11 @@ fn build_genesis() -> Value {
         }),
     );
 
-    // 中文注释：链下交易清算模块创世配置（空，不预置任何费率）。
-    root.insert(
-        "offchainTransactionPos".into(),
-        json!({
-            "initialRates": []
-        }),
-    );
+    // 中文注释:`offchain-transaction-pos` pallet 未声明 `#[pallet::genesis_config]`,
+    // 所有 Storage 都是 ValueQuery=0 / OptionQuery=None / 治理运行时产生,
+    // 不应在创世 preset 中塞入对应字段(会导致 runtime GenesisConfig
+    // schema 拒绝"unknown field `offchainTransactionPos`")。Step 2b-iv-b
+    // 彻底清理老省储行清算后,老的 `initialRates` 创世路径也一并作废。
 
     // 中文注释：创世常量写入 genesis-pallet 链上存储。
     let citizens_bytes: Vec<u8> = CITIZENS.as_bytes().to_vec();
