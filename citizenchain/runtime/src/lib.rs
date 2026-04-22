@@ -78,12 +78,14 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
     //   the compatible custom types.
-    // Step 2b-iv-b 彻底清理老省储行清算 Call/Storage/Events/Errors,pallet
-    // storage_version 从 1 → 2;dev 链统一 setCode 升级。
-    spec_version: 9,
+    //
+    // Step 1 (多签注册) + Step 2 (多签转账) 离线 QR 聚合签名改造涉及破坏性 call_index 重用
+    // (vote_X → finalize_X)和 SweepAction 结构变更,与历史版本不可向后兼容。
+    // spec_version 归 1 + 重新创世清理所有旧 storage / 提案数据。
+    spec_version: 1,
     impl_version: 1,
     apis: apis::RUNTIME_API_VERSIONS,
-    transaction_version: 2,
+    transaction_version: 1,
     system_version: 1,
 };
 
