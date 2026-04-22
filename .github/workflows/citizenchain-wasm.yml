@@ -33,13 +33,9 @@ jobs:
       - name: 安装系统依赖
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev
 
-      - name: spec_version 自增
-        run: |
-          FILE=citizenchain/runtime/src/lib.rs
-          OLD=$(grep -oP 'spec_version:\s*\K[0-9]+' "$FILE")
-          NEW=$((OLD + 1))
-          sed -i "s/spec_version: $OLD/spec_version: $NEW/" "$FILE"
-          echo "spec_version: $OLD → $NEW"
+      # Step 2 改造:删除 "spec_version 自增" 自动 bump step。
+      # 原逻辑每次 CI 跑都把 spec_version +1,与"重新创世 + 钉死版本号"的语义冲突。
+      # 版本号从此纯手动管理:runtime 代码改时由开发者显式改 spec_version 提交。
 
       - name: 清理旧版 WASM artifact
         env:
@@ -74,11 +70,5 @@ jobs:
             citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
           retention-days: 30
 
-      - name: 提交 spec_version 自增
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add citizenchain/runtime/src/lib.rs
-          NEW=$(grep -oP 'spec_version:\s*\K[0-9]+' citizenchain/runtime/src/lib.rs)
-          git commit -m "runtime: spec_version → $NEW [skip ci]"
-          git push
+      # Step 2 改造:删除 "提交 spec_version 自增" 步骤,与前面的 bump step 配套删除。
+      # 版本号不再由 CI bot 自动 commit 回 main。
