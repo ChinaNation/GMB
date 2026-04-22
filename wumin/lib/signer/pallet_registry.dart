@@ -29,9 +29,12 @@ class PalletRegistry {
   static const int transferKeepAliveCall = 3;
 
   // ---- DuoqianTransferPow ----
+  // Step 2 · 离线 QR 聚合签名改造:vote_transfer(call_index=1)已物理删除,
+  // 替换为 finalize_transfer(同 call_index=1)。finalize_X 聚合签名路径走
+  // 热钱包/wuminapp,冷钱包不负责盲签 finalize_X(sigs 由 sr25519 签名聚合,
+  // 本质不是 payload decode 场景)。
   static const int duoqianTransferPowPallet = 19;
   static const int proposeTransferCall = 0;
-  static const int voteTransferCall = 1;
 
   // ---- VotingEngineSystem ----
   static const int votingEngineSystemPallet = 9;
@@ -44,10 +47,12 @@ class PalletRegistry {
   static const int developerDirectUpgradeCall = 2;
 
   // ---- DuoqianManagePow ----
+  // Step 1 · 离线 QR 聚合签名改造:vote_create(call_index=3)已物理删除,
+  // 替换为 finalize_create(同 call_index=3)。冷钱包不负责盲签 finalize_X。
+  // vote_close(call_index=5)尚未改造(Step 3 待做),保留。
   static const int duoqianManagePowPallet = 17;
   static const int proposeCreateCall = 0;
   static const int proposeCloseCall = 1;
-  static const int voteCreateCall = 3;
   static const int proposeCreatePersonalCall = 4;
   static const int voteCloseCall = 5;
 
@@ -71,10 +76,11 @@ class PalletRegistry {
   static const int proposeResolutionIssuanceCall = 0;
 
   // ---- DuoqianTransferPow 补充 ----
+  // Step 2 · 离线聚合改造:vote_safety_fund_transfer (call_index=4) / vote_sweep_to_main (call_index=6)
+  // 已物理删除,替换为 finalize_safety_fund_transfer / finalize_sweep_to_main(同 call_index)。
+  // 冷钱包不负责盲签 finalize_X。
   static const int proposeSafetyFundCall = 3;
-  static const int voteSafetyFundCall = 4;
   static const int proposeSweepCall = 5;
-  static const int voteSweepCall = 6;
 
   // ---- OffchainTransactionPos(清算行 L2 体系) ----
   static const int offchainTransactionPosPallet = 21;

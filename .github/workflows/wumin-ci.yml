@@ -46,18 +46,17 @@ jobs:
           sed -i "s/duoqianTransferPowPallet = [0-9]*/duoqianTransferPowPallet = $DUOQIAN_IDX/" "$REGISTRY"
           sed -i "s/votingEngineSystemPallet = [0-9]*/votingEngineSystemPallet = $VOTING_IDX/" "$REGISTRY"
 
+          # Step 2 · 离线聚合改造后 vote_transfer 已删除,冷钱包不盲签 finalize_X,本段只同步 propose_transfer
           PROPOSE_CALL=$(grep -B2 'fn propose_transfer' "$TRANSFER_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
-          VOTE_CALL=$(grep -B2 'fn vote_transfer' "$TRANSFER_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
           JOINT_CALL=$(grep -B2 'fn joint_vote' "$VOTING_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
           CITIZEN_CALL=$(grep -B2 'fn citizen_vote' "$VOTING_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
 
           sed -i "s/proposeTransferCall = [0-9]*/proposeTransferCall = $PROPOSE_CALL/" "$REGISTRY"
-          sed -i "s/voteTransferCall = [0-9]*/voteTransferCall = $VOTE_CALL/" "$REGISTRY"
           sed -i "s/jointVoteCall = [0-9]*/jointVoteCall = $JOINT_CALL/" "$REGISTRY"
           sed -i "s/citizenVoteCall = [0-9]*/citizenVoteCall = $CITIZEN_CALL/" "$REGISTRY"
 
           echo "spec_version={$SPEC} Balances=$BALANCES_IDX DuoqianTransfer=$DUOQIAN_IDX VotingEngine=$VOTING_IDX"
-          echo "propose=$PROPOSE_CALL vote=$VOTE_CALL joint=$JOINT_CALL citizen=$CITIZEN_CALL"
+          echo "propose=$PROPOSE_CALL joint=$JOINT_CALL citizen=$CITIZEN_CALL"
 
       - name: 安装依赖
         working-directory: wumin
