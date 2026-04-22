@@ -48,10 +48,7 @@ use sp_core::{sr25519, Void};
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
 #[allow(unused_imports)]
 use sp_runtime::traits::Hash as _;
-use sp_runtime::{
-    traits::One,
-    Perbill,
-};
+use sp_runtime::{traits::One, Perbill};
 use sp_version::RuntimeVersion;
 
 // Local module imports
@@ -88,10 +85,10 @@ parameter_types! {
 #[allow(unused_parens)]
 type SingleBlockMigrations = ();
 
-pub fn is_keyless_account(address: &AccountId) -> bool {
+pub fn is_stake_account(address: &AccountId) -> bool {
     primitives::china::china_ch::CHINA_CH
         .iter()
-        .any(|n| address == &AccountId::new(n.keyless_address))
+        .any(|n| address == &AccountId::new(n.stake_address))
 }
 
 fn is_reserved_fee_account(address: &AccountId) -> bool {
@@ -112,24 +109,24 @@ fn is_cb_fee_account(address: &AccountId) -> bool {
         .any(|n| address == &AccountId::new(n.fee_address))
 }
 
-fn is_reserved_duoqian_account(address: &AccountId) -> bool {
+fn is_reserved_main_account(address: &AccountId) -> bool {
     let raw: &[u8] = address.as_ref();
     if raw.len() != 32 {
         return false;
     }
     let mut addr = [0u8; 32];
     addr.copy_from_slice(raw);
-    primitives::china::china_zb::is_reserved_duoqian_address(&addr)
+    primitives::china::china_zb::is_reserved_main_address(&addr)
 }
 
-fn is_keyless_multi_address(address: &Address) -> bool {
+fn is_stake_multi_address(address: &Address) -> bool {
     match address {
-        sp_runtime::MultiAddress::Id(account) => is_keyless_account(account),
-        sp_runtime::MultiAddress::Address32(raw) => is_keyless_account(&AccountId::new(*raw)),
+        sp_runtime::MultiAddress::Id(account) => is_stake_account(account),
+        sp_runtime::MultiAddress::Address32(raw) => is_stake_account(&AccountId::new(*raw)),
         sp_runtime::MultiAddress::Raw(raw) if raw.len() == 32 => {
             let mut out = [0u8; 32];
             out.copy_from_slice(raw.as_slice());
-            is_keyless_account(&AccountId::new(out))
+            is_stake_account(&AccountId::new(out))
         }
         _ => false,
     }
@@ -141,13 +138,13 @@ impl Contains<RuntimeCall> for RuntimeCallFilter {
     fn contains(call: &RuntimeCall) -> bool {
         match call {
             RuntimeCall::Balances(pallet_balances::Call::force_transfer { source, .. }) => {
-                !is_keyless_multi_address(source)
+                !is_stake_multi_address(source)
             }
             RuntimeCall::Balances(pallet_balances::Call::force_unreserve { who, .. }) => {
-                !is_keyless_multi_address(who)
+                !is_stake_multi_address(who)
             }
             RuntimeCall::Balances(pallet_balances::Call::force_set_balance { who, .. }) => {
-                !is_keyless_multi_address(who)
+                !is_stake_multi_address(who)
             }
             // force_adjust_total_issuance 直接影响全局发行量；统一在 BaseCallFilter 禁用外部入口。
             RuntimeCall::Balances(pallet_balances::Call::force_adjust_total_issuance {
@@ -185,7 +182,7 @@ impl frame_system::Config for Runtime {
     type AccountData = pallet_balances::AccountData<Balance>;
     /// 地址显示编号（SS58 前缀），统一来自 primitives 制度常量。
     type SS58Prefix = SS58Prefix;
-    /// 中文注释：全局调用过滤器，禁止 keyless_address 参与 force_* 余额调用，并封禁强制总发行量调整入口。
+    /// 中文注释：全局调用过滤器，禁止 stake_address 参与 force_* 余额调用，并封禁强制总发行量调整入口。
     type BaseCallFilter = RuntimeCallFilter;
     type MaxConsumers = frame_support::traits::ConstU32<16>;
     type SingleBlockMigrations = SingleBlockMigrations;
@@ -342,7 +339,8 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                 duoqian_address,
             )),
             // 付费调用交易：多签投票（虚拟金额 100000 分 = 1000 元 → 0.1% = 1 元/次）
-            RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::vote_create {
+            // Step 1 · 多签注册改造:vote_create 已替换为 finalize_create(离线聚合 N 签代投)。
+            RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::finalize_create {
                 ..
             }) => onchain_transaction_pow::AmountExtractResult::Amount(100000),
             RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::vote_close {
@@ -394,7 +392,9 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                     _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
                 }
             }
-            RuntimeCall::SfidCodeAuth(_) => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+            RuntimeCall::SfidCodeAuth(_) => {
+                onchain_transaction_pow::AmountExtractResult::Amount(100000)
+            }
             RuntimeCall::CitizenLightnodeIssuance(_) => {
                 onchain_transaction_pow::AmountExtractResult::NoAmount
             }
@@ -453,39 +453,33 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                     _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
                 }
             }
-            // 链下交易清算模块
+            // 清算行(L2)扫码支付清算:Step 2b-iv-b 清理后只剩新体系 Call。
             RuntimeCall::OffchainTransactionPos(ref offchain_call) => {
                 match offchain_call {
-                    // 链上资金交易：省储行提交/入队批次，按批次中省储行获得的手续费总额收取链上交易费
-                    offchain_transaction_pos::pallet::Call::submit_offchain_batch {
-                        batch, ..
-                    } | offchain_transaction_pos::pallet::Call::enqueue_offchain_batch {
-                        batch, ..
+                    // L3 充值 / 提现:按金额计费(链上资金交易 0.1% 最低 0.1 元)
+                    offchain_transaction_pos::pallet::Call::deposit { amount } => {
+                        onchain_transaction_pow::AmountExtractResult::Amount(*amount)
+                    }
+                    offchain_transaction_pos::pallet::Call::withdraw { amount } => {
+                        onchain_transaction_pow::AmountExtractResult::Amount(*amount)
+                    }
+                    // 清算行批次 V2 上链:按 sum(fee_amount) 计费(链下资金交易)
+                    offchain_transaction_pos::pallet::Call::submit_offchain_batch_v2 {
+                        batch,
+                        ..
                     } => {
                         let mut total_fee: u128 = 0;
                         for item in batch.iter() {
-                            total_fee = total_fee.saturating_add(item.offchain_fee_amount);
+                            total_fee = total_fee.saturating_add(item.fee_amount);
                         }
                         onchain_transaction_pow::AmountExtractResult::Amount(total_fee)
                     }
-                    // 链上资金交易：处理已入队批次，从存储中读取预算的手续费总额
-                    offchain_transaction_pos::pallet::Call::process_queued_batch {
-                        queue_id,
-                    } => {
-                        if let Some(queued) =
-                            offchain_transaction_pos::pallet::QueuedBatches::<Runtime>::get(
-                                queue_id,
-                            )
-                        {
-                            onchain_transaction_pow::AmountExtractResult::Amount(
-                                queued.fee_sum_snapshot,
-                            )
-                        } else {
-                            // 队列记录不存在时不收费（交易执行时会报错）
-                            onchain_transaction_pow::AmountExtractResult::NoAmount
-                        }
+                    // 全局费率上限调整(Root Origin,免费)
+                    offchain_transaction_pos::pallet::Call::set_max_l2_fee_rate { .. } => {
+                        onchain_transaction_pow::AmountExtractResult::NoAmount
                     }
-                    // 付费调用交易：绑定清算行、费率提案/投票、运维操作等（1 元/次）
+                    // 其他付费调用(bind_clearing_bank / switch_bank / propose_l2_fee_rate):
+                    // 固定 1 元/次
                     _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
                 }
             }
@@ -501,32 +495,15 @@ pub struct RuntimeFeePayerExtractor;
 impl onchain_transaction_pow::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
     fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
         match call {
-            // 省储行批次提交/入队/处理：链上交易费从省储行费用地址扣取
-            RuntimeCall::OffchainTransactionPos(ref offchain_call) => {
-                match offchain_call {
-                    offchain_transaction_pos::pallet::Call::submit_offchain_batch {
-                        institution, ..
-                    }
-                    | offchain_transaction_pos::pallet::Call::enqueue_offchain_batch {
-                        institution, ..
-                    } => {
-                        offchain_transaction_pos::Pallet::<Runtime>::fee_account_of(*institution).ok()
-                    }
-                    offchain_transaction_pos::pallet::Call::process_queued_batch {
-                        queue_id,
-                    } => {
-                        offchain_transaction_pos::pallet::QueuedBatches::<Runtime>::get(queue_id)
-                            .and_then(|queued| {
-                                offchain_transaction_pos::Pallet::<Runtime>::fee_account_of(
-                                    queued.institution,
-                                )
-                                .ok()
-                            })
-                    }
-                    _ => None, // 其他 offchain 调用由调用者个人付费
-                }
-            }
-            // 其他交易由调用者个人账户付费
+            // 清算行 V2 批次:链上交易费由收款方清算行费用账户承担(settlement 内部已把
+            // fee 从付款方清算行主账户转到收款方费用账户,对齐链下手续费归属)。
+            RuntimeCall::OffchainTransactionPos(
+                offchain_transaction_pos::pallet::Call::submit_offchain_batch_v2 {
+                    institution_main,
+                    ..
+                },
+            ) => offchain_transaction_pos::Pallet::<Runtime>::fee_account_of(institution_main).ok(),
+            // 其他 offchain Call 及其他 RuntimeCall 由调用者个人账户付费。
             _ => None,
         }
     }
@@ -587,7 +564,7 @@ impl duoqian_manage_pow::DuoqianAddressValidator<AccountId> for RuntimeDuoqianAd
         // 中文注释：禁止占用“国储会/省储会”的制度保留交易地址。
         if primitives::china::china_cb::CHINA_CB
             .iter()
-            .any(|n| address == &AccountId::new(n.duoqian_address))
+            .any(|n| address == &AccountId::new(n.main_address))
         {
             return false;
         }
@@ -595,7 +572,7 @@ impl duoqian_manage_pow::DuoqianAddressValidator<AccountId> for RuntimeDuoqianAd
         // 中文注释：禁止占用“省储行”的制度保留交易地址。
         if primitives::china::china_ch::CHINA_CH
             .iter()
-            .any(|n| address == &AccountId::new(n.duoqian_address))
+            .any(|n| address == &AccountId::new(n.main_address))
         {
             return false;
         }
@@ -630,7 +607,7 @@ pub struct RuntimeInstitutionAssetGuard;
 
 impl duoqian_manage_pow::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
     fn is_protected(address: &AccountId) -> bool {
-        is_keyless_account(address)
+        is_stake_account(address)
     }
 }
 
@@ -640,11 +617,11 @@ impl institution_asset_guard::InstitutionAssetGuard<AccountId> for RuntimeInstit
         action: institution_asset_guard::InstitutionAssetAction,
     ) -> bool {
         // 中文注释：匹配顺序很重要——更具体的账户类型必须放在更宽泛的类型之前。
-        // fee_address 同时出现在 CHINA_RESERVED_DUOQIAN_ADDRESSES 列表中（duoqian 派生地址），
-        // 如果 is_reserved_duoqian_account 先匹配，fee_address 会被错误地按 duoqian 规则放行。
+        // fee_address 同时出现在 CHINA_RESERVED_MAIN_ADDRESSES 列表中（同由 BLAKE2 派生且统一保留），
+        // 如果 is_reserved_main_account 先匹配，fee_address 会被错误地按主账户规则放行。
 
         // 1. 无私钥系统账户：全禁
-        if is_keyless_account(source) {
+        if is_stake_account(source) {
             return false;
         }
 
@@ -673,7 +650,7 @@ impl institution_asset_guard::InstitutionAssetGuard<AccountId> for RuntimeInstit
         }
 
         // 5. 多签保留地址（范围最宽）：只允许多签转账和关闭
-        if is_reserved_duoqian_account(source) {
+        if is_reserved_main_account(source) {
             return matches!(
                 action,
                 institution_asset_guard::InstitutionAssetAction::DuoqianTransferExecute
@@ -690,10 +667,10 @@ impl duoqian_manage_pow::DuoqianReservedAddressChecker<AccountId>
     for RuntimeDuoqianReservedAddressChecker
 {
     fn is_reserved(address: &AccountId) -> bool {
-        // 中文注释：禁止占用省储行 keyless_address（制度保留地址）。
+        // 中文注释：禁止占用省储行 stake_address（制度保留地址）。
         if primitives::china::china_ch::CHINA_CH
             .iter()
-            .any(|n| address == &AccountId::new(n.keyless_address))
+            .any(|n| address == &AccountId::new(n.stake_address))
         {
             return true;
         }
@@ -716,20 +693,20 @@ impl duoqian_manage_pow::DuoqianReservedAddressChecker<AccountId>
             return true;
         }
 
-        is_reserved_duoqian_account(address)
+        is_reserved_main_account(address)
     }
 }
 
 impl
     duoqian_manage_pow::SfidInstitutionVerifier<
-        duoqian_manage_pow::pallet::SfidNameOf<Runtime>,
+        duoqian_manage_pow::pallet::AccountNameOf<Runtime>,
         duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
         duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
     > for RuntimeSfidInstitutionVerifier
 {
     fn verify_institution_registration(
         sfid_id: &[u8],
-        name: &duoqian_manage_pow::pallet::SfidNameOf<Runtime>,
+        account_name: &duoqian_manage_pow::pallet::AccountNameOf<Runtime>,
         nonce: &duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
         signature: &duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
         signing_province: Option<&[u8]>,
@@ -737,7 +714,10 @@ impl
         #[cfg(feature = "runtime-benchmarks")]
         {
             let _ = signing_province;
-            return !sfid_id.is_empty() && !name.is_empty() && !nonce.is_empty() && !signature.is_empty();
+            return !sfid_id.is_empty()
+                && !account_name.is_empty()
+                && !nonce.is_empty()
+                && !signature.is_empty();
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
@@ -766,14 +746,15 @@ impl
             sig_raw.copy_from_slice(sig_bytes);
             let signature = sr25519::Signature::from_raw(sig_raw);
 
-            // 中文注释：payload tag 统一为 GMB_SFID_V1；signing_province 存在时追加到末尾防跨省 replay。
+            // 中文注释：统一 domain 走 DUOQIAN_DOMAIN + OP_SIGN_INST；signing_province 存在时追加到末尾防跨省 replay。
             let msg = match signing_province {
                 Some(p) => {
                     let payload = (
-                        b"GMB_SFID_V1",
+                        primitives::core_const::DUOQIAN_DOMAIN,
+                        primitives::core_const::OP_SIGN_INST,
                         frame_system::Pallet::<Runtime>::block_hash(0),
                         sfid_id,
-                        name.as_slice(),
+                        account_name.as_slice(),
                         nonce.as_slice(),
                         p,
                     );
@@ -781,10 +762,11 @@ impl
                 }
                 None => {
                     let payload = (
-                        b"GMB_SFID_V1",
+                        primitives::core_const::DUOQIAN_DOMAIN,
+                        primitives::core_const::OP_SIGN_INST,
                         frame_system::Pallet::<Runtime>::block_hash(0),
                         sfid_id,
-                        name.as_slice(),
+                        account_name.as_slice(),
                         nonce.as_slice(),
                     );
                     blake2_256(&payload.encode())
@@ -808,9 +790,11 @@ impl duoqian_manage_pow::Config for Runtime {
     type FeeRouter = TransferFeeRouter;
     type MaxAdmins = ConstU32<64>;
     type MaxSfidIdLength = ConstU32<96>;
-    type MaxSfidNameLength = ConstU32<128>;
+    type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
+    // sr25519 签名固定 64 字节,用于 finalize_create 聚合签名的 BoundedVec 容量上限。
+    type MaxAdminSignatureLength = ConstU32<64>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<121>;
     type WeightInfo = duoqian_manage_pow::weights::SubstrateWeight<Runtime>;
@@ -849,7 +833,8 @@ impl
         let signature = sr25519::Signature::from_raw(sig_raw);
 
         let payload = (
-            b"GMB_SFID_V1",
+            primitives::core_const::DUOQIAN_DOMAIN,
+            primitives::core_const::OP_SIGN_BIND,
             frame_system::Pallet::<Runtime>::block_hash(0),
             account,
             credential.binding_id,
@@ -900,7 +885,8 @@ impl
             let signature = sr25519::Signature::from_raw(sig_raw);
 
             let payload = (
-                b"GMB_SFID_V1",
+                primitives::core_const::DUOQIAN_DOMAIN,
+                primitives::core_const::OP_SIGN_VOTE,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 account,
                 binding_id,
@@ -962,7 +948,8 @@ impl
             let signature = sr25519::Signature::from_raw(sig_raw);
 
             let payload = (
-                b"GMB_SFID_V1",
+                primitives::core_const::DUOQIAN_DOMAIN,
+                primitives::core_const::OP_SIGN_POP,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 who,
                 eligible_total,
@@ -1062,11 +1049,40 @@ impl duoqian_transfer_pow::Config for Runtime {
 // 链下交易清算模块配置
 // ---------------------------------------------------------------------------
 
-impl offchain_transaction_pos::ProtectedSourceChecker<AccountId>
-    for RuntimeProtectedSourceChecker
-{
-    fn is_protected(address: &AccountId) -> bool {
-        is_keyless_account(address)
+/// 扫码支付 Step 1 新增:SFID 机构登记表查询实现。
+///
+/// 委托给 `duoqian-manage-pow` 的三张 Storage(`AddressRegisteredSfid` /
+/// `SfidRegisteredAddress` / `DuoqianAccounts`),供 `offchain-transaction-pos`
+/// 的 `bank_check` 模块判定清算行合法性用。
+pub struct DuoqianSfidAccountQuery;
+
+impl offchain_transaction_pos::bank_check::SfidAccountQuery<AccountId> for DuoqianSfidAccountQuery {
+    fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
+        duoqian_manage_pow::AddressRegisteredSfid::<Runtime>::get(addr)
+            .map(|info| (info.sfid_id.to_vec(), info.account_name.to_vec()))
+    }
+
+    fn find_address(sfid_id: &[u8], account_name: &[u8]) -> Option<AccountId> {
+        let id: duoqian_manage_pow::SfidIdOf<Runtime> = sfid_id.to_vec().try_into().ok()?;
+        let an: duoqian_manage_pow::AccountNameOf<Runtime> =
+            account_name.to_vec().try_into().ok()?;
+        duoqian_manage_pow::SfidRegisteredAddress::<Runtime>::get(&id, &an)
+    }
+
+    fn is_active(addr: &AccountId) -> bool {
+        matches!(
+            duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(addr).map(|a| a.status),
+            Some(duoqian_manage_pow::DuoqianStatus::Active)
+        )
+    }
+
+    /// 扫码支付 Step 2 新增:判定 `who` 是否是 `bank` 多签账户的管理员之一。
+    /// 用于费率提案 / 批次提交等治理动作的身份校验。
+    fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool {
+        match duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(bank) {
+            Some(account) => account.duoqian_admins.iter().any(|a| a == who),
+            None => false,
+        }
     }
 }
 
@@ -1075,10 +1091,9 @@ impl offchain_transaction_pos::Config for Runtime {
     type Currency = Balances;
     type MaxBatchSize = ConstU32<100_000>;
     type MaxBatchSignatureLength = ConstU32<128>;
-    type InternalVoteEngine = VotingEngineSystem;
-    type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type InstitutionAssetGuard = RuntimeInstitutionAssetGuard;
-    type WeightInfo = offchain_transaction_pos::weights::SubstrateWeight<Runtime>;
+    type SfidAccountQuery = DuoqianSfidAccountQuery;
+    type WeightInfo = ();
 }
 
 /// 禁用特权原点：始终拒绝任何 Origin，确保不存在可被调用的特权入口。
@@ -1362,8 +1377,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             // 统一 ID：proposal_id 即投票引擎 ID，不再有双 ID 映射
             let proposal_id = 99u64;
-            let recipient =
-                AccountId::new(primitives::china::china_cb::CHINA_CB[1].duoqian_address);
+            let recipient = AccountId::new(primitives::china::china_cb::CHINA_CB[1].main_address);
             let total_amount = 123u128;
 
             // 直接在投票引擎 ProposalData 中写入带 MODULE_TAG 前缀的业务数据
@@ -1430,7 +1444,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let nrc_institution = reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
                 .expect("nrc institution id must be valid");
-            let nrc_account = AccountId::new(CHINA_CB[0].duoqian_address);
+            let nrc_account = AccountId::new(CHINA_CB[0].main_address);
             let initial_balance: Balance = 1_000;
             let destroy_amount: Balance = 100;
 
@@ -1559,9 +1573,9 @@ mod tests {
     }
 
     #[test]
-    fn duoqian_reserved_checker_rejects_keyless_and_shenfen_fee_addresses() {
-        let keyless = AccountId::new(primitives::china::china_ch::CHINA_CH[0].keyless_address);
-        assert!(RuntimeDuoqianReservedAddressChecker::is_reserved(&keyless));
+    fn duoqian_reserved_checker_rejects_stake_and_shenfen_fee_addresses() {
+        let stake = AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_address);
+        assert!(RuntimeDuoqianReservedAddressChecker::is_reserved(&stake));
 
         let fee_account = AccountId::new(primitives::china::china_ch::CHINA_CH[0].fee_address);
         assert!(RuntimeDuoqianReservedAddressChecker::is_reserved(
@@ -1570,27 +1584,27 @@ mod tests {
     }
 
     #[test]
-    fn runtime_call_filter_blocks_force_transfer_from_keyless() {
-        let keyless = AccountId::new(primitives::china::china_ch::CHINA_CH[0].keyless_address);
+    fn runtime_call_filter_blocks_force_transfer_from_stake() {
+        let stake = AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_address);
         let dst = AccountId::new([9u8; 32]);
 
         let blocked_by_id = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
-            source: sp_runtime::MultiAddress::Id(keyless),
+            source: sp_runtime::MultiAddress::Id(stake),
             dest: sp_runtime::MultiAddress::Id(dst.clone()),
             value: 1,
         });
         assert!(!RuntimeCallFilter::contains(&blocked_by_id));
 
-        let keyless_raw = primitives::china::china_ch::CHINA_CH[0].keyless_address;
+        let stake_raw = primitives::china::china_ch::CHINA_CH[0].stake_address;
         let blocked_by_32 = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
-            source: sp_runtime::MultiAddress::Address32(keyless_raw),
+            source: sp_runtime::MultiAddress::Address32(stake_raw),
             dest: sp_runtime::MultiAddress::Id(dst.clone()),
             value: 1,
         });
         assert!(!RuntimeCallFilter::contains(&blocked_by_32));
 
         let blocked_by_raw = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
-            source: sp_runtime::MultiAddress::Raw(keyless_raw.to_vec()),
+            source: sp_runtime::MultiAddress::Raw(stake_raw.to_vec()),
             dest: sp_runtime::MultiAddress::Id(dst.clone()),
             value: 1,
         });
@@ -1606,7 +1620,7 @@ mod tests {
         let blocked_force_unreserve =
             RuntimeCall::Balances(pallet_balances::Call::force_unreserve {
                 who: sp_runtime::MultiAddress::Id(AccountId::new(
-                    primitives::china::china_ch::CHINA_CH[0].keyless_address,
+                    primitives::china::china_ch::CHINA_CH[0].stake_address,
                 )),
                 amount: 1,
             });
@@ -1615,7 +1629,7 @@ mod tests {
         let blocked_force_set_balance =
             RuntimeCall::Balances(pallet_balances::Call::force_set_balance {
                 who: sp_runtime::MultiAddress::Id(AccountId::new(
-                    primitives::china::china_ch::CHINA_CH[0].keyless_address,
+                    primitives::china::china_ch::CHINA_CH[0].stake_address,
                 )),
                 new_free: 1,
             });
@@ -1626,8 +1640,7 @@ mod tests {
     fn pow_digest_author_finds_pow_engine_author() {
         // 中文注释：pre_digest 现在存储 sr25519 公钥，PowDigestAuthor 解码后派生 AccountId。
         let public = sp_core::sr25519::Public::from_raw([21u8; 32]);
-        let expected_account: AccountId =
-            sp_runtime::MultiSigner::from(public).into_account();
+        let expected_account: AccountId = sp_runtime::MultiSigner::from(public).into_account();
         let encoded = public.encode();
         let digests: Vec<(sp_runtime::ConsensusEngineId, &[u8])> = vec![
             (*b"TEST", b"ignored".as_ref()),
@@ -1681,9 +1694,13 @@ mod tests {
             let raw = voting_engine_system::Pallet::<Runtime>::get_proposal_data(proposal_id)
                 .expect("proposal data should exist");
             let tag = runtime_root_upgrade::MODULE_TAG;
-            assert!(raw.len() >= tag.len() && &raw[..tag.len()] == tag, "MODULE_TAG mismatch");
-            let updated = runtime_root_upgrade::pallet::Proposal::<Runtime>::decode(&mut &raw[tag.len()..])
-                .expect("should decode");
+            assert!(
+                raw.len() >= tag.len() && &raw[..tag.len()] == tag,
+                "MODULE_TAG mismatch"
+            );
+            let updated =
+                runtime_root_upgrade::pallet::Proposal::<Runtime>::decode(&mut &raw[tag.len()..])
+                    .expect("should decode");
             assert!(matches!(
                 updated.status,
                 runtime_root_upgrade::pallet::ProposalStatus::Rejected
@@ -1711,7 +1728,8 @@ mod tests {
             let bind_nonce: sfid_code_auth::pallet::NonceOf<Runtime> =
                 b"bind-nonce".to_vec().try_into().expect("nonce should fit");
             let bind_payload = (
-                b"GMB_SFID_V1",
+                primitives::core_const::DUOQIAN_DOMAIN,
+                primitives::core_const::OP_SIGN_BIND,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 &account,
                 binding_id,
@@ -1745,7 +1763,8 @@ mod tests {
             let vote_signature: sfid_code_auth::pallet::SignatureOf<Runtime> = pair
                 .sign(&blake2_256(
                     &(
-                        b"GMB_SFID_V1",
+                        primitives::core_const::DUOQIAN_DOMAIN,
+                        primitives::core_const::OP_SIGN_VOTE,
                         frame_system::Pallet::<Runtime>::block_hash(0),
                         &account,
                         binding_id,
@@ -1771,7 +1790,8 @@ mod tests {
             let pop_signature: voting_engine_system::pallet::VoteSignatureOf<Runtime> = pair
                 .sign(&blake2_256(
                     &(
-                        b"GMB_SFID_V1",
+                        primitives::core_const::DUOQIAN_DOMAIN,
+                        primitives::core_const::OP_SIGN_POP,
                         frame_system::Pallet::<Runtime>::block_hash(0),
                         &account,
                         123u64,
@@ -1815,7 +1835,8 @@ mod tests {
             let nonce = b"wrap-nonce";
             let vote_msg = blake2_256(
                 &(
-                    b"GMB_SFID_V1",
+                    primitives::core_const::DUOQIAN_DOMAIN,
+                    primitives::core_const::OP_SIGN_VOTE,
                     frame_system::Pallet::<Runtime>::block_hash(0),
                     &who,
                     binding_id,
@@ -1890,18 +1911,19 @@ mod tests {
                     .to_vec()
                     .try_into()
                     .expect("nonce should fit");
-            let register_name: duoqian_manage_pow::pallet::SfidNameOf<Runtime> =
-                b"test-name"
+            let register_account_name: duoqian_manage_pow::pallet::AccountNameOf<Runtime> =
+                b"test-account-name"
                     .to_vec()
                     .try_into()
-                    .expect("name should fit");
+                    .expect("account_name should fit");
             let register_signature: duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime> = pair
                 .sign(&blake2_256(
                     &(
-                        b"GMB_SFID_V1",
+                        primitives::core_const::DUOQIAN_DOMAIN,
+                        primitives::core_const::OP_SIGN_INST,
                         frame_system::Pallet::<Runtime>::block_hash(0),
                         sfid_id.as_slice(),
-                        register_name.as_slice(),
+                        register_account_name.as_slice(),
                         register_nonce.as_slice(),
                     )
                         .encode(),
@@ -1912,12 +1934,12 @@ mod tests {
                 .expect("signature should fit");
             assert!(
                 <RuntimeSfidInstitutionVerifier as duoqian_manage_pow::SfidInstitutionVerifier<
-                    duoqian_manage_pow::pallet::SfidNameOf<Runtime>,
+                    duoqian_manage_pow::pallet::AccountNameOf<Runtime>,
                     duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
                     duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id.as_slice(),
-                    &register_name,
+                    &register_account_name,
                     &register_nonce,
                     &register_signature,
                 )
@@ -1927,12 +1949,12 @@ mod tests {
                 vec![9u8; 63].try_into().expect("signature should fit");
             assert!(
                 !<RuntimeSfidInstitutionVerifier as duoqian_manage_pow::SfidInstitutionVerifier<
-                    duoqian_manage_pow::pallet::SfidNameOf<Runtime>,
+                    duoqian_manage_pow::pallet::AccountNameOf<Runtime>,
                     duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
                     duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id.as_slice(),
-                    &register_name,
+                    &register_account_name,
                     &register_nonce,
                     &bad_signature,
                 )
@@ -2131,12 +2153,12 @@ mod asset_guard_tests {
     use super::*;
     use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
 
-    fn keyless_account() -> AccountId {
-        AccountId::new(primitives::china::china_ch::CHINA_CH[0].keyless_address)
+    fn stake_account() -> AccountId {
+        AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_address)
     }
 
-    fn reserved_duoqian_account() -> AccountId {
-        AccountId::new(primitives::china::china_cb::CHINA_CB[1].duoqian_address)
+    fn reserved_main_account() -> AccountId {
+        AccountId::new(primitives::china::china_cb::CHINA_CB[1].main_address)
     }
 
     fn reserved_fee_account() -> AccountId {
@@ -2148,8 +2170,8 @@ mod asset_guard_tests {
     }
 
     #[test]
-    fn keyless_account_is_completely_blocked() {
-        let account = keyless_account();
+    fn stake_account_is_completely_blocked() {
+        let account = stake_account();
         assert!(!RuntimeInstitutionAssetGuard::can_spend(
             &account,
             InstitutionAssetAction::DuoqianTransferExecute
@@ -2170,7 +2192,7 @@ mod asset_guard_tests {
 
     #[test]
     fn reserved_duoqian_only_allows_transfer_and_close() {
-        let account = reserved_duoqian_account();
+        let account = reserved_main_account();
         assert!(RuntimeInstitutionAssetGuard::can_spend(
             &account,
             InstitutionAssetAction::DuoqianTransferExecute

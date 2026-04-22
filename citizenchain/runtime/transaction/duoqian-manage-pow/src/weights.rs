@@ -16,7 +16,8 @@ pub trait WeightInfo {
 	fn register_sfid_institution() -> Weight;
 	fn propose_create() -> Weight;
 	fn propose_create_personal() -> Weight;
-	fn vote_create() -> Weight;
+	/// `n` = 聚合的签名数量(= 管理员投票数)。
+	fn finalize_create(n: u32) -> Weight;
 	fn propose_close() -> Weight;
 	fn vote_close() -> Weight;
 	fn cleanup_rejected_proposal() -> Weight;
@@ -42,11 +43,13 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(8))
 			.saturating_add(T::DbWeight::get().writes(9))
 	}
-	fn vote_create() -> Weight {
-		Weight::from_parts(140_000_000, 0)
+	/// 基础成本 + 每签名 40_000_000 增量(sr25519 验签 + cast_internal_vote 开销的占位)。
+	fn finalize_create(n: u32) -> Weight {
+		Weight::from_parts(60_000_000, 0)
+			.saturating_add(Weight::from_parts(40_000_000, 0).saturating_mul(n.into()))
 			.saturating_add(Weight::from_parts(0, 4554))
-			.saturating_add(T::DbWeight::get().reads(9))
-			.saturating_add(T::DbWeight::get().writes(12))
+			.saturating_add(T::DbWeight::get().reads(6 + u64::from(n)))
+			.saturating_add(T::DbWeight::get().writes(8 + u64::from(n)))
 	}
 	fn propose_close() -> Weight {
 		Weight::from_parts(70_000_000, 0)
@@ -87,11 +90,12 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(8))
 			.saturating_add(RocksDbWeight::get().writes(9))
 	}
-	fn vote_create() -> Weight {
-		Weight::from_parts(140_000_000, 0)
+	fn finalize_create(n: u32) -> Weight {
+		Weight::from_parts(60_000_000, 0)
+			.saturating_add(Weight::from_parts(40_000_000, 0).saturating_mul(n.into()))
 			.saturating_add(Weight::from_parts(0, 4554))
-			.saturating_add(RocksDbWeight::get().reads(9))
-			.saturating_add(RocksDbWeight::get().writes(12))
+			.saturating_add(RocksDbWeight::get().reads(6 + u64::from(n)))
+			.saturating_add(RocksDbWeight::get().writes(8 + u64::from(n)))
 	}
 	fn propose_close() -> Weight {
 		Weight::from_parts(70_000_000, 0)

@@ -1062,9 +1062,24 @@ pub(crate) struct BindCallbackPayload {
 
 // ── 多签管理 ──────────────────────────────────────────
 
+/// 多签账户链上状态。
+///
+/// 流转(2026-04-21 统一两步模式):
+/// ```text
+///   Inactive  ──点"激活"──▶  Pending  ──成功──▶  Registered
+///                                     └──失败──▶  Failed ──点"重试激活"──▶  Pending
+/// ```
+///
+/// - `Inactive`:本地已创建账户记录,**尚未推链**。默认状态。
+///   创建机构(含公安局 reconcile)时自动写入 2 条默认账户(主账户/费用账户)→ Inactive;
+///   管理员手工建账户也走同一条路径 → Inactive。等待显式"激活"触发上链。
+/// - `Pending`:激活请求已提交,正在推链中。
+/// - `Registered`:链上已注册,`duoqian_address` + `chain_tx_hash` 已填入。
+/// - `Failed`:上链失败,允许再次点击"重试激活"。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum MultisigChainStatus {
+    Inactive,
     Pending,
     Registered,
     Failed,
@@ -1072,7 +1087,7 @@ pub(crate) enum MultisigChainStatus {
 
 impl Default for MultisigChainStatus {
     fn default() -> Self {
-        Self::Pending
+        Self::Inactive
     }
 }
 

@@ -49,11 +49,12 @@ class DuoqianManageService {
 
   /// 提交 propose_create extrinsic。
   ///
-  /// 参数编码：[0x11][0x00] + sfid_id(BoundedVec<u8>) + admin_count(u32 LE)
-  ///   + duoqian_admins(BoundedVec<AccountId32>) + threshold(u32 LE) + amount(u128 LE)
+  /// 参数编码：[0x11][0x00] + sfid_id(BoundedVec<u8>) + account_name(BoundedVec<u8>)
+  ///   + admin_count(u32 LE) + duoqian_admins(BoundedVec<AccountId32>)
+  ///   + threshold(u32 LE) + amount(u128 LE)
   Future<({String txHash, int usedNonce})> submitProposeCreate({
     required Uint8List sfidId,
-    required Uint8List name,
+    required Uint8List accountName,
     required int adminCount,
     required List<Uint8List> adminPubkeys,
     required int threshold,
@@ -71,10 +72,10 @@ class DuoqianManageService {
         CompactBigIntCodec.codec.encode(BigInt.from(sfidId.length)));
     output.write(sfidId);
 
-    // name: BoundedVec<u8> = Compact<u32> length + bytes
+    // account_name: BoundedVec<u8> = Compact<u32> length + bytes
     output.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(name.length)));
-    output.write(name);
+        CompactBigIntCodec.codec.encode(BigInt.from(accountName.length)));
+    output.write(accountName);
 
     // admin_count: u32 little-endian
     output.write(_u32ToLeBytes(adminCount));
@@ -102,10 +103,10 @@ class DuoqianManageService {
 
   /// 提交 propose_create_personal extrinsic（个人多签，无需 SFID）。
   ///
-  /// 参数编码：[0x11][0x05] + name(BoundedVec) + admin_count(u32 LE)
+  /// 参数编码：[0x11][0x05] + account_name(BoundedVec) + admin_count(u32 LE)
   ///   + duoqian_admins(BoundedVec<AccountId32>) + threshold(u32 LE) + amount(u128 LE)
   Future<({String txHash, int usedNonce})> submitProposeCreatePersonal({
-    required Uint8List name,
+    required Uint8List accountName,
     required int adminCount,
     required List<Uint8List> adminPubkeys,
     required int threshold,
@@ -118,10 +119,10 @@ class DuoqianManageService {
     output.pushByte(_palletIndex);
     output.pushByte(_proposeCreatePersonalCallIndex);
 
-    // name: BoundedVec<u8> = Compact<u32> length + bytes
+    // account_name: BoundedVec<u8> = Compact<u32> length + bytes
     output.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(name.length)));
-    output.write(name);
+        CompactBigIntCodec.codec.encode(BigInt.from(accountName.length)));
+    output.write(accountName);
 
     // admin_count: u32 little-endian
     output.write(_u32ToLeBytes(adminCount));
@@ -214,13 +215,13 @@ class DuoqianManageService {
 
   // ──── 链上查询 ────
 
-  /// 查询 SFID (sfid_id + name) 是否已注册，返回派生的多签地址 hex（null 表示未注册）。
-  Future<String?> fetchSfidRegisteredAddress(Uint8List sfidId, Uint8List name) async {
+  /// 查询 SFID (sfid_id + account_name) 是否已注册，返回派生的多签地址 hex（null 表示未注册）。
+  Future<String?> fetchSfidRegisteredAddress(Uint8List sfidId, Uint8List accountName) async {
     final key = _buildDoubleMapStorageKey(
       'DuoqianManagePow',
       'SfidRegisteredAddress',
       sfidId,
-      name,
+      accountName,
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null || data.length < 32) return null;

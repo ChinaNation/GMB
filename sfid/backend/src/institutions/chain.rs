@@ -28,6 +28,6 @@ pub async fn submit_register_account(
     sfid_id: &str,
     account_name: &str,
 ) -> Result<ChainInstitutionRegisterReceipt, String> {
-    // 中文注释:链端的 `name` 字段 = sfid 系统的 account_name(见任务卡 2 背景)。
+    // 中文注释:链端已从 `name` 重命名为 `account_name`（2026-04-21），与本后端字段完全对齐。
     submit_register_sfid_institution_extrinsic(state, ctx, sfid_id, account_name).await
 }

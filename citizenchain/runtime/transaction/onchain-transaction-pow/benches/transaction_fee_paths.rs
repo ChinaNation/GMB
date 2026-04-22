@@ -112,7 +112,7 @@ struct MockNrcAccountProvider;
 impl NrcAccountProvider<AccountId32> for MockNrcAccountProvider {
     fn nrc_account() -> Option<AccountId32> {
         Some(AccountId32::new(
-            primitives::china::china_cb::CHINA_CB[0].duoqian_address,
+            primitives::china::china_cb::CHINA_CB[0].main_address,
         ))
     }
 }

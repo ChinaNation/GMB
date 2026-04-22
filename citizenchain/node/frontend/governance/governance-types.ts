@@ -35,15 +35,7 @@ export type UserVoteStatus = {
   jointVote: boolean | null;
 };
 
-// ── 签名管理员 ──
-
-export interface SigningAdminInfo {
-  pubkeyHex: string;
-  shenfenId: string;
-  shenfenName: string;
-}
-
-// ── 管理员匹配（旧，保留兼容投票签名流程） ──
+// ── 管理员匹配（提案发起/投票签名流程共用） ──
 
 export type AdminWalletMatch = {
   address: string;
@@ -73,7 +65,7 @@ export type InstitutionListItem = {
   shenfenId: string;
   orgType: number;
   orgTypeLabel: string;
-  duoqianAddress: string;
+  mainAddress: string;
 };
 
 export type GovernanceOverview = {
@@ -93,7 +85,7 @@ export type InstitutionDetail = {
   shenfenId: string;
   orgType: number;
   orgTypeLabel: string;
-  duoqianAddress: string;
+  mainAddress: string;
   balanceFen: string | null;
   admins: AdminInfo[];
   internalThreshold: number;
@@ -107,6 +99,17 @@ export type InstitutionDetail = {
   nrcFeeAddress: string | null;
   nrcFeeBalanceFen: string | null;
   nrcAnquanAddress: string | null;
+  nrcAnquanBalanceFen: string | null;
+  warning: string | null;
+};
+
+export type InstitutionBalanceUpdate = {
+  shenfenId: string;
+  balanceFen: string | null;
+  stakingBalanceFen: string | null;
+  feeBalanceFen: string | null;
+  cbFeeBalanceFen: string | null;
+  nrcFeeBalanceFen: string | null;
   nrcAnquanBalanceFen: string | null;
   warning: string | null;
 };
@@ -163,11 +166,6 @@ export type RuntimeUpgradeDetail = {
   status: number;
 };
 
-export type FeeRateProposalDetail = {
-  proposalId: number;
-  institutionHex: string;
-  newRateBp: number;
-};
 
 export type SweepProposalDetail = {
   proposalId: number;
@@ -186,7 +184,6 @@ export type ProposalFullInfo = {
   meta: ProposalMeta;
   transferDetail: TransferProposalDetail | null;
   runtimeUpgradeDetail: RuntimeUpgradeDetail | null;
-  feeRateDetail: FeeRateProposalDetail | null;
   safetyFundDetail: SafetyFundProposalDetail | null;
   sweepDetail: SweepProposalDetail | null;
   internalTally: VoteTally | null;

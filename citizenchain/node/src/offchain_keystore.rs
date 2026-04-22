@@ -1,7 +1,20 @@
-//! 省储行签名管理员私钥加密存储模块。
+//! 节点清算行(L2)管理员 sr25519 私钥加密存储模块。
 //!
-//! 使用 AES-256-GCM 加密私钥，密钥由节点启动密码通过 PBKDF2 派生。
-//! 私钥仅在内存中以明文存在，磁盘上始终为密文。
+//! 使用 AES-256-GCM 加密私钥,密钥由节点启动密码通过 PBKDF2 派生。
+//! 私钥仅在内存中以明文存在,磁盘上始终为密文。
+//!
+//! **当前用途**:清算行节点 CLI 启动路径(`service.rs::new_full` 接
+//! `--clearing-bank` / `--clearing-bank-password` flag)在此加密存取管理员
+//! sr25519 seed,`offchain::{keystore_signer, pool_submitter}` 消费。
+//!
+//! **历史遗留**:`SigningKey.shenfen_id` 字段名保留以避免 blast radius;
+//! 语义是**清算行管理员身份标识**(CLI 启动时外部传入,链上不存)。字段 rename
+//! 待 Step 3 清算行 UI 引入完整 keystore 管理功能时一并收敛。
+//!
+//! **老省储行"签名管理员"UI 功能**(原 `ui/settings/cold-wallets/set_signing_admin`
+//! Tauri 命令 + AdminListPage"设为验证者"按钮)已在清理轮次彻底删除,本文件
+//! **仅作为 Rust lib** 被 CLI 路径调用。未来清算行 Tab 新 UI 会复用本模块的
+//! `save_signing_key` / `load_signing_key` 公开 API。
 
 use sp_core::{sr25519, Pair};
 use std::fs;
@@ -20,11 +33,12 @@ const SALT_LEN: usize = 16;
 /// 加密存储文件格式：[salt:16][nonce:12][shenfen_id_len:1][shenfen_id:N][ciphertext+tag:48+16]
 /// shenfen_id 最长 48 字节，私钥固定 32 字节。
 
-/// 签名管理员密钥（内存中的解密状态）。
+/// 清算行管理员密钥（内存中的解密状态）。
 pub struct SigningKey {
     /// sr25519 密钥对（含私钥）。
     pub pair: sr25519::Pair,
-    /// 省储行 shenfen_id。
+    /// 清算行管理员身份标识(CLI 启动时外部传入;字段名保留以避免 blast radius,
+    /// Step 3 清算行 UI 收敛时一并 rename 为 `admin_id`)。
     pub shenfen_id: String,
 }
 
@@ -79,7 +93,9 @@ impl OffchainKeystore {
         // 组装文件内容
         let shenfen_bytes = shenfen_id.as_bytes();
         let shenfen_len = shenfen_bytes.len() as u8;
-        let mut data = Vec::with_capacity(SALT_LEN + NONCE_LEN + 1 + shenfen_bytes.len() + ciphertext.len() + tag.len());
+        let mut data = Vec::with_capacity(
+            SALT_LEN + NONCE_LEN + 1 + shenfen_bytes.len() + ciphertext.len() + tag.len(),
+        );
         data.extend_from_slice(&salt_bytes);
         data.extend_from_slice(&nonce_bytes);
         data.push(shenfen_len);
@@ -118,7 +134,9 @@ impl OffchainKeystore {
         aes_key.zeroize();
 
         // 从 seed 构造密钥对
-        let seed_array: [u8; 32] = seed.as_slice().try_into()
+        let seed_array: [u8; 32] = seed
+            .as_slice()
+            .try_into()
             .map_err(|_| "私钥长度错误".to_string())?;
         seed.zeroize();
         let pair = <sr25519::Pair as Pair>::from_seed(&seed_array);

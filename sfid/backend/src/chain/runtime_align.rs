@@ -10,27 +10,29 @@ use subxt::{OnlineClient, PolkadotConfig};
 
 use crate::*;
 
-// 中文注释（适用于本文件所有 *_DOMAIN 常量）：
-// 必须使用 [u8; N] 数组类型，与链端 verifier 里 `b"..."` 字面量的类型(&[u8; N]) 完全对齐。
-// SCALE 编码下：
+// 中文注释（适用于本文件所有 DUOQIAN_DOMAIN + OP_SIGN_* 常量）：
+// 必须使用 [u8; N] 数组类型 + u8，与链端 verifier 里
+// `primitives::core_const::DUOQIAN_DOMAIN` (= `*b"DUOQIAN_V1"` 即 [u8; 10])
+// + `OP_SIGN_*` u8 完全对齐。SCALE 编码下：
 //   [u8; N] / &[u8; N]  →  N 字节，无长度前缀
+//   u8                   →  1 字节
 //   &[u8] / Vec<u8>     →  Compact(N) ++ N 字节，多 1~4 字节长度前缀
 // 任何一个 domain 写成 &[u8] 都会导致 message 与链端不一致 → blake2_256 不同
 // → sr25519 verify 失败 → 链端返回 InvalidSfidXxxSignature。
 // 历史教训：INSTITUTION_DOMAIN 曾被错误声明为 &[u8]，导致 register_sfid_institution
 // 长期 InvalidSfidInstitutionSignature。修复见 ADR
 // `04-decisions/sfid/2026-04-07-subxt-0.43-pow-chain-quirks.md`。
-// 中文注释：Phase 1.B 起统一所有业务 domain tag 为 11 字节 "GMB_SFID_V1"，
-// 原先 4 个分离的 domain 常量（BIND/VOTE/INSTITUTION/POPULATION）合并为同一个值，
-// 由 payload 其他字段（who/binding_id/proposal_id 等）区分用途。
-// 必须与 citizenchain 链端 verifier 中的 DOMAIN 字面量保持 [u8; 11] 类型严格一致。
+// 中文注释：2026-04-20 统一 DUOQIAN_V1 单域方案：domain 字节 10B
+// (b"DUOQIAN_V1") + 1B op_tag 区分子命名空间。按 op_tag 分别标识 BIND / VOTE /
+// POP / INST。与 citizenchain `primitives::core_const::{DUOQIAN_DOMAIN, OP_SIGN_*}`
+// 严格对齐。
+const DUOQIAN_DOMAIN: [u8; 10] = *b"DUOQIAN_V1";
+const OP_SIGN_BIND: u8 = 0x10;
+const OP_SIGN_VOTE: u8 = 0x11;
+const OP_SIGN_POP: u8 = 0x12;
+const OP_SIGN_INST: u8 = 0x13;
 #[allow(dead_code)]
-const BIND_DOMAIN: [u8; 11] = *b"GMB_SFID_V1";
-const VOTE_DOMAIN: [u8; 11] = *b"GMB_SFID_V1";
-const INSTITUTION_DOMAIN: [u8; 11] = *b"GMB_SFID_V1";
-#[allow(dead_code)]
-pub(crate) const POPULATION_DOMAIN_STR: &str = "GMB_SFID_V1";
-const POPULATION_DOMAIN: [u8; 11] = *b"GMB_SFID_V1";
+pub(crate) const POPULATION_DOMAIN_STR: &str = "DUOQIAN_V1";
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
 static SIGNING_KEY_CACHE: OnceLock<RwLock<Option<CachedSigningKey>>> = OnceLock::new();
 const TRUSTED_PRODUCTION_CHAINS: &[TrustedProductionChain] = &[
@@ -120,7 +122,8 @@ pub(crate) fn build_bind_credential(
     let genesis_hash = resolve_chain_genesis_hash()?;
     let binding_id = blake2_256(binding_seed.as_bytes());
     let payload = (
-        BIND_DOMAIN,
+        DUOQIAN_DOMAIN,
+        OP_SIGN_BIND,
         genesis_hash,
         who,
         binding_id,
@@ -158,7 +161,8 @@ pub(crate) fn build_bind_credential_with_province(
     let genesis_hash = resolve_chain_genesis_hash()?;
     let binding_id = blake2_256(binding_seed.as_bytes());
     let payload = (
-        BIND_DOMAIN,
+        DUOQIAN_DOMAIN,
+        OP_SIGN_BIND,
         genesis_hash,
         who,
         binding_id,
@@ -193,7 +197,8 @@ pub(crate) fn build_vote_credential(
     let genesis_hash = resolve_chain_genesis_hash()?;
     let binding_id = blake2_256(binding_seed.as_bytes());
     let payload = (
-        VOTE_DOMAIN,
+        DUOQIAN_DOMAIN,
+        OP_SIGN_VOTE,
         genesis_hash,
         who,
         binding_id,
@@ -225,7 +230,8 @@ pub(crate) fn build_population_snapshot_credential(
     let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
     let genesis_hash = resolve_chain_genesis_hash()?;
     let payload = (
-        POPULATION_DOMAIN,
+        DUOQIAN_DOMAIN,
+        OP_SIGN_POP,
         genesis_hash,
         who,
         eligible_total,
@@ -275,7 +281,8 @@ pub(crate) fn build_institution_credential_with_province(
     // 中文注释：链端 verifier（citizenchain/runtime/src/configs/mod.rs 约 770 行）
     // 在 signing_province 为 Some 时 payload 末尾追加省份字节。必须 6 元组完全一致。
     let payload = (
-        INSTITUTION_DOMAIN,
+        DUOQIAN_DOMAIN,
+        OP_SIGN_INST,
         genesis_hash,
         sfid_id.as_bytes(),
         name.as_bytes(),
@@ -311,9 +318,10 @@ pub(crate) fn build_institution_credential(
         return Err("register_nonce is required".to_string());
     }
     let genesis_hash = resolve_chain_genesis_hash()?;
-    // 中文注释：V2 payload 包含 name 字段，与 citizenchain 链上 RuntimeSfidInstitutionVerifier 对齐。
+    // 中文注释：payload 带 name 字段，与 citizenchain 链上 RuntimeSfidInstitutionVerifier 对齐。
     let payload = (
-        INSTITUTION_DOMAIN,
+        DUOQIAN_DOMAIN,
+        OP_SIGN_INST,
         genesis_hash,
         sfid_id.as_bytes(),
         name.as_bytes(),

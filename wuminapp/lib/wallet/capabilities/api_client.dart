@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+
 class HealthStatus {
   const HealthStatus({
     required this.service,
@@ -71,8 +72,7 @@ class PopulationSnapshotResponse {
 }
 
 class ApiClient {
-  ApiClient({String? baseUrl})
-      : _baseUrl = baseUrl ?? _defaultBaseUrl;
+  ApiClient({String? baseUrl}) : _baseUrl = baseUrl ?? _defaultBaseUrl;
 
   final String _baseUrl;
 
@@ -121,18 +121,20 @@ class ApiClient {
     final uri = Uri.parse('$_baseUrl/api/v1/app/vote-account/register');
     http.Response response;
     try {
-      response = await http.post(
-        uri,
-        headers: _headers(includeContentType: true),
-        body: jsonEncode({
-          'address': address,
-          'pubkey': normalized,
-          'signature': signatureHex.startsWith('0x')
-              ? signatureHex
-              : '0x$signatureHex',
-          'sign_message': signMessage,
-        }),
-      ).timeout(const Duration(seconds: 15));
+      response = await http
+          .post(
+            uri,
+            headers: _headers(includeContentType: true),
+            body: jsonEncode({
+              'address': address,
+              'pubkey': normalized,
+              'signature': signatureHex.startsWith('0x')
+                  ? signatureHex
+                  : '0x$signatureHex',
+              'sign_message': signMessage,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
     } on TimeoutException catch (_) {
       throw Exception('注册请求超时，请检查网络连接');
     } on SocketException catch (_) {
@@ -167,11 +169,12 @@ class ApiClient {
     if (addr.isEmpty) {
       throw Exception('walletAddress is empty');
     }
-    final uri = Uri.parse(
-        '$_baseUrl/api/v1/app/vote-account/status?address=$addr');
+    final uri =
+        Uri.parse('$_baseUrl/api/v1/app/vote-account/status?address=$addr');
     http.Response response;
     try {
-      response = await http.get(uri, headers: _headers())
+      response = await http
+          .get(uri, headers: _headers())
           .timeout(const Duration(seconds: 15));
     } on TimeoutException catch (_) {
       throw Exception('状态查询超时，请检查网络连接');
@@ -341,7 +344,8 @@ class ApiClient {
         '$_baseUrl/api/v1/app/institution/${Uri.encodeComponent(trimmed)}/accounts');
     http.Response response;
     try {
-      response = await http.get(uri, headers: _headers())
+      response = await http
+          .get(uri, headers: _headers())
           .timeout(const Duration(seconds: 15));
     } on TimeoutException catch (_) {
       throw Exception('查询超时，请检查网络连接');
@@ -382,7 +386,11 @@ class ApiClient {
         accounts.add(InstitutionAccountEntry(
           accountName: (m['account_name']?.toString() ?? '').trim(),
           duoqianAddress: m['duoqian_address']?.toString(),
-          chainStatus: (m['chain_status']?.toString() ?? 'Pending').trim(),
+          // 中文注释:SFID 后端公开接口返回 SCREAMING_SNAKE_CASE；
+          // 这里兼容旧口径 Pending/Confirmed/Failed，统一折叠成同一套状态。
+          chainStatus: InstitutionAccountEntry.normalizeChainStatus(
+            m['chain_status']?.toString(),
+          ),
         ));
       }
     }
@@ -449,7 +457,6 @@ class ApiClient {
       signature: (data['signature']?.toString() ?? '').trim(),
     );
   }
-
 }
 
 class VoteCredentialResponse {
@@ -497,8 +504,29 @@ class InstitutionAccountEntry {
   /// 链上派生的多签地址（hex，上链成功后才有值）。
   final String? duoqianAddress;
 
-  /// 链上状态：Pending / Confirmed / Failed。
+  /// 链上状态：`INACTIVE` / `PENDING` / `REGISTERED` / `FAILED`。
   final String chainStatus;
+
+  bool get isRegistered => chainStatus == 'REGISTERED';
+
+  static String normalizeChainStatus(String? raw) {
+    final status = raw?.trim();
+    switch (status) {
+      case 'INACTIVE':
+      case 'PENDING':
+      case 'REGISTERED':
+      case 'FAILED':
+        return status!;
+      case 'Pending':
+        return 'PENDING';
+      case 'Confirmed':
+        return 'REGISTERED';
+      case 'Failed':
+        return 'FAILED';
+      default:
+        return 'PENDING';
+    }
+  }
 }
 
 /// 机构账户列表响应。

@@ -963,7 +963,7 @@ let state = AppState {
 
 - 链端(完全不动)
 - sheng_signer_cache / signer_router / chain_sheng_signing(独立于分片)
-- 4 个 payload DOMAIN 常量(`GMB_SFID_V1`)
+- 4 个 payload DOMAIN 常量(`GMB_SFID_V1`，2026-04-20 彻底退役为 `DUOQIAN_DOMAIN + OP_SIGN_*`)
 - runtime_align.rs 里 `build_institution_credential_with_province`
 
 ---

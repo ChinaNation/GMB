@@ -93,8 +93,11 @@ class _PersonalDuoqianCreatePageState
     try {
       final creatorBytes = _hexDecode(wallet.pubkeyHex);
       final nameBytes = utf8.encode(name);
+      // 与 citizenchain primitives::core_const::{DUOQIAN_DOMAIN, OP_PERSONAL} 严格对齐
+      // preimage = b"DUOQIAN_V1" (10B) || 0x04 || ss58_prefix_le (2B) || creator (32B) || account_name
       final input = <int>[
-        ...utf8.encode('DUOQIAN_PERSONAL_V1'),
+        ...utf8.encode('DUOQIAN_V1'),
+        0x04, // OP_PERSONAL
         ..._u16LeBytes(_ss58Prefix),
         ...creatorBytes,
         ...nameBytes,
@@ -266,7 +269,7 @@ class _PersonalDuoqianCreatePageState
       }
 
       final result = await _manageService.submitProposeCreatePersonal(
-        name: nameBytes,
+        accountName: nameBytes,
         adminCount: _adminPubkeys.length,
         adminPubkeys: adminPubkeyBytes,
         threshold: threshold,

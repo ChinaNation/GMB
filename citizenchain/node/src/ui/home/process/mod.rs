@@ -2,11 +2,11 @@
 //!
 //! 替代旧的子进程模式——不再启动外部二进制，直接在 Tauri 进程内运行 Substrate 节点。
 
+use crate::ui::node_runner::{self, NodeHandle};
 use crate::ui::{
     settings::{device_password, grandpa_address},
     shared::{keystore, rpc, security},
 };
-use crate::ui::node_runner::{self, NodeHandle};
 use std::{
     path::PathBuf,
     sync::{Mutex, OnceLock},
@@ -24,16 +24,11 @@ static NODE_LIFECYCLE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 pub struct RuntimeState {
     /// 进程内运行的 Substrate 节点句柄。
     pub node_handle: Option<NodeHandle>,
-    /// 链下清算账本（启动时由 service 注入，用于停止前检查待上链交易）。
-    pub offchain_ledger: Option<crate::offchain_ledger::OffchainLedger>,
 }
 
 impl Default for RuntimeState {
     fn default() -> Self {
-        Self {
-            node_handle: None,
-            offchain_ledger: None,
-        }
+        Self { node_handle: None }
     }
 }
 
@@ -94,48 +89,12 @@ fn start_node_sync(app: AppHandle, unlock_password: String) -> Result<NodeStatus
         rpc::clear_genesis_hash_cache();
         thread::sleep(Duration::from_millis(250));
 
-        // 中文注释：检测签名管理员，有则解密并创建链下清算配置。
-        {
-            let app_data = security::app_data_dir(&app)?;
-            let ks = crate::offchain_keystore::OffchainKeystore::new(&app_data);
-            if ks.has_signing_key() {
-                match ks.load_signing_key(&unlock_password) {
-                    Ok(signing_key) => {
-                        let ledger = crate::offchain_ledger::OffchainLedger::new(&app_data);
-                        match ledger.load_from_disk(&unlock_password) {
-                            Ok(count) => {
-                                log::info!("[Offchain] 恢复 {count} 笔待上链交易");
-                            }
-                            Err(e) => {
-                                log::warn!("[Offchain] 账本恢复失败（首次启动或密码不匹配）：{e}");
-                            }
-                        }
-                        // 存入全局配置供 service 读取
-                        crate::service::set_offchain_config(Some(
-                            crate::service::OffchainConfig {
-                                ledger: ledger.clone(),
-                                shenfen_id: signing_key.shenfen_id.clone(),
-                            },
-                        ));
-                        // 存入 AppState 供 stop_node 检查
-                        if let Ok(mut state) = app.state::<AppState>().0.lock() {
-                            state.offchain_ledger = Some(ledger);
-                        }
-                        log::info!(
-                            "[Offchain] 签名管理员已加载（{}），链下清算功能已启用",
-                            signing_key.shenfen_id
-                        );
-                    }
-                    Err(e) => {
-                        log::warn!("[Offchain] 签名管理员解密失败：{e}");
-                        crate::service::set_offchain_config(None);
-                    }
-                }
-            } else {
-                crate::service::set_offchain_config(None);
-                log::info!("[Offchain] 未检测到签名管理员，链下清算未启用");
-            }
-        }
+        // 扫码支付 Step 2b-iv-a 清理:原"检测签名管理员 → 加载旧 offchain_ledger →
+        // 注入 set_offchain_config"的老省储行清算切入已删除(ADR-006 省储行退出清算)。
+        // UI 模式下 `node_runner.rs` 传 `None,None,None` 到 `new_full`,不启动清算行
+        // 组件,启动路径仅承担 PoW + GRANDPA 基础职能;生产清算行节点通过 CLI 的
+        // `--clearing-bank` 启动。_unlock_password 的保留是为 unused 变量告警抑制。
+        let _ = &unlock_password;
 
         // 准备启动参数。
         let base_path = node_data_dir(&app)?;
@@ -195,23 +154,11 @@ fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
         eprintln!("[审计] stop_node attempt 日志写入失败: {e}");
     }
     let result = (|| -> Result<NodeStatus, String> {
-        // 检查链下账本是否有待上链交易，如有则拒绝停止
-        {
-            let app_state = app.state::<AppState>();
-            let state = app_state
-                .0
-                .lock()
-                .map_err(|_| "acquire process state failed".to_string())?;
-            if let Some(ref ledger) = state.offchain_ledger {
-                let pending = ledger.pending_count();
-                if pending > 0 {
-                    return Err(format!(
-                        "有 {} 笔交易待上链，不允许停止节点",
-                        pending
-                    ));
-                }
-            }
-        }
+        // 扫码支付 Step 2b-iv-a 清理:原老省储行清算的 "pending_count > 0 拒绝停止"
+        // 保护已删除。UI 模式暂不启动清算行组件(通过 CLI `--clearing-bank` 启动),
+        // 该保护对 UI 运行时一直是死代码;CLI 模式下的 graceful shutdown + pending
+        // 检查留给 Step 3 独立任务实现(需要把 OffchainComponents 挂到 task_manager
+        // 的 spawn_essential_handle 生命周期而非全局 static)。
 
         {
             let app_state = app.state::<AppState>();

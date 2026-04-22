@@ -133,8 +133,12 @@ pub(crate) fn default_chain_keystore_dir(app: &AppHandle) -> Result<PathBuf, Str
         .join("chains")
         .join(DEFAULT_CHAIN_ID)
         .join("keystore");
-    ensure_directory_secure(&ks)
-        .map_err(|e| format!("create default chain keystore dir failed ({}): {e}", ks.display()))?;
+    ensure_directory_secure(&ks).map_err(|e| {
+        format!(
+            "create default chain keystore dir failed ({}): {e}",
+            ks.display()
+        )
+    })?;
     Ok(ks)
 }
 

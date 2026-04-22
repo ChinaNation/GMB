@@ -122,4 +122,4 @@
 - `joint_vote_total_matches_threshold` — 联合投票总票数 = 通过阈值
 - `fullnode_total_issuance_is_consistent` — 全节点发行总量 = 区块奖励 × 区块数
 - `genesis_issuance_matches_population` — 创世发行 = 人口 × 10,000
-- `all_china_ch_duoqian_addresses_are_unique` — 43 省 duoqian_address 全部唯一
+- `all_china_ch_main_addresses_are_unique` — 43 省 main_address 全部唯一

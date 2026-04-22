@@ -92,7 +92,7 @@ Runtime 接线：
 
 对每家省储行执行：
 1. 将 `shenfen_id` 编码成固定 48 字节 `pallet_id`。
-2. 由 `duoqian_address` 解码出固定收款账户。
+2. 由 `main_address` 解码出固定收款账户。
 3. 将 `stake_amount` 转成运行时 `Balance`，并做回写校验防止饱和截断。
 4. 计算 `interest = principal * rate_bp / 10_000`。
 5. `interest == 0` 时视为成功但不发币。

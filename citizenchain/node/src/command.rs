@@ -217,9 +217,20 @@ pub fn run() -> sc_cli::Result<()> {
             };
             let runner = cli.create_runner(&cli.run)?;
             // 固定使用 libp2p 后端（支持 WSS + DCUtR/Relay/AutoNAT），已清理 litep2p 代码路径。
+            // 扫码支付 Step 2b-ii-β-2-b / 2b-iii-b:把清算行 CLI 参数透传给 service::new_full
+            let clearing_bank = cli.clearing_bank.clone();
+            let clearing_bank_password = cli.clearing_bank_password.clone();
+            let clearing_reserve_monitor_interval_secs = cli.clearing_reserve_monitor_interval_secs;
             runner.run_node_until_exit(|config| async move {
-                service::new_full(config, mining_threads, gpu_device)
-                    .map_err(sc_cli::Error::Service)
+                service::new_full(
+                    config,
+                    mining_threads,
+                    gpu_device,
+                    clearing_bank,
+                    clearing_bank_password,
+                    clearing_reserve_monitor_interval_secs,
+                )
+                .map_err(sc_cli::Error::Service)
             })
         }
     }

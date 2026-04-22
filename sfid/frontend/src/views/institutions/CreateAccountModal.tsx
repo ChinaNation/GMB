@@ -1,13 +1,19 @@
 // 中文注释:新建账户弹窗。
-// 账户名自由输入(≤ 30 字),同 sfid 下不能重名。
-// 提交调 createAccount → 上链 register_sfid_institution。
-// 铁律:feedback_institutions_two_layer.md
+//
+// 2026-04-21 统一两步模式:
+//   - 创建后只登记本地 `Inactive`,**不立即上链**
+//   - 管理员需在账户列表点"激活"按钮才触发 `submit_register_account` 推链
+//   - 链上派生公式由链端按 `account_name` 路由(Role::Main / Role::Fee / Role::Named),
+//     sfid 前端不做地址预览(避免和链端公式漂移)
+//
+// 约束:
+//   - 同一 sfid_id 下 account_name 唯一(后端硬校验,前端做一次即时预校验)
+//   - "主账户" / "费用账户" 是默认账户(创建机构时已自动生成),这里手工建名不能重复
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button, Form, Input, message, Modal, Typography } from 'antd';
 import { createAccount, type MultisigAccount } from '../../api/institution';
 import type { AdminAuth } from '../../api/client';
-import { deriveDuoqianAddress } from '../../utils/deriveDuoqianAddress';
 
 interface Props {
   auth: AdminAuth;
@@ -35,17 +41,10 @@ export const CreateAccountModal: React.FC<Props> = ({
 }) => {
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
-  const [inputName, setInputName] = useState('');
-
-  const previewAddress = useMemo(
-    () => deriveDuoqianAddress(sfidId, inputName),
-    [sfidId, inputName],
-  );
 
   useEffect(() => {
     if (open) {
       form.resetFields();
-      setInputName('');
     }
   }, [open]);
 
@@ -59,7 +58,7 @@ export const CreateAccountModal: React.FC<Props> = ({
       message.error('账户名称最多 30 字');
       return;
     }
-    // 前端预校验:同 sfid 下不能重名
+    // 前端预校验:同 sfid 下不能重名(含已自动生成的主账户/费用账户)
     if (existingAccounts.some((a) => a.account_name === name)) {
       message.error(`账户名称"${name}"在本机构下已存在`);
       return;
@@ -67,18 +66,11 @@ export const CreateAccountModal: React.FC<Props> = ({
     setSubmitting(true);
     try {
       await createAccount(auth, sfidId, name);
-      message.success(`账户已创建并上链:${name}`);
+      message.success(`账户已创建,在列表中点"激活"即可推链注册`);
       onCreated();
     } catch (err) {
-      // 任务卡 20260409 Phase 1.C：识别后端针对省签名密钥缺失的 503 错误，给出友好提示
       const raw = err instanceof Error ? err.message : '创建账户失败';
-      if (raw.includes('本省') && raw.includes('未在线')) {
-        message.error('本省登录管理员未在线,请联系省管理员登录后重试');
-      } else if (raw.includes('密钥管理员不能直接推送')) {
-        message.error('请以省或市管理员身份操作');
-      } else {
-        message.error(raw);
-      }
+      message.error(raw);
     } finally {
       setSubmitting(false);
     }
@@ -94,7 +86,7 @@ export const CreateAccountModal: React.FC<Props> = ({
           取消
         </Button>,
         <Button key="submit" type="primary" loading={submitting} onClick={() => form.submit()}>
-          {submitting ? '上链中...' : '创建并上链'}
+          {submitting ? '创建中...' : '创建'}
         </Button>,
       ]}
       destroyOnClose
@@ -114,22 +106,13 @@ export const CreateAccountModal: React.FC<Props> = ({
             { required: true, message: '请输入账户名称' },
             { max: 30, message: '最多 30 个字' },
           ]}
-          extra="同一机构下账户名称不能重复。账户名称将作为链上派生多签地址的 name 参数。"
+          extra={'创建后账户状态为"未激活";需在账户列表中点"激活"按钮才会推链注册。'}
         >
           <Input
             placeholder="如:办案账户、工资账户、采购账户..."
             maxLength={30}
-            onChange={(e) => setInputName(e.target.value.trim())}
           />
         </Form.Item>
-        {previewAddress && (
-          <div style={{ marginTop: -8, marginBottom: 16 }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>派生地址：</Typography.Text>
-            <Typography.Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>
-              {previewAddress}
-            </Typography.Text>
-          </div>
-        )}
       </Form>
     </Modal>
   );

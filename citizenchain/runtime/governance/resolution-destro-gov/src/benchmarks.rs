@@ -80,9 +80,7 @@ mod benchmarks {
 
         for i in 0..5 {
             let voter = prc_admin::<T>(i);
-            assert!(
-                T::InternalVoteEngine::cast_internal_vote(voter, proposal_id, true).is_ok()
-            );
+            assert!(T::InternalVoteEngine::cast_internal_vote(voter, proposal_id, true).is_ok());
         }
 
         #[extrinsic_call]
@@ -113,9 +111,7 @@ mod benchmarks {
 
         for i in 0..6 {
             let voter = prc_admin::<T>(i);
-            assert!(
-                T::InternalVoteEngine::cast_internal_vote(voter, proposal_id, true).is_ok()
-            );
+            assert!(T::InternalVoteEngine::cast_internal_vote(voter, proposal_id, true).is_ok());
         }
 
         #[extrinsic_call]

@@ -1,18 +1,21 @@
 // 中文注释:私权机构详情页布局 — 顶部左右双板块 + 账户 + 资料库。
 //
-// 布局(2026-04-19 第三轮改造):
-//   顶部一整块 Card(标题 = 机构名称):
-//     ┌ 左 Col:SFID 信息(只读)───────────────┐  ┌ 右 Col:机构信息 ───────────────┐
-//     │ SFID / 省 / 市 / A3 / P1 / 机构代码 │  │ [右上:编辑 | 取消+保存]      │
-//     │ 创建时间 / 创建用户                  │  │ 机构名称 + 搜索查重图标       │
-//     │                                      │  │ 企业类型 Select(仅 SFR)       │
-//     └──────────────────────────────────────┘  └──────────────────────────────┘
+// 布局:
+//   顶部一整块 Card(标题 = 机构名称,编辑/取消/保存按钮在 Card extra 右上角):
+//     ┌ 左 Col:SFID 信息(只读)──────────────┐  ┌ 右 Col:机构信息 ──────────────┐
+//     │ SFID / 省 / 市 / A3 / P1 / 机构代码 │  │ 机构名称 + 搜索查重图标       │
+//     │ 创建时间 / 创建用户                  │  │ 企业类型 Select(仅 SFR)       │
+//     │                                      │  │ 所属法人 AutoComplete(仅 FFR) │
+//     └──────────────────────────────────────┘  └───────────────────────────────┘
 //
 // 右板块交互:
-//   默认态 = 只读(Descriptions 展示当前机构名 / 企业类型),右上角"编辑"按钮
-//   编辑态 = Form 可操作,右上角变成"取消" + "保存"
-//   机构名称右侧搜索图标:输入后点击查重;重名则禁止保存
-//   名称未变(与原值相同) → 视为已通过,不需再查重
+//   默认态 = 只读 Descriptions 展示,右上角显示"编辑"按钮
+//   编辑态 = Form 可操作,右上角切换为"取消" + "保存"
+//   机构名称右侧搜索图标:输入后点击查重;重名则禁止保存;名称未改动视为已通过
+//   FFR 所属法人:输入后点搜索图标触发模糊搜索(/institution/search-parents)
+//
+// 账户列表(AccountList)每家机构自带"主账户"/"费用账户"两条默认账户,
+// 创建时为 INACTIVE 状态,管理员显式"激活"才推链(见 AccountList 组件)。
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -28,7 +31,6 @@ import {
   Select,
   Space,
   Spin,
-  Switch,
   Typography,
   message,
 } from 'antd';
@@ -72,12 +74,7 @@ interface InfoFormValues {
   sub_type?: string;
   /** 非法人(FFR)所属法人 sfid_id */
   parent_sfid_id?: string;
-  /** 清算行开关(仅 SFR/JOINT_STOCK 或 FFR/挂 SFR·JOINT_STOCK 时展示) */
-  is_clearing_bank?: boolean;
 }
-
-/** 清算行默认账户名称(与后端 service::CLEARING_BANK_NAMES 对齐) */
-const CLEARING_BANK_ACCOUNT_NAMES = ['主账户', '费用账户'] as const;
 
 export const PrivateInstitutionLayout: React.FC<Props> = ({
   auth,
@@ -105,10 +102,6 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
   const isSFR = inst.a3 === 'SFR';
   const isFFR = inst.a3 === 'FFR';
 
-  // Form 内部实时值(用于编辑态联动"清算行"显示)
-  const watchedSubType = Form.useWatch('sub_type', form);
-  const watchedClearingBank = Form.useWatch('is_clearing_bank', form);
-
   const subTypeChoices = useMemo(
     () => (isSFR ? subTypeChoicesForP1(inst.p1) : []),
     [isSFR, inst.p1],
@@ -124,27 +117,6 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
   const [parentSearching, setParentSearching] = useState(false);
   // 当前选中的法人(用于展示已选项名称;首次进入若 inst.parent_sfid_id 有值,也要一次性拿到显示名)
   const [selectedParent, setSelectedParent] = useState<ParentInstitutionRow | null>(null);
-
-  // 清算行资格:SFR+JOINT_STOCK / FFR+父SFR+父JOINT_STOCK
-  const eligibleForClearingBank = (() => {
-    if (isSFR) {
-      const st = editing ? watchedSubType : inst.sub_type;
-      return st === 'JOINT_STOCK';
-    }
-    if (isFFR) {
-      return (
-        selectedParent?.a3 === 'SFR' &&
-        selectedParent?.sub_type === 'JOINT_STOCK'
-      );
-    }
-    return false;
-  })();
-
-  // 清算行账户存在性(用于控制 Switch 是否可关)
-  const clearingBankAccountsPresent = CLEARING_BANK_ACCOUNT_NAMES.filter((n) =>
-    accounts.some((a) => a.account_name === n),
-  );
-  const allClearingBankAccountsAbsent = clearingBankAccountsPresent.length === 0;
 
   // detail 变更 → 若有 parent_sfid_id 则拉一次展示名称
   useEffect(() => {
@@ -206,7 +178,6 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
       institution_name: inst.institution_name ?? '',
       sub_type: inst.sub_type ?? undefined,
       parent_sfid_id: inst.parent_sfid_id ?? undefined,
-      is_clearing_bank: inst.is_clearing_bank === true,
     });
   }, [inst.sfid_id, inst.institution_name, inst.sub_type]);
 
@@ -217,7 +188,6 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
       institution_name: inst.institution_name ?? '',
       sub_type: inst.sub_type ?? undefined,
       parent_sfid_id: inst.parent_sfid_id ?? undefined,
-      is_clearing_bank: inst.is_clearing_bank === true,
     });
     setCurrentName(inst.institution_name ?? '');
   };
@@ -229,7 +199,6 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
       institution_name: inst.institution_name ?? '',
       sub_type: inst.sub_type ?? undefined,
       parent_sfid_id: inst.parent_sfid_id ?? undefined,
-      is_clearing_bank: inst.is_clearing_bank === true,
     });
     setCurrentName(inst.institution_name ?? '');
   };
@@ -301,10 +270,6 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
         institution_name: name,
         sub_type: isSFR ? values.sub_type ?? null : null,
         parent_sfid_id: isFFR ? values.parent_sfid_id : undefined,
-        // 仅在资格满足时才把 is_clearing_bank 送到后端;否则 undefined 让后端忽略
-        is_clearing_bank: eligibleForClearingBank
-          ? values.is_clearing_bank === true
-          : undefined,
       });
       message.success('机构信息已保存');
       setEditing(false);
@@ -426,7 +391,6 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
                     institution_name: inst.institution_name ?? '',
                     sub_type: inst.sub_type ?? undefined,
                     parent_sfid_id: inst.parent_sfid_id ?? undefined,
-                    is_clearing_bank: inst.is_clearing_bank === true,
                   }}
                 >
                   <Form.Item
@@ -469,15 +433,10 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
                       label="所属法人"
                       name="parent_sfid_id"
                       rules={[{ required: true, message: '请选择所属法人机构' }]}
-                      extra={
-                        inst.is_clearing_bank
-                          ? '清算行开启期间不可修改所属法人,请先关闭清算行'
-                          : '输入 SFID 或机构名称后点击右侧搜索图标,从下拉结果中选择;必须是私法人(SFR)或公法人(GFR)'
-                      }
+                      extra="输入 SFID 或机构名称后点击右侧搜索图标,从下拉结果中选择;必须是私法人(SFR)或公法人(GFR)"
                     >
                       <AutoComplete
                         // 不提供 onSearch → 用户输入时不自动请求,仅点搜索图标触发
-                        disabled={inst.is_clearing_bank === true}
                         filterOption={false}
                         notFoundContent={null}
                         options={parentSearchOpts.map((r) => ({
@@ -521,40 +480,12 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
                       name="sub_type"
                       rules={[{ required: true, message: '请选择企业类型' }]}
                       extra={
-                        inst.is_clearing_bank
-                          ? '清算行开启期间不可修改企业类型,请先关闭清算行'
-                          : inst.p1 === '0'
-                            ? '当前 P1=非盈利,企业类型锁定为公益组织'
-                            : '当前 P1=盈利,可选四种企业类型'
+                        inst.p1 === '0'
+                          ? '当前 P1=非盈利,企业类型锁定为公益组织'
+                          : '当前 P1=盈利,可选四种企业类型'
                       }
                     >
-                      <Select
-                        options={subTypeChoices}
-                        placeholder="请选择企业类型"
-                        disabled={inst.is_clearing_bank === true}
-                      />
-                    </Form.Item>
-                  )}
-                  {eligibleForClearingBank && (
-                    <Form.Item
-                      label="清算行设置"
-                      name="is_clearing_bank"
-                      valuePropName="checked"
-                      extra={
-                        !watchedClearingBank
-                          ? '开启后自动创建"主账户"、"费用账户"并上链注册;地址由 (SFID + 账户名称) 派生'
-                          : allClearingBankAccountsAbsent
-                            ? '已开启,账户已全部删除,可关闭清算行'
-                            : `已开启;关闭前需链上注销并软删剩余账户:${clearingBankAccountsPresent.join(', ')}`
-                      }
-                    >
-                      <Switch
-                        disabled={
-                          inst.is_clearing_bank === true && !allClearingBankAccountsAbsent
-                        }
-                        checkedChildren="开启"
-                        unCheckedChildren="关闭"
-                      />
+                      <Select options={subTypeChoices} placeholder="请选择企业类型" />
                     </Form.Item>
                   )}
                 </Form>
@@ -598,15 +529,6 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
                       )}
                     </Descriptions.Item>
                   )}
-                  {eligibleForClearingBank && (
-                    <Descriptions.Item label="清算行设置">
-                      {inst.is_clearing_bank ? (
-                        <span style={{ color: '#52c41a' }}>已开启</span>
-                      ) : (
-                        <span style={{ color: '#999' }}>未开启</span>
-                      )}
-                    </Descriptions.Item>
-                  )}
                 </Descriptions>
               )}
           </Col>
@@ -632,10 +554,13 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
         style={{ marginBottom: 16 }}
       >
         <AccountList
+          auth={auth}
+          sfidId={inst.sfid_id}
           accounts={accounts}
           loading={loading}
           canDelete={canWrite}
           onDelete={onDeleteAccount}
+          onActivated={onReload}
         />
       </Card>
 

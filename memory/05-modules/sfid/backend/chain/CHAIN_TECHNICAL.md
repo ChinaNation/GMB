@@ -20,9 +20,9 @@
    - SFID 实际提供：`GET /api/v1/chain/voters/count` 返回人口快照签名；核心签名 payload 与链上 verifier 一致。
    - 对齐结论：已对齐；对链接口现固定返回 `genesis_hash`、`who`、`eligible_total`、`snapshot_nonce`、`signature`。
 4. 功能 4：机构 `sfid_id` 登记
-   - 链上需要：proof 型字段包 `("GMB_SFID_INSTITUTION_V2", genesis_hash, sfid_id, name, register_nonce)`，以及 extrinsic `register_sfid_institution(sfid_id, name, register_nonce, signature)`。V2 新增 `name` 参数（机构名称，BoundedVec<u8, 128>），纳入签名载荷防篡改。创建/注销多签账户时按 0.1%（最低 10 分）收取手续费，走 FeeRouter 分账。
+   - 链上需要：proof 型字段包 `(DUOQIAN_DOMAIN, OP_SIGN_INST, genesis_hash, sfid_id, name, register_nonce)`，以及 extrinsic `register_sfid_institution(sfid_id, name, register_nonce, signature)`。`name` 参数（机构名称，BoundedVec<u8, 128>）纳入签名载荷防篡改。创建/注销多签账户时按 0.1%（最低 10 分）收取手续费，走 FeeRouter 分账。
    - SFID 实际提供：`sheng-admins` 模块在机构扫码录入成功后，生成 `genesis_hash + sfid_id + name + register_nonce + signature`，并用这组字段调用链上登记入口，同时在响应中回写 proof 字段与 `tx_hash/block_number`。
-   - 对齐结论：已对齐（V2 升级待下次 runtime 升级生效）。
+   - 对齐结论：已对齐（2026-04-20 统一 DUOQIAN_V1 + op_tag 方案）。
 5. 功能 5：SFID 验签主备账户管理
    - 链上需要：创世三账户 `main + backup_1 + backup_2`，以及标准 extrinsic `rotate_sfid_keys(new_backup)`，要求由备用账户发起。
    - SFID 实际提供：`key-admins` 模块以链上三把公钥为唯一真相；`rotate/challenge` 与 `rotate/commit` 都强制发起者是 `backup_1/backup_2`，若服务端代提链上交易，则必须具备所选备用账户的 signer 能力。
@@ -67,7 +67,7 @@
 ## 4. 功能 1/2/3 对齐契约（Runtime 口径）
 
 ### 4.1 功能 1：SFID 绑定验签
-1. 固定 payload：`("GMB_SFID_BIND_V3", genesis_hash, who, binding_id, bind_nonce)`。
+1. 固定 payload：`(DUOQIAN_DOMAIN, OP_SIGN_BIND, genesis_hash, who, binding_id, bind_nonce)`。
 2. `genesis_hash` 对应 Runtime `block_hash(0)`。
 3. SFID 对链输出字段（链上消费）：`genesis_hash`、`who`、`binding_id`、`bind_nonce`、`signature`。
 4. 链上交易参数更新为：`bind_sfid(origin, credential)`；Runtime 直接使用 `credential.binding_id` 绑定，不再消费旧版明文与过期字段。
@@ -78,13 +78,13 @@
 9. `bind_result.signature` 为 Runtime 凭证签名；`sfid_signature` 不再对链接口暴露。
 
 ### 4.2 功能 2：投票凭证验签与防重放
-1. 固定 payload：`("GMB_SFID_VOTE_V3", genesis_hash, who, binding_id, proposal_id, vote_nonce)`。
+1. 固定 payload：`(DUOQIAN_DOMAIN, OP_SIGN_VOTE, genesis_hash, who, binding_id, proposal_id, vote_nonce)`。
 2. SFID 对链输出字段：`genesis_hash`、`who`、`binding_id`、`proposal_id`、`vote_nonce`、`signature`。
 3. 链上防重放键固定为：`(proposal_id, binding_id, hash(vote_nonce))`。
 4. `vote_nonce` 每次新生成，严禁复用。
 
 ### 4.3 功能 3：人口快照签名
-1. 固定 payload：`("GMB_SFID_POPULATION_V3", genesis_hash, who, eligible_total, snapshot_nonce)`。
+1. 固定 payload：`(DUOQIAN_DOMAIN, OP_SIGN_POP, genesis_hash, who, eligible_total, snapshot_nonce)`。
 2. `voters/count` 必须接收 `who(account)` 并进入签名 payload，不能仅对 `eligible_total` 签名。
 3. SFID 对链输出字段：`genesis_hash`、`who`、`eligible_total`、`snapshot_nonce`、`signature`。
 4. 人口快照对链接口已收口为最小字段集，不再并行返回旧版兼容字段。
@@ -94,9 +94,9 @@
 2. 签名密钥缓存中的 seed 必须使用可清零敏感类型存储（`SensitiveSeed`），禁止以普通 `String` 持有。
 3. `runtime_meta` 不再持久化或恢复活动主私钥 / 主公钥 / 已知 seed 映射，防止数据库旧状态覆盖部署环境。
 
-### 4.5 功能 4：机构登记签名（INSTITUTION_V2）
-1. 固定 payload：`("GMB_SFID_INSTITUTION_V2", genesis_hash, sfid_id, name, register_nonce)`。
-2. V2 相对 V1 新增 `name`（机构名称）字段，用于链上存储展示。
+### 4.5 功能 4：机构登记签名
+1. 固定 payload：`(DUOQIAN_DOMAIN, OP_SIGN_INST, genesis_hash, sfid_id, name, register_nonce)`。
+2. 签名载荷包含 `name`（机构名称）字段，用于链上存储展示并防篡改。
 3. SFID 对链输出字段：`genesis_hash`、`sfid_id`、`name`、`register_nonce`、`signature`。
 4. 链上交易参数：`register_sfid_institution(sfid_id, name, register_nonce, signature)`。
 5. `register_nonce` 每次新生成（UUID），链上按 `hash(register_nonce)` 去重。

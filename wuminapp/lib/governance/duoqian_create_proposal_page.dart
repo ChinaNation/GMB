@@ -38,8 +38,7 @@ class DuoqianCreateProposalPage extends StatefulWidget {
       _DuoqianCreateProposalPageState();
 }
 
-class _DuoqianCreateProposalPageState
-    extends State<DuoqianCreateProposalPage> {
+class _DuoqianCreateProposalPageState extends State<DuoqianCreateProposalPage> {
   final _sfidIdController = TextEditingController();
   final _amountController = TextEditingController();
   final _thresholdController = TextEditingController();
@@ -55,10 +54,10 @@ class _DuoqianCreateProposalPageState
   String? _chainProgressError;
 
   // ── 机构账户列表（从 SFID 后端查询） ──
-  String? _institutionName;                     // 查到的机构名称
+  String? _institutionName; // 查到的机构名称
   List<InstitutionAccountEntry> _accounts = []; // 机构下所有账户
-  InstitutionAccountEntry? _selectedAccount;    // 用户选中的账户
-  bool _verifyingChain = false;                 // 选中账户后链上验证中
+  InstitutionAccountEntry? _selectedAccount; // 用户选中的账户
+  bool _verifyingChain = false; // 选中账户后链上验证中
 
   // 管理员列表（公钥 hex，不含 0x）
   final List<String> _adminPubkeys = [];
@@ -69,7 +68,8 @@ class _DuoqianCreateProposalPageState
   @override
   void initState() {
     super.initState();
-    debugPrint('[DuoqianCreate-Diag] initState: adminWallets.length=${widget.adminWallets.length}');
+    debugPrint(
+        '[DuoqianCreate-Diag] initState: adminWallets.length=${widget.adminWallets.length}');
     if (widget.adminWallets.isNotEmpty) {
       final w = widget.adminWallets.first;
       debugPrint('[DuoqianCreate-Diag] first wallet: name=${w.walletName} '
@@ -78,7 +78,8 @@ class _DuoqianCreateProposalPageState
     }
     _selectedWallet = widget.adminWallets.first;
     _syncCreatorAdmin(widget.adminWallets.first);
-    debugPrint('[DuoqianCreate-Diag] after sync: _adminPubkeys=${_adminPubkeys.length} '
+    debugPrint(
+        '[DuoqianCreate-Diag] after sync: _adminPubkeys=${_adminPubkeys.length} '
         'creator=${_creatorPubkey?.substring(0, 8)}...');
   }
 
@@ -161,10 +162,10 @@ class _DuoqianCreateProposalPageState
       _sfidError = null;
     });
 
-    // 如果后端已返回 duoqian_address 且状态 Confirmed，直接使用
+    // 中文注释:优先信任 SFID 返回的已注册地址，避免重复打一遍链上 DoubleMap。
     if (account.duoqianAddress != null &&
         account.duoqianAddress!.isNotEmpty &&
-        account.chainStatus == 'Confirmed') {
+        account.isRegistered) {
       setState(() {
         _registeredAddress = account.duoqianAddress;
         _verifyingChain = false;
@@ -176,9 +177,10 @@ class _DuoqianCreateProposalPageState
     try {
       final sfidText = _sfidIdController.text.trim();
       final sfidBytes = Uint8List.fromList(utf8.encode(sfidText));
-      final nameBytes = Uint8List.fromList(utf8.encode(account.accountName));
+      final accountNameBytes =
+          Uint8List.fromList(utf8.encode(account.accountName));
       final address = await _manageService.fetchSfidRegisteredAddress(
-          sfidBytes, nameBytes);
+          sfidBytes, accountNameBytes);
       if (!mounted) return;
 
       if (address == null) {
@@ -206,10 +208,11 @@ class _DuoqianCreateProposalPageState
   Future<void> _addAdminByQr() async {
     final result = await Navigator.push<String>(
       context,
-      MaterialPageRoute(builder: (_) => const QrScanPage(
-        mode: QrScanMode.raw,
-        customTitle: '扫码添加管理员',
-      )),
+      MaterialPageRoute(
+          builder: (_) => const QrScanPage(
+                mode: QrScanMode.raw,
+                customTitle: '扫码添加管理员',
+              )),
     );
     if (result == null || !mounted) return;
 
@@ -330,7 +333,8 @@ class _DuoqianCreateProposalPageState
 
       Future<Uint8List> signCallback(Uint8List payload) async {
         if (hotWalletManager != null) {
-          return await hotWalletManager.signWithWalletNoAuth(wallet.walletIndex, payload);
+          return await hotWalletManager.signWithWalletNoAuth(
+              wallet.walletIndex, payload);
         }
         // 冷钱包 QR 签名
         final qrSigner = QrSigner();
@@ -350,8 +354,7 @@ class _DuoqianCreateProposalPageState
               SignDisplayField(
                   label: '账户名称', value: _selectedAccount!.accountName),
               SignDisplayField(
-                  label: '管理员数量',
-                  value: _adminPubkeys.length.toString()),
+                  label: '管理员数量', value: _adminPubkeys.length.toString()),
               SignDisplayField(
                   label: '阈值', value: '$threshold/${_adminPubkeys.length}'),
               SignDisplayField(
@@ -375,11 +378,11 @@ class _DuoqianCreateProposalPageState
         return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
-      final nameBytes =
+      final accountNameBytes =
           Uint8List.fromList(utf8.encode(_selectedAccount!.accountName));
       final result = await _manageService.submitProposeCreate(
         sfidId: sfidBytes,
-        name: nameBytes,
+        accountName: accountNameBytes,
         adminCount: _adminPubkeys.length,
         adminPubkeys: adminPubkeyBytes,
         threshold: threshold,
@@ -445,7 +448,8 @@ class _DuoqianCreateProposalPageState
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('[DuoqianCreate-Diag] build START: _adminPubkeys=${_adminPubkeys.length} '
+    debugPrint(
+        '[DuoqianCreate-Diag] build START: _adminPubkeys=${_adminPubkeys.length} '
         '_registeredAddress=${_registeredAddress != null} _checkingSfid=$_checkingSfid');
     return Scaffold(
       backgroundColor: Colors.white,
@@ -488,8 +492,8 @@ class _DuoqianCreateProposalPageState
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
                   ),
                 ),
               ),
@@ -524,11 +528,13 @@ class _DuoqianCreateProposalPageState
               decoration: BoxDecoration(
                 color: AppTheme.primaryDark.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.primaryDark.withValues(alpha: 0.2)),
+                border: Border.all(
+                    color: AppTheme.primaryDark.withValues(alpha: 0.2)),
               ),
               child: Text(
                 '机构名称：$_institutionName',
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
             const SizedBox(height: 12),
@@ -550,8 +556,10 @@ class _DuoqianCreateProposalPageState
                 if (a != null) _onAccountSelected(a);
               },
               decoration: InputDecoration(
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
             ),
           ],
@@ -562,11 +570,13 @@ class _DuoqianCreateProposalPageState
             const Row(
               children: [
                 SizedBox(
-                  width: 14, height: 14,
+                  width: 14,
+                  height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 SizedBox(width: 8),
-                Text('链上验证中...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                Text('链上验证中...',
+                    style: TextStyle(fontSize: 12, color: Colors.grey)),
               ],
             ),
           ],
@@ -579,7 +589,8 @@ class _DuoqianCreateProposalPageState
               decoration: BoxDecoration(
                 color: AppTheme.success.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -591,7 +602,8 @@ class _DuoqianCreateProposalPageState
                   const SizedBox(height: 4),
                   Text(
                     _hexToSs58(_registeredAddress!),
-                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                    style:
+                        const TextStyle(fontSize: 12, fontFamily: 'monospace'),
                   ),
                 ],
               ),
@@ -625,16 +637,23 @@ class _DuoqianCreateProposalPageState
               ),
               title: Row(
                 children: [
-                  Flexible(child: Text(_truncateAddress(ss58), style: const TextStyle(fontSize: 13))),
+                  Flexible(
+                      child: Text(_truncateAddress(ss58),
+                          style: const TextStyle(fontSize: 13))),
                   if (isCreator) ...[
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: AppTheme.success.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text('创建人', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.success)),
+                      child: const Text('创建人',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.success)),
                     ),
                   ],
                 ],
@@ -642,7 +661,8 @@ class _DuoqianCreateProposalPageState
               trailing: isCreator
                   ? null
                   : IconButton(
-                      icon: const Icon(Icons.close, size: 18, color: AppTheme.danger),
+                      icon: const Icon(Icons.close,
+                          size: 18, color: AppTheme.danger),
                       onPressed: () => _removeAdmin(index),
                     ),
             );
@@ -653,7 +673,8 @@ class _DuoqianCreateProposalPageState
             label: const Text('扫码添加管理员'),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppTheme.primaryDark,
-              side: BorderSide(color: AppTheme.primaryDark.withValues(alpha: 0.3)),
+              side: BorderSide(
+                  color: AppTheme.primaryDark.withValues(alpha: 0.3)),
             ),
           ),
 
@@ -710,11 +731,16 @@ class _DuoqianCreateProposalPageState
                 );
               }).toList(),
               onChanged: (w) {
-                if (w != null) setState(() { _selectedWallet = w; _syncCreatorAdmin(w); });
+                if (w != null) {
+                  setState(() {
+                    _selectedWallet = w;
+                    _syncCreatorAdmin(w);
+                  });
+                }
               },
               decoration: InputDecoration(
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),

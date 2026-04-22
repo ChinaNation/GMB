@@ -84,7 +84,7 @@
 
 3. 技术文档明显过期
    - 文档仍写 `register_sfid_institution` 只接受 `sfid_id + register_nonce + signature`
-   - 文档仍写验签 payload 是 `GMB_SFID_INSTITUTION_V1`
+   - 文档仍写验签 payload 是 `GMB_SFID_INSTITUTION_V1`（该域名已于 2026-04-20 彻底退役，改用 `(DUOQIAN_DOMAIN, OP_SIGN_INST, ...)`）
    - 文档仍写“当前代码实际提供 5 个公开入口”，漏掉 `propose_create_personal`
    - 文档仍写 `AddressRegisteredSfid.nonce += 1`，但代码已明确不再更新该字段
    - 位置：

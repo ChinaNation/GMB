@@ -78,7 +78,9 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
     //   the compatible custom types.
-    spec_version: 8,
+    // Step 2b-iv-b 彻底清理老省储行清算 Call/Storage/Events/Errors,pallet
+    // storage_version 从 1 → 2;dev 链统一 setCode 升级。
+    spec_version: 9,
     impl_version: 1,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 2,
@@ -162,7 +164,7 @@ pub type BlockId = generic::BlockId<Block>;
 pub type TxExtension = (
     frame_system::AuthorizeCall<Runtime>,
     frame_system::CheckNonZeroSender<Runtime>,
-    CheckNonKeylessSender,
+    CheckNonStakeSender,
     frame_system::CheckSpecVersion<Runtime>,
     frame_system::CheckTxVersion<Runtime>,
     frame_system::CheckGenesis<Runtime>,
@@ -175,14 +177,14 @@ pub type TxExtension = (
 );
 
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, Eq, PartialEq, TypeInfo, Debug)]
-pub struct CheckNonKeylessSender;
+pub struct CheckNonStakeSender;
 
-impl TransactionExtension<RuntimeCall> for CheckNonKeylessSender
+impl TransactionExtension<RuntimeCall> for CheckNonStakeSender
 where
     RuntimeCall: Dispatchable<Info = DispatchInfo>,
     <RuntimeCall as Dispatchable>::RuntimeOrigin: AsSystemOriginSigner<AccountId> + Clone,
 {
-    const IDENTIFIER: &'static str = "CheckNonKeylessSender";
+    const IDENTIFIER: &'static str = "CheckNonStakeSender";
     type Implicit = ();
     type Val = ();
     type Pre = ();
@@ -202,7 +204,7 @@ where
         _source: TransactionSource,
     ) -> ValidateResult<Self::Val, RuntimeCall> {
         if let Some(who) = origin.as_system_origin_signer() {
-            if configs::is_keyless_account(&who) {
+            if configs::is_stake_account(&who) {
                 return Err(InvalidTransaction::Call.into());
             }
         }
@@ -329,7 +331,7 @@ mod runtime {
     #[runtime::pallet_index(16)]
     pub type GrandpaKeyGov = grandpa_key_gov;
 
-    // 多签交易模块：duoqian_address 创建/注销与半数签名校验
+    // 多签交易模块：duoqian_address 创建/注销与半数签名校验（注册型多签，非宪法保留主账户）
     #[runtime::pallet_index(17)]
     pub type DuoqianManagePow = duoqian_manage_pow;
 
@@ -337,7 +339,7 @@ mod runtime {
     #[runtime::pallet_index(18)]
     pub type PowDifficulty = pow_difficulty_module;
 
-    // 机构多签名地址转账模块：治理机构内部投票通过后从 duoqian_address 转账
+    // 机构多签名地址转账模块：治理机构内部投票通过后从 main_address 转账（宪法保留主账户，同时兼容注册型 duoqian_address）
     #[runtime::pallet_index(19)]
     pub type DuoqianTransferPow = duoqian_transfer_pow;
 

@@ -577,7 +577,10 @@ mod tests {
         let raw = voting_engine_system::Pallet::<Test>::get_proposal_data(proposal_id)
             .expect("proposal data should exist");
         let tag = crate::MODULE_TAG;
-        assert!(raw.len() >= tag.len() && &raw[..tag.len()] == tag, "MODULE_TAG mismatch");
+        assert!(
+            raw.len() >= tag.len() && &raw[..tag.len()] == tag,
+            "MODULE_TAG mismatch"
+        );
         pallet::Proposal::<Test>::decode(&mut &raw[tag.len()..]).expect("should decode proposal")
     }
 
@@ -812,7 +815,10 @@ mod tests {
                 code_ok(),
             ));
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
-            assert!(code_executed, "PRC proposer should also trigger runtime code executor");
+            assert!(
+                code_executed,
+                "PRC proposer should also trigger runtime code executor"
+            );
         });
     }
 

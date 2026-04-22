@@ -15,9 +15,21 @@ use crate::sfid::{
     InstitutionCategory, InstitutionCode, PUBLIC_SECURITY_INSTITUTION_NAME,
 };
 
-/// 清算行设置启用时自动创建的 2 个默认账户 name(链上 extrinsic 的 name 参数)。
-/// 链上地址 = blake2_256("DUOQIAN_SFID_V1" + SS58_PREFIX_LE + sfid_id + name)。
-pub const CLEARING_BANK_NAMES: &[&str] = &["主账户", "费用账户"];
+/// 所有机构创建时自动生成的 2 个默认账户 `account_name`。
+///
+/// (2026-04-21 统一两步模式) sfid 后端侧只认 `account_name` 字符串,
+/// 链端按 `account_name` 值翻译到对应 `InstitutionAccountRole`:
+/// - `"主账户"`  → `Role::Main`,preimage 不含 name
+/// - `"费用账户"` → `Role::Fee`, preimage 不含 name
+/// - 其他任意非空字符串 → `Role::Named(name)`,preimage 含 name
+///
+/// 派生细节完全是链端内部关注点(见 `citizenchain/runtime/transaction/
+/// duoqian-manage-pow/src/lib.rs` 的 `InstitutionAccountRole` /
+/// `derive_institution_address`)。sfid 后端只负责把字符串原样传过去。
+///
+/// **两个保留名**:`delete_account` 对这两个 `account_name` 直接 409 拒绝,
+/// 保证每家机构至少始终挂着这两个默认账户记录。
+pub const DEFAULT_ACCOUNT_NAMES: &[&str] = &["主账户", "费用账户"];
 
 pub const MAX_ACCOUNT_NAME_CHARS: usize = 30;
 pub const MAX_ACCOUNT_NAME_BYTES: usize = 128;
@@ -331,12 +343,13 @@ pub fn reconcile_public_security_for_province(
                 institution_code: "ZF".to_string(),
                 sub_type: None,
                 parent_sfid_id: None,
-                is_clearing_bank: false,
                 sfid_finalized: false,
                 created_by: actor.to_string(),
                 created_at: Utc::now(),
             };
-            store.multisig_institutions.insert(sfid_id, inst);
+            store.multisig_institutions.insert(sfid_id.clone(), inst);
+            // 2026-04-21:公安局 reconcile 同步插入 2 条默认 Inactive 账户
+            insert_default_accounts_into_legacy(store, &sfid_id, actor);
             report.inserted += 1;
         }
     }
@@ -373,6 +386,41 @@ pub fn reconcile_public_security_for_province(
         .count();
 
     report
+}
+
+/// 给指定机构写入 2 条默认 Inactive 账户(legacy store)。
+///
+/// 幂等:已存在账户不覆盖;仅在该 `(sfid_id, account_name)` 缺失时补齐。
+/// 只写 legacy store(reconcile 本身就持 legacy 写锁);sharded_store 的同步由
+/// `sync_legacy_to_sharded` 启动时一次性对齐,或在 handler 层二次写入。
+pub fn insert_default_accounts_into_legacy(
+    store: &mut Store,
+    sfid_id: &str,
+    actor: &str,
+) {
+    use crate::institutions::derive::derive_duoqian_address;
+    use crate::institutions::model::{account_key_to_string, MultisigAccount};
+    use crate::models::MultisigChainStatus;
+    let now = Utc::now();
+    for name in DEFAULT_ACCOUNT_NAMES {
+        let key = account_key_to_string(sfid_id, name);
+        // DUOQIAN_V1 本地派生(主账户→0x00 / 费用账户→0x01);公安局 SFID 固定,
+        // 账户地址在 reconcile 时即可完全确定,无需等激活上链。
+        let addr = derive_duoqian_address(sfid_id, name);
+        store
+            .multisig_accounts
+            .entry(key)
+            .or_insert_with(|| MultisigAccount {
+                sfid_id: sfid_id.to_string(),
+                account_name: (*name).to_string(),
+                duoqian_address: addr,
+                chain_status: MultisigChainStatus::Inactive,
+                chain_tx_hash: None,
+                chain_block_number: None,
+                created_by: actor.to_string(),
+                created_at: now,
+            });
+    }
 }
 
 /// 老记录 backfill:扫 multisig_institutions,给 city_code 为空的公安局机构

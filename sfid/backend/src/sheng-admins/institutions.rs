@@ -1523,11 +1523,11 @@ pub(crate) async fn submit_register_sfid_institution_extrinsic(
         format!("register_sfid_institution included failed: parse block number failed: {e}")
     })?;
 
-    // 从链上 SfidRegisteredAddress(sfid_id, name) 读取派生的多签地址
+    // 从链上 SfidRegisteredAddress(sfid_id, account_name) 读取派生的多签地址
     let duoqian_address = {
         let sfid_key = subxt::dynamic::Value::from_bytes(sfid_id.as_bytes());
-        let name_key = subxt::dynamic::Value::from_bytes(credential.name.as_bytes());
-        let query = subxt::dynamic::storage("DuoqianManagePow", "SfidRegisteredAddress", vec![sfid_key, name_key]);
+        let account_name_key = subxt::dynamic::Value::from_bytes(credential.name.as_bytes());
+        let query = subxt::dynamic::storage("DuoqianManagePow", "SfidRegisteredAddress", vec![sfid_key, account_name_key]);
         match client.storage().at(block_hash).fetch(&query).await {
             Ok(Some(val)) => {
                 // AccountId = 32 bytes,编码后取 inner bytes

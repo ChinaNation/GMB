@@ -23,7 +23,7 @@ fn prc_recipients<T: pallet::Config>() -> BoundedVec<T::AccountId, T::MaxAllocat
     let recipients: Vec<T::AccountId> = CHINA_CB
         .iter()
         .skip(1)
-        .map(|node| decode_account::<T>(node.duoqian_address))
+        .map(|node| decode_account::<T>(node.main_address))
         .collect();
     recipients
         .try_into()
@@ -45,7 +45,7 @@ fn reason_max<T: pallet::Config>() -> pallet::ReasonOf<T> {
 }
 
 fn one_allocation<T: pallet::Config>() -> pallet::AllocationOf<T> {
-    let recipient = decode_account::<T>(CHINA_CB[1].duoqian_address);
+    let recipient = decode_account::<T>(CHINA_CB[1].main_address);
     let alloc = vec![pallet::RecipientAmount {
         recipient,
         amount: 1_000_000u128,

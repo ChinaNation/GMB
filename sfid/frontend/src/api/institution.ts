@@ -12,7 +12,20 @@ export const InstitutionCategoryLabel: Record<InstitutionCategory, string> = {
   PRIVATE_INSTITUTION: '私权机构',
 };
 
-export type MultisigChainStatus = 'PENDING' | 'REGISTERED' | 'FAILED';
+/**
+ * 多签账户链上状态。
+ *
+ * 流转(2026-04-21 统一两步激活模式):
+ *   INACTIVE  ──点"激活"──▶  PENDING  ──成功──▶  REGISTERED
+ *                                     └──失败──▶  FAILED ──点"重试激活"──▶  PENDING
+ *
+ * - `INACTIVE`:本地已登记账户,未推链。所有账户(含机构创建时自动生成的 2 条默认账户、
+ *   管理员手工创建的其他账户)默认都是这个状态。
+ * - `PENDING`:激活请求已提交,正在上链确认。
+ * - `REGISTERED`:链上已注册,`duoqian_address` + `chain_tx_hash` 已填。
+ * - `FAILED`:上链失败,可点"重试激活"重推。
+ */
+export type MultisigChainStatus = 'INACTIVE' | 'PENDING' | 'REGISTERED' | 'FAILED';
 
 export interface MultisigInstitution {
   sfid_id: string;
@@ -31,8 +44,6 @@ export interface MultisigInstitution {
   sub_type?: string | null;
   /** 所属法人 sfid_id(仅 A3=FFR 非法人必填;指向 SFR/GFR) */
   parent_sfid_id?: string | null;
-  /** 清算行设置:SFR/JOINT_STOCK 或 FFR 挂靠此类 SFR 时可开启;开启则创建主账户/费用账户上链 */
-  is_clearing_bank?: boolean;
   created_by: string;
   created_at: string;
 }
@@ -68,7 +79,6 @@ export interface InstitutionListRow {
   institution_code: string;
   sub_type?: string | null;
   parent_sfid_id?: string | null;
-  is_clearing_bank?: boolean;
   account_count: number;
   created_at: string;
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users);未命中 null */
@@ -135,8 +145,6 @@ export interface UpdateInstitutionInput {
   sub_type?: string | null;
   /** 所属法人 sfid_id(仅 FFR;传空串后端会拒) */
   parent_sfid_id?: string;
-  /** 清算行开关:true=开启(创建主账户/费用账户上链);false=关闭(前置:两账户已软删) */
-  is_clearing_bank?: boolean;
 }
 
 /** 法人机构搜索结果项(FFR 详情页"所属法人"选择器用) */
@@ -202,7 +210,9 @@ export async function createInstitution(
 }
 
 /**
- * 在机构下创建账户并上链。同一 sfid_id 下 account_name 必须唯一(后端硬校验)。
+ * 在机构下创建账户(**只登记本地 Inactive,不触链**)。
+ * 2026-04-21 统一两步模式:创建后需在账户列表点"激活"按钮才推链注册。
+ * 同一 sfid_id 下 account_name 必须唯一(后端硬校验)。
  */
 export async function createAccount(
   auth: AdminAuth,
@@ -217,6 +227,23 @@ export async function createAccount(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ account_name: accountName }),
     }
+  );
+}
+
+/**
+ * 激活账户(推链注册)。
+ * 允许从 INACTIVE / FAILED 触发;PENDING / REGISTERED 会被后端拒绝。
+ * 链上派生公式由链端按 account_name 路由到 Role::Main / Role::Fee / Role::Named。
+ */
+export async function activateAccount(
+  auth: AdminAuth,
+  sfidId: string,
+  accountName: string,
+): Promise<CreateAccountOutput> {
+  return adminRequest<CreateAccountOutput>(
+    `/api/v1/institution/${encodeURIComponent(sfidId)}/account/${encodeURIComponent(accountName)}/activate`,
+    auth,
+    { method: 'POST' },
   );
 }
 

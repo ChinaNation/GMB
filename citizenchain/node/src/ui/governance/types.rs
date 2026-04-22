@@ -46,9 +46,9 @@ pub struct InstitutionDetail {
     pub org_type: u8,
     /// 机构类型显示标签。
     pub org_type_label: String,
-    /// 机构多签地址（SS58 格式）。
-    pub duoqian_address: String,
-    /// 多签账户余额（分），节点未运行时为 null。
+    /// 主账户地址 hex，由前端再转成 SS58 显示。
+    pub main_address: String,
+    /// 主账户链上余额（分），节点未运行时为 null。
     pub balance_fen: Option<String>,
     /// 管理员列表（含公钥和链上余额），节点未运行时为空。
     pub admins: Vec<AdminInfo>,
@@ -80,6 +80,28 @@ pub struct InstitutionDetail {
     pub warning: Option<String>,
 }
 
+/// 治理详情页余额更新事件，仅覆盖链上金额和告警，不改页面结构。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstitutionBalanceUpdate {
+    /// 链上身份标识，用于前端过滤当前页面事件。
+    pub shenfen_id: String,
+    /// 主账户链上余额（分）。
+    pub balance_fen: Option<String>,
+    /// 永久质押账户链上余额（分，仅 PRB）。
+    pub staking_balance_fen: Option<String>,
+    /// 费用账户链上余额（分，仅 PRB）。
+    pub fee_balance_fen: Option<String>,
+    /// 省储会费用账户链上余额（分，仅 PRC）。
+    pub cb_fee_balance_fen: Option<String>,
+    /// 国储会费用账户链上余额（分，仅 NRC）。
+    pub nrc_fee_balance_fen: Option<String>,
+    /// 国储会安全基金账户链上余额（分，仅 NRC）。
+    pub nrc_anquan_balance_fen: Option<String>,
+    /// 链上查询告警。
+    pub warning: Option<String>,
+}
+
 /// 机构列表项，用于治理首页机构列表。
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,7 +110,8 @@ pub struct InstitutionListItem {
     pub shenfen_id: String,
     pub org_type: u8,
     pub org_type_label: String,
-    pub duoqian_address: String,
+    /// 主账户地址 hex，由前端转成 SS58 显示。
+    pub main_address: String,
 }
 
 /// 治理首页聚合数据。

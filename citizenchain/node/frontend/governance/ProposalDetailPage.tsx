@@ -164,7 +164,6 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
           proposalKind={meta.kind}
           adminWallets={[votingWallet]}
           shenfenId={shenfenId}
-          useRateVote={!!info.feeRateDetail}
           useSafetyFundVote={!!info.safetyFundDetail}
           useSweepVote={!!info.sweepDetail}
           onClose={() => setVotingWallet(null)}
@@ -247,19 +246,6 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
             <div className="detail-row">
               <span className="detail-label">提案人</span>
               <code className="detail-value">{hexToSs58(info.runtimeUpgradeDetail.proposerHex)}</code>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 费率设置提案详情 */}
-      {info.feeRateDetail && (
-        <div className="institution-info-section">
-          <h3>费率设置详情</h3>
-          <div className="proposal-detail-table">
-            <div className="detail-row">
-              <span className="detail-label">新费率</span>
-              <span className="detail-value">{info.feeRateDetail.newRateBp} bp ({(info.feeRateDetail.newRateBp / 100).toFixed(2)}%)</span>
             </div>
           </div>
         </div>

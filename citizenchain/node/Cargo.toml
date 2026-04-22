@@ -86,6 +86,11 @@ pow-difficulty-module = { path = "../runtime/otherpallet/pow-difficulty-module",
 genesis-pallet = { path = "../runtime/genesis", default-features = true }
 fullnode-pow-reward = { path = "../runtime/issuance/fullnode-pow-reward", default-features = true }
 onchain-transaction-pow = { path = "../runtime/transaction/onchain-transaction-pow", default-features = true }
+# 扫码支付 Step 2b-ii-β-2-a 新增:node 端 pool_submitter 需要直接 use
+# offchain-transaction-pos 的 batch_item / pallet::Call 类型构造 extrinsic。
+offchain-transaction-pos = { path = "../runtime/transaction/offchain-transaction-pos", default-features = true }
+frame-support = { workspace = true, default-features = true }
+frame-system-rpc-runtime-api = { workspace = true, default-features = true }
 
 # 桌面 GUI（Tauri）
 tauri = { version = "2", features = [] }

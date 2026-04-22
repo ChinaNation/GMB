@@ -123,7 +123,7 @@ pub fn create_benchmark_extrinsic(
     let tx_ext: runtime::TxExtension = (
         frame_system::AuthorizeCall::<runtime::Runtime>::new(),
         frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
-        runtime::CheckNonKeylessSender,
+        runtime::CheckNonStakeSender,
         frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
         frame_system::CheckTxVersion::<runtime::Runtime>::new(),
         frame_system::CheckGenesis::<runtime::Runtime>::new(),

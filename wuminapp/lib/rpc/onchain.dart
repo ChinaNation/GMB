@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart'
-    show ExtrinsicPayload, Hasher, SignatureType, SigningPayload;
+    show ExtrinsicPayload, SignatureType, SigningPayload;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
@@ -32,12 +32,6 @@ class OnchainRpc {
 
   /// transfer_keep_alive call index（标准 pallet_balances）。
   static const _transferKeepAliveCallIndex = 3;
-
-  /// OffchainTransactionPos pallet index。
-  static const _offchainTransactionPosPalletIndex = 21;
-
-  /// bind_clearing_institution call index。
-  static const _bindClearingInstitutionCallIndex = 9;
 
   // ──── 公开方法 ────
 
@@ -214,106 +208,6 @@ class OnchainRpc {
     return feeFen.toDouble() / 100.0;
   }
 
-  // ──── 绑定清算行 ────
-
-  /// 执行 OffchainTransactionPos::bind_clearing_institution。
-  ///
-  /// [fromAddress] 用户 SS58 地址
-  /// [signerPubkey] 用户公钥 32 字节
-  /// [shenfenId] 省储行 shenfen_id 字符串
-  /// [sign] 签名回调
-  ///
-  /// 返回交易哈希 hex 和 nonce。
-  Future<({String txHash, int usedNonce})> bindClearingInstitution({
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required String shenfenId,
-    required Future<Uint8List> Function(Uint8List payload) sign,
-  }) async {
-    final metadata = await _rpc.fetchMetadata();
-    final genesisHash = await _rpc.fetchGenesisHash();
-    final registry = metadata.chainInfo.scaleCodec.registry;
-
-    final results = await Future.wait([
-      _rpc.fetchRuntimeVersion(),
-      NonceManager.instance.getNextNonce(
-        address: fromAddress,
-        fetchChainNonce: _rpc.fetchNonce,
-      ),
-      _rpc.fetchLatestBlock(),
-    ]);
-    final runtimeVersion = results[0] as dynamic;
-    final nonce = results[1] as int;
-    final latestBlock =
-        results[2] as ({Uint8List blockHash, int blockNumber});
-
-    final callData = _buildBindClearingCall(shenfenId);
-
-    final signingPayload = SigningPayload(
-      method: callData,
-      specVersion: runtimeVersion.specVersion,
-      transactionVersion: runtimeVersion.transactionVersion,
-      genesisHash: '0x${_hexEncode(genesisHash)}',
-      blockHash: '0x${_hexEncode(latestBlock.blockHash)}',
-      blockNumber: latestBlock.blockNumber,
-      eraPeriod: _eraPeriod,
-      nonce: nonce,
-      tip: 0,
-    );
-    final payloadBytes = signingPayload.encode(registry);
-    final signature = await sign(payloadBytes);
-
-    final extrinsicPayload = ExtrinsicPayload(
-      signer: signerPubkey,
-      method: callData,
-      signature: signature,
-      eraPeriod: _eraPeriod,
-      blockNumber: latestBlock.blockNumber,
-      nonce: nonce,
-      tip: 0,
-    );
-    final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
-
-    try {
-      final txHash = await _rpc.submitExtrinsic(encoded);
-      return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
-    } catch (e) {
-      NonceManager.instance.rollback(fromAddress);
-      rethrow;
-    }
-  }
-
-  /// 查询链上绑定的清算省储行。
-  ///
-  /// 返回 shenfen_id 字符串，未绑定返回 null。
-  Future<String?> queryClearingInstitution(String pubkeyHex) async {
-    final accountId = _hexDecodeBytes(pubkeyHex);
-    if (accountId.length != 32) return null;
-
-    // storage key = twox128("OffchainTransactionPos") + twox128("RecipientClearingInstitution") + blake2_128_concat(account_id)
-    final palletHash = _twox128('OffchainTransactionPos');
-    final storageHash = _twox128('RecipientClearingInstitution');
-    final accountHash = _blake2b128Concat(accountId);
-
-    final keyBytes = Uint8List(palletHash.length + storageHash.length + accountHash.length);
-    keyBytes.setAll(0, palletHash);
-    keyBytes.setAll(palletHash.length, storageHash);
-    keyBytes.setAll(palletHash.length + storageHash.length, accountHash);
-
-    final keyHex = '0x${_hexEncode(keyBytes)}';
-    final data = await _rpc.fetchStorage(keyHex);
-    if (data == null || data.isEmpty) return null;
-
-    // 返回值是 [u8; 48]，去尾部零字节还原 shenfen_id
-    final institutionBytes = data.length >= 48 ? data.sublist(0, 48) : data;
-    var endIndex = institutionBytes.length;
-    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) {
-      endIndex--;
-    }
-    if (endIndex == 0) return null;
-    return String.fromCharCodes(institutionBytes.sublist(0, endIndex));
-  }
-
   // ──── 内部：extrinsic 编码 ────
 
   static String _hexEncode(Uint8List bytes) {
@@ -336,45 +230,4 @@ class OnchainRpc {
     return output.toBytes();
   }
 
-  /// 构造 OffchainTransactionPos::bind_clearing_institution 的 SCALE 编码 call data。
-  ///
-  /// 格式：[pallet_index=21] [call_index=9] [institution: [u8; 48]]
-  static Uint8List _buildBindClearingCall(String shenfenId) {
-    final output = ByteOutput();
-    output.pushByte(_offchainTransactionPosPalletIndex);
-    output.pushByte(_bindClearingInstitutionCallIndex);
-    // shenfen_id UTF-8 字节补零到 48 字节（与链上 shenfen_id_to_fixed48 一致）
-    final idBytes = Uint8List(48);
-    final raw = shenfenId.codeUnits;
-    for (var i = 0; i < raw.length && i < 48; i++) {
-      idBytes[i] = raw[i];
-    }
-    output.write(idBytes);
-    return output.toBytes();
-  }
-
-  // ──── 内部：哈希工具 ────
-
-  static Uint8List _hexDecodeBytes(String hex) {
-    final text = hex.startsWith('0x') ? hex.substring(2) : hex;
-    if (text.isEmpty || text.length.isOdd) return Uint8List(0);
-    final result = Uint8List(text.length ~/ 2);
-    for (var i = 0; i < result.length; i++) {
-      result[i] = int.parse(text.substring(i * 2, i * 2 + 2), radix: 16);
-    }
-    return result;
-  }
-
-  static Uint8List _twox128(String input) {
-    return Hasher.twoxx128.hashString(input);
-  }
-
-  /// blake2_128_concat 哈希：16 字节 blake2b-128 + 原始字节。
-  static Uint8List _blake2b128Concat(Uint8List input) {
-    final hash = Hasher.blake2b128.hash(input);
-    final result = Uint8List(hash.length + input.length);
-    result.setAll(0, hash);
-    result.setAll(hash.length, input);
-    return result;
-  }
 }

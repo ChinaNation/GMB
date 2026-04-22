@@ -11,10 +11,14 @@
 //   "GMB_ACTIVATE"(12B) + shenfen_id(48B) + timestamp(8B) + nonce(16B) = 84 bytes
 
 use crate::ui::home;
-use crate::ui::shared::security;
 use crate::ui::settings::device_password;
+use crate::ui::shared::security;
 use serde::{Deserialize, Serialize};
-use std::{fs, io::ErrorKind, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    fs,
+    io::ErrorKind,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tauri::AppHandle;
 
 use super::institution;
@@ -100,8 +104,12 @@ fn save_activations(app: &AppHandle, activations: &[StoredActivation]) -> Result
     })
     .map_err(|e| format!("序列化激活记录失败: {e}"))?;
     let path = activations_path(app)?;
-    security::write_text_atomic_restricted(&path, &format!("{raw}\n"))
-        .map_err(|e| format!("写入激活记录文件失败 ({}): {e}", security::sanitize_path(&path)))
+    security::write_text_atomic_restricted(&path, &format!("{raw}\n")).map_err(|e| {
+        format!(
+            "写入激活记录文件失败 ({}): {e}",
+            security::sanitize_path(&path)
+        )
+    })
 }
 
 fn now_ms() -> u64 {
@@ -164,12 +172,14 @@ pub async fn build_activate_admin_request(
     if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("公钥格式无效，应为 64 位十六进制".to_string());
     }
-    let pubkey_bytes = hex::decode(&pubkey_clean)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
     // 检查是否已激活
     let activations = load_activations(&app)?;
-    if activations.iter().any(|a| a.pubkey_hex == pubkey_clean && a.shenfen_id == shenfen_id) {
+    if activations
+        .iter()
+        .any(|a| a.pubkey_hex == pubkey_clean && a.shenfen_id == shenfen_id)
+    {
         return Err("该管理员已激活，无需重复操作".to_string());
     }
 
@@ -177,19 +187,17 @@ pub async fn build_activate_admin_request(
     let pk = pubkey_clean.clone();
 
     // 在链上验证管理员身份
-    let admins = tauri::async_runtime::spawn_blocking(move || {
-        institution::fetch_admins(&sid)
-    })
-    .await
-    .map_err(|e| format!("查询管理员列表失败: {e}"))??;
+    let admins = tauri::async_runtime::spawn_blocking(move || institution::fetch_admins(&sid))
+        .await
+        .map_err(|e| format!("查询管理员列表失败: {e}"))??;
 
     if !admins.iter().any(|a| *a == pk) {
         return Err("该公钥不在此机构的链上管理员列表中".to_string());
     }
 
     // 查找机构名称（用于 display）
-    let institution_name = super::find_institution_name(&shenfen_id)
-        .unwrap_or_else(|| shenfen_id.clone());
+    let institution_name =
+        super::find_institution_name(&shenfen_id).unwrap_or_else(|| shenfen_id.clone());
 
     // 构建激活 payload
     let timestamp = now_secs();
@@ -233,8 +241,8 @@ pub async fn build_activate_admin_request(
         },
     };
 
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| format!("序列化签名请求失败: {e}"))?;
+    let request_json =
+        serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
 
     Ok(ActivateRequestResult {
         request_json,
@@ -267,12 +275,15 @@ pub async fn verify_activate_admin(
         .to_ascii_lowercase();
 
     // 解析签名响应
-    let response: signing::QrSignResponse = serde_json::from_str(&response_json)
-        .map_err(|e| format!("解析签名响应失败: {e}"))?;
+    let response: signing::QrSignResponse =
+        serde_json::from_str(&response_json).map_err(|e| format!("解析签名响应失败: {e}"))?;
 
     // 验证协议版本
     if response.proto != "WUMIN_QR_V1" {
-        return Err(format!("协议版本不匹配：期望 WUMIN_QR_V1，实际 {}", response.proto));
+        return Err(format!(
+            "协议版本不匹配：期望 WUMIN_QR_V1，实际 {}",
+            response.proto
+        ));
     }
 
     // 验证请求 ID
@@ -281,7 +292,9 @@ pub async fn verify_activate_admin(
     }
 
     // 验证公钥
-    let response_pubkey = response.body.pubkey
+    let response_pubkey = response
+        .body
+        .pubkey
         .strip_prefix("0x")
         .unwrap_or(&response.body.pubkey)
         .to_ascii_lowercase();
@@ -294,7 +307,9 @@ pub async fn verify_activate_admin(
         .strip_prefix("0x")
         .unwrap_or(&expected_payload_hash)
         .to_ascii_lowercase();
-    let response_hash = response.body.payload_hash
+    let response_hash = response
+        .body
+        .payload_hash
         .strip_prefix("0x")
         .unwrap_or(&response.body.payload_hash)
         .to_ascii_lowercase();
@@ -303,23 +318,23 @@ pub async fn verify_activate_admin(
     }
 
     // 验证 sr25519 签名(本地验证,不需要提交链上)
-    let sig_hex = response.body.signature
+    let sig_hex = response
+        .body
+        .signature
         .strip_prefix("0x")
         .unwrap_or(&response.body.signature);
     if sig_hex.len() != 128 {
-        return Err(format!("签名长度无效：期望 128 hex，实际 {}", sig_hex.len()));
+        return Err(format!(
+            "签名长度无效：期望 128 hex，实际 {}",
+            sig_hex.len()
+        ));
     }
-    let signature_bytes = hex::decode(sig_hex)
-        .map_err(|e| format!("签名解码失败: {e}"))?;
-    let pubkey_bytes = hex::decode(&pubkey_clean)
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let signature_bytes = hex::decode(sig_hex).map_err(|e| format!("签名解码失败: {e}"))?;
+    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
     // 解码 payload
-    let payload_clean = payload_hex
-        .strip_prefix("0x")
-        .unwrap_or(&payload_hex);
-    let payload_bytes = hex::decode(payload_clean)
-        .map_err(|e| format!("payload 解码失败: {e}"))?;
+    let payload_clean = payload_hex.strip_prefix("0x").unwrap_or(&payload_hex);
+    let payload_bytes = hex::decode(payload_clean).map_err(|e| format!("payload 解码失败: {e}"))?;
 
     // 验证 payload 前缀是 "GMB_ACTIVATE"
     if payload_bytes.len() < 12 || &payload_bytes[..12] != ACTIVATE_PREFIX {
@@ -328,15 +343,13 @@ pub async fn verify_activate_admin(
 
     // 使用 sr25519 验证签名
     // sr25519 签名时对 payload 做内部哈希处理，直接传原始 payload
-    use sp_core::sr25519::{Public, Signature};
     use sp_core::crypto::Pair;
+    use sp_core::sr25519::{Public, Signature};
     let public = Public::from_raw(
-        <[u8; 32]>::try_from(pubkey_bytes.as_slice())
-            .map_err(|_| "公钥长度必须为 32 字节")?
+        <[u8; 32]>::try_from(pubkey_bytes.as_slice()).map_err(|_| "公钥长度必须为 32 字节")?,
     );
     let signature = Signature::from_raw(
-        <[u8; 64]>::try_from(signature_bytes.as_slice())
-            .map_err(|_| "签名长度必须为 64 字节")?
+        <[u8; 64]>::try_from(signature_bytes.as_slice()).map_err(|_| "签名长度必须为 64 字节")?,
     );
     if !sp_core::sr25519::Pair::verify(&signature, &payload_bytes, &public) {
         return Err("sr25519 签名验证失败，无法证明管理员身份".to_string());
@@ -344,7 +357,11 @@ pub async fn verify_activate_admin(
 
     // 从 payload 中提取 shenfen_id（偏移 12，长度 48，去尾零）
     let id_bytes = &payload_bytes[12..60];
-    let end = id_bytes.iter().rposition(|&b| b != 0).map(|i| i + 1).unwrap_or(0);
+    let end = id_bytes
+        .iter()
+        .rposition(|&b| b != 0)
+        .map(|i| i + 1)
+        .unwrap_or(0);
     let shenfen_id = String::from_utf8_lossy(&id_bytes[..end]).to_string();
 
     // 写入本地存储
@@ -362,8 +379,13 @@ pub async fn verify_activate_admin(
     save_activations(&app, &activations)?;
 
     if let Err(e) = security::append_audit_log(
-        &app, "activate_admin",
-        &format!("success pubkey={} shenfen={}", &pubkey_clean[..8], &shenfen_id),
+        &app,
+        "activate_admin",
+        &format!(
+            "success pubkey={} shenfen={}",
+            &pubkey_clean[..8],
+            &shenfen_id
+        ),
     ) {
         eprintln!("[审计] activate_admin success 日志写入失败: {e}");
     }
@@ -401,11 +423,9 @@ pub async fn get_activated_admins(
     let status = home::current_status(&app)?;
     if status.running {
         let sid = shenfen_id.clone();
-        let admins = tauri::async_runtime::spawn_blocking(move || {
-            institution::fetch_admins(&sid)
-        })
-        .await
-        .map_err(|e| format!("查询管理员列表失败: {e}"));
+        let admins = tauri::async_runtime::spawn_blocking(move || institution::fetch_admins(&sid))
+            .await
+            .map_err(|e| format!("查询管理员列表失败: {e}"));
 
         if let Ok(Ok(chain_admins)) = admins {
             // 删除不再是链上管理员的激活记录
@@ -468,8 +488,13 @@ pub fn deactivate_admin(
     save_activations(&app, &activations)?;
 
     if let Err(e) = security::append_audit_log(
-        &app, "deactivate_admin",
-        &format!("success pubkey={} shenfen={}", &pubkey_clean[..pubkey_clean.len().min(8)], &shenfen_id),
+        &app,
+        "deactivate_admin",
+        &format!(
+            "success pubkey={} shenfen={}",
+            &pubkey_clean[..pubkey_clean.len().min(8)],
+            &shenfen_id
+        ),
     ) {
         eprintln!("[审计] deactivate_admin success 日志写入失败: {e}");
     }

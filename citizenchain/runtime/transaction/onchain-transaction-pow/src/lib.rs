@@ -309,9 +309,8 @@ where
         }
 
         // 中文注释：安全基金账户分成（NRC_ANQUAN_ADDRESS 常量地址）。
-        let safety_fund_account = T::AccountId::decode(
-            &mut &primitives::china::china_cb::NRC_ANQUAN_ADDRESS[..],
-        );
+        let safety_fund_account =
+            T::AccountId::decode(&mut &primitives::china::china_cb::NRC_ANQUAN_ADDRESS[..]);
         match safety_fund_account {
             Ok(account) => {
                 if let Err(remaining) = Currency::resolve(&account, safety_fund_credit) {
@@ -499,7 +498,7 @@ mod tests {
     impl NrcAccountProvider<AccountId32> for MockNrcAccountProvider {
         fn nrc_account() -> Option<AccountId32> {
             Some(AccountId32::new(
-                primitives::china::china_cb::CHINA_CB[0].duoqian_address,
+                primitives::china::china_cb::CHINA_CB[0].main_address,
             ))
         }
     }
@@ -963,7 +962,8 @@ mod tests {
             let total_fee = 55u128; // base 50 + tip 5
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+            let safety_fund_percent =
+                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -1026,7 +1026,8 @@ mod tests {
             let total_fee = 15u128; // base 10 + tip 5
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+            let safety_fund_percent =
+                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);

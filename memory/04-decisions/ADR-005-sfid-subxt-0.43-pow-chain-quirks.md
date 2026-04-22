@@ -43,6 +43,11 @@ SCALE 编码不同（`&[u8]` 多写 1 字节 Compact 长度前缀），导致
 链端返回 `Pallet error: DuoqianManagePow::InvalidSfidInstitutionSignature`。
 这是协议对齐 bug，与上述 PoW 链坑无关，但本次一并修掉。
 
+> **尾注 · 2026-04-20**: 上述 `GMB_SFID_INSTITUTION_V2` 域名已在
+> `20260420-unified-DUOQIAN_V1-domain` 任务中彻底退役，改用
+> `(DUOQIAN_DOMAIN = b"DUOQIAN_V1", OP_SIGN_INST = 0x13, ...)`。SCALE
+> 类型对齐铁律（`[u8; N]` 无长度前缀）在新方案下依旧适用。
+
 ## 决策
 
 `sfid/backend` 推链路径上**强制**做以下四件事：

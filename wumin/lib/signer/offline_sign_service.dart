@@ -155,8 +155,6 @@ class OfflineSignService {
         'developer_direct_upgrade',
         'propose_runtime_upgrade',
         'activate_admin',
-        'propose_institution_rate',
-        'vote_institution_rate',
         'propose_safety_fund_transfer',
         'vote_safety_fund_transfer',
         'propose_sweep_to_main',

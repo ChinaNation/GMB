@@ -13,10 +13,12 @@ mod cli;
 mod command;
 #[cfg(feature = "gpu-mining")]
 mod gpu_miner;
-mod offchain_gossip;
+// 扫码支付清算体系 清算行节点组件。
+// Step 2b-iv-a 清理:删除旧 offchain_{ledger,packer,gossip}.rs(省储行清算模型
+// 按 ADR-006 退出)。`offchain_keystore` 作为节点统一密钥容器保留,供新路径
+// `offchain::{keystore_signer, pool_submitter}` 使用。
+mod offchain;
 mod offchain_keystore;
-mod offchain_ledger;
-mod offchain_packer;
 mod rpc;
 mod service;
 mod tls_cert;

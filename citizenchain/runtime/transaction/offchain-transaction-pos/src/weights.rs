@@ -1,55 +1,18 @@
-//! 链下交易手续费模块权重定义。
+//! 清算行(L2)扫码支付清算 pallet 权重。
 //!
-//! 当前为保守手动估算值，后续应由 `frame-benchmarking` 自动生成替换。
+//! Step 2b-iv-b 清理后,老省储行 `submit_offchain_batch` / `enqueue_offchain_batch`
+//! / `process_queued_batch` 的权重方法已随对应 Call 一并删除。当前 pallet 的 call
+//! 权重全部在 `lib.rs` 的 `#[pallet::weight]` 里用 `T::DbWeight` 直接估算,本文件
+//! 保留**空 trait + 空实现**,作为后续接入 `frame-benchmarking` 自动生成时的锚点。
 
-use frame_support::{
-    traits::Get,
-    weights::{constants::RocksDbWeight, Weight},
-};
+use frame_support::weights::Weight;
 
-/// 权重接口：由 runtime 注入实现。
+/// 权重接口(保留空壳,为将来 benchmark 扩展预留)。
 pub trait WeightInfo {
-    /// 直接提交会同时覆盖验签、批次校验、转账和 processed tx 写入。
-    fn submit_offchain_batch(items: u32) -> Weight;
-    /// 入队主要消耗在验签、防重检查和队列持久化。
-    fn enqueue_offchain_batch(items: u32) -> Weight;
-    /// 出队执行除批次处理外，还包含失败重试/状态回写路径。
-    fn process_queued_batch(items: u32) -> Weight;
-}
-
-/// 默认保守估算实现。
-pub struct SubstrateWeight<T>(core::marker::PhantomData<T>);
-impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-    fn submit_offchain_batch(items: u32) -> Weight {
-        let items = items as u64;
-        T::DbWeight::get().reads_writes(9 + items.saturating_mul(7), 8 + items.saturating_mul(7))
-    }
-
-    fn enqueue_offchain_batch(items: u32) -> Weight {
-        let items = items as u64;
-        T::DbWeight::get().reads_writes(9 + items.saturating_mul(6), 4 + items.saturating_mul(2))
-    }
-
-    fn process_queued_batch(items: u32) -> Weight {
-        let items = items as u64;
-        T::DbWeight::get().reads_writes(8 + items.saturating_mul(7), 4 + items.saturating_mul(7))
+    /// 占位:后续按批次大小生成 `submit_offchain_batch_v2` 权重。
+    fn submit_offchain_batch_v2(_items: u32) -> Weight {
+        Weight::zero()
     }
 }
 
-/// 单元测试用实现。
-impl WeightInfo for () {
-    fn submit_offchain_batch(items: u32) -> Weight {
-        let items = items as u64;
-        RocksDbWeight::get().reads_writes(9 + items.saturating_mul(7), 8 + items.saturating_mul(7))
-    }
-
-    fn enqueue_offchain_batch(items: u32) -> Weight {
-        let items = items as u64;
-        RocksDbWeight::get().reads_writes(9 + items.saturating_mul(6), 4 + items.saturating_mul(2))
-    }
-
-    fn process_queued_batch(items: u32) -> Weight {
-        let items = items as u64;
-        RocksDbWeight::get().reads_writes(8 + items.saturating_mul(7), 4 + items.saturating_mul(7))
-    }
-}
+impl WeightInfo for () {}

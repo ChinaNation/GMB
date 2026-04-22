@@ -76,11 +76,13 @@ class PalletRegistry {
   static const int proposeSweepCall = 5;
   static const int voteSweepCall = 6;
 
-  // ---- OffchainTransactionPos ----
+  // ---- OffchainTransactionPos(清算行 L2 体系) ----
   static const int offchainTransactionPosPallet = 21;
-  static const int proposeInstitutionRateCall = 1;
-  static const int voteInstitutionRateCall = 2;
-  static const int bindClearingInstitutionCall = 9;
-  /// 链下支付授权（虚拟 call_index，非链上 extrinsic）。
-  static const int offchainPayCall = 99;
+  static const int bindClearingBankCall = 30;
+  static const int depositCall = 31;
+  static const int withdrawCall = 32;
+  static const int switchBankCall = 33;
+  static const int submitOffchainBatchV2Call = 34;
+  static const int proposeL2FeeRateCall = 40;
+  static const int setMaxL2FeeRateCall = 41;
 }

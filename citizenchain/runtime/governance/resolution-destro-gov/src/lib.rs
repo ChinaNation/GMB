@@ -73,13 +73,13 @@ fn institution_pallet_address(institution: InstitutionPalletId) -> Option<[u8; 3
         .iter()
         .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
     {
-        return Some(node.duoqian_address);
+        return Some(node.main_address);
     }
 
     CHINA_CH
         .iter()
         .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-        .map(|n| n.duoqian_address)
+        .map(|n| n.main_address)
 }
 
 #[frame_support::pallet]
@@ -300,8 +300,7 @@ pub mod pallet {
             // 中文注释：允许 STATUS_PASSED 和 STATUS_EXECUTION_FAILED 状态执行，
             // 后者是自动执行失败后手动重试的入口。
             ensure!(
-                proposal.status == STATUS_PASSED
-                    || proposal.status == STATUS_EXECUTION_FAILED,
+                proposal.status == STATUS_PASSED || proposal.status == STATUS_EXECUTION_FAILED,
                 Error::<T>::ProposalNotPassed
             );
 

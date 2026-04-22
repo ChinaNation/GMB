@@ -223,7 +223,11 @@ pub mod pallet {
             let reward: BalanceOf<T> = FULLNODE_BLOCK_REWARD.saturated_into();
             // 中文注释：deposit_creating 会在钱包尚未建户时自动建户，并同步增加总发行量。
             let imbalance = T::Currency::deposit_creating(&recipient, reward);
-            debug_assert_eq!(imbalance.peek(), reward, "deposit_creating must return full reward");
+            debug_assert_eq!(
+                imbalance.peek(),
+                reward,
+                "deposit_creating must return full reward"
+            );
             Self::deposit_event(Event::<T>::PowRewardIssued {
                 block: block_number,
                 miner: author,

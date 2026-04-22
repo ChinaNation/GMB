@@ -19,7 +19,11 @@ pub use pallet::*;
 #[frame_support::pallet]
 pub mod pallet {
     use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
-    use frame_support::{pallet_prelude::*, traits::{Currency, Imbalance}, Blake2_128Concat};
+    use frame_support::{
+        pallet_prelude::*,
+        traits::{Currency, Imbalance},
+        Blake2_128Concat,
+    };
     use scale_info::TypeInfo;
     use sfid_code_auth::{OnSfidBound, OnSfidBoundWeight};
     use sp_runtime::traits::{SaturatedConversion, Zero};
@@ -163,7 +167,11 @@ pub mod pallet {
             // 中文注释：这里有意通过 deposit_creating 主动增发，并丢弃返回的 PositiveImbalance；
             // 奖励发行本身就是本模块的职责，不需要再将该发行凭证向外传递。
             let imbalance = T::Currency::deposit_creating(who, reward);
-            debug_assert_eq!(imbalance.peek(), reward, "deposit_creating must return full reward");
+            debug_assert_eq!(
+                imbalance.peek(),
+                reward,
+                "deposit_creating must return full reward"
+            );
 
             // 中文注释：只有铸币成功进入账本后，才推进累计人数并写入双重防重标记。
             RewardedCount::<T>::put(rewarded_count.saturating_add(1));

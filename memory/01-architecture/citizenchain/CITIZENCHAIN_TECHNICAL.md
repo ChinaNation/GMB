@@ -97,7 +97,7 @@ citizenchain/
 
 ### 7.2 当前实现特征
 - `AccountId` 与公钥等价，链上账户体系直接以公钥签名身份为主。
-- 交易扩展中显式拒绝 `keyless` 账户作为发送方。
+- 交易扩展中显式拒绝 `stake` 账户作为发送方。
 - runtime 当前直接依赖本产品的治理、发行、交易、其他 pallet。
 - 创世配置由 `runtime/src/genesis_config_presets.rs` 提供。
 

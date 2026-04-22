@@ -10,7 +10,12 @@ const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 use crate::ui::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, RPC_RESPONSE_LIMIT_SMALL)
+    rpc::rpc_post(
+        method,
+        params,
+        RPC_REQUEST_TIMEOUT,
+        RPC_RESPONSE_LIMIT_SMALL,
+    )
 }
 
 /// 查询指定机构的管理员公钥列表。
@@ -34,11 +39,20 @@ pub fn fetch_admins(shenfen_id: &str) -> Result<Vec<String>, String> {
 
 /// 查询账户余额（返回 free 余额，单位为最小精度）。
 pub fn fetch_balance(account_hex: &str) -> Result<Option<u128>, String> {
+    fetch_balance_at(account_hex, None)
+}
+
+/// 查询指定 finalized 块上的账户余额（返回 free 余额，单位为最小精度）。
+pub fn fetch_balance_at(
+    account_hex: &str,
+    block_hash: Option<&str>,
+) -> Result<Option<u128>, String> {
     let storage_key = storage_keys::system_account_key(account_hex)?;
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(storage_key)]),
-    )?;
+    let mut params = vec![Value::String(storage_key)];
+    if let Some(hash) = block_hash {
+        params.push(Value::String(hash.to_string()));
+    }
+    let result = rpc_post("state_getStorage", Value::Array(params))?;
 
     match result {
         Value::Null => Ok(None),
@@ -47,6 +61,15 @@ pub fn fetch_balance(account_hex: &str) -> Result<Option<u128>, String> {
             decode_account_balance(&data)
         }
         _ => Err("state_getStorage 返回格式无效".to_string()),
+    }
+}
+
+/// 查询最新 finalized 区块哈希。
+pub fn fetch_finalized_head() -> Result<String, String> {
+    let result = rpc_post("chain_getFinalizedHead", Value::Array(vec![]))?;
+    match result {
+        Value::String(hash) => Ok(hash),
+        _ => Err("chain_getFinalizedHead 返回格式无效".to_string()),
     }
 }
 

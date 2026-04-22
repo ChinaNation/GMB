@@ -131,30 +131,6 @@ class PayloadDecoder {
         return _decodeDeveloperUpgrade(bytes);
       }
 
-      // OffchainTransactionPos / bind_clearing_institution
-      if (palletIndex == PalletRegistry.offchainTransactionPosPallet &&
-          callIndex == PalletRegistry.bindClearingInstitutionCall) {
-        return _decodeBindClearingInstitution(bytes);
-      }
-
-      // OffchainTransactionPos / offchain_pay（链下支付授权）
-      if (palletIndex == PalletRegistry.offchainTransactionPosPallet &&
-          callIndex == PalletRegistry.offchainPayCall) {
-        return _decodeOffchainPay(bytes);
-      }
-
-      // OffchainTransactionPos / propose_institution_rate
-      if (palletIndex == PalletRegistry.offchainTransactionPosPallet &&
-          callIndex == PalletRegistry.proposeInstitutionRateCall) {
-        return _decodeProposeInstitutionRate(bytes);
-      }
-
-      // OffchainTransactionPos / vote_institution_rate
-      if (palletIndex == PalletRegistry.offchainTransactionPosPallet &&
-          callIndex == PalletRegistry.voteInstitutionRateCall) {
-        return _decodeVoteProposal(bytes, 'vote_institution_rate', '费率提案');
-      }
-
       // ── DuoqianManagePow(17) ──
       if (palletIndex == PalletRegistry.duoqianManagePowPallet) {
         if (callIndex == PalletRegistry.proposeCreateCall) return _decodeProposeCreate(bytes);
@@ -432,84 +408,6 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // OffchainTransactionPos(21) / offchain_pay(99) — 链下支付授权
-  // 格式：[21][99][payer:32][recipient:32][amount_fen:u128_LE][fee_fen:u128_LE][tx_id:32][bank:48]
-  // 总长度 178 字节
-  // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeOffchainPay(Uint8List bytes) {
-    if (bytes.length < 178) return null;
-
-    // payer: 32 bytes (offset 2)
-    final payerAccountId = bytes.sublist(2, 34);
-    final payerAddress =
-        Keyring().encodeAddress(payerAccountId.toList(), _ss58Prefix);
-
-    // recipient: 32 bytes (offset 34)
-    final recipientAccountId = bytes.sublist(34, 66);
-    final recipientAddress =
-        Keyring().encodeAddress(recipientAccountId.toList(), _ss58Prefix);
-
-    // amount_fen: u128 LE (offset 66, 16 bytes)
-    final amountFen = _readU128Le(bytes, 66);
-    final amountYuan = _fenToYuan(amountFen);
-
-    // fee_fen: u128 LE (offset 82, 16 bytes)
-    final feeFen = _readU128Le(bytes, 82);
-    final feeYuan = _fenToYuan(feeFen);
-
-    // bank: 48 bytes (offset 130), shenfen_id 补零
-    final bankBytes = bytes.sublist(130, 178);
-    var endIndex = 48;
-    while (endIndex > 0 && bankBytes[endIndex - 1] == 0) {
-      endIndex--;
-    }
-    final shenfenId =
-        endIndex > 0 ? String.fromCharCodes(bankBytes.sublist(0, endIndex)) : '';
-    final bankName = institutionName(shenfenId) ?? shenfenId;
-
-    return DecodedPayload(
-      action: 'offchain_pay',
-      summary: '扫码支付 $amountYuan GMB 给 ${_truncateAddress(recipientAddress)}',
-      fields: {
-        'from': payerAddress,
-        'to': recipientAddress,
-        'amount_yuan': '$amountYuan GMB',
-        'fee_yuan': '$feeYuan GMB',
-        'bank': bankName,
-      },
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // OffchainTransactionPos(21) / bind_clearing_institution(9)
-  // 格式：[0x15][0x09][institution: [u8; 48]]
-  // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeBindClearingInstitution(Uint8List bytes) {
-    // 2 (pallet+call) + 48 (InstitutionPalletId) = 50
-    if (bytes.length < 50) return null;
-
-    // institution: [u8; 48] — shenfen_id 补零到 48 字节
-    final institutionBytes = bytes.sublist(2, 50);
-    // 去尾部零字节还原 shenfen_id 字符串
-    var endIndex = 48;
-    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) {
-      endIndex--;
-    }
-    if (endIndex == 0) return null;
-    final shenfenId = String.fromCharCodes(institutionBytes.sublist(0, endIndex));
-    final bankName = institutionName(shenfenId) ?? shenfenId;
-
-    return DecodedPayload(
-      action: 'bind_clearing',
-      summary: '绑定清算行：$bankName',
-      fields: {
-        'institution': bankName,
-        'shenfen_id': shenfenId,
-      },
-    );
-  }
-
-  // ---------------------------------------------------------------------------
   // 管理员激活（非链上交易）
   // 格式：GMB_ACTIVATE(12B) + shenfen_id(48B, 右补零) + timestamp(8B, u64 LE) + nonce(16B)
   // ---------------------------------------------------------------------------
@@ -530,40 +428,6 @@ class PayloadDecoder {
       summary: '激活管理员 - $shenfenId',
       fields: {
         'shenfen_id': shenfenId,
-      },
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // OffchainTransactionPos(21) / propose_institution_rate(1)
-  // 格式：[21][1][institution:48][new_rate_bp:u32_LE]
-  // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeProposeInstitutionRate(Uint8List bytes) {
-    // 2 (pallet+call) + 48 (institution) + 4 (u32) = 54
-    if (bytes.length < 54) return null;
-
-    // institution: [u8; 48] — shenfen_id 补零到 48 字节
-    final institutionBytes = bytes.sublist(2, 50);
-    var endIndex = 48;
-    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) {
-      endIndex--;
-    }
-    if (endIndex == 0) return null;
-    final shenfenId = String.fromCharCodes(institutionBytes.sublist(0, endIndex));
-
-    // new_rate_bp: u32 LE
-    final rateBp = bytes[50] |
-        (bytes[51] << 8) |
-        (bytes[52] << 16) |
-        (bytes[53] << 24);
-    final ratePercent = (rateBp / 100.0).toStringAsFixed(2);
-
-    return DecodedPayload(
-      action: 'propose_institution_rate',
-      summary: '$shenfenId 提案设置链下交易费率为 $ratePercent%',
-      fields: {
-        'institution': shenfenId,
-        'new_rate_bp': '$rateBp bp ($ratePercent%)',
       },
     );
   }
@@ -600,12 +464,12 @@ class PayloadDecoder {
     final sfidId = utf8.decode(bytes.sublist(offset, offset + sfidLen), allowMalformed: true);
     offset += sfidLen;
 
-    // name: BoundedVec<u8>
-    final (nameLen, nameLenSize) = _decodeCompactU32(bytes, offset);
-    offset += nameLenSize;
-    if (offset + nameLen > bytes.length) return null;
-    final name = utf8.decode(bytes.sublist(offset, offset + nameLen), allowMalformed: true);
-    offset += nameLen;
+    // account_name: BoundedVec<u8>
+    final (accountNameLen, accountNameLenSize) = _decodeCompactU32(bytes, offset);
+    offset += accountNameLenSize;
+    if (offset + accountNameLen > bytes.length) return null;
+    final accountName = utf8.decode(bytes.sublist(offset, offset + accountNameLen), allowMalformed: true);
+    offset += accountNameLen;
 
     // admin_count: u32
     if (offset + 4 > bytes.length) return null;
@@ -628,10 +492,10 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: 'propose_create',
-      summary: '创建多签账户「$name」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
+      summary: '创建多签账户「$accountName」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
       fields: {
         'sfid_id': sfidId,
-        'name': name,
+        'account_name': accountName,
         'admin_count': adminCount.toString(),
         'threshold': '$threshold/$adminCount',
         'amount_yuan': '$amountYuan GMB',
@@ -641,18 +505,18 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // DuoqianManagePow(17) / propose_create_personal(4)
-  // 格式：[17][4][BoundedVec name][u32 admin_count][BoundedVec<AccountId32> admins][u32 threshold][u128 amount]
+  // 格式：[17][4][BoundedVec account_name][u32 admin_count][BoundedVec<AccountId32> admins][u32 threshold][u128 amount]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreatePersonal(Uint8List bytes) {
     if (bytes.length < 10) return null;
     var offset = 2;
 
-    // name: BoundedVec<u8>
-    final (nameLen, nameLenSize) = _decodeCompactU32(bytes, offset);
-    offset += nameLenSize;
-    if (offset + nameLen > bytes.length) return null;
-    final name = utf8.decode(bytes.sublist(offset, offset + nameLen), allowMalformed: true);
-    offset += nameLen;
+    // account_name: BoundedVec<u8>
+    final (accountNameLen, accountNameLenSize) = _decodeCompactU32(bytes, offset);
+    offset += accountNameLenSize;
+    if (offset + accountNameLen > bytes.length) return null;
+    final accountName = utf8.decode(bytes.sublist(offset, offset + accountNameLen), allowMalformed: true);
+    offset += accountNameLen;
 
     // admin_count: u32
     if (offset + 4 > bytes.length) return null;
@@ -675,9 +539,9 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: 'propose_create_personal',
-      summary: '创建个人多签「$name」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
+      summary: '创建个人多签「$accountName」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
       fields: {
-        'name': name,
+        'account_name': accountName,
         'admin_count': adminCount.toString(),
         'threshold': '$threshold/$adminCount',
         'amount_yuan': '$amountYuan GMB',

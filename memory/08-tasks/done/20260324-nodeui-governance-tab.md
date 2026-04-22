@@ -158,6 +158,6 @@ GovernanceSection 内部使用子 Tab 切换"机构"和"提案"视图。
 #### 技术要点备忘
 
 - citizenchain 使用新版 polkadot-sdk 的 `TransactionExtension` API（非旧版 `SignedExtension`）
-- TxExtension 元组编码顺序：`AuthorizeCall(0) + CheckNonZeroSender(0) + CheckNonKeylessSender(0) + CheckSpecVersion(0) + CheckTxVersion(0) + CheckGenesis(0) + CheckEra(2) + CheckNonce(compact) + CheckWeight(0) + ChargeTransactionPayment(compact) + CheckMetadataHash(1:mode) + WeightReclaim(0)`
+- TxExtension 元组编码顺序：`AuthorizeCall(0) + CheckNonZeroSender(0) + CheckNonStakeSender(0) + CheckSpecVersion(0) + CheckTxVersion(0) + CheckGenesis(0) + CheckEra(2) + CheckNonce(compact) + CheckWeight(0) + ChargeTransactionPayment(compact) + CheckMetadataHash(1:mode) + WeightReclaim(0)`
 - 签名载荷 implicit 数据：`spec_version(4) + tx_version(4) + genesis_hash(32) + era_block_hash(32) + metadata_hash_implicit(0x00)`
 - Extrinsic 版本字节：`0x84`（v4 signed），不是 `0xc4`

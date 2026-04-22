@@ -223,7 +223,12 @@ fn merge_known_peers(app: &AppHandle, observed_peer_ids: &[String]) -> KnownPeer
 }
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
-    rpc::rpc_post(method, params, RPC_REQUEST_TIMEOUT, RPC_RESPONSE_LIMIT_LARGE)
+    rpc::rpc_post(
+        method,
+        params,
+        RPC_REQUEST_TIMEOUT,
+        RPC_RESPONSE_LIMIT_LARGE,
+    )
 }
 
 // 网络统计必须建立在"当前 RPC 确认属于目标链"的前提上，
@@ -392,8 +397,7 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
                 ) {
                     if let Some(arr) = peers.as_array() {
                         for p in arr {
-                            let is_light =
-                                p.get("roles").map(extract_light_role).unwrap_or(false);
+                            let is_light = p.get("roles").map(extract_light_role).unwrap_or(false);
                             if is_light {
                                 if let Some(pid_raw) = p.get("peerId").and_then(Value::as_str) {
                                     if let Some(pid) = normalize_peer_id(pid_raw) {
@@ -558,10 +562,7 @@ mod tests {
     #[test]
     fn normalize_peer_id_trims_whitespace() {
         let padded = format!("  {VALID_PEER_ID}  ");
-        assert_eq!(
-            normalize_peer_id(&padded),
-            Some(VALID_PEER_ID.to_string())
-        );
+        assert_eq!(normalize_peer_id(&padded), Some(VALID_PEER_ID.to_string()));
     }
 
     #[test]
