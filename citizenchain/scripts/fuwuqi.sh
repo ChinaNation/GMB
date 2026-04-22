@@ -13,9 +13,9 @@ set -euo pipefail
 # ╚══════════════════════════════════════════════════════════════╝
 # 用法：引导节点不带0x；
 
-NODE_KEY=""
+NODE_KEY="83e5af5b66ace1501e7bc2379a76873382883dd37ccdda791578ae50f8c72587"
 GRANDPA_KEY=""
-MINER_REWARD_ADDRESS=""
+MINER_REWARD_ADDRESS="w5D8NC99pbhhvq1znhu63XSUnjukm5ozqXnqg6jxP5Ged9ZiP"
 
 # ══════════════════════════════════════════════════════════════
 
@@ -35,7 +35,20 @@ REMOTE_DATA="/opt/citizenchain/data"
 REMOTE_KEYSTORE="$REMOTE_DATA/chains/citizenchain/keystore"
 SERVICE_NAME="citizenchain-node"
 SSH_KEY="$HOME/.ssh/ed25519"
-SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=accept-new"
+# 中文注释:
+# 用 ControlMaster 复用同一条 TCP 连接跑完所有步骤,避免链路抖动导致
+# 每步独立 SSH 连接时随机超时(实测中间链路丢包 30-50% 会让 scp/deb 上传失败)。
+# ControlPersist=15m 让 master 在脚本跑完后再保留一段时间,期间多跑一次也快。
+SSH_CTRL_DIR="$HOME/.ssh/sockets"
+mkdir -p "$SSH_CTRL_DIR"
+chmod 700 "$SSH_CTRL_DIR"
+SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=accept-new \
+  -o ControlMaster=auto \
+  -o ControlPath=$SSH_CTRL_DIR/%r@%h-%p \
+  -o ControlPersist=15m \
+  -o ConnectTimeout=30 \
+  -o ServerAliveInterval=10 \
+  -o ServerAliveCountMax=6"
 
 # ─── 校验密钥格式 ───
 
