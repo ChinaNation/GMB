@@ -95,70 +95,70 @@ class PayloadDecoder {
         return _decodeTransferKeepAlive(bytes);
       }
 
-      // DuoqianTransferPow / propose_transfer
-      if (palletIndex == PalletRegistry.duoqianTransferPowPallet &&
-          callIndex == PalletRegistry.proposeTransferCall) {
-        return _decodeProposeTransfer(bytes);
+      // ── VotingEngineSystem(9) · 统一投票入口 ──
+      // Phase 3：业务 pallet 的 vote_X 全部下线，冷钱包只在这里解码投票 payload。
+      if (palletIndex == PalletRegistry.votingEngineSystemPallet) {
+        if (callIndex == PalletRegistry.internalVoteCall) {
+          return _decodeInternalVote(bytes);
+        }
+        if (callIndex == PalletRegistry.jointVoteCall) {
+          return _decodeJointVote(bytes);
+        }
+        if (callIndex == PalletRegistry.citizenVoteCall) {
+          return _decodeCitizenVote(bytes);
+        }
+        if (callIndex == PalletRegistry.finalizeProposalCall) {
+          return _decodeFinalizeProposal(bytes);
+        }
       }
 
-      // Step 2 · vote_transfer 已删除(替换为 finalize_transfer,冷钱包不负责)
-
-      // VotingEngineSystem / joint_vote
-      if (palletIndex == PalletRegistry.votingEngineSystemPallet &&
-          callIndex == PalletRegistry.jointVoteCall) {
-        return _decodeJointVote(bytes);
+      // ── DuoqianTransferPow(19) ──
+      // Phase 3：只保留 propose_X 解码；finalize_X 已删除，
+      // 投票走 VotingEngineSystem::internal_vote。
+      if (palletIndex == PalletRegistry.duoqianTransferPowPallet) {
+        if (callIndex == PalletRegistry.proposeTransferCall) {
+          return _decodeProposeTransfer(bytes);
+        }
+        if (callIndex == PalletRegistry.proposeSafetyFundCall) {
+          return _decodeProposeSafetyFund(bytes);
+        }
+        if (callIndex == PalletRegistry.proposeSweepCall) {
+          return _decodeProposeSweep(bytes);
+        }
       }
 
-      // VotingEngineSystem / citizen_vote
-      if (palletIndex == PalletRegistry.votingEngineSystemPallet &&
-          callIndex == PalletRegistry.citizenVoteCall) {
-        return _decodeCitizenVote(bytes);
-      }
-
-      // RuntimeRootUpgrade / propose_runtime_upgrade
-      if (palletIndex == PalletRegistry.runtimeRootUpgradePallet &&
-          callIndex == PalletRegistry.proposeRuntimeUpgradeCall) {
-        return _decodeProposeRuntimeUpgrade(bytes);
-      }
-
-      // RuntimeRootUpgrade / developer_direct_upgrade
-      if (palletIndex == PalletRegistry.runtimeRootUpgradePallet &&
-          callIndex == PalletRegistry.developerDirectUpgradeCall) {
-        return _decodeDeveloperUpgrade(bytes);
+      // ── RuntimeRootUpgrade(13) ──
+      if (palletIndex == PalletRegistry.runtimeRootUpgradePallet) {
+        if (callIndex == PalletRegistry.proposeRuntimeUpgradeCall) {
+          return _decodeProposeRuntimeUpgrade(bytes);
+        }
+        if (callIndex == PalletRegistry.developerDirectUpgradeCall) {
+          return _decodeDeveloperUpgrade(bytes);
+        }
       }
 
       // ── DuoqianManagePow(17) ──
-      // Step 1 · vote_create 已替换为 finalize_create(冷钱包不负责盲签聚合签名)
+      // Phase 3：vote_close / finalize_create 已物理删除，
+      // 投票走 VotingEngineSystem::internal_vote。
       if (palletIndex == PalletRegistry.duoqianManagePowPallet) {
         if (callIndex == PalletRegistry.proposeCreateCall) return _decodeProposeCreate(bytes);
         if (callIndex == PalletRegistry.proposeCloseCall) return _decodeProposeClose(bytes);
         if (callIndex == PalletRegistry.proposeCreatePersonalCall) return _decodeProposeCreatePersonal(bytes);
-        if (callIndex == PalletRegistry.voteCloseCall) return _decodeVoteProposal(bytes, 'vote_close', '多签关闭提案');
-      }
-
-      // ── DuoqianTransferPow(19) 补充 ──
-      // Step 2 · vote_safety_fund_transfer / vote_sweep_to_main 已替换为 finalize_X(冷钱包不负责)
-      if (palletIndex == PalletRegistry.duoqianTransferPowPallet) {
-        if (callIndex == PalletRegistry.proposeSafetyFundCall) return _decodeProposeSafetyFund(bytes);
-        if (callIndex == PalletRegistry.proposeSweepCall) return _decodeProposeSweep(bytes);
       }
 
       // ── ResolutionDestroGov(14) ──
       if (palletIndex == PalletRegistry.resolutionDestroGovPallet) {
         if (callIndex == PalletRegistry.proposeDestroyCall) return _decodeProposeDestroy(bytes);
-        if (callIndex == PalletRegistry.voteDestroyCall) return _decodeVoteProposal(bytes, 'vote_destroy', '决议销毁提案');
       }
 
       // ── AdminsOriginGov(12) ──
       if (palletIndex == PalletRegistry.adminsOriginGovPallet) {
         if (callIndex == PalletRegistry.proposeAdminReplacementCall) return _decodeProposeAdminReplacement(bytes);
-        if (callIndex == PalletRegistry.voteAdminReplacementCall) return _decodeVoteProposal(bytes, 'vote_admin_replacement', '管理员替换提案');
       }
 
       // ── GrandpaKeyGov(16) ──
       if (palletIndex == PalletRegistry.grandpaKeyGovPallet) {
-        if (callIndex == PalletRegistry.proposeKeyChangeCall) return _decodeProposeKeyChange(bytes);
-        if (callIndex == PalletRegistry.voteKeyChangeCall) return _decodeVoteProposal(bytes, 'vote_key_change', 'GRANDPA 密钥提案');
+        if (callIndex == PalletRegistry.proposeReplaceGrandpaKeyCall) return _decodeProposeKeyChange(bytes);
       }
 
       return null;
@@ -252,13 +252,53 @@ class PayloadDecoder {
     );
   }
 
-  // Step 2 · vote_transfer 已废弃,`_decodeVoteTransfer` 移除:
-  // finalize_transfer 的参数是 `(proposal_id, sigs: Vec<(AccountId, sig64)>)`,
-  // sigs 体积随 N 增长,盲签无人类可读语义,冷钱包不提供该解码能力。
+  // Phase 3 · 业务 pallet 的 finalize_X / vote_X 全部下线,
+  // 冷钱包统一通过 `_decodeInternalVote` 解码一人一票的管理员投票 payload。
 
   // ---------------------------------------------------------------------------
-  // VotingEngineSystem(9) / joint_vote(3)
-  // 格式：[0x09][0x03][proposal_id:u64_le][institution:48][approve:bool]
+  // VotingEngineSystem(9) / internal_vote(0)
+  // 格式：[0x09][0x00][proposal_id:u64_le][approve:bool]
+  //
+  // Phase 3 统一入口：所有业务 pallet(admins/resolution_destro/grandpa_key/
+  // duoqian_manage/duoqian_transfer 五路)的管理员投票都走这里,冷钱包不再按
+  // 业务 pallet 分路解码投票 payload。
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeInternalVote(Uint8List bytes) {
+    if (bytes.length < 11) return null;
+    final proposalId = _readU64Le(bytes, 2);
+    final approve = bytes[10] != 0;
+    final voteText = approve ? '赞成' : '反对';
+    return DecodedPayload(
+      action: 'internal_vote',
+      summary: '管理员投票 提案 #$proposalId：$voteText',
+      fields: {
+        'proposal_id': proposalId.toString(),
+        'approve': approve.toString(),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // VotingEngineSystem(9) / finalize_proposal(3)
+  // 格式：[0x09][0x03][proposal_id:u64_le]
+  //
+  // 任意账户触发终态执行，无需签投票语义。
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeFinalizeProposal(Uint8List bytes) {
+    if (bytes.length < 10) return null;
+    final proposalId = _readU64Le(bytes, 2);
+    return DecodedPayload(
+      action: 'finalize_proposal',
+      summary: '触发提案 #$proposalId 终态执行',
+      fields: {
+        'proposal_id': proposalId.toString(),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // VotingEngineSystem(9) / joint_vote(1)
+  // 格式：[0x09][0x01][proposal_id:u64_le][institution:48][approve:bool]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeJointVote(Uint8List bytes) {
     // 2 + 8 + 48 + 1 = 59
@@ -280,8 +320,8 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // VotingEngineSystem / citizen_vote
-  // 格式：[pallet][call][proposal_id:u64_le][binding_id:32][Vec nonce][Vec sig][approve:bool]
+  // VotingEngineSystem(9) / citizen_vote(2)
+  // 格式：[0x09][0x02][proposal_id:u64_le][binding_id:32][Vec nonce][Vec sig][approve:bool]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeCitizenVote(Uint8List bytes) {
     // 最小：2 + 8 + 32 + 1(Vec nonce compact len) + 1(Vec sig compact len) + 1(approve) = 45
@@ -405,23 +445,6 @@ class PayloadDecoder {
       summary: '激活管理员 - $shenfenId',
       fields: {
         'shenfen_id': shenfenId,
-      },
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // 通用投票解码（proposal_id:u64 + approve:bool）
-  // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeVoteProposal(Uint8List bytes, String action, String label) {
-    if (bytes.length < 11) return null;
-    final proposalId = _readU64Le(bytes, 2);
-    final approve = bytes[10] != 0;
-    return DecodedPayload(
-      action: action,
-      summary: '$label #$proposalId 投票：${approve ? "赞成" : "反对"}',
-      fields: {
-        'proposal_id': proposalId.toString(),
-        'approve': approve.toString(),
       },
     );
   }

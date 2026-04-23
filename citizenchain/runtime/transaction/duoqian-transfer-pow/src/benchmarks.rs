@@ -1,11 +1,10 @@
 //! 机构多签名地址转账模块 Benchmark 定义。
 //!
-//! Step 2 · 离线 QR 聚合改造:原 `vote_transfer` / `vote_safety_fund_transfer` /
-//! `vote_sweep_to_main` 已替换为 `finalize_X(sigs)`。本文件只保留 `propose_transfer`
-//! 和 `execute_transfer` 两个纯链上动作的 benchmark;`finalize_X` 的精确 weight
-//! 涉及 sr25519 验签 + `cast_internal_vote` 循环,成本模型和 Step 1 `finalize_create`
-//! 一致,直接沿用 `weights.rs` 的占位公式(基础 + 每签名增量),待后续 benchmark CLI
-//! 生成真实数据后替换。
+//! Phase 3(2026-04-22)「投票引擎统一入口整改」:
+//! 本 pallet 的 `vote_X` / `finalize_X` 已物理删除,所有管理员投票一律通过
+//! `VotingEngineSystem::internal_vote`(9.0)。本文件只保留 `propose_transfer`
+//! 和 `execute_transfer` 两个业务动作的 benchmark;投票 weight 全部归入
+//! voting-engine-system pallet 自身的 benchmark,业务端无需重复覆盖。
 
 #![cfg(feature = "runtime-benchmarks")]
 
@@ -21,7 +20,6 @@ use crate::{
     institution_pallet_address, reserve_pallet_id_to_bytes, BalanceOf, Call, Config,
     InstitutionPalletId, Pallet, CHINA_CB, ORG_PRC,
 };
-use voting_engine_system::InternalVoteEngine;
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
@@ -78,7 +76,7 @@ mod benchmarks {
     }
 
     /// execute_transfer benchmark:触发自动执行失败,然后补足余额手动重试成功。
-    /// 投票阶段直接用 `cast_internal_vote` 绕过离线聚合(benchmark 不测验签路径)。
+    /// 投票阶段直接调用 `VotingEngineSystem::internal_vote` 统一入口累计赞成票。
     #[benchmark]
     fn execute_transfer() {
         let institution = prc_institution();
@@ -103,10 +101,16 @@ mod benchmarks {
         .is_ok());
         let pid = last_proposal_id::<T>();
 
-        // 投票通过（自动执行可能因余额不足失败，这不影响提案状态）
+        // 投票通过（自动执行可能因余额不足失败，这不影响提案状态）。
+        // Phase 3: 走 VotingEngineSystem 统一入口,benchmark 不测验签路径。
         for i in 0..6 {
             let voter = prc_admin::<T>(i);
-            assert!(T::InternalVoteEngine::cast_internal_vote(voter, pid, true).is_ok());
+            assert!(voting_engine_system::Pallet::<T>::internal_vote(
+                RawOrigin::Signed(voter).into(),
+                pid,
+                true,
+            )
+            .is_ok());
         }
 
         // 补充余额后手动执行

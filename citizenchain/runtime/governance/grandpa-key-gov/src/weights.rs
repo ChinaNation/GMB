@@ -44,7 +44,6 @@ use frame_support::{
 /// Weight functions for `grandpa_key_gov`.
 pub trait WeightInfo {
 	fn propose_replace_grandpa_key() -> Weight;
-	fn vote_replace_grandpa_key() -> Weight;
 	fn execute_replace_grandpa_key() -> Weight;
 	fn cancel_failed_replace_grandpa_key() -> Weight;
 }
@@ -80,42 +79,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(Weight::from_parts(0, 19871))
 			.saturating_add(T::DbWeight::get().reads(7))
 			.saturating_add(T::DbWeight::get().writes(7))
-	}
-	/// Storage: `GrandpaKeyGov::ProposalActions` (r:1 w:1)
-	/// Proof: `GrandpaKeyGov::ProposalActions` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalVotesByAccount` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::InternalVotesByAccount` (`max_values`: None, `max_size`: Some(73), added: 2548, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalTallies` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::InternalTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	/// Storage: `Grandpa::PendingChange` (r:1 w:1)
-	/// Proof: `Grandpa::PendingChange` (`max_values`: Some(1), `max_size`: Some(2575), added: 3070, mode: `MaxEncodedLen`)
-	/// Storage: `Grandpa::Authorities` (r:1 w:0)
-	/// Proof: `Grandpa::Authorities` (`max_values`: Some(1), `max_size`: Some(2562), added: 3057, mode: `MaxEncodedLen`)
-	/// Storage: `GrandpaKeyGov::ActiveProposalByInstitution` (r:1 w:1)
-	/// Proof: `GrandpaKeyGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `GrandpaKeyGov::GrandpaKeyOwnerByKey` (r:0 w:2)
-	/// Proof: `GrandpaKeyGov::GrandpaKeyOwnerByKey` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
-	/// Storage: `GrandpaKeyGov::CurrentGrandpaKeys` (r:0 w:1)
-	/// Proof: `GrandpaKeyGov::CurrentGrandpaKeys` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
-	/// Storage: `GrandpaKeyGov::PendingProposalByNewKey` (r:0 w:1)
-	/// Proof: `GrandpaKeyGov::PendingProposalByNewKey` (`max_values`: None, `max_size`: Some(56), added: 2531, mode: `MaxEncodedLen`)
-	/// Storage: `GrandpaKeyGov::ProposalCreatedAt` (r:0 w:1)
-	/// Proof: `GrandpaKeyGov::ProposalCreatedAt` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	fn vote_replace_grandpa_key() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `3781`
-		//  Estimated: `4554`
-		// Minimum execution time: 129_251_000 picoseconds.
-		Weight::from_parts(131_555_000, 0)
-			.saturating_add(Weight::from_parts(0, 4554))
-			.saturating_add(T::DbWeight::get().reads(8))
-			.saturating_add(T::DbWeight::get().writes(12))
 	}
 	/// Storage: `GrandpaKeyGov::ProposalActions` (r:1 w:1)
 	/// Proof: `GrandpaKeyGov::ProposalActions` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
@@ -203,42 +166,6 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 19871))
 			.saturating_add(RocksDbWeight::get().reads(7))
 			.saturating_add(RocksDbWeight::get().writes(7))
-	}
-	/// Storage: `GrandpaKeyGov::ProposalActions` (r:1 w:1)
-	/// Proof: `GrandpaKeyGov::ProposalActions` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalVotesByAccount` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::InternalVotesByAccount` (`max_values`: None, `max_size`: Some(73), added: 2548, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalTallies` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::InternalTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	/// Storage: `Grandpa::PendingChange` (r:1 w:1)
-	/// Proof: `Grandpa::PendingChange` (`max_values`: Some(1), `max_size`: Some(2575), added: 3070, mode: `MaxEncodedLen`)
-	/// Storage: `Grandpa::Authorities` (r:1 w:0)
-	/// Proof: `Grandpa::Authorities` (`max_values`: Some(1), `max_size`: Some(2562), added: 3057, mode: `MaxEncodedLen`)
-	/// Storage: `GrandpaKeyGov::ActiveProposalByInstitution` (r:1 w:1)
-	/// Proof: `GrandpaKeyGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `GrandpaKeyGov::GrandpaKeyOwnerByKey` (r:0 w:2)
-	/// Proof: `GrandpaKeyGov::GrandpaKeyOwnerByKey` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
-	/// Storage: `GrandpaKeyGov::CurrentGrandpaKeys` (r:0 w:1)
-	/// Proof: `GrandpaKeyGov::CurrentGrandpaKeys` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
-	/// Storage: `GrandpaKeyGov::PendingProposalByNewKey` (r:0 w:1)
-	/// Proof: `GrandpaKeyGov::PendingProposalByNewKey` (`max_values`: None, `max_size`: Some(56), added: 2531, mode: `MaxEncodedLen`)
-	/// Storage: `GrandpaKeyGov::ProposalCreatedAt` (r:0 w:1)
-	/// Proof: `GrandpaKeyGov::ProposalCreatedAt` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	fn vote_replace_grandpa_key() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `3781`
-		//  Estimated: `4554`
-		// Minimum execution time: 129_251_000 picoseconds.
-		Weight::from_parts(131_555_000, 0)
-			.saturating_add(Weight::from_parts(0, 4554))
-			.saturating_add(RocksDbWeight::get().reads(8))
-			.saturating_add(RocksDbWeight::get().writes(12))
 	}
 	/// Storage: `GrandpaKeyGov::ProposalActions` (r:1 w:1)
 	/// Proof: `GrandpaKeyGov::ProposalActions` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)

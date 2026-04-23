@@ -79,14 +79,19 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
     //   the compatible custom types.
     //
-    // Step 1 (多签注册) + Step 2 (多签转账) 离线 QR 聚合签名改造涉及破坏性 call_index 重用
-    // (vote_X → finalize_X)和 SweepAction 结构变更,与历史版本不可向后兼容。
-    // spec_version 归 1 + 重新创世清理所有旧 storage / 提案数据。
+    // Phase 3「投票引擎统一入口整改」(2026-04-22):
+    //   - 业务 pallet 的 vote_X / finalize_X 全部物理删除,所有管理员投票一律走
+    //     `VotingEngineSystem::internal_vote`(9.0)。
+    //   - 投票引擎内部 call_index 重排:
+    //     0=internal_vote / 1=joint_vote / 2=citizen_vote / 3=finalize_proposal。
+    //   - 多个业务 pallet 的 call_index 连续重排(见 Phase 2 任务卡),
+    //     与历史版本不可向后兼容。
+    //   - 链仍处于开发期(feedback_chain_in_dev),走 fresh genesis,不做链上 setCode。
     //
     // 注意:`.github/workflows/citizenchain-wasm.yml` 原先有 "spec_version 自增"
     // 自动 bump step 已同步删除,spec_version 从此纯手动管理,避免 CI 打乱
     // "重新创世 + 钉死某个版本"的语义。
-    spec_version: 1,
+    spec_version: 2,
     impl_version: 1,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 1,
@@ -396,6 +401,33 @@ mod tests {
         assert!(
             payer.is_none(),
             "fee_payer must return None for DuoqianTransferPow (fees handled internally)"
+        );
+    }
+
+    /// Phase 2 回归:7 个治理业务 pallet 的 `MODULE_TAG` 必须全局唯一。
+    ///
+    /// 背景:投票引擎达终态后通过 `InternalVoteResultCallback` tuple 广播到
+    /// 全部业务 Executor,各 Executor 靠 `ProposalData` 前缀的 MODULE_TAG 互斥
+    /// 认领自己的提案。若两个模块碰撞,同一个提案可能被两个 Executor 同时执行,
+    /// 产生数据层异常。本测试在编译时固定捕获。
+    #[test]
+    fn governance_module_tags_are_globally_unique() {
+        use std::collections::HashSet;
+        let tags: [(&str, &[u8]); 7] = [
+            ("admins_origin_gov", admins_origin_gov::MODULE_TAG),
+            ("grandpa_key_gov", grandpa_key_gov::MODULE_TAG),
+            ("resolution_destro_gov", resolution_destro_gov::MODULE_TAG),
+            ("resolution_issuance_gov", resolution_issuance_gov::MODULE_TAG),
+            ("runtime_root_upgrade", runtime_root_upgrade::MODULE_TAG),
+            ("duoqian_manage_pow", duoqian_manage_pow::MODULE_TAG),
+            ("duoqian_transfer_pow", duoqian_transfer_pow::MODULE_TAG),
+        ];
+        let unique: HashSet<&[u8]> = tags.iter().map(|(_, t)| *t).collect();
+        assert_eq!(
+            unique.len(),
+            tags.len(),
+            "MODULE_TAG must be globally unique across governance pallets; got: {:?}",
+            tags,
         );
     }
 

@@ -49,7 +49,6 @@ use frame_support::{
 /// Weight functions for `admins_origin_gov`.
 pub trait WeightInfo {
 	fn propose_admin_replacement() -> Weight;
-	fn vote_admin_replacement() -> Weight;
 	fn execute_admin_replacement() -> Weight;
 }
 
@@ -84,34 +83,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(Weight::from_parts(0, 19871))
 			.saturating_add(T::DbWeight::get().reads(6))
 			.saturating_add(T::DbWeight::get().writes(12))
-	}
-	/// Storage: `AdminsOriginGov::ProposalActions` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::ProposalActions` (`max_values`: None, `max_size`: Some(129), added: 2604, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalVotesByAccount` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::InternalVotesByAccount` (`max_values`: None, `max_size`: Some(73), added: 2548, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalTallies` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::InternalTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::ProposalPassedAt` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::ProposalPassedAt` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::ActiveProposalByInstitution` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::ProposalCreatedAt` (r:0 w:1)
-	/// Proof: `AdminsOriginGov::ProposalCreatedAt` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	fn vote_admin_replacement() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `1824`
-		//  Estimated: `4554`
-		// Minimum execution time: 100_848_000 picoseconds.
-		Weight::from_parts(103_823_000, 0)
-			.saturating_add(Weight::from_parts(0, 4554))
-			.saturating_add(T::DbWeight::get().reads(7))
-			.saturating_add(T::DbWeight::get().writes(9))
 	}
 	/// Storage: `AdminsOriginGov::ProposalActions` (r:1 w:1)
 	/// Proof: `AdminsOriginGov::ProposalActions` (`max_values`: None, `max_size`: Some(129), added: 2604, mode: `MaxEncodedLen`)
@@ -171,34 +142,6 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 19871))
 			.saturating_add(RocksDbWeight::get().reads(6))
 			.saturating_add(RocksDbWeight::get().writes(12))
-	}
-	/// Storage: `AdminsOriginGov::ProposalActions` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::ProposalActions` (`max_values`: None, `max_size`: Some(129), added: 2604, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalVotesByAccount` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::InternalVotesByAccount` (`max_values`: None, `max_size`: Some(73), added: 2548, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalTallies` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::InternalTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::ProposalPassedAt` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::ProposalPassedAt` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::ActiveProposalByInstitution` (r:1 w:1)
-	/// Proof: `AdminsOriginGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::ProposalCreatedAt` (r:0 w:1)
-	/// Proof: `AdminsOriginGov::ProposalCreatedAt` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	fn vote_admin_replacement() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `1824`
-		//  Estimated: `4554`
-		// Minimum execution time: 100_848_000 picoseconds.
-		Weight::from_parts(103_823_000, 0)
-			.saturating_add(Weight::from_parts(0, 4554))
-			.saturating_add(RocksDbWeight::get().reads(7))
-			.saturating_add(RocksDbWeight::get().writes(9))
 	}
 	/// Storage: `AdminsOriginGov::ProposalActions` (r:1 w:1)
 	/// Proof: `AdminsOriginGov::ProposalActions` (`max_values`: None, `max_size`: Some(129), added: 2604, mode: `MaxEncodedLen`)

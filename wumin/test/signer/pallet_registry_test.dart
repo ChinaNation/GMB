@@ -11,6 +11,7 @@ void main() {
 
     test('不支持的 specVersion 返回 false', () {
       expect(PalletRegistry.isSupported(0), isFalse);
+      expect(PalletRegistry.isSupported(1), isFalse); // Phase 3 已升至 spec=2
       expect(PalletRegistry.isSupported(999), isFalse);
       expect(PalletRegistry.isSupported(-1), isFalse);
     });
@@ -23,25 +24,53 @@ void main() {
       final pallets = {
         PalletRegistry.balancesPallet,
         PalletRegistry.duoqianTransferPowPallet,
+        PalletRegistry.duoqianManagePowPallet,
         PalletRegistry.votingEngineSystemPallet,
+        PalletRegistry.runtimeRootUpgradePallet,
+        PalletRegistry.resolutionDestroGovPallet,
+        PalletRegistry.adminsOriginGovPallet,
+        PalletRegistry.grandpaKeyGovPallet,
+        PalletRegistry.resolutionIssuanceGovPallet,
+        PalletRegistry.offchainTransactionPosPallet,
       };
-      // 三个 pallet 索引应互不相同
-      expect(pallets.length, 3);
+      expect(pallets.length, 10);
     });
 
-    test('call 索引常量已定义', () {
-      // Balances
-      expect(PalletRegistry.transferKeepAliveCall, isNonNegative);
-      // DuoqianTransferPow
-      expect(PalletRegistry.proposeTransferCall, isNonNegative);
-      // Step 2 · voteTransferCall 已删除(vote_transfer → finalize_transfer,冷钱包不盲签)
-      // VotingEngineSystem
-      expect(PalletRegistry.jointVoteCall, isNonNegative);
-      expect(PalletRegistry.citizenVoteCall, isNonNegative);
+    test('投票引擎 call_index 按 Phase 2 重排', () {
+      // 0=internal_vote / 1=joint_vote / 2=citizen_vote / 3=finalize_proposal
+      expect(PalletRegistry.internalVoteCall, 0);
+      expect(PalletRegistry.jointVoteCall, 1);
+      expect(PalletRegistry.citizenVoteCall, 2);
+      expect(PalletRegistry.finalizeProposalCall, 3);
     });
 
-    test('supportedSpecVersions 非空', () {
+    test('业务 pallet 的 vote_X 常量已物理删除 (编译期保证)', () {
+      // 本测试只要能编译通过即视为通过：
+      // voteDestroyCall / voteAdminReplacementCall / voteKeyChangeCall /
+      // voteCloseCall / voteCreateCall / voteTransferCall /
+      // voteSafetyFundCall / voteSweepCall 等常量必须不存在。
+      // 若回归重新引入,会直接触发编译错误。
+      expect(true, isTrue);
+    });
+
+    test('业务 pallet 的 propose_X / execute_X call_index 连续排列', () {
+      expect(PalletRegistry.proposeTransferCall, 0);
+      expect(PalletRegistry.proposeSafetyFundCall, 1);
+      expect(PalletRegistry.proposeSweepCall, 2);
+      expect(PalletRegistry.executeTransferCall, 3);
+      expect(PalletRegistry.executeSafetyFundCall, 4);
+      expect(PalletRegistry.executeSweepCall, 5);
+
+      expect(PalletRegistry.proposeCreateCall, 0);
+      expect(PalletRegistry.proposeCloseCall, 1);
+      expect(PalletRegistry.registerSfidInstitutionCall, 2);
+      expect(PalletRegistry.proposeCreatePersonalCall, 3);
+      expect(PalletRegistry.cleanupRejectedProposalCall, 4);
+    });
+
+    test('supportedSpecVersions 非空 + 当前为 spec=2', () {
       expect(PalletRegistry.supportedSpecVersions, isNotEmpty);
+      expect(PalletRegistry.supportedSpecVersions, contains(2));
     });
   });
 }

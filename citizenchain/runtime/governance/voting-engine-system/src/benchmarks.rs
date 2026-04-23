@@ -8,10 +8,10 @@ use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_
 use sp_runtime::traits::{Hash as HashT, SaturatedConversion, Saturating};
 
 use crate::{
-    CitizenTallies, CitizenVotesByBindingId, Config, InstitutionPalletId, JointInstitutionTallies,
-    JointTallies, Pallet, Proposal, Proposals, VoteCountU32, VoteCountU64, VoteNonceOf,
-    VoteSignatureOf, PROPOSAL_KIND_INTERNAL, PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STAGE_INTERNAL,
-    STAGE_JOINT, STATUS_VOTING,
+    CitizenTallies, CitizenVotesByBindingId, Config, InstitutionPalletId, InternalTallies,
+    InternalVotesByAccount, JointInstitutionTallies, JointTallies, Pallet, Proposal, Proposals,
+    VoteCountU32, VoteCountU64, VoteNonceOf, VoteSignatureOf, PROPOSAL_KIND_INTERNAL,
+    PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STAGE_INTERNAL, STAGE_JOINT, STATUS_VOTING,
 };
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> Result<T::AccountId, BenchmarkError> {
@@ -45,6 +45,32 @@ mod benchmarks {
         }
 
         assert!(Proposals::<T>::contains_key(created_id));
+        Ok(())
+    }
+
+    /// 内部投票 benchmark:管理员对内部提案投赞成一票。
+    ///
+    /// 先通过 `do_create_internal_proposal` 建立有效提案 + 管理员快照,
+    /// 再测 `do_internal_vote` 主路径。
+    #[benchmark]
+    fn internal_vote() -> Result<(), BenchmarkError> {
+        let who = decode_account::<T>(CHINA_CB[0].duoqian_admins[0])?;
+        let institution = nrc_institution()?;
+        let proposal_id = Pallet::<T>::do_create_internal_proposal(
+            who.clone(),
+            crate::internal_vote::ORG_NRC,
+            institution,
+        )
+        .map_err(|_| BenchmarkError::Stop("create internal proposal should succeed"))?;
+
+        #[block]
+        {
+            Pallet::<T>::do_internal_vote(who.clone(), proposal_id, true)
+                .map_err(|_| BenchmarkError::Stop("internal vote should succeed"))?;
+        }
+
+        assert!(InternalVotesByAccount::<T>::contains_key(proposal_id, &who));
+        assert_eq!(InternalTallies::<T>::get(proposal_id).yes, 1u32);
         Ok(())
     }
 

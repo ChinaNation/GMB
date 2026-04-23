@@ -29,8 +29,9 @@ class RuntimeUpgradeService {
   /// propose_runtime_upgrade call_index=0。
   static const _proposeCallIndex = 0;
 
-  /// joint_vote call_index=3。
-  static const _jointVoteCallIndex = 3;
+  /// joint_vote call_index=1（Phase 2 重排后,投票引擎内部 call_index 序列
+  /// 为 0=internal_vote / 1=joint_vote / 2=citizen_vote / 3=finalize_proposal）。
+  static const _jointVoteCallIndex = 1;
 
   /// Mortal era 周期。
   static const _eraPeriod = 64;

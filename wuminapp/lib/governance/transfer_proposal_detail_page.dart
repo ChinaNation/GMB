@@ -6,6 +6,7 @@ import 'institution_data.dart';
 import 'institution_admin_service.dart';
 import 'pending_vote_store.dart';
 import 'proposal_context.dart';
+import 'internal_vote_service.dart';
 import 'transfer_proposal_service.dart';
 import '../qr/pages/qr_sign_session_page.dart';
 import '../rpc/chain_rpc.dart';
@@ -18,16 +19,18 @@ import 'proposal_vote_widgets.dart';
 
 /// 详情页展示/投票的三种提案类型。
 ///
-/// 决定：读哪个 storage map、提交哪个 extrinsic、QR 签名如何展示。
-/// pallet_index 都是 19（DuoqianTransferPow），只有 call_index 不同。
+/// 决定：读哪个 storage map 与 QR 签名如何展示。
+/// Phase 3(2026-04-22)起,投票动作统一走 `VotingEngineSystem::internal_vote`
+/// (9.0),不再按 kind 区分 call_index;`kind` 仅影响"创建提案"路径与
+/// 详情展示逻辑。
 enum TransferProposalKind {
-  /// 机构转账提案（propose_transfer / vote_transfer，call_index=0/1）。
+  /// 机构转账提案（propose_transfer, pallet=19 call=0）。
   transfer,
 
-  /// 安全基金转账提案（propose_safety_fund_transfer / vote_safety_fund_transfer，call_index=3/4）。
+  /// 安全基金转账提案（propose_safety_fund_transfer, pallet=19 call=1）。
   safetyFund,
 
-  /// 手续费划转提案（propose_sweep_to_main / vote_sweep_to_main，call_index=5/6）。
+  /// 手续费划转提案（propose_sweep_to_main, pallet=19 call=2）。
   sweep,
 }
 
@@ -104,17 +107,11 @@ class _TransferProposalDetailPageState
     }
   }
 
-  /// QR 签名 action 字段（与链上 extrinsic 名对齐，便于冷钱包识别）。
-  String get _signAction {
-    switch (widget.kind) {
-      case TransferProposalKind.transfer:
-        return 'vote_transfer';
-      case TransferProposalKind.safetyFund:
-        return 'vote_safety_fund_transfer';
-      case TransferProposalKind.sweep:
-        return 'vote_sweep_to_main';
-    }
-  }
+  /// QR 签名 action 字段。
+  ///
+  /// Phase 3 起所有管理员投票统一走 `internal_vote`,冷钱包按 action
+  /// 识别并解码同一套 call 格式；业务类型仅通过 summary/fields 文案体现。
+  String get _signAction => 'internal_vote';
 
   // 投票计数
   int _yesCount = 0;
@@ -343,40 +340,15 @@ class _TransferProposalDetailPageState
         return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
-      // 按 kind 调用对应 submit 方法，确保 call_index 与 runtime 端一致：
-      //   transfer   → vote_transfer（1）
-      //   safetyFund → vote_safety_fund_transfer（4）
-      //   sweep      → vote_sweep_to_main（6）
-      final ({String txHash, int usedNonce}) result;
-      switch (widget.kind) {
-        case TransferProposalKind.transfer:
-          result = await _proposalService.submitVoteTransfer(
-            proposalId: widget.proposalId,
-            approve: approve,
-            fromAddress: wallet.address,
-            signerPubkey: Uint8List.fromList(pubkeyBytes),
-            sign: signCallback,
-          );
-          break;
-        case TransferProposalKind.safetyFund:
-          result = await _proposalService.submitVoteSafetyFund(
-            proposalId: widget.proposalId,
-            approve: approve,
-            fromAddress: wallet.address,
-            signerPubkey: Uint8List.fromList(pubkeyBytes),
-            sign: signCallback,
-          );
-          break;
-        case TransferProposalKind.sweep:
-          result = await _proposalService.submitVoteSweep(
-            proposalId: widget.proposalId,
-            approve: approve,
-            fromAddress: wallet.address,
-            signerPubkey: Uint8List.fromList(pubkeyBytes),
-            sign: signCallback,
-          );
-          break;
-      }
+      // Phase 3: 所有管理员投票统一走 VotingEngineSystem::internal_vote(9.0)。
+      // 业务 kind 仅用于 QR 展示的文案与 storage 读取,不再分派 call_index。
+      final result = await InternalVoteService().submit(
+        proposalId: widget.proposalId,
+        approve: approve,
+        fromAddress: wallet.address,
+        signerPubkey: Uint8List.fromList(pubkeyBytes),
+        sign: signCallback,
+      );
 
       // 持久化待确认投票记录
       var pubkey = wallet.pubkeyHex.toLowerCase();
