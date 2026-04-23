@@ -349,17 +349,30 @@ class _DuoqianCreateProposalPageState extends State<DuoqianCreateProposalPage> {
             action: 'propose_create',
             summary: '发起创建多签账户提案',
             fields: [
+              // propose_create 链端 fields 按 Registry = (sfid_id,
+              // account_name, admin_count, threshold, amount_yuan)。
+              // amount_yuan 带 " GMB" 后缀与 wumin decoder 对齐
+              // (2026-04-22 两色识别整改)。
               SignDisplayField(
-                  label: 'SFID ID', value: _sfidIdController.text.trim()),
+                  key: 'sfid_id',
+                  label: 'SFID ID',
+                  value: _sfidIdController.text.trim()),
               SignDisplayField(
-                  label: '账户名称', value: _selectedAccount!.accountName),
+                  key: 'account_name',
+                  label: '账户名称',
+                  value: _selectedAccount!.accountName),
               SignDisplayField(
-                  label: '管理员数量', value: _adminPubkeys.length.toString()),
+                  key: 'admin_count',
+                  label: '管理员数量',
+                  value: _adminPubkeys.length.toString()),
               SignDisplayField(
-                  label: '阈值', value: '$threshold/${_adminPubkeys.length}'),
+                  key: 'threshold',
+                  label: '阈值',
+                  value: '$threshold/${_adminPubkeys.length}'),
               SignDisplayField(
+                  key: 'amount_yuan',
                   label: '初始资金',
-                  value: AmountFormat.format(amountYuan, symbol: '')),
+                  value: AmountFormat.format(amountYuan)),
             ],
           ),
         );

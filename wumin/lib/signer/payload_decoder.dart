@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../chain/chain_constants.dart';
@@ -113,8 +114,8 @@ class PayloadDecoder {
       }
 
       // ── DuoqianTransferPow(19) ──
-      // Phase 3：只保留 propose_X 解码；finalize_X 已删除，
-      // 投票走 VotingEngineSystem::internal_vote。
+      // Phase 3：投票入口统一到 VotingEngineSystem::internal_vote,
+      // 本 pallet 保留 3 条 propose_X + 3 条 execute_X 兜底执行。
       if (palletIndex == PalletRegistry.duoqianTransferPowPallet) {
         if (callIndex == PalletRegistry.proposeTransferCall) {
           return _decodeProposeTransfer(bytes);
@@ -124,6 +125,27 @@ class PayloadDecoder {
         }
         if (callIndex == PalletRegistry.proposeSweepCall) {
           return _decodeProposeSweep(bytes);
+        }
+        if (callIndex == PalletRegistry.executeTransferCall) {
+          return _decodeProposalIdOnly(
+            bytes,
+            action: 'execute_transfer',
+            summaryTemplate: '手动触发转账提案 #{id} 执行',
+          );
+        }
+        if (callIndex == PalletRegistry.executeSafetyFundCall) {
+          return _decodeProposalIdOnly(
+            bytes,
+            action: 'execute_safety_fund_transfer',
+            summaryTemplate: '手动触发安全基金提案 #{id} 执行',
+          );
+        }
+        if (callIndex == PalletRegistry.executeSweepCall) {
+          return _decodeProposalIdOnly(
+            bytes,
+            action: 'execute_sweep_to_main',
+            summaryTemplate: '手动触发手续费划转提案 #{id} 执行',
+          );
         }
       }
 
@@ -138,27 +160,64 @@ class PayloadDecoder {
       }
 
       // ── DuoqianManagePow(17) ──
-      // Phase 3：vote_close / finalize_create 已物理删除，
-      // 投票走 VotingEngineSystem::internal_vote。
+      // Phase 3：投票入口统一到 VotingEngineSystem::internal_vote。本 pallet
+      // 保留 propose_X + cleanup_rejected_proposal(被拒提案残留清理)。
+      // register_sfid_institution 由 sfid 后端 ShengSigningPubkey 直签,
+      // 不走冷钱包,decoder 不覆盖。
       if (palletIndex == PalletRegistry.duoqianManagePowPallet) {
         if (callIndex == PalletRegistry.proposeCreateCall) return _decodeProposeCreate(bytes);
         if (callIndex == PalletRegistry.proposeCloseCall) return _decodeProposeClose(bytes);
         if (callIndex == PalletRegistry.proposeCreatePersonalCall) return _decodeProposeCreatePersonal(bytes);
+        if (callIndex == PalletRegistry.cleanupRejectedProposalCall) {
+          return _decodeProposalIdOnly(
+            bytes,
+            action: 'cleanup_rejected_proposal',
+            summaryTemplate: '清理被拒提案 #{id} 残留',
+          );
+        }
       }
 
       // ── ResolutionDestroGov(14) ──
       if (palletIndex == PalletRegistry.resolutionDestroGovPallet) {
         if (callIndex == PalletRegistry.proposeDestroyCall) return _decodeProposeDestroy(bytes);
+        if (callIndex == PalletRegistry.executeDestroyCall) {
+          return _decodeProposalIdOnly(
+            bytes,
+            action: 'execute_destroy',
+            summaryTemplate: '手动触发决议销毁提案 #{id} 执行',
+          );
+        }
       }
 
       // ── AdminsOriginGov(12) ──
       if (palletIndex == PalletRegistry.adminsOriginGovPallet) {
         if (callIndex == PalletRegistry.proposeAdminReplacementCall) return _decodeProposeAdminReplacement(bytes);
+        if (callIndex == PalletRegistry.executeAdminReplacementCall) {
+          return _decodeProposalIdOnly(
+            bytes,
+            action: 'execute_admin_replacement',
+            summaryTemplate: '手动触发管理员替换提案 #{id} 执行',
+          );
+        }
       }
 
       // ── GrandpaKeyGov(16) ──
       if (palletIndex == PalletRegistry.grandpaKeyGovPallet) {
         if (callIndex == PalletRegistry.proposeReplaceGrandpaKeyCall) return _decodeProposeKeyChange(bytes);
+        if (callIndex == PalletRegistry.executeReplaceGrandpaKeyCall) {
+          return _decodeProposalIdOnly(
+            bytes,
+            action: 'execute_replace_grandpa_key',
+            summaryTemplate: '手动触发 GRANDPA 密钥替换提案 #{id} 执行',
+          );
+        }
+        if (callIndex == PalletRegistry.cancelFailedReplaceGrandpaKeyCall) {
+          return _decodeProposalIdOnly(
+            bytes,
+            action: 'cancel_failed_replace_grandpa_key',
+            summaryTemplate: '取消失败的 GRANDPA 密钥替换提案 #{id}',
+          );
+        }
       }
 
       return null;
@@ -361,7 +420,29 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // RuntimeRootUpgrade(13) / propose_runtime_upgrade(0)
-  // 格式：[13][0][Compact<u32> reason_len][reason_bytes][Compact<u32> wasm_len][wasm_bytes][u64_le eligible_total][Compact nonce][Compact sig]
+  //
+  // 链端签名：
+  //   pub fn propose_runtime_upgrade(
+  //     origin,
+  //     reason: ReasonOf<T>,          // BoundedVec<u8>
+  //     code: CodeOf<T>,              // BoundedVec<u8> —— 实际 WASM
+  //     eligible_total: u64,
+  //     snapshot_nonce: SnapshotNonceOf<T>,   // BoundedVec<u8>
+  //     signature: SnapshotSignatureOf<T>,    // BoundedVec<u8>
+  //   )
+  //
+  // SCALE 编码：
+  //   [13][0]
+  //   + Compact<u32> reason_len + reason_bytes
+  //   + Compact<u32> wasm_len   + wasm_bytes
+  //   + u64_le eligible_total
+  //   + Compact<u32> nonce_len  + nonce_bytes
+  //   + Compact<u32> sig_len    + sig_bytes
+  //
+  // display.fields 对齐 Registry: `reason` / `wasm_size` / `wasm_hash` /
+  // `eligible_total`。`wasm_hash` 由 decoder 现场 `sha256(wasm_bytes)` 计算,
+  // 与节点 Tauri UI 用同一算法生成的哈希逐字对齐 — 这样用户才能独立核对
+  // "我签的就是这份 WASM"。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeRuntimeUpgrade(Uint8List bytes) {
     if (bytes.length < 3) return null;
@@ -373,8 +454,9 @@ class PayloadDecoder {
     offset += reasonLenSize;
     var reason = '';
     if (reasonLen > 0 && offset + reasonLen <= bytes.length) {
-      reason = String.fromCharCodes(
+      reason = utf8.decode(
         bytes.sublist(offset, offset + reasonLen),
+        allowMalformed: true,
       );
     }
     offset += reasonLen;
@@ -383,24 +465,36 @@ class PayloadDecoder {
     if (offset >= bytes.length) return null;
     final (wasmLen, wasmLenSize) = _decodeCompactU32(bytes, offset);
     offset += wasmLenSize;
+    if (offset + wasmLen > bytes.length) return null;
 
-    final sizeKb = (wasmLen / 1024).toStringAsFixed(0);
-    final sizeMb = (wasmLen / (1024 * 1024)).toStringAsFixed(2);
-    final sizeDisplay = wasmLen > 1024 * 1024 ? '$sizeMb MB' : '$sizeKb KB';
+    final wasmBytes = bytes.sublist(offset, offset + wasmLen);
+    final wasmHash = sha256.convert(wasmBytes).toString(); // 64 hex (小写)
+    offset += wasmLen;
+
+    // eligible_total: u64_le
+    if (offset + 8 > bytes.length) return null;
+    final eligibleTotal = _readU64Le(bytes, offset);
 
     return DecodedPayload(
       action: 'propose_runtime_upgrade',
-      summary: 'Runtime 升级提案（WASM $sizeDisplay）',
+      summary: 'Runtime 升级提案（WASM ${_formatWasmSize(wasmLen)}, '
+          '合格人数 $eligibleTotal）',
       fields: {
         'reason': reason,
-        'wasm_size': sizeDisplay,
+        'wasm_size': _formatWasmSize(wasmLen),
+        'wasm_hash': '0x$wasmHash',
+        'eligible_total': eligibleTotal.toString(),
       },
     );
   }
 
   // ---------------------------------------------------------------------------
   // RuntimeRootUpgrade(13) / developer_direct_upgrade(2)
-  // 格式：[13][2][Compact<u32> wasm_len][wasm_bytes...]
+  //
+  // 链端签名：pub fn developer_direct_upgrade(origin, code: CodeOf<T>)
+  // SCALE 编码：[13][2] + Compact<u32> wasm_len + wasm_bytes
+  //
+  // display.fields 对齐 Registry: `wasm_size` / `wasm_hash`。hash 同 sha256。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeDeveloperUpgrade(Uint8List bytes) {
     if (bytes.length < 3) return null;
@@ -408,20 +502,27 @@ class PayloadDecoder {
     var offset = 2; // 跳过 pallet_index + call_index
     final (wasmLen, lenSize) = _decodeCompactU32(bytes, offset);
     offset += lenSize;
+    if (offset + wasmLen > bytes.length) return null;
 
-    // 计算 wasm 大小（KB 或 MB）
-    final sizeKb = (wasmLen / 1024).toStringAsFixed(0);
-    final sizeMb = (wasmLen / (1024 * 1024)).toStringAsFixed(2);
-    final sizeDisplay = wasmLen > 1024 * 1024 ? '$sizeMb MB' : '$sizeKb KB';
+    final wasmBytes = bytes.sublist(offset, offset + wasmLen);
+    final wasmHash = sha256.convert(wasmBytes).toString(); // 64 hex (小写)
 
     return DecodedPayload(
       action: 'developer_direct_upgrade',
-      summary: '开发者直升 Runtime（WASM $sizeDisplay）',
+      summary: '开发者直升 Runtime（WASM ${_formatWasmSize(wasmLen)}）',
       fields: {
-        'wasm_size': sizeDisplay,
-        'wasm_bytes': wasmLen.toString(),
+        'wasm_size': _formatWasmSize(wasmLen),
+        'wasm_hash': '0x$wasmHash',
       },
     );
+  }
+
+  /// WASM 字节数的人可读渲染: `X.XX MB`(≥1 MB) 或 `X KB`。
+  static String _formatWasmSize(int wasmLen) {
+    if (wasmLen > 1024 * 1024) {
+      return '${(wasmLen / (1024 * 1024)).toStringAsFixed(2)} MB';
+    }
+    return '${(wasmLen / 1024).toStringAsFixed(0)} KB';
   }
 
   // ---------------------------------------------------------------------------
@@ -692,6 +793,34 @@ class PayloadDecoder {
       fields: {
         'institution': shenfenId,
         'new_key': '0x$keyHex',
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 通用:只取 proposal_id: u64_le 的兜底执行/取消/清理类 call。
+  //
+  // 链端 Phase 3 保留的若干 `execute_X` / `cancel_failed_X` /
+  // `cleanup_rejected_X` 签名完全一致:
+  //     pub fn <name>(origin, proposal_id: u64) -> DispatchResult
+  // SCALE 编码恒为 `[pallet_idx][call_idx][proposal_id:u64_le]` = 10 bytes。
+  //
+  // 所有这类 call 的 `display.fields` 按 Registry 统一为
+  //   { proposal_id: <decimal string> }
+  // 与节点 Tauri UI / wuminapp 的 sign_request 逐字对齐 → 🟢 绿色识别。
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposalIdOnly(
+    Uint8List bytes, {
+    required String action,
+    required String summaryTemplate,
+  }) {
+    if (bytes.length < 10) return null;
+    final proposalId = _readU64Le(bytes, 2);
+    return DecodedPayload(
+      action: action,
+      summary: summaryTemplate.replaceAll('{id}', proposalId.toString()),
+      fields: {
+        'proposal_id': proposalId.toString(),
       },
     );
   }

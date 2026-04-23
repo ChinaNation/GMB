@@ -369,10 +369,12 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
           text: '警告:交易内容与摘要不符,禁止签名',
         );
       case DisplayMatchStatus.decodeFailed:
+        // 两色识别模型(2026-04-22): 无法解码 → 红色拒签,
+        // 不再展示"来自请求方的黄色信息"(feedback_no_compatibility)。
         statusBanner = _buildBanner(
-          color: AppTheme.warning,
-          icon: Icons.warning_amber_rounded,
-          text: '无法独立验证交易内容,以下信息来自请求方',
+          color: AppTheme.danger,
+          icon: Icons.dangerous_rounded,
+          text: '警告:无法独立验证交易内容,禁止签名',
         );
     }
 
@@ -484,24 +486,9 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     final verification = _verification;
     final isMismatched =
         verification?.displayMatch == DisplayMatchStatus.mismatched;
-    final displayAction = request.body.display.action;
-    const allowedHashedActions = {
-      'developer_direct_upgrade',
-      'propose_runtime_upgrade',
-      'activate_admin',
-      'propose_safety_fund_transfer',
-      'vote_safety_fund_transfer',
-      'propose_sweep_to_main',
-      'vote_sweep_to_main',
-      'propose_create',
-      'propose_create_personal',
-      'propose_transfer',
-      'vote_transfer',
-      'joint_vote',
-    };
+    // 两色识别模型(2026-04-22): decodeFailed 一律红色拒签,不再走白名单兜底。
     final isDecodeFailed =
-        verification?.displayMatch == DisplayMatchStatus.decodeFailed &&
-        !allowedHashedActions.contains(displayAction);
+        verification?.displayMatch == DisplayMatchStatus.decodeFailed;
 
     return ListView(
       padding: const EdgeInsets.all(16),

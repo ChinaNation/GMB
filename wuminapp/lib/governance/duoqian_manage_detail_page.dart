@@ -250,14 +250,15 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
             action: 'internal_vote',
             summary: '$summaryType提案 #${widget.proposalId} 投票：$voteText',
             fields: [
-              SignDisplayField(label: '提案编号', value: widget.proposalId.toString()),
-              SignDisplayField(label: '投票', value: approve.toString()),
-              if (_createInfo != null) ...[
-                SignDisplayField(label: '初始资金', value: AmountFormat.format(_createInfo!.amountYuan, symbol: '')),
-                SignDisplayField(label: '阈值', value: '${_createInfo!.threshold}/${_createInfo!.adminCount}'),
-              ],
-              if (_closeInfo != null)
-                SignDisplayField(label: '受益人', value: _closeInfo!.beneficiary),
+              // internal_vote 链端 fields 按 Registry = (proposal_id, approve)。
+              // _createInfo / _closeInfo 属辅助上下文,页面已独立展示,
+              // 不塞 display.fields 避免对齐失败(2026-04-22 两色识别整改)。
+              SignDisplayField(
+                  key: 'proposal_id',
+                  label: '提案编号',
+                  value: widget.proposalId.toString()),
+              SignDisplayField(
+                  key: 'approve', label: '投票', value: approve.toString()),
             ],
           ),
         );

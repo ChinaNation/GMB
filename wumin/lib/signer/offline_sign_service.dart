@@ -143,34 +143,23 @@ class OfflineSignService {
     }
 
     final verification = verifyPayload(request);
-    if (verification.displayMatch == DisplayMatchStatus.mismatched) {
-      throw const OfflineSignException(
-        OfflineSignErrorCode.displayMismatch,
-        '交易内容与摘要不符,拒绝签名',
-      );
-    }
-    if (verification.displayMatch == DisplayMatchStatus.decodeFailed) {
-      final displayAction = body.display.action;
-      const allowedHashedActions = {
-        'developer_direct_upgrade',
-        'propose_runtime_upgrade',
-        'activate_admin',
-        'propose_safety_fund_transfer',
-        'vote_safety_fund_transfer',
-        'propose_sweep_to_main',
-        'vote_sweep_to_main',
-        'propose_create',
-        'propose_create_personal',
-        'propose_transfer',
-        'vote_transfer',
-        'joint_vote',
-      };
-      if (!allowedHashedActions.contains(displayAction)) {
+    // 两色识别模型(2026-04-22):
+    //   matched  → 绿色放行
+    //   mismatched / decodeFailed → 红色拒签,不再保留任何"白名单盲签"兜底。
+    //   见 memory/05-architecture/qr-signing-recognition.md § 四铁律。
+    switch (verification.displayMatch) {
+      case DisplayMatchStatus.matched:
+        break;
+      case DisplayMatchStatus.mismatched:
         throw const OfflineSignException(
           OfflineSignErrorCode.displayMismatch,
-          '无法独立验证交易内容,禁止签名。请升级冷钱包。',
+          '交易内容与摘要不符,拒绝签名',
         );
-      }
+      case DisplayMatchStatus.decodeFailed:
+        throw const OfflineSignException(
+          OfflineSignErrorCode.displayMismatch,
+          '无法独立验证交易内容,禁止签名',
+        );
     }
 
     final payloadBytes = _hexToBytes(body.payloadHex);

@@ -53,17 +53,12 @@ class PalletRegistry {
   /// `finalize_proposal(proposal_id)` — 任意人触发终态执行（无需签投票）。
   static const int finalizeProposalCall = 3;
 
-  // ---- 业务 pallet：只保留提案创建 / 执行重试入口 ----
+  // ---- 业务 pallet:仅保留提案创建与幂等兜底入口 ----
   //
-  // Phase 2 已在链端物理删除所有业务 `vote_X` call：
-  //   - admins_origin_gov: vote_admin_replacement
-  //   - resolution_destro_gov: vote_destroy
-  //   - grandpa_key_gov: vote_replace_grandpa_key
-  //   - duoqian_manage_pow: vote_close / finalize_create
-  //   - duoqian_transfer_pow: finalize_transfer / finalize_safety_fund_transfer /
-  //     finalize_sweep_to_main
-  // 冷钱包只解码 propose_X / execute_X / cleanup_X 等业务创建类 call，
-  // 投票动作一律由 VotingEngineSystem(9) 路径解码。
+  // Phase 2/3 已在链端物理删除所有业务 pallet 内部的聚合签名与投票入口
+  // (共八条),全部通过 `VotingEngineSystem(9).internal_vote(0)` 统一收敛。
+  // 业务 pallet 仅保留 propose 提案创建、execute 执行兜底、cleanup 被拒清理、
+  // cancel 失败取消 等幂等入口。冷钱包 decoder 与此对齐。
 
   // ---- DuoqianTransferPow (19) ----
   static const int duoqianTransferPowPallet = 19;

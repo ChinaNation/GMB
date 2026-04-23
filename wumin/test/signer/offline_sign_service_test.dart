@@ -51,28 +51,31 @@ void main() {
       hotWallet = (await walletManager.getWalletByIndex(1))!;
     });
 
-    test('signParsedRequest should sign matching request with hot wallet',
+    test(
+        'signParsedRequest should sign matched internal_vote (Phase 3 统一入口)',
         () async {
-      // vote_transfer: pallet=0x13, call=0x01, proposal_id=1 (u64 LE), approve=true
-      const votePayloadHex = '0x13010100000000000000' '01';
+      // Phase 3(2026-04-22): 所有管理员投票走 VotingEngineSystem(9).internal_vote(0)
+      // payload = [0x09][0x00][u64 LE proposal_id=1][bool approve=1]
+      const payloadHex = '0x09000100000000000000' '01';
       final knownSpec = PalletRegistry.supportedSpecVersions.first;
       final request = _buildTestRequest(
         requestId: 'offline-req-test-0001',
         address: hotWallet.address,
         pubkey: '0x${hotWallet.pubkeyHex}',
-        payloadHex: votePayloadHex,
+        payloadHex: payloadHex,
         specVersion: knownSpec,
         display: const SignDisplay(
-          action: 'vote_transfer',
-          summary: '转账提案 #1 投票：赞成',
+          action: 'internal_vote',
+          summary: '管理员投票 提案 #1：赞成',
           fields: [
-            SignDisplayField(label: '提案', value: '1'),
-            SignDisplayField(label: '投票', value: 'true'),
+            // 两色识别模型要求 display.fields 的 key 与 decoder 输出逐字对齐。
+            SignDisplayField(key: 'proposal_id', label: '提案', value: '1'),
+            SignDisplayField(key: 'approve', label: '投票', value: 'true'),
           ],
         ),
       );
 
-      final payloadBytes = _hexToBytes(votePayloadHex);
+      final payloadBytes = _hexToBytes(payloadHex);
 
       final response = await service.signParsedRequest(
         walletIndex: hotWallet.walletIndex,
@@ -109,6 +112,72 @@ void main() {
       expect(verification.decoded, isNull);
     });
 
+    test('signParsedRequest 拒绝 decodeFailed(未知 specVersion)', () async {
+      // 两色识别模型: decodeFailed → 红色拒签,不再有白名单兜底。
+      final request = _buildTestRequest(
+        requestId: 'offline-req-test-decode-fail',
+        address: hotWallet.address,
+        pubkey: '0x${hotWallet.pubkeyHex}',
+        payloadHex:
+            '0x130000' // 任意非本 runtime 合法 payload
+            'deadbeef',
+        specVersion: 999, // 未支持的 spec
+        display: const SignDisplay(
+          // 即便 action 恰是本仓库白名单旧条目,也必须拒签。
+          action: 'propose_transfer',
+          summary: 'fake propose',
+        ),
+      );
+
+      expect(
+        () => service.signParsedRequest(
+          walletIndex: hotWallet.walletIndex,
+          request: request,
+        ),
+        throwsA(
+          isA<OfflineSignException>().having(
+            (e) => e.code,
+            'code',
+            OfflineSignErrorCode.displayMismatch,
+          ),
+        ),
+      );
+    });
+
+    test('signParsedRequest 拒绝 mismatched(action 不一致)', () async {
+      // decode 成功但 display.action 和 decoded.action 不一致 → 红色拒签。
+      const payloadHex = '0x09000700000000000000' '01';
+      final request = _buildTestRequest(
+        requestId: 'offline-req-test-action-mismatch',
+        address: hotWallet.address,
+        pubkey: '0x${hotWallet.pubkeyHex}',
+        payloadHex: payloadHex,
+        specVersion: PalletRegistry.supportedSpecVersions.first,
+        display: const SignDisplay(
+          action: 'joint_vote', // decoder 会解码为 'internal_vote'
+          summary: '恶意伪造',
+          fields: [
+            SignDisplayField(key: 'proposal_id', label: '提案', value: '7'),
+            SignDisplayField(key: 'approve', label: '投票', value: 'true'),
+          ],
+        ),
+      );
+
+      expect(
+        () => service.signParsedRequest(
+          walletIndex: hotWallet.walletIndex,
+          request: request,
+        ),
+        throwsA(
+          isA<OfflineSignException>().having(
+            (e) => e.code,
+            'code',
+            OfflineSignErrorCode.displayMismatch,
+          ),
+        ),
+      );
+    });
+
     test('verifyPayload decodes known specVersion', () {
       // Balances::transfer_keep_alive: pallet=2, call=3
       // MultiAddress::Id prefix=0x00, then 32 bytes dest, then compact amount
@@ -123,7 +192,7 @@ void main() {
           action: 'transfer',
           summary: 'test transfer',
           fields: [
-            SignDisplayField(label: '金额', value: '0.01 GMB'),
+            SignDisplayField(key: 'amount_yuan', label: '金额', value: '0.01 GMB'),
           ],
         ),
       );

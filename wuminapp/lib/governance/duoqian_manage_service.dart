@@ -15,7 +15,7 @@ import 'duoqian_manage_models.dart';
 /// 提案创建类 extrinsic 的编码与提交,以及 SFID 注册状态和多签账户的
 /// storage 查询。
 ///
-/// Phase 3(2026-04-22): vote_create / vote_close 已从链端物理删除,
+/// Phase 3(2026-04-22): 本 pallet 内部的管理员投票入口已从链端物理删除,
 /// 管理员投票一律走 `VotingEngineSystem::internal_vote`(9.0),
 /// 通过 [InternalVoteService] 或业务 service 的 `submitInternalVote`
 /// 统一入口发送。
