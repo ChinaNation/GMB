@@ -724,7 +724,7 @@ pub async fn submit_propose_safety_fund(
 
         let mut call_data = Vec::new();
         call_data.push(19u8); // DuoqianTransferPow pallet
-        call_data.push(3u8); // propose_safety_fund_transfer call
+        call_data.push(1u8); // propose_safety_fund_transfer call (Phase 2 重排,原 3)
         call_data.extend_from_slice(&beneficiary_bytes);
         call_data.extend_from_slice(&amount_fen.to_le_bytes());
         call_data.extend_from_slice(&remark_compact);
@@ -745,23 +745,8 @@ pub async fn submit_propose_safety_fund(
 }
 
 /// 构建安全基金投票签名请求 QR JSON（需要节点运行）。
-#[tauri::command]
-pub async fn build_safety_fund_vote_request(
-    app: AppHandle,
-    proposal_id: u64,
-    pubkey_hex: String,
-    approve: bool,
-) -> Result<signing::VoteSignRequestResult, String> {
-    let status = home::current_status(&app)?;
-    if !status.running {
-        return Err("节点未运行，无法构建签名请求".to_string());
-    }
-    tauri::async_runtime::spawn_blocking(move || {
-        signing::build_safety_fund_vote_sign_request(proposal_id, &pubkey_hex, approve)
-    })
-    .await
-    .map_err(|e| format!("build safety fund vote request task failed: {e}"))?
-}
+// Phase 3(2026-04-22): `build_safety_fund_vote_request` 已删除,
+// 所有管理员投票统一走 `build_vote_request`(internal_vote, 9.0)。
 
 /// 构建手续费划转提案签名请求。
 #[tauri::command]
@@ -803,8 +788,8 @@ pub async fn submit_propose_sweep(
         let amount_fen = (amount_yuan * 100.0).round() as u128;
         let institution_id = storage_keys::shenfen_id_to_fixed48(&shenfen_id);
         let mut call_data = Vec::with_capacity(66);
-        call_data.push(19u8);
-        call_data.push(5u8);
+        call_data.push(19u8); // DuoqianTransferPow pallet
+        call_data.push(2u8); // propose_sweep_to_main call (Phase 2 重排,原 5)
         call_data.extend_from_slice(&institution_id);
         call_data.extend_from_slice(&amount_fen.to_le_bytes());
         signing::verify_and_submit(
@@ -821,21 +806,5 @@ pub async fn submit_propose_sweep(
     .map_err(|e| format!("submit propose sweep failed: {e}"))?
 }
 
-/// 构建手续费划转投票签名请求。
-#[tauri::command]
-pub async fn build_sweep_vote_request(
-    app: AppHandle,
-    proposal_id: u64,
-    pubkey_hex: String,
-    approve: bool,
-) -> Result<signing::VoteSignRequestResult, String> {
-    let status = home::current_status(&app)?;
-    if !status.running {
-        return Err("节点未运行".to_string());
-    }
-    tauri::async_runtime::spawn_blocking(move || {
-        signing::build_sweep_vote_sign_request(proposal_id, &pubkey_hex, approve)
-    })
-    .await
-    .map_err(|e| format!("build sweep vote failed: {e}"))?
-}
+// Phase 3(2026-04-22): `build_sweep_vote_request` 已删除,
+// 所有管理员投票统一走 `build_vote_request`(internal_vote, 9.0)。

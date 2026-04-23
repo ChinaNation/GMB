@@ -11,8 +11,14 @@ import 'duoqian_manage_models.dart';
 
 /// 多签账户管理链上交互服务（对应 DuoqianManagePow pallet 17）。
 ///
-/// 负责 propose_create / vote_create / propose_close / vote_close
-/// 的 extrinsic 编码/提交，以及 SFID 注册状态和多签账户的 storage 查询。
+/// 负责 propose_create / propose_close / propose_create_personal 等
+/// 提案创建类 extrinsic 的编码与提交,以及 SFID 注册状态和多签账户的
+/// storage 查询。
+///
+/// Phase 3(2026-04-22): vote_create / vote_close 已从链端物理删除,
+/// 管理员投票一律走 `VotingEngineSystem::internal_vote`(9.0),
+/// 通过 [InternalVoteService] 或业务 service 的 `submitInternalVote`
+/// 统一入口发送。
 class DuoqianManageService {
   DuoqianManageService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
@@ -29,17 +35,11 @@ class DuoqianManageService {
   /// propose_close call_index=1。
   static const _proposeCloseCallIndex = 1;
 
-  /// vote_create call_index=3。
-  static const _voteCreateCallIndex = 3;
-
-  /// vote_close call_index=4。
-  static const _voteCloseCallIndex = 4;
-
   /// Mortal era 周期。
   static const _eraPeriod = 64;
 
-  /// propose_create_personal call_index=5。
-  static const _proposeCreatePersonalCallIndex = 5;
+  /// propose_create_personal call_index=3（Phase 2 重排,原 5）。
+  static const _proposeCreatePersonalCallIndex = 3;
 
   /// ProposalData 中的 action 类型前缀。
   static const actionCreate = 1;
@@ -177,41 +177,7 @@ class DuoqianManageService {
     );
   }
 
-  /// 提交 vote_create extrinsic。
-  ///
-  /// 参数编码：[0x11][0x03] + proposal_id(u64 LE) + approve(bool)
-  Future<({String txHash, int usedNonce})> submitVoteCreate({
-    required int proposalId,
-    required bool approve,
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required Future<Uint8List> Function(Uint8List payload) sign,
-  }) async {
-    return _signAndSubmit(
-      callData: _buildVoteCall(_voteCreateCallIndex, proposalId, approve),
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-    );
-  }
-
-  /// 提交 vote_close extrinsic。
-  ///
-  /// 参数编码：[0x11][0x04] + proposal_id(u64 LE) + approve(bool)
-  Future<({String txHash, int usedNonce})> submitVoteClose({
-    required int proposalId,
-    required bool approve,
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required Future<Uint8List> Function(Uint8List payload) sign,
-  }) async {
-    return _signAndSubmit(
-      callData: _buildVoteCall(_voteCloseCallIndex, proposalId, approve),
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-    );
-  }
+  // 投票动作已迁移到 `InternalVoteService`（Phase 3, pallet=9 call=0）。
 
   // ──── 链上查询 ────
 
@@ -383,17 +349,6 @@ class DuoqianManageService {
     );
   }
 
-  // ──── 内部：call data 构造 ────
-
-  Uint8List _buildVoteCall(int callIndex, int proposalId, bool approve) {
-    final output = ByteOutput();
-    output.pushByte(_palletIndex);
-    output.pushByte(callIndex);
-    output.write(_u64ToLeBytes(proposalId));
-    output.pushByte(approve ? 1 : 0);
-    return output.toBytes();
-  }
-
   // ──── 内部：签名提交 ────
 
   Future<({String txHash, int usedNonce})> _signAndSubmit({
@@ -531,13 +486,6 @@ class DuoqianManageService {
     final bytes = Uint8List(4);
     final bd = ByteData.sublistView(bytes);
     bd.setUint32(0, value, Endian.little);
-    return bytes;
-  }
-
-  Uint8List _u64ToLeBytes(int value) {
-    final bytes = Uint8List(8);
-    final bd = ByteData.sublistView(bytes);
-    bd.setUint64(0, value, Endian.little);
     return bytes;
   }
 

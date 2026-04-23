@@ -49,7 +49,6 @@ use frame_support::{
 /// Weight functions for `resolution_destro_gov`.
 pub trait WeightInfo {
 	fn propose_destroy() -> Weight;
-	fn vote_destroy() -> Weight;
 	fn execute_destroy() -> Weight;
 }
 
@@ -78,36 +77,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(Weight::from_parts(0, 19871))
 			.saturating_add(T::DbWeight::get().reads(4))
 			.saturating_add(T::DbWeight::get().writes(6))
-	}
-	/// Storage: `ResolutionDestroGov::ProposalActions` (r:1 w:1)
-	/// Proof: `ResolutionDestroGov::ProposalActions` (`max_values`: None, `max_size`: Some(88), added: 2563, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalVotesByAccount` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::InternalVotesByAccount` (`max_values`: None, `max_size`: Some(73), added: 2548, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalTallies` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::InternalTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestroGov::ProposalPassedAt` (r:1 w:1)
-	/// Proof: `ResolutionDestroGov::ProposalPassedAt` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	/// Storage: `System::Account` (r:1 w:1)
-	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestroGov::ActiveProposalByInstitution` (r:1 w:1)
-	/// Proof: `ResolutionDestroGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestroGov::ProposalCreatedAt` (r:0 w:1)
-	/// Proof: `ResolutionDestroGov::ProposalCreatedAt` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	fn vote_destroy() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `2100`
-		//  Estimated: `4554`
-		// Minimum execution time: 127_377_000 picoseconds.
-		Weight::from_parts(130_794_000, 0)
-			.saturating_add(Weight::from_parts(0, 4554))
-			.saturating_add(T::DbWeight::get().reads(8))
-			.saturating_add(T::DbWeight::get().writes(9))
 	}
 	/// Storage: `ResolutionDestroGov::ProposalActions` (r:1 w:1)
 	/// Proof: `ResolutionDestroGov::ProposalActions` (`max_values`: None, `max_size`: Some(88), added: 2563, mode: `MaxEncodedLen`)
@@ -161,36 +130,6 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 19871))
 			.saturating_add(RocksDbWeight::get().reads(4))
 			.saturating_add(RocksDbWeight::get().writes(6))
-	}
-	/// Storage: `ResolutionDestroGov::ProposalActions` (r:1 w:1)
-	/// Proof: `ResolutionDestroGov::ProposalActions` (`max_values`: None, `max_size`: Some(88), added: 2563, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalVotesByAccount` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::InternalVotesByAccount` (`max_values`: None, `max_size`: Some(73), added: 2548, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::InternalTallies` (r:1 w:1)
-	/// Proof: `VotingEngineSystem::InternalTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestroGov::ProposalPassedAt` (r:1 w:1)
-	/// Proof: `ResolutionDestroGov::ProposalPassedAt` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	/// Storage: `System::Account` (r:1 w:1)
-	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestroGov::ActiveProposalByInstitution` (r:1 w:1)
-	/// Proof: `ResolutionDestroGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngineSystem::PendingProposalCleanups` (r:0 w:1)
-	/// Proof: `VotingEngineSystem::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestroGov::ProposalCreatedAt` (r:0 w:1)
-	/// Proof: `ResolutionDestroGov::ProposalCreatedAt` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	fn vote_destroy() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `2100`
-		//  Estimated: `4554`
-		// Minimum execution time: 127_377_000 picoseconds.
-		Weight::from_parts(130_794_000, 0)
-			.saturating_add(Weight::from_parts(0, 4554))
-			.saturating_add(RocksDbWeight::get().reads(8))
-			.saturating_add(RocksDbWeight::get().writes(9))
 	}
 	/// Storage: `ResolutionDestroGov::ProposalActions` (r:1 w:1)
 	/// Proof: `ResolutionDestroGov::ProposalActions` (`max_values`: None, `max_size`: Some(88), added: 2563, mode: `MaxEncodedLen`)

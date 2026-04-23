@@ -26,7 +26,8 @@ use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRC},
-    InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED, STATUS_REJECTED,
+    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_PASSED,
+    STATUS_REJECTED,
 };
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
@@ -301,51 +302,12 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 对”GRANDPA 密钥替换”提案投票，达到阈值通过后自动执行替换。
+        /// 任意人触发"已通过提案"的密钥替换执行。
         ///
-        /// 权限双重校验：业务层 `is_internal_admin`（实时名单）+ 投票引擎 `is_admin_in_snapshot`（快照）。
-        /// 实时检查确保已被撤换的管理员无法继续投票，快照确保投票期间名单稳定。
+        /// Phase 2 整改后投票一律走 `VotingEngineSystem::internal_vote` 公开 call;
+        /// 通过后由本模块的 `InternalVoteExecutor` 自动执行替换。本 call 保留给
+        /// "自动执行失败(如 GRANDPA 仍有 pending change)后的手动重试"。
         #[pallet::call_index(1)]
-        #[pallet::weight(<T as Config>::WeightInfo::vote_replace_grandpa_key())]
-        pub fn vote_replace_grandpa_key(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            approve: bool,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            let action = Self::decode_action(proposal_id)?;
-            let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                Self::is_internal_admin(org, action.institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-
-            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
-
-            Self::deposit_event(Event::<T>::GrandpaKeyVoteSubmitted {
-                proposal_id,
-                who,
-                approve,
-            });
-
-            if approve {
-                if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
-                    if proposal.status == STATUS_PASSED {
-                        if Self::try_execute_from_action(proposal_id, action).is_err() {
-                            Self::deposit_event(Event::<T>::GrandpaKeyExecutionFailed {
-                                proposal_id,
-                            });
-                        }
-                    }
-                }
-            }
-
-            Ok(())
-        }
-
-        /// 手动执行已通过的密钥替换提案。
-        #[pallet::call_index(2)]
         #[pallet::weight(<T as Config>::WeightInfo::execute_replace_grandpa_key())]
         pub fn execute_replace_grandpa_key(
             origin: OriginFor<T>,
@@ -361,9 +323,8 @@ pub mod pallet {
             Self::try_execute_from_action(proposal_id, action)
         }
 
-        /// 清理”已通过但确定无法执行”的提案。
-        /// 注：call_index(3) 已废弃（旧版 cleanup extrinsic），编号保留以兼容已编码的交易。
-        #[pallet::call_index(4)]
+        /// 清理"已通过但确定无法执行"的提案(如 GRANDPA 密钥格式错乱等)。
+        #[pallet::call_index(2)]
         #[pallet::weight(<T as Config>::WeightInfo::cancel_failed_replace_grandpa_key())]
         pub fn cancel_failed_replace_grandpa_key(
             origin: OriginFor<T>,
@@ -429,7 +390,9 @@ pub mod pallet {
 
         /// 中文注释：从投票引擎读取并解码提案动作数据。
         /// 先校验 MODULE_TAG 前缀，防止跨模块误解码。
-        fn decode_action(proposal_id: u64) -> Result<GrandpaKeyReplacementAction, DispatchError> {
+        pub(crate) fn decode_action(
+            proposal_id: u64,
+        ) -> Result<GrandpaKeyReplacementAction, DispatchError> {
             let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             let tag = crate::MODULE_TAG;
@@ -441,7 +404,7 @@ pub mod pallet {
         }
 
         /// 中文注释：尝试执行已通过的密钥替换提案，成功后调度 GRANDPA authority set 变更。
-        fn try_execute_from_action(
+        pub(crate) fn try_execute_from_action(
             proposal_id: u64,
             action: GrandpaKeyReplacementAction,
         ) -> DispatchResult {
@@ -515,6 +478,39 @@ pub mod pallet {
 
             Ok(next_authorities)
         }
+    }
+}
+
+// ──── 投票终态回调:把已通过的 GRANDPA 密钥替换提案落地到链上 ────
+//
+// Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
+// 通过 [`voting_engine_system::InternalVoteResultCallback`] 广播回来。
+// 本 Executor 按 `MODULE_TAG` 前缀认领本模块的提案。
+//
+// 失败语义:自动执行失败(如 GRANDPA pending change 未清理)时发
+// `GrandpaKeyExecutionFailed` 事件,提案状态保留 PASSED,任何签名管理员可以通过
+// `execute_replace_grandpa_key` 手动重试,或用 `cancel_failed_replace_grandpa_key`
+// 清理确定无法执行的提案。
+pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
+
+impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
+    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+        let raw = match voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id) {
+            Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
+            _ => return Ok(()),
+        };
+        if !approved {
+            return Ok(());
+        }
+        let action = GrandpaKeyReplacementAction::decode(&mut &raw[crate::MODULE_TAG.len()..])
+            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+
+        if pallet::Pallet::<T>::try_execute_from_action(proposal_id, action).is_err() {
+            pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::GrandpaKeyExecutionFailed {
+                proposal_id,
+            });
+        }
+        Ok(())
     }
 }
 
@@ -683,6 +679,7 @@ mod tests {
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
+        type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalThresholdProvider = ();
         type InternalAdminCountProvider = ();
@@ -767,11 +764,7 @@ mod tests {
 
     fn pass_prc_proposal(node_index: usize, proposal_id: u64) {
         for admin_index in 0..6 {
-            assert_ok!(GrandpaKeyGov::vote_replace_grandpa_key(
-                RuntimeOrigin::signed(cb_admin(node_index, admin_index)),
-                proposal_id,
-                true,
-            ));
+            assert_ok!(cast_vote(cb_admin(node_index, admin_index), proposal_id, true));
         }
     }
 
@@ -783,6 +776,15 @@ mod tests {
     /// 获取最近一次 create_internal_proposal 分配的 proposal_id。
     fn last_proposal_id() -> u64 {
         voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+    }
+
+    /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(Phase 2 统一入口)。
+    fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
+        voting_engine_system::Pallet::<Test>::internal_vote(
+            RuntimeOrigin::signed(who),
+            proposal_id,
+            approve,
+        )
     }
 
     #[test]
@@ -1164,12 +1166,8 @@ mod tests {
             let pid = last_proposal_id();
             let outsider = AccountId32::new([98u8; 32]);
             assert_noop!(
-                GrandpaKeyGov::vote_replace_grandpa_key(
-                    RuntimeOrigin::signed(outsider),
-                    pid,
-                    true,
-                ),
-                Error::<Test>::UnauthorizedAdmin
+                cast_vote(outsider, pid, true),
+                voting_engine_system::pallet::Error::<Test>::NoPermission
             );
         });
     }

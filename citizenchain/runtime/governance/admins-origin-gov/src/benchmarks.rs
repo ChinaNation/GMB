@@ -1,4 +1,8 @@
 //! 管理员治理模块 Benchmark 定义。
+//!
+//! Phase 2 整改后投票统一由 `voting-engine-system::internal_vote` 公开 call 承担,
+//! 本模块不再有 `vote_admin_replacement` extrinsic。Benchmark 只覆盖提案创建和
+//! 执行重试两条路径。
 
 #![cfg(feature = "runtime-benchmarks")]
 
@@ -11,6 +15,7 @@ use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
+use voting_engine_system::STATUS_PASSED;
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
@@ -36,6 +41,7 @@ mod benchmarks {
         let new_admin: T::AccountId = frame_benchmarking::account("new_admin", 0, 0);
         let stale_new_admin: T::AccountId = frame_benchmarking::account("stale_new_admin", 0, 0);
 
+        // 先发一个"陈旧"提案,让它自然超时被终结,验证新提案不会冲突。
         assert!(AdminsOriginGov::<T>::propose_admin_replacement(
             RawOrigin::Signed(proposer.clone()).into(),
             ORG_PRC,
@@ -68,44 +74,17 @@ mod benchmarks {
         assert!(voting_engine_system::Pallet::<T>::get_proposal_data(1).is_some());
     }
 
-    #[benchmark]
-    fn vote_admin_replacement() {
-        let institution = prc_institution();
-        let proposer = prc_admin::<T>(0);
-        let old_admin = prc_admin::<T>(1);
-        let final_voter = prc_admin::<T>(5);
-        let new_admin: T::AccountId = frame_benchmarking::account("new_admin", 1, 0);
-
-        assert!(AdminsOriginGov::<T>::propose_admin_replacement(
-            RawOrigin::Signed(proposer).into(),
-            ORG_PRC,
-            institution,
-            old_admin.clone(),
-            new_admin,
-        )
-        .is_ok());
-
-        for i in 0..5 {
-            let voter = prc_admin::<T>(i);
-            assert!(AdminsOriginGov::<T>::vote_admin_replacement(
-                RawOrigin::Signed(voter).into(),
-                0,
-                true,
-            )
-            .is_ok());
-        }
-
-        #[extrinsic_call]
-        vote_admin_replacement(RawOrigin::Signed(final_voter), 0, true);
-    }
-
+    /// `execute_admin_replacement` benchmark:
+    /// 1. 发起提案 → 自动存入 ProposalData
+    /// 2. 手动把提案状态推到 PASSED(模拟投票通过但自动执行失败的场景)
+    /// 3. 手动 mutate CurrentAdmins 模拟"管理员列表被污染"的中间态
+    /// 4. 调 `execute_admin_replacement` 完成补救执行
     #[benchmark]
     fn execute_admin_replacement() {
         let institution = prc_institution();
         let proposer = prc_admin::<T>(0);
         let old_admin = prc_admin::<T>(1);
         let caller = prc_admin::<T>(6);
-        let final_voter = prc_admin::<T>(5);
         let new_admin: T::AccountId = frame_benchmarking::account("new_admin", 2, 0);
         let temp_admin: T::AccountId = frame_benchmarking::account("temp_admin", 0, 0);
 
@@ -118,16 +97,12 @@ mod benchmarks {
         )
         .is_ok());
 
-        for i in 0..5 {
-            let voter = prc_admin::<T>(i);
-            assert!(AdminsOriginGov::<T>::vote_admin_replacement(
-                RawOrigin::Signed(voter).into(),
-                0,
-                true,
-            )
-            .is_ok());
-        }
+        // 用引擎低级接口直接把提案推到 PASSED(绕开投票;benchmark 只测 execute 路径)。
+        assert!(
+            voting_engine_system::Pallet::<T>::set_status_and_emit(0, STATUS_PASSED).is_ok()
+        );
 
+        // 模拟中间态:先把 old_admin 换成 temp_admin,execute 时能检测到不一致并 rewrite。
         CurrentAdmins::<T>::mutate(institution, |maybe_admins| {
             let admins = maybe_admins
                 .as_mut()
@@ -139,13 +114,7 @@ mod benchmarks {
             admins[old_pos] = temp_admin.clone();
         });
 
-        assert!(AdminsOriginGov::<T>::vote_admin_replacement(
-            RawOrigin::Signed(final_voter).into(),
-            0,
-            true,
-        )
-        .is_ok());
-
+        // 再还原 old_admin(让 execute 逻辑有合法 old_admin 可查)。
         CurrentAdmins::<T>::mutate(institution, |maybe_admins| {
             let admins = maybe_admins
                 .as_mut()

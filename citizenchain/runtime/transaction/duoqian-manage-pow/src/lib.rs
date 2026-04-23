@@ -25,7 +25,10 @@ use sp_runtime::{
     SaturatedConversion, TransactionOutcome,
 };
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
-use voting_engine_system::{InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED, STATUS_REJECTED};
+use voting_engine_system::{
+    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_PASSED,
+    STATUS_REJECTED,
+};
 
 type BalanceOf<T> =
     <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -172,56 +175,6 @@ pub struct CreateDuoqianAction<AccountId, Balance> {
     pub admin_count: u32,
     pub threshold: u32,
     pub amount: Balance,
-}
-
-/// 创建多签账户的离线管理员签名意图（Step 1 · 多签注册离线 QR 聚合版）。
-///
-/// 每个管理员在 wuminapp 扫描发起人导出的 QR 后,对此结构做 sr25519 签名,
-/// 回传给发起人。发起人把 N 个 (admin, signature) 聚合后一笔 `finalize_create`
-/// 代投,投票引擎内部自动达阈值 → `execute_create`。
-///
-/// 设计要点:
-/// - `admins_root = blake2_256(SCALE.encode(sorted_admins))`:让签名消息体积固定,
-///   QR 小;链上 finalize 时可重算等值校验。
-/// - `approve` 恒为 true:拒绝的语义不通过离线签名表达(拒绝走"不签名超时自动 reject")。
-/// - 所有字段都来自 Tx 1 的 `CreateDuoqianProposed` / `PersonalDuoqianProposed`
-///   event,wuminapp 扫码后即可完整重建 intent。
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo)]
-pub struct CreateVoteIntent<AccountId, Balance> {
-    /// 投票引擎分配的提案 ID(Tx 1 的 event 中返回)
-    pub proposal_id: u64,
-    /// Tx 1 中预写入的多签账户地址
-    pub duoqian_address: AccountId,
-    /// Tx 1 的发起人(= `CreateDuoqianAction.proposer`)
-    pub creator: AccountId,
-    /// `blake2_256(SCALE.encode(sorted_admins))`,let 签名消息体积固定
-    pub admins_root: [u8; 32],
-    /// Tx 1 预写入的阈值
-    pub threshold: u32,
-    /// Tx 1 预设的入金金额
-    pub amount: Balance,
-    /// 固定 true,占位防误签
-    pub approve: bool,
-}
-
-impl<AccountId: Encode, Balance: Encode> CreateVoteIntent<AccountId, Balance> {
-    /// 根据签名域铁律构造标准签名消息 hash。
-    ///
-    /// preimage = DUOQIAN_DOMAIN (10B) || OP_SIGN_CREATE (1B) || SS58_PREFIX_LE (2B)
-    ///         || blake2_256(SCALE.encode(self))
-    /// signing_hash = blake2_256(preimage)
-    ///
-    /// wuminapp 扫码后与本函数等价实现(Dart 端用相同 SCALE 布局 + 相同 domain/op_tag),
-    /// 链上 finalize 用本函数得到的 32 字节 hash 作为 sr25519 签名的消息体。
-    pub fn signing_hash(&self, ss58_prefix: u16) -> [u8; 32] {
-        let intent_hash = sp_io::hashing::blake2_256(&self.encode());
-        let mut preimage = Vec::with_capacity(10 + 1 + 2 + 32);
-        preimage.extend_from_slice(primitives::core_const::DUOQIAN_DOMAIN);
-        preimage.push(primitives::core_const::OP_SIGN_CREATE);
-        preimage.extend_from_slice(&ss58_prefix.to_le_bytes());
-        preimage.extend_from_slice(&intent_hash);
-        sp_io::hashing::blake2_256(&preimage)
-    }
 }
 
 /// 关闭多签账户提案的业务数据
@@ -438,8 +391,8 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 机构多签账户创建提案已发起（Tx 1,pending 状态预写入）。
-        /// wuminapp 扫描此事件后即可构造 `CreateVoteIntent` + QR,发给其他管理员离线签名。
+        /// 机构多签账户创建提案已发起（pending 状态预写入）。
+        /// wuminapp 扫描此事件后引导其他管理员到投票引擎统一入口 `internal_vote` 投票。
         CreateDuoqianProposed {
             proposal_id: u64,
             duoqian_address: T::AccountId,
@@ -777,147 +730,6 @@ pub mod pallet {
             Ok(())
         }
 
-        /// finalize_create:离线聚合管理员 sr25519 签名,一笔代投 + 自动激活。
-        ///
-        /// 替代原 `vote_create` 的"每人一笔在线投票"模式:
-        /// - 发起人(Tx 1 中锁定的 `action.proposer`)把所有线下收集的
-        ///   `(admin, sr25519_signature)` 装入 `sigs`,一次上链。
-        /// - 本函数逐条:成员校验 → 去重 → sr25519 验签 → 代投 → 阈值自动判定。
-        /// - 达阈值 `STATUS_PASSED` → 原子执行 `execute_create`(入金 + 激活)。
-        /// - 被拒绝 `STATUS_REJECTED` → 清除 Pending 记录。
-        ///
-        /// 签名消息:参见 `CreateVoteIntent::signing_hash`(DUOQIAN_V1 + OP_SIGN_CREATE + ss58 + intent)。
-        ///
-        /// 语义要点:
-        /// - **发起人不必是管理员**:Tx 1 已把 proposer 锁定,Tx 2 仅代投 + 代付 gas。
-        /// - **幂等性**:投票引擎内部 `AlreadyVoted` 保护,重复提交会直接失败,不会导致重复入金。
-        /// - **部分补签不支持**:一次提交必须 >= 阈值;否则 `InsufficientSignatures` 拒绝。
-        #[pallet::call_index(3)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::finalize_create(sigs.len() as u32))]
-        pub fn finalize_create(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            sigs: AdminSignaturesOf<T>,
-        ) -> DispatchResult {
-            // 任意签名账户都可代投(支付 gas)。发起人身份已在 Tx 1 中锁定。
-            let _submitter = ensure_signed(origin)?;
-
-            // 1. 读取提案业务数据 (MODULE_TAG + ACTION_CREATE + SCALE)
-            let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-            let tag = crate::MODULE_TAG;
-            ensure!(
-                raw.len() > tag.len() && &raw[..tag.len()] == tag,
-                Error::<T>::ProposalActionNotFound
-            );
-            ensure!(
-                raw[tag.len()] == ACTION_CREATE,
-                Error::<T>::ProposalActionNotFound
-            );
-            let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(
-                &mut &raw[tag.len() + 1..],
-            )
-            .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-
-            // 2. 读取 Pending 状态下的 DuoqianAccount:拿到管理员集合和阈值。
-            let duoqian = DuoqianAccounts::<T>::get(&action.duoqian_address)
-                .ok_or(Error::<T>::DuoqianNotFound)?;
-
-            // 3. 签名数不能少于阈值
-            let sigs_len_u32 = sigs.len() as u32;
-            ensure!(
-                sigs_len_u32 >= duoqian.threshold,
-                Error::<T>::InsufficientSignatures
-            );
-
-            // 4. 构造签名消息 hash(链上与 wuminapp 端用同一公式)
-            let admins_root = Self::compute_admins_root(&duoqian.duoqian_admins);
-            let intent = CreateVoteIntent::<T::AccountId, BalanceOf<T>> {
-                proposal_id,
-                duoqian_address: action.duoqian_address.clone(),
-                creator: action.proposer.clone(),
-                admins_root,
-                threshold: action.threshold,
-                amount: action.amount,
-                approve: true,
-            };
-            let signing_hash = intent.signing_hash(T::SS58Prefix::get());
-
-            // 5. 循环验签 + 代投
-            let mut seen: BTreeSet<T::AccountId> = BTreeSet::new();
-            let mut accepted: u32 = 0;
-            for (admin, sig_bytes) in sigs.iter() {
-                // 5.1 必须是该多签的管理员之一
-                ensure!(
-                    duoqian.duoqian_admins.iter().any(|a| a == admin),
-                    Error::<T>::UnauthorizedSignature
-                );
-                // 5.2 同批次内去重
-                ensure!(
-                    seen.insert(admin.clone()),
-                    Error::<T>::DuplicateSignature
-                );
-                // 5.3 签名长度必须是 sr25519 的 64 字节
-                ensure!(
-                    sig_bytes.len() == 64,
-                    Error::<T>::MalformedSignature
-                );
-                let sig = Sr25519Signature::try_from(sig_bytes.as_slice())
-                    .map_err(|_| Error::<T>::MalformedSignature)?;
-                let pubkey = Self::pubkey_from_accountid(admin)?;
-                ensure!(
-                    sp_io::crypto::sr25519_verify(&sig, &signing_hash, &pubkey),
-                    Error::<T>::InvalidSignature
-                );
-                // 5.4 代投;投票引擎自己做"已投过"/"快照外"/"阈值"等所有检查
-                T::InternalVoteEngine::cast_internal_vote(admin.clone(), proposal_id, true)?;
-                accepted = accepted.saturating_add(1);
-            }
-
-            // 6. 根据投票引擎最终状态执行或清理
-            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-
-            if proposal.status == STATUS_PASSED {
-                // 事务内执行,失败随事务回滚资金操作
-                let exec_result =
-                    with_transaction(|| match Self::execute_create(proposal_id, &action) {
-                        Ok(()) => TransactionOutcome::Commit(Ok(())),
-                        Err(e) => TransactionOutcome::Rollback(Err(e)),
-                    });
-                if exec_result.is_err() {
-                    // 执行失败:清除 Pending,释放地址锁定,防止永久占用。
-                    DuoqianAccounts::<T>::remove(&action.duoqian_address);
-                    PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
-                    Self::deposit_event(Event::<T>::CreateExecutionFailed {
-                        proposal_id,
-                        duoqian_address: action.duoqian_address.clone(),
-                    });
-                }
-            } else if proposal.status == STATUS_REJECTED {
-                // 提案被拒绝:清理 Pending,释放地址锁定。
-                DuoqianAccounts::<T>::remove(&action.duoqian_address);
-                PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
-                Self::deposit_event(Event::<T>::DuoqianCreateRejected {
-                    proposal_id,
-                    duoqian_address: action.duoqian_address.clone(),
-                });
-            }
-
-            // 读回最新 status(execute_create 内部会把 PASSED 推进到 EXECUTED)
-            let final_status = voting_engine_system::Pallet::<T>::proposals(proposal_id)
-                .map(|p| p.status)
-                .unwrap_or(proposal.status);
-            Self::deposit_event(Event::<T>::CreateFinalized {
-                proposal_id,
-                signatures_accepted: accepted,
-                final_status,
-            });
-
-            Ok(())
-        }
-
-        /// 中文注释：机构登记改为 proof 模式；任意提交者都可代发，但链上只信任 SFID MAIN 签出的字段包。
         #[pallet::call_index(2)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::register_sfid_institution())]
         pub fn register_sfid_institution(
@@ -1101,77 +913,13 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 对"关闭多签账户"提案投票，达到阈值后自动执行关闭。
-        #[pallet::call_index(4)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::vote_close())]
-        pub fn vote_close(origin: OriginFor<T>, proposal_id: u64, approve: bool) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            // 读取提案数据（MODULE_TAG + ACTION_CLOSE + payload）
-            let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-            let tag = crate::MODULE_TAG;
-            ensure!(
-                raw.len() > tag.len() && &raw[..tag.len()] == tag,
-                Error::<T>::ProposalActionNotFound
-            );
-            ensure!(
-                raw[tag.len()] == ACTION_CLOSE,
-                Error::<T>::ProposalActionNotFound
-            );
-            let action = CloseDuoqianAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
-                .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-
-            // 校验管理员权限
-            let institution = account_to_institution_id(&action.duoqian_address);
-            ensure!(
-                Self::is_duoqian_admin(institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-
-            // 投票
-            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
-
-            Self::deposit_event(Event::<T>::CloseVoteSubmitted {
-                proposal_id,
-                who,
-                approve,
-            });
-
-            // 检查投票结果并执行或清理
-            if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
-                if proposal.status == STATUS_PASSED {
-                    // 使用 with_transaction 保证 execute_close 内部的资金操作原子性：
-                    // 若扣费或转出中途失败，已执行的操作会随事务回滚。
-                    let exec_result =
-                        with_transaction(|| match Self::execute_close(proposal_id, &action) {
-                            Ok(()) => TransactionOutcome::Commit(Ok(())),
-                            Err(e) => TransactionOutcome::Rollback(Err(e)),
-                        });
-                    if exec_result.is_err() {
-                        // 执行失败后清除活跃关闭提案记录，允许重新发起关闭提案（账户仍为 Active）。
-                        PendingCloseProposal::<T>::remove(&action.duoqian_address);
-                        Self::deposit_event(Event::<T>::CloseExecutionFailed {
-                            proposal_id,
-                            duoqian_address: action.duoqian_address,
-                        });
-                    }
-                } else if proposal.status == STATUS_REJECTED {
-                    // 提案被拒绝：清理 PendingCloseProposal，允许重新发起关闭。
-                    PendingCloseProposal::<T>::remove(&action.duoqian_address);
-                }
-            }
-
-            Ok(())
-        }
-
         /// 发起"创建个人多签账户"提案（无需 SFID 注册）。
         ///
         /// 地址由 `creator + account_name` 派生：
         /// `Blake2b_256(DUOQIAN_DOMAIN || OP_PERSONAL || SS58_PREFIX_LE || creator.encode() || name_utf8)`
         ///
         /// 投票通过后由 vote_create 自动执行入金 + 激活（复用 execute_create）。
-        #[pallet::call_index(5)]
+        #[pallet::call_index(3)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_create_personal())]
         pub fn propose_create_personal(
             origin: OriginFor<T>,
@@ -1315,7 +1063,7 @@ pub mod pallet {
         /// 清理已被拒绝或超时的创建/关闭提案残留状态。
         /// 任意签名账户可调用。用于解决投票引擎 on_initialize 超时 reject 后
         /// 本模块无法自动收到通知导致的 Pending / PendingCloseProposal 残留。
-        #[pallet::call_index(6)]
+        #[pallet::call_index(4)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::cleanup_rejected_proposal())]
         pub fn cleanup_rejected_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let _ = ensure_signed(origin)?;
@@ -1484,7 +1232,7 @@ pub mod pallet {
         }
 
         /// 执行创建：入金 + 激活 DuoqianAccounts + 更新 nonce
-        fn execute_create(
+        pub(crate) fn execute_create(
             proposal_id: u64,
             action: &CreateDuoqianAction<T::AccountId, BalanceOf<T>>,
         ) -> DispatchResult {
@@ -1538,7 +1286,7 @@ pub mod pallet {
         }
 
         /// 执行关闭：转出余额 + 删除 DuoqianAccounts + 更新 nonce
-        fn execute_close(
+        pub(crate) fn execute_close(
             proposal_id: u64,
             action: &CloseDuoqianAction<T::AccountId>,
         ) -> DispatchResult {
@@ -1603,6 +1351,112 @@ pub mod pallet {
 
             Ok(())
         }
+    }
+}
+
+// ──── 投票终态回调:把已通过的多签创建/关闭提案落地到链上 ────
+//
+// Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
+// 通过 [`voting_engine_system::InternalVoteResultCallback`] 广播回来。
+// 本 Executor:
+// - 按 `MODULE_TAG + ACTION_CREATE / ACTION_CLOSE` 前缀认领本模块提案;
+// - `approved = true` → 分派到 `execute_create` / `execute_close`;执行失败
+//   发事件,不回滚投票(提案保留 PASSED,可用 cleanup_rejected_proposal 或
+//   手动重试处理);
+// - `approved = false` → 清理 Pending 存储(DuoqianAccounts / PendingCloseProposal),
+//   释放地址占用。
+pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
+
+impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
+    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+        use frame_support::storage::{with_transaction, TransactionOutcome};
+        let raw = match voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id) {
+            Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
+            _ => return Ok(()),
+        };
+        let tag = crate::MODULE_TAG;
+        if raw.len() <= tag.len() {
+            return Ok(());
+        }
+        let action_byte = raw[tag.len()];
+
+        if approved {
+            match action_byte {
+                ACTION_CREATE => {
+                    let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(
+                        &mut &raw[tag.len() + 1..],
+                    )
+                    .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+
+                    // 事务内执行,失败则清理 Pending 释放地址锁定。
+                    let exec_result = with_transaction(|| {
+                        match pallet::Pallet::<T>::execute_create(proposal_id, &action) {
+                            Ok(()) => TransactionOutcome::Commit(Ok(())),
+                            Err(e) => TransactionOutcome::Rollback(Err(e)),
+                        }
+                    });
+                    if exec_result.is_err() {
+                        DuoqianAccounts::<T>::remove(&action.duoqian_address);
+                        PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
+                        pallet::Pallet::<T>::deposit_event(
+                            pallet::Event::<T>::CreateExecutionFailed {
+                                proposal_id,
+                                duoqian_address: action.duoqian_address,
+                            },
+                        );
+                    }
+                }
+                ACTION_CLOSE => {
+                    let action =
+                        CloseDuoqianAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
+                            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+
+                    let exec_result = with_transaction(|| {
+                        match pallet::Pallet::<T>::execute_close(proposal_id, &action) {
+                            Ok(()) => TransactionOutcome::Commit(Ok(())),
+                            Err(e) => TransactionOutcome::Rollback(Err(e)),
+                        }
+                    });
+                    if exec_result.is_err() {
+                        PendingCloseProposal::<T>::remove(&action.duoqian_address);
+                        pallet::Pallet::<T>::deposit_event(
+                            pallet::Event::<T>::CloseExecutionFailed {
+                                proposal_id,
+                                duoqian_address: action.duoqian_address,
+                            },
+                        );
+                    }
+                }
+                _ => {}
+            }
+        } else {
+            // 否决:清理 Pending 记录释放地址锁定。
+            match action_byte {
+                ACTION_CREATE => {
+                    if let Ok(action) = CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(
+                        &mut &raw[tag.len() + 1..],
+                    ) {
+                        DuoqianAccounts::<T>::remove(&action.duoqian_address);
+                        PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
+                        pallet::Pallet::<T>::deposit_event(
+                            pallet::Event::<T>::DuoqianCreateRejected {
+                                proposal_id,
+                                duoqian_address: action.duoqian_address,
+                            },
+                        );
+                    }
+                }
+                ACTION_CLOSE => {
+                    if let Ok(action) =
+                        CloseDuoqianAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
+                    {
+                        PendingCloseProposal::<T>::remove(&action.duoqian_address);
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1847,6 +1701,8 @@ mod tests {
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
+        // Phase 2:挂上本模块 Executor,提案通过后自动 execute_create / execute_close。
+        type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalAdminCountProvider = TestInternalAdminCountProvider;
         type InternalThresholdProvider = TestInternalThresholdProvider;
@@ -1883,8 +1739,8 @@ mod tests {
     }
 
     /// 从固定 seed 派生 sr25519 keypair:公钥即为 AccountId32。
-    /// 这样管理员既能作为链上 origin,又能对 CreateVoteIntent 做可验证 sr25519 签名,
-    /// 支撑 `finalize_create` 的离线聚合签名测试。
+    /// 测试中管理员既能作为链上 origin(签发 `internal_vote`),也能对任意
+    /// payload 做可验证 sr25519 签名,供签名相关回归测试复用。
     fn admin_pair(seed: u8) -> (AccountId32, sr25519::Pair) {
         let mut seed_bytes = [0u8; 32];
         seed_bytes[0] = seed;
@@ -1911,64 +1767,34 @@ mod tests {
         (bounded, pairs)
     }
 
-    /// 构造一条管理员 sr25519 签名(对 `CreateVoteIntent`)。
-    fn sign_create_intent(
-        pair: &sr25519::Pair,
-        proposal_id: u64,
-        duoqian_address: &AccountId32,
-        creator: &AccountId32,
-        admins: &DuoqianAdminsOf<Test>,
-        threshold: u32,
-        amount: u128,
-    ) -> AdminSignatureOf<Test> {
-        let admins_root = Pallet::<Test>::compute_admins_root(admins);
-        let intent = CreateVoteIntent::<AccountId32, u128> {
-            proposal_id,
-            duoqian_address: duoqian_address.clone(),
-            creator: creator.clone(),
-            admins_root,
-            threshold,
-            amount,
-            approve: true,
-        };
-        let ss58 = <Test as frame_system::Config>::SS58Prefix::get();
-        let msg = intent.signing_hash(ss58);
-        let sig = pair.sign(&msg);
-        sig.0.to_vec().try_into().expect("sig should fit")
-    }
 
-    /// finalize_create 聚合 helper:从 pairs 前 `take` 个生成签名 + 调 extrinsic。
+    /// Phase 2 测试辅助:走投票引擎公开 `internal_vote` extrinsic,
+    /// 让 `admins` 的前 `take` 个成员各投一张赞成票。
+    ///
+    /// 替代旧的 `finalize_with` 聚合签名 helper——业务模块不再持有投票 call,
+    /// 通过后由投票引擎通过 [`InternalVoteExecutor`] 自动触发 execute_create。
+    ///
+    /// - 参数 `_submitter` / `_duoqian_address` / `_creator` / `_pairs` /
+    ///   `_threshold` / `_amount` 保留占位,让调用端旧语义透明迁移(已实际无用)。
     fn finalize_with(
-        submitter: AccountId32,
+        _submitter: AccountId32,
         proposal_id: u64,
-        duoqian_address: &AccountId32,
-        creator: &AccountId32,
+        _duoqian_address: &AccountId32,
+        _creator: &AccountId32,
         admins: &DuoqianAdminsOf<Test>,
-        pairs: &[sr25519::Pair],
-        threshold: u32,
-        amount: u128,
+        _pairs: &[sr25519::Pair],
+        _threshold: u32,
+        _amount: u128,
         take: usize,
     ) -> frame_support::dispatch::DispatchResult {
-        let sigs: AdminSignaturesOf<Test> = admins
-            .iter()
-            .zip(pairs.iter())
-            .take(take)
-            .map(|(a, p)| {
-                let sig = sign_create_intent(
-                    p,
-                    proposal_id,
-                    duoqian_address,
-                    creator,
-                    admins,
-                    threshold,
-                    amount,
-                );
-                (a.clone(), sig)
-            })
-            .collect::<Vec<_>>()
-            .try_into()
-            .expect("sigs vec should fit");
-        Duoqian::finalize_create(RuntimeOrigin::signed(submitter), proposal_id, sigs)
+        for admin in admins.iter().take(take) {
+            VotingEngineSystem::internal_vote(
+                RuntimeOrigin::signed(admin.clone()),
+                proposal_id,
+                true,
+            )?;
+        }
+        Ok(())
     }
 
     fn register_sfid_with_account_name(
@@ -2237,13 +2063,13 @@ mod tests {
 
             let close_pid = last_proposal_id();
 
-            // 关闭仍走在线投票(vote_close 本步未改造)
-            assert_ok!(Duoqian::vote_close(
+            // Phase 2:关闭走投票引擎公开 internal_vote,通过后由 Executor 自动 execute_close。
+            assert_ok!(VotingEngineSystem::internal_vote(
                 RuntimeOrigin::signed(admins[0].clone()),
                 close_pid,
                 true
             ));
-            assert_ok!(Duoqian::vote_close(
+            assert_ok!(VotingEngineSystem::internal_vote(
                 RuntimeOrigin::signed(admins[1].clone()),
                 close_pid,
                 true
@@ -2281,61 +2107,6 @@ mod tests {
         });
     }
 
-    #[test]
-    fn finalize_rejects_non_admin_signature() {
-        new_test_ext().execute_with(|| {
-            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("E001");
-            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
-
-            assert_ok!(Duoqian::propose_create(
-                RuntimeOrigin::signed(admins[0].clone()),
-                sfid.clone(),
-                account_name.clone(),
-                3,
-                admins.clone(),
-                2,
-                1_000,
-            ));
-
-            let pid = last_proposal_id();
-
-            // 构造 sig:一个合法管理员 + 一个非管理员(admin(4) 不在 admins 列表)
-            let legit_sig = sign_create_intent(
-                &pairs[0],
-                pid,
-                &duoqian_address,
-                &admins[0],
-                &admins,
-                2,
-                1_000,
-            );
-            let (outsider, outsider_pair) = admin_pair(99);
-            let outsider_sig = sign_create_intent(
-                &outsider_pair,
-                pid,
-                &duoqian_address,
-                &admins[0],
-                &admins,
-                2,
-                1_000,
-            );
-            let sigs: AdminSignaturesOf<Test> = vec![
-                (admins[0].clone(), legit_sig),
-                (outsider, outsider_sig),
-            ]
-            .try_into()
-            .expect("sigs vec should fit");
-
-            assert_noop!(
-                Duoqian::finalize_create(
-                    RuntimeOrigin::signed(admins[0].clone()),
-                    pid,
-                    sigs
-                ),
-                Error::<Test>::UnauthorizedSignature
-            );
-        });
-    }
 
     #[test]
     fn cannot_close_pending_account() {
@@ -2610,180 +2381,16 @@ mod tests {
     // ──── Step 1 离线 QR 聚合专项测试 ────
 
     /// finalize_create 签名数不足阈值时必须拒绝。
-    #[test]
-    fn finalize_create_insufficient_sigs_rejected() {
-        new_test_ext().execute_with(|| {
-            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("K001");
-            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
-
-            assert_ok!(Duoqian::propose_create(
-                RuntimeOrigin::signed(admins[0].clone()),
-                sfid,
-                account_name,
-                3,
-                admins.clone(),
-                2,
-                1_000,
-            ));
-            let pid = last_proposal_id();
-
-            // 只提交 1 个签名,阈值 2,应拒绝
-            assert_noop!(
-                finalize_with(
-                    admins[0].clone(),
-                    pid,
-                    &duoqian_address,
-                    &admins[0],
-                    &admins,
-                    &pairs,
-                    2,
-                    1_000,
-                    1,
-                ),
-                Error::<Test>::InsufficientSignatures
-            );
-        });
-    }
 
     /// 同一 admin 在同一批签名里重复出现必须拒绝。
-    #[test]
-    fn finalize_create_duplicate_sig_rejected() {
-        new_test_ext().execute_with(|| {
-            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("K002");
-            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
-
-            assert_ok!(Duoqian::propose_create(
-                RuntimeOrigin::signed(admins[0].clone()),
-                sfid,
-                account_name,
-                3,
-                admins.clone(),
-                2,
-                1_000,
-            ));
-            let pid = last_proposal_id();
-
-            let sig0 =
-                sign_create_intent(&pairs[0], pid, &duoqian_address, &admins[0], &admins, 2, 1_000);
-            let sig0_dup =
-                sign_create_intent(&pairs[0], pid, &duoqian_address, &admins[0], &admins, 2, 1_000);
-            let sigs: AdminSignaturesOf<Test> = vec![
-                (admins[0].clone(), sig0),
-                (admins[0].clone(), sig0_dup),
-            ]
-            .try_into()
-            .expect("sigs vec should fit");
-
-            assert_noop!(
-                Duoqian::finalize_create(
-                    RuntimeOrigin::signed(admins[0].clone()),
-                    pid,
-                    sigs
-                ),
-                Error::<Test>::DuplicateSignature
-            );
-        });
-    }
 
     /// 被篡改的签名验证失败必须拒绝。
-    #[test]
-    fn finalize_create_tampered_sig_rejected() {
-        new_test_ext().execute_with(|| {
-            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("K003");
-            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
-
-            assert_ok!(Duoqian::propose_create(
-                RuntimeOrigin::signed(admins[0].clone()),
-                sfid,
-                account_name,
-                3,
-                admins.clone(),
-                2,
-                1_000,
-            ));
-            let pid = last_proposal_id();
-
-            // 对错误 amount 签(wuminapp 用 999 签但链上 Tx 1 写的是 1_000)
-            let wrong_sig = sign_create_intent(
-                &pairs[0],
-                pid,
-                &duoqian_address,
-                &admins[0],
-                &admins,
-                2,
-                999,
-            );
-            let right_sig = sign_create_intent(
-                &pairs[1],
-                pid,
-                &duoqian_address,
-                &admins[0],
-                &admins,
-                2,
-                1_000,
-            );
-            let sigs: AdminSignaturesOf<Test> = vec![
-                (admins[0].clone(), wrong_sig),
-                (admins[1].clone(), right_sig),
-            ]
-            .try_into()
-            .expect("sigs vec should fit");
-
-            assert_noop!(
-                Duoqian::finalize_create(
-                    RuntimeOrigin::signed(admins[0].clone()),
-                    pid,
-                    sigs
-                ),
-                Error::<Test>::InvalidSignature
-            );
-        });
-    }
 
     /// 签名长度不是 64 字节必须拒绝。
+
+    /// 提案通过并 execute_create 后再尝试投票应被投票引擎的 AlreadyVoted/状态检查挡住。
     #[test]
-    fn finalize_create_malformed_sig_rejected() {
-        new_test_ext().execute_with(|| {
-            let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("K004");
-            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
-
-            assert_ok!(Duoqian::propose_create(
-                RuntimeOrigin::signed(admins[0].clone()),
-                sfid,
-                account_name,
-                3,
-                admins.clone(),
-                2,
-                1_000,
-            ));
-            let pid = last_proposal_id();
-
-            let good =
-                sign_create_intent(&pairs[0], pid, &duoqian_address, &admins[0], &admins, 2, 1_000);
-            // 构造长度 32 的非法签名(应为 64)
-            let bad_sig: AdminSignatureOf<Test> =
-                vec![0u8; 32].try_into().expect("32 bytes fits");
-            let sigs: AdminSignaturesOf<Test> = vec![
-                (admins[0].clone(), good),
-                (admins[1].clone(), bad_sig),
-            ]
-            .try_into()
-            .expect("sigs vec should fit");
-
-            assert_noop!(
-                Duoqian::finalize_create(
-                    RuntimeOrigin::signed(admins[0].clone()),
-                    pid,
-                    sigs
-                ),
-                Error::<Test>::MalformedSignature
-            );
-        });
-    }
-
-    /// finalize_create 成功后再次调用应当被投票引擎的 AlreadyVoted 保护。
-    #[test]
-    fn finalize_create_second_call_is_replay_protected() {
+    fn passed_create_proposal_rejects_replay() {
         new_test_ext().execute_with(|| {
             let (sfid, account_name, duoqian_address) = register_sfid_and_get_address("K005");
             let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);

@@ -164,8 +164,6 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
           proposalKind={meta.kind}
           adminWallets={[votingWallet]}
           shenfenId={shenfenId}
-          useSafetyFundVote={!!info.safetyFundDetail}
-          useSweepVote={!!info.sweepDetail}
           onClose={() => setVotingWallet(null)}
           onSuccess={handleVoteSuccess}
         />

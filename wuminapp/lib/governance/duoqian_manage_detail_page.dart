@@ -9,6 +9,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import '../util/amount_format.dart';
 import 'duoqian_manage_models.dart';
 import 'duoqian_manage_service.dart';
+import 'internal_vote_service.dart';
 import 'institution_data.dart';
 import 'institution_admin_service.dart';
 import 'pending_vote_store.dart';
@@ -246,7 +247,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
           payloadHex: '0x${_toHex(payload)}',
           specVersion: rv.specVersion,
           display: SignDisplay(
-            action: _isCreateProposal ? 'vote_create' : 'vote_close',
+            action: 'internal_vote',
             summary: '$summaryType提案 #${widget.proposalId} 投票：$voteText',
             fields: [
               SignDisplayField(label: '提案编号', value: widget.proposalId.toString()),
@@ -275,24 +276,15 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
-      final ({String txHash, int usedNonce}) result;
-      if (_isCreateProposal) {
-        result = await _manageService.submitVoteCreate(
-          proposalId: widget.proposalId,
-          approve: approve,
-          fromAddress: wallet.address,
-          signerPubkey: Uint8List.fromList(pubkeyBytes),
-          sign: signCallback,
-        );
-      } else {
-        result = await _manageService.submitVoteClose(
-          proposalId: widget.proposalId,
-          approve: approve,
-          fromAddress: wallet.address,
-          signerPubkey: Uint8List.fromList(pubkeyBytes),
-          sign: signCallback,
-        );
-      }
+      // Phase 3: 创建/关闭多签的投票都走 VotingEngineSystem::internal_vote(9.0),
+      // 由 runtime 的 InternalVoteExecutor 按 MODULE_TAG+ACTION 分派。
+      final result = await InternalVoteService().submit(
+        proposalId: widget.proposalId,
+        approve: approve,
+        fromAddress: wallet.address,
+        signerPubkey: Uint8List.fromList(pubkeyBytes),
+        sign: signCallback,
+      );
 
       // 持久化待确认投票记录
       var pubkey = wallet.pubkeyHex.toLowerCase();

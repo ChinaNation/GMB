@@ -44,6 +44,7 @@ use frame_support::{
 /// Weight functions for `voting_engine_system`.
 pub trait WeightInfo {
 	fn create_internal_proposal() -> Weight;
+	fn internal_vote() -> Weight;
 	fn joint_vote() -> Weight;
 	fn citizen_vote() -> Weight;
 	fn finalize_proposal_internal() -> Weight;
@@ -66,6 +67,18 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(Weight::from_parts(0, 1493))
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(2))
+	}
+	/// 内部投票(占位:与 `joint_vote` 同量级);Phase 2 业务模块改造完成后由
+	/// benchmark-cli 重跑生成精确值。
+	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:0)
+	/// Storage: `VotingEngineSystem::InternalVotesByAccount` (r:1 w:1)
+	/// Storage: `VotingEngineSystem::InternalTallies` (r:1 w:1)
+	/// Storage: `VotingEngineSystem::SnapshotAdmins` (r:1 w:0)
+	fn internal_vote() -> Weight {
+		Weight::from_parts(30_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 3559))
+			.saturating_add(T::DbWeight::get().reads(6))
+			.saturating_add(T::DbWeight::get().writes(3))
 	}
 	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:0)
 	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
@@ -161,6 +174,13 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 1493))
 			.saturating_add(RocksDbWeight::get().reads(1))
 			.saturating_add(RocksDbWeight::get().writes(2))
+	}
+	/// 内部投票(占位;Phase 2 后由 benchmark-cli 重跑精确值)。
+	fn internal_vote() -> Weight {
+		Weight::from_parts(30_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 3559))
+			.saturating_add(RocksDbWeight::get().reads(6))
+			.saturating_add(RocksDbWeight::get().writes(3))
 	}
 	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:0)
 	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)

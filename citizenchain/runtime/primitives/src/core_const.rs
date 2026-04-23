@@ -60,11 +60,11 @@ pub const OP_SIGN_BIND: u8 = 0x10; // 公民身份绑定
 pub const OP_SIGN_VOTE: u8 = 0x11; // 公民投票
 pub const OP_SIGN_POP: u8 = 0x12; // 人口快照
 pub const OP_SIGN_INST: u8 = 0x13; // SFID 机构登记
-pub const OP_SIGN_CREATE: u8 = 0x14; // 多签注册离线聚合(Step 1 · duoqian-manage-pow::finalize_create)
-pub const OP_SIGN_TRANSFER: u8 = 0x15; // 多签转账(通用)离线聚合(Step 2 · duoqian-transfer-pow::finalize_transfer)
-pub const OP_SIGN_SAFETY_FUND: u8 = 0x16; // 安全基金转账离线聚合(Step 2 · finalize_safety_fund_transfer)
-pub const OP_SIGN_SWEEP: u8 = 0x17; // 费用→主账户划转离线聚合(Step 2 · finalize_sweep_to_main)
-                                    // 后续业务需从 0x18 起分配,签名域 op_tag 空间共 0x10-0x1F。
+// 注:0x14 ~ 0x17 原为多签/转账/安全基金/手续费划转的离线聚合签名 op_tag
+// (Step 1 / Step 2 旧架构),已随 Phase 2"统一投票入口"整改全部删除。
+// 所有治理投票一律走 `VotingEngineSystem::internal_vote` 公开 call,业务模块
+// 不再持有 `finalize_X` / `vote_X` 聚合签名接口。
+// 新业务从 0x18 起分配,签名域 op_tag 空间共 0x10-0x1F。
 
 #[cfg(test)]
 mod tests {

@@ -115,7 +115,16 @@ pub struct VoteSubmitResult {
 
 // ──── 公开函数 ────
 
-/// 构建 vote_transfer 签名请求。
+/// 构建内部投票（`internal_vote`）签名请求。
+///
+/// Phase 3(2026-04-22)「投票引擎统一入口整改」:
+/// 所有业务 pallet(admins_origin_gov / resolution_destro_gov /
+/// grandpa_key_gov / duoqian_manage_pow / duoqian_transfer_pow)的 vote_X
+/// 已物理删除,管理员一人一票统一走 `VotingEngineSystem::internal_vote`
+/// (pallet=9, call=0),由投票引擎按 ProposalData 前缀自动分派到对应
+/// `InternalVoteExecutor`。
+///
+/// Call 编码: `[0x09][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
 ///
 /// 返回 QR 签名请求 JSON + 请求 ID + 预期 payload hash。
 pub fn build_vote_sign_request(
@@ -139,10 +148,10 @@ pub fn build_vote_sign_request(
     let (block_hash, block_number) = fetch_latest_block()?;
     let nonce = fetch_nonce(&pubkey_clean)?;
 
-    // 构建 call data: [pallet=19][call=1][proposal_id: u64_le][approve: bool]
+    // 构建 call data: [pallet=9][call=0][proposal_id: u64_le][approve: bool]
     let mut call_data = Vec::with_capacity(11);
-    call_data.push(19u8); // DuoqianTransferPow pallet index
-    call_data.push(1u8); // vote_transfer call index
+    call_data.push(9u8); // VotingEngineSystem pallet index
+    call_data.push(0u8); // internal_vote call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.push(if approve { 1u8 } else { 0u8 });
 
@@ -167,10 +176,10 @@ pub fn build_vote_sign_request(
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
     // display.fields 必须与 wumin PayloadDecoder 解码结果的 key/value 完全一致。
-    // wumin 解码 vote_transfer 返回: proposal_id=数字字符串, approve="true"/"false"
+    // wumin 解码 internal_vote 返回: proposal_id=数字字符串, approve="true"/"false"
     let display = serde_json::json!({
-        "action": "vote_transfer",
-        "summary": format!("转账提案 #{proposal_id} 投票：{}", if approve { "赞成" } else { "反对" }),
+        "action": "internal_vote",
+        "summary": format!("管理员投票 提案 #{proposal_id}：{}", if approve { "赞成" } else { "反对" }),
         "fields": [
             { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
             { "key": "approve", "label": "投票", "value": approve.to_string() }
@@ -206,7 +215,10 @@ pub fn build_vote_sign_request(
     })
 }
 
-/// 构建 joint_vote 签名请求（联合投票：pallet=9, call=3）。
+/// 构建 joint_vote 签名请求（联合投票：pallet=9, call=1）。
+///
+/// Phase 2 将投票引擎内部 call_index 重排为
+/// 0=internal_vote / 1=joint_vote / 2=citizen_vote / 3=finalize_proposal。
 ///
 /// shenfen_id 用于构造 institution_id 48 字节参数。
 pub fn build_joint_vote_sign_request(
@@ -231,10 +243,10 @@ pub fn build_joint_vote_sign_request(
     let (block_hash, block_number) = fetch_latest_block()?;
     let nonce = fetch_nonce(&pubkey_clean)?;
 
-    // call data: [pallet=9][call=3][proposal_id: u64_le][institution_id: 48 bytes][approve: bool]
+    // call data: [pallet=9][call=1][proposal_id: u64_le][institution_id: 48 bytes][approve: bool]
     let mut call_data = Vec::with_capacity(1 + 1 + 8 + 48 + 1);
     call_data.push(9u8); // VotingEngineSystem pallet index
-    call_data.push(3u8); // joint_vote call index
+    call_data.push(1u8); // joint_vote call index (Phase 2 重排,原 3)
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.extend_from_slice(&institution_id);
     call_data.push(if approve { 1u8 } else { 0u8 });
@@ -459,7 +471,7 @@ pub fn build_propose_safety_fund_sign_request(
     let remark_compact = encode_compact_u32(remark_bytes.len() as u32);
     let mut call_data = Vec::with_capacity(2 + 32 + 16 + remark_compact.len() + remark_bytes.len());
     call_data.push(19u8); // DuoqianTransferPow pallet
-    call_data.push(3u8); // propose_safety_fund_transfer call
+    call_data.push(1u8); // propose_safety_fund_transfer call (Phase 2 重排,原 3)
     call_data.extend_from_slice(&beneficiary_bytes);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
     call_data.extend_from_slice(&remark_compact);
@@ -517,85 +529,14 @@ pub fn build_propose_safety_fund_sign_request(
     })
 }
 
-/// 构建 vote_safety_fund_transfer 签名请求（安全基金投票：pallet=19, call=4）。
-pub fn build_safety_fund_vote_sign_request(
-    proposal_id: u64,
-    pubkey_hex: &str,
-    approve: bool,
-) -> Result<VoteSignRequestResult, String> {
-    let pubkey_clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(pubkey_hex)
-        .to_ascii_lowercase();
-    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("公钥格式无效，应为 64 位十六进制".to_string());
-    }
-    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
+// Phase 3(2026-04-22): `build_safety_fund_vote_sign_request` 已删除,
+// 安全基金提案投票统一走 `build_vote_sign_request`(internal_vote, 9.0)。
 
-    let (spec_version, tx_version) = fetch_runtime_version()?;
-    let genesis_hash = fetch_genesis_hash()?;
-    let (block_hash, block_number) = fetch_latest_block()?;
-    let nonce = fetch_nonce(&pubkey_clean)?;
-
-    // call data: [0x13][0x04][proposal_id:u64_le][approve:bool]
-    let mut call_data = Vec::with_capacity(11);
-    call_data.push(19u8); // DuoqianTransferPow pallet
-    call_data.push(4u8); // vote_safety_fund_transfer call
-    call_data.extend_from_slice(&proposal_id.to_le_bytes());
-    call_data.push(if approve { 1u8 } else { 0u8 });
-
-    let payload = build_signing_payload(
-        &call_data,
-        &genesis_hash,
-        &block_hash,
-        block_number,
-        nonce,
-        spec_version,
-        tx_version,
-    );
-    let payload_hash = sha256_hash(&payload);
-    let request_id = generate_request_id("sf-vote");
-    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
-
-    let display = serde_json::json!({
-        "action": "vote_safety_fund_transfer",
-        "summary": format!("安全基金提案 #{proposal_id} 投票：{}", if approve { "赞成" } else { "反对" }),
-        "fields": [
-            { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
-            { "key": "approve", "label": "投票", "value": approve.to_string() }
-        ]
-    });
-
-    let now = now_secs();
-    let request = QrSignRequest {
-        proto: PROTOCOL_VERSION.to_string(),
-        kind: "sign_request".to_string(),
-        id: request_id.clone(),
-        issued_at: now,
-        expires_at: now + DEFAULT_TTL_SECS,
-        body: SignRequestBody {
-            address: account_ss58,
-            pubkey: format!("0x{pubkey_clean}"),
-            sig_alg: "sr25519".to_string(),
-            payload_hex: format!("0x{}", hex::encode(&payload)),
-            spec_version: spec_version,
-            display,
-        },
-    };
-
-    let request_json =
-        serde_json::to_string(&request).map_err(|e| format!("序列化签名请求失败: {e}"))?;
-
-    Ok(VoteSignRequestResult {
-        request_json,
-        request_id,
-        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
-        sign_nonce: nonce,
-        sign_block_number: block_number,
-    })
-}
-
-/// 构建 propose_sweep_to_main 签名请求（手续费划转提案：pallet=19, call=5）。
+/// 构建 propose_sweep_to_main 签名请求（手续费划转提案：pallet=19, call=2）。
+///
+/// Phase 2 将本 pallet 的 call_index 连续重排:
+/// 0=propose_transfer / 1=propose_safety_fund_transfer / 2=propose_sweep_to_main /
+/// 3=execute_transfer / 4=execute_safety_fund_transfer / 5=execute_sweep_to_main。
 pub fn build_propose_sweep_sign_request(
     pubkey_hex: &str,
     shenfen_id: &str,
@@ -622,8 +563,8 @@ pub fn build_propose_sweep_sign_request(
 
     // call data: [0x13][0x05][institution:48][amount:u128_le]
     let mut call_data = Vec::with_capacity(2 + 48 + 16);
-    call_data.push(19u8);
-    call_data.push(5u8);
+    call_data.push(19u8); // DuoqianTransferPow pallet
+    call_data.push(2u8); // propose_sweep_to_main call (Phase 2 重排,原 5)
     call_data.extend_from_slice(&institution_id);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
 
@@ -679,80 +620,8 @@ pub fn build_propose_sweep_sign_request(
     })
 }
 
-/// 构建 vote_sweep_to_main 签名请求（手续费划转投票：pallet=19, call=6）。
-pub fn build_sweep_vote_sign_request(
-    proposal_id: u64,
-    pubkey_hex: &str,
-    approve: bool,
-) -> Result<VoteSignRequestResult, String> {
-    let pubkey_clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(pubkey_hex)
-        .to_ascii_lowercase();
-    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("公钥格式无效".to_string());
-    }
-    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
-
-    let (spec_version, tx_version) = fetch_runtime_version()?;
-    let genesis_hash = fetch_genesis_hash()?;
-    let (block_hash, block_number) = fetch_latest_block()?;
-    let nonce = fetch_nonce(&pubkey_clean)?;
-
-    let mut call_data = Vec::with_capacity(11);
-    call_data.push(19u8);
-    call_data.push(6u8);
-    call_data.extend_from_slice(&proposal_id.to_le_bytes());
-    call_data.push(if approve { 1u8 } else { 0u8 });
-
-    let payload = build_signing_payload(
-        &call_data,
-        &genesis_hash,
-        &block_hash,
-        block_number,
-        nonce,
-        spec_version,
-        tx_version,
-    );
-    let payload_hash = sha256_hash(&payload);
-    let request_id = generate_request_id("sw-vote");
-    let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
-
-    let display = serde_json::json!({
-        "action": "vote_sweep_to_main",
-        "summary": format!("手续费划转提案 #{proposal_id} 投票：{}", if approve { "赞成" } else { "反对" }),
-        "fields": [
-            { "key": "proposal_id", "label": "提案编号", "value": proposal_id.to_string() },
-            { "key": "approve", "label": "投票", "value": approve.to_string() }
-        ]
-    });
-
-    let now = now_secs();
-    let request = QrSignRequest {
-        proto: PROTOCOL_VERSION.to_string(),
-        kind: "sign_request".to_string(),
-        id: request_id.clone(),
-        issued_at: now,
-        expires_at: now + DEFAULT_TTL_SECS,
-        body: SignRequestBody {
-            address: account_ss58,
-            pubkey: format!("0x{pubkey_clean}"),
-            sig_alg: "sr25519".to_string(),
-            payload_hex: format!("0x{}", hex::encode(&payload)),
-            spec_version: spec_version,
-            display,
-        },
-    };
-
-    let request_json = serde_json::to_string(&request).map_err(|e| format!("序列化失败: {e}"))?;
-    Ok(VoteSignRequestResult {
-        request_json,
-        request_id,
-        expected_payload_hash: format!("0x{}", hex::encode(&payload_hash)),
-        sign_nonce: nonce,
-        sign_block_number: block_number,
-    })
-}
+// Phase 3(2026-04-22): `build_sweep_vote_sign_request` 已删除,
+// 手续费划转提案投票统一走 `build_vote_sign_request`(internal_vote, 9.0)。
 
 /// 构建 developer_direct_upgrade 签名请求（开发期快捷升级：pallet=13, call=2）。
 /// wasm_path 为编译产物的绝对路径，后端直接读文件。

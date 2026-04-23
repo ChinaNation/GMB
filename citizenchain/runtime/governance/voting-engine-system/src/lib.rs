@@ -13,9 +13,14 @@
 //! - **联合提案发起权**：国储会和省储会管理员均可发起联合投票提案。
 //!
 //! 通过 trait 为上层治理模块提供标准化能力：
-//! - `InternalVoteEngine` / `JointVoteEngine`：提案创建和投票。
-//! - `JointVoteResultCallback`：联合提案终结后回调目标治理模块。
-//! - 自动超时结算、原子终结+回调一致性、90 天延迟分块清理。
+//! - `InternalVoteEngine` / `JointVoteEngine`：仅负责提案创建(不再负责投票,
+//!   Phase 1 整改后投票一律走本 pallet 的公开 `internal_vote / joint_vote /
+//!   citizen_vote` extrinsic)。
+//! - `InternalVoteResultCallback` / `JointVoteResultCallback`:内部/联合提案
+//!   进入终态(PASSED/REJECTED)时,投票引擎对所有业务模块 tuple 广播回调,
+//!   业务模块按 `MODULE_TAG` 前缀认领自己的提案并执行业务。
+//! - 自动超时结算、原子终结 + 回调一致性(回调返回 Err 整体回滚)、
+//!   90 天延迟分块清理。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -77,19 +82,18 @@ pub trait JointVoteEngine<AccountId> {
     fn cleanup_joint_proposal(_proposal_id: u64) {}
 }
 
-/// 中文注释：事项模块接入内部投票时，统一由投票引擎创建提案并返回真实提案ID。
+/// 事项模块接入内部投票时,统一由投票引擎创建提案并返回真实提案 ID。
+///
+/// 业务模块只通过 `create_internal_proposal` 将提案注册到投票引擎,
+/// 投票动作不再经此 trait 转发——所有管理员直接调公开的
+/// `VotingEngineSystem::internal_vote(proposal_id, approve)` extrinsic 投票,
+/// 由投票引擎的 `InternalVoteResultCallback` 广播回调业务模块执行业务。
 pub trait InternalVoteEngine<AccountId> {
     fn create_internal_proposal(
         who: AccountId,
         org: u8,
         institution: InstitutionPalletId,
     ) -> Result<u64, DispatchError>;
-
-    fn cast_internal_vote(
-        who: AccountId,
-        proposal_id: u64,
-        approve: bool,
-    ) -> Result<(), DispatchError>;
 
     fn cleanup_internal_proposal(_proposal_id: u64) {}
 }
@@ -100,14 +104,6 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
         _org: u8,
         _institution: InstitutionPalletId,
     ) -> Result<u64, DispatchError> {
-        Err(DispatchError::Other("InternalVoteEngineNotConfigured"))
-    }
-
-    fn cast_internal_vote(
-        _who: AccountId,
-        _proposal_id: u64,
-        _approve: bool,
-    ) -> Result<(), DispatchError> {
         Err(DispatchError::Other("InternalVoteEngineNotConfigured"))
     }
 }
@@ -139,6 +135,125 @@ pub trait JointVoteResultCallback {
 
 impl JointVoteResultCallback for () {
     fn on_joint_vote_finalized(_vote_proposal_id: u64, _approved: bool) -> DispatchResult {
+        Ok(())
+    }
+}
+
+/// 内部投票终态回调。
+///
+/// 投票引擎在提案进入 `STATUS_PASSED` / `STATUS_REJECTED` 时(由
+/// `set_status_and_emit` 统一触发)对所有注册的业务模块广播此回调。
+///
+/// 业务模块应当:
+/// - 通过 `ProposalData` 的 `MODULE_TAG` 前缀(或业务独立存储键)认领自己的提案,
+///   不属于自己的提案直接返回 `Ok(())` 跳过;
+/// - `approved = true` 时执行具体业务动作(转账 / 替换管理员 / 销毁 / ...);
+/// - `approved = false` 时可选清理业务独立存储(如 `SweepProposalActions`)。
+///
+/// 与 [`JointVoteResultCallback`] 行为对称:回调返回 `Err` 会让
+/// `set_status_and_emit` 的整个事务回滚,提案状态不推进。
+///
+/// 多业务模块通过 tuple 注册(见下方 `impl` for `(A,)`、`(A, B)` ... 等元组类型)。
+pub trait InternalVoteResultCallback {
+    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult;
+}
+
+/// 默认空实现(runtime 在 Phase 2 业务模块改造前临时挂 `type X = ()`)。
+impl InternalVoteResultCallback for () {
+    fn on_internal_vote_finalized(_proposal_id: u64, _approved: bool) -> DispatchResult {
+        Ok(())
+    }
+}
+
+// ──── InternalVoteResultCallback 的 tuple 实现(手写,覆盖 1~6 个成员)────
+//
+// 语义:依次调用每个成员的 `on_internal_vote_finalized`;任一成员返回 `Err`
+// 立即短路返回,后续成员不再调用——这与 `with_transaction` 内的
+// `TransactionOutcome::Rollback(Err(...))` 协作确保整个状态转换事务回滚。
+//
+// 注:Phase 2 预计注册 5 个业务模块(duoqian_transfer_pow /
+// duoqian_manage_pow / admins_origin_gov / resolution_destro_gov /
+// grandpa_key_gov),留 6 元组余量。如未来业务模块增加,补对应元组 impl。
+impl<A: InternalVoteResultCallback> InternalVoteResultCallback for (A,) {
+    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+        A::on_internal_vote_finalized(proposal_id, approved)
+    }
+}
+
+impl<A: InternalVoteResultCallback, B: InternalVoteResultCallback> InternalVoteResultCallback
+    for (A, B)
+{
+    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+        A::on_internal_vote_finalized(proposal_id, approved)?;
+        B::on_internal_vote_finalized(proposal_id, approved)?;
+        Ok(())
+    }
+}
+
+impl<
+        A: InternalVoteResultCallback,
+        B: InternalVoteResultCallback,
+        C: InternalVoteResultCallback,
+    > InternalVoteResultCallback for (A, B, C)
+{
+    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+        A::on_internal_vote_finalized(proposal_id, approved)?;
+        B::on_internal_vote_finalized(proposal_id, approved)?;
+        C::on_internal_vote_finalized(proposal_id, approved)?;
+        Ok(())
+    }
+}
+
+impl<
+        A: InternalVoteResultCallback,
+        B: InternalVoteResultCallback,
+        C: InternalVoteResultCallback,
+        D: InternalVoteResultCallback,
+    > InternalVoteResultCallback for (A, B, C, D)
+{
+    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+        A::on_internal_vote_finalized(proposal_id, approved)?;
+        B::on_internal_vote_finalized(proposal_id, approved)?;
+        C::on_internal_vote_finalized(proposal_id, approved)?;
+        D::on_internal_vote_finalized(proposal_id, approved)?;
+        Ok(())
+    }
+}
+
+impl<
+        A: InternalVoteResultCallback,
+        B: InternalVoteResultCallback,
+        C: InternalVoteResultCallback,
+        D: InternalVoteResultCallback,
+        E: InternalVoteResultCallback,
+    > InternalVoteResultCallback for (A, B, C, D, E)
+{
+    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+        A::on_internal_vote_finalized(proposal_id, approved)?;
+        B::on_internal_vote_finalized(proposal_id, approved)?;
+        C::on_internal_vote_finalized(proposal_id, approved)?;
+        D::on_internal_vote_finalized(proposal_id, approved)?;
+        E::on_internal_vote_finalized(proposal_id, approved)?;
+        Ok(())
+    }
+}
+
+impl<
+        A: InternalVoteResultCallback,
+        B: InternalVoteResultCallback,
+        C: InternalVoteResultCallback,
+        D: InternalVoteResultCallback,
+        E: InternalVoteResultCallback,
+        F: InternalVoteResultCallback,
+    > InternalVoteResultCallback for (A, B, C, D, E, F)
+{
+    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+        A::on_internal_vote_finalized(proposal_id, approved)?;
+        B::on_internal_vote_finalized(proposal_id, approved)?;
+        C::on_internal_vote_finalized(proposal_id, approved)?;
+        D::on_internal_vote_finalized(proposal_id, approved)?;
+        E::on_internal_vote_finalized(proposal_id, approved)?;
+        F::on_internal_vote_finalized(proposal_id, approved)?;
         Ok(())
     }
 }
@@ -335,6 +450,10 @@ pub mod pallet {
         >;
 
         type JointVoteResultCallback: JointVoteResultCallback;
+        /// 内部投票终态回调(对称于 `JointVoteResultCallback`)。
+        /// Runtime 用 tuple 注册多个业务模块的 Executor,投票引擎在提案进入
+        /// `STATUS_PASSED` / `STATUS_REJECTED` 时广播到每个成员。
+        type InternalVoteResultCallback: InternalVoteResultCallback;
         type InternalAdminProvider: InternalAdminProvider<Self::AccountId>;
         type InternalAdminCountProvider: InternalAdminCountProvider;
         /// 内部投票阈值动态提供器（治理机构硬编码，注册多签动态读取）。
@@ -670,46 +789,30 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
+        /// 内部投票(公开入口)。
+        ///
+        /// 所有机构管理员对内部提案的投票统一走此 call。
+        /// 由 `do_internal_vote` 做完整的阶段/权限/防双投/记票/阈值校验。
+        /// 达到终态(PASSED/REJECTED)时会通过 `set_status_and_emit` 触发
+        /// `InternalVoteResultCallback` 广播给业务模块执行后续动作。
+        ///
+        /// 签名客户端构造 call_data 格式:
+        ///   `[pallet=9][call=0][proposal_id: u64 LE][approve: bool]`
         #[pallet::call_index(0)]
-        #[pallet::weight(T::DbWeight::get().reads(1))] // 非零 weight，防止零成本 spam
-        pub fn create_internal_proposal(
-            origin: OriginFor<T>,
-            _org: u8,
-            _institution: InstitutionPalletId,
-        ) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-            // 中文注释：内部提案只能由业务模块经 InternalVoteEngine trait 创建，
-            // 禁止直接发 extrinsic 绕过业务动作映射和上层副作用。
-            Err(Error::<T>::NoPermission.into())
-        }
-
-        #[pallet::call_index(1)]
-        #[pallet::weight(T::DbWeight::get().reads(1))] // 非零 weight，防止零成本 spam
-        pub fn create_joint_proposal(
-            origin: OriginFor<T>,
-            _eligible_total: u64,
-            _snapshot_nonce: VoteNonceOf<T>,
-            _signature: VoteSignatureOf<T>,
-        ) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-            // 中文注释：联合投票提案只能由事项模块通过 JointVoteEngine trait 创建；
-            // 禁止外部直接调用，避免产生“无事项映射”的悬空联合提案。
-            Err(Error::<T>::NoPermission.into())
-        }
-
-        #[pallet::call_index(2)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(4, 4))]
+        #[pallet::weight(T::WeightInfo::internal_vote())]
         pub fn internal_vote(
             origin: OriginFor<T>,
-            _proposal_id: u64,
-            _approve: bool,
+            proposal_id: u64,
+            approve: bool,
         ) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-            // 中文注释：内部投票只能由事项模块通过 InternalVoteEngine trait 转发。
-            Err(Error::<T>::NoPermission.into())
+            let who = ensure_signed(origin)?;
+            Self::do_internal_vote(who, proposal_id, approve)
         }
 
-        #[pallet::call_index(3)]
+        /// 联合投票(公开入口)。
+        ///
+        /// 国储会 / 省储会 / 省储行管理员按机构投票;每个机构独立计票。
+        #[pallet::call_index(1)]
         #[pallet::weight(T::WeightInfo::joint_vote())]
         pub fn joint_vote(
             origin: OriginFor<T>,
@@ -721,7 +824,11 @@ pub mod pallet {
             Self::do_joint_vote(who, proposal_id, institution, approve)
         }
 
-        #[pallet::call_index(4)]
+        /// 公民投票(公开入口)。
+        ///
+        /// SFID 绑定用户按 >50% 多数投票;外层可由任意签名账户代投,
+        /// 内层 `signature` 必须是 `binding_id` 绑定的用户本人 sr25519 签名。
+        #[pallet::call_index(2)]
         #[pallet::weight(T::WeightInfo::citizen_vote())]
         pub fn citizen_vote(
             origin: OriginFor<T>,
@@ -735,7 +842,7 @@ pub mod pallet {
             Self::do_citizen_vote(who, proposal_id, binding_id, nonce, signature, approve)
         }
 
-        #[pallet::call_index(5)]
+        #[pallet::call_index(3)]
         #[pallet::weight(
             T::WeightInfo::finalize_proposal_internal()
                 .max(T::WeightInfo::finalize_proposal_joint())
@@ -920,13 +1027,30 @@ pub mod pallet {
                     }
                 }
 
-                if kind == PROPOSAL_KIND_JOINT && status != STATUS_VOTING {
+                // 中文注释:callback 只在"投票中 → PASSED/REJECTED"首次进入终态时触发,
+                // 不覆盖 PASSED→EXECUTED / PASSED→EXECUTION_FAILED 的二次推进。
+                // 后者是业务执行结果,业务自己清楚,不需要再次回调(否则会被错误解读为"否决"清理存储)。
+                let first_terminal = matches!(status, STATUS_PASSED | STATUS_REJECTED);
+
+                if kind == PROPOSAL_KIND_JOINT && first_terminal {
                     if let Err(err) = T::JointVoteResultCallback::on_joint_vote_finalized(
                         proposal_id,
                         status == STATUS_PASSED,
                     ) {
                         // 中文注释：联合投票结果必须由业务模块成功消费后，
                         // 才允许投票引擎把提案标记为最终状态。
+                        return TransactionOutcome::Rollback(Err(err));
+                    }
+                }
+
+                // 中文注释:内部投票终态回调(对称于上面 joint 回调)。
+                // 业务模块在回调内执行具体业务动作(转账 / 替换管理员 / 销毁 / ...),
+                // 失败则整个状态转换事务回滚,票数 + 状态都保持原样。
+                if kind == PROPOSAL_KIND_INTERNAL && first_terminal {
+                    if let Err(err) = T::InternalVoteResultCallback::on_internal_vote_finalized(
+                        proposal_id,
+                        status == STATUS_PASSED,
+                    ) {
                         return TransactionOutcome::Rollback(Err(err));
                     }
                 }
@@ -956,7 +1080,8 @@ pub mod pallet {
             })
         }
 
-        /// 低级状态覆盖：仅供 on_joint_vote_finalized 回调在同一事务内纠正状态。
+        /// 低级状态覆盖:仅供 `on_joint_vote_finalized` / `on_internal_vote_finalized`
+        /// 回调在同一事务内纠正状态(如"PASSED → EXECUTION_FAILED")。
         /// 不发事件、不注册清理——这些由外层 set_status_and_emit 统一处理。
         pub fn override_proposal_status(proposal_id: u64, new_status: u8) -> DispatchResult {
             Proposals::<T>::try_mutate(proposal_id, |maybe| {
@@ -1297,16 +1422,8 @@ impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
         pallet::Pallet::<T>::do_create_internal_proposal(who, org, institution)
     }
 
-    fn cast_internal_vote(
-        who: T::AccountId,
-        proposal_id: u64,
-        approve: bool,
-    ) -> Result<(), DispatchError> {
-        pallet::Pallet::<T>::do_internal_vote(who, proposal_id, approve)
-    }
-
     fn cleanup_internal_proposal(_proposal_id: u64) {
-        // 已弃用：清理现在由 set_status_and_emit 在终态转换时自动注册。
+        // 清理现在由 set_status_and_emit 在终态转换时自动注册。
         // 保留空实现以兼容 trait 定义。
     }
 }
@@ -1375,6 +1492,7 @@ mod tests {
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = TestJointVoteResultCallback;
+        type InternalVoteResultCallback = TestInternalVoteResultCallback;
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalAdminCountProvider = ();
         type InternalThresholdProvider = ();
@@ -1392,10 +1510,22 @@ mod tests {
     thread_local! {
         static JOINT_CALLBACK_OVERRIDE_STATUS: RefCell<Option<u8>> = const { RefCell::new(None) };
     }
+    // Phase 1 新增:内部投票终态回调测试桩。
+    // INTERNAL_CALLBACK_SHOULD_FAIL = true → on_internal_vote_finalized 返回 Err,
+    //   触发 set_status_and_emit 回滚;用于验证事务原子性。
+    // INTERNAL_CALLBACK_LOG 记录每次被调用的 (proposal_id, approved),
+    //   用于验证回调是否触发 / 触发参数是否正确。
+    thread_local! {
+        static INTERNAL_CALLBACK_SHOULD_FAIL: RefCell<bool> = const { RefCell::new(false) };
+    }
+    thread_local! {
+        static INTERNAL_CALLBACK_LOG: RefCell<Vec<(u64, bool)>> = const { RefCell::new(Vec::new()) };
+    }
 
     pub struct TestSfidEligibility;
     pub struct TestPopulationSnapshotVerifier;
     pub struct TestJointVoteResultCallback;
+    pub struct TestInternalVoteResultCallback;
     pub struct TestInternalAdminProvider;
 
     impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
@@ -1550,6 +1680,20 @@ mod tests {
                 if let Some(status) = JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow()) {
                     VotingEngineSystem::override_proposal_status(vote_proposal_id, status)?;
                 }
+                Ok(())
+            }
+        }
+    }
+
+    impl InternalVoteResultCallback for TestInternalVoteResultCallback {
+        fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+            // 先记日志,无论成功/失败都记 — 事务回滚会让日志外的状态回退,但
+            // thread_local 不参与事务,通过对比"日志有/状态没变"即可验证回滚语义。
+            INTERNAL_CALLBACK_LOG
+                .with(|log| log.borrow_mut().push((proposal_id, approved)));
+            if INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow()) {
+                Err(DispatchError::Other("internal callback failed"))
+            } else {
                 Ok(())
             }
         }
@@ -1780,6 +1924,22 @@ mod tests {
         .expect("internal proposal should be created")
     }
 
+    /// 测试辅助:走公开 `internal_vote` extrinsic 投票。
+    ///
+    /// Phase 1 改造后,管理员投票只能通过公开 call(不再经 trait 转发),
+    /// 此函数包裹 `RuntimeOrigin::signed(who)` 让测试代码保持简洁。
+    fn cast_internal_vote_via_extrinsic(
+        who: AccountId32,
+        proposal_id: u64,
+        approve: bool,
+    ) -> DispatchResult {
+        VotingEngineSystem::internal_vote(
+            RuntimeOrigin::signed(who),
+            proposal_id,
+            approve,
+        )
+    }
+
     fn insert_citizen_proposal(proposal_id: u64, eligible_total: u64, end: u64) {
         Proposals::<Test>::insert(
             proposal_id,
@@ -1799,16 +1959,10 @@ mod tests {
     #[test]
     fn internal_proposal_must_be_created_by_same_institution_admin() {
         new_test_ext().execute_with(|| {
+            // Phase 1 整改:`create_internal_proposal` 公开 extrinsic 已删除,
+            // 只保留 `InternalVoteEngine` trait 入口供业务模块内部调用;
+            // 这里直接验证 trait 路径的权限校验。
             let outsider = AccountId32::new([7u8; 32]);
-
-            assert_noop!(
-                VotingEngineSystem::create_internal_proposal(
-                    RuntimeOrigin::signed(nrc_admin(0)),
-                    internal_vote::ORG_NRC,
-                    nrc_pid(),
-                ),
-                pallet::Error::<Test>::NoPermission
-            );
 
             assert_noop!(
                 <VotingEngineSystem as InternalVoteEngine<AccountId32>>::create_internal_proposal(
@@ -1853,21 +2007,15 @@ mod tests {
             );
 
             assert_noop!(
-                <VotingEngineSystem as InternalVoteEngine<AccountId32>>::cast_internal_vote(
-                    nrc_admin(0),
-                    proposal_id,
-                    true,
-                ),
+                cast_internal_vote_via_extrinsic(nrc_admin(0), proposal_id, true),
                 pallet::Error::<Test>::NoPermission
             );
 
-            assert_ok!(
-                <VotingEngineSystem as InternalVoteEngine<AccountId32>>::cast_internal_vote(
-                    prb_admin(1),
-                    proposal_id,
-                    true,
-                )
-            );
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                prb_admin(1),
+                proposal_id,
+                true
+            ));
         });
     }
 
@@ -1881,13 +2029,11 @@ mod tests {
             );
 
             for i in 0..12 {
-                assert_ok!(
-                    <VotingEngineSystem as InternalVoteEngine<AccountId32>>::cast_internal_vote(
-                        nrc_admin(i),
-                        proposal_id,
-                        true,
-                    )
-                );
+                assert_ok!(cast_internal_vote_via_extrinsic(
+                    nrc_admin(i),
+                    proposal_id,
+                    true
+                ));
             }
             assert_eq!(
                 VotingEngineSystem::proposals(proposal_id)
@@ -1896,13 +2042,11 @@ mod tests {
                 STATUS_VOTING
             );
 
-            assert_ok!(
-                <VotingEngineSystem as InternalVoteEngine<AccountId32>>::cast_internal_vote(
-                    nrc_admin(12),
-                    proposal_id,
-                    true,
-                )
-            );
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                nrc_admin(12),
+                proposal_id,
+                true
+            ));
             assert_eq!(
                 VotingEngineSystem::proposals(proposal_id)
                     .expect("proposal exists")
@@ -1971,16 +2115,9 @@ mod tests {
     #[test]
     fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
         new_test_ext().execute_with(|| {
-            // 中文注释：外部 extrinsic 入口已禁用，统一要求事项模块通过 trait 创建联合投票提案。
-            assert_noop!(
-                VotingEngineSystem::create_joint_proposal(
-                    RuntimeOrigin::signed(nrc_admin(0)),
-                    10,
-                    snapshot_nonce_ok(),
-                    snapshot_sig_ok()
-                ),
-                pallet::Error::<Test>::NoPermission
-            );
+            // Phase 1 整改:`create_joint_proposal` 公开 extrinsic 已删除,
+            // 只保留 `JointVoteEngine` trait 入口供业务模块内部调用;
+            // 这里直接验证 trait 路径的权限校验。
 
             // 外部人员不能创建联合提案
             let outsider = AccountId32::new([9u8; 32]);
@@ -2960,6 +3097,238 @@ mod tests {
             VotingEngineSystem::set_proposal_passed(42, 200);
             let meta2 = ProposalMeta::<Test>::get(42).expect("meta should exist");
             assert_eq!(meta2.passed_at, Some(200));
+        });
+    }
+
+    // ──── Phase 1 新增:公开 internal_vote extrinsic + InternalVoteResultCallback ────
+
+    /// 重置 Phase 1 新增的 thread_local 测试桩状态,避免用例间污染。
+    fn reset_internal_callback_state() {
+        INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
+        INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().clear());
+    }
+
+    #[test]
+    fn internal_vote_public_call_casts_vote() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                nrc_admin(0),
+                proposal_id,
+                true
+            ));
+
+            assert!(InternalVotesByAccount::<Test>::contains_key(
+                proposal_id,
+                &nrc_admin(0)
+            ));
+            assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 1);
+            assert_eq!(InternalTallies::<Test>::get(proposal_id).no, 0);
+        });
+    }
+
+    #[test]
+    fn internal_vote_rejects_non_admin() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            // 非 NRC 管理员(比如 PRB 的管理员)不能投 NRC 的内部提案。
+            assert_noop!(
+                cast_internal_vote_via_extrinsic(prb_admin(0), proposal_id, true),
+                pallet::Error::<Test>::NoPermission
+            );
+            assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 0);
+        });
+    }
+
+    #[test]
+    fn internal_vote_rejects_double_vote() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                nrc_admin(0),
+                proposal_id,
+                true
+            ));
+            assert_noop!(
+                cast_internal_vote_via_extrinsic(nrc_admin(0), proposal_id, false),
+                pallet::Error::<Test>::AlreadyVoted
+            );
+        });
+    }
+
+    #[test]
+    fn internal_vote_passes_triggers_callback_approved_true() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            // NRC 阈值 13 票;投 13 票赞成使提案进入 STATUS_PASSED。
+            for i in 0..13 {
+                assert_ok!(cast_internal_vote_via_extrinsic(
+                    nrc_admin(i),
+                    proposal_id,
+                    true
+                ));
+            }
+
+            // 回调被触发且 approved = true。
+            let log = INTERNAL_CALLBACK_LOG.with(|log| log.borrow().clone());
+            assert_eq!(log, vec![(proposal_id, true)]);
+            assert_eq!(
+                VotingEngineSystem::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_PASSED
+            );
+        });
+    }
+
+    #[test]
+    fn internal_vote_early_rejection_triggers_callback_approved_false() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            // NRC 总管理员 19 人,阈值 13 票。7 票反对 → 剩余 12 人全同意也到不了 13,
+            // 触发提前否决。
+            for i in 0..7 {
+                assert_ok!(cast_internal_vote_via_extrinsic(
+                    nrc_admin(i),
+                    proposal_id,
+                    false
+                ));
+            }
+
+            // 回调被触发且 approved = false。
+            let log = INTERNAL_CALLBACK_LOG.with(|log| log.borrow().clone());
+            assert_eq!(log, vec![(proposal_id, false)]);
+            assert_eq!(
+                VotingEngineSystem::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_REJECTED
+            );
+        });
+    }
+
+    #[test]
+    fn internal_vote_callback_not_called_before_threshold() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            // 投 12 票赞成(阈值 13),未达阈值不应触发回调。
+            for i in 0..12 {
+                assert_ok!(cast_internal_vote_via_extrinsic(
+                    nrc_admin(i),
+                    proposal_id,
+                    true
+                ));
+            }
+
+            let log = INTERNAL_CALLBACK_LOG.with(|log| log.borrow().clone());
+            assert!(log.is_empty(), "未达阈值回调不应被调用: {:?}", log);
+            assert_eq!(
+                VotingEngineSystem::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_VOTING
+            );
+        });
+    }
+
+    #[test]
+    fn internal_vote_callback_err_rolls_back_status() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            // 前 12 票赞成(未达阈值,不触发回调,不受 SHOULD_FAIL 影响)。
+            for i in 0..12 {
+                assert_ok!(cast_internal_vote_via_extrinsic(
+                    nrc_admin(i),
+                    proposal_id,
+                    true
+                ));
+            }
+
+            // 第 13 票达阈值,回调会被触发;置 SHOULD_FAIL 让回调返回 Err。
+            INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = true);
+            assert!(cast_internal_vote_via_extrinsic(nrc_admin(12), proposal_id, true).is_err());
+
+            // 提案状态、票数必须整体回滚到投票中 + 12 票。
+            assert_eq!(
+                VotingEngineSystem::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_VOTING
+            );
+            assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 12);
+            assert!(!InternalVotesByAccount::<Test>::contains_key(
+                proposal_id,
+                &nrc_admin(12)
+            ));
+        });
+    }
+
+    #[test]
+    fn internal_vote_rejects_wrong_stage_joint_proposal() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            // 手工写一个 kind=JOINT 的提案,用 internal_vote 去投 → 应拒绝。
+            let proposal_id = 999u64;
+            let now = <frame_system::Pallet<Test>>::block_number();
+            Proposals::<Test>::insert(
+                proposal_id,
+                Proposal {
+                    kind: PROPOSAL_KIND_JOINT,
+                    stage: STAGE_JOINT,
+                    status: STATUS_VOTING,
+                    internal_org: None,
+                    internal_institution: None,
+                    start: now,
+                    end: now + 100,
+                    citizen_eligible_total: 0,
+                },
+            );
+
+            assert_noop!(
+                cast_internal_vote_via_extrinsic(nrc_admin(0), proposal_id, true),
+                pallet::Error::<Test>::InvalidProposalKind
+            );
         });
     }
 }

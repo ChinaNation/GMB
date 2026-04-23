@@ -19,7 +19,7 @@ use primitives::china::china_ch::{
 use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, STATUS_EXECUTED, STATUS_PASSED,
+    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -303,60 +303,15 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 对"管理员更换"提案投票，达到阈值通过后自动执行替换。
+        /// 任意人触发"已通过提案"的执行,用于自动执行失败后的补救重试。
         ///
-        /// 权限双重校验：业务层 `admins_for_institution`（实时名单）+ 投票引擎 `is_admin_in_snapshot`（快照）。
-        /// 实时检查确保已被替换的管理员无法继续投票，快照确保投票期间名单稳定。
+        /// Phase 2 整改后投票一律走 `VotingEngineSystem::internal_vote` 公开 call;
+        /// 通过后由本模块的 `InternalVoteExecutor` 自动触发 `try_execute_replacement`。
+        /// 若自动执行失败(如存储暂时不一致),任何签名账户都可以调用本 call 重试。
         #[pallet::call_index(1)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::vote_admin_replacement())]
-        pub fn vote_admin_replacement(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            approve: bool,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            let action =
-                Self::load_proposal_data(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
-
-            // 仅目标机构管理员可参与该提案投票
-            let admins = Self::admins_for_institution(action.institution)?;
-            ensure!(admins.contains(&who), Error::<T>::UnauthorizedAdmin);
-
-            // 转发到投票引擎做计票与阈值判断
-            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
-
-            Self::deposit_event(Event::<T>::AdminReplacementVoteSubmitted {
-                proposal_id,
-                who,
-                approve,
-            });
-
-            if approve {
-                // 中文注释：只在内部投票状态达到 PASSED 时执行替换，避免前置赞成票被回滚。
-                if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
-                    if proposal.status == STATUS_PASSED {
-                        // 中文注释：首次进入 PASSED 时记下时间锚点。
-                        voting_engine_system::Pallet::<T>::set_proposal_passed(
-                            proposal_id,
-                            frame_system::Pallet::<T>::block_number(),
-                        );
-                        if Self::try_execute_replacement_from_action(proposal_id, action).is_err() {
-                            Self::deposit_event(Event::<T>::AdminReplacementExecutionFailed {
-                                proposal_id,
-                            });
-                        }
-                    }
-                }
-            }
-            Ok(())
-        }
-
-        #[pallet::call_index(2)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::execute_admin_replacement())]
         pub fn execute_admin_replacement(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let _ = ensure_signed(origin)?;
-            // 中文注释：执行入口保持公开触发，只要提案已经通过，任何账户都可以帮助把已批准的替换落地。
             Self::try_execute_replacement(proposal_id)
         }
     }
@@ -392,13 +347,13 @@ pub mod pallet {
             AdminReplacementAction::decode(&mut &raw[tag.len()..]).ok()
         }
 
-        fn try_execute_replacement(proposal_id: u64) -> DispatchResult {
+        pub(crate) fn try_execute_replacement(proposal_id: u64) -> DispatchResult {
             let action =
                 Self::load_proposal_data(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
             Self::try_execute_replacement_from_action(proposal_id, action)
         }
 
-        fn try_execute_replacement_from_action(
+        pub(crate) fn try_execute_replacement_from_action(
             proposal_id: u64,
             action: AdminReplacementAction<T::AccountId>,
         ) -> DispatchResult {
@@ -443,6 +398,56 @@ pub mod pallet {
 
             Ok(())
         }
+    }
+}
+
+// ──── 投票终态回调:把已通过的管理员替换提案落地到链上 ────
+//
+// Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
+// 通过 [`voting_engine_system::InternalVoteResultCallback`] 广播回来。
+// 本 Executor 按 `MODULE_TAG` 前缀认领本模块的提案,非己方直接 Ok(()) skip。
+//
+// 设计要点:
+// - `approved = true` 时执行 `try_execute_replacement`,失败发 `AdminReplacementExecutionFailed`
+//   事件但不返回 Err(否则投票引擎会回滚状态,票数白投);
+// - `approved = false` 下本模块没有独立存储需要清理,直接 Ok(()) 返回;
+// - 数据层异常(解码失败、MODULE_TAG 不匹配)返回 Err,触发 set_status_and_emit 回滚,
+//   避免错误状态被提交。
+pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
+
+impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
+    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+        // Step 1:认领 — 检查 ProposalData 是否以 MODULE_TAG 开头。
+        let raw = match voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id) {
+            Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
+            _ => return Ok(()), // 非本模块提案
+        };
+
+        if !approved {
+            // 否决:无独立存储需清理(ProposalData 由投票引擎延迟清理)。
+            return Ok(());
+        }
+
+        // Step 2:解码 action。异常视为数据层问题,回滚投票状态。
+        let action = AdminReplacementAction::<T::AccountId>::decode(
+            &mut &raw[crate::MODULE_TAG.len()..],
+        )
+        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+
+        // Step 3:打业务执行时间戳(首次进入 PASSED)。
+        voting_engine_system::Pallet::<T>::set_proposal_passed(
+            proposal_id,
+            frame_system::Pallet::<T>::block_number(),
+        );
+
+        // Step 4:执行替换。失败发事件,不回滚 — 提案保留 PASSED 状态,
+        //         任何签名账户可通过 execute_admin_replacement 重试。
+        if pallet::Pallet::<T>::try_execute_replacement_from_action(proposal_id, action).is_err() {
+            pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::AdminReplacementExecutionFailed {
+                proposal_id,
+            });
+        }
+        Ok(())
     }
 }
 
@@ -598,6 +603,9 @@ mod tests {
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
+        // Phase 2 整改:mock runtime 必须把本模块的 Executor 挂上,
+        // 否则内部提案通过后业务执行回调不会触发,端到端测试失败。
+        type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalThresholdProvider = ();
         type InternalAdminCountProvider = ();
@@ -655,6 +663,19 @@ mod tests {
         voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
     }
 
+    /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(Phase 2 后的统一入口)。
+    ///
+    /// 替代旧的 `AdminsOriginGov::vote_admin_replacement`——业务模块不再持有投票 call,
+    /// 所有管理员通过投票引擎的公开 call 直接投票,通过后由 `InternalVoteExecutor` 回调
+    /// 执行业务。
+    fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
+        voting_engine_system::Pallet::<Test>::internal_vote(
+            RuntimeOrigin::signed(who),
+            proposal_id,
+            approve,
+        )
+    }
+
     #[test]
     fn nrc_replacement_executes_when_yes_votes_reach_threshold() {
         new_test_ext().execute_with(|| {
@@ -672,11 +693,7 @@ mod tests {
             let pid = last_proposal_id();
 
             for i in 0..13 {
-                assert_ok!(AdminsOriginGov::vote_admin_replacement(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
             let admins = CurrentAdmins::<Test>::get(institution)
@@ -718,12 +735,8 @@ mod tests {
             let pid = last_proposal_id();
 
             assert_noop!(
-                AdminsOriginGov::vote_admin_replacement(
-                    RuntimeOrigin::signed(prc_admin(0)),
-                    pid,
-                    true
-                ),
-                Error::<Test>::UnauthorizedAdmin
+                cast_vote(prc_admin(0), pid, true),
+                voting_engine_system::pallet::Error::<Test>::NoPermission
             );
         });
     }
@@ -744,11 +757,7 @@ mod tests {
             ));
             let pid = last_proposal_id();
             for i in 0..13 {
-                assert_ok!(AdminsOriginGov::vote_admin_replacement(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
             assert_ok!(AdminsOriginGov::propose_admin_replacement(
@@ -779,11 +788,7 @@ mod tests {
 
             // 省储会内部投票阈值：>=6
             for i in 0..6 {
-                assert_ok!(AdminsOriginGov::vote_admin_replacement(
-                    RuntimeOrigin::signed(prc_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(prc_admin(i), pid, true));
             }
 
             let admins = CurrentAdmins::<Test>::get(institution)
@@ -812,11 +817,7 @@ mod tests {
 
             // 省储行内部投票阈值：>=6
             for i in 0..6 {
-                assert_ok!(AdminsOriginGov::vote_admin_replacement(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(prb_admin(i), pid, true));
             }
 
             let admins = CurrentAdmins::<Test>::get(institution)
@@ -853,12 +854,8 @@ mod tests {
             let pid = last_proposal_id();
 
             assert_noop!(
-                AdminsOriginGov::vote_admin_replacement(
-                    RuntimeOrigin::signed(prb_admin(0)),
-                    pid,
-                    true
-                ),
-                Error::<Test>::UnauthorizedAdmin
+                cast_vote(prb_admin(0), pid, true),
+                voting_engine_system::pallet::Error::<Test>::NoPermission
             );
         });
     }
@@ -889,12 +886,8 @@ mod tests {
             let pid = last_proposal_id();
 
             assert_noop!(
-                AdminsOriginGov::vote_admin_replacement(
-                    RuntimeOrigin::signed(prc_admin(0)),
-                    pid,
-                    true
-                ),
-                Error::<Test>::UnauthorizedAdmin
+                cast_vote(prc_admin(0), pid, true),
+                voting_engine_system::pallet::Error::<Test>::NoPermission
             );
         });
     }
@@ -925,11 +918,7 @@ mod tests {
             });
 
             for i in [0usize, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
-                assert_ok!(AdminsOriginGov::vote_admin_replacement(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
             let proposal = voting_engine_system::Pallet::<Test>::proposals(pid)
@@ -983,11 +972,7 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            assert_ok!(AdminsOriginGov::vote_admin_replacement(
-                RuntimeOrigin::signed(nrc_admin(2)),
-                pid,
-                false
-            ));
+            assert_ok!(cast_vote(nrc_admin(2), pid, false));
 
             let admins = CurrentAdmins::<Test>::get(institution)
                 .expect("current admins should remain stored")
@@ -1048,11 +1033,7 @@ mod tests {
             let pid = last_proposal_id();
 
             for i in 0..13 {
-                assert_ok!(AdminsOriginGov::vote_admin_replacement(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
             assert_noop!(
@@ -1130,11 +1111,7 @@ mod tests {
             });
 
             for i in [0usize, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
-                assert_ok!(AdminsOriginGov::vote_admin_replacement(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
             assert_eq!(
@@ -1182,11 +1159,7 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            assert_ok!(AdminsOriginGov::vote_admin_replacement(
-                RuntimeOrigin::signed(nrc_admin(2)),
-                pid,
-                true
-            ));
+            assert_ok!(cast_vote(nrc_admin(2), pid, true));
 
             let admins = CurrentAdmins::<Test>::get(institution)
                 .expect("current admins should remain stored")

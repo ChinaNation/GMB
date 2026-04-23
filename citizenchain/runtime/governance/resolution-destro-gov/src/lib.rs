@@ -15,7 +15,8 @@ use primitives::china::china_ch::{
 };
 use voting_engine_system::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED,
+    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_EXECUTION_FAILED,
+    STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -194,68 +195,13 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 对”决议销毁”提案投票，达到阈值通过后自动执行销毁。
+        /// 任意人触发"已通过提案"的销毁执行,用于自动执行失败后的补救重试。
         ///
-        /// 权限双重校验：业务层 `is_internal_admin`（实时名单）+ 投票引擎 `is_admin_in_snapshot`（快照）。
-        /// 实时检查确保已被替换的管理员无法继续投票，快照确保投票期间名单稳定。
+        /// Phase 2 整改后投票一律走 `VotingEngineSystem::internal_vote` 公开 call;
+        /// 通过后由本模块的 `InternalVoteExecutor` 自动执行销毁。
         #[pallet::call_index(1)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::vote_destroy())]
-        pub fn vote_destroy(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            approve: bool,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            let action =
-                Self::load_proposal_data(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
-            let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                Self::is_internal_admin(org, action.institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-
-            T::InternalVoteEngine::cast_internal_vote(who.clone(), proposal_id, approve)?;
-
-            Self::deposit_event(Event::<T>::DestroyVoteSubmitted {
-                proposal_id,
-                who,
-                approve,
-            });
-
-            if let Some(proposal) = voting_engine_system::Pallet::<T>::proposals(proposal_id) {
-                if proposal.status == STATUS_PASSED {
-                    if voting_engine_system::Pallet::<T>::get_proposal_meta(proposal_id)
-                        .and_then(|m| m.passed_at)
-                        .is_none()
-                    {
-                        voting_engine_system::Pallet::<T>::set_proposal_passed(
-                            proposal_id,
-                            frame_system::Pallet::<T>::block_number(),
-                        );
-                    }
-                    if approve
-                        && Self::try_execute_destroy_from_action(proposal_id, action).is_err()
-                    {
-                        // 中文注释：执行失败，覆写投票引擎状态为 STATUS_EXECUTION_FAILED，
-                        // 与 resolution-issuance-gov 保持一致。手动 execute_destroy 仍可重试。
-                        let _ = voting_engine_system::Pallet::<T>::override_proposal_status(
-                            proposal_id,
-                            STATUS_EXECUTION_FAILED,
-                        );
-                        Self::deposit_event(Event::<T>::DestroyExecutionFailed { proposal_id });
-                    }
-                }
-            }
-            Ok(())
-        }
-
-        /// 手动执行已通过的销毁提案。
-        #[pallet::call_index(2)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::execute_destroy())]
         pub fn execute_destroy(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            // 中文注释：这里保留公开触发入口，任何签名账户都可以推动“已获批准”的销毁落地，
-            // 不要求再次拿到管理员身份，避免因管理员离线导致通过提案迟迟无法执行。
             let _ = ensure_signed(origin)?;
             Self::try_execute_destroy(proposal_id)
         }
@@ -285,13 +231,13 @@ pub mod pallet {
             DestroyAction::decode(&mut &raw[tag.len()..]).ok()
         }
 
-        fn try_execute_destroy(proposal_id: u64) -> DispatchResult {
+        pub(crate) fn try_execute_destroy(proposal_id: u64) -> DispatchResult {
             let action =
                 Self::load_proposal_data(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
             Self::try_execute_destroy_from_action(proposal_id, action)
         }
 
-        fn try_execute_destroy_from_action(
+        pub(crate) fn try_execute_destroy_from_action(
             proposal_id: u64,
             action: DestroyAction<BalanceOf<T>>,
         ) -> DispatchResult {
@@ -333,6 +279,46 @@ pub mod pallet {
             });
             Ok(())
         }
+    }
+}
+
+// ──── 投票终态回调:把已通过的销毁提案落地到链上 ────
+//
+// Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
+// 通过 [`voting_engine_system::InternalVoteResultCallback`] 广播回来。
+// 本 Executor 按 `MODULE_TAG` 前缀认领本模块的提案,非己方直接 Ok(()) skip。
+pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
+
+impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
+    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+        let raw = match voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id) {
+            Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
+            _ => return Ok(()),
+        };
+        if !approved {
+            return Ok(());
+        }
+        let action = DestroyAction::<BalanceOf<T>>::decode(&mut &raw[crate::MODULE_TAG.len()..])
+            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+
+        // 打执行时间戳(对齐 resolution-issuance-gov 语义)。
+        voting_engine_system::Pallet::<T>::set_proposal_passed(
+            proposal_id,
+            frame_system::Pallet::<T>::block_number(),
+        );
+
+        // 执行销毁;失败则覆写状态为 EXECUTION_FAILED + 发事件,
+        // 投票不回滚(票已投完,回滚会造成票数丢失)。
+        if pallet::Pallet::<T>::try_execute_destroy_from_action(proposal_id, action).is_err() {
+            let _ = voting_engine_system::Pallet::<T>::override_proposal_status(
+                proposal_id,
+                STATUS_EXECUTION_FAILED,
+            );
+            pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::DestroyExecutionFailed {
+                proposal_id,
+            });
+        }
+        Ok(())
     }
 }
 
@@ -521,6 +507,8 @@ mod tests {
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
+        // Phase 2 整改:挂上本模块 Executor,让提案通过后自动触发销毁执行。
+        type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalThresholdProvider = ();
         type InternalAdminCountProvider = ();
@@ -570,6 +558,15 @@ mod tests {
         voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
     }
 
+    /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(Phase 2 统一入口)。
+    fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
+        voting_engine_system::Pallet::<Test>::internal_vote(
+            RuntimeOrigin::signed(who),
+            proposal_id,
+            approve,
+        )
+    }
+
     fn new_test_ext() -> sp_io::TestExternalities {
         let mut storage = frame_system::GenesisConfig::<Test>::default()
             .build_storage()
@@ -605,11 +602,7 @@ mod tests {
             let pid = last_proposal_id();
 
             for i in 0..13 {
-                assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
             assert_eq!(Balances::free_balance(&account), 900);
@@ -631,11 +624,7 @@ mod tests {
             let pid = last_proposal_id();
 
             for i in 0..6 {
-                assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(prc_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(prc_admin(i), pid, true));
             }
 
             assert_eq!(Balances::free_balance(&account), 800);
@@ -657,11 +646,7 @@ mod tests {
             let pid = last_proposal_id();
 
             for i in 0..6 {
-                assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(prb_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(prb_admin(i), pid, true));
             }
 
             assert_eq!(Balances::free_balance(&account), 700);
@@ -692,8 +677,8 @@ mod tests {
             let pid = last_proposal_id();
 
             assert_noop!(
-                ResolutionDestroGov::vote_destroy(RuntimeOrigin::signed(prc_admin(0)), pid, true),
-                Error::<Test>::UnauthorizedAdmin
+                cast_vote(prc_admin(0), pid, true),
+                voting_engine_system::pallet::Error::<Test>::NoPermission
             );
         });
     }
@@ -722,19 +707,11 @@ mod tests {
             let pid = last_proposal_id();
 
             for i in 0..12 {
-                assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
             // 第 13 票应被记录，自动执行失败不回滚投票，状态覆写为 EXECUTION_FAILED。
-            assert_ok!(ResolutionDestroGov::vote_destroy(
-                RuntimeOrigin::signed(nrc_admin(12)),
-                pid,
-                true
-            ));
+            assert_ok!(cast_vote(nrc_admin(12), pid, true));
             assert_eq!(
                 voting_engine_system::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
@@ -768,11 +745,7 @@ mod tests {
             let pid = last_proposal_id();
 
             for i in 0..13 {
-                assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
             // 如果不校验 ED，这里会被销毁到 0 并触发账户 reap。
@@ -838,11 +811,7 @@ mod tests {
             let pid = last_proposal_id();
 
             for i in 0..13 {
-                assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
             // 自动执行失败后状态为 STATUS_EXECUTION_FAILED
@@ -878,11 +847,7 @@ mod tests {
             let pid1 = last_proposal_id();
 
             for i in 0..13 {
-                assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid1,
-                    true
-                ));
+                assert_ok!(cast_vote(nrc_admin(i), pid1, true));
             }
 
             assert_ok!(ResolutionDestroGov::propose_destroy(
@@ -907,13 +872,9 @@ mod tests {
                 100
             ));
             let pid = last_proposal_id();
-            assert_ok!(ResolutionDestroGov::vote_destroy(
-                RuntimeOrigin::signed(nrc_admin(1)),
-                pid,
-                true
-            ));
+            assert_ok!(cast_vote(nrc_admin(1), pid, true));
             assert_noop!(
-                ResolutionDestroGov::vote_destroy(RuntimeOrigin::signed(nrc_admin(1)), pid, true),
+                cast_vote(nrc_admin(1), pid, true),
                 voting_engine_system::pallet::Error::<Test>::AlreadyVoted
             );
         });
@@ -934,11 +895,7 @@ mod tests {
             ));
             let pid = last_proposal_id();
             for i in 0..13 {
-                assert_ok!(ResolutionDestroGov::vote_destroy(
-                    RuntimeOrigin::signed(nrc_admin(i)),
-                    pid,
-                    true
-                ));
+                assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
             let _ = Balances::deposit_creating(&account, 200);
             assert_ok!(ResolutionDestroGov::execute_destroy(
