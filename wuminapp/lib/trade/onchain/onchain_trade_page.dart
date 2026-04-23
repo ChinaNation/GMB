@@ -372,8 +372,12 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
               action: 'transfer',
               summary: '转账 $amountFormatted $_selectedSymbol 给 $toAddr',
               fields: [
-                SignDisplayField(label: '收款账户', value: toAddr),
+                // transfer 链端 fields 按 Registry = (to, amount_yuan)。
+                // wumin decoder 输出 "X.XX GMB"(千分位),wuminapp 的
+                // $amountFormatted 来自 AmountFormat.format 已自带千分位。
+                SignDisplayField(key: 'to', label: '收款账户', value: toAddr),
                 SignDisplayField(
+                    key: 'amount_yuan',
                     label: '金额',
                     value: '$amountFormatted $_selectedSymbol'),
               ],

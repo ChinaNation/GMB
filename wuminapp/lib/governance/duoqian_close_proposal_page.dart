@@ -140,10 +140,16 @@ class _DuoqianCloseProposalPageState extends State<DuoqianCloseProposalPage> {
             action: 'propose_close',
             summary: '发起关闭多签账户提案',
             fields: [
-              SignDisplayField(label: '多签地址', value: _duoqianSs58),
-              SignDisplayField(label: '受益人', value: beneficiary),
-              if (_availableBalance != null)
-                SignDisplayField(label: '当前余额', value: AmountFormat.format(_availableBalance!, symbol: '')),
+              // propose_close 链端 fields 按 Registry =
+              // (duoqian_address, beneficiary)。"当前余额" 属辅助展示,
+              // 页面已独立显示,不塞 display.fields 避免对齐失败
+              // (2026-04-22 两色识别整改)。
+              SignDisplayField(
+                  key: 'duoqian_address',
+                  label: '多签地址',
+                  value: _duoqianSs58),
+              SignDisplayField(
+                  key: 'beneficiary', label: '受益人', value: beneficiary),
             ],
           ),
         );

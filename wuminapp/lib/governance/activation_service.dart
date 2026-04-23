@@ -139,8 +139,11 @@ class ActivationService {
         action: 'activate_admin',
         summary: '激活机构管理员',
         fields: [
-          SignDisplayField(label: '机构', value: shenfenId),
-          SignDisplayField(label: '管理员公钥', value: pk),
+          // activate_admin 链下签名 payload 只含 shenfen_id(48B 右补零),
+          // Registry 字段清单只有 shenfen_id。管理员公钥属辅助信息,不塞
+          // display.fields 避免对齐失败(2026-04-22 两色识别整改)。
+          SignDisplayField(
+              key: 'shenfen_id', label: '身份码', value: shenfenId),
         ],
       ),
     );
