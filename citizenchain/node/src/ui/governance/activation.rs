@@ -214,12 +214,14 @@ pub async fn build_activate_admin_request(
     // SS58 编码账户地址
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
-    // display 字段：wumin 端据此展示激活确认界面
+    // display 字段:wumin 端据此展示激活确认界面。
+    // Registry activate_admin fields 严格只含 `shenfen_id`(对齐 wumin
+    // decoder `_decodeActivateAdmin` 输出),机构名属辅助信息,通过 summary
+    // 展示即可(2026-04-22 两色识别整改)。
     let display = serde_json::json!({
         "action": "activate_admin",
         "summary": format!("激活管理员 - {institution_name}"),
         "fields": [
-            { "key": "institution", "label": "机构", "value": institution_name },
             { "key": "shenfen_id", "label": "身份码", "value": shenfen_id }
         ]
     });

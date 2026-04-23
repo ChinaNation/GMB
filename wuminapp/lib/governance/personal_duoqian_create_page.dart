@@ -246,10 +246,24 @@ class _PersonalDuoqianCreatePageState
             action: 'propose_create_personal',
             summary: '发起创建个人多签账户提案',
             fields: [
-              SignDisplayField(label: '名称', value: nameText),
-              SignDisplayField(label: '管理员数量', value: _adminPubkeys.length.toString()),
-              SignDisplayField(label: '阈值', value: '$threshold/${_adminPubkeys.length}'),
-              SignDisplayField(label: '初始资金', value: AmountFormat.format(amountYuan, symbol: '')),
+              // propose_create_personal 链端 fields 按 Registry =
+              // (account_name, admin_count, threshold, amount_yuan)。
+              // amount_yuan 带 " GMB" 后缀与 wumin decoder 对齐
+              // (2026-04-22 两色识别整改)。
+              SignDisplayField(
+                  key: 'account_name', label: '名称', value: nameText),
+              SignDisplayField(
+                  key: 'admin_count',
+                  label: '管理员数量',
+                  value: _adminPubkeys.length.toString()),
+              SignDisplayField(
+                  key: 'threshold',
+                  label: '阈值',
+                  value: '$threshold/${_adminPubkeys.length}'),
+              SignDisplayField(
+                  key: 'amount_yuan',
+                  label: '初始资金',
+                  value: AmountFormat.format(amountYuan)),
             ],
           ),
         );

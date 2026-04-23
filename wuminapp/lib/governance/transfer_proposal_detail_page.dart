@@ -319,9 +319,17 @@ class _TransferProposalDetailPageState
             action: _signAction,
             summary: '$_kindLabel #${widget.proposalId} 投票：$voteText',
             fields: [
-              SignDisplayField(label: '提案编号', value: widget.proposalId.toString()),
-              SignDisplayField(label: '投票', value: approve.toString()),
-              ..._buildSignDisplayFields(),
+              // Phase 3: 转账提案管理员投票统一走 internal_vote,
+              // fields 按 Registry 恒为 (proposal_id, approve)。
+              // 类型特有字段(收款账户/金额/备注/机构/划转金额/目标)属辅助展示,
+              // 页面已独立显示,不塞 display.fields 避免对齐失败
+              // (2026-04-22 两色识别整改)。
+              SignDisplayField(
+                  key: 'proposal_id',
+                  label: '提案编号',
+                  value: widget.proposalId.toString()),
+              SignDisplayField(
+                  key: 'approve', label: '投票', value: approve.toString()),
             ],
           ),
         );
@@ -515,41 +523,6 @@ class _TransferProposalDetailPageState
         return _safetyFundInfo?.proposer;
       case TransferProposalKind.sweep:
         return null; // sweep 提案 storage 不记录 proposer
-    }
-  }
-
-  /// QR 签名时附加的类型特有字段。
-  List<SignDisplayField> _buildSignDisplayFields() {
-    switch (widget.kind) {
-      case TransferProposalKind.transfer:
-        final info = _transferInfo;
-        if (info == null) return const [];
-        return [
-          SignDisplayField(label: '收款账户', value: info.beneficiary),
-          SignDisplayField(
-              label: '金额', value: AmountFormat.format(info.amountYuan)),
-          if (info.remark.isNotEmpty)
-            SignDisplayField(label: '备注', value: info.remark),
-        ];
-      case TransferProposalKind.safetyFund:
-        final info = _safetyFundInfo;
-        if (info == null) return const [];
-        return [
-          SignDisplayField(label: '收款账户', value: info.beneficiary),
-          SignDisplayField(
-              label: '金额', value: AmountFormat.format(info.amountYuan)),
-          if (info.remark.isNotEmpty)
-            SignDisplayField(label: '备注', value: info.remark),
-        ];
-      case TransferProposalKind.sweep:
-        final info = _sweepInfo;
-        if (info == null) return const [];
-        return [
-          SignDisplayField(label: '机构', value: widget.institution.name),
-          SignDisplayField(
-              label: '划转金额', value: AmountFormat.format(info.amountYuan)),
-          const SignDisplayField(label: '目标', value: '机构主账户'),
-        ];
     }
   }
 

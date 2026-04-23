@@ -214,10 +214,22 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
             action: 'propose_transfer',
             summary: '${OrgType.label(widget.institution.orgType)} 提案转账 $amountFormatted GMB 给 $beneficiary',
             fields: [
-              SignDisplayField(label: '付款机构', value: OrgType.label(widget.institution.orgType)),
-              SignDisplayField(label: '收款账户', value: beneficiary),
-              SignDisplayField(label: '金额', value: '$amountFormatted GMB'),
-              SignDisplayField(label: '备注', value: remarkText),
+              // propose_transfer 链端 fields 按 Registry = (org, beneficiary,
+              // amount_yuan, remark)。OrgType.label 输出与 wumin decoder
+              // _orgName 字面一致;amount_yuan 与 _fenToYuan 同为千分位
+              // "X.XX GMB"。
+              SignDisplayField(
+                  key: 'org',
+                  label: '付款机构',
+                  value: OrgType.label(widget.institution.orgType)),
+              SignDisplayField(
+                  key: 'beneficiary', label: '收款账户', value: beneficiary),
+              SignDisplayField(
+                  key: 'amount_yuan',
+                  label: '金额',
+                  value: '$amountFormatted GMB'),
+              SignDisplayField(
+                  key: 'remark', label: '备注', value: remarkText),
             ],
           ),
         );

@@ -25,9 +25,6 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
 import 'package:wuminapp_mobile/user/vote_sign_page.dart';
-import 'package:wuminapp_mobile/signer/qr_signer.dart';
-import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
-import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -597,53 +594,23 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           'CITIZEN_VOTE_REGISTER|${wallet.address}|$timestamp';
       final messageBytes = Uint8List.fromList(utf8.encode(signMessage));
 
-      Uint8List signatureBytes;
-      if (wallet.isHotWallet) {
-        final walletManager = WalletManager();
-        signatureBytes = await walletManager.signWithWallet(
-          wallet.walletIndex,
-          messageBytes,
+      // 2026-04-22 两色识别整改:删除投票账户注册的冷钱包 QR 签名分支
+      // (Registry 无对应 action + decoder 无解码分支 → 必红色拒签)。
+      // 热钱包路径保留;冷钱包用户需先改用热钱包注册投票账户,
+      // 或等后续补 decoder / envelope 两色通路再启用。
+      if (!wallet.isHotWallet) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('冷钱包暂不支持投票账户注册,请使用热钱包')),
         );
-      } else {
-        // 冷钱包：通过 QrSignSessionPage 获取签名
-        final qrSigner = QrSigner();
-        final requestId =
-            QrSigner.generateRequestId(prefix: 'vote-reg-');
-        final payloadHex =
-            '0x${messageBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-        final request = qrSigner.buildRequest(
-          requestId: requestId,
-          address: wallet.address,
-          pubkey: '0x${wallet.pubkeyHex}',
-          payloadHex: payloadHex,
-          specVersion: 0,
-          display: SignDisplay(
-            action: 'vote_register',
-            summary: '注册投票账户',
-            fields: [
-              SignDisplayField(label: '地址', value: wallet.address),
-            ],
-          ),
-        );
-        final requestJson = qrSigner.encodeRequest(request);
-
-        final response = await Navigator.push<SignResponseEnvelope>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => QrSignSessionPage(
-              request: request,
-              requestJson: requestJson,
-              expectedPubkey: '0x${wallet.pubkeyHex}',
-            ),
-          ),
-        );
-        if (response == null || !mounted) {
-          setState(() => _voteSubmitting = false);
-          return;
-        }
-        signatureBytes =
-            Uint8List.fromList(_hexToBytes(response.body.signature));
+        setState(() => _voteSubmitting = false);
+        return;
       }
+      final walletManager = WalletManager();
+      final signatureBytes = await walletManager.signWithWallet(
+        wallet.walletIndex,
+        messageBytes,
+      );
 
       final sigHex =
           '0x${signatureBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
@@ -1825,11 +1792,3 @@ class _HollowQrPainter extends CustomPainter {
   }
 }
 
-List<int> _hexToBytes(String input) {
-  final hex = input.startsWith('0x') ? input.substring(2) : input;
-  final result = <int>[];
-  for (var i = 0; i < hex.length; i += 2) {
-    result.add(int.parse(hex.substring(i, i + 2), radix: 16));
-  }
-  return result;
-}

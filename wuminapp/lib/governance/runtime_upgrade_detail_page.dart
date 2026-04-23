@@ -330,13 +330,17 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               action: 'joint_vote',
               summary: '联合投票 提案 #${widget.proposalId}：$voteText',
               fields: [
-                SignDisplayField(label: '提案编号', value: widget.proposalId.toString()),
-                SignDisplayField(label: '投票', value: approve.toString()),
-                if (_proposalInfo != null) ...[
-                  SignDisplayField(label: '提案人', value: _proposalInfo!.proposer),
-                  SignDisplayField(label: '提案理由', value: _proposalInfo!.reason),
-                  SignDisplayField(label: '代码哈希', value: _proposalInfo!.codeHashHex),
-                ],
+                // joint_vote 当前 decoder 输出 fields = (proposal_id, approve),
+                // institution_id 在 payload 里但 decoder 跳过不回填 display。
+                // _proposalInfo(提案人/理由/代码哈希)属辅助展示,
+                // 页面已独立显示,不塞 display.fields 避免对齐失败
+                // (2026-04-22 两色识别整改)。
+                SignDisplayField(
+                    key: 'proposal_id',
+                    label: '提案编号',
+                    value: widget.proposalId.toString()),
+                SignDisplayField(
+                    key: 'approve', label: '投票', value: approve.toString()),
               ],
             ),
           );
