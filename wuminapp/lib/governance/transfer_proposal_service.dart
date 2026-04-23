@@ -25,25 +25,20 @@ class TransferProposalService {
   // ──── 常量 ────
 
   /// DuoqianTransferPow pallet index（runtime pallet_index=19）。
+  ///
+  /// Phase 3(2026-04-22): 本 pallet 的所有 vote_X / finalize_X 已删除,
+  /// 只保留 propose_X(0/1/2) 与 execute_X(3/4/5) 两组路径;
+  /// 管理员投票一律走 VotingEngineSystem(9).internal_vote(0)。
   static const _palletIndex = 19;
 
   /// propose_transfer call_index=0。
   static const _proposeCallIndex = 0;
 
-  /// vote_transfer call_index=1。
-  static const _voteCallIndex = 1;
+  /// propose_safety_fund_transfer call_index=1。
+  static const _proposeSafetyFundCallIndex = 1;
 
-  /// propose_safety_fund_transfer call_index=3。
-  static const _proposeSafetyFundCallIndex = 3;
-
-  /// vote_safety_fund_transfer call_index=4。
-  static const _voteSafetyFundCallIndex = 4;
-
-  /// propose_sweep_to_main call_index=5。
-  static const _proposeSweepCallIndex = 5;
-
-  /// vote_sweep_to_main call_index=6。
-  static const _voteSweepCallIndex = 6;
+  /// propose_sweep_to_main call_index=2。
+  static const _proposeSweepCallIndex = 2;
 
   /// Mortal era 周期。
   static const _eraPeriod = 64;
@@ -77,28 +72,6 @@ class TransferProposalService {
     );
   }
 
-  /// 提交 vote_transfer extrinsic。
-  ///
-  /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。
-  Future<({String txHash, int usedNonce})> submitVoteTransfer({
-    required int proposalId,
-    required bool approve,
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required Future<Uint8List> Function(Uint8List payload) sign,
-  }) async {
-    final callData = _buildVoteTransferCall(
-      proposalId: proposalId,
-      approve: approve,
-    );
-    return _signAndSubmit(
-      callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-    );
-  }
-
   /// 提交 propose_safety_fund_transfer extrinsic（安全基金转账提案）。
   Future<({String txHash, int usedNonce})> submitProposeSafetyFund({
     required String beneficiaryAddress,
@@ -121,26 +94,6 @@ class TransferProposalService {
     );
   }
 
-  /// 提交 vote_safety_fund_transfer extrinsic（安全基金投票）。
-  Future<({String txHash, int usedNonce})> submitVoteSafetyFund({
-    required int proposalId,
-    required bool approve,
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required Future<Uint8List> Function(Uint8List payload) sign,
-  }) async {
-    final callData = _buildVoteSafetyFundCall(
-      proposalId: proposalId,
-      approve: approve,
-    );
-    return _signAndSubmit(
-      callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-    );
-  }
-
   /// 提交 propose_sweep_to_main extrinsic（手续费划转提案）。
   Future<({String txHash, int usedNonce})> submitProposeSweep({
     required InstitutionInfo institution,
@@ -152,26 +105,6 @@ class TransferProposalService {
     final callData = _buildProposeSweepCall(
       institutionIdentity: institution.shenfenId,
       amountYuan: amountYuan,
-    );
-    return _signAndSubmit(
-      callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-    );
-  }
-
-  /// 提交 vote_sweep_to_main extrinsic（手续费划转投票）。
-  Future<({String txHash, int usedNonce})> submitVoteSweep({
-    required int proposalId,
-    required bool approve,
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required Future<Uint8List> Function(Uint8List payload) sign,
-  }) async {
-    final callData = _buildVoteSweepCall(
-      proposalId: proposalId,
-      approve: approve,
     );
     return _signAndSubmit(
       callData: callData,
@@ -952,29 +885,9 @@ class TransferProposalService {
     return output.toBytes();
   }
 
-  /// 构造 vote_transfer call data。
-  ///
-  /// 格式：[0x13][0x01][proposal_id:u64_le][approve:bool]
-  Uint8List _buildVoteTransferCall({
-    required int proposalId,
-    required bool approve,
-  }) {
-    final output = ByteOutput();
-    output.pushByte(_palletIndex);
-    output.pushByte(_voteCallIndex);
-
-    // proposal_id: u64 little-endian
-    output.write(_u64ToLeBytes(proposalId));
-
-    // approve: bool
-    output.pushByte(approve ? 1 : 0);
-
-    return output.toBytes();
-  }
-
   /// 构造 propose_sweep_to_main call data。
   ///
-  /// 格式：[0x13][0x05][institution:48][amount:u128_le]
+  /// 格式：[0x13][0x02][institution:48][amount:u128_le]
   Uint8List _buildProposeSweepCall({
     required String institutionIdentity,
     required double amountYuan,
@@ -994,24 +907,9 @@ class TransferProposalService {
     return output.toBytes();
   }
 
-  /// 构造 vote_sweep_to_main call data。
-  ///
-  /// 格式：[0x13][0x06][proposal_id:u64_le][approve:bool]
-  Uint8List _buildVoteSweepCall({
-    required int proposalId,
-    required bool approve,
-  }) {
-    final output = ByteOutput();
-    output.pushByte(_palletIndex);
-    output.pushByte(_voteSweepCallIndex);
-    output.write(_u64ToLeBytes(proposalId));
-    output.pushByte(approve ? 1 : 0);
-    return output.toBytes();
-  }
-
   /// 构造 propose_safety_fund_transfer call data。
   ///
-  /// 格式：[0x13][0x03][beneficiary:32][amount:u128_le][remark:Vec<u8>]
+  /// 格式：[0x13][0x01][beneficiary:32][amount:u128_le][remark:Vec<u8>]
   Uint8List _buildProposeSafetyFundCall({
     required String beneficiaryAddress,
     required double amountYuan,
@@ -1042,21 +940,6 @@ class TransferProposalService {
       output.write(Uint8List.fromList(remarkBytes));
     }
 
-    return output.toBytes();
-  }
-
-  /// 构造 vote_safety_fund_transfer call data。
-  ///
-  /// 格式：[0x13][0x04][proposal_id:u64_le][approve:bool]
-  Uint8List _buildVoteSafetyFundCall({
-    required int proposalId,
-    required bool approve,
-  }) {
-    final output = ByteOutput();
-    output.pushByte(_palletIndex);
-    output.pushByte(_voteSafetyFundCallIndex);
-    output.write(_u64ToLeBytes(proposalId));
-    output.pushByte(approve ? 1 : 0);
     return output.toBytes();
   }
 

@@ -180,8 +180,7 @@ export const api = {
       requestId, expectedPubkeyHex, expectedPayloadHash,
       shenfenId, amountYuan, signNonce, signBlockNumber, responseJson,
     }),
-  buildSweepVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>
-    invoke<VoteSignRequestResult>('build_sweep_vote_request', { proposalId, pubkeyHex, approve }),
+  // Phase 3(2026-04-22): buildSweepVoteRequest 已删除,统一走 buildVoteRequest(internal_vote)。
   buildProposeSafetyFundRequest: (
     pubkeyHex: string, beneficiaryAddress: string, amountYuan: number, remark: string,
   ) =>
@@ -198,8 +197,7 @@ export const api = {
       beneficiaryAddress, amountYuan, remark,
       signNonce, signBlockNumber, responseJson,
     }),
-  buildSafetyFundVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>
-    invoke<VoteSignRequestResult>('build_safety_fund_vote_request', { proposalId, pubkeyHex, approve }),
+  // Phase 3(2026-04-22): buildSafetyFundVoteRequest 已删除,统一走 buildVoteRequest(internal_vote)。
 
   // ── 冷钱包管理 ──
   getWallets: () => invoke<WalletStore>('get_wallets'),

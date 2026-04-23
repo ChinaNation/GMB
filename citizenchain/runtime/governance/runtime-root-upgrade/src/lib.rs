@@ -471,6 +471,7 @@ mod tests {
         type SfidEligibility = ();
         type PopulationSnapshotVerifier = ();
         type JointVoteResultCallback = ();
+        type InternalVoteResultCallback = ();
         type InternalAdminProvider = ();
         type InternalThresholdProvider = ();
         type InternalAdminCountProvider = ();

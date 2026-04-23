@@ -1,4 +1,7 @@
 //! 多签交易模块 Benchmark 定义。
+//!
+//! Phase 2 整改后投票统一走 `voting-engine-system::internal_vote`,本模块不再有
+//! `finalize_create` / `vote_close` extrinsic。对应的 benchmark 已删除。
 
 #![cfg(feature = "runtime-benchmarks")]
 
@@ -6,18 +9,17 @@ use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_support::traits::{Currency, Get};
 use frame_system::RawOrigin;
-use sp_core::{sr25519, Pair};
 use sp_runtime::traits::SaturatedConversion;
 use sp_std::vec;
-use voting_engine_system::InternalVoteEngine;
+use voting_engine_system::STATUS_PASSED;
 
 use crate::{
     pallet::{
-        AccountNameOf, AddressRegisteredSfid, AdminSignatureOf, AdminSignaturesOf, DuoqianAccounts,
-        DuoqianAdminsOf, RegisterNonceOf, RegisterSignatureOf, SfidIdOf, SfidRegisteredAddress,
+        AccountNameOf, AddressRegisteredSfid, DuoqianAccounts, DuoqianAdminsOf, RegisterNonceOf,
+        RegisterSignatureOf, SfidIdOf, SfidRegisteredAddress,
     },
-    BalanceOf, Call, Config, CreateVoteIntent, DuoqianAddressValidator,
-    DuoqianReservedAddressChecker, Pallet, ProtectedSourceChecker,
+    BalanceOf, Call, Config, DuoqianAddressValidator, DuoqianReservedAddressChecker, Pallet,
+    ProtectedSourceChecker,
 };
 
 fn find_safe_sfid<T: Config>() -> Result<(SfidIdOf<T>, T::AccountId), BenchmarkError> {
@@ -110,19 +112,11 @@ fn find_safe_beneficiary<T: Config>(
     ))
 }
 
-/// Benchmark 辅助:用 sr25519::Pair 派生管理员 (AccountId, Pair),
-/// 使 `finalize_create` 能构造真实可验证的 sr25519 签名。
-fn bench_admin_with_key<T: Config>(seed: u8) -> Result<(T::AccountId, sr25519::Pair), BenchmarkError>
-where
-    T::AccountId: Decode,
-{
-    let mut seed_bytes = [0u8; 32];
-    seed_bytes[0] = seed;
-    let pair = sr25519::Pair::from_seed(&seed_bytes);
-    let pubkey = pair.public();
-    let account = T::AccountId::decode(&mut &pubkey.0[..])
-        .map_err(|_| BenchmarkError::Stop("pubkey should decode to AccountId"))?;
-    Ok((account, pair))
+/// Benchmark 辅助:让指定提案通过(绕开投票路径,benchmark 只关心后续业务执行开销)。
+fn pass_proposal<T: Config>(proposal_id: u64) -> Result<(), BenchmarkError> {
+    voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_PASSED)
+        .map_err(|_| BenchmarkError::Stop("benchmark: set_status_and_emit PASSED failed"))?;
+    Ok(())
 }
 
 #[benchmarks(where
@@ -202,79 +196,6 @@ mod benchmarks {
         Ok(())
     }
 
-    /// `finalize_create` benchmark:2/2 阈值,两个 sr25519 管理员签名聚合。
-    ///
-    /// 用真实 `sr25519::Pair` 派生管理员账户,签出可验证的 `CreateVoteIntent` 签名,
-    /// 测量本 pallet 循环验签 + 代投 + 自动 `execute_create` 的总权重。
-    #[benchmark]
-    fn finalize_create() -> Result<(), BenchmarkError> {
-        let relayer: T::AccountId = frame_benchmarking::account("relayer", 2, 0);
-        let (sfid_id, duoqian_address) = find_safe_sfid::<T>()?;
-        let _ = register_institution::<T>(&relayer, &sfid_id)?;
-
-        let (admin1, pair1) = bench_admin_with_key::<T>(201)?;
-        let (admin2, pair2) = bench_admin_with_key::<T>(202)?;
-        let admins: DuoqianAdminsOf<T> = vec![admin1.clone(), admin2.clone()]
-            .try_into()
-            .map_err(|_| BenchmarkError::Stop("benchmark admins should fit"))?;
-
-        let amount: BalanceOf<T> = 1_000u128.saturated_into();
-        let funding: BalanceOf<T> = 1_000_000u128.saturated_into();
-        let _ = T::Currency::deposit_creating(&admin1, funding);
-
-        let account_name = bench_account_name::<T>()?;
-
-        assert!(Pallet::<T>::propose_create(
-            RawOrigin::Signed(admin1.clone()).into(),
-            sfid_id,
-            account_name,
-            2,
-            admins.clone(),
-            2,
-            amount,
-        )
-        .is_ok());
-
-        let proposal_id = 0u64;
-
-        // 构造 intent 并让两管理员签名
-        let admins_root = Pallet::<T>::compute_admins_root(&admins);
-        let intent = CreateVoteIntent::<T::AccountId, BalanceOf<T>> {
-            proposal_id,
-            duoqian_address: duoqian_address.clone(),
-            creator: admin1.clone(),
-            admins_root,
-            threshold: 2,
-            amount,
-            approve: true,
-        };
-        let msg = intent.signing_hash(T::SS58Prefix::get());
-        let sig1: AdminSignatureOf<T> = pair1
-            .sign(&msg)
-            .0
-            .to_vec()
-            .try_into()
-            .map_err(|_| BenchmarkError::Stop("sig1 should fit"))?;
-        let sig2: AdminSignatureOf<T> = pair2
-            .sign(&msg)
-            .0
-            .to_vec()
-            .try_into()
-            .map_err(|_| BenchmarkError::Stop("sig2 should fit"))?;
-        let sigs: AdminSignaturesOf<T> = vec![(admin1.clone(), sig1), (admin2.clone(), sig2)]
-            .try_into()
-            .map_err(|_| BenchmarkError::Stop("sigs vec should fit"))?;
-
-        #[extrinsic_call]
-        finalize_create(RawOrigin::Signed(admin1), proposal_id, sigs);
-
-        // 投票通过后 DuoqianAccounts 应变为 Active
-        let account =
-            DuoqianAccounts::<T>::get(&duoqian_address).expect("duoqian account should exist");
-        assert_eq!(account.status, crate::DuoqianStatus::Active);
-        Ok(())
-    }
-
     #[benchmark]
     fn propose_close() -> Result<(), BenchmarkError> {
         let relayer: T::AccountId = frame_benchmarking::account("relayer", 3, 0);
@@ -295,7 +216,7 @@ mod benchmarks {
 
         let account_name = bench_account_name::<T>()?;
 
-        // Create and activate via trait(benchmark 里不走 finalize_create 路径,直接让投票引擎代投)
+        // Create 提案 → 推到 PASSED 触发 Executor.execute_create → DuoqianAccounts 激活。
         assert!(Pallet::<T>::propose_create(
             RawOrigin::Signed(admin1.clone()).into(),
             sfid_id,
@@ -306,8 +227,7 @@ mod benchmarks {
             amount,
         )
         .is_ok());
-        assert!(T::InternalVoteEngine::cast_internal_vote(admin1.clone(), 0, true).is_ok());
-        assert!(T::InternalVoteEngine::cast_internal_vote(admin2.clone(), 0, true).is_ok());
+        pass_proposal::<T>(0)?;
 
         let beneficiary = find_safe_beneficiary::<T>(&duoqian_address)?;
 
@@ -319,6 +239,7 @@ mod benchmarks {
         );
 
         assert!(voting_engine_system::Pallet::<T>::get_proposal_data(1).is_some());
+        let _ = admin2; // avoid unused warning for admin2
         Ok(())
     }
 
@@ -354,56 +275,4 @@ mod benchmarks {
         Ok(())
     }
 
-    #[benchmark]
-    fn vote_close() -> Result<(), BenchmarkError> {
-        let relayer: T::AccountId = frame_benchmarking::account("relayer", 4, 0);
-
-        let (sfid_id, duoqian_address) = find_safe_sfid::<T>()?;
-        let _ = register_institution::<T>(&relayer, &sfid_id)?;
-
-        let admin1: T::AccountId = frame_benchmarking::account("admin", 30, 0);
-        let admin2: T::AccountId = frame_benchmarking::account("admin", 31, 0);
-
-        let admins: DuoqianAdminsOf<T> = vec![admin1.clone(), admin2.clone()]
-            .try_into()
-            .map_err(|_| BenchmarkError::Stop("benchmark admins should fit"))?;
-
-        let amount: BalanceOf<T> = 1_000u128.saturated_into();
-        let funding: BalanceOf<T> = 1_000_000u128.saturated_into();
-        let _ = T::Currency::deposit_creating(&admin1, funding);
-
-        let account_name = bench_account_name::<T>()?;
-
-        // Create and activate
-        assert!(Pallet::<T>::propose_create(
-            RawOrigin::Signed(admin1.clone()).into(),
-            sfid_id,
-            account_name,
-            2,
-            admins,
-            2,
-            amount,
-        )
-        .is_ok());
-        assert!(T::InternalVoteEngine::cast_internal_vote(admin1.clone(), 0, true).is_ok());
-        assert!(T::InternalVoteEngine::cast_internal_vote(admin2.clone(), 0, true).is_ok());
-
-        let beneficiary = find_safe_beneficiary::<T>(&duoqian_address)?;
-
-        assert!(Pallet::<T>::propose_close(
-            RawOrigin::Signed(admin1.clone()).into(),
-            duoqian_address.clone(),
-            beneficiary,
-        )
-        .is_ok());
-
-        assert!(T::InternalVoteEngine::cast_internal_vote(admin1, 1, true).is_ok());
-
-        #[extrinsic_call]
-        vote_close(RawOrigin::Signed(admin2), 1, true);
-
-        // DuoqianAccounts 应该被删除
-        assert!(!DuoqianAccounts::<T>::contains_key(&duoqian_address));
-        Ok(())
-    }
 }

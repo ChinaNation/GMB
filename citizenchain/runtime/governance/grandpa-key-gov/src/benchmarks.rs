@@ -1,4 +1,8 @@
 //! GRANDPA 密钥治理模块 Benchmark 定义。
+//!
+//! Phase 2 整改后投票统一走 `voting-engine-system::internal_vote`,本模块不再有
+//! `vote_replace_grandpa_key` extrinsic。Benchmark 只覆盖"发起提案"、"重试执行"和
+//! "清理不可执行提案"三条路径。
 
 #![cfg(feature = "runtime-benchmarks")]
 
@@ -6,7 +10,7 @@ use codec::{Decode, Encode};
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use sp_core::Pair;
-use voting_engine_system::InternalVoteEngine;
+use voting_engine_system::STATUS_PASSED;
 
 use crate::{
     pallet, reserve_pallet_id_to_bytes, Call, Config, GrandpaKeyReplacementAction,
@@ -46,11 +50,12 @@ fn propose<T: pallet::Config>(
     .is_ok());
 }
 
+/// 用引擎低级接口直接把提案推到 PASSED(绕开投票路径;benchmark 只测
+/// execute / cancel 本身的开销)。
 fn pass_proposal<T: pallet::Config>(proposal_id: u64) {
-    for i in 0..6 {
-        let voter = prc_admin::<T>(i);
-        assert!(T::InternalVoteEngine::cast_internal_vote(voter, proposal_id, true).is_ok());
-    }
+    assert!(
+        voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_PASSED).is_ok()
+    );
 }
 
 #[benchmarks]
@@ -70,28 +75,10 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn vote_replace_grandpa_key() {
-        let institution = prc_institution();
-        let proposer = prc_admin::<T>(0);
-        let final_voter = prc_admin::<T>(5);
-        let new_key = seeded_public_key(12);
-
-        propose::<T>(institution, proposer, new_key);
-
-        for i in 0..5 {
-            let voter = prc_admin::<T>(i);
-            assert!(T::InternalVoteEngine::cast_internal_vote(voter, 0, true).is_ok());
-        }
-
-        #[extrinsic_call]
-        vote_replace_grandpa_key(RawOrigin::Signed(final_voter), 0, true);
-    }
-
-    #[benchmark]
     fn execute_replace_grandpa_key() {
         let institution = prc_institution();
         let proposer = prc_admin::<T>(0);
-        let caller = prc_admin::<T>(6);
+        let caller = prc_admin::<T>(0);
         let new_key = seeded_public_key(13);
 
         propose::<T>(institution, proposer, new_key);
@@ -111,7 +98,7 @@ mod benchmarks {
         propose::<T>(institution, proposer, new_key);
         pass_proposal::<T>(0);
 
-        // 将 old_key 篡改为不存在的 authority，制造"已通过但不可执行"场景。
+        // 将 old_key 篡改为不存在的 authority,制造"已通过但不可执行"场景。
         let old_raw = voting_engine_system::Pallet::<T>::get_proposal_data(0)
             .expect("proposal data should exist");
         let tag = crate::MODULE_TAG;

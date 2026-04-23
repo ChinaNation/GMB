@@ -5,14 +5,21 @@
 ///
 /// [supportedSpecVersions] 列出当前注册表适配的 spec_version 集合。
 /// 离线设备收到未知 spec_version 时应拒绝解码，提示用户升级冷钱包。
+///
+/// Phase 3 · 投票引擎统一入口整改（2026-04-22）：
+/// - 业务 pallet 的 `vote_X` 全部下线，所有管理员投票走
+///   `VotingEngineSystem::internal_vote`（9.0）。
+/// - `joint_vote` / `citizen_vote` / `finalize_proposal` 在投票引擎内部
+///   重新排 call_index：0=internal_vote / 1=joint_vote / 2=citizen_vote /
+///   3=finalize_proposal。
 class PalletRegistry {
   const PalletRegistry._();
 
   /// 当前注册表适配的链 spec_version 集合。
   ///
-  /// 链升级后若 pallet 索引未变，将新 spec_version 加入此集合即可。
-  /// 若索引发生变化，需同步修改下方常量并更新此集合。
-  static const Set<int> supportedSpecVersions = {1};
+  /// Phase 3 runtime 升级到 `spec_version = 2`，冷钱包同步仅接受 2。
+  /// 遇到 spec=1 的离线请求（旧版在线端）视为过期，拒绝解码。
+  static const Set<int> supportedSpecVersions = {2};
 
   /// 检查给定 spec_version 是否与当前注册表兼容。
   ///
@@ -24,65 +31,83 @@ class PalletRegistry {
     return supportedSpecVersions.contains(specVersion);
   }
 
-  // ---- Balances ----
+  // ---- Balances (2) ----
   static const int balancesPallet = 2;
   static const int transferKeepAliveCall = 3;
 
-  // ---- DuoqianTransferPow ----
-  // Step 2 · 离线 QR 聚合签名改造:vote_transfer(call_index=1)已物理删除,
-  // 替换为 finalize_transfer(同 call_index=1)。finalize_X 聚合签名路径走
-  // 热钱包/wuminapp,冷钱包不负责盲签 finalize_X(sigs 由 sr25519 签名聚合,
-  // 本质不是 payload decode 场景)。
+  // ---- VotingEngineSystem (9) · 所有治理投票唯一入口 ----
+  static const int votingEngineSystemPallet = 9;
+
+  /// `internal_vote(proposal_id, approve)` — 管理员一人一票，
+  /// 覆盖所有业务 pallet 的内部投票（admins/resolution_destro/grandpa_key/
+  /// duoqian_manage/duoqian_transfer 五路）。
+  static const int internalVoteCall = 0;
+
+  /// `joint_vote(proposal_id, institution_id_48, approve)` — 联合投票。
+  static const int jointVoteCall = 1;
+
+  /// `citizen_vote(proposal_id, binding_id, nonce, signature, approve)`
+  /// — 公民投票（由 SFID 发凭证）。
+  static const int citizenVoteCall = 2;
+
+  /// `finalize_proposal(proposal_id)` — 任意人触发终态执行（无需签投票）。
+  static const int finalizeProposalCall = 3;
+
+  // ---- 业务 pallet：只保留提案创建 / 执行重试入口 ----
+  //
+  // Phase 2 已在链端物理删除所有业务 `vote_X` call：
+  //   - admins_origin_gov: vote_admin_replacement
+  //   - resolution_destro_gov: vote_destroy
+  //   - grandpa_key_gov: vote_replace_grandpa_key
+  //   - duoqian_manage_pow: vote_close / finalize_create
+  //   - duoqian_transfer_pow: finalize_transfer / finalize_safety_fund_transfer /
+  //     finalize_sweep_to_main
+  // 冷钱包只解码 propose_X / execute_X / cleanup_X 等业务创建类 call，
+  // 投票动作一律由 VotingEngineSystem(9) 路径解码。
+
+  // ---- DuoqianTransferPow (19) ----
   static const int duoqianTransferPowPallet = 19;
   static const int proposeTransferCall = 0;
+  static const int proposeSafetyFundCall = 1;
+  static const int proposeSweepCall = 2;
+  static const int executeTransferCall = 3;
+  static const int executeSafetyFundCall = 4;
+  static const int executeSweepCall = 5;
 
-  // ---- VotingEngineSystem ----
-  static const int votingEngineSystemPallet = 9;
-  static const int jointVoteCall = 3;
-  static const int citizenVoteCall = 4;
-
-  // ---- RuntimeRootUpgrade ----
+  // ---- RuntimeRootUpgrade (13) ----
   static const int runtimeRootUpgradePallet = 13;
   static const int proposeRuntimeUpgradeCall = 0;
   static const int developerDirectUpgradeCall = 2;
 
-  // ---- DuoqianManagePow ----
-  // Step 1 · 离线 QR 聚合签名改造:vote_create(call_index=3)已物理删除,
-  // 替换为 finalize_create(同 call_index=3)。冷钱包不负责盲签 finalize_X。
-  // vote_close(call_index=5)尚未改造(Step 3 待做),保留。
+  // ---- DuoqianManagePow (17) ----
   static const int duoqianManagePowPallet = 17;
   static const int proposeCreateCall = 0;
   static const int proposeCloseCall = 1;
-  static const int proposeCreatePersonalCall = 4;
-  static const int voteCloseCall = 5;
+  static const int registerSfidInstitutionCall = 2;
+  static const int proposeCreatePersonalCall = 3;
+  static const int cleanupRejectedProposalCall = 4;
 
-  // ---- ResolutionDestroGov ----
+  // ---- ResolutionDestroGov (14) ----
   static const int resolutionDestroGovPallet = 14;
   static const int proposeDestroyCall = 0;
-  static const int voteDestroyCall = 1;
+  static const int executeDestroyCall = 1;
 
-  // ---- AdminsOriginGov ----
+  // ---- AdminsOriginGov (12) ----
   static const int adminsOriginGovPallet = 12;
   static const int proposeAdminReplacementCall = 0;
-  static const int voteAdminReplacementCall = 1;
+  static const int executeAdminReplacementCall = 1;
 
-  // ---- GrandpaKeyGov ----
+  // ---- GrandpaKeyGov (16) ----
   static const int grandpaKeyGovPallet = 16;
-  static const int proposeKeyChangeCall = 0;
-  static const int voteKeyChangeCall = 1;
+  static const int proposeReplaceGrandpaKeyCall = 0;
+  static const int executeReplaceGrandpaKeyCall = 1;
+  static const int cancelFailedReplaceGrandpaKeyCall = 2;
 
-  // ---- ResolutionIssuanceGov ----
+  // ---- ResolutionIssuanceGov (8) ----
   static const int resolutionIssuanceGovPallet = 8;
   static const int proposeResolutionIssuanceCall = 0;
 
-  // ---- DuoqianTransferPow 补充 ----
-  // Step 2 · 离线聚合改造:vote_safety_fund_transfer (call_index=4) / vote_sweep_to_main (call_index=6)
-  // 已物理删除,替换为 finalize_safety_fund_transfer / finalize_sweep_to_main(同 call_index)。
-  // 冷钱包不负责盲签 finalize_X。
-  static const int proposeSafetyFundCall = 3;
-  static const int proposeSweepCall = 5;
-
-  // ---- OffchainTransactionPos(清算行 L2 体系) ----
+  // ---- OffchainTransactionPos (21) · 清算行 L2 体系 ----
   static const int offchainTransactionPosPallet = 21;
   static const int bindClearingBankCall = 30;
   static const int depositCall = 31;

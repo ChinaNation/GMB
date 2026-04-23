@@ -1,4 +1,7 @@
 //! 决议销毁模块 Benchmark 定义。
+//!
+//! Phase 2 整改后投票统一走 `voting-engine-system::internal_vote`,本模块不再有
+//! `vote_destroy` extrinsic。benchmark 只覆盖"发起提案"和"任意人重试执行"两条路径。
 
 #![cfg(feature = "runtime-benchmarks")]
 
@@ -7,7 +10,7 @@ use frame_benchmarking::v2::*;
 use frame_support::traits::Currency;
 use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
-use voting_engine_system::InternalVoteEngine;
+use voting_engine_system::STATUS_PASSED;
 
 use crate::Pallet as ResolutionDestroGov;
 use crate::{
@@ -58,37 +61,11 @@ mod benchmarks {
         assert!(voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id).is_some());
     }
 
-    #[benchmark]
-    fn vote_destroy() {
-        let institution = prc_institution();
-        let proposer = prc_admin::<T>(0);
-        let final_voter = prc_admin::<T>(5);
-        let amount: BalanceOf<T> = 100u128.saturated_into();
-        let top_up: BalanceOf<T> = 1_000_000u128.saturated_into();
-
-        assert!(ResolutionDestroGov::<T>::propose_destroy(
-            RawOrigin::Signed(proposer).into(),
-            ORG_PRC,
-            institution,
-            amount,
-        )
-        .is_ok());
-        let proposal_id = last_proposal_id::<T>();
-
-        let institution_account = institution_account::<T>(institution);
-        let _ = T::Currency::deposit_creating(&institution_account, top_up);
-
-        for i in 0..5 {
-            let voter = prc_admin::<T>(i);
-            assert!(T::InternalVoteEngine::cast_internal_vote(voter, proposal_id, true).is_ok());
-        }
-
-        #[extrinsic_call]
-        vote_destroy(RawOrigin::Signed(final_voter), proposal_id, true);
-
-        // 执行完成后提案数据仍在 voting-engine-system 中（由统一清理流程处理）。
-    }
-
+    /// `execute_destroy` benchmark:
+    /// 1. 发起提案
+    /// 2. 给机构账户充值以通过 ED 检查
+    /// 3. 手动把提案推到 PASSED(绕开投票路径,benchmark 只测 execute)
+    /// 4. 调 `execute_destroy` 完成补救执行
     #[benchmark]
     fn execute_destroy() {
         let institution = prc_institution();
@@ -109,14 +86,13 @@ mod benchmarks {
         let institution_account = institution_account::<T>(institution);
         let _ = T::Currency::deposit_creating(&institution_account, top_up);
 
-        for i in 0..6 {
-            let voter = prc_admin::<T>(i);
-            assert!(T::InternalVoteEngine::cast_internal_vote(voter, proposal_id, true).is_ok());
-        }
+        // 用引擎低级接口直接把提案推到 PASSED。
+        assert!(
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_PASSED)
+                .is_ok()
+        );
 
         #[extrinsic_call]
         execute_destroy(RawOrigin::Signed(caller), proposal_id);
-
-        // 执行完成后提案数据仍在 voting-engine-system 中（由统一清理流程处理）。
     }
 }

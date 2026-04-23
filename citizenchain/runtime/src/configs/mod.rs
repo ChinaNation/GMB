@@ -339,14 +339,6 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
             }) => onchain_transaction_pow::AmountExtractResult::Amount(Balances::free_balance(
                 duoqian_address,
             )),
-            // 付费调用交易：多签投票（虚拟金额 100000 分 = 1000 元 → 0.1% = 1 元/次）
-            // Step 1 · 多签注册改造:vote_create 已替换为 finalize_create(离线聚合 N 签代投)。
-            RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::finalize_create {
-                ..
-            }) => onchain_transaction_pow::AmountExtractResult::Amount(100000),
-            RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::vote_close {
-                ..
-            }) => onchain_transaction_pow::AmountExtractResult::Amount(100000),
             // 免费调用交易：SFID 注册是证明型操作
             RuntimeCall::DuoqianManagePow(
                 duoqian_manage_pow::pallet::Call::register_sfid_institution { .. },
@@ -376,20 +368,19 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                     _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
                 }
             }
-            // 投票引擎：拆分内部调用（免费）和用户投票（付费）
+            // 投票引擎:拆分"内部投票"(免费,鼓励管理员踊跃履职)与其他调用(付费)。
+            // Phase 2 后公开 call 只剩 4 个:internal_vote / joint_vote / citizen_vote / finalize_proposal。
             RuntimeCall::VotingEngineSystem(ref ve_call) => {
                 match ve_call {
-                    // 免费：系统内部调用（直接调用会被 pallet 拒绝）
-                    voting_engine_system::pallet::Call::create_internal_proposal { .. }
-                    | voting_engine_system::pallet::Call::create_joint_proposal { .. }
-                    | voting_engine_system::pallet::Call::internal_vote { .. } => {
+                    // 免费:管理员内部投票(最高频路径,0 gas 降门槛)
+                    voting_engine_system::pallet::Call::internal_vote { .. } => {
                         onchain_transaction_pow::AmountExtractResult::NoAmount
                     }
-                    // 免费：终结已完成提案
+                    // 免费:终结已完成提案(任意人都可调,推动清理)
                     voting_engine_system::pallet::Call::finalize_proposal { .. } => {
                         onchain_transaction_pow::AmountExtractResult::NoAmount
                     }
-                    // 付费：用户主动参与投票
+                    // 付费:用户主动参与联合/公民投票(1 元/次)
                     _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
                 }
             }
@@ -794,7 +785,9 @@ impl duoqian_manage_pow::Config for Runtime {
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
-    // sr25519 签名固定 64 字节,用于 finalize_create 聚合签名的 BoundedVec 容量上限。
+    // sr25519 签名固定 64 字节。
+    // Phase 2 整改后聚合签名 `finalize_create` 已删除,此类型仍保留为 `AdminSignatureOf`
+    // 的容量配置,供未来业务扩展(如链下审计签名附件)使用。
     type MaxAdminSignatureLength = ConstU32<64>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<121>;
@@ -1323,6 +1316,18 @@ impl voting_engine_system::Config for Runtime {
     type SfidEligibility = RuntimeSfidEligibility;
     type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
+    // Phase 2:内部投票终态回调注册 5 个业务 Executor。
+    // 顺序按调用频率降序:transfer / multisig manage 类业务最频繁,
+    // grandpa key 替换最稀有放最后(tuple iterate 时命中越早越省 gas)。
+    // 每个 Executor 通过 MODULE_TAG 前缀 + 独立存储键互斥认领本模块提案,
+    // 非己方提案直接 Ok(()) skip,顺序不影响行为正确性。
+    type InternalVoteResultCallback = (
+        duoqian_transfer_pow::InternalVoteExecutor<Runtime>,
+        duoqian_manage_pow::InternalVoteExecutor<Runtime>,
+        admins_origin_gov::InternalVoteExecutor<Runtime>,
+        resolution_destro_gov::InternalVoteExecutor<Runtime>,
+        grandpa_key_gov::InternalVoteExecutor<Runtime>,
+    );
     type InternalAdminProvider = RuntimeInternalAdminProvider;
     type InternalAdminCountProvider = RuntimeInternalAdminCountProvider;
     type InternalThresholdProvider = RuntimeInternalThresholdProvider;
@@ -1462,7 +1467,7 @@ mod tests {
             let pid = VotingEngineSystem::next_proposal_id().saturating_sub(1);
 
             for i in 0..13 {
-                assert_ok!(ResolutionDestroGov::vote_destroy(
+                assert_ok!(VotingEngineSystem::internal_vote(
                     RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].duoqian_admins[i])),
                     pid,
                     true,

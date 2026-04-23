@@ -68,10 +68,9 @@ pub fn run_desktop() {
             governance::check_vote_status,
             governance::build_propose_sweep_request,
             governance::submit_propose_sweep,
-            governance::build_sweep_vote_request,
             governance::build_propose_safety_fund_request,
             governance::submit_propose_safety_fund,
-            governance::build_safety_fund_vote_request,
+            // Phase 3: safety_fund/sweep 投票统一走 governance::build_vote_request。
             transaction::get_wallets,
             transaction::add_wallet,
             transaction::remove_wallet,
