@@ -141,22 +141,16 @@ class OnchainRpc {
       return TxConfirmResult.pending;
     }
 
-    // nonce 已推进，说明该 nonce 位置的交易已被链上消费。
-    // 在最近区块中搜索 txHash 进行二次验证。
-    try {
-      final foundBlock = await findTxInRecentBlocks(txHash);
-      if (foundBlock != null) {
-        return TxConfirmResult.confirmed;
-      }
-      // 未在最近区块中找到 txHash，有两种可能：
-      // 1) 交易在更早的区块中已确认（超出搜索窗口）
-      // 2) 交易真的丢失了（同 nonce 的另一笔交易被打包）
-      // 由于无法区分，nonce 已推进时默认认为已确认（保守策略：不误判为 lost）。
-      return TxConfirmResult.confirmed;
-    } catch (_) {
-      // 查找失败时，nonce 已推进，默认已确认
-      return TxConfirmResult.confirmed;
-    }
+    // nonce 已推进 → 确认。
+    //
+    // 2026-04-23 整改:删除"在最近区块中按 txHash 搜索二次验证"路径。
+    // 原因见 `pending_tx_reconciler._reconcileOne`:逐块拉 body 会触发
+    // substrate `MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2` 反滥用 ban,
+    // 把轻节点 peer 打到 peers=0。
+    // 由于原逻辑"未找到也返回 confirmed"(同 nonce 的另一笔 tx 顶替是罕见
+    // 场景,宁可保守标 confirmed 也不误判 lost),这次二次验证实际从不改变
+    // 结果,直接删除即可。
+    return TxConfirmResult.confirmed;
   }
 
   /// 向后兼容的简单确认检查（仅 nonce）。
@@ -168,20 +162,11 @@ class OnchainRpc {
     return confirmedNonce > usedNonce;
   }
 
-  /// 在最近区块中搜索指定交易哈希。找到则返回所在区块号，未找到返回 null。
-  Future<int?> findTxInRecentBlocks(String txHash, {int depth = 50}) async {
-    final latestBlock = await _rpc.fetchLatestBlock();
-    final startBlock = latestBlock.blockNumber;
-    final endBlock = (startBlock - depth).clamp(1, startBlock);
-
-    for (var blockNum = startBlock; blockNum >= endBlock; blockNum--) {
-      final blockData = await _rpc.fetchBlockExtrinsicHashes(blockNum);
-      if (blockData != null && blockData.contains(txHash)) {
-        return blockNum;
-      }
-    }
-    return null;
-  }
+  // 2026-04-23 整改:`findTxInRecentBlocks` 已删除。
+  // 原实现逐块调 `fetchBlockExtrinsicHashes` → `getBlockExtrinsics`,
+  // 触发 substrate block-request 反滥用机制(MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2)
+  // 把轻节点 peer ban 掉。交易确认改走 nonce-only 判定,
+  // 详见 `pending_tx_reconciler.dart`。
 
   // ──── 手续费估算 ────
 
