@@ -136,6 +136,33 @@ make_transfer_sigs
   - `20260422-joint-vote-institution-id-display.md`
     (joint_vote institution_id 冷钱包展示)
 
+### PR-E ✅ activate_admin 签名请求解析失败 bugfix(2026-04-22 · Mobile Agent)
+
+**问题**:管理员列表点"激活"显示 QR 码后,wumin 冷钱包扫码报
+"签名请求解析失败:sign_request.pubkey 必填 0x hex"。
+
+**根因**:违反 `feedback_pubkey_format_rule` 铁律。
+- `wuminapp/lib/governance/activation_service.dart` 两处传入裸 hex:
+  - L128 `payloadHex = _bytesToHex(payload)`(无 `0x`)
+  - L135 `pubkey: pk`(`_normalize()` 去了 `0x`)
+- 传到 wumin `SignRequestBody.fromJson:40/46` 严格校验"必须以 `0x` 开头" → 抛 FormatException
+- `QrSigner._validateHexField` 两端都太松(允许裸 hex 通过 buildRequest),让错误在热钱包源头漏过,直到冷钱包扫码才暴露
+
+**修复**:
+- ✅ `activation_service.dart:128` 改 `'0x${_bytesToHex(payload)}'`
+- ✅ `activation_service.dart:138` 改 `pubkey: '0x$pk'`
+- ✅ `wuminapp/lib/signer/qr_signer.dart` `_validateHexField` 强制要求 `0x` 前缀,源头拦截裸 hex
+- ✅ `wumin/lib/signer/qr_signer.dart` 同步强制 `0x` 校验
+- ✅ Grep 扫全 wuminapp 其他 10 处 `pubkey:` / `payloadHex:` 构造点均已带 `0x` 前缀,无同类问题
+
+**回归**:
+- wumin analyze 0 issues + test **96/96** PASS
+- wuminapp analyze 0 issues + test **65/65** PASS
+
+**用户动作**:wumin apk + wuminapp 重编重装后,激活 QR 可正常扫码识别。
+
+---
+
 ### PR-D ✅ citizenchain 节点 UI 对齐(2026-04-22 完成, Blockchain Agent)
 - 默认范围:`citizenchain/node/src/ui/` + `citizenchain/node/frontend/`
 - ✅ 审计 `signing.rs` 全部 8 个 `build_X_sign_request` 的 display.fields

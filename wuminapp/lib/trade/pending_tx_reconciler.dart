@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
 import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
-import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/local_tx_store.dart';
 
 /// 单条 pending 记录对账后的处置结果。
@@ -82,33 +81,26 @@ class ReconcileDecision {
 /// 作用：
 /// - 把"已上链但本地仍 pending"的 LocalTxEntity 强制推进到 confirmed。
 /// - 不依赖页面生命周期，不依赖 fire-and-forget 轮询，任何时候调用都能兜底。
-/// - 判定顺序：优先按 txHash 在最近区块里搜索（最权威），其次按 nonce 推进（快速路径）。
+/// - 2026-04-23 整改:判定策略简化为**仅靠 nonce 推进**(走 `state_getStorage`
+///   协议,不触发 substrate block-request 反滥用 ban)。原"按 txHash 在最近
+///   区块搜索"路径已物理删除,详见 `_reconcileOne`。
 class PendingTxReconciler {
   PendingTxReconciler({
     ChainRpc? chainRpc,
-    OnchainRpc? onchainRpc,
-  })  : _chainRpc = chainRpc ?? ChainRpc(),
-        _onchainRpc = onchainRpc ?? OnchainRpc(chainRpc: chainRpc);
+  }) : _chainRpc = chainRpc ?? ChainRpc();
 
   static final PendingTxReconciler instance = PendingTxReconciler();
 
   final ChainRpc _chainRpc;
-  final OnchainRpc _onchainRpc;
 
   /// 防止重复并发调用：一次只跑一个 reconcileAll。
   Future<int>? _inflight;
 
-  /// 深度搜索 txHash 时的最大回溯区块数。
-  static const int _deepSearchDepth = 200;
-
-  /// 浅搜索（用于刚提交的交易，快速路径）。
-  static const int _shallowSearchDepth = 20;
+  // 2026-04-23 整改:`_deepSearchDepth / _shallowSearchDepth /
+  // _minDeepSearchAge` 已随 `findTxInRecentBlocks` 一并下线。
 
   /// 交易提交后多久仍无法在链上找到，才允许判为 lost。
   static const Duration _lostThreshold = Duration(minutes: 10);
-
-  /// 记录确认时的最小年龄（防止刚提交就被快速路径误判）。
-  static const Duration _minDeepSearchAge = Duration(seconds: 30);
 
   /// 对所有 status == 'pending' 的本地记录跑一轮对账。
   ///
@@ -173,31 +165,30 @@ class PendingTxReconciler {
 
   Future<ReconcileOutcome> _reconcileOne(
     LocalTxEntity record, {
+    // 2026-04-23 整改:`shallow` 参数保留仅为兼容调用方,内部不再区分
+    // 深/浅搜索(block-body 搜索路径已整体下线)。
     bool shallow = false,
   }) async {
-    final txHash = record.txHash;
     final usedNonce = record.usedNonce ?? record.blockNumber;
     final ageMs =
         DateTime.now().millisecondsSinceEpoch - record.createdAtMillis;
     final age = Duration(milliseconds: ageMs);
 
     try {
-      // IO 1：按 txHash 在最近区块里搜索（跳过过于年轻的记录以节省带宽）。
-      int? foundBlockNumber;
-      if (txHash != null && txHash.isNotEmpty) {
-        final shouldDeepSearch = shallow || age > _minDeepSearchAge;
-        if (shouldDeepSearch) {
-          final depth = shallow ? _shallowSearchDepth : _deepSearchDepth;
-          foundBlockNumber = await _onchainRpc.findTxInRecentBlocks(
-            txHash,
-            depth: depth,
-          );
-        }
-      }
-
-      // IO 2：必要时查链上 nonce 作为备用判据。
+      // 2026-04-23 整改:删除"按 txHash 在最近区块逐块拉 body 搜索"路径。
+      // 原因:`findTxInRecentBlocks` 会对每个 block 发 `getBlockExtrinsics`
+      // (即 smoldot `block_query(header=false, body=true)`)。substrate 端
+      // `sc-network-sync::block_request_handler` 对同一 (peer+hash+BODY)
+      // 请求超过 `MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2` 次就返回 None
+      // 并扣 i32::MIN 声誉分,peer 被立即 ban → 轻节点 peers 归零。
+      //
+      // 交易确认改为完全依赖 nonce 推进判定(`state_getStorage` 协议,
+      // 与 block-request 协议无关,不受反滥用机制影响)。
+      // `decideReconcileOutcome` 的路径 2 已完整覆盖该语义。
+      // 代价:丢失"确认在哪块"的具体 block 号,`confirmedAtBlock` 恒为 null,
+      // UI 仅显示"已确认"而不具体到块;余额/nonce 仍然正确。
       int? chainNonce;
-      if (foundBlockNumber == null && usedNonce != null) {
+      if (usedNonce != null) {
         final pubkeyHex = _extractPubkeyHex(record);
         if (pubkeyHex != null) {
           chainNonce = await _chainRpc.fetchConfirmedNonce(pubkeyHex);
@@ -206,7 +197,7 @@ class PendingTxReconciler {
 
       // 纯函数判定。
       final decision = decideReconcileOutcome(
-        foundBlockNumber: foundBlockNumber,
+        foundBlockNumber: null,
         chainNonce: chainNonce,
         usedNonce: usedNonce,
         age: age,
@@ -219,17 +210,6 @@ class PendingTxReconciler {
               realBlockNumber: decision.confirmedAtBlock);
           return ReconcileOutcome.confirmed;
         case ReconcileOutcome.lost:
-          // lost 前再深搜一次兜底，避免把"已出块只是搜索窗口没覆盖"误判为 lost。
-          if (txHash != null && txHash.isNotEmpty) {
-            final retry = await _onchainRpc.findTxInRecentBlocks(
-              txHash,
-              depth: _deepSearchDepth,
-            );
-            if (retry != null) {
-              await _markConfirmed(record, realBlockNumber: retry);
-              return ReconcileOutcome.confirmed;
-            }
-          }
           await _markLost(record);
           return ReconcileOutcome.lost;
         case ReconcileOutcome.stillPending:
