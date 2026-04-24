@@ -625,14 +625,13 @@ class SmoldotClientManager {
         'getAccountNextIndex', () => _chain!.getAccountNextIndex(accountIdHex));
   }
 
-  /// 原生读取指定区块中的 extrinsics（必须完整同步）。
-  Future<List<String>> getBlockExtrinsics(String blockHashHex) async {
-    _ensureReady();
-    await ensureSynced();
-    await _waitForPeer();
-    return _withRetry(
-        'getBlockExtrinsics', () => _chain!.getBlockExtrinsics(blockHashHex));
-  }
+  // 2026-04-23 整改:`getBlockExtrinsics` 已从上层代码移除。
+  //
+  // 原用途:交易确认时逐块拉 body 按 extrinsic hash 搜索 txHash。
+  // 因 substrate `MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2` 反滥用机制会对
+  // 同一 (peer+hash+BODY) 请求超过 2 次直接返回空并 ban peer,把轻节点打死,
+  // 上层已切换到 nonce-only 判定。smoldot-dart 层 binding 暂保留,避免触动
+  // 跨 FFI 边界;如后续也无人调用可一并移除。
 
   /// 原生提交已编码 extrinsic（必须完整同步）。
   Future<String?> submitExtrinsicHex(String extrinsicHex) async {

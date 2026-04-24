@@ -166,7 +166,13 @@ class QrSigner {
   }
 
   void _validateHexField(String value, String field) {
-    final text = value.startsWith('0x') ? value.substring(2) : value;
+    // feedback_pubkey_format_rule 铁律: 内部统一 0x 小写 hex。
+    // 拒绝裸 hex, 强制 0x 前缀。SignRequestBody.fromJson 同要求。
+    if (!value.startsWith('0x')) {
+      throw QrSignException(
+          QrSignErrorCode.invalidField, '$field 必须以 0x 开头');
+    }
+    final text = value.substring(2);
     if (text.isEmpty || text.length.isOdd) {
       throw QrSignException(
           QrSignErrorCode.invalidField, '$field 必须是偶数字节 hex');

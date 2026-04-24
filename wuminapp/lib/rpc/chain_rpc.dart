@@ -101,36 +101,12 @@ class ChainRpc {
     );
   }
 
-  /// 获取指定区块中所有 extrinsic 的 blake2_256 哈希。
-  ///
-  /// 用于交易确认：在链上区块中搜索指定 txHash 是否存在。
-  Future<List<String>?> fetchBlockExtrinsicHashes(int blockNumber) async {
-    try {
-      final blockHashHex =
-          await SmoldotClientManager.instance.getBlockHash(blockNumber);
-      if (blockHashHex == null || blockHashHex.isEmpty) {
-        return null;
-      }
-      final extrinsics =
-          await SmoldotClientManager.instance.getBlockExtrinsics(blockHashHex);
-
-      final hashes = <String>[];
-      for (final ext in extrinsics) {
-        final extBytes = _hexDecode(_stripHexPrefix(ext));
-        // blake2_256 哈希
-        final hash = _blake2b256(extBytes);
-        hashes.add('0x${_hexEncode(hash)}');
-      }
-      return hashes;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static Uint8List _blake2b256(Uint8List data) {
-    // 使用 polkadart 的 Hasher
-    return Uint8List.fromList(Hasher.blake2b256.hash(data));
-  }
+  // 2026-04-23 整改:`fetchBlockExtrinsicHashes` 已删除。
+  //
+  // 原实现包装 `getBlockExtrinsics`(smoldot `chainHead_v1_body`)逐块拉 body
+  // 并用 blake2_256 求每笔 extrinsic 哈希。因触发 substrate block-request
+  // 反滥用 ban 把轻节点打死,已整体下线。交易确认现走 nonce-only,见
+  // `pending_tx_reconciler.dart`。
 
   /// 获取运行时 metadata（含 registry，用于 extrinsic 编码）。结果缓存。
   Future<RuntimeMetadata> fetchMetadata() async {

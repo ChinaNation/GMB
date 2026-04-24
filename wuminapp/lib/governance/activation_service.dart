@@ -125,14 +125,17 @@ class ActivationService {
     final account = Keyring().encodeAddress(pkBytes, 2027);
 
     final payload = _buildActivatePayload(shenfenId);
-    final payloadHex = _bytesToHex(payload);
+    // feedback_pubkey_format_rule 铁律: 内部统一 0x 小写 hex。
+    // wumin SignRequestBody.fromJson 严格要求 pubkey / payload_hex
+    // 以 0x 开头,缺前缀会抛 "签名请求解析失败"(2026-04-22 修复)。
+    final payloadHex = '0x${_bytesToHex(payload)}';
 
     final signer = QrSigner();
     final requestId = QrSigner.generateRequestId(prefix: 'act-');
     final request = signer.buildRequest(
       requestId: requestId,
       address: account,
-      pubkey: pk,
+      pubkey: '0x$pk',
       payloadHex: payloadHex,
       specVersion: 0,
       display: SignDisplay(
