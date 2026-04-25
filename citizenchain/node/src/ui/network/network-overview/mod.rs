@@ -46,12 +46,15 @@ fn known_peers_cache() -> &'static Mutex<CachedKnownPeers> {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 /// 网络总览面板对前端返回的聚合统计结果。
+/// clearing_nodes 当前阶段固定返回 0，作为"加入清算行的节点"指标的占位字段；
+/// 待清算节点识别口径（链上标记 or 节点元数据）落地后再填充真实统计。
 pub struct NetworkOverview {
     pub total_nodes: u64,
     pub online_nodes: u64,
     pub guochuhui_nodes: u64,
     pub shengchuhui_nodes: u64,
     pub shengchuhang_nodes: u64,
+    pub clearing_nodes: u64,
     pub full_nodes: u64,
     pub light_nodes: u64,
     pub warning: Option<String>,
@@ -309,6 +312,7 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
             guochuhui_nodes: 0,
             shengchuhui_nodes: 0,
             shengchuhang_nodes: 0,
+            clearing_nodes: 0,
             full_nodes: 0,
             light_nodes: 0,
             warning: None,
@@ -528,12 +532,17 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
         .count() as u64;
     let total_nodes = (bootnodes.len() as u64).saturating_add(known_non_genesis);
 
+    // 清算节点统计口径尚未落地，先硬编码 0 作为 UI 占位；
+    // 后续按"加入清算行的节点"规则补充真实统计逻辑。
+    let clearing_nodes = 0u64;
+
     Ok(NetworkOverview {
         total_nodes,
         online_nodes,
         guochuhui_nodes,
         shengchuhui_nodes,
         shengchuhang_nodes,
+        clearing_nodes,
         full_nodes,
         light_nodes,
         warning: if warnings.is_empty() {

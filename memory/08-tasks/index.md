@@ -31,12 +31,13 @@
 - `memory/08-tasks/open/20260413-083358-轻节点连接稳定性逐行审计-检查轻节点为何总是连不上区块链-逐文件逐行审查连接链路代码并输出完整检查报告与改进方案.md`
 - `memory/08-tasks/open/20260419-扫码支付-step1-同行MVP.md`
 - `memory/08-tasks/open/20260421-092827-全仓库检查机构相关账户计算是否正确-优先核查-runtime-primitives-作为真源定义-并追踪其在-runtime-及相关模块中的使用.md`
+- `memory/08-tasks/open/20260422-cold-wallet-two-color-recognition.md`
+- `memory/08-tasks/open/20260422-joint-vote-institution-id-display.md`
+- `memory/08-tasks/open/20260422-offchain-clearing-pay-two-color.md`
+- `memory/08-tasks/open/20260424-step1-sfid-clearing-bank-eligibility.md`
 
 ## done
 
-- `memory/08-tasks/done/20260422-unified-voting-entry-phase1.md`
-- `memory/08-tasks/done/20260422-unified-voting-entry-phase2.md`
-- `memory/08-tasks/done/20260422-unified-voting-entry-phase3.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-nodeuitauri-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-nodeui-backend-对-runtime-primitives-的错误路径引用.md`
@@ -132,7 +133,16 @@
 - `memory/08-tasks/done/20260420-duoqian_address-改名-main_address.md`
 - `memory/08-tasks/done/20260420-keyless_address-改名-stake_address.md`
 - `memory/08-tasks/done/20260420-unified-DUOQIAN_V1-domain.md`
-- `memory/08-tasks/done/20260421-name-to-account-name-rename.md`
-- `memory/08-tasks/done/20260421-op-institution-role-split.md`
 - `memory/08-tasks/done/20260421-154308-多签账户注册改造-离线QR聚合签名-step1.md`
 - `memory/08-tasks/done/20260421-162425-多签账户转账改造-离线QR聚合签名-step2.md`
+- `memory/08-tasks/done/20260421-name-to-account-name-rename.md`
+- `memory/08-tasks/done/20260421-op-institution-role-split.md`
+- `memory/08-tasks/done/20260421-sfid-默认账户两步激活.md`
+- `memory/08-tasks/done/20260422-unified-voting-entry-phase1.md`
+- `memory/08-tasks/done/20260422-unified-voting-entry-phase2.md`
+- `memory/08-tasks/done/20260422-unified-voting-entry-phase3.md`
+- `memory/08-tasks/done/20260423-wuminapp-wallet-detail-redesign.md`
+- `memory/08-tasks/done/20260424-nodeui-tab-restructure.md`
+- `memory/08-tasks/done/20260424-wuminapp-wallet-detail-redesign-v2.md`
+- `memory/08-tasks/done/20260424-wuminapp-wallet-detail-redesign-v3.md`
+- `memory/08-tasks/done/20260424-wuminapp-wallet-detail-redesign-v4.md`

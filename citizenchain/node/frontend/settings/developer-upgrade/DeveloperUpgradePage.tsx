@@ -1,11 +1,20 @@
-// 开发升级页：选择 WASM 文件 → 选择已激活管理员 → QR 签名 → 提交 developer_direct_upgrade。
+// 开发期 Runtime 直升页：国储会/省储会管理员可直接 set_code（不走联合投票）。
+// 仅在 DeveloperUpgradeEnabled = true 的开发期可用。
+//
+// 2026-04-24 重构：从 governance/DeveloperUpgradePage.tsx 迁入本目录（随"治理"tab 下线，
+// 功能归属改为设置页"开发升级"子块）。form 阶段改为横排布局，复用 .bootnode-inline 3 列网格：
+// 左侧 = "开发升级" 标题 + 选择文件按钮 + 文件名；中间 = 管理员下拉；右侧 = 生成签名请求按钮。
+// 外层 section 承载背景框（与"节点身份密钥"/"确定性投票节点"视觉一致）。
+//
+// 流程保持不变：form → qr → scan → submit → done/error；仅 form 阶段参与 inline 排版，
+// 其他阶段保留原有的 QR/扫描/进度/完成/错误面板。
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { QRCodeSVG } from 'qrcode.react';
-import { api, sanitizeError } from '../api';
-import { hexToSs58 } from '../format';
-import { QrScanner } from './QrScanner';
-import type { ActivatedAdmin, InstitutionListItem, VoteSignRequestResult } from './governance-types';
+import { api, sanitizeError } from '../../api';
+import { hexToSs58 } from '../../format';
+import { QrScanner } from '../../governance/QrScanner';
+import type { ActivatedAdmin, InstitutionListItem, VoteSignRequestResult } from '../../governance/governance-types';
 
 type FlowStep = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 type JointProposerAdmin = ActivatedAdmin & { institutionName: string };
@@ -142,27 +151,19 @@ export function DeveloperUpgradePage() {
   if (loadingAdmins) return <div className="governance-loading">加载中…</div>;
 
   return (
-    <div className="developer-upgrade-page">
-      <h2>开发期 Runtime 升级</h2>
-      <p className="dev-upgrade-hint">
-        国储会和省储会管理员可直接 set_code，不走联合投票。仅在开发期（DeveloperUpgradeEnabled = true）可用。
-      </p>
-
+    <section className="section settings-devup-section">
       {step === 'form' && (
-        <div className="dev-upgrade-form">
-          <div className="dev-upgrade-field">
-            <label>Runtime WASM 文件</label>
-            <div className="dev-upgrade-file-row">
-              <button className="dev-upgrade-pick-file" onClick={handlePickFile}>选择文件</button>
+        <>
+          <div className="bootnode-inline devup-inline">
+            <div className="devup-label-group">
+              <h2>开发升级</h2>
+              <button onClick={handlePickFile}>选择文件</button>
               <span className="dev-upgrade-file-name">
                 {wasmFileName || '未选择文件'}
               </span>
             </div>
-          </div>
-          <div className="dev-upgrade-field">
-            <label>联合提案发起人管理员</label>
             {admins.length === 0 ? (
-              <p className="upgrade-no-wallet">无已激活的国储会或省储会管理员，请先在对应机构页面激活</p>
+              <p className="upgrade-no-wallet">无已激活的国储会或省储会管理员</p>
             ) : (
               <select
                 value={selectedPubkey}
@@ -175,7 +176,7 @@ export function DeveloperUpgradePage() {
                   </option>
                 ) : (
                   <>
-                    <option value="">请选择…</option>
+                    <option value="">请选择管理员…</option>
                     {admins.map((a) => (
                       <option key={a.pubkeyHex} value={a.pubkeyHex}>
                         {a.institutionName} · {hexToSs58(a.pubkeyHex)}
@@ -185,16 +186,15 @@ export function DeveloperUpgradePage() {
                 )}
               </select>
             )}
+            <button
+              disabled={!wasmPath.trim() || !selectedPubkey || building}
+              onClick={handleBuildRequest}
+            >
+              {building ? '构建中…' : '生成签名请求'}
+            </button>
           </div>
-          {error && <div className="error">{error}</div>}
-          <button
-            className="dev-upgrade-submit"
-            disabled={!wasmPath.trim() || !selectedPubkey || building}
-            onClick={handleBuildRequest}
-          >
-            {building ? '构建签名请求中…' : '生成签名请求'}
-          </button>
-        </div>
+          {error ? <p className="section-inline-error">{error}</p> : null}
+        </>
       )}
 
       {step === 'qr' && (
@@ -239,6 +239,6 @@ export function DeveloperUpgradePage() {
           <button className="cancel-button" onClick={() => { setStep('form'); setError(null); }}>返回</button>
         </div>
       )}
-    </div>
+    </section>
   );
 }

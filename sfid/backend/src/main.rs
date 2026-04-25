@@ -1115,12 +1115,19 @@ fn main() {
                 "/api/v1/app/institution/:sfid_id/accounts",
                 get(institutions::handler::app_list_accounts),
             )
-            // ── 扫码支付 Step 1:wuminapp 清算行公开搜索 ──
-            // 仅返回 is_clearing_bank == true 的机构,带主账户/费用账户地址,
+            // ── 清算行搜索(2026-04-24, ADR-007 收紧):仅返回资格白名单 + 主账户已激活 ──
+            // 资格白名单:(SFR ∧ JOINT_STOCK) ∨ (FFR ∧ parent.SFR ∧ parent.JOINT_STOCK)
             // 用于 wuminapp 绑定清算行前的列表展示。
             .route(
                 "/api/v1/app/clearing-banks/search",
                 get(institutions::handler::app_search_clearing_banks),
+            )
+            // ── 候选清算行搜索(2026-04-24, ADR-007 Step 1 新增) ──
+            // 用于 NodeUI"添加清算行"搜索:仅按资格白名单过滤,不要求主账户已激活,
+            // 不分页(单页 limit ≤ 50),无 province/city 过滤(sfid_id 全局唯一)。
+            .route(
+                "/api/v1/app/clearing-banks/eligible-search",
+                get(institutions::handler::app_search_eligible_clearing_banks),
             );
 
         let app_state = state.clone();

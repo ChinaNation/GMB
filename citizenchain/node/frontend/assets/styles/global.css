@@ -179,7 +179,8 @@ body {
 }
 
 .settings-wallet-section .wallet-inline,
-.settings-nodekey-section .bootnode-inline {
+.settings-nodekey-section .bootnode-inline,
+.settings-devup-section .bootnode-inline {
   column-gap: 10px;
   min-height: 84px;
   min-width: 0;
@@ -201,13 +202,43 @@ body {
 }
 
 .settings-wallet-section .wallet-current,
-.settings-nodekey-section .bootnode-inline h2 {
+.settings-nodekey-section .bootnode-inline h2,
+.settings-devup-section .bootnode-inline h2 {
   margin: 0;
   display: flex;
   align-items: center;
   font-size: 16px;
   line-height: normal;
   white-space: nowrap;
+}
+
+/* 开发升级：与 settings-nodekey-section 视觉一致，独立 margin 控制避免叠加。 */
+.settings-devup-section {
+  margin-top: 12px;
+  padding-top: 0;
+  border-top: none;
+}
+
+/* form 阶段左侧 slot：标题 + 选择文件按钮 + 文件名 紧邻排布，整体占据 max-content 列。
+   宽度收敛：文件名过长时省略号，避免挤压中间的管理员下拉。 */
+.devup-label-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.devup-label-group .dev-upgrade-file-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-devup-section .devup-inline select {
+  flex: 0 0 auto;
+  min-width: 240px;
+  max-width: 360px;
 }
 
 .settings-wallet-section .wallet-inline input,
@@ -407,7 +438,7 @@ select option:checked {
 }
 
 .mining-income-grid,
-.network-overview-grid {
+.network-inline-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(260px, 1fr));
   gap: 10px;
@@ -421,7 +452,7 @@ select option:checked {
 }
 
 .mining-section .metric-card,
-.network-section .metric-card {
+.network-inline-section .metric-card {
   min-height: 80px;
   display: flex;
   flex-direction: column;
@@ -430,8 +461,34 @@ select option:checked {
 }
 
 .mining-section .metric-value,
-.network-section .metric-value {
+.network-inline-section .metric-value {
   margin-top: 12px;
+}
+
+/* 治理节点卡片：3 列子网格，每列 = 1 个数字 + 对应名称，数字与名称上下对齐。
+   列顺序固定为国储会｜省储会｜省储行，与挖矿页内嵌网络统计卡片展示语义一致。 */
+.governance-node-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.governance-node-col {
+  text-align: center;
+}
+
+.governance-node-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.governance-node-name {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.2px;
 }
 
 .metric-label {
@@ -797,38 +854,6 @@ select option:checked {
   font-size: 12px;
   color: var(--text-secondary);
   word-break: break-all;
-}
-
-/* ── 治理子 Tab ── */
-
-.governance-sub-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding-bottom: 4px;
-}
-
-.governance-sub-tabs button {
-  background: transparent;
-  color: var(--text-secondary);
-  border: none;
-  padding: 4px 16px;
-  font-size: 14px;
-  cursor: pointer;
-  min-width: 88px;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-
-.governance-sub-tabs button:hover {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.governance-sub-tabs button.active {
-  background: linear-gradient(135deg, #0891b2, #06b6d4);
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
 }
 
 /* ── 提案列表 ── */
@@ -1908,53 +1933,6 @@ select option:checked {
   font-size: 13px;
   color: #dc2626;
   margin: 4px 0 0;
-}
-
-.dev-upgrade-form {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  max-width: 600px;
-}
-
-.dev-upgrade-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.dev-upgrade-field label {
-  font-size: 13px;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.dev-upgrade-field select,
-.dev-upgrade-field input {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 14px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-}
-
-.dev-upgrade-file-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.dev-upgrade-pick-file {
-  padding: 8px 16px;
-  border: 1px solid var(--primary);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--primary);
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
-  min-width: auto;
 }
 
 .dev-upgrade-file-name {

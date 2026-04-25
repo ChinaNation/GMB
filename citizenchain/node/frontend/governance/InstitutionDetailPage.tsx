@@ -156,11 +156,11 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
       {/* 机构信息卡片 */}
       <div className="institution-detail-grid">
         <div className="metric-card">
-          <div className="metric-label">机构类型 <code className="metric-label-id">{detail.shenfenId}</code></div>
+          <div className="metric-label">机构类型 /身份ID <code className="metric-label-id">{detail.shenfenId}</code></div>
           <div className="metric-value">{detail.orgTypeLabel}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">机构主账户 <code className="metric-label-id">{hexToSs58(detail.mainAddress)}</code></div>
+          <div className="metric-label">主账户 <code className="metric-label-id">{hexToSs58(detail.mainAddress)}</code></div>
           <div className="metric-value">
             {detail.balanceFen != null
               ? formatBalance(detail.balanceFen)
@@ -173,7 +173,7 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
         </div>
         <div className="metric-card">
           <div className="metric-label">联合投票权重</div>
-          <div className="metric-value">{detail.jointVoteWeight}</div>
+          <div className="metric-value">{detail.jointVoteWeight} 票</div>
         </div>
         {detail.orgType === 2 && detail.stakingAddress && (
           <div className="metric-card">
