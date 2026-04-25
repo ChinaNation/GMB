@@ -9,12 +9,14 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 /// 扫码支付清算体系 Step 1 新增:绑定**清算行**(L2)确认页。
 ///
 /// 中文注释:
-/// - 清算行(L2)体系唯一绑定页。数据源:SFID `clearing_bank_list_page` 传入的
-///   `ClearingBankInfo`;链上调用 `bind_clearing_bank(bank_main_address)`
-///   (call_index 30)。原省储行绑定页 + `bind_clearing_institution` extrinsic
-///   已在 Step 2b-iv-b 随老 pallet 一起删除。
+/// - 清算行(L2)体系唯一绑定页。数据源:SFID 搜索结果传入的 `ClearingBankInfo`;
+///   链上调用 `bind_clearing_bank(bank_main_address)`(call_index 30)。
+///   原省储行绑定页 + `bind_clearing_institution` extrinsic 已在 Step 2b-iv-b
+///   随老 pallet 一起删除。
 /// - 绑定即开户,**无预存、无业务开户费**;链上仅产生付费调用 1 元/次。
 /// - 本步**仅支持热钱包**(冷钱包扫码签名 Step 2 接入,与旧页面保持一致风格)。
+/// - 2026-04-23:原来的清算行入口页 / 清算行列表页 / 收款码页已整体下线,本页目
+///   前无活跃入口,等「设置清算行」真实交互落地时再复用。
 class BindClearingBankPage extends StatefulWidget {
   const BindClearingBankPage({
     super.key,
@@ -128,10 +130,9 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
             walletManager.signWithWalletNoAuth(wallet.walletIndex, payload),
       );
 
-      // 扫码支付 Step 2c-ii-a:绑定成功同步持久化 `shenfen_id`,供
-      // `offchain_clearing_receive_page` 生成收款 QR 时 `bank` 字段回填。
-      // 链上 `UserBank` 只存主账户,没 `shenfen_id`,不在这里落盘将无法在本地
-      // 重建收款码。
+      // 扫码支付 Step 2c-ii-a:绑定成功同步持久化 `shenfen_id`,供后续收款码页面
+      // `bank` 字段回填。链上 `UserBank` 只存主账户,没 `shenfen_id`,不在这里落盘
+      // 将无法在本地重建收款码。
       await ClearingBankPrefs.save(wallet.walletIndex, widget.bank.sfidId);
 
       if (!mounted) return;

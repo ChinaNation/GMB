@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, sanitizeError } from '../../api';
 import type { MiningDashboard } from '../../types';
+import { NetworkInlineSection } from './NetworkInlineSection';
 
 function formatIncomeDisplay(raw: string): string {
   const normalized = raw.replace(/,/g, '').trim();
@@ -68,7 +69,7 @@ export function MiningDashboardSection() {
   return (
     <>
       <section className="section mining-section">
-        <h2>挖矿实际收益</h2>
+        <h2>挖矿收益</h2>
         <div className="mining-income-grid">
           <div className="metric-card">
             <div className="metric-label">实际到账收益总额</div>
@@ -154,6 +155,8 @@ export function MiningDashboardSection() {
           </div>
         </div>
       </section>
+
+      <NetworkInlineSection />
 
       <section className="section">
         <h2>出块记录</h2>

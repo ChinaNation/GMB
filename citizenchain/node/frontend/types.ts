@@ -87,6 +87,8 @@ export type NetworkOverview = {
   guochuhuiNodes: number;
   shengchuhuiNodes: number;
   shengchuhangNodes: number;
+  // 清算节点数量（当前阶段由后端硬编码 0 占位，待清算节点识别规则落地后填充）。
+  clearingNodes: number;
   fullNodes: number;
   lightNodes: number;
   warning: string | null;

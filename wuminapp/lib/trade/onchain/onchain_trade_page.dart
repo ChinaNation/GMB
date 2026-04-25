@@ -196,8 +196,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       return;
     }
 
-    // 与 wallet_page._openClearingPaymentEntry 同口径的配置注入占位。
-    // 打包时以 `--dart-define` 传入生产地址;dev 模式用 localhost。
+    // 清算行扫码配置注入占位。打包时以 `--dart-define` 传入生产地址;
+    // dev 模式用 localhost。
     const sfidBaseUrl = String.fromEnvironment(
       'SFID_BASE_URL',
       defaultValue: 'http://127.0.0.1:8080',

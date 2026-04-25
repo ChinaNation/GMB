@@ -178,6 +178,59 @@ class ChainRpc {
     return snapshot.freeYuan ?? 0.0;
   }
 
+  /// 查询链上真实余额 = free + reserved,最新块(不传 block hash)。
+  ///
+  /// 中文注释:
+  /// - 对齐 polkadot.js apps 的 total 余额口径;钱包详情页第 3 张卡片展示
+  ///   的就是这个值,不能只取 free,否则锁仓 / 质押的 reserved 部分会漏算。
+  /// - 走通用 `fetchStorageBatch` 取 `System.Account` 原始 bytes,在 Dart 侧
+  ///   自行解码 AccountData 的 free + reserved,绕过原生 SystemAccountSnapshot
+  ///   当前只暴露 freeFen 字段的限制。
+  /// - 账户不存在或数据不完整均返回 0.0。
+  Future<double> fetchTotalBalance(String pubkeyHex) async {
+    // 1. 构造 System.Account storage key:prefix + blake2_128(accountId) + accountId
+    final accountId = _hexDecode(
+        pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex);
+    final blake2 = Hasher.blake2b128.hash(accountId);
+    final fullKey = Uint8List(
+        _systemAccountPrefix.length + blake2.length + accountId.length);
+    fullKey.setAll(0, _systemAccountPrefix);
+    fullKey.setAll(_systemAccountPrefix.length, blake2);
+    fullKey.setAll(_systemAccountPrefix.length + blake2.length, accountId);
+    final keyHex = '0x${_hexEncode(fullKey)}';
+
+    // 2. 批量接口复用,只查 1 个 key 也走同一路径。
+    final batchResult = await fetchStorageBatch([keyHex]);
+    final data = batchResult[keyHex];
+    return _decodeTotalBalanceFromAccountData(data);
+  }
+
+  /// 从 System.Account 的 SCALE 编码数据中解码 free + reserved 总余额(yuan)。
+  ///
+  /// 中文注释:
+  /// AccountInfo 布局:
+  ///   nonce(u32, 4 字节) + consumers(u32, 4 字节) + providers(u32, 4 字节)
+  ///   + sufficients(u32, 4 字节) = 16 字节头;
+  /// 紧接着 AccountData:
+  ///   free(u128, offset 16, 16 字节 little-endian)
+  ///   reserved(u128, offset 32, 16 字节 little-endian)
+  /// data 为 null 或长度 < 48 返回 0.0(账户不存在 / 数据不完整)。
+  static double _decodeTotalBalanceFromAccountData(Uint8List? data) {
+    if (data == null || data.length < 48) return 0.0;
+    BigInt readU128(int offset) {
+      var value = BigInt.zero;
+      for (var i = 0; i < 16; i++) {
+        value += BigInt.from(data[offset + i]) << (i * 8);
+      }
+      return value;
+    }
+
+    final free = readU128(16);
+    final reserved = readU128(32);
+    final totalFen = free + reserved;
+    return totalFen.toDouble() / 100.0;
+  }
+
   /// System.Account storage key 前缀（twox128("System") + twox128("Account")）。
   static final Uint8List _systemAccountPrefix = _hexDecode(
       '26aa394eea5630e07c48ae0c9558cef7b99d880ec681799c0cf30e8886371da9');
