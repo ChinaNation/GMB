@@ -9,8 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// - 链上 → `shenfen_id` 的反向映射在 SFID 后端存,公开搜索 API 只支持 keyword
 ///   匹配,没有"按主账户 hex 精确反查"端点。为避免 Step 2c-ii-a 进度依赖 SFID
 ///   Agent 侧改动,本步用 SharedPreferences 做本地缓存:
-///     - **写入点**:`bind_clearing_bank_page` 在链上绑定成功后写。
-///     - **读取点**:`offchain_clearing_receive_page` 生成收款 QR 前读。
+///     - **写入点**:绑定页在链上绑定成功后写入。
+///     - **读取点**:原收款码生成页在构造 QR 前读;2026-04-23 收款码页已随清算行
+///       入口重构下线,本缓存目前仅由绑定流程写入,等后续清算行功能重上线再接读端。
 /// - 缓存按 `walletIndex` 隔离,同 App 多钱包互不干扰。
 /// - **失去缓存的处置**(App 重装 / 清数据 / 用户之前在 CLI / 另一台设备绑的):
 ///   收款页显示"请先在本 App 绑定清算行以生成收款码"。Step 3 改为 SFID 后端

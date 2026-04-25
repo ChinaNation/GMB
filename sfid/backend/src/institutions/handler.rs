@@ -1565,6 +1565,11 @@ pub(crate) struct AppClearingBankSearchQuery {
 /// 清算行搜索结果单条。
 ///
 /// 与现有 `app_list_accounts` 风格一致:只暴露展示必要字段,不带创建人/管理员等。
+///
+/// (2026-04-24, ADR-007)新增 `sub_type` / `parent_sfid_id` /
+/// `parent_institution_name` / `parent_a3` 字段,用于:
+/// - wuminapp 显示"招商银行 → 招商银行广州民主路支行"父子层级
+/// - 前端二次资格校验(wuminapp 不必信任后端,可用前端 utils 复核)
 #[derive(Serialize, Clone)]
 struct AppClearingBankRow {
     sfid_id: String,
@@ -1572,6 +1577,18 @@ struct AppClearingBankRow {
     institution_name: String,
     /// 主体属性:SFR(私法人)或 FFR(非法人)。
     a3: String,
+    /// 私法人子类型(仅 a3=SFR 有值)。资格白名单要求 SFR + JOINT_STOCK 或 FFR(parent.SFR + parent.JOINT_STOCK)。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sub_type: Option<String>,
+    /// 所属法人 sfid_id(仅 a3=FFR 有值)。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_sfid_id: Option<String>,
+    /// 所属法人中文名(FFR 用,前端展示"父子结构":招商银行 → 招商银行广州民主路支行)。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_institution_name: Option<String>,
+    /// 所属法人 a3(FFR 必为 SFR;辅助前端复核资格)。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_a3: Option<String>,
     province: String,
     city: String,
     /// 主账户链上地址(hex, 不含 0x 前缀)。未上链时为 None。
@@ -1595,13 +1612,19 @@ struct AppClearingBankSearchOutput {
 ///
 /// 路由:`GET /api/v1/app/clearing-banks/search`
 ///
-/// 语义(2026-04-21 统一两步激活模式重构):
-/// - 清算行概念已废除,所有机构默认都有"主账户"/"费用账户"两条记录
-/// - 本接口只返回**主账户已激活上链**(`chain_status == Registered`)的机构
-///   — 相当于"已具备链上结算能力的机构"
+/// 语义(2026-04-24, ADR-007 收紧):
+/// - 仅返回**资格白名单**机构 ∩ **主账户已激活上链**(`chain_status == Registered`)
+/// - 资格白名单:(SFR ∧ sub_type=JOINT_STOCK) ∨ (FFR ∧ parent.SFR ∧ parent.JOINT_STOCK)
+///   - 详细规则见 `service::is_clearing_bank_eligible`
 /// - 默认跨全国 43 省;传 `province` 限定单省
 /// - 主账户 / 费用账户地址从 `MultisigAccount` 对应 `(sfid_id, "主账户" | "费用账户")` 反查
-/// - 返回字段脱敏,不含管理员 pubkey 列表 / 创建者等
+/// - 返回字段含 sub_type / parent_sfid_id / parent_institution_name / parent_a3,
+///   便于前端展示"招商银行 → 招商银行广州民主路支行"父子结构和复核资格
+///
+/// 跨省 parent 解析:
+/// - FFR 候选的 parent_sfid_id 可能在另一省 shard,采用 2 轮跨省读取:
+///   - 第 1 轮:跨 43 省构建全国"SFR ∧ JOINT_STOCK"的 sfid_id 集合
+///   - 第 2 轮:扫描候选时,FFR 仅当 parent_sfid_id ∈ 第 1 轮集合时通过
 pub(crate) async fn app_search_clearing_banks(
     State(state): State<AppState>,
     axum::extract::Query(query): axum::extract::Query<AppClearingBankSearchQuery>,
@@ -1624,11 +1647,48 @@ pub(crate) async fn app_search_clearing_banks(
         _ => PROVINCES.iter().map(|p| p.name.to_string()).collect(),
     };
 
+    // 第 1 轮:跨全国 43 省构建"SFR ∧ JOINT_STOCK"的快查表 sfid_id → (institution_name, a3)
+    // FFR 候选过滤时用此表判定 parent 是否合规。
+    // 注意:第 1 轮永远跨全国(不受 query.province 限制),因为 FFR 的 parent 可能在外省。
+    let mut sfr_jointstock_lookup: std::collections::HashMap<String, (Option<String>, String)> =
+        std::collections::HashMap::new();
+    for p in PROVINCES.iter() {
+        let read_result = state
+            .sharded_store
+            .read_province(p.name, move |shard| {
+                let mut hits: Vec<(String, Option<String>, String)> = Vec::new();
+                for inst in shard.multisig_institutions.values() {
+                    if inst.a3 == "SFR" && inst.sub_type.as_deref() == Some("JOINT_STOCK") {
+                        hits.push((
+                            inst.sfid_id.clone(),
+                            inst.institution_name.clone(),
+                            inst.a3.clone(),
+                        ));
+                    }
+                }
+                hits
+            })
+            .await;
+        match read_result {
+            Ok(hits) => {
+                for (sid, name, a3) in hits {
+                    sfr_jointstock_lookup.insert(sid, (name, a3));
+                }
+            }
+            Err(e) => {
+                tracing::warn!(province = %p.name, error = %e, "app_search_clearing_banks: stage1 SFR-JOINT_STOCK collect failed");
+            }
+        }
+    }
+
     let q_city = query.city.clone();
+    let lookup = std::sync::Arc::new(sfr_jointstock_lookup);
     let mut all_rows: Vec<AppClearingBankRow> = Vec::new();
+    // 第 2 轮:跨目标省扫描候选,过滤资格白名单 + 主账户已激活
     for prov in &target_provinces {
         let q_city_inner = q_city.clone();
         let q_kw_inner = keyword_lc.clone();
+        let lookup_inner = lookup.clone();
         let read_result = state
             .sharded_store
             .read_province(prov, move |shard| {
@@ -1654,10 +1714,34 @@ pub(crate) async fn app_search_clearing_banks(
 
                 let mut prov_rows: Vec<AppClearingBankRow> = Vec::new();
                 for inst in shard.multisig_institutions.values() {
-                    // 只返回主账户已上链注册的机构(Registered)
+                    // 主账户已上链注册(Registered)
                     if !main_addr.contains_key(&inst.sfid_id) {
                         continue;
                     }
+
+                    // 资格白名单过滤(SFR + JOINT_STOCK 或 FFR + 合规 parent)
+                    let (eligible, parent_info): (bool, Option<(String, Option<String>, String)>) =
+                        match inst.a3.as_str() {
+                            "SFR" => (
+                                inst.sub_type.as_deref() == Some("JOINT_STOCK"),
+                                None,
+                            ),
+                            "FFR" => match inst.parent_sfid_id.as_deref() {
+                                Some(pid) => match lookup_inner.get(pid) {
+                                    Some((p_name, p_a3)) => (
+                                        true,
+                                        Some((pid.to_string(), p_name.clone(), p_a3.clone())),
+                                    ),
+                                    None => (false, None),
+                                },
+                                None => (false, None),
+                            },
+                            _ => (false, None),
+                        };
+                    if !eligible {
+                        continue;
+                    }
+
                     if let Some(ref c) = q_city_inner {
                         if inst.city != *c {
                             continue;
@@ -1674,10 +1758,18 @@ pub(crate) async fn app_search_clearing_banks(
                             continue;
                         }
                     }
+                    let (parent_sfid_id, parent_institution_name, parent_a3) = match parent_info {
+                        Some((pid, pname, pa3)) => (Some(pid), pname, Some(pa3)),
+                        None => (None, None, None),
+                    };
                     prov_rows.push(AppClearingBankRow {
                         sfid_id: inst.sfid_id.clone(),
                         institution_name: inst.institution_name.clone().unwrap_or_default(),
                         a3: inst.a3.clone(),
+                        sub_type: inst.sub_type.clone(),
+                        parent_sfid_id,
+                        parent_institution_name,
+                        parent_a3,
                         province: inst.province.clone(),
                         city: inst.city.clone(),
                         main_account: main_addr.get(&inst.sfid_id).cloned(),
@@ -1722,6 +1814,236 @@ pub(crate) async fn app_search_clearing_banks(
             page,
             size,
         },
+    })
+    .into_response()
+}
+
+// ─── 清算行候选搜索(2026-04-24, ADR-007 Step 1 新增)─────────────
+//
+// 与 `app_search_clearing_banks` 的差异:
+// - 不要求主账户已激活上链(NodeUI"添加清算行"用,可能正在创建中)
+// - 仅按资格白名单过滤
+// - 仅 `q` 模糊匹配 sfid_id / institution_name(无 province/city 过滤)
+// - 限定单页返回(无分页),`limit` 上限 50
+
+/// 候选清算行搜索查询参数。
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct EligibleClearingBankSearchQuery {
+    /// 关键字,匹配 sfid_id / institution_name 子串(大小写不敏感)。
+    pub q: Option<String>,
+    /// 上限(默认 20,最大 50)。
+    pub limit: Option<u32>,
+}
+
+/// 候选清算行搜索结果单条。
+///
+/// 比 `AppClearingBankRow` 多 `main_chain_status` 字段,让 NodeUI 区分
+/// "已上链" / "待激活" / "Pending"。
+#[derive(Serialize, Clone)]
+struct EligibleClearingBankRow {
+    sfid_id: String,
+    /// 机构中文名(两步式未命名时为 None,两步式第一步已建但未命名)。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    institution_name: Option<String>,
+    a3: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sub_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_sfid_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_institution_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_a3: Option<String>,
+    province: String,
+    city: String,
+    /// 主账户链上地址(hex, 不含 0x 前缀)。未上链时为 None。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    main_account: Option<String>,
+    /// 费用账户链上地址。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fee_account: Option<String>,
+    /// 主账户链上状态:`Inactive` / `Pending` / `Registered` / `Failed`。
+    main_chain_status: String,
+}
+
+/// NodeUI 添加清算行候选搜索(无鉴权)。
+///
+/// 路由:`GET /api/v1/app/clearing-banks/eligible-search?q=<keyword>&limit=<N>`
+///
+/// 语义:
+/// - 返回所有满足资格白名单的机构(包括主账户尚未上链的)
+/// - 不分页(单页结果),`limit` 默认 20 上限 50
+/// - 不按 province/city 过滤(sfid_id 全局唯一,精确定位)
+pub(crate) async fn app_search_eligible_clearing_banks(
+    State(state): State<AppState>,
+    axum::extract::Query(query): axum::extract::Query<EligibleClearingBankSearchQuery>,
+) -> impl IntoResponse {
+    let limit = query.limit.unwrap_or(20).clamp(1, 50) as usize;
+
+    // 关键字小写化
+    let keyword_lc: Option<String> = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && s.len() <= 64)
+        .map(|s| s.to_lowercase());
+
+    // 第 1 轮:全国扫 SFR-JOINT_STOCK 集合(同 app_search_clearing_banks)
+    let mut sfr_jointstock_lookup: std::collections::HashMap<String, (Option<String>, String)> =
+        std::collections::HashMap::new();
+    for p in PROVINCES.iter() {
+        let read_result = state
+            .sharded_store
+            .read_province(p.name, move |shard| {
+                let mut hits: Vec<(String, Option<String>, String)> = Vec::new();
+                for inst in shard.multisig_institutions.values() {
+                    if inst.a3 == "SFR" && inst.sub_type.as_deref() == Some("JOINT_STOCK") {
+                        hits.push((
+                            inst.sfid_id.clone(),
+                            inst.institution_name.clone(),
+                            inst.a3.clone(),
+                        ));
+                    }
+                }
+                hits
+            })
+            .await;
+        match read_result {
+            Ok(hits) => {
+                for (sid, name, a3) in hits {
+                    sfr_jointstock_lookup.insert(sid, (name, a3));
+                }
+            }
+            Err(e) => {
+                tracing::warn!(province = %p.name, error = %e, "app_search_eligible_clearing_banks: stage1 collect failed");
+            }
+        }
+    }
+
+    let lookup = std::sync::Arc::new(sfr_jointstock_lookup);
+    let mut all_rows: Vec<EligibleClearingBankRow> = Vec::new();
+    // 第 2 轮:跨全国 43 省扫候选(本接口不接受 province 过滤参数)
+    for p in PROVINCES.iter() {
+        if all_rows.len() >= limit {
+            break;
+        }
+        let q_kw_inner = keyword_lc.clone();
+        let lookup_inner = lookup.clone();
+        let read_result = state
+            .sharded_store
+            .read_province(p.name, move |shard| {
+                // 预构建 sfid_id → (主账户地址, 主账户 chain_status, 费用账户地址)
+                let mut main_addr: std::collections::HashMap<String, (Option<String>, crate::models::MultisigChainStatus)> =
+                    std::collections::HashMap::new();
+                let mut fee_addr: std::collections::HashMap<String, String> =
+                    std::collections::HashMap::new();
+                for acc in shard.multisig_accounts.values() {
+                    match acc.account_name.as_str() {
+                        "主账户" => {
+                            main_addr.insert(
+                                acc.sfid_id.clone(),
+                                (acc.duoqian_address.clone(), acc.chain_status.clone()),
+                            );
+                        }
+                        "费用账户" => {
+                            if let Some(ref addr) = acc.duoqian_address {
+                                fee_addr.insert(acc.sfid_id.clone(), addr.clone());
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                let mut prov_rows: Vec<EligibleClearingBankRow> = Vec::new();
+                for inst in shard.multisig_institutions.values() {
+                    // 资格白名单
+                    let (eligible, parent_info): (bool, Option<(String, Option<String>, String)>) =
+                        match inst.a3.as_str() {
+                            "SFR" => (
+                                inst.sub_type.as_deref() == Some("JOINT_STOCK"),
+                                None,
+                            ),
+                            "FFR" => match inst.parent_sfid_id.as_deref() {
+                                Some(pid) => match lookup_inner.get(pid) {
+                                    Some((p_name, p_a3)) => (
+                                        true,
+                                        Some((pid.to_string(), p_name.clone(), p_a3.clone())),
+                                    ),
+                                    None => (false, None),
+                                },
+                                None => (false, None),
+                            },
+                            _ => (false, None),
+                        };
+                    if !eligible {
+                        continue;
+                    }
+
+                    // 关键字过滤
+                    if let Some(ref kw) = q_kw_inner {
+                        let sfid_lc = inst.sfid_id.to_lowercase();
+                        let name_lc = inst
+                            .institution_name
+                            .as_deref()
+                            .map(|n| n.to_lowercase())
+                            .unwrap_or_default();
+                        if !sfid_lc.contains(kw) && !name_lc.contains(kw) {
+                            continue;
+                        }
+                    }
+
+                    let (parent_sfid_id, parent_institution_name, parent_a3) = match parent_info {
+                        Some((pid, pname, pa3)) => (Some(pid), pname, Some(pa3)),
+                        None => (None, None, None),
+                    };
+                    let (main_account_addr, main_chain_status) = match main_addr.get(&inst.sfid_id)
+                    {
+                        Some((addr, status)) => (addr.clone(), format!("{:?}", status)),
+                        None => (None, "Inactive".to_string()),
+                    };
+                    prov_rows.push(EligibleClearingBankRow {
+                        sfid_id: inst.sfid_id.clone(),
+                        institution_name: inst.institution_name.clone(),
+                        a3: inst.a3.clone(),
+                        sub_type: inst.sub_type.clone(),
+                        parent_sfid_id,
+                        parent_institution_name,
+                        parent_a3,
+                        province: inst.province.clone(),
+                        city: inst.city.clone(),
+                        main_account: main_account_addr,
+                        fee_account: fee_addr.get(&inst.sfid_id).cloned(),
+                        main_chain_status,
+                    });
+                }
+                prov_rows
+            })
+            .await;
+        match read_result {
+            Ok(rows) => all_rows.extend(rows),
+            Err(e) => {
+                tracing::warn!(province = %p.name, error = %e, "app_search_eligible_clearing_banks: stage2 read failed");
+            }
+        }
+    }
+
+    // 稳定排序:按省 → 市 → sfid_id,保证多端视图一致
+    all_rows.sort_by(|a, b| {
+        a.province
+            .cmp(&b.province)
+            .then(a.city.cmp(&b.city))
+            .then(a.sfid_id.cmp(&b.sfid_id))
+    });
+
+    // limit 截断
+    if all_rows.len() > limit {
+        all_rows.truncate(limit);
+    }
+
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: all_rows,
     })
     .into_response()
 }

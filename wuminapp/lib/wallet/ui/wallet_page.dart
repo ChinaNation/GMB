@@ -1,19 +1,8 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:qr/qr.dart';
-import 'package:qr_flutter/qr_flutter.dart';
-import 'package:saver_gallery/saver_gallery.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/trade/local_tx_store.dart';
 import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
-import 'package:wuminapp_mobile/qr/qr_protocols.dart';
-import 'package:wuminapp_mobile/qr/envelope.dart';
-import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
 import 'package:wuminapp_mobile/user/user_service.dart' show UserProfileService;
 import 'package:wuminapp_mobile/ui/widgets/bip39_input.dart';
 import 'package:wuminapp_mobile/ui/widgets/shimmer_loading.dart';
@@ -22,10 +11,13 @@ import 'package:wuminapp_mobile/util/screenshot_guard.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
+import 'package:wuminapp_mobile/wallet/ui/cards/wallet_action_card.dart';
+import 'package:wuminapp_mobile/wallet/ui/cards/wallet_identity_card.dart';
+import 'package:wuminapp_mobile/wallet/ui/cards/wallet_onchain_balance_card.dart';
 import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_tx_monitor.dart';
-// 清算行(L2)统一入口页
-import 'package:wuminapp_mobile/trade/offchain/clearing_payment_entry_page.dart';
+// 清算行设置占位页(替代原「扫码支付(清算行)」统一入口)。
+import 'package:wuminapp_mobile/trade/offchain/clearing_bank_settings_page.dart';
 
 class MyWalletPage extends StatefulWidget {
   const MyWalletPage({
@@ -572,59 +564,6 @@ class _MyWalletPageState extends State<MyWalletPage> {
   }
 }
 
-/// 自绘二维码，中央 [hollowSize] 像素区域不绘制任何模块（真正留白）。
-class _HollowQrPainter extends CustomPainter {
-  _HollowQrPainter({required this.data, required this.hollowSize});
-
-  final String data;
-  final double hollowSize;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final qrCode = QrCode.fromData(
-      data: data,
-      errorCorrectLevel: QrErrorCorrectLevel.H,
-    );
-    final qrImage = QrImage(qrCode);
-    final moduleCount = qrImage.moduleCount;
-    final moduleSize = size.width / moduleCount;
-    final paint = Paint()..color = const Color(0xFF000000);
-
-    // 中央留白区域（以像素为单位转换为模块范围）
-    final hollowModules = (hollowSize / moduleSize).ceil();
-    final hollowStart = (moduleCount - hollowModules) ~/ 2;
-    final hollowEnd = hollowStart + hollowModules;
-
-    for (var row = 0; row < moduleCount; row++) {
-      for (var col = 0; col < moduleCount; col++) {
-        if (qrImage.isDark(row, col)) {
-          // 跳过中央区域
-          if (row >= hollowStart &&
-              row < hollowEnd &&
-              col >= hollowStart &&
-              col < hollowEnd) {
-            continue;
-          }
-          canvas.drawRect(
-            Rect.fromLTWH(
-              col * moduleSize,
-              row * moduleSize,
-              moduleSize,
-              moduleSize,
-            ),
-            paint,
-          );
-        }
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_HollowQrPainter oldDelegate) {
-    return oldDelegate.data != data || oldDelegate.hollowSize != hollowSize;
-  }
-}
-
 class WalletDetailPage extends StatefulWidget {
   const WalletDetailPage({super.key, required this.wallet});
 
@@ -636,18 +575,36 @@ class WalletDetailPage extends StatefulWidget {
 
 class _WalletDetailPageState extends State<WalletDetailPage> {
   final WalletManager _walletService = WalletManager();
-  final GlobalKey _qrKey = GlobalKey();
-  late String _walletName;
-  bool _isEditingName = false;
+
+  /// 本页是否有修改落盘过(用于 pop 时回传给上一页刷新列表)。
   bool _hasChanged = false;
-  bool _isSavingQr = false;
-  late final TextEditingController _nameEditController;
   List<LocalTxEntity> _recentRecords = const [];
   bool _screenshotGuardActive = false;
 
+  /// 中文注释:外层下拉刷新通过此 key 触发链上余额卡的 refresh()。
+  final GlobalKey<WalletOnchainBalanceCardState> _balanceCardKey =
+      GlobalKey<WalletOnchainBalanceCardState>();
+
+  /// 整页下拉刷新:
+  /// - 链上余额卡:通过 GlobalKey 调 refresh()
+  /// - 交易记录:复用 _loadRecentRecords()
+  /// - 清算行余额(动作卡"余额"列):本轮 0.00 元 写死占位,
+  ///   待清算行功能落地后在此追加刷新调用。TODO(清算行)
+  Future<void> _onPullRefresh() async {
+    await Future.wait<void>([
+      Future(() async {
+        try {
+          await _balanceCardKey.currentState?.refresh();
+        } catch (_) {
+          // 中文注释:链上余额刷新失败已在卡片内置错误态处理,这里不打断其他刷新
+        }
+      }),
+      _loadRecentRecords(),
+    ]);
+  }
+
   @override
   void dispose() {
-    _nameEditController.dispose();
     ChainTxMonitor.instance.onBalanceChanged = null;
     if (_screenshotGuardActive) ScreenshotGuard.disable();
     super.dispose();
@@ -656,8 +613,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   @override
   void initState() {
     super.initState();
-    _walletName = widget.wallet.walletName;
-    _nameEditController = TextEditingController(text: _walletName);
     _loadRecentRecords();
     // 中文注释：启动链上交易监控（余额变化触发模式）。
     ChainTxMonitor.instance.watchWallet(
@@ -673,32 +628,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       }
     };
     ChainTxMonitor.instance.start();
-  }
-
-  /// 打开清算行(L2)统一入口页。
-  ///
-  /// SFID baseUrl / 清算行节点 WSS 由全局配置注入(本步先用占位常量,
-  /// 后续接入完整配置层时改为读取 `Env.sfidBaseUrl` 等)。
-  Future<void> _openClearingPaymentEntry() async {
-    // TODO(step2): 替换为环境/配置注入的真实地址
-    const sfidBaseUrl = String.fromEnvironment(
-      'SFID_BASE_URL',
-      defaultValue: 'http://127.0.0.1:8080',
-    );
-    const clearingNodeWss = String.fromEnvironment(
-      'CLEARING_NODE_WSS',
-      defaultValue: '',
-    );
-
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ClearingPaymentEntryPage(
-          wallet: widget.wallet,
-          sfidBaseUrl: sfidBaseUrl,
-          clearingNodeWssUrl: clearingNodeWss.isEmpty ? null : clearingNodeWss,
-        ),
-      ),
-    );
   }
 
   Future<void> _loadRecentRecords() async {
@@ -756,8 +685,14 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
 
   Future<void> _onMenuAction(String action) async {
     switch (action) {
-      case 'clearing_bank_v2':
-        await _openClearingPaymentEntry();
+      case 'clearing_bank':
+        // 中文注释:跳转「设置清算行」占位页。真实搜索/绑定流程等后续任务卡。
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) =>
+                ClearingBankSettingsPage(wallet: widget.wallet),
+          ),
+        );
       case 'seed':
         await _revealSecret('私钥', () async {
           final seed =
@@ -840,86 +775,38 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     }
   }
 
-  Future<void> _saveWalletName(String name) async {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty || trimmed == _walletName) {
-      setState(() {
-        _isEditingName = false;
-        _nameEditController.text = _walletName;
-      });
-      return;
-    }
+  /// 钱包名持久化(纯落盘 + 通信账户昵称双向同步)。
+  ///
+  /// 中文注释:
+  /// - 编辑态和回滚逻辑已搬到 [WalletIdentityCard],这里仅负责落盘 + 同步。
+  /// - 调用方(WalletIdentityCard)传进来的 newName 已 trim,但 updateWalletDisplay
+  ///   内部再 trim 一次也无副作用,保持签名稳定。
+  /// - 若该钱包绑定的是当前通信账户,需要同步更新 UserProfile 里的昵称。
+  /// - 出错时重新抛出,让 WalletIdentityCard 走回滚分支。
+  Future<void> _saveWalletName(String newName) async {
     try {
       await _walletService.updateWalletDisplay(
         widget.wallet.walletIndex,
-        walletName: trimmed,
+        walletName: newName,
         walletIcon: widget.wallet.walletIcon,
       );
       // 双向同步：如果该钱包是通信账户，同步更新用户资料中的昵称
       final profileService = UserProfileService();
       final profileState = await profileService.getState();
       if (profileState.communicationWalletIndex == widget.wallet.walletIndex) {
-        await profileService.updateCommunicationWalletName(trimmed);
+        await profileService.updateCommunicationWalletName(newName);
       }
       if (!mounted) return;
       setState(() {
-        _walletName = trimmed;
-        _isEditingName = false;
         _hasChanged = true;
       });
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    }
-  }
-
-  Future<void> _saveQrToGallery() async {
-    if (_isSavingQr) return;
-    setState(() {
-      _isSavingQr = true;
-    });
-    try {
-      final boundary =
-          _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return;
-      final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-      if (byteData == null) return;
-      final pngBytes = byteData.buffer.asUint8List();
-      final fileName = 'wallet_qr_${DateTime.now().millisecondsSinceEpoch}.png';
-      final result = await SaverGallery.saveImage(
-        Uint8List.fromList(pngBytes),
-        fileName: fileName,
-        skipIfExists: false,
-      );
-      if (!mounted) return;
-      final success = result.isSuccess;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? '二维码已保存到相册' : '保存失败，请检查相册权限'),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败：$e')),
-      );
-    } finally {
       if (mounted) {
-        setState(() {
-          _isSavingQr = false;
-        });
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
       }
+      rethrow;
     }
-  }
-
-  /// 将地址拆成两行显示，第一行长一些，第二行短一些。
-  String _formatAddressTwoLines(String address) {
-    if (address.length <= 20) return address;
-    final firstLineLen = (address.length * 2) ~/ 3;
-    return '${address.substring(0, firstLineLen)}\n${address.substring(firstLineLen)}';
   }
 
   @override
@@ -940,11 +827,9 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
               icon: const Icon(Icons.more_vert),
               onSelected: _onMenuAction,
               itemBuilder: (_) => [
-                // 清算行(L2)体系:绑定 / 充值 / 提现 / 生成收款码 / 扫码付款
-                // 全部在此入口下(`ClearingPaymentEntryPage`)。
                 const PopupMenuItem(
-                  value: 'clearing_bank_v2',
-                  child: Text('扫码支付(清算行)'),
+                  value: 'clearing_bank',
+                  child: Text('清算行'),
                 ),
                 if (widget.wallet.isHotWallet) ...[
                   const PopupMenuItem(value: 'seed', child: Text('查看私钥')),
@@ -954,320 +839,139 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
             ),
           ],
         ),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // 余额卡片（含钱包名称）
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
-              decoration: BoxDecoration(
-                color: AppTheme.primary.withAlpha(15),
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        body: RefreshIndicator(
+          onRefresh: _onPullRefresh,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              // 第 1 张卡:钱包身份卡(钱包名 + 短地址 + QR 入口)。
+              WalletIdentityCard(
+                wallet: widget.wallet,
+                onNameChanged: _saveWalletName,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 钱包名称（左上角，点击可编辑）
-                  _isEditingName
-                      ? SizedBox(
-                          width: 180,
-                          child: TextField(
-                            controller: _nameEditController,
-                            autofocus: true,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.primaryDark,
-                            ),
-                            decoration: const InputDecoration(
-                              border: UnderlineInputBorder(),
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(vertical: 4),
-                            ),
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: _saveWalletName,
-                            onTapOutside: (_) {
-                              _saveWalletName(_nameEditController.text);
-                            },
-                          ),
-                        )
-                      : GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _isEditingName = true;
-                              _nameEditController.text = _walletName;
-                            });
-                          },
-                          child: Text(
-                            _walletName,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.primaryDark,
-                            ),
-                          ),
-                        ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          AmountFormat.format(widget.wallet.balance,
-                              symbol: ''),
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.primaryDark,
-                          ),
-                        ),
-                        const Text(
-                          '元',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.primaryDark,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'GMB',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: AppTheme.textTertiary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 16),
+              // 第 2 张卡:充值 / 提现 / 余额(3 列,余额为静态展示)。
+              WalletActionCard(wallet: widget.wallet),
+              const SizedBox(height: 16),
+              // 第 3 张卡:链上 total 余额(free + reserved)。
+              WalletOnchainBalanceCard(
+                key: _balanceCardKey,
+                wallet: widget.wallet,
               ),
-            ),
-            const SizedBox(height: 20),
-            // 钱包二维码（中央真正留白 + 下载按钮）
-            Center(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  RepaintBoundary(
-                    key: _qrKey,
-                    child: Container(
-                      color: Colors.white,
-                      padding: const EdgeInsets.all(8),
-                      child: CustomPaint(
-                        size: const Size(240, 240),
-                        painter: _HollowQrPainter(
-                          data: QrEnvelope<UserContactBody>(
-                            kind: QrKind.userContact,
-                            id: null,
-                            issuedAt: null,
-                            expiresAt: null,
-                            body: UserContactBody(
-                              address: widget.wallet.address,
-                              name: _walletName,
-                            ),
-                          ).toRawJson(),
-                          hollowSize: 48,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: AppTheme.border,
-                        width: 1,
-                      ),
-                    ),
-                    child: IconButton(
-                      tooltip: '保存二维码到相册',
-                      constraints: const BoxConstraints(),
-                      padding: EdgeInsets.zero,
-                      onPressed: _isSavingQr ? null : _saveQrToGallery,
-                      icon: _isSavingQr
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : SvgPicture.asset(
-                              'assets/icons/download.svg',
-                              width: 18,
-                              height: 18,
-                              colorFilter: const ColorFilter.mode(
-                                AppTheme.textSecondary,
-                                BlendMode.srcIn,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            // 钱包地址居中 + 复制图标在右侧
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                // 地址居中（与二维码对齐）
-                GestureDetector(
-                  onTap: () {
-                    Clipboard.setData(
-                        ClipboardData(text: widget.wallet.address));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('钱包地址已复制')),
-                    );
-                  },
-                  child: Text(
-                    _formatAddressTwoLines(widget.wallet.address),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppTheme.textTertiary,
-                    ),
-                  ),
-                ),
-                // 复制图标定位到右侧
-                Positioned(
-                  right: 16,
-                  child: IconButton(
-                    tooltip: '复制钱包地址',
-                    constraints: const BoxConstraints(),
-                    padding: EdgeInsets.zero,
-                    iconSize: 18,
-                    onPressed: () {
-                      Clipboard.setData(
-                          ClipboardData(text: widget.wallet.address));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('钱包地址已复制')),
-                      );
-                    },
-                    icon: SvgPicture.asset(
-                      'assets/icons/copy.svg',
-                      width: 16,
-                      height: 16,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            // 交易记录标题行
-            InkWell(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => TransactionHistoryPage(
-                      walletAddress: widget.wallet.address,
-                    ),
-                  ),
-                );
-              },
-              child: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: [
-                    Text(
-                      '交易记录',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Spacer(),
-                    Icon(Icons.chevron_right,
-                        size: 20, color: AppTheme.textTertiary),
-                  ],
-                ),
-              ),
-            ),
-            const Divider(height: 1),
-            // 最近交易记录
-            if (_recentRecords.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
-                child: Center(
-                  child: Text(
-                    '暂无交易记录',
-                    style: TextStyle(color: AppTheme.textTertiary),
-                  ),
-                ),
-              )
-            else
-              ...List.generate(_recentRecords.length, (index) {
-                final record = _recentRecords[index];
-                final isOut = record.direction == 'out';
-                final label =
-                    _localTxTypeLabel(record.txType, record.direction);
-                final counterparty = isOut
-                    ? _shortAddress(record.toAddress)
-                    : _shortAddress(record.fromAddress);
-                final dt =
-                    DateTime.fromMillisecondsSinceEpoch(record.createdAtMillis)
-                        .toLocal();
-                final timeStr =
-                    '${dt.year}-${_pad(dt.month)}-${_pad(dt.day)} ${_pad(dt.hour)}:${_pad(dt.minute)}';
-                final amountColor =
-                    isOut ? AppTheme.danger : AppTheme.primaryDark;
-                return Column(
-                  children: [
-                    ListTile(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => TransactionHistoryPage(
-                              walletAddress: widget.wallet.address,
-                            ),
-                          ),
-                        );
-                      },
-                      leading: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: isOut
-                            ? AppTheme.danger.withAlpha(20)
-                            : AppTheme.success.withAlpha(20),
-                        child: Icon(
-                          isOut ? Icons.arrow_upward : Icons.arrow_downward,
-                          size: 18,
-                          color: amountColor,
-                        ),
-                      ),
-                      title: Text(
-                        label,
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text(
-                        '$counterparty\n$timeStr',
-                        style: const TextStyle(fontSize: 12, height: 1.5),
-                      ),
-                      isThreeLine: true,
-                      trailing: Text(
-                        '${isOut ? "-" : "+"}${AmountFormat.format(record.amountYuan, symbol: '')}',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: amountColor,
-                        ),
-                      ),
-                    ),
-                    if (index < _recentRecords.length - 1)
-                      const Divider(height: 1),
-                  ],
-                );
-              }),
-          ],
+              const SizedBox(height: 24),
+              // 交易记录区块(保留原实现)。
+              ..._buildTransactionHistorySection(),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  /// 交易记录区块:标题跳转 + 最近 5 条列表。从原 build 方法拆出,便于阅读。
+  List<Widget> _buildTransactionHistorySection() {
+    return [
+      InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => TransactionHistoryPage(
+                walletAddress: widget.wallet.address,
+              ),
+            ),
+          );
+        },
+        child: const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              Text(
+                '交易记录',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Spacer(),
+              Icon(Icons.chevron_right,
+                  size: 20, color: AppTheme.textTertiary),
+            ],
+          ),
+        ),
+      ),
+      const Divider(height: 1),
+      if (_recentRecords.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 32),
+          child: Center(
+            child: Text(
+              '暂无交易记录',
+              style: TextStyle(color: AppTheme.textTertiary),
+            ),
+          ),
+        )
+      else
+        ...List.generate(_recentRecords.length, (index) {
+          final record = _recentRecords[index];
+          final isOut = record.direction == 'out';
+          final label = _localTxTypeLabel(record.txType, record.direction);
+          final counterparty = isOut
+              ? _shortAddress(record.toAddress)
+              : _shortAddress(record.fromAddress);
+          final dt = DateTime.fromMillisecondsSinceEpoch(record.createdAtMillis)
+              .toLocal();
+          final timeStr =
+              '${dt.year}-${_pad(dt.month)}-${_pad(dt.day)} ${_pad(dt.hour)}:${_pad(dt.minute)}';
+          final amountColor = isOut ? AppTheme.danger : AppTheme.primaryDark;
+          return Column(
+            children: [
+              ListTile(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => TransactionHistoryPage(
+                        walletAddress: widget.wallet.address,
+                      ),
+                    ),
+                  );
+                },
+                leading: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: isOut
+                      ? AppTheme.danger.withAlpha(20)
+                      : AppTheme.success.withAlpha(20),
+                  child: Icon(
+                    isOut ? Icons.arrow_upward : Icons.arrow_downward,
+                    size: 18,
+                    color: amountColor,
+                  ),
+                ),
+                title: Text(
+                  label,
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  '$counterparty\n$timeStr',
+                  style: const TextStyle(fontSize: 12, height: 1.5),
+                ),
+                isThreeLine: true,
+                trailing: Text(
+                  '${isOut ? "-" : "+"}${AmountFormat.format(record.amountYuan, symbol: '')}',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: amountColor,
+                  ),
+                ),
+              ),
+              if (index < _recentRecords.length - 1)
+                const Divider(height: 1),
+            ],
+          );
+        }),
+    ];
   }
 }
 

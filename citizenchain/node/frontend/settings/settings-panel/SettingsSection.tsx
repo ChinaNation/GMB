@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
 import { WalletSection } from '../fee-address/WalletSection';
 import { NodeKeySection } from '../node-key/NodeKeySection';
+import { DeveloperUpgradePage } from '../developer-upgrade';
 import type { BootnodeKey, ChainStatus, RewardWallet } from '../../types';
 
 type Props = {
@@ -48,6 +49,7 @@ export function SettingsSection({ disabled }: Props) {
           disabled={disabled}
         />
       )}
+      {isAdmin && <DeveloperUpgradePage />}
       {chainStatus && (
         <div className="settings-version-section">
           <div className="settings-version-row">
