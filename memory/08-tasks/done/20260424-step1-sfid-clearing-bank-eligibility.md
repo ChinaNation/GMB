@@ -88,3 +88,12 @@
 8. 前端 InstitutionListTable / InstitutionDetailPage / PrivateInstitutionLayout 改造
 9. npm run build 验证
 10. 文档完整性检查 + 任务卡归档
+
+- 状态：done
+
+## 完成信息
+
+- 完成时间：2026-04-24 22:01:39
+- 完成摘要：Step 1 SFID 端清算行资格白名单完成:service::is_clearing_bank_eligible 函数 + 8 case 单测全绿;app_search_clearing_banks 收紧到 SFR-JOINT_STOCK + FFR(parent.SFR.JOINT_STOCK) ∩ 主账户已激活,响应字段补 sub_type/parent_sfid_id/parent_institution_name/parent_a3;新增 app_search_eligible_clearing_banks(候选搜索,无主账户激活要求,不分页 limit≤50,无 province/city 过滤);跨省 parent 解析采用 2 轮跨省读;sfid 前端 InstitutionListTable + PrivateInstitutionLayout 加可作为清算行 badge + sub_type=JOINT_STOCK 提示;cargo test 80/80 通过,vite build 通过;ADR-007 + clearing-bank-eligibility 规则文档建立;project_institution_create_rules.md 补正废除范围说明
+- 对照清单：memory/07-ai/pre-submit-checklist.md
+- 对照总标准：memory/07-ai/definition-of-done.md

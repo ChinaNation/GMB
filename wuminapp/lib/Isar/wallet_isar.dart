@@ -31,6 +31,12 @@ class WalletProfileEntity {
 
   /// 签名模式：`local`（热钱包）或 `external`（冷钱包）。
   late String signMode;
+
+  /// 中文注释：用户拖拽排序后的稳定顺序。
+  /// 数值越小越靠前；旧用户首次启动时通过 SharedPreferences flag 一次性
+  /// 按 walletIndex 升序填充，保证升级无感（不丢原有顺序）。
+  /// 排序时优先按 sortOrder 升序，相同则回退 walletIndex 兜底（保持稳定）。
+  int sortOrder = 0;
 }
 
 @collection

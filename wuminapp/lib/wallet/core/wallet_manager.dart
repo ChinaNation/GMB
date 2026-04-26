@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:isar/isar.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:substrate_bip39/crypto_scheme.dart';
 import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_secure_keys.dart';
@@ -23,6 +24,7 @@ class WalletProfile {
     required this.createdAtMillis,
     required this.source,
     required this.signMode,
+    this.sortOrder = 0,
   });
 
   final int walletIndex;
@@ -38,6 +40,9 @@ class WalletProfile {
 
   /// 签名模式：`local`（热钱包）或 `external`（冷钱包）。
   final String signMode;
+
+  /// 中文注释：用户拖拽排序后的稳定顺序，数值越小越靠前。
+  final int sortOrder;
 
   bool get isHotWallet => signMode == 'local';
   bool get isColdWallet => signMode == 'external';
@@ -92,15 +97,69 @@ class WalletManager {
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static final LocalAuthentication _localAuth = LocalAuthentication();
 
+  /// 中文注释：拖拽排序首次迁移 flag。设置后不再重复填充 sortOrder。
+  static const String _kSortOrderInitialized =
+      'wallet_sort_order_initialized';
+
   // ---------------------------------------------------------------------------
   // 查询
   // ---------------------------------------------------------------------------
 
+  /// 中文注释：钱包列表查询入口。
+  /// - 首次进入会做一次性 sortOrder 迁移（按原 walletIndex 升序填 sortOrder），
+  ///   通过 SharedPreferences flag 保证只做一次。
+  /// - 排序规则：sortOrder 升序优先，相同则回退 walletIndex 兜底（保证稳定）。
   Future<List<WalletProfile>> getWallets() async {
     final isar = await WalletIsar.instance.db();
-    final rows =
-        await isar.walletProfileEntitys.where().sortByWalletIndex().findAll();
+    await _ensureSortOrderInitialized(isar);
+    final rows = await isar.walletProfileEntitys
+        .where()
+        .sortBySortOrder()
+        .thenByWalletIndex()
+        .findAll();
     return rows.map(_toProfile).toList(growable: false);
+  }
+
+  /// 中文注释：旧用户首次升级到拖拽排序版的一次性迁移。
+  /// - 通过 SharedPreferences flag 幂等保护，只在首次执行时按 walletIndex
+  ///   升序把 sortOrder 写成 0..N-1，保留旧顺序。
+  /// - 没有钱包也写 flag，避免每次进入都重新检测。
+  Future<void> _ensureSortOrderInitialized(Isar isar) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_kSortOrderInitialized) ?? false) {
+      return;
+    }
+    final wallets = await isar.walletProfileEntitys
+        .where()
+        .sortByWalletIndex()
+        .findAll();
+    if (wallets.isNotEmpty) {
+      await isar.writeTxn(() async {
+        for (var i = 0; i < wallets.length; i++) {
+          wallets[i].sortOrder = i;
+          await isar.walletProfileEntitys.put(wallets[i]);
+        }
+      });
+    }
+    await prefs.setBool(_kSortOrderInitialized, true);
+  }
+
+  /// 中文注释：按传入的 walletIndex 顺序写入新的 sortOrder。
+  /// 在一次 Isar 事务里完成，失败回滚。
+  Future<void> reorderWallets(List<int> walletIndexes) async {
+    final isar = await WalletIsar.instance.db();
+    await isar.writeTxn(() async {
+      for (var i = 0; i < walletIndexes.length; i++) {
+        final entity = await isar.walletProfileEntitys
+            .filter()
+            .walletIndexEqualTo(walletIndexes[i])
+            .findFirst();
+        if (entity != null) {
+          entity.sortOrder = i;
+          await isar.walletProfileEntitys.put(entity);
+        }
+      }
+    });
   }
 
   Future<WalletProfile?> getWallet() async {
@@ -896,6 +955,7 @@ class WalletManager {
       createdAtMillis: row.createdAtMillis,
       source: row.source,
       signMode: row.signMode,
+      sortOrder: row.sortOrder,
     );
   }
 

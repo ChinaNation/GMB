@@ -27,6 +27,29 @@ class AmountFormat {
     return symbol.isEmpty ? formatted : '$formatted $symbol';
   }
 
+  /// 千分位格式化，只输出数字字符串（不带单位/符号）。
+  ///
+  /// 与 [format] 的区别：本方法专为列表余额行使用，
+  /// 不带 `GMB` / `元` 等任何后缀，便于横向卡片紧凑展示。
+  ///
+  /// 异常输入（null / NaN / Infinity）返回 `--`，调用方无需再做判断。
+  ///
+  /// ```dart
+  /// AmountFormat.formatThousands(1234567.89)        // "1,234,567.89"
+  /// AmountFormat.formatThousands(0.0)               // "0.00"
+  /// AmountFormat.formatThousands(-1000.5)           // "-1,000.50"
+  /// AmountFormat.formatThousands(null)              // "--"
+  /// AmountFormat.formatThousands(double.nan)        // "--"
+  /// AmountFormat.formatThousands(double.infinity)   // "--"
+  /// ```
+  static String formatThousands(double? value, {int decimals = 2}) {
+    if (value == null || value.isNaN || value.isInfinite) {
+      return '--';
+    }
+    final fixed = value.toStringAsFixed(decimals);
+    return _addThousandSeparator(fixed);
+  }
+
   /// 将已有的金额字符串添加千分位逗号。
   ///
   /// 自动识别并保留末尾的币种后缀（如 " GMB"）。

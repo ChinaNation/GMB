@@ -31,6 +31,7 @@ import {
   Select,
   Space,
   Spin,
+  Tag,
   Typography,
   message,
 } from 'antd';
@@ -52,6 +53,10 @@ import {
 import { AccountList } from './AccountList';
 import { CreateAccountModal } from './CreateAccountModal';
 import { DocumentLibrary } from './DocumentLibrary';
+import {
+  CLEARING_BANK_ELIGIBLE_LABEL,
+  isClearingBankEligible,
+} from '../../utils/clearingBankEligible';
 
 // 创建者角色中文映射(与列表页保持一致)
 const CREATED_BY_ROLE_LABEL: Record<string, string> = {
@@ -480,9 +485,11 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
                       name="sub_type"
                       rules={[{ required: true, message: '请选择企业类型' }]}
                       extra={
+                        // 资格白名单提示(2026-04-24, ADR-007):
+                        // 选中 JOINT_STOCK 时额外提示"可参与清算业务",其他类型保留原文案。
                         inst.p1 === '0'
                           ? '当前 P1=非盈利,企业类型锁定为公益组织'
-                          : '当前 P1=盈利,可选四种企业类型'
+                          : '当前 P1=盈利,可选四种企业类型;选择"股份公司"可参与清算业务(在区块链节点软件中注册为清算行)'
                       }
                     >
                       <Select options={subTypeChoices} placeholder="请选择企业类型" />
@@ -523,10 +530,28 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
                   {isSFR && (
                     <Descriptions.Item label="企业类型">
                       {inst.sub_type ? (
-                        SUB_TYPE_LABEL[inst.sub_type] || inst.sub_type
+                        <>
+                          {SUB_TYPE_LABEL[inst.sub_type] || inst.sub_type}
+                          {/* 清算行资格 badge(2026-04-24, ADR-007):
+                              SFR + JOINT_STOCK 自身判定为可作为清算行;
+                              不需要 parent 信息 */}
+                          {isClearingBankEligible(inst, null) && (
+                            <Tag color="blue" style={{ marginLeft: 8 }}>
+                              {CLEARING_BANK_ELIGIBLE_LABEL}
+                            </Tag>
+                          )}
+                        </>
                       ) : (
                         <span style={{ color: '#999' }}>(未设置)</span>
                       )}
+                    </Descriptions.Item>
+                  )}
+                  {/* FFR 资格 badge(2026-04-24, ADR-007):
+                      需要 parent 信息(parent.SFR + parent.JOINT_STOCK)。
+                      selectedParent 已在 useEffect 里按 parent_sfid_id 反查并缓存。 */}
+                  {isFFR && selectedParent && isClearingBankEligible(inst, selectedParent) && (
+                    <Descriptions.Item label="清算行资格">
+                      <Tag color="blue">{CLEARING_BANK_ELIGIBLE_LABEL}</Tag>
                     </Descriptions.Item>
                   )}
                 </Descriptions>

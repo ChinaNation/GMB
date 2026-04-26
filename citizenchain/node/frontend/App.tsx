@@ -24,7 +24,6 @@ type TabKey =
 
 export default function App() {
   const [tab, setTab] = useState<TabKey>('home');
-  const [nodeActionBusy, setNodeActionBusy] = useState(false);
 
   return (
     <div className="page">
@@ -43,7 +42,7 @@ export default function App() {
         <div className="home-dual-panel">
           <main className="app">
             <section className="content">
-              <HomeNodeSection onNodeActionBusyChange={setNodeActionBusy} />
+              <HomeNodeSection />
             </section>
           </main>
           <aside className="app">
@@ -56,7 +55,7 @@ export default function App() {
         <main className="app">
           <section className="content">
             {tab === 'settings' ? (
-              <SettingsSection disabled={nodeActionBusy} />
+              <SettingsSection />
             ) : null}
 
             {tab === 'mining' ? (
