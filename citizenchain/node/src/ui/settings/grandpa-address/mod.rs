@@ -442,7 +442,7 @@ pub fn set_grandpa_key(
         if was_running {
             let _ = home::stop_node_blocking(app.clone())?;
             node_stopped_for_restart = true;
-            let _ = home::start_node_blocking(app.clone(), unlock.to_string())?;
+            let _ = home::start_node_blocking(app.clone())?;
             new_node_started = true;
             node_stopped_for_restart = false;
             verify_grandpa_after_start(&app)?;
@@ -457,7 +457,7 @@ pub fn set_grandpa_key(
         let restore_err = restore_grandpa_persisted_state(&app, &backup).err();
         let restart_restore_err = if was_running && process_was_interrupted && restore_err.is_none()
         {
-            home::start_node_blocking(app.clone(), unlock.to_string())
+            home::start_node_blocking(app.clone())
                 .map(|_| ())
                 .err()
         } else {

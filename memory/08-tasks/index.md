@@ -34,7 +34,6 @@
 - `memory/08-tasks/open/20260422-cold-wallet-two-color-recognition.md`
 - `memory/08-tasks/open/20260422-joint-vote-institution-id-display.md`
 - `memory/08-tasks/open/20260422-offchain-clearing-pay-two-color.md`
-- `memory/08-tasks/open/20260424-step1-sfid-clearing-bank-eligibility.md`
 
 ## done
 
@@ -143,6 +142,11 @@
 - `memory/08-tasks/done/20260422-unified-voting-entry-phase3.md`
 - `memory/08-tasks/done/20260423-wuminapp-wallet-detail-redesign.md`
 - `memory/08-tasks/done/20260424-nodeui-tab-restructure.md`
+- `memory/08-tasks/done/20260424-step1-sfid-clearing-bank-eligibility.md`
 - `memory/08-tasks/done/20260424-wuminapp-wallet-detail-redesign-v2.md`
 - `memory/08-tasks/done/20260424-wuminapp-wallet-detail-redesign-v3.md`
 - `memory/08-tasks/done/20260424-wuminapp-wallet-detail-redesign-v4.md`
+- `memory/08-tasks/done/20260424-wuminapp-wallet-list-redesign.md`
+- `memory/08-tasks/done/20260425-083200-ui-app.md`
+- `memory/08-tasks/done/20260425-nodeui-cleanup-preview-html-and-identity-doc.md`
+- `memory/08-tasks/done/20260424-wuminapp-wallet-list-redesign-v6.md`
