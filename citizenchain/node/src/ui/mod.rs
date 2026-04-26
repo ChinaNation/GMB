@@ -1,7 +1,11 @@
 //! 桌面 GUI 模块（Tauri）。
 //!
 //! 将 Substrate 区块链节点和 Tauri 桌面界面合并为单一程序。
-//! 启动时同时运行 Tauri 窗口和 Substrate 节点服务。
+//! 节点生命周期与 App 进程绑定：
+//! - App 启动 → setup 后台线程自动 `start_node_blocking`
+//! - 用户关窗（红 X / Cmd+Q / 菜单 Quit / 系统关闭）→ App 退出 → `RunEvent::Exit` 触发 `cleanup_on_exit`
+//! - macOS 黄色横线为系统原生 minimize，不影响节点和进程，无需拦截
+//! 三平台（macOS / Windows / Linux）行为统一：关窗即退出软件即停节点。
 
 pub(crate) mod governance;
 pub(crate) mod home;
@@ -18,15 +22,13 @@ use std::sync::Mutex;
 
 /// 启动 Tauri 桌面应用。
 ///
-/// Substrate 节点在用户点击"启动节点"时在进程内启动（不再作为子进程）。
+/// Substrate 节点在 setup 阶段后台线程自动启动；用户无启停按钮、无密码框。
 pub fn run_desktop() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState(Mutex::new(RuntimeState::default())))
         .invoke_handler(tauri::generate_handler![
             home::identity::get_node_status,
-            home::process::start_node,
-            home::process::stop_node,
             settings::fee_address::get_reward_wallet,
             settings::fee_address::set_reward_wallet,
             settings::fee_address::get_local_miner_address,
@@ -81,6 +83,19 @@ pub fn run_desktop() {
         ])
         .setup(|app| {
             cleanup_on_startup(app.handle());
+
+            // 自动启动节点。在后台线程跑，避免阻塞 setup 让窗口慢出现。
+            // start_node_blocking 内部带 5s + 2s 等待，前端通过 get_node_status 轮询自然刷新。
+            let app_handle = app.handle().clone();
+            std::thread::Builder::new()
+                .name("auto-start-node".into())
+                .spawn(move || {
+                    if let Err(e) = home::start_node_blocking(app_handle) {
+                        eprintln!("[节点] 自动启动失败: {e}");
+                    }
+                })
+                .expect("spawn auto-start-node thread failed");
+
             Ok(())
         })
         .build(tauri::generate_context!("tauri.conf.json"))

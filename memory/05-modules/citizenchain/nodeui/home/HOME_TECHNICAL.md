@@ -34,25 +34,31 @@ home/
 
 ## process/mod.rs
 
+节点生命周期与 App 进程绑定（2026-04-25 起，三平台 macOS/Windows/Linux 行为统一）：
+
+| 用户操作 | 节点行为 | 触发机制 |
+|----------|----------|----------|
+| 打开 App | 自动启动节点 | `ui::run_desktop` setup 后台线程 spawn `start_node_blocking` |
+| 关窗（红 X / Cmd+Q / 菜单 Quit / 系统关闭） | 退出 App + 停止节点 | Tauri 默认行为 → `RunEvent::Exit` → `cleanup_on_exit`（不拦截 `CloseRequested`） |
+| macOS 黄色横线 | 窗口最小化，节点继续运行 | macOS 系统原生 minimize，不触发 `CloseRequested`，无需拦截 |
+
+Linux 端备注：UI 模式只用于桌面打包（.deb），服务器场景走 CLI `--clearing-bank` 不进 Tauri。
+
+**已删除**（2026-04-25）：
+- `start_node` / `stop_node` Tauri command（前端不再有启停按钮和密码输入框）
+- `verify_start_unlock_password` / `unlock_password` 形参链路（启停不再校验设备密码；密码校验只保留在 `set_grandpa_key` / `set_bootnode_key` / `set_reward_wallet` 等显式高权操作内）
+- 前端 `HomeNodeSection` 启动/停止 modal 和相关 state、`api.startNode` / `api.stopNode`、`disabled` prop 全链路（启停按钮删后该 prop 失去触发源）
+
 核心职责：
-- **进程启停**：`start_node`（异步）/ `stop_node`，通过 `NODE_LIFECYCLE_LOCK` 互斥锁串行化，同一时刻只允许一个启停操作。`start_node` 返回后异步等待节点 RPC 就绪，然后触发 GRANDPA 校验和奖励钱包链上同步
-- **二进制校验**：SHA256 哈希验证 + 受信任目录校验（`is_trusted_node_process`）
-- **进程检测**：使用 `sysinfo` 库替代 `ps` 外部命令，Linux 优先走 `/proc` 监听端口探测，其他 Unix 再回退到 `lsof`
-- **运行时密钥**：启动时临时解密 node-key 注入，停止时清理
-- **RPC 端口共享**：节点启动参数、监听进程识别、HTTP/WS RPC 访问都复用同一份本地 RPC 端口来源
+- **进程内运行**：节点不再以子进程 sidecar 方式启动，由 `node_runner::start_node_in_process` 在 Tauri 进程内的后台线程跑 Substrate 服务（`task_manager.future().await`）
+- **生命周期绑定**：句柄 `NodeHandle` 持有 `oneshot::Sender<()>` 和 `JoinHandle<()>`，drop 时发 shutdown 信号 → `tokio::select!` 让 `task_manager.future()` 与 shutdown 任一退出 → 显式 `drop(task_manager)` 释放 Backend → `tokio_runtime.shutdown_timeout(10s)` → `JoinHandle::join()`，**确保 RocksDB LOCK 真正释放**（修复了之前 drop `JoinHandle` 不停线程导致的 `lock hold by current process` bug）
+- **保存即重启**：`set_grandpa_key` / `set_bootnode_key` 仍可在节点运行中调用 `stop_node_blocking` → `start_node_blocking` 让新私钥即时生效，依赖上述真停机制
+- **串行化**：`NODE_LIFECYCLE_LOCK` 互斥锁保证同一时刻只允许一个启停操作
+- **状态可见**：`current_status` 单纯读 `state.node_handle.is_some()`，前端通过 `get_node_status` 每 3s 轮询自然刷新；启停期间为避免阻塞 `get_node_status`，`take` handle 后立即释放 state 锁再 drop
 
-RPC 暴露风险说明：
-- `spawn_node` 启动时使用 `--unsafe-rpc-external --rpc-methods Unsafe --rpc-cors all`，将高权限 RPC 绑定到 0.0.0.0
-- 这是因为 Tauri WebView 在某些操作系统环境下访问 localhost 有限制，需要通过外部网卡 IP 访问 RPC
-- **风险**：在公共网络上运行时，`Unsafe` RPC 方法（如 `author_submitExtrinsic`）会被外部访问
-- **当前定位**：单机家用场景，节点不对外暴露。如果后续部署到公网环境，需要改为 `--rpc-methods Safe` 并限制 CORS
-
-关键安全设计：
-1. 二进制先复制到运行时目录并在副本上再次验 hash（stage_verified_node_bin）
-2. 进程信任判定只使用 `sysinfo::Process::exe()` 返回的结构化可执行路径，不再从拼接后的命令行字符串反推首个 token，避免带空格路径绕过受信任目录校验
-3. 运行时密钥文件设置 0600 权限，停止后立即删除
-4. `pid_alive` 不仅检测信号返回值，还通过 `sysinfo` 校验进程可执行文件名以 `citizenchain-node` 开头（`starts_with`），防止 PID 复用导致误判或误杀无关进程，同时避免 `contains` 被 `fake-citizenchain-node` 等伪造名称绕过
-5. `cleanup_on_exit` 中对 `terminate_trusted_listener_nodes` 的失败不再静默丢弃，而是通过 `eprintln!` 记录错误日志，便于排查退出时的清理异常
+RPC 暴露说明：
+- `node_runner` 启动参数固定 `--rpc-methods Unsafe --rpc-cors all`，仅监听本机 `--rpc-port`
+- 当前定位：单机家用场景，节点不对外暴露。如后续部署公网，需改 `--rpc-methods Safe` 并限制 CORS
 
 ## rpc/mod.rs
 
@@ -70,5 +76,5 @@ RPC 暴露风险说明：
 
 核心职责：
 - **节点状态查询**：`current_status`（PID、运行标志、PeerId、节点名）
-- **节点名称管理**：`set_node_name`（需设备密码验证），名称经 Unicode NFC 归一化后存储
+- **节点身份读取**：`get_node_identity`（节点名 + PeerId 一次性返回，供前端展示）
 - **PeerId 获取**：从 RPC `system_localPeerId` 获取

@@ -238,7 +238,7 @@ pub fn set_bootnode_key(
     if home::current_status(&app)?.running {
         if let Err(err) = (|| -> Result<(), String> {
             let _ = home::stop_node_blocking(app.clone())?;
-            let _ = home::start_node_blocking(app.clone(), unlock.to_string())?;
+            let _ = home::start_node_blocking(app.clone())?;
             wait_peer_id_applied(&app, &derived_peer_id)?;
             Ok(())
         })() {

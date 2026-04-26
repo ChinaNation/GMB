@@ -5,11 +5,7 @@ import { NodeKeySection } from '../node-key/NodeKeySection';
 import { DeveloperUpgradePage } from '../developer-upgrade';
 import type { BootnodeKey, ChainStatus, RewardWallet } from '../../types';
 
-type Props = {
-  disabled: boolean;
-};
-
-export function SettingsSection({ disabled }: Props) {
+export function SettingsSection() {
   const [wallet, setWallet] = useState<RewardWallet>({ address: null });
   const [nodeKey, setNodeKey] = useState<BootnodeKey>({
     nodeKey: null,
@@ -38,7 +34,7 @@ export function SettingsSection({ disabled }: Props) {
 
   return (
     <>
-      <WalletSection wallet={wallet} onUpdated={setWallet} disabled={disabled} />
+      <WalletSection wallet={wallet} onUpdated={setWallet} />
       {isAdmin && (
         <NodeKeySection
           nodeKey={nodeKey}
@@ -46,7 +42,6 @@ export function SettingsSection({ disabled }: Props) {
           onApplied={() => {
             void loadSettings();
           }}
-          disabled={disabled}
         />
       )}
       {isAdmin && <DeveloperUpgradePage />}

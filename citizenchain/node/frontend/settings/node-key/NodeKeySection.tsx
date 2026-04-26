@@ -6,10 +6,9 @@ type Props = {
   nodeKey: BootnodeKey;
   onUpdated: (next: BootnodeKey) => void;
   onApplied: () => void;
-  disabled: boolean;
 };
 
-export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Props) {
+export function NodeKeySection({ nodeKey, onUpdated, onApplied }: Props) {
   type PendingAction = 'bootnode' | 'grandpa' | null;
 
   const [input, setInput] = useState(nodeKey.nodeKey ?? '');
@@ -61,10 +60,10 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
           onChange={(e) => setInput(e.target.value)}
           placeholder="请输入节点身份密钥（Ed25519 私钥 hex）"
           type="password"
-          disabled={disabled || saving}
+          disabled={saving}
         />
         <button
-          disabled={disabled || saving}
+          disabled={saving}
           onClick={() => {
             if (!input.trim()) {
               setBootnodeError('请输入节点身份密钥');
@@ -92,10 +91,10 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
           onChange={(e) => setGrandpaInput(e.target.value)}
           placeholder="请输入确定性投票节点私钥"
           type="password"
-          disabled={disabled || savingGrandpa}
+          disabled={savingGrandpa}
         />
         <button
-          disabled={disabled || savingGrandpa}
+          disabled={savingGrandpa}
           onClick={() => {
             if (!grandpaInput.trim()) {
               setGrandpaError('请输入确定性投票节点私钥');
@@ -198,7 +197,7 @@ export function NodeKeySection({ nodeKey, onUpdated, onApplied, disabled }: Prop
 
                   setBootnodeError('未选择上传类型，请重新点击上传按钮');
                 }}
-                disabled={saving || savingGrandpa || disabled}
+                disabled={saving || savingGrandpa}
               >
                 {saving || savingGrandpa ? '验证中...' : '确认'}
               </button>

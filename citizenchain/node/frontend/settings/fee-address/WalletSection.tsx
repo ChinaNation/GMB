@@ -108,12 +108,11 @@ function normalizeWalletAddressClient(input: string): string {
 type Props = {
   wallet: RewardWallet;
   onUpdated: (next: RewardWallet) => void;
-  disabled: boolean;
 };
 
 type BindStatus = null | 'binding' | 'success' | 'failed' | 'timeout';
 
-export function WalletSection({ wallet, onUpdated, disabled }: Props) {
+export function WalletSection({ wallet, onUpdated }: Props) {
   const [input, setInput] = useState(wallet.address ?? '');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
@@ -214,7 +213,7 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
       <div className="wallet-inline wallet-inline-readonly">
         <span className="wallet-current">
           本机矿工账户
-          <span className="wallet-bind-state">{minerAddress ?? '未生成（请先启动节点）'}</span>
+          <span className="wallet-bind-state">{minerAddress ?? '未生成（节点启动中…）'}</span>
         </span>
       </div>
       <div className="wallet-inline">
@@ -226,16 +225,16 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="请输入手续费收款钱包地址"
-          disabled={disabled || saving}
+          disabled={saving}
         />
-        <button type="button" className="scan-icon-btn" onClick={() => setShowAddressScan(true)} disabled={disabled || saving} title="扫码填入">
+        <button type="button" className="scan-icon-btn" onClick={() => setShowAddressScan(true)} disabled={saving} title="扫码填入">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
             <rect x="7" y="7" width="10" height="10" rx="1"/>
           </svg>
         </button>
         <button
-          disabled={disabled || saving}
+          disabled={saving}
           onClick={() => {
             let nextAddress = '';
             try {
@@ -284,7 +283,7 @@ export function WalletSection({ wallet, onUpdated, disabled }: Props) {
               </button>
               <button
                 onClick={onSubmit}
-                disabled={saving || disabled}
+                disabled={saving}
               >
                 {saving ? '验证中...' : actionText}
               </button>

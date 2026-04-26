@@ -45,12 +45,9 @@ export function sanitizeError(e: unknown): string {
 }
 
 // 统一封装所有 Tauri 命令调用，避免组件里散落 invoke 字符串。
+// 节点启停由 App 进程生命周期托管（开 App = 启 / 退 App = 停），前端不再持有启停命令。
 export const api = {
   getNodeStatus: () => invoke<NodeStatus>('get_node_status'),
-  startNode: (unlockPassword: string) =>
-    invoke<NodeStatus>('start_node', { unlockPassword }),
-  stopNode: (unlockPassword: string) =>
-    invoke<NodeStatus>('stop_node', { unlockPassword }),
 
   getRewardWallet: () => invoke<RewardWallet>('get_reward_wallet'),
   setRewardWallet: (address: string, unlockPassword: string) =>

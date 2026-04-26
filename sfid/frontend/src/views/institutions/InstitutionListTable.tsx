@@ -3,7 +3,7 @@
 // 整行可点击 → 进机构详情页。不显示"操作"列。
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { message, Table, Typography } from 'antd';
+import { message, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   listInstitutions,
@@ -11,6 +11,10 @@ import {
   type InstitutionListRow,
 } from '../../api/institution';
 import type { AdminAuth } from '../../api/client';
+import {
+  isSelfEligibleClearingBank,
+  CLEARING_BANK_ELIGIBLE_LABEL,
+} from '../../utils/clearingBankEligible';
 
 // 创建者角色中文映射
 const CREATED_BY_ROLE_LABEL: Record<string, string> = {
@@ -91,6 +95,18 @@ export const InstitutionListTable: React.FC<Props> = ({
         dataIndex: 'account_count',
         width: 90,
         align: 'center',
+      },
+      // 清算行资格 badge(2026-04-24, ADR-007):
+      // SFR + JOINT_STOCK 直接判定(列表行字段足够);FFR 因列表行无 parent 字段不在此渲染,
+      // 详情页有完整 parent 信息后再判定。
+      {
+        title: '清算行资格',
+        key: 'clearing_eligible',
+        width: 130,
+        render: (_v, r) =>
+          isSelfEligibleClearingBank(r) ? (
+            <Tag color="blue">{CLEARING_BANK_ELIGIBLE_LABEL}</Tag>
+          ) : null,
       },
     ];
     if (showCreatedByColumn) {
