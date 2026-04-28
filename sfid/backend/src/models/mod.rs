@@ -343,7 +343,6 @@ pub(crate) struct KeyringRotateChallenge {
     pub(crate) created_at: DateTime<Utc>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AuditLogEntry {
     pub(crate) seq: u64,
@@ -471,7 +470,6 @@ pub(crate) struct HealthData {
     pub(crate) status: &'static str,
     pub(crate) checked_at: i64,
 }
-
 
 // ── 公民身份绑定接口类型 ──
 
@@ -1090,4 +1088,3 @@ impl Default for MultisigChainStatus {
         Self::Inactive
     }
 }
-

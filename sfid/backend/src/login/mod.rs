@@ -450,7 +450,9 @@ pub(crate) async fn admin_auth_verify(
         expire_at,
         last_active_at: now,
     };
-    store.admin_sessions.insert(access_token.clone(), new_session.clone());
+    store
+        .admin_sessions
+        .insert(access_token.clone(), new_session.clone());
     // 中文注释：先释放写锁，再执行 bootstrap_sheng_signer（含链上推送），避免
     // 跨 await 持有 StoreWriteGuard。
     drop(store);
@@ -472,12 +474,9 @@ pub(crate) async fn admin_auth_verify(
     // 省登录管理员验签成功后确保本省签名密钥就绪。
     if admin_role == AdminRole::ShengAdmin {
         if let Some(province) = admin_province.as_deref() {
-            if let Err(e) = crate::key_admins::bootstrap_sheng_signer(
-                &state,
-                admin_pubkey.as_str(),
-                province,
-            )
-            .await
+            if let Err(e) =
+                crate::key_admins::bootstrap_sheng_signer(&state, admin_pubkey.as_str(), province)
+                    .await
             {
                 tracing::error!(province, error = %e, "BOOTSTRAP FAILED: {}", e);
             } else {
@@ -721,7 +720,9 @@ pub(crate) async fn admin_auth_qr_complete(
         expire_at,
         last_active_at: now,
     };
-    store.admin_sessions.insert(access_token.clone(), new_session_qr.clone());
+    store
+        .admin_sessions
+        .insert(access_token.clone(), new_session_qr.clone());
 
     // Phase 2 admin_auth 迁移:QR 登录成功后同步写 GlobalShard session
     {
@@ -740,8 +741,7 @@ pub(crate) async fn admin_auth_qr_complete(
     // 为省登录管理员 bootstrap 本省签名密钥（需要 provinces 映射）。
     let bootstrap_pubkey = login_pubkey.clone();
     let bootstrap_role = login_role.clone();
-    let bootstrap_province =
-        province_scope_for_role(&store, &login_pubkey, &login_role);
+    let bootstrap_province = province_scope_for_role(&store, &login_pubkey, &login_role);
     store.qr_login_results.insert(
         input.challenge_id.clone(),
         QrLoginResultRecord {
@@ -996,9 +996,7 @@ fn admin_auth(
                             g.sheng_admin_province_by_pubkey
                                 .get(creator)
                                 .cloned()
-                                .or_else(|| {
-                                    sheng_admin_province(creator).map(|v| v.to_string())
-                                })
+                                .or_else(|| sheng_admin_province(creator).map(|v| v.to_string()))
                         }
                     };
                     let city = if user.role == AdminRole::ShiAdmin && !user.city.is_empty() {
@@ -1026,33 +1024,40 @@ fn admin_auth(
 
         // GlobalShard 命中:KeyAdmin / ShengAdmin(或已同步的 ShiAdmin)
         // 未命中:fallback legacy store(ShiAdmin 可能尚未同步到 GlobalShard)
-        let (admin_pubkey, role, status, admin_name, _city_raw, _created_by, admin_province, admin_city) =
-            if let Some(info) = user_info {
-                info
-            } else {
-                // fallback:从 legacy store 读(只拿读锁)
-                let store = store_read_or_500(state)?;
-                let Some(user) = store.admin_users_by_pubkey.get(&session_pubkey) else {
-                    return Err(api_error(StatusCode::FORBIDDEN, 2002, "admin not found"));
-                };
-                let province =
-                    province_scope_for_role(&store, &user.admin_pubkey, &user.role);
-                let city = if user.role == AdminRole::ShiAdmin && !user.city.is_empty() {
-                    Some(user.city.clone())
-                } else {
-                    None
-                };
-                (
-                    user.admin_pubkey.clone(),
-                    user.role.clone(),
-                    user.status.clone(),
-                    user.admin_name.clone(),
-                    user.city.clone(),
-                    user.created_by.clone(),
-                    province,
-                    city,
-                )
+        let (
+            admin_pubkey,
+            role,
+            status,
+            admin_name,
+            _city_raw,
+            _created_by,
+            admin_province,
+            admin_city,
+        ) = if let Some(info) = user_info {
+            info
+        } else {
+            // fallback:从 legacy store 读(只拿读锁)
+            let store = store_read_or_500(state)?;
+            let Some(user) = store.admin_users_by_pubkey.get(&session_pubkey) else {
+                return Err(api_error(StatusCode::FORBIDDEN, 2002, "admin not found"));
             };
+            let province = province_scope_for_role(&store, &user.admin_pubkey, &user.role);
+            let city = if user.role == AdminRole::ShiAdmin && !user.city.is_empty() {
+                Some(user.city.clone())
+            } else {
+                None
+            };
+            (
+                user.admin_pubkey.clone(),
+                user.role.clone(),
+                user.status.clone(),
+                user.admin_name.clone(),
+                user.city.clone(),
+                user.created_by.clone(),
+                province,
+                city,
+            )
+        };
 
         if status != AdminStatus::Active {
             return Err(api_error(StatusCode::FORBIDDEN, 2003, "admin disabled"));
@@ -1410,7 +1415,12 @@ fn cleanup_admin_sessions(
             .admin_sessions
             .iter()
             .map(|(token, session)| {
-                (token.clone(), session.last_active_at, session.role.clone(), session.admin_pubkey.clone())
+                (
+                    token.clone(),
+                    session.last_active_at,
+                    session.role.clone(),
+                    session.admin_pubkey.clone(),
+                )
             })
             .collect::<Vec<_>>();
         entries.sort_by_key(|(_, last_active, _, _)| *last_active);

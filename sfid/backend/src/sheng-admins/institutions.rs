@@ -144,12 +144,25 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
     if institution.chars().count() > MAX_INSTITUTION_CHARS {
         return api_error(StatusCode::BAD_REQUEST, 1001, "institution too long");
     }
-    let institution_name = input.institution_name.as_deref().unwrap_or("").trim().to_string();
+    let institution_name = input
+        .institution_name
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if institution_name.is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "institution_name is required");
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "institution_name is required",
+        );
     }
     if institution_name.chars().count() > 30 {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "institution_name too long (max 30)");
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "institution_name too long (max 30)",
+        );
     }
     // ── 查找已有机构,确定 site_sfid ──
     // 公安局由 reconcile 预创建,sfid_finalized=false 表示尚未固化;
@@ -157,9 +170,7 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
     let (old_sfid_id, already_finalized) = match state.store.read() {
         Ok(store) => {
             let found = store.multisig_institutions.values().find(|i| {
-                i.province == province
-                    && i.city == city
-                    && i.institution_code == institution
+                i.province == province && i.city == city && i.institution_code == institution
             });
             match found {
                 Some(inst) => (inst.sfid_id.clone(), inst.sfid_finalized),
@@ -211,7 +222,11 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
             }
             Err(e) => {
                 tracing::error!(error = %e, "store write failed for sfid finalize");
-                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store write failed");
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    1004,
+                    "store write failed",
+                );
             }
         }
 
@@ -253,19 +268,10 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
     let install_token = Uuid::new_v4().to_string().replace('-', "");
 
     // 用 SFID 主密钥签名 QR1
-    let sign_source = format!(
-        "sfid-cpms-v1|install|{}|{}",
-        site_sfid, install_token
-    );
+    let sign_source = format!("sfid-cpms-v1|install|{}|{}", site_sfid, install_token);
     let signature = match sign_with_main_key(&state, &sign_source) {
         Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "sign QR1 failed",
-            )
-        }
+        Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "sign QR1 failed"),
     };
 
     // 获取 RSA 公钥 PEM
@@ -356,7 +362,9 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
     {
         match state.store.write() {
             Ok(mut store) => {
-                store.cpms_site_keys.insert(site_sfid.clone(), new_site_for_legacy);
+                store
+                    .cpms_site_keys
+                    .insert(site_sfid.clone(), new_site_for_legacy);
             }
             Err(e) => {
                 tracing::warn!(error = %e, "dual-write legacy store failed (cpms generate, shard already committed)");
@@ -414,16 +422,13 @@ pub(crate) async fn register_cpms(
 
     // Phase 2 Day 3 Round 2 迁移 cpms_site_keys 到 sharded_store:先定位省,再写分片
     let sfid_trimmed = qr2.sfid.trim().to_string();
-    let province = match resolve_site_province_via_shard(
-        &state,
-        &sfid_trimmed,
-        ctx.admin_province.as_deref(),
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err((code, msg)) => return api_error(code, 1004, msg),
-    };
+    let province =
+        match resolve_site_province_via_shard(&state, &sfid_trimmed, ctx.admin_province.as_deref())
+            .await
+        {
+            Ok(v) => v,
+            Err((code, msg)) => return api_error(code, 1004, msg),
+        };
     let token_expected = qr2.token.trim().to_string();
     let actor_pubkey = ctx.admin_pubkey.clone();
     let sfid_trimmed_for_legacy = sfid_trimmed.clone();
@@ -493,16 +498,17 @@ pub(crate) async fn register_cpms(
         Ok(v) => v,
         Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "blind hex decode failed"),
     };
-    let blind_anon_sig = match key_admins::rsa_blind::blind_sign(&blind_anon_req_bytes, &province_code) {
-        Ok(v) => v,
-        Err(e) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                &format!("blind sign failed: {e}"),
-            )
-        }
-    };
+    let blind_anon_sig =
+        match key_admins::rsa_blind::blind_sign(&blind_anon_req_bytes, &province_code) {
+            Ok(v) => v,
+            Err(e) => {
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    1004,
+                    &format!("blind sign failed: {e}"),
+                )
+            }
+        };
 
     // 构造 QR3
     let qr3 = serde_json::json!({
@@ -513,7 +519,13 @@ pub(crate) async fn register_cpms(
     });
     let qr3_payload = match serde_json::to_string(&qr3) {
         Ok(v) => v,
-        Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "serialize QR3 failed"),
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "serialize QR3 failed",
+            )
+        }
     };
 
     // 持久化 QR3 到 sharded store + legacy store
@@ -529,7 +541,10 @@ pub(crate) async fn register_cpms(
             })
             .await;
         if let Ok(mut store) = state.store.write() {
-            if let Some(site) = store.cpms_site_keys.get_mut(sfid_trimmed_for_legacy.as_str()) {
+            if let Some(site) = store
+                .cpms_site_keys
+                .get_mut(sfid_trimmed_for_legacy.as_str())
+            {
                 site.qr3_payload = Some(qr3_payload.clone());
             }
         }
@@ -562,17 +577,29 @@ pub(crate) async fn archive_import(
         Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid QR4 payload"),
     };
     if qr4.r#type != "ARCHIVE" {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "qr_type must be CPMS_ARCHIVE");
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "qr_type must be CPMS_ARCHIVE",
+        );
     }
 
     // 1. 验证 anon_cert.sfid_sig（RSA 盲签名验签）
     let sfid_sig_bytes = match hex::decode(qr4.cert.sig.trim().trim_start_matches("0x")) {
         Ok(v) => v,
-        Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "anon_cert.sfid_sig hex decode failed"),
+        Err(_) => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "anon_cert.sfid_sig hex decode failed",
+            )
+        }
     };
-    let msg_randomizer = qr4.cert.mr.as_deref().and_then(|r| {
-        hex::decode(r.trim().trim_start_matches("0x")).ok()
-    });
+    let msg_randomizer = qr4
+        .cert
+        .mr
+        .as_deref()
+        .and_then(|r| hex::decode(r.trim().trim_start_matches("0x")).ok());
     let cert_valid = match key_admins::rsa_blind::verify_anon_cert(
         &qr4.cert.prov,
         &qr4.cert.pk,
@@ -594,7 +621,11 @@ pub(crate) async fn archive_import(
 
     // 2. 验证 province_code 一致性
     if qr4.cert.prov != qr4.prov {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "province_code mismatch between anon_cert and QR4");
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "province_code mismatch between anon_cert and QR4",
+        );
     }
 
     // 3. 验证 archive_sig（sr25519）
@@ -608,7 +639,13 @@ pub(crate) async fn archive_import(
     };
     let archive_sig_bytes = match hex::decode(qr4.sig.trim().trim_start_matches("0x")) {
         Ok(v) => v,
-        Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "archive_sig hex decode failed"),
+        Err(_) => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "archive_sig hex decode failed",
+            )
+        }
     };
     if !verify_sr25519_signature(&anon_pubkey_bytes, &archive_sign_source, &archive_sig_bytes) {
         return api_error(StatusCode::UNAUTHORIZED, 2004, "archive_sig invalid");
@@ -617,7 +654,13 @@ pub(crate) async fn archive_import(
     // 4. 去重 + 录入
     let anon_cert_json = match serde_json::to_string(&qr4.cert) {
         Ok(v) => v,
-        Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "serialize anon_cert failed"),
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "serialize anon_cert failed",
+            )
+        }
     };
     let anon_cert_hash = hex::encode(Blake2b256::digest(anon_cert_json.as_bytes()));
     // 以 anon_cert.province_code 为准落库
@@ -678,16 +721,13 @@ pub(crate) async fn revoke_install_token(
         Err(resp) => return resp,
     };
     let sfid_trimmed = site_sfid.trim().to_string();
-    let province = match resolve_site_province_via_shard(
-        &state,
-        &sfid_trimmed,
-        ctx.admin_province.as_deref(),
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err((code, msg)) => return api_error(code, 1004, msg),
-    };
+    let province =
+        match resolve_site_province_via_shard(&state, &sfid_trimmed, ctx.admin_province.as_deref())
+            .await
+        {
+            Ok(v) => v,
+            Err((code, msg)) => return api_error(code, 1004, msg),
+        };
     let actor_pubkey = ctx.admin_pubkey.clone();
     let sfid_for_closure = sfid_trimmed.clone();
     let write_result = state
@@ -764,7 +804,13 @@ pub(crate) async fn reissue_install_token(
     };
     let rsa_pubkey_pem = match key_admins::rsa_blind::get_public_key_pem() {
         Ok(v) => v,
-        Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "RSA public key not available"),
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "RSA public key not available",
+            )
+        }
     };
     let rsa_raw = strip_pem_envelope(&rsa_pubkey_pem);
 
@@ -784,15 +830,18 @@ pub(crate) async fn reissue_install_token(
         .sharded_store
         .read_province(&province, move |shard| {
             shard.cpms_site_keys.get(&sfid_for_read).map(|s| {
-                (s.admin_province.clone(), s.city_name.clone(), s.institution_name.clone())
+                (
+                    s.admin_province.clone(),
+                    s.city_name.clone(),
+                    s.institution_name.clone(),
+                )
             })
         })
         .await
         .ok()
         .flatten();
-    let (prov_name, city_name, inst_name) = site_meta.unwrap_or_else(|| {
-        (province.clone(), String::new(), String::new())
-    });
+    let (prov_name, city_name, inst_name) =
+        site_meta.unwrap_or_else(|| (province.clone(), String::new(), String::new()));
 
     let qr1 = serde_json::json!({
         "proto": "SFID_CPMS_V1",
@@ -807,7 +856,13 @@ pub(crate) async fn reissue_install_token(
     });
     let qr1_payload = match serde_json::to_string(&qr1) {
         Ok(v) => v,
-        Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "serialize QR1 failed"),
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "serialize QR1 failed",
+            )
+        }
     };
     let actor_pubkey = ctx.admin_pubkey.clone();
     let sfid_for_closure = site_sfid_validated.clone();
@@ -951,16 +1006,13 @@ pub(crate) async fn delete_cpms_keys(
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
     // Phase 2 Day 3：cpms_site_keys 迁移到 sharded_store
-    let province = match resolve_site_province_via_shard(
-        &state,
-        &site_sfid,
-        ctx.admin_province.as_deref(),
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err((code, msg)) => return api_error(code, 1004, msg),
-    };
+    let province =
+        match resolve_site_province_via_shard(&state, &site_sfid, ctx.admin_province.as_deref())
+            .await
+        {
+            Ok(v) => v,
+            Err((code, msg)) => return api_error(code, 1004, msg),
+        };
     let sfid_for_closure = site_sfid.clone();
     let scope_province = ctx.admin_province.clone();
     let write_result = state
@@ -982,7 +1034,11 @@ pub(crate) async fn delete_cpms_keys(
                     "only pending cpms site can be deleted",
                 ));
             }
-            let info = (existing.site_sfid.clone(), existing.status.clone(), existing.version);
+            let info = (
+                existing.site_sfid.clone(),
+                existing.status.clone(),
+                existing.version,
+            );
             shard.cpms_site_keys.remove(sfid_for_closure.as_str());
             Ok(info)
         })
@@ -1123,7 +1179,13 @@ pub(crate) async fn get_cpms_site_by_institution(
     let province_code = extract_province_code_from_sfid(&sfid_id);
     let province_name = match crate::sfid::province::province_name_by_code(&province_code) {
         Some(n) => n.to_string(),
-        None => return api_error(StatusCode::BAD_REQUEST, 1001, "cannot resolve province from sfid_id"),
+        None => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "cannot resolve province from sfid_id",
+            )
+        }
     };
     let sfid_id_r = sfid_id.clone();
     let inst_result = state
@@ -1135,7 +1197,13 @@ pub(crate) async fn get_cpms_site_by_institution(
     let inst = match inst_result {
         Ok(Some(v)) => v,
         Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
-        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &format!("shard read: {e}")),
+        Err(e) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                &format!("shard read: {e}"),
+            )
+        }
     };
     // 省级管理员只能看本省
     if let Some(scope_province) = ctx.admin_province.as_deref() {
@@ -1206,16 +1274,13 @@ async fn update_cpms_site_status(
         return api_error(StatusCode::BAD_REQUEST, 1001, "reason too long");
     }
     // Phase 2 Day 3：cpms_site_keys 迁移到 sharded_store
-    let province = match resolve_site_province_via_shard(
-        &state,
-        &site_sfid,
-        ctx.admin_province.as_deref(),
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err((code, msg)) => return api_error(code, 1004, msg),
-    };
+    let province =
+        match resolve_site_province_via_shard(&state, &site_sfid, ctx.admin_province.as_deref())
+            .await
+        {
+            Ok(v) => v,
+            Err((code, msg)) => return api_error(code, 1004, msg),
+        };
     let sfid_for_closure = site_sfid.clone();
     let scope_province = ctx.admin_province.clone();
     let actor_pubkey = ctx.admin_pubkey.clone();
@@ -1320,7 +1385,10 @@ fn cpms_site_keys_to_list_row(site: &CpmsSiteKeys, store: &Store) -> CpmsSiteKey
     }
 }
 
-fn cpms_site_keys_to_list_row_simple(site: &CpmsSiteKeys, created_by_name: String) -> CpmsSiteKeysListRow {
+fn cpms_site_keys_to_list_row_simple(
+    site: &CpmsSiteKeys,
+    created_by_name: String,
+) -> CpmsSiteKeysListRow {
     CpmsSiteKeysListRow {
         site_sfid: site.site_sfid.clone(),
         install_token_status: site.install_token_status.clone(),
@@ -1383,7 +1451,6 @@ pub(crate) struct ChainInstitutionRegisterReceipt {
 // 中文注释:`validate_sfid_id_format` 和 SFID_ID_* 常量已搬到
 // `crate::sfid::validator`,本文件通过 import 使用。见任务卡 1。
 
-
 pub(crate) async fn submit_register_sfid_institution_extrinsic(
     state: &AppState,
     ctx: &AdminAuthContext,
@@ -1403,9 +1470,8 @@ pub(crate) async fn submit_register_sfid_institution_extrinsic(
     // 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 11：
     // 业务 extrinsic 统一由本省 sr25519 Pair 签名并提交，签字段包和 submit 共用
     // 同一把 pair（否则链端 verifier 校验 origin != payload signer 会失败）。
-    let (province_pair, province) = resolve_business_signer(state, ctx).map_err(|(_, msg)| {
-        format!("register_sfid_institution submit failed: {msg}")
-    })?;
+    let (province_pair, province) = resolve_business_signer(state, ctx)
+        .map_err(|(_, msg)| format!("register_sfid_institution submit failed: {msg}"))?;
     let credential = build_institution_credential_with_province(
         state,
         sfid_id.as_str(),
@@ -1437,8 +1503,7 @@ pub(crate) async fn submit_register_sfid_institution_extrinsic(
         .map_err(|e| {
             format!("register_sfid_institution submit failed: legacy rpc connect failed: {e}")
         })?;
-    let legacy_rpc =
-        subxt::backend::legacy::LegacyRpcMethods::<PolkadotConfig>::new(rpc_client);
+    let legacy_rpc = subxt::backend::legacy::LegacyRpcMethods::<PolkadotConfig>::new(rpc_client);
 
     // 用本省 Pair 的公钥作为 signer account（而非 SFID MAIN）。
     let signer_account = AccountId32(province_pair.public().0);
@@ -1501,29 +1566,27 @@ pub(crate) async fn submit_register_sfid_institution_extrinsic(
         format!("register_sfid_institution submit failed: submit_and_watch failed: {e}")
     })?;
     // ③ 只等 InBestBlock（对应上方注释 ③）。dispatch 已发生、事件可读，无需等 finalize。
-    let in_block = tokio::time::timeout(
-        std::time::Duration::from_secs(120),
-        async {
-            use subxt::tx::TxStatus;
-            loop {
-                match submitted.next().await {
-                    Some(Ok(TxStatus::InBestBlock(b))) => return Ok::<_, String>(b),
-                    Some(Ok(TxStatus::InFinalizedBlock(b))) => return Ok(b),
-                    Some(Ok(TxStatus::Error { message }))
-                    | Some(Ok(TxStatus::Invalid { message }))
-                    | Some(Ok(TxStatus::Dropped { message })) => {
-                        return Err(format!("tx pool reported: {message}"));
-                    }
-                    Some(Ok(_)) => continue,
-                    Some(Err(e)) => return Err(format!("tx watch stream error: {e}")),
-                    None => return Err("tx watch stream closed unexpectedly".to_string()),
+    let in_block = tokio::time::timeout(std::time::Duration::from_secs(120), async {
+        use subxt::tx::TxStatus;
+        loop {
+            match submitted.next().await {
+                Some(Ok(TxStatus::InBestBlock(b))) => return Ok::<_, String>(b),
+                Some(Ok(TxStatus::InFinalizedBlock(b))) => return Ok(b),
+                Some(Ok(TxStatus::Error { message }))
+                | Some(Ok(TxStatus::Invalid { message }))
+                | Some(Ok(TxStatus::Dropped { message })) => {
+                    return Err(format!("tx pool reported: {message}"));
                 }
+                Some(Ok(_)) => continue,
+                Some(Err(e)) => return Err(format!("tx watch stream error: {e}")),
+                None => return Err("tx watch stream closed unexpectedly".to_string()),
             }
-        },
-    )
+        }
+    })
     .await
     .map_err(|_| {
-        "register_sfid_institution submit failed: timed out waiting for in-block inclusion".to_string()
+        "register_sfid_institution submit failed: timed out waiting for in-block inclusion"
+            .to_string()
     })?
     .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
     in_block
@@ -1532,13 +1595,9 @@ pub(crate) async fn submit_register_sfid_institution_extrinsic(
         .map_err(|e| format!("register_sfid_institution included failed: {e}"))?;
 
     let block_hash = in_block.block_hash();
-    let block = client
-        .blocks()
-        .at(block_hash)
-        .await
-        .map_err(|e| {
-            format!("register_sfid_institution included failed: fetch block failed: {e}")
-        })?;
+    let block = client.blocks().at(block_hash).await.map_err(|e| {
+        format!("register_sfid_institution included failed: fetch block failed: {e}")
+    })?;
     let block_number = block.number().to_string().parse::<u64>().map_err(|e| {
         format!("register_sfid_institution included failed: parse block number failed: {e}")
     })?;
@@ -1547,7 +1606,11 @@ pub(crate) async fn submit_register_sfid_institution_extrinsic(
     let duoqian_address = {
         let sfid_key = subxt::dynamic::Value::from_bytes(sfid_id.as_bytes());
         let account_name_key = subxt::dynamic::Value::from_bytes(credential.name.as_bytes());
-        let query = subxt::dynamic::storage("DuoqianManagePow", "SfidRegisteredAddress", vec![sfid_key, account_name_key]);
+        let query = subxt::dynamic::storage(
+            "DuoqianManagePow",
+            "SfidRegisteredAddress",
+            vec![sfid_key, account_name_key],
+        );
         match client.storage().at(block_hash).fetch(&query).await {
             Ok(Some(val)) => {
                 // AccountId = 32 bytes,编码后取 inner bytes
@@ -1628,16 +1691,21 @@ fn sign_with_main_key(state: &AppState, message: &str) -> Result<String, String>
         .signing_seed_hex
         .read()
         .map_err(|_| "seed lock poisoned".to_string())?;
-    let keypair =
-        key_admins::chain_keyring::try_load_signing_key_from_seed(seed.expose_secret())
-            .map_err(|e| format!("load signing key failed: {e}"))?;
+    let keypair = key_admins::chain_keyring::try_load_signing_key_from_seed(seed.expose_secret())
+        .map_err(|e| format!("load signing key failed: {e}"))?;
     let sig = keypair.sign(message.as_bytes());
     Ok(format!("0x{}", hex::encode(sig.0)))
 }
 
 /// 验证 sr25519 签名。
-pub(crate) fn verify_sr25519_signature(pubkey_bytes: &[u8; 32], message: &str, signature: &[u8]) -> bool {
-    use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
+pub(crate) fn verify_sr25519_signature(
+    pubkey_bytes: &[u8; 32],
+    message: &str,
+    signature: &[u8],
+) -> bool {
+    use schnorrkel::{
+        signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature,
+    };
     let pk = match Sr25519PublicKey::from_bytes(pubkey_bytes) {
         Ok(v) => v,
         Err(_) => return false,

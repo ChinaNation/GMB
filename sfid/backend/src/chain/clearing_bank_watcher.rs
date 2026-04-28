@@ -78,16 +78,19 @@ impl ClearingBankNodeCache {
     }
 }
 
-/// 启动 watcher tokio task。返回 Arc 句柄,handler 端读 cache。
+/// 在已进入 Tokio runtime 的上下文里启动 watcher task。
 ///
-/// `chain_http_url` 由调用方传入(避免本模块再依赖 chain::url 模块)。
-pub fn spawn_watcher(chain_http_url: String) -> Arc<ClearingBankNodeCache> {
-    let cache = Arc::new(ClearingBankNodeCache::new());
+/// `cache` 由调用方先创建并放进 `AppState`,这里仅负责把后台轮询任务挂上去。
+/// 这样可以避免在同步 `main()` 初始化阶段过早 `tokio::spawn` 导致无 reactor panic。
+pub fn start_watcher(chain_http_url: String, cache: Arc<ClearingBankNodeCache>) {
     let cache_clone = Arc::clone(&cache);
-    tokio::spawn(async move {
+    // 中文注释：这里显式要求调用方已经进入 Tokio runtime，
+    // 避免以后再次把 watcher 挪回同步 main() 初始化阶段时只看到模糊的 reactor panic。
+    let runtime = tokio::runtime::Handle::try_current()
+        .expect("ClearingBankWatcher must be started inside a Tokio runtime");
+    runtime.spawn(async move {
         run_watcher_loop(chain_http_url, cache_clone).await;
     });
-    cache
 }
 
 async fn run_watcher_loop(http_url: String, cache: Arc<ClearingBankNodeCache>) {

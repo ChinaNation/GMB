@@ -13,9 +13,7 @@
 
 use std::collections::HashMap;
 
-use crate::institutions::model::{
-    account_key_to_string, MultisigAccount, MultisigInstitution,
-};
+use crate::institutions::model::{account_key_to_string, MultisigAccount, MultisigInstitution};
 use crate::models::Store;
 
 // ─── 机构 ────────────────────────────────────────────────────────
@@ -58,12 +56,7 @@ pub fn insert_account(store: &mut Store, account: MultisigAccount) {
     store.multisig_accounts.insert(key, account);
 }
 
-pub fn update_account_chain<F>(
-    store: &mut Store,
-    sfid_id: &str,
-    account_name: &str,
-    f: F,
-) -> bool
+pub fn update_account_chain<F>(store: &mut Store, sfid_id: &str, account_name: &str, f: F) -> bool
 where
     F: FnOnce(&mut MultisigAccount),
 {

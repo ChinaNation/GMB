@@ -81,12 +81,7 @@ pub type LoginChallengeEnvelope = QrEnvelope<LoginChallengeBody>;
 pub type LoginReceiptEnvelope = QrEnvelope<LoginReceiptBody>;
 
 impl LoginChallengeEnvelope {
-    pub fn new(
-        id: String,
-        issued_at: i64,
-        expires_at: i64,
-        body: LoginChallengeBody,
-    ) -> Self {
+    pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginChallengeBody) -> Self {
         Self {
             proto: WUMIN_QR_V1.to_string(),
             kind: QrKind::LoginChallenge.wire().to_string(),
@@ -99,12 +94,7 @@ impl LoginChallengeEnvelope {
 }
 
 impl LoginReceiptEnvelope {
-    pub fn new(
-        id: String,
-        issued_at: i64,
-        expires_at: i64,
-        body: LoginReceiptBody,
-    ) -> Self {
+    pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginReceiptBody) -> Self {
         Self {
             proto: WUMIN_QR_V1.to_string(),
             kind: QrKind::LoginReceipt.wire().to_string(),
@@ -137,7 +127,15 @@ pub fn build_signature_message(
         .or_else(|| principal.strip_prefix("0X"))
         .unwrap_or(principal)
         .to_lowercase();
-    format!("{}|{}|{}|{}|{}|{}", WUMIN_QR_V1, kind.wire(), id, sys, exp, pp)
+    format!(
+        "{}|{}|{}|{}|{}|{}",
+        WUMIN_QR_V1,
+        kind.wire(),
+        id,
+        sys,
+        exp,
+        pp
+    )
 }
 
 // ---------- parse helpers ----------

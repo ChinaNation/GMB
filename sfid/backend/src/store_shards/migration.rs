@@ -53,12 +53,11 @@ pub(crate) async fn migrate_legacy_store_if_needed(
     let shards_payload: Vec<(String, serde_json::Value)> = {
         let mut out = Vec::with_capacity(shards.len() + 1);
         for (province, shard) in &shards {
-            let v = serde_json::to_value(shard)
-                .map_err(|e| format!("encode shard {province}: {e}"))?;
+            let v =
+                serde_json::to_value(shard).map_err(|e| format!("encode shard {province}: {e}"))?;
             out.push((province.clone(), v));
         }
-        let gv = serde_json::to_value(&global)
-            .map_err(|e| format!("encode global shard: {e}"))?;
+        let gv = serde_json::to_value(&global).map_err(|e| format!("encode global shard: {e}"))?;
         out.push(("global".to_string(), gv));
         out
     };
@@ -134,7 +133,9 @@ fn split_legacy_store(store: &Store) -> (HashMap<String, StoreShard>, GlobalShar
             inst.province.clone()
         };
         let shard = ensure(&mut shards, &province);
-        shard.multisig_institutions.insert(sfid_id.clone(), inst.clone());
+        shard
+            .multisig_institutions
+            .insert(sfid_id.clone(), inst.clone());
     }
 
     // ── 机构账户:通过 "sfid_id|account_name" key 的 sfid_id 前缀反查 ──
@@ -238,7 +239,9 @@ fn split_legacy_store(store: &Store) -> (HashMap<String, StoreShard>, GlobalShar
             .and_then(|cid| citizen_province_by_id.get(cid).cloned())
             .unwrap_or_else(|| "__unknown__".to_string());
         let shard = ensure(&mut shards, &province);
-        shard.generated_sfid_by_pubkey.insert(pubkey.clone(), sfid.clone());
+        shard
+            .generated_sfid_by_pubkey
+            .insert(pubkey.clone(), sfid.clone());
     }
 
     // reward_state_by_pubkey:同上

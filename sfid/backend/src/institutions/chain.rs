@@ -37,7 +37,13 @@ pub async fn submit_register_account(
 ) -> Result<ChainInstitutionRegisterReceipt, String> {
     // 中文注释:链端已从 `name` 重命名为 `account_name`（2026-04-21），与本后端字段完全对齐。
     submit_register_sfid_institution_extrinsic(
-        state, ctx, sfid_id, account_name, a3, sub_type, parent_sfid_id,
+        state,
+        ctx,
+        sfid_id,
+        account_name,
+        a3,
+        sub_type,
+        parent_sfid_id,
     )
     .await
 }
