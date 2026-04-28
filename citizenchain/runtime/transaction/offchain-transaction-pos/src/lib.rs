@@ -33,6 +33,7 @@ pub mod solvency;
 #[cfg(test)]
 mod tests;
 
+use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
     pallet_prelude::*,
     storage::{with_transaction, TransactionOutcome},
@@ -41,6 +42,38 @@ use frame_support::{
     Blake2_128Concat,
 };
 use frame_system::pallet_prelude::*;
+use scale_info::TypeInfo;
+
+/// Step 2(2026-04-27, ADR-007)新增:清算行节点声明信息。
+///
+/// 一家清算行机构(sfid_id)在链上声明其对外服务的全节点身份 + RPC 接入点。
+/// 用于:
+/// - wuminapp 通过 sfid_id 反查清算行节点的 wss URL
+/// - wuminapp 校验对端 PeerId 防 DNS 劫持
+/// - NodeUI 网络面板统计 clearing_nodes 数量
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+pub struct ClearingBankNodeInfo<AccountId, BlockNumber> {
+    /// libp2p PeerId 字符串(以 "12D3KooW" 开头,~52 字节)。
+    pub peer_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+    /// 节点对外可达的 RPC 域名(不含 scheme/port,如 "l2.cmb.com.cn")。
+    pub rpc_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
+    /// 节点 RPC 端口(通常 9944)。
+    pub rpc_port: u16,
+    /// 注册时所在区块高度。
+    pub registered_at: BlockNumber,
+    /// 提交注册的清算行管理员账户(审计用)。
+    pub registered_by: AccountId,
+}
 
 /// 清算行清算 pallet 的存储版本。Step 2b-iv-b 清理老省储行 Storage 后从 1 → 2。
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
@@ -162,6 +195,35 @@ pub mod pallet {
         OptionQuery,
     >;
 
+    /// Step 2(2026-04-27, ADR-007)新增:清算行节点声明 storage。
+    ///
+    /// `sfid_id` → 节点信息(peer_id / rpc_domain / rpc_port / 注册管理员)
+    ///
+    /// 链上自证"哪家机构在哪个全节点上对外提供清算服务"。
+    /// 写入时机:`register_clearing_bank` 单签即可,要求调用方是该机构的激活管理员。
+    /// 删除/更新:`unregister_clearing_bank` / `update_clearing_bank_endpoint`。
+    #[pallet::storage]
+    #[pallet::getter(fn clearing_bank_nodes)]
+    pub type ClearingBankNodes<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        BoundedVec<u8, sp_core::ConstU32<64>>,
+        crate::ClearingBankNodeInfo<T::AccountId, BlockNumberFor<T>>,
+        OptionQuery,
+    >;
+
+    /// Step 2 新增:节点 PeerId 反向索引(`peer_id → sfid_id`),
+    /// 防止同一 PeerId 被多个机构占用。
+    #[pallet::storage]
+    #[pallet::getter(fn node_peer_to_institution)]
+    pub type NodePeerToInstitution<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        BoundedVec<u8, sp_core::ConstU32<64>>,
+        BoundedVec<u8, sp_core::ConstU32<64>>,
+        OptionQuery,
+    >;
+
     // ================== Events ==================
 
     #[pallet::event]
@@ -216,6 +278,26 @@ pub mod pallet {
             submitter: T::AccountId,
             item_count: u32,
             total_debit: u128,
+        },
+        /// Step 2 新增:清算行节点声明完成,机构对外提供清算服务。
+        ClearingBankRegistered {
+            sfid_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+            peer_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+            rpc_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
+            rpc_port: u16,
+            registered_by: T::AccountId,
+        },
+        /// Step 2 新增:清算行节点 RPC 端点更新(域名 / 端口变更,PeerId 不变)。
+        ClearingBankEndpointUpdated {
+            sfid_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+            new_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
+            new_port: u16,
+            updated_by: T::AccountId,
+        },
+        /// Step 2 新增:清算行节点声明注销,机构退出清算网络。
+        ClearingBankUnregistered {
+            sfid_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+            unregistered_by: T::AccountId,
         },
     }
 
@@ -286,6 +368,30 @@ pub mod pallet {
         L3NonceOverflow,
         /// L3 提交的 nonce 不等于 `链上 nonce + 1`(重放或不同步)。
         InvalidL3Nonce,
+
+        // ========== Step 2 清算行节点声明相关 ==========
+        /// 清算行节点 sfid_id 字段不能为空。
+        EmptySfidId,
+        /// PeerId 字段不能为空。
+        EmptyPeerId,
+        /// PeerId 格式非法(必须 "12D3KooW" 开头 + 长度 ≥ 46 + 纯 ASCII alphanumeric)。
+        InvalidPeerIdFormat,
+        /// RPC 域名字段不能为空。
+        EmptyRpcDomain,
+        /// RPC 域名格式非法(仅允许小写字母 / 数字 / 点 / 横杠)。
+        InvalidRpcDomainFormat,
+        /// RPC 端口非法(必须 1024-65535)。
+        InvalidRpcPort,
+        /// 该机构(sfid_id)不满足清算行资格白名单。
+        NotEligibleForClearingBank,
+        /// 该 sfid_id 已经声明了清算行节点(切换走 unregister + register)。
+        ClearingBankAlreadyRegistered,
+        /// 该 sfid_id 尚未声明清算行节点(无法 update / unregister)。
+        ClearingBankNodeNotFound,
+        /// PeerId 已被另一家机构占用(防 PeerId 冒名)。
+        PeerIdAlreadyRegistered,
+        /// Step 2 第 6 重 bank_check:该机构未声明清算行节点(尚未加入清算网络)。
+        ClearingBankNotRegisteredAsNode,
     }
 
     // ================== Calls ==================
@@ -333,7 +439,19 @@ pub mod pallet {
 
         /// 清算行批次上链(清算行 L2 体系唯一上链路径)。
         ///
-        /// [`institution_main`] 批次归属的清算行主账户地址(= 付款方清算行)
+        /// Step 2(2026-04-27, ADR-007)修订:**收款方主导清算**模型。
+        /// - `institution_main` 现在 = **收款方清算行主账户**(原为付款方)
+        /// - 提交者 = 收款方清算行的某个激活管理员(已解密私钥,自动签)
+        /// - 批次内所有 item 的 `recipient_bank` 必须等于 `institution_main`
+        ///   (`payer_bank` 可不同,即同一收款方清算行可一次代收来自不同付款方清算行的多笔)
+        /// - 链上 gas 由 `RuntimeFeePayerExtractor` 自动从 `fee_account_of(institution_main)` 扣
+        ///   (即 fee 收入和 gas 支出都由同一收款方清算行的费用账户承担,自给自足)
+        ///
+        /// 安全模型:链上验签的核心是 L3 用户对 PaymentIntent 的 sr25519 签名,
+        /// PaymentIntent 内含 payer_bank 字段;链上凭 L3 签名授权 mutate
+        /// payer_bank 主账户 Currency,与谁提交批次无关。
+        ///
+        /// [`institution_main`] 批次归属的清算行主账户地址(= **收款方**清算行)
         /// [`batch_seq`] 清算行内单调递增的批次序号(冗余审计字段,Step 2b 启用严格校验)
         /// [`batch`] `OffchainBatchItemV2` 列表(每条带 L3 sr25519 签名 / nonce / 费率)
         /// [`batch_signature`] 清算行多签批次级签名(Step 2b 启用阈值校验)
@@ -389,6 +507,74 @@ pub mod pallet {
             ensure_root(origin)?;
             crate::fee_config::do_set_max_l2_fee_rate::<T>(new_max)
         }
+
+        /// Step 2(2026-04-27, ADR-007)新增:声明本节点为某清算行的清算节点。
+        ///
+        /// 校验链(任一失败立即拒绝):
+        /// 1. origin 是签名账户
+        /// 2. sfid_id / peer_id / rpc_domain 非空,rpc_port ∈ [1024, 65535]
+        /// 3. peer_id 格式合法("12D3KooW" 开头 + 长度 ≥ 46 + 纯 ASCII alphanumeric)
+        /// 4. rpc_domain 字符集合法(仅小写字母/数字/点/横杠)
+        /// 5. sfid_id 反查得到主账户地址 + 该地址已 Active
+        /// 6. 调用方(origin)是该机构的激活管理员之一
+        /// 7. 资格白名单:机构必须 (SFR ∧ JOINT_STOCK) ∨ (FFR ∧ parent.SFR.JOINT_STOCK)
+        /// 8. sfid_id 未已注册节点(切换走 unregister + register)
+        /// 9. peer_id 未被另一机构占用
+        ///
+        /// 单签即可,不走内部投票(节点声明影响小,损失可逆)。
+        #[pallet::call_index(50)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(6, 3))]
+        pub fn register_clearing_bank(
+            origin: OriginFor<T>,
+            sfid_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+            peer_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+            rpc_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
+            rpc_port: u16,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            Self::do_register_clearing_bank(who, sfid_id, peer_id, rpc_domain, rpc_port)
+        }
+
+        /// Step 2 新增:更新清算行节点的 RPC 端点(域名 / 端口),PeerId 不变。
+        ///
+        /// 校验:
+        /// 1. origin 是签名账户
+        /// 2. sfid_id 已注册清算行节点
+        /// 3. 调用方是该机构的激活管理员
+        /// 4. new_domain / new_port 字段合法
+        ///
+        /// 不重新校验资格白名单(注册时已校验,后续无需重复)。
+        #[pallet::call_index(51)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(3, 1))]
+        pub fn update_clearing_bank_endpoint(
+            origin: OriginFor<T>,
+            sfid_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+            new_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
+            new_port: u16,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            Self::do_update_clearing_bank_endpoint(who, sfid_id, new_domain, new_port)
+        }
+
+        /// Step 2 新增:注销清算行节点声明,机构退出清算网络。
+        ///
+        /// 校验:
+        /// 1. origin 是签名账户
+        /// 2. sfid_id 已注册清算行节点
+        /// 3. 调用方是该机构的激活管理员
+        ///
+        /// 注销后该机构 sfid_id 不再被 wuminapp 显示为可绑定清算行(SFID 后端
+        /// `app_search_clearing_banks` 过滤会去掉该 sfid_id)。
+        /// 已绑定到该机构的用户需要主动 switch_bank 切换或继续使用直到迁移完成。
+        #[pallet::call_index(52)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(3, 2))]
+        pub fn unregister_clearing_bank(
+            origin: OriginFor<T>,
+            sfid_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            Self::do_unregister_clearing_bank(who, sfid_id)
+        }
     }
 
     // ================== Hooks ==================
@@ -413,5 +599,185 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     /// 反查清算行主账户对应的费用账户(辅助 ops / off-chain ledger)。
     pub fn fee_account_of(bank_main: &T::AccountId) -> Result<T::AccountId, pallet::Error<T>> {
         crate::bank_check::fee_account_of::<T>(bank_main)
+    }
+
+    // ============= Step 2(2026-04-27, ADR-007)清算行节点声明实现 =============
+
+    /// PeerId 字节串校验:必须以 "12D3KooW" 开头 + 长度 ≥ 46 + 纯 ASCII alphanumeric。
+    /// 与 [citizenchain/node/src/ui/network/network-overview/mod.rs::normalize_peer_id]
+    /// 保持一致的语义。链上仅做字节级格式校验,不解析 libp2p 协议。
+    fn validate_peer_id_bytes(peer_id: &[u8]) -> Result<(), pallet::Error<T>> {
+        if peer_id.len() < 46 {
+            return Err(pallet::Error::<T>::InvalidPeerIdFormat);
+        }
+        if !peer_id.starts_with(b"12D3KooW") {
+            return Err(pallet::Error::<T>::InvalidPeerIdFormat);
+        }
+        if !peer_id.iter().all(|c| c.is_ascii_alphanumeric()) {
+            return Err(pallet::Error::<T>::InvalidPeerIdFormat);
+        }
+        Ok(())
+    }
+
+    /// RPC 域名字节串校验:仅允许小写字母 / 数字 / 点 / 横杠;
+    /// 不解析 DNS,真实可达性由 NodeUI 提交前自测保证。
+    fn validate_rpc_domain_bytes(domain: &[u8]) -> Result<(), pallet::Error<T>> {
+        if domain.is_empty() {
+            return Err(pallet::Error::<T>::EmptyRpcDomain);
+        }
+        let valid = domain
+            .iter()
+            .all(|&c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'.' || c == b'-');
+        if !valid {
+            return Err(pallet::Error::<T>::InvalidRpcDomainFormat);
+        }
+        Ok(())
+    }
+
+    /// 反查 sfid_id 对应的清算行主账户地址(用于校验机构合法性)。
+    fn lookup_main_account_by_sfid(
+        sfid_id: &[u8],
+    ) -> Result<T::AccountId, pallet::Error<T>> {
+        use crate::bank_check::{SfidAccountQuery, ACCOUNT_NAME_MAIN};
+        T::SfidAccountQuery::find_address(sfid_id, ACCOUNT_NAME_MAIN)
+            .ok_or(pallet::Error::<T>::NotRegisteredClearingBank)
+    }
+
+    /// `register_clearing_bank` 完整业务逻辑(供 extrinsic 调用)。
+    pub(crate) fn do_register_clearing_bank(
+        who: T::AccountId,
+        sfid_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+        peer_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+        rpc_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
+        rpc_port: u16,
+    ) -> DispatchResult {
+        use crate::bank_check::SfidAccountQuery;
+
+        // 1-2. 非空 + 端口范围
+        ensure!(!sfid_id.is_empty(), pallet::Error::<T>::EmptySfidId);
+        ensure!(!peer_id.is_empty(), pallet::Error::<T>::EmptyPeerId);
+        ensure!(rpc_port >= 1024, pallet::Error::<T>::InvalidRpcPort);
+
+        // 3. PeerId 格式
+        Self::validate_peer_id_bytes(peer_id.as_slice())?;
+
+        // 4. 域名字符集
+        Self::validate_rpc_domain_bytes(rpc_domain.as_slice())?;
+
+        // 5. sfid_id → 主账户 + Active
+        let bank_main = Self::lookup_main_account_by_sfid(sfid_id.as_slice())?;
+        ensure!(
+            T::SfidAccountQuery::is_active(&bank_main),
+            pallet::Error::<T>::ClearingBankNotActive
+        );
+
+        // 6. 调用方是该机构的激活管理员
+        ensure!(
+            T::SfidAccountQuery::is_admin_of(&bank_main, &who),
+            pallet::Error::<T>::UnauthorizedAdmin
+        );
+
+        // 7. 资格白名单(委托给 trait 实现层查 InstitutionMetadata)
+        ensure!(
+            T::SfidAccountQuery::is_clearing_bank_eligible(&bank_main),
+            pallet::Error::<T>::NotEligibleForClearingBank
+        );
+
+        // 8. sfid_id 未已注册
+        ensure!(
+            !pallet::ClearingBankNodes::<T>::contains_key(&sfid_id),
+            pallet::Error::<T>::ClearingBankAlreadyRegistered
+        );
+
+        // 9. peer_id 未被另一机构占用
+        ensure!(
+            !pallet::NodePeerToInstitution::<T>::contains_key(&peer_id),
+            pallet::Error::<T>::PeerIdAlreadyRegistered
+        );
+
+        let now = frame_system::Pallet::<T>::block_number();
+        let info = crate::ClearingBankNodeInfo {
+            peer_id: peer_id.clone(),
+            rpc_domain: rpc_domain.clone(),
+            rpc_port,
+            registered_at: now,
+            registered_by: who.clone(),
+        };
+
+        pallet::ClearingBankNodes::<T>::insert(&sfid_id, &info);
+        pallet::NodePeerToInstitution::<T>::insert(&peer_id, &sfid_id);
+
+        Self::deposit_event(pallet::Event::ClearingBankRegistered {
+            sfid_id,
+            peer_id,
+            rpc_domain,
+            rpc_port,
+            registered_by: who,
+        });
+        Ok(())
+    }
+
+    /// `update_clearing_bank_endpoint` 完整业务逻辑。
+    pub(crate) fn do_update_clearing_bank_endpoint(
+        who: T::AccountId,
+        sfid_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+        new_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
+        new_port: u16,
+    ) -> DispatchResult {
+        use crate::bank_check::SfidAccountQuery;
+
+        ensure!(!sfid_id.is_empty(), pallet::Error::<T>::EmptySfidId);
+        ensure!(new_port >= 1024, pallet::Error::<T>::InvalidRpcPort);
+        Self::validate_rpc_domain_bytes(new_domain.as_slice())?;
+
+        let mut info = pallet::ClearingBankNodes::<T>::get(&sfid_id)
+            .ok_or(pallet::Error::<T>::ClearingBankNodeNotFound)?;
+
+        let bank_main = Self::lookup_main_account_by_sfid(sfid_id.as_slice())?;
+        ensure!(
+            T::SfidAccountQuery::is_admin_of(&bank_main, &who),
+            pallet::Error::<T>::UnauthorizedAdmin
+        );
+
+        info.rpc_domain = new_domain.clone();
+        info.rpc_port = new_port;
+        pallet::ClearingBankNodes::<T>::insert(&sfid_id, &info);
+
+        Self::deposit_event(pallet::Event::ClearingBankEndpointUpdated {
+            sfid_id,
+            new_domain,
+            new_port,
+            updated_by: who,
+        });
+        Ok(())
+    }
+
+    /// `unregister_clearing_bank` 完整业务逻辑。
+    pub(crate) fn do_unregister_clearing_bank(
+        who: T::AccountId,
+        sfid_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+    ) -> DispatchResult {
+        use crate::bank_check::SfidAccountQuery;
+
+        ensure!(!sfid_id.is_empty(), pallet::Error::<T>::EmptySfidId);
+
+        let info = pallet::ClearingBankNodes::<T>::get(&sfid_id)
+            .ok_or(pallet::Error::<T>::ClearingBankNodeNotFound)?;
+
+        let bank_main = Self::lookup_main_account_by_sfid(sfid_id.as_slice())?;
+        ensure!(
+            T::SfidAccountQuery::is_admin_of(&bank_main, &who),
+            pallet::Error::<T>::UnauthorizedAdmin
+        );
+
+        // 删除主索引 + 反向索引
+        pallet::ClearingBankNodes::<T>::remove(&sfid_id);
+        pallet::NodePeerToInstitution::<T>::remove(&info.peer_id);
+
+        Self::deposit_event(pallet::Event::ClearingBankUnregistered {
+            sfid_id,
+            unregistered_by: who,
+        });
+        Ok(())
     }
 }

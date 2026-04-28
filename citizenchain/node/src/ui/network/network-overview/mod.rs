@@ -46,8 +46,8 @@ fn known_peers_cache() -> &'static Mutex<CachedKnownPeers> {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 /// 网络总览面板对前端返回的聚合统计结果。
-/// clearing_nodes 当前阶段固定返回 0，作为"加入清算行的节点"指标的占位字段；
-/// 待清算节点识别口径（链上标记 or 节点元数据）落地后再填充真实统计。
+/// clearing_nodes 自 ADR-007 Step 2 起取自链上 `OffchainTransactionPos::ClearingBankNodes`
+/// storage 的总条目数(即声明为清算行的机构数量)。
 pub struct NetworkOverview {
     pub total_nodes: u64,
     pub online_nodes: u64,
@@ -532,9 +532,19 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
         .count() as u64;
     let total_nodes = (bootnodes.len() as u64).saturating_add(known_non_genesis);
 
-    // 清算节点统计口径尚未落地，先硬编码 0 作为 UI 占位；
-    // 后续按"加入清算行的节点"规则补充真实统计逻辑。
-    let clearing_nodes = 0u64;
+    // ADR-007 Step 2 阶段 B:实时统计链上 ClearingBankNodes storage 的条目数。
+    // RPC 失败时降级到 0,并在 warning 中追加原因(避免某次状态读失败把整个网络面板数据置空)。
+    let clearing_nodes = if rpc_ready {
+        match crate::ui::clearing_bank::chain::count_clearing_bank_nodes() {
+            Ok(n) => n,
+            Err(err) => {
+                warnings.push(format!("读取 ClearingBankNodes 总数失败:{err}"));
+                0
+            }
+        }
+    } else {
+        0
+    };
 
     Ok(NetworkOverview {
         total_nodes,

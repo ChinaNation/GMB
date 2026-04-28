@@ -71,6 +71,10 @@ struct AppState {
     /// 按省分片的新 Store。此轮只构造 + 迁移,handler 仍走 legacy `store`。
     #[allow(dead_code)]
     pub(crate) sharded_store: Arc<store_shards::ShardedStore>,
+    /// ADR-007 Step 2 阶段 D 新增:链上 ClearingBankNodes 内存缓存。
+    /// 启动时 spawn `chain::clearing_bank_watcher::spawn_watcher` 并把 Arc 句柄存这里,
+    /// `app_search_clearing_banks` 第 2 轮过滤通过 `contains(sfid_id)` 判断"已加入清算网络"。
+    pub(crate) clearing_bank_node_cache: Arc<chain::clearing_bank_watcher::ClearingBankNodeCache>,
 }
 
 #[derive(Clone)]
@@ -723,6 +727,16 @@ fn main() {
             .unwrap_or(true);
         Arc::new(store_shards::ShardedStore::new(backend, double_write))
     };
+    // ADR-007 Step 2 阶段 D:启动 ClearingBankNodes watcher,内存缓存链上已声明清算行 sfid_id 集合。
+    // 链 URL 不可达时 watcher 内部指数退避重试,不阻塞 backend 启动。
+    let clearing_bank_node_cache = match chain::url::chain_http_url() {
+        Ok(http_url) => chain::clearing_bank_watcher::spawn_watcher(http_url),
+        Err(e) => {
+            tracing::warn!(error = %e, "SFID_CHAIN_WS_URL 未配置,ClearingBankNodes watcher 跳过启动");
+            std::sync::Arc::new(chain::clearing_bank_watcher::ClearingBankNodeCache::new())
+        }
+    };
+
     let state = AppState {
         store,
         signing_seed_hex: Arc::new(RwLock::new(main_seed)),
@@ -735,6 +749,7 @@ fn main() {
         public_key_hex: Arc::new(RwLock::new(public_key_hex)),
         sheng_signer_cache,
         sharded_store,
+        clearing_bank_node_cache,
     };
     seed_sheng_admins(&state);
     sync_builtin_sheng_admins(&state);
