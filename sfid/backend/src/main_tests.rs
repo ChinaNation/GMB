@@ -77,6 +77,8 @@ fn build_test_state() -> AppState {
                 unreachable!("main_tests.rs only compiles in test cfg")
             }
         },
+        // 测试态:不启动 watcher,只塞个空 cache(scan_ok=false → 不参与过滤,降级老语义)。
+        clearing_bank_node_cache: Arc::new(chain::clearing_bank_watcher::ClearingBankNodeCache::new()),
     };
     seed_sheng_admins(&state);
     key_admins::seed_chain_keyring(&state);

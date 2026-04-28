@@ -7,6 +7,7 @@
 //! - macOS 黄色横线为系统原生 minimize，不影响节点和进程，无需拦截
 //! 三平台（macOS / Windows / Linux）行为统一：关窗即退出软件即停节点。
 
+pub(crate) mod clearing_bank;
 pub(crate) mod governance;
 pub(crate) mod home;
 pub(crate) mod mining;
@@ -79,7 +80,22 @@ pub fn run_desktop() {
             transaction::set_active_wallet,
             transaction::get_wallet_balance,
             transaction::build_transfer_request,
-            transaction::submit_transfer
+            transaction::submit_transfer,
+            // ─── 清算行 tab(ADR-007 Step 2 阶段 B) ───
+            clearing_bank::search_eligible_clearing_banks,
+            clearing_bank::query_clearing_bank_node_info,
+            clearing_bank::query_local_peer_id,
+            clearing_bank::test_clearing_bank_endpoint_connectivity,
+            clearing_bank::build_register_clearing_bank_request,
+            clearing_bank::submit_register_clearing_bank,
+            clearing_bank::build_update_clearing_bank_endpoint_request,
+            clearing_bank::submit_update_clearing_bank_endpoint,
+            clearing_bank::build_unregister_clearing_bank_request,
+            clearing_bank::submit_unregister_clearing_bank,
+            clearing_bank::build_decrypt_admin_request,
+            clearing_bank::verify_and_decrypt_admin,
+            clearing_bank::list_decrypted_admins,
+            clearing_bank::lock_decrypted_admin
         ])
         .setup(|app| {
             cleanup_on_startup(app.handle());

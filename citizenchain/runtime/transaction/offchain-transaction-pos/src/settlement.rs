@@ -1,11 +1,11 @@
-//! 扫码支付清算体系 Step 2 新增:清算行批次上链**新 execute** 路径。
+//! 扫码支付清算体系:清算行批次上链 settlement 路径。
 //!
 //! 中文注释:
-//! - **与现有 `pallet::execute_batch`(旧省储行清算)并存**,本文件实现新清算
-//!   行体系的分账逻辑:
-//!     - 同行清算:仅 `DepositBalance` 轧差 + 手续费从主账户到费用账户
-//!     - 跨行清算:主账户 → 收款方主账户(本金)+ 主账户 → 收款方费用账户(fee)
-//!     + 双方 `DepositBalance` / `BankTotalDeposits` 同步
+//! - 同行清算(payer_bank == recipient_bank):仅 `DepositBalance` 轧差 + 手续费从主账户到费用账户
+//! - 跨行清算(payer_bank != recipient_bank):
+//!     主账户 → 收款方主账户(本金)
+//!   + 主账户 → 收款方费用账户(fee)
+//!   + 双方 `DepositBalance` / `BankTotalDeposits` 同步
 //! - 每条 `OffchainBatchItemV2` 必经:
 //!     1. L3 签名验证(`sr25519_verify` 对 `PaymentIntent::signing_hash`)
 //!     2. nonce 单调递增(`nonce::consume_nonce`)
@@ -14,7 +14,13 @@
 //!     5. 防重放(`ProcessedOffchainTx` 不命中)
 //! - 手续费**全部归收款方清算行的费用账户**,无省储行分成。
 //!
-//! Step 2b 的节点 packer 会用新 `submit_offchain_batch_v2` extrinsic 走到这里。
+//! Step 2(2026-04-27, ADR-007)修订:**收款方主导清算**模型。
+//! - `submit_offchain_batch_v2` 的 `institution_main` 现在 = 收款方清算行主账户
+//! - 同一批次所有 item 的 `recipient_bank` 必须 == `institution_main`(原为 `payer_bank`)
+//! - 提交者 = 收款方清算行的某个激活管理员
+//! - 链上 gas 由 `RuntimeFeePayerExtractor` 从 `fee_account_of(institution_main)` 扣
+//!
+//! 节点 packer 收齐多笔 → 提交 `submit_offchain_batch_v2` 走到这里。
 
 use codec::{Decode, Encode};
 use frame_support::{
@@ -56,15 +62,20 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
 
 /// 清算行批次上链的完整执行。
 ///
-/// [`submitter`] 提交该批次的清算行多签管理员(仅记录事件用)
-/// [`institution_main`] 批次归属的清算行主账户地址(= 付款方清算行)
+/// Step 2(2026-04-27, ADR-007)修订:**收款方主导清算**。
+///
+/// [`submitter`] 提交该批次的清算行多签管理员(必须是 institution_main 即收款方机构的激活管理员)
+/// [`institution_main`] 批次归属的清算行主账户地址(= **收款方**清算行)
 /// [`batch`] SCALE 编码过的 V2 批次数据(已在 extrinsic 入口完成 BoundedVec 长度校验)
+///
+/// 偿付预检按 **付款方清算行** 做(每个 payer_bank 各自统计扣减总额),因为
+/// 跨行支付的链上 Currency 流出来自付款方主账户。同一批次内可能有多个 payer_bank。
 pub fn execute_clearing_bank_batch<T: Config>(
     submitter: &T::AccountId,
     institution_main: &T::AccountId,
     batch: &[OffchainBatchItemV2<T::AccountId, BlockNumberFor<T>>],
 ) -> DispatchResult {
-    // 批次级校验:提交方必须是清算行多签管理员
+    // 批次级校验:提交方必须是 institution_main(收款方清算行)的激活管理员
     ensure!(
         T::SfidAccountQuery::is_admin_of(institution_main, submitter),
         Error::<T>::UnauthorizedAdmin
@@ -72,15 +83,15 @@ pub fn execute_clearing_bank_batch<T: Config>(
 
     let now = frame_system::Pallet::<T>::block_number();
 
-    // 按主账户分组做一次性偿付预检:先统计扣款总额
-    // (同行只扣 fee,跨行扣 transfer+fee)
-    let mut projected_debit: u128 = 0;
-    let mut projected_inflows: sp_std::vec::Vec<(T::AccountId, u128)> = Default::default();
+    // 按付款方清算行分组统计扣款总额(同行只扣 fee 不流出主账户;跨行扣 transfer+fee)。
+    // 用 BTreeMap 保证迭代顺序确定,与 saturating_add 一起避免重入风险。
+    let mut projected_debits: sp_std::collections::btree_map::BTreeMap<T::AccountId, u128> =
+        Default::default();
 
     for item in batch.iter() {
-        // payer_bank 必须是本批次的 institution_main(单一清算行提交)
+        // recipient_bank 必须是本批次的 institution_main(收款方主导)
         ensure!(
-            &item.payer_bank == institution_main,
+            &item.recipient_bank == institution_main,
             Error::<T>::InstitutionMismatch
         );
         ensure!(item.transfer_amount > 0, Error::<T>::InvalidTransferAmount);
@@ -90,12 +101,12 @@ pub fn execute_clearing_bank_batch<T: Config>(
         );
         ensure!(now <= item.expires_at, Error::<T>::ExpiredIntent);
 
-        // 收款方清算行必须合法(本步跨行时必要)
+        // 付款方清算行必须合法(跨行时必要;同行时即 institution_main 自身,已知合法)
         if item.payer_bank != item.recipient_bank {
-            bank_check::ensure_can_be_bound::<T>(&item.recipient_bank)?;
+            bank_check::ensure_can_be_bound::<T>(&item.payer_bank)?;
         }
 
-        // 费率校验(按收款方清算行)
+        // 费率校验(按收款方清算行 = institution_main)
         let rate_bp = fee_config::current_rate_bp::<T>(&item.recipient_bank);
         ensure!(rate_bp > 0, Error::<T>::L2FeeRateNotConfigured);
         let expected_fee = calc_fee(item.transfer_amount, rate_bp)
@@ -105,22 +116,24 @@ pub fn execute_clearing_bank_batch<T: Config>(
             Error::<T>::InvalidFeeAmount
         );
 
-        // 统计主账户即将扣减的总额(用于偿付预检)
+        // 统计付款方清算行即将扣减的总额(用于偿付预检)
         let item_debit = if item.payer_bank == item.recipient_bank {
+            // 同行:fee 走 fee_account 但本金内部轧差(主账户净流出 = fee)
             item.fee_amount
         } else {
+            // 跨行:本金 + fee 都从付款方主账户流出
             item.transfer_amount.saturating_add(item.fee_amount)
         };
-        projected_debit = projected_debit.saturating_add(item_debit);
-
-        // 统计收款方清算行即将收款总额(跨行时)
-        if item.payer_bank != item.recipient_bank {
-            projected_inflows.push((item.recipient_bank.clone(), item.transfer_amount));
-        }
+        let entry = projected_debits.entry(item.payer_bank.clone()).or_insert(0);
+        *entry = entry.saturating_add(item_debit);
     }
 
-    // 批次级偿付预检(付款方清算行)
-    solvency::ensure_can_debit::<T>(institution_main, projected_debit)?;
+    // 按付款方清算行做偿付预检
+    let mut total_batch_debit: u128 = 0;
+    for (payer_bank, debit) in projected_debits.iter() {
+        solvency::ensure_can_debit::<T>(payer_bank, *debit)?;
+        total_batch_debit = total_batch_debit.saturating_add(*debit);
+    }
 
     // 逐笔执行
     for item in batch.iter() {
@@ -131,7 +144,7 @@ pub fn execute_clearing_bank_batch<T: Config>(
         bank: institution_main.clone(),
         submitter: submitter.clone(),
         item_count: batch.len() as u32,
-        total_debit: projected_debit,
+        total_debit: total_batch_debit,
     });
     Ok(())
 }

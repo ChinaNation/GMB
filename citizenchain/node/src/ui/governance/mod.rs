@@ -7,7 +7,7 @@ pub mod proposal;
 pub(crate) mod registry;
 pub mod sfid_api;
 pub mod signing;
-mod storage_keys;
+pub(crate) mod storage_keys;
 pub mod types;
 
 use crate::ui::home;

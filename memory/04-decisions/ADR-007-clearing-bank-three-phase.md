@@ -3,6 +3,7 @@
 - 状态：accepted
 - 日期：2026-04-24
 - 决策人：Architect 主入口（Claude）+ 用户
+- 进度:Step 1(2026-04-24)✅,Step 2 阶段 A+B+C+D(2026-04-27)✅,Step 3 待启动
 
 ## 上下文
 
@@ -27,16 +28,91 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 
 **不做**：runtime 改动、wumin/wuminapp 改动、链上 ClearingBankNodes storage、PeerId 绑定。
 
-### Step 2：区块链端（citizenchain）
+### Step 2：区块链端（citizenchain，2026-04-27 完工）
 
-- runtime: `bank_check::ensure_can_be_bound` 收紧到资格白名单（链上二次保险）
-- runtime: 新增 `ClearingBankNodes: Map<sfid_id, ClearingBankNodeInfo>` storage 和 `NodePeerToInstitution` 反向索引
-- runtime: 新增 `register_clearing_bank` / `update_clearing_bank_endpoint` / `unregister_clearing_bank` extrinsic
-- runtime: spec_version 升级（2 → 3）走链上 `propose_runtime_upgrade`
-- citizenchain/node UI：新增"清算行"顶级 tab（首页/挖矿/国储会/省储会/省储行/清算行/白皮书/公民宪法/设置 = 9 个 tab）
-- NodeUI: 空页搜索 SFID 候选（调 Step 1 新增的 eligible-search） → 创建机构提案 / 已存在直接展示 → 声明本机节点为该机构清算节点
-- NodeUI: clearing_nodes 字段从硬编码 0 改为读 ClearingBankNodes 长度
-- 末尾联动：SFID 后端 `/clearing-banks/search` 加 `AND sfid_id ∈ ClearingBankNodes` 过滤
+#### 2.1 runtime 核心改动
+
+**A. 清算方向反转：收款方主导清算**
+
+- `submit_offchain_batch_v2` 校验改为 `item.recipient_bank == institution_main`（原为 `payer_bank`）
+- batch 提交者 = 收款方清算行的某个 duoqian_admin（不再是付款方）
+- fee 流向统一：永远归 `fee_account_of(recipient_bank)`（同行 / 跨行统一规则，简化 settlement.rs 分支逻辑）
+- 链上验签流程不变：A 的 sr25519 签名 PaymentIntent 是核心授权，pallet 凭授权 mutate Currency，谁提交 batch 不影响安全
+
+**B. gas 由 fee_account 直接支付**
+
+- 新增 runtime 自定义 `OnChargeTransaction` 实现（`ChargeBatchFromInstitution`）
+- 仅针对 `submit_offchain_batch_v2` 这个 call 特殊处理：从 `fee_account_of(institution_main)` 直接扣 gas
+- 其他 call 走默认 CurrencyAdapter（从 origin 个人账户扣）
+- 管理员个人钱包余额完全不动；清算行 fee 收入直接覆盖 gas 成本（fee 量级 vs gas 量级 ≈ 1000:1，盈余充足）
+
+**C. 机构元数据上链（Required，开发期彻底切换）**
+
+- 新增 `InstitutionMetadata: Map<SfidId, MetadataInfo>` storage，包含 `a3 / sub_type / parent_sfid_id`
+- `register_sfid_institution` / `propose_create` 等创建路径增加 a3/sub_type/parent 参数（Required）
+- **不做 backfill_institution_metadata**——开发期无旧数据，按 [feedback_chain_in_dev.md](../feedback_chain_in_dev.md) fresh genesis 重建
+
+**D. 资格白名单链上二次校验**
+
+- `bank_check::ensure_can_be_bound` 校验链由 4 重收紧到 6 重：
+  - 原 1-4：AddressRegisteredSfid / account_name="主账户" / a3 ∈ {SFR,FFR} / DuoqianAccount.status=Active
+  - **新 5**：资格白名单（SFR-JOINT_STOCK ∨ FFR-parent.SFR.JOINT_STOCK），通过 SfidAccountQuery trait 查 InstitutionMetadata
+  - **新 6**：sfid_id ∈ ClearingBankNodes（必须是已声明的清算行节点）
+
+**E. 清算行节点声明 storage + extrinsic**
+
+- 新增 `ClearingBankNodes: Map<SfidId, ClearingBankNodeInfo>` storage（peer_id / rpc_domain / rpc_port / registered_at / registered_by）
+- 新增 `NodePeerToInstitution: Map<PeerId, SfidId>` 反向索引（防 PeerId 冒名）
+- 新增 `register_clearing_bank(sfid_id, peer_id, rpc_domain, rpc_port)` extrinsic（任一 duoqian_admin 单签即可，不走内部投票）
+- 新增 `update_clearing_bank_endpoint(sfid_id, new_domain, new_port)`（仅改端点，不动 PeerId）
+- 新增 `unregister_clearing_bank(sfid_id)`（注销 + 反向索引清理）
+
+**F. spec_version 2 → 3**
+
+- runtime 代码 bump，dev 链直接用新版
+- **主网升级**：Step 2 不上链；等 Step 3 wumin decoder + wuminapp 兼容做完后，由 Architect 主入口走 `propose_runtime_upgrade` 联合提案上链
+
+#### 2.2 node Tauri 后端改动
+
+新增 Tauri command（`citizenchain/node/src/ui/clearing_bank/`）：
+
+- `search_eligible_clearing_banks(query, limit)`：转发 SFID `/clearing-banks/eligible-search`
+- `query_clearing_bank_node_info(sfid_id)`：链上查 `ClearingBankNodes[sfid_id]`
+- `query_local_peer_id()`：调 RPC `system_localPeerId` 拿本机 PeerId
+- `test_clearing_bank_endpoint_connectivity(domain, port, expected_peer_id)`：连通性自测（DNS + wss 连接 + 链 ID 匹配 + system_localPeerId 匹配）
+- `build_register_clearing_bank_request` / `submit_register_clearing_bank`
+- `build_update_clearing_bank_endpoint_request` / `submit_update_clearing_bank_endpoint`
+- `build_unregister_clearing_bank_request` / `submit_unregister_clearing_bank`
+- 修改 `get_network_overview`：`clearing_nodes` 字段从硬编码 0 改为 `ClearingBankNodes::iter().count()`
+
+#### 2.3 node 前端改动（清算行 tab）
+
+- `App.tsx` TabKey 加 `'clearing-bank'`，顶部 nav 9 tab：首页 / 挖矿 / 国储会 / 省储会 / 省储行 / **清算行** / 白皮书 / 公民宪法 / 设置
+- 新建 `clearing-bank/ClearingBankSection.tsx`，状态机 8 视图：
+  ```
+  empty → add-input-sfid → check-status →
+    ├─ register-sfid (链上未注册地址)
+    ├─ propose-create (未创建多签账户)
+    ├─ wait-vote     (等其他 admins 投票)
+    ├─ declare-node  (Active 后,声明清算行节点)
+    └─ detail        (完成,显示机构详情)
+  ```
+- 复用 `governance/InstitutionDetailPage` 展示 5 卡片 + 提案列表
+- **管理员列表 UI 仅在清算行 tab 用"解密"术语**（NRC/PRC/PRB 沿用原"激活"不动）：
+  - 列表行新增"解密"按钮 + 状态指示绿点
+  - 解密 = wumin 扫码签 challenge → 节点验签 → 解密本地加密存储的私钥到内存
+  - 内存中密钥永久驻留至节点重启，无时间限制
+  - 解密后 packer 攒批可直接用内存中密钥签 `submit_offchain_batch_v2`
+- 提案按钮：转账 / 手续费划转启用；换管理员 / 费率设置 disabled "即将上线"
+- 新增"节点信息"长卡片：peer_id / rpc_domain:rpc_port / 注册管理员 + 端点更新/注销入口
+- 提交 register_clearing_bank 前**强制 NodeUI 连通性自测**
+
+#### 2.4 SFID 端 Step 2 末尾联动
+
+- `sfid/backend/src/institutions/handler.rs::app_search_clearing_banks` 在第 2 轮跨省扫描里加过滤：
+  - `AND sfid_id IN (SELECT sfid_id FROM clearing_bank_nodes_cache)`
+- 新建 `sfid/backend/src/chain/clearing_bank_watcher.rs`：常驻 tokio task 订阅链上 `ClearingBankRegistered/Updated/Unregistered` 事件 + 全量启动 scan + SQLite 缓存（按 [feedback_no_dns_peerid_firewall](../feedback_no_dns_peerid_firewall.md) 不假设网络问题）
+- SFID 后端推链 `register_sfid_institution` 等调用增加 a3/sub_type/parent 参数
 
 ### Step 3：手机端（wumin + wuminapp）
 
@@ -56,14 +132,30 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 
 PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不变；域名作为辅助字段，可单独 update 不影响 PeerId 主键。
 
-## 资金模型确认（与本 ADR 一致）
+## 资金模型（2026-04-27 修订：收款方主导清算）
 
 - 用户 `bind_clearing_bank` = 在该清算行开户（无预存费）
 - 充值：用户钱包 → 清算行主账户（Currency 真转），同时 `DepositBalance[bank][user] += amount`
-- 同行支付：DepositBalance 内部轧差，主账户内 fee 流转
-- 跨行支付：链上原子 2 次 Currency::transfer（本金 + 手续费）+ 双方 DepositBalance 同步
+- 用户支付（核心修订）：
+  - **wuminapp 把签名 PaymentIntent 发给收款方清算行的 wss 端口**（不再发给付款方）
+  - 收款方清算行（Y）的 packer 攒批 → Y 的某个已解密管理员密钥自动签 `submit_offchain_batch_v2`
+  - 链上验 A 签名 → 扣 X 主账户（A 的存款方） → 本金到 Y 主账户 + fee 到 Y 费用账户
+- 同行支付：A、B 都在 X，X 自己作为收款方清算行清算；DepositBalance 内部轧差；fee 进 X 自己费用账户
+- 跨行支付：A 在 X、B 在 Y，**Y 主导**链上原子 2 次 Currency::transfer（X主→Y主 本金 + X主→Y费用 fee）+ DepositBalance 双向同步
 - 用户单笔签名：sr25519 签 PaymentIntent 的 `blake2_256("GMB_L3_PAY_V1" || SCALE(intent))`
 - 链上 `submit_offchain_batch_v2` 整批原子（with_transaction），失败全回滚
+- gas：**自定义 OnChargeTransaction 让 fee_account_of(institution_main) 直接付**，管理员个人钱包不参与
+- 经济模型自洽：fee 量级 0.01%~0.1% × 交易金额，gas 量级约 fee × 0.1%，盈余约 99.9%
+
+## 收款方主导的合理性
+
+| 角度 | 说明 |
+|---|---|
+| 公平性 | 谁做事谁拿钱：Y 做了清算批次提交、本机账本管理、流动性承担，应得 fee |
+| 业务一致性 | Y 是商户 B 的清算行，主导收款 = 现实金融中"商户银行"角色 |
+| 同行/跨行统一 | 一套规则：永远收款方清算 + 收款方拿 fee + 收款方付 gas |
+| 自给自足 | gas 由 fee_account 直接覆盖，运营闭环不依赖管理员个人垫付 |
+| 安全模型 | A 的 sr25519 签名是核心授权（PaymentIntent 已含 payer_bank=X）；Y 提交时链上凭授权扣 X 主账户，与谁提交无关 |
 
 ## 后果
 

@@ -167,6 +167,38 @@ pub struct RegisteredInstitution<SfidId, AccountName> {
     pub account_name: AccountName,
 }
 
+/// 机构元数据(2026-04-27, ADR-007 Step 2 新增)。
+///
+/// 每个 sfid_id 唯一一条,在该机构首次调用 `register_sfid_institution` 时由 SFID
+/// 后端推链上链。包含清算行资格白名单判定所需字段:
+/// - `a3`:主体属性(SFR / FFR / GFR / SF),用作清算行资格白名单一级过滤
+/// - `sub_type`:仅 a3==SFR 时有值(JOINT_STOCK / LIMITED_LIABILITY 等),
+///    清算行资格要求 SFR 必须 `JOINT_STOCK`
+/// - `parent_sfid_id`:仅 a3==FFR 时有值,指向所属 SFR 法人;清算行资格要求
+///    FFR 的 parent 必须是 SFR-JOINT_STOCK
+///
+/// 资格判定:`(SFR ∧ sub_type=JOINT_STOCK) ∨ (FFR ∧ parent.SFR ∧ parent.JOINT_STOCK)`
+/// 详见 ADR-007 与 [bank_check::SfidAccountQuery::is_clearing_bank_eligible]。
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+pub struct MetadataInfo<A3, SubType, SfidId> {
+    /// 主体属性(SFR / FFR / GFR / SF)。
+    pub a3: A3,
+    /// 私法人子类型(仅 a3==SFR 时有值)。
+    pub sub_type: Option<SubType>,
+    /// 所属法人机构 sfid_id(仅 a3==FFR 时必填)。
+    pub parent_sfid_id: Option<SfidId>,
+}
+
 /// 创建多签账户提案的业务数据（存入投票引擎 ProposalData）
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct CreateDuoqianAction<AccountId, Balance> {
@@ -260,6 +292,16 @@ pub mod pallet {
         #[pallet::constant]
         type MaxRegisterSignatureLength: Get<u32>;
 
+        /// a3 主体属性字符串最大长度(8 字节足够 "SFR"/"FFR"/"GFR"/"SF" 等)。
+        /// Step 2(2026-04-27, ADR-007)新增,用于 InstitutionMetadata。
+        #[pallet::constant]
+        type MaxA3Length: Get<u32>;
+
+        /// 私法人子类型字符串最大长度(32 字节足够 "JOINT_STOCK"/"LIMITED_LIABILITY" 等)。
+        /// Step 2(2026-04-27, ADR-007)新增,用于 InstitutionMetadata。
+        #[pallet::constant]
+        type MaxSubTypeLength: Get<u32>;
+
         /// 管理员 sr25519 签名最大字节数(固定 64)。
         /// 用于 `finalize_create` 聚合签名时的 BoundedVec 容量上限,防止过大输入。
         #[pallet::constant]
@@ -289,6 +331,12 @@ pub mod pallet {
     pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
     pub type RegisterNonceOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterNonceLength>;
     pub type RegisterSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterSignatureLength>;
+    /// Step 2 新增:机构 a3 主体属性字节串(SFR/FFR/GFR/SF)。
+    pub type A3Of<T> = BoundedVec<u8, <T as Config>::MaxA3Length>;
+    /// Step 2 新增:机构 sub_type 子类型字节串(JOINT_STOCK 等,仅 SFR 有值)。
+    pub type SubTypeOf<T> = BoundedVec<u8, <T as Config>::MaxSubTypeLength>;
+    /// Step 2 新增:机构元数据,见 [MetadataInfo]。
+    pub type MetadataInfoOf<T> = MetadataInfo<A3Of<T>, SubTypeOf<T>, SfidIdOf<T>>;
 
     /// 管理员离线 sr25519 签名载体(固定 64 字节)。
     pub type AdminSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxAdminSignatureLength>;
@@ -332,6 +380,20 @@ pub mod pallet {
         RegisteredInstitution<SfidIdOf<T>, AccountNameOf<T>>,
         OptionQuery,
     >;
+
+    /// 机构元数据(2026-04-27, ADR-007 Step 2 新增):sfid_id → MetadataInfo
+    ///
+    /// 每个 sfid_id 唯一一条,由 SFID 后端推链时通过 `register_sfid_institution`
+    /// 上链。后续同 sfid_id 不同 account_name 的 register 调用必须传相同元数据
+    /// (链上校验一致性,不允许覆写)。
+    ///
+    /// 用途:
+    /// - 清算行资格白名单判定(SFR-JOINT_STOCK / FFR-parent.SFR.JOINT_STOCK)
+    /// - 链上 `bank_check::ensure_can_be_bound` 第 5 重校验
+    #[pallet::storage]
+    #[pallet::getter(fn institution_metadata)]
+    pub type InstitutionMetadata<T: Config> =
+        StorageMap<_, Blake2_128Concat, SfidIdOf<T>, MetadataInfoOf<T>, OptionQuery>;
 
     /// 已消费的机构登记 nonce，防止 proof 重放。
     #[pallet::storage]
@@ -532,6 +594,18 @@ pub mod pallet {
         EmptySfidId,
         /// 机构登记 nonce 已被使用
         RegisterNonceAlreadyUsed,
+        /// Step 2 新增:a3 为空(机构元数据必填)
+        EmptyA3,
+        /// Step 2 新增:SFR 必须传 sub_type
+        MissingSubType,
+        /// Step 2 新增:非 SFR 不应传 sub_type
+        UnexpectedSubType,
+        /// Step 2 新增:FFR 必须传 parent_sfid_id
+        MissingParentSfid,
+        /// Step 2 新增:非 FFR 不应传 parent_sfid_id
+        UnexpectedParentSfid,
+        /// Step 2 新增:同 sfid_id 二次注册时元数据与已上链不一致
+        InstitutionMetadataMismatch,
         /// 无法将派生地址转换为账户ID
         DerivedAddressDecodeFailed,
         /// 账户仍有保留余额，不允许注销
@@ -730,6 +804,18 @@ pub mod pallet {
             Ok(())
         }
 
+        /// SFID 后端推链注册机构地址。
+        ///
+        /// Step 2(2026-04-27, ADR-007)新增 a3 / sub_type / parent_sfid_id 三个参数,
+        /// 用于上链机构元数据(InstitutionMetadata storage),作为清算行资格白名单
+        /// 判定的链上数据源。规则:
+        /// - 第一次注册某 sfid_id 时:写入 InstitutionMetadata
+        /// - 同 sfid_id 后续注册不同 account_name:校验本次元数据与已上链一致(防覆写)
+        ///
+        /// 元数据要求:
+        /// - `a3`:必填,字节串(SFR/FFR/GFR/SF)
+        /// - `sub_type`:仅 a3==SFR 时有值;否则必须 None
+        /// - `parent_sfid_id`:仅 a3==FFR 时必填;否则必须 None
         #[pallet::call_index(2)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::register_sfid_institution())]
         pub fn register_sfid_institution(
@@ -740,10 +826,33 @@ pub mod pallet {
             signature: RegisterSignatureOf<T>,
             // 中文注释：可选的省名（UTF-8 字节），传入即按省签名密钥验签；不传走 SfidMainAccount 兼容路径。
             signing_province: Option<Vec<u8>>,
+            // Step 2 新增:机构元数据(SFID 后端推链时一并上链)。
+            a3: A3Of<T>,
+            sub_type: Option<SubTypeOf<T>>,
+            parent_sfid_id: Option<SfidIdOf<T>>,
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
             ensure!(!account_name.is_empty(), Error::<T>::EmptyAccountName);
+            ensure!(!a3.is_empty(), Error::<T>::EmptyA3);
+            // a3 与 sub_type / parent_sfid_id 的形态一致性校验:
+            // - SFR: sub_type 必填, parent_sfid_id 必须 None
+            // - FFR: sub_type 必须 None, parent_sfid_id 必填
+            // - 其他(GFR/SF): sub_type 与 parent_sfid_id 必须都为 None
+            match a3.as_slice() {
+                b"SFR" => {
+                    ensure!(sub_type.is_some(), Error::<T>::MissingSubType);
+                    ensure!(parent_sfid_id.is_none(), Error::<T>::UnexpectedParentSfid);
+                }
+                b"FFR" => {
+                    ensure!(sub_type.is_none(), Error::<T>::UnexpectedSubType);
+                    ensure!(parent_sfid_id.is_some(), Error::<T>::MissingParentSfid);
+                }
+                _ => {
+                    ensure!(sub_type.is_none(), Error::<T>::UnexpectedSubType);
+                    ensure!(parent_sfid_id.is_none(), Error::<T>::UnexpectedParentSfid);
+                }
+            }
             let register_nonce_hash = T::Hashing::hash(register_nonce.as_slice());
             ensure!(
                 !UsedRegisterNonce::<T>::get(register_nonce_hash),
@@ -784,6 +893,23 @@ pub mod pallet {
                 !T::ProtectedSourceChecker::is_protected(&duoqian_address),
                 Error::<T>::ProtectedSource
             );
+
+            // Step 2:写入或校验 InstitutionMetadata(同 sfid_id 必须元数据一致)。
+            let new_metadata = MetadataInfo {
+                a3: a3.clone(),
+                sub_type: sub_type.clone(),
+                parent_sfid_id: parent_sfid_id.clone(),
+            };
+            if let Some(existing) = InstitutionMetadata::<T>::get(&sfid_id) {
+                ensure!(
+                    existing.a3 == new_metadata.a3
+                        && existing.sub_type == new_metadata.sub_type
+                        && existing.parent_sfid_id == new_metadata.parent_sfid_id,
+                    Error::<T>::InstitutionMetadataMismatch
+                );
+            } else {
+                InstitutionMetadata::<T>::insert(&sfid_id, &new_metadata);
+            }
 
             SfidRegisteredAddress::<T>::insert(&sfid_id, &account_name, &duoqian_address);
             UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
@@ -1728,6 +1854,8 @@ mod tests {
         type MaxAccountNameLength = ConstU32<128>;
         type MaxRegisterNonceLength = ConstU32<64>;
         type MaxRegisterSignatureLength = ConstU32<64>;
+        type MaxA3Length = ConstU32<8>;
+        type MaxSubTypeLength = ConstU32<32>;
         type MaxAdminSignatureLength = ConstU32<64>;
         type MinCreateAmount = ConstU128<111>;
         type MinCloseBalance = ConstU128<121>;
@@ -1818,12 +1946,17 @@ mod tests {
             .to_vec()
             .try_into()
             .expect("register signature should fit");
+        // Step 2:测试默认用 GFR(公权机构),无 sub_type / parent。
+        let a3: A3Of<Test> = b"GFR".to_vec().try_into().expect("a3 should fit");
         assert_ok!(Duoqian::register_sfid_institution(
             RuntimeOrigin::signed(relayer()),
             sfid.clone(),
             account_name.clone(),
             register_nonce,
             signature,
+            None,
+            a3,
+            None,
             None,
         ));
         let duoqian_address = SfidRegisteredAddress::<Test>::get(&sfid, &account_name)
@@ -1909,6 +2042,7 @@ mod tests {
                 .to_vec()
                 .try_into()
                 .expect("register signature should fit");
+            let a3: A3Of<Test> = b"GFR".to_vec().try_into().expect("a3 should fit");
             assert_noop!(
                 Duoqian::register_sfid_institution(
                     RuntimeOrigin::signed(admin(1)),
@@ -1916,6 +2050,9 @@ mod tests {
                     account_name,
                     register_nonce,
                     bad_signature,
+                    None,
+                    a3,
+                    None,
                     None,
                 ),
                 Error::<Test>::InvalidSfidInstitutionSignature

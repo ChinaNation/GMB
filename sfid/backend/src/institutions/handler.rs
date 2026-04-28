@@ -964,8 +964,19 @@ pub(crate) async fn activate_account(
         format!("sfid={} account_name={}", sfid_id, account_name),
     );
 
-    // 推链
-    match submit_register_account(&state, &ctx, &sfid_id, &account_name).await {
+    // 推链:ADR-007 Step 2 起,把 a3 / sub_type / parent_sfid_id 一并推上链
+    // 写 InstitutionMetadata storage,供链端 bank_check 资格白名单二次校验。
+    match submit_register_account(
+        &state,
+        &ctx,
+        &sfid_id,
+        &account_name,
+        &inst.a3,
+        inst.sub_type.as_deref(),
+        inst.parent_sfid_id.as_deref(),
+    )
+    .await
+    {
         Ok(receipt) => {
             // 一致性断言:链上返回的 duoqian_address 必须等于本地 DUOQIAN_V1 派生值。
             // 不一致 = domain / op_tag / ss58_prefix 对不上,属严重配置 bug。
@@ -1689,6 +1700,11 @@ pub(crate) async fn app_search_clearing_banks(
         let q_city_inner = q_city.clone();
         let q_kw_inner = keyword_lc.clone();
         let lookup_inner = lookup.clone();
+        // ADR-007 Step 2 阶段 D:把"已加入清算网络"快照引用一并传入闭包,
+        // 第 2 轮过滤里跳过尚未声明节点的机构(避免暴露给 wuminapp 后挂在等待 RPC)。
+        // 缓存为空(scan 失败 / 启动初期)时不收紧过滤,以"主账户已激活"为兜底,避免接口空响应。
+        let cb_node_cache_inner = state.clearing_bank_node_cache.clone();
+        let cb_cache_ready = cb_node_cache_inner.last_scan_ok();
         let read_result = state
             .sharded_store
             .read_province(prov, move |shard| {
@@ -1716,6 +1732,12 @@ pub(crate) async fn app_search_clearing_banks(
                 for inst in shard.multisig_institutions.values() {
                     // 主账户已上链注册(Registered)
                     if !main_addr.contains_key(&inst.sfid_id) {
+                        continue;
+                    }
+
+                    // ADR-007 Step 2:仅返回**已加入清算网络**的机构(链上 ClearingBankNodes 含本 sfid_id)。
+                    // cache 尚未首次 scan 成功时,跳过此过滤(degrade 到老语义,避免空响应)。
+                    if cb_cache_ready && !cb_node_cache_inner.contains(&inst.sfid_id) {
                         continue;
                     }
 

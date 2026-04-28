@@ -22,12 +22,22 @@ use crate::AppState;
 ///
 /// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 11：
 /// 新增 `ctx` 参数，用于在下游解析本省签名 Pair（`resolve_business_signer`）。
+///
+/// ADR-007 Step 2(2026-04-27, 阶段 D)新增:`a3 / sub_type / parent_sfid_id`
+/// 三个元数据参数随 register_sfid_institution 一并上链。链端 `do_register_sfid_institution`
+/// 把它们写入 `InstitutionMetadata` storage,后续 bank_check 资格白名单二次校验使用。
 pub async fn submit_register_account(
     state: &AppState,
     ctx: &AdminAuthContext,
     sfid_id: &str,
     account_name: &str,
+    a3: &str,
+    sub_type: Option<&str>,
+    parent_sfid_id: Option<&str>,
 ) -> Result<ChainInstitutionRegisterReceipt, String> {
     // 中文注释:链端已从 `name` 重命名为 `account_name`（2026-04-21），与本后端字段完全对齐。
-    submit_register_sfid_institution_extrinsic(state, ctx, sfid_id, account_name).await
+    submit_register_sfid_institution_extrinsic(
+        state, ctx, sfid_id, account_name, a3, sub_type, parent_sfid_id,
+    )
+    .await
 }

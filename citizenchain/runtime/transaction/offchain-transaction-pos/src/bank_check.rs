@@ -35,7 +35,7 @@ pub const ACCOUNT_NAME_FEE: &[u8] = "费用账户".as_bytes();
 /// 机构登记表查询抽象。
 ///
 /// 运行时由 `duoqian-manage-pow` 的 `AddressRegisteredSfid` / `SfidRegisteredAddress` /
-/// `DuoqianAccounts` 三个 Storage 组合实现。测试可用 `()` 或 mock。
+/// `DuoqianAccounts` / `InstitutionMetadata` 四个 Storage 组合实现。测试可用 `()` 或 mock。
 pub trait SfidAccountQuery<AccountId> {
     /// 地址 → (sfid_id 字节, account_name 字节)。未登记返回 None。
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)>;
@@ -46,9 +46,24 @@ pub trait SfidAccountQuery<AccountId> {
     /// `who` 是否是 `bank` 对应 DuoqianAccount 的多签管理员之一。
     /// Step 2 新增:清算行费率提案 / 关闭等治理动作需校验管理员身份。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool;
+    /// Step 2(2026-04-27, ADR-007)新增:清算行资格白名单判定。
+    ///
+    /// 给定一个清算行主账户地址,判定其所属机构是否满足"私法人股份公司
+    /// 或其下属非法人"白名单:
+    /// - 主账户对应机构 a3 == "SFR" ∧ sub_type == "JOINT_STOCK"
+    /// - 或 a3 == "FFR" ∧ parent_sfid_id 指向 SFR + JOINT_STOCK 机构
+    ///
+    /// 实现委托给 runtime 层查 `InstitutionMetadata` storage,trait 层不
+    /// 暴露 a3/sub_type/parent_sfid_id 等具体字段,保持 bank_check 解耦。
+    fn is_clearing_bank_eligible(addr: &AccountId) -> bool;
+    /// Step 2(2026-04-27, ADR-007)新增:节点是否已声明为清算行节点。
+    ///
+    /// 链上 `ClearingBankNodes` storage 由 sfid_id 索引;此方法接受主账户
+    /// 地址参数,内部由实现层反查 sfid_id 后判定。
+    fn is_registered_clearing_node(bank: &AccountId) -> bool;
 }
 
-/// 测试用 no-op 默认实现:一律返回未登记 / 未激活 / 无管理员权限。
+/// 测试用 no-op 默认实现:一律返回未登记 / 未激活 / 无管理员权限 / 不合资格 / 未声明节点。
 impl<AccountId> SfidAccountQuery<AccountId> for () {
     fn account_info(_addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
         None
@@ -60,6 +75,12 @@ impl<AccountId> SfidAccountQuery<AccountId> for () {
         false
     }
     fn is_admin_of(_bank: &AccountId, _who: &AccountId) -> bool {
+        false
+    }
+    fn is_clearing_bank_eligible(_addr: &AccountId) -> bool {
+        false
+    }
+    fn is_registered_clearing_node(_bank: &AccountId) -> bool {
         false
     }
 }
@@ -85,11 +106,16 @@ fn a3_is_private_institution(sfid_bytes: &[u8]) -> bool {
 
 /// 严格校验:某地址可作为"清算行主账户"被 L3 绑定。
 ///
-/// 四条必须同时满足:
+/// Step 2(2026-04-27, ADR-007)起 6 重校验,任一失败即拒绝:
 /// 1. 在链上 `AddressRegisteredSfid` 有机构登记
 /// 2. `account_name` 段等于 "主账户"
-/// 3. A3 ∈ {SFR, FFR}
+/// 3. A3 ∈ {SFR, FFR}(字节级前缀判定)
 /// 4. 对应 `DuoqianAccount.status == Active`
+/// 5. **资格白名单**:满足 (SFR ∧ JOINT_STOCK) ∨ (FFR ∧ parent.SFR ∧ parent.JOINT_STOCK)
+///    通过 `SfidAccountQuery::is_clearing_bank_eligible` 委托给 runtime 层查
+///    `InstitutionMetadata` storage(详见 ADR-007)
+/// 6. **节点已声明**:`sfid_id ∈ ClearingBankNodes`,确保该机构已加入清算网络
+///    (用户不能绑定到"机构合法但未声明清算行节点"的机构)
 pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T>> {
     let (sfid_bytes, account_name_bytes) =
         T::SfidAccountQuery::account_info(addr).ok_or(Error::<T>::NotRegisteredClearingBank)?;
@@ -107,6 +133,18 @@ pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T
     ensure!(
         T::SfidAccountQuery::is_active(addr),
         Error::<T>::ClearingBankNotActive
+    );
+
+    // Step 2 第 5 重:资格白名单(SFR-JOINT_STOCK / FFR-parent.SFR.JOINT_STOCK)
+    ensure!(
+        T::SfidAccountQuery::is_clearing_bank_eligible(addr),
+        Error::<T>::NotEligibleForClearingBank
+    );
+
+    // Step 2 第 6 重:必须已声明清算行节点
+    ensure!(
+        T::SfidAccountQuery::is_registered_clearing_node(addr),
+        Error::<T>::ClearingBankNotRegisteredAsNode
     );
 
     Ok(())

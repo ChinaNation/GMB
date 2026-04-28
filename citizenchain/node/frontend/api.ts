@@ -33,6 +33,13 @@ import type {
   TransferSignRequestResult,
   TransferSubmitResult,
 } from './transaction/transaction-types';
+import type {
+  ClearingBankNodeOnChainInfo,
+  ConnectivityTestReport,
+  DecryptAdminRequestResult,
+  DecryptedAdminInfo,
+  EligibleClearingBankCandidate,
+} from './clearing-bank/clearing-bank-types';
 
 const ERROR_MAX_LENGTH = 500;
 
@@ -218,4 +225,71 @@ export const api = {
       requestId, expectedPubkeyHex, expectedPayloadHash,
       callDataHex, signNonce, signBlockNumber, responseJson,
     }),
+
+  // ── 清算行 tab(ADR-007 Step 2 阶段 B) ──
+  searchEligibleClearingBanks: (query: string, limit?: number) =>
+    invoke<EligibleClearingBankCandidate[]>('search_eligible_clearing_banks', { query, limit }),
+  queryClearingBankNodeInfo: (sfidId: string) =>
+    invoke<ClearingBankNodeOnChainInfo | null>('query_clearing_bank_node_info', { sfidId }),
+  queryLocalPeerId: () => invoke<string>('query_local_peer_id'),
+  testClearingBankEndpointConnectivity: (domain: string, port: number, expectedPeerId: string) =>
+    invoke<ConnectivityTestReport>('test_clearing_bank_endpoint_connectivity', {
+      domain, port, expectedPeerId,
+    }),
+  buildRegisterClearingBankRequest: (
+    pubkeyHex: string, sfidId: string, peerId: string, rpcDomain: string, rpcPort: number,
+  ) =>
+    invoke<VoteSignRequestResult>('build_register_clearing_bank_request', {
+      pubkeyHex, sfidId, peerId, rpcDomain, rpcPort,
+    }),
+  submitRegisterClearingBank: (
+    requestId: string, expectedPubkeyHex: string, expectedPayloadHash: string,
+    sfidId: string, peerId: string, rpcDomain: string, rpcPort: number,
+    signNonce: number, signBlockNumber: number, responseJson: string,
+  ) =>
+    invoke<VoteSubmitResult>('submit_register_clearing_bank', {
+      requestId, expectedPubkeyHex, expectedPayloadHash,
+      sfidId, peerId, rpcDomain, rpcPort,
+      signNonce, signBlockNumber, responseJson,
+    }),
+  buildUpdateClearingBankEndpointRequest: (
+    pubkeyHex: string, sfidId: string, newDomain: string, newPort: number,
+  ) =>
+    invoke<VoteSignRequestResult>('build_update_clearing_bank_endpoint_request', {
+      pubkeyHex, sfidId, newDomain, newPort,
+    }),
+  submitUpdateClearingBankEndpoint: (
+    requestId: string, expectedPubkeyHex: string, expectedPayloadHash: string,
+    sfidId: string, newDomain: string, newPort: number,
+    signNonce: number, signBlockNumber: number, responseJson: string,
+  ) =>
+    invoke<VoteSubmitResult>('submit_update_clearing_bank_endpoint', {
+      requestId, expectedPubkeyHex, expectedPayloadHash,
+      sfidId, newDomain, newPort,
+      signNonce, signBlockNumber, responseJson,
+    }),
+  buildUnregisterClearingBankRequest: (pubkeyHex: string, sfidId: string) =>
+    invoke<VoteSignRequestResult>('build_unregister_clearing_bank_request', { pubkeyHex, sfidId }),
+  submitUnregisterClearingBank: (
+    requestId: string, expectedPubkeyHex: string, expectedPayloadHash: string,
+    sfidId: string,
+    signNonce: number, signBlockNumber: number, responseJson: string,
+  ) =>
+    invoke<VoteSubmitResult>('submit_unregister_clearing_bank', {
+      requestId, expectedPubkeyHex, expectedPayloadHash,
+      sfidId,
+      signNonce, signBlockNumber, responseJson,
+    }),
+  buildDecryptAdminRequest: (pubkeyHex: string, sfidId: string) =>
+    invoke<DecryptAdminRequestResult>('build_decrypt_admin_request', { pubkeyHex, sfidId }),
+  verifyAndDecryptAdmin: (
+    requestId: string, pubkeyHex: string, expectedPayloadHash: string, responseJson: string,
+  ) =>
+    invoke<DecryptedAdminInfo>('verify_and_decrypt_admin', {
+      requestId, pubkeyHex, expectedPayloadHash, responseJson,
+    }),
+  listDecryptedAdmins: (sfidId: string) =>
+    invoke<DecryptedAdminInfo[]>('list_decrypted_admins', { sfidId }),
+  lockDecryptedAdmin: (pubkeyHex: string) =>
+    invoke<void>('lock_decrypted_admin', { pubkeyHex }),
 };

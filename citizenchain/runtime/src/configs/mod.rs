@@ -37,6 +37,7 @@ use frame_support::{
         ConstU128, ConstU32, ConstU64, ConstU8, Contains, EnsureOrigin, FindAuthor, OnUnbalanced,
         UnfilteredDispatchable, VariantCountOf,
     },
+    BoundedVec,
     weights::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
         ConstantMultiplier, Weight,
@@ -487,8 +488,14 @@ pub struct RuntimeFeePayerExtractor;
 impl onchain_transaction_pow::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
     fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
         match call {
-            // 清算行 V2 批次:链上交易费由收款方清算行费用账户承担(settlement 内部已把
-            // fee 从付款方清算行主账户转到收款方费用账户,对齐链下手续费归属)。
+            // 清算行 V2 批次:链上 gas 由 institution_main 的费用账户直接承担。
+            //
+            // Step 2(2026-04-27, ADR-007)修订:**收款方主导清算**模型下,
+            // institution_main 现在 = 收款方清算行主账户。fee_account_of(institution_main)
+            // = 收款方清算行费用账户 = 同一账户既收清算手续费又付链上 gas,自给自足闭环。
+            //
+            // 提交者(origin)是该机构的某个激活管理员(已在节点端解密私钥,自动签),
+            // 但其个人钱包余额不参与 gas 扣费。
             RuntimeCall::OffchainTransactionPos(
                 offchain_transaction_pos::pallet::Call::submit_offchain_batch_v2 {
                     institution_main,
@@ -785,6 +792,11 @@ impl duoqian_manage_pow::Config for Runtime {
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
+    // Step 2(2026-04-27, ADR-007)新增:机构元数据字段长度上限。
+    // a3 为 SFR/FFR/GFR/SF 等三字符标识,8 字节足够。
+    type MaxA3Length = ConstU32<8>;
+    // sub_type 为 JOINT_STOCK / LIMITED_LIABILITY / NON_PROFIT 等枚举字符串。
+    type MaxSubTypeLength = ConstU32<32>;
     // sr25519 签名固定 64 字节。
     // Phase 2 整改后聚合签名 `finalize_create` 已删除,此类型仍保留为 `AdminSignatureOf`
     // 的容量配置,供未来业务扩展(如链下审计签名附件)使用。
@@ -1077,6 +1089,61 @@ impl offchain_transaction_pos::bank_check::SfidAccountQuery<AccountId> for Duoqi
             Some(account) => account.duoqian_admins.iter().any(|a| a == who),
             None => false,
         }
+    }
+
+    /// Step 2(2026-04-27, ADR-007)新增:清算行资格白名单判定。
+    ///
+    /// 委托查 `InstitutionMetadata` storage:
+    /// - SFR + sub_type=JOINT_STOCK            → ✅
+    /// - FFR + parent.SFR + parent.JOINT_STOCK → ✅(parent 元数据另查)
+    /// - 其他                                   → ❌
+    fn is_clearing_bank_eligible(addr: &AccountId) -> bool {
+        // 1. 反查地址所属的 sfid_id
+        let registered = match duoqian_manage_pow::AddressRegisteredSfid::<Runtime>::get(addr) {
+            Some(info) => info,
+            None => return false,
+        };
+        // 2. 查机构元数据
+        let meta = match duoqian_manage_pow::InstitutionMetadata::<Runtime>::get(&registered.sfid_id)
+        {
+            Some(m) => m,
+            None => return false,
+        };
+        match meta.a3.as_slice() {
+            b"SFR" => meta.sub_type.as_ref().map(|s| s.as_slice()) == Some(&b"JOINT_STOCK"[..]),
+            b"FFR" => {
+                let parent_id = match meta.parent_sfid_id.as_ref() {
+                    Some(p) => p,
+                    None => return false,
+                };
+                let parent_meta =
+                    match duoqian_manage_pow::InstitutionMetadata::<Runtime>::get(parent_id) {
+                        Some(m) => m,
+                        None => return false,
+                    };
+                parent_meta.a3.as_slice() == b"SFR"
+                    && parent_meta.sub_type.as_ref().map(|s| s.as_slice())
+                        == Some(&b"JOINT_STOCK"[..])
+            }
+            _ => false,
+        }
+    }
+
+    /// Step 2(2026-04-27, ADR-007)新增:判定 `bank` 主账户对应的机构是否
+    /// 已声明为清算行节点(链上 `ClearingBankNodes` 存在该 sfid_id 记录)。
+    fn is_registered_clearing_node(bank: &AccountId) -> bool {
+        let registered = match duoqian_manage_pow::AddressRegisteredSfid::<Runtime>::get(bank) {
+            Some(info) => info,
+            None => return false,
+        };
+        // ClearingBankNodes 的 key 是 BoundedVec<u8, ConstU32<64>>,
+        // 把 SfidIdOf<Runtime>(BoundedVec<u8, MaxSfidIdLength=96>) 转换过去
+        let sfid_bytes: Vec<u8> = registered.sfid_id.to_vec();
+        let key: BoundedVec<u8, ConstU32<64>> = match sfid_bytes.try_into() {
+            Ok(b) => b,
+            Err(_) => return false,
+        };
+        offchain_transaction_pos::pallet::ClearingBankNodes::<Runtime>::contains_key(&key)
     }
 }
 

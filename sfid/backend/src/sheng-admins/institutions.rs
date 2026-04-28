@@ -1389,6 +1389,13 @@ pub(crate) async fn submit_register_sfid_institution_extrinsic(
     ctx: &AdminAuthContext,
     site_sfid: &str,
     institution_name: &str,
+    // ADR-007 Step 2(2026-04-27)新增:把 SFID 端的机构元数据一并推到链上
+    // `InstitutionMetadata` storage,供链端 bank_check 资格白名单二次校验使用。
+    // 这三个字段对 a3/sub_type/parent_sfid_id 形态合法性的检查在 runtime 内完成
+    // (`do_register_sfid_institution`),后端只负责按 MultisigInstitution 字段值原样转发。
+    a3: &str,
+    sub_type: Option<&str>,
+    parent_sfid_id: Option<&str>,
 ) -> Result<ChainInstitutionRegisterReceipt, String> {
     let sfid_id = validate_sfid_id_format(site_sfid)
         .map_err(|e| format!("register_sfid_institution submit failed: {e}"))?;
@@ -1446,6 +1453,15 @@ pub(crate) async fn submit_register_sfid_institution_extrinsic(
         "Some",
         vec![Value::from_bytes(province.as_bytes().to_vec())],
     );
+    // ADR-007 Step 2 新增:把后端的机构元数据推到链上,供 bank_check 资格白名单二次校验。
+    let sub_type_val = match sub_type {
+        Some(s) => Value::unnamed_variant("Some", vec![Value::from_bytes(s.as_bytes().to_vec())]),
+        None => Value::unnamed_variant("None", vec![]),
+    };
+    let parent_sfid_val = match parent_sfid_id {
+        Some(p) => Value::unnamed_variant("Some", vec![Value::from_bytes(p.as_bytes().to_vec())]),
+        None => Value::unnamed_variant("None", vec![]),
+    };
     let payload = tx(
         "DuoqianManagePow",
         "register_sfid_institution",
@@ -1457,6 +1473,10 @@ pub(crate) async fn submit_register_sfid_institution_extrinsic(
                 format!("register_sfid_institution submit failed: signature hex decode failed: {e}")
             })?),
             signing_province_val,
+            // a3 / sub_type / parent_sfid_id(Step 2 新增 Required + 两个 Option)
+            Value::from_bytes(a3.as_bytes().to_vec()),
+            sub_type_val,
+            parent_sfid_val,
         ],
     );
     // ② immortal + 显式 nonce(对应注释 ①/②)
