@@ -237,15 +237,13 @@ pub(crate) async fn replace_sheng_admin(
         use subxt::{OnlineClient, PolkadotConfig};
         let ws_url_res = crate::chain::url::chain_ws_url();
         match ws_url_res {
-            Ok(ws) => {
-                match OnlineClient::<PolkadotConfig>::from_insecure_url(ws.clone()).await {
-                    Ok(client) => {
-                        match subxt::backend::rpc::RpcClient::from_insecure_url(ws.as_str()).await
-                        {
-                            Ok(rpc) => {
-                                let legacy = LegacyRpcMethods::<PolkadotConfig>::new(rpc);
-                                let main_pair = state.sheng_signer_cache.sfid_main_signer();
-                                if let Err(e) = crate::key_admins::chain_sheng_signing::submit_set_sheng_signing_pubkey_with_client(
+            Ok(ws) => match OnlineClient::<PolkadotConfig>::from_insecure_url(ws.clone()).await {
+                Ok(client) => {
+                    match subxt::backend::rpc::RpcClient::from_insecure_url(ws.as_str()).await {
+                        Ok(rpc) => {
+                            let legacy = LegacyRpcMethods::<PolkadotConfig>::new(rpc);
+                            let main_pair = state.sheng_signer_cache.sfid_main_signer();
+                            if let Err(e) = crate::key_admins::chain_sheng_signing::submit_set_sheng_signing_pubkey_with_client(
                                     &client,
                                     &legacy,
                                     &main_pair,
@@ -256,17 +254,16 @@ pub(crate) async fn replace_sheng_admin(
                                 {
                                     tracing::warn!(province = %province_name, error = %e, "clear sheng signing pubkey on chain failed");
                                 }
-                            }
-                            Err(e) => {
-                                tracing::warn!(province = %province_name, error = %e, "legacy rpc connect failed");
-                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(province = %province_name, error = %e, "legacy rpc connect failed");
                         }
                     }
-                    Err(e) => {
-                        tracing::warn!(province = %province_name, error = %e, "chain connect failed");
-                    }
                 }
-            }
+                Err(e) => {
+                    tracing::warn!(province = %province_name, error = %e, "chain connect failed");
+                }
+            },
             Err(e) => {
                 tracing::warn!(province = %province_name, error = %e, "resolve ws url failed");
             }

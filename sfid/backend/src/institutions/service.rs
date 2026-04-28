@@ -11,8 +11,8 @@ use crate::institutions::model::{MultisigAccount, MultisigInstitution};
 use crate::institutions::store;
 use crate::models::Store;
 use crate::sfid::{
-    classify, generate_sfid_code, province::PROVINCES, A3, GenerateSfidInput,
-    InstitutionCategory, InstitutionCode, PUBLIC_SECURITY_INSTITUTION_NAME,
+    classify, generate_sfid_code, province::PROVINCES, GenerateSfidInput, InstitutionCategory,
+    InstitutionCode, A3, PUBLIC_SECURITY_INSTITUTION_NAME,
 };
 
 /// 所有机构创建时自动生成的 2 个默认账户 `account_name`。
@@ -116,13 +116,10 @@ pub fn institution_name_exists_excluding(
     name: &str,
     exclude_sfid_id: Option<&str>,
 ) -> bool {
-    store
-        .multisig_institutions
-        .values()
-        .any(|i| {
-            i.institution_name.as_deref() == Some(name)
-                && exclude_sfid_id.map_or(true, |ex| i.sfid_id != ex)
-        })
+    store.multisig_institutions.values().any(|i| {
+        i.institution_name.as_deref() == Some(name)
+            && exclude_sfid_id.map_or(true, |ex| i.sfid_id != ex)
+    })
 }
 
 /// 检查同城是否存在同名机构(公权机构使用:不同市允许重名)。
@@ -164,9 +161,7 @@ pub fn validate_sub_type_with_p1(
     let trimmed = sub_type.map(str::trim).filter(|s| !s.is_empty());
     match a3 {
         "SFR" => {
-            let st = trimmed.ok_or(ServiceError::BadInput(
-                "私法人(SFR)必须选择企业类型",
-            ))?;
+            let st = trimmed.ok_or(ServiceError::BadInput("私法人(SFR)必须选择企业类型"))?;
             if !VALID_SUB_TYPES.contains(&st) {
                 return Err(ServiceError::BadInput(
                     "企业类型非法(仅 SOLE_PROPRIETORSHIP/PARTNERSHIP/LIMITED_LIABILITY/JOINT_STOCK/NON_PROFIT)",
@@ -193,9 +188,7 @@ pub fn validate_sub_type_with_p1(
         }
         _ => {
             if trimmed.is_some() {
-                return Err(ServiceError::BadInput(
-                    "仅私法人(SFR)才允许设置企业类型",
-                ));
+                return Err(ServiceError::BadInput("仅私法人(SFR)才允许设置企业类型"));
             }
             Ok(None)
         }
@@ -414,8 +407,7 @@ pub fn reconcile_public_security_for_province(
         .multisig_institutions
         .values()
         .filter(|i| {
-            matches!(i.category, InstitutionCategory::PublicSecurity)
-                && i.province == province_name
+            matches!(i.category, InstitutionCategory::PublicSecurity) && i.province == province_name
         })
         .count();
 
@@ -427,11 +419,7 @@ pub fn reconcile_public_security_for_province(
 /// 幂等:已存在账户不覆盖;仅在该 `(sfid_id, account_name)` 缺失时补齐。
 /// 只写 legacy store(reconcile 本身就持 legacy 写锁);sharded_store 的同步由
 /// `sync_legacy_to_sharded` 启动时一次性对齐,或在 handler 层二次写入。
-pub fn insert_default_accounts_into_legacy(
-    store: &mut Store,
-    sfid_id: &str,
-    actor: &str,
-) {
+pub fn insert_default_accounts_into_legacy(store: &mut Store, sfid_id: &str, actor: &str) {
     use crate::institutions::derive::derive_duoqian_address;
     use crate::institutions::model::{account_key_to_string, MultisigAccount};
     use crate::models::MultisigChainStatus;

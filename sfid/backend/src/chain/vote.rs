@@ -55,7 +55,11 @@ impl VoteDecision {
             has_vote_eligibility: is_bound,
             sfid_code: record.sfid_code.clone(),
             archive_index: record.archive_no.clone(),
-            citizen_status: if is_bound { Some(CitizenStatus::Normal) } else { None },
+            citizen_status: if is_bound {
+                Some(CitizenStatus::Normal)
+            } else {
+                None
+            },
         }
     }
 

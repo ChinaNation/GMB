@@ -112,7 +112,9 @@ pub(crate) async fn query_free_balance(account_pubkey_hex: &str) -> Result<u128,
         ));
     }
     let mut buf = [0u8; 16];
-    buf.copy_from_slice(&bytes[ACCOUNT_INFO_HEADER_LEN..ACCOUNT_INFO_HEADER_LEN + ACCOUNT_INFO_FREE_LEN]);
+    buf.copy_from_slice(
+        &bytes[ACCOUNT_INFO_HEADER_LEN..ACCOUNT_INFO_HEADER_LEN + ACCOUNT_INFO_FREE_LEN],
+    );
     Ok(u128::from_le_bytes(buf))
 }
 
@@ -154,11 +156,7 @@ pub(crate) async fn admin_query_chain_balance(
     }
     let pubkey = query.account_pubkey.trim().to_string();
     if pubkey.is_empty() {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "account_pubkey is required",
-        );
+        return api_error(StatusCode::BAD_REQUEST, 1001, "account_pubkey is required");
     }
     match query_free_balance(pubkey.as_str()).await {
         Ok(min_units) => Json(ApiResponse {

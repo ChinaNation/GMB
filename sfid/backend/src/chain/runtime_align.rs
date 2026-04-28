@@ -352,7 +352,6 @@ fn runtime_signature_meta(state: &AppState) -> RuntimeSignatureMeta {
     }
 }
 
-
 fn is_production_mode() -> bool {
     std::env::var("SFID_ENV")
         .ok()
