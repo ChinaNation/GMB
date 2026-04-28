@@ -146,7 +146,8 @@
 - `memory/08-tasks/done/20260424-wuminapp-wallet-detail-redesign-v2.md`
 - `memory/08-tasks/done/20260424-wuminapp-wallet-detail-redesign-v3.md`
 - `memory/08-tasks/done/20260424-wuminapp-wallet-detail-redesign-v4.md`
+- `memory/08-tasks/done/20260424-wuminapp-wallet-list-redesign-v6.md`
 - `memory/08-tasks/done/20260424-wuminapp-wallet-list-redesign.md`
 - `memory/08-tasks/done/20260425-083200-ui-app.md`
 - `memory/08-tasks/done/20260425-nodeui-cleanup-preview-html-and-identity-doc.md`
-- `memory/08-tasks/done/20260424-wuminapp-wallet-list-redesign-v6.md`
+- `memory/08-tasks/done/20260427-step2-citizenchain-clearing-bank-nodes.md`

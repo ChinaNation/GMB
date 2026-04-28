@@ -91,10 +91,13 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // 注意:`.github/workflows/citizenchain-wasm.yml` 原先有 "spec_version 自增"
     // 自动 bump step 已同步删除,spec_version 从此纯手动管理,避免 CI 打乱
     // "重新创世 + 钉死某个版本"的语义。
-    spec_version: 2,
+    // Step 2(2026-04-27, ADR-007)清算行节点声明 + 收款方主导清算 + InstitutionMetadata
+    // 上链 → spec_version 2 → 3,transaction_version 1 → 2(register_sfid_institution
+    // 等 extrinsic 签名变化)。开发期 fresh genesis,不主网升级。
+    spec_version: 3,
     impl_version: 1,
     apis: apis::RUNTIME_API_VERSIONS,
-    transaction_version: 1,
+    transaction_version: 2,
     system_version: 1,
 };
 

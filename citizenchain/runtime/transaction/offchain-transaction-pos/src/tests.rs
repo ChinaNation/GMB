@@ -121,6 +121,18 @@ impl crate::bank_check::SfidAccountQuery<AccountId32> for MockSfid {
         let who_bytes: &[u8; 32] = who.as_ref();
         *bank_bytes == BANK_MAIN_BYTES && *who_bytes == BANK_ADMIN_BYTES
     }
+
+    /// Step 2 mock:测试场景默认 BANK_MAIN 满足资格白名单,负路径单测自行覆盖。
+    fn is_clearing_bank_eligible(addr: &AccountId32) -> bool {
+        let bytes: &[u8; 32] = addr.as_ref();
+        *bytes == BANK_MAIN_BYTES
+    }
+
+    /// Step 2 mock:测试场景默认 BANK_MAIN 已声明清算行节点。
+    fn is_registered_clearing_node(bank: &AccountId32) -> bool {
+        let bytes: &[u8; 32] = bank.as_ref();
+        *bytes == BANK_MAIN_BYTES
+    }
 }
 
 impl offchain_transaction_pos::Config for Test {
